@@ -43,14 +43,17 @@ export function SignInCard() {
       </CardHeader>
       <CardContent>
         {authed ? (
-          <Button asChild variant="outline" size="lg" className="w-full">
-            <a href="/api/auth/logout">Sign out</a>
+          <Button
+            render={<a href="/api/auth/logout" />}
+            variant="outline"
+            size="lg"
+            className="w-full"
+          >
+            Sign out
           </Button>
         ) : (
-          <Button asChild size="lg" className="w-full">
-            <a href="/api/auth/login">
-              {isLoading ? "Loading…" : "Sign in with Bungie"}
-            </a>
+          <Button render={<a href="/api/auth/login" />} size="lg" className="w-full">
+            {isLoading ? "Loading…" : "Sign in with Bungie"}
           </Button>
         )}
       </CardContent>

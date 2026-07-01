@@ -404,7 +404,7 @@ export function BuilderPanel() {
                           max={200}
                           step={1}
                           value={[targets[i]]}
-                          onValueChange={(v) => setTarget(i, v[0])}
+                          onValueChange={(v) => setTarget(i, Array.isArray(v) ? v[0] : v)}
                           ceiling={ceilingValue}
                           aria-label={`${STAT_LABELS[key]} target`}
                           className="cursor-pointer py-1.5"
