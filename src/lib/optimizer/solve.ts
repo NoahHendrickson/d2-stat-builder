@@ -241,6 +241,8 @@ export interface SolveOptions {
   onCeilings?: (ceilings: number[]) => void;
   /** Wall-clock cap for the top-N search (defaults to TOPN_BUDGET_MS). */
   topNBudgetMs?: number;
+  /** Wall-clock cap for refining the ceilings past their seeds (defaults to CEILING_BUDGET_MS). */
+  ceilingBudgetMs?: number;
 }
 
 export function solve(
@@ -342,10 +344,18 @@ export function solve(
   // Which stats Balanced left short (so a directional on a piece tuned to that stat can help).
   const shortStat: boolean[] = new Array(NUM_STATS).fill(false);
 
+  // Feasibility bound: per stat, the optimistic completion (best remaining pieces +
+  // tuning upside) must reach the minimum with mods — and JOINTLY, the mod points needed
+  // across all stats (each deficit rounded up to the 5-point mod grain) must fit the
+  // shared budget. The joint check is what prunes multi-constraint queries (e.g. weapon
+  // AND grenade both demanding) early enough to avoid exhaustive walks.
   const canReachMin = (k: number): boolean => {
+    let needed = 0;
     for (let s = 0; s < NUM_STATS; s++) {
-      if (sum[s] + frag[s] + sumTuneUp[s] + suffixStat[k][s] + maxModPoints < min[s]) {
-        return false;
+      const d = min[s] - (sum[s] + frag[s] + sumTuneUp[s] + suffixStat[k][s]);
+      if (d > 0) {
+        needed += Math.ceil(d / 5) * 5;
+        if (needed > maxModPoints) return false;
       }
     }
     return true;
@@ -426,11 +436,17 @@ export function solve(
     }
 
     const rec = (i: number): void => {
-      // Joint-feasibility prune: even with the best remaining tuning upside and all mods,
-      // if some stat can't reach its minimum from here this branch is dead. (The top-N
-      // bounds are per-stat, so this joint check is what cuts the demanding-target cliff.)
+      // Joint-feasibility prune: even with the best remaining tuning upside, if the mod
+      // points needed to close every stat's deficit (each rounded up to the 5-point mod
+      // grain) exceed the SHARED budget, this branch is dead. (The top-N bounds are
+      // per-stat, so this joint check is what cuts the demanding-target cliff.)
+      let needed = 0;
       for (let s = 0; s < NUM_STATS; s++) {
-        if (aug[s] + suffixUp[i][s] + maxModPoints < min[s]) return;
+        const d = min[s] - (aug[s] + suffixUp[i][s]);
+        if (d > 0) {
+          needed += Math.ceil(d / 5) * 5;
+          if (needed > maxModPoints) return;
+        }
       }
       // Branch-and-bound: clamp(x+m) ≤ clamp(x)+m, so this over-estimates the best
       // total still reachable from here. Balanced is enumerated first (highest total),
@@ -570,29 +586,41 @@ export function solve(
   const loadouts = heap.toSorted();
   // Seed each ceiling with the best value already seen among the returned builds — a
   // strong, guaranteed-achievable lower bound that makes the exact ceiling search prune
-  // hard (it only explores combos that could beat what the top-N already found).
+  // hard (it only explores combos that could beat what the top-N already found). Mods are
+  // only auto-assigned to cover target deficits, so a build's stats alone would just echo
+  // the targets back; its unspent mod capacity could genuinely be socketed into any ONE
+  // stat, so each stat's seed gets the full spare added (still achievable per stat).
   const seed = new Array(NUM_STATS).fill(0);
   for (const lo of loadouts) {
+    const spare =
+      (mods.major - lo.modsUsed.major) * 10 + (mods.minor - lo.modsUsed.minor) * 5;
     for (let s = 0; s < NUM_STATS; s++) {
-      if (lo.stats[s] > seed[s]) seed[s] = lo.stats[s];
+      const v = clamp(lo.stats[s] + spare);
+      if (v > seed[s]) seed[s] = v;
     }
   }
   // Emit the seed immediately as the fast approximate — the animation's first frame —
   // then refine toward the exact ceilings within the time budget.
   onCeilings?.(seed.slice(0, NUM_STATS));
-  const ceilings = runCeilings(input, slots, seed, CEILING_BUDGET_MS, onCeilings);
+  const ceilings = runCeilings(
+    input,
+    slots,
+    seed,
+    opts.ceilingBudgetMs ?? CEILING_BUDGET_MS,
+    onCeilings,
+  );
   return { loadouts, combosTried, combosValid, ceilings, capped };
 }
 
 /**
- * Exact per-stat ceilings for a FEASIBLE query: for each stat `t`, the maximum final
- * value of stat `t` (after fragment + tuning + mods, clamped 0–200) reachable while
- * still meeting the current minimums on the OTHER five stats. Because the stat-t-
- * maximizing build has stat_t ≥ min_t, it also satisfies t's own minimum, so it lives
- * in the same all-minimums tree the top-N search explores — no relaxation needed. One
- * pruned DFS updates all six running maxima at each valid leaf; `seed` pre-loads them
- * with the best values the top-N already found so the per-stat prune bites immediately.
- * An infeasible query (no build meets the minimums) yields zeros.
+ * Per-stat ceilings for a FEASIBLE query: for each stat `t`, the maximum final value of
+ * stat `t` (after fragment + tuning + mods, clamped 0–200) reachable while still meeting
+ * the current minimums on the OTHER five stats. Each stat's ceiling is pinned by binary-
+ * searching feasibility probes between `seed` (achievable, from the top-N's builds) and
+ * the optimistic suffix bound; probes for the six stats are interleaved round-robin under
+ * the shared budget (see the scheduling comment below). Exact when the probes fit the
+ * budget, otherwise a guaranteed-achievable lower bound. An infeasible query (no build
+ * meets the minimums) yields zeros.
  */
 function runCeilings(
   input: OptimizerInput,
@@ -651,6 +679,10 @@ function runCeilings(
   const deficits = new Array(NUM_STATS).fill(0);
   const aug = new Array(NUM_STATS).fill(0);
   const shortStat: boolean[] = new Array(NUM_STATS).fill(false);
+  // suffixUp[i][s] = max tuning upside to stat s reachable from chosen pieces i..4.
+  const suffixUp: number[][] = Array.from({ length: NUM_SLOTS + 1 }, () =>
+    new Array(NUM_STATS).fill(0),
+  );
   // Probe minimums: `min` with one stat temporarily raised during the binary search.
   const probeMins = min.slice(0, NUM_STATS);
 
@@ -660,14 +692,19 @@ function runCeilings(
     }
     return true;
   };
-  // Can every probe minimum still be reached from slot k? (Admissible feasibility bound.)
+  // Can every probe minimum still be reached from slot k? Same admissible bound as the
+  // top-N search's canReachMin: per-stat optimistic completion, plus the JOINT check that
+  // all mod-point deficits (rounded up to the 5-point grain) fit the shared mod budget —
+  // that joint check is what keeps UNsatisfiable probes from degenerating into exhaustive
+  // walks when two stats are demanding at once (the probed stat + a held minimum).
   const canReachMin = (k: number): boolean => {
+    let needed = 0;
     for (let s = 0; s < NUM_STATS; s++) {
-      if (
-        sum[s] + frag[s] + sumTuneUp[s] + suffixStat[k][s] + maxModPoints <
-        probeMins[s]
-      )
-        return false;
+      const d = probeMins[s] - (sum[s] + frag[s] + sumTuneUp[s] + suffixStat[k][s]);
+      if (d > 0) {
+        needed += Math.ceil(d / 5) * 5;
+        if (needed > maxModPoints) return false;
+      }
     }
     return true;
   };
@@ -692,9 +729,28 @@ function runCeilings(
     // sum+frag or Balanced is double-counted and the ceiling is over-reported. (Mirrors
     // the same reset in optimizeTuning.)
     for (let s = 0; s < NUM_STATS; s++) aug[s] = sum[s] + frag[s];
+    for (let s = 0; s < NUM_STATS; s++) suffixUp[NUM_SLOTS][s] = 0;
+    for (let i = NUM_SLOTS - 1; i >= 0; i--) {
+      for (let s = 0; s < NUM_STATS; s++) {
+        suffixUp[i][s] = suffixUp[i + 1][s] + chosen[i].tuneStatUpside[s];
+      }
+    }
     leafOk = false;
     const rec = (i: number): void => {
       if (leafOk) return;
+      // Same joint-feasibility prune as optimizeTuning's directional search: if the mod
+      // points needed to close every remaining deficit (even granting the best tuning
+      // upside still ahead) exceed the shared budget, this branch is dead. Without it an
+      // UNsatisfiable probe enumerates every tuning combination of every candidate combo
+      // (exotics alone branch 31 ways), which is what made impossibility proofs slow.
+      let needed = 0;
+      for (let s = 0; s < NUM_STATS; s++) {
+        const d = probeMins[s] - (aug[s] + suffixUp[i][s]);
+        if (d > 0) {
+          needed += Math.ceil(d / 5) * 5;
+          if (needed > maxModPoints) return;
+        }
+      }
       if (i === NUM_SLOTS) {
         for (let s = 0; s < NUM_STATS; s++) {
           deficits[s] = Math.max(0, probeMins[s] - aug[s]);
@@ -721,14 +777,14 @@ function runCeilings(
 
   // Is there any valid loadout meeting `probeMins`? Depth-first, early-exiting at the
   // first one found — so a satisfiable probe returns almost immediately. Proving a probe
-  // UNsatisfiable can be expensive, so the search also bails when the budget runs out.
-  const deadline = performance.now() + budgetMs;
+  // UNsatisfiable can be expensive, so each probe also bails at its own deadline.
+  let probeDeadline = 0;
   let aborted = false;
   let nodes = 0;
   let found = false;
   const search = (k: number, exoticCount: number): void => {
     if (aborted) return;
-    if ((nodes++ & 2047) === 0 && performance.now() > deadline) {
+    if ((nodes++ & 2047) === 0 && performance.now() > probeDeadline) {
       aborted = true;
       return;
     }
@@ -767,33 +823,51 @@ function runCeilings(
       }
     }
   };
-  const feasible = (): boolean => {
+  const feasible = (deadline: number): boolean => {
+    probeDeadline = deadline;
+    aborted = false;
     found = false;
     search(0, 0);
     return found;
   };
 
   // For each stat, binary-search the highest value it can reach while the OTHER minimums
-  // hold. Feasibility is monotonic in the ask and each probe early-exits, so ~log2(range)
-  // cheap probes pin the exact ceiling. The seed (best value the top-N already produced)
-  // is a feasible lower bound; the suffix bound gives the optimistic upper bound.
+  // hold: `ceiling[t]` is the proven-achievable low side, `optimistic[t]` the suffix-bound
+  // high side. Probes are scheduled ROUND-ROBIN — one probe per unsettled stat per pass —
+  // and each probe is capped at a fair share of the remaining budget. A probe that finds
+  // a build raises that stat's ceiling (trusted even if the clock then expired — a found
+  // build is proof); a probe that proves infeasibility OR times out shrinks the optimistic
+  // bound instead, so the ceiling stays a guaranteed-achievable lower bound. Fair shares
+  // are what keep one expensive impossibility proof from starving every stat scheduled
+  // after it (previously sequential refinement reported those stats' raw seeds as maxima).
+  const globalDeadline = performance.now() + budgetMs;
+  const optimistic = new Array(NUM_STATS).fill(0);
+  let pending: number[] = [];
   for (let t = 0; t < NUM_STATS; t++) {
-    const hi = clamp(frag[t] + suffixStat[0][t] + maxModPoints);
-    let lo = ceiling[t];
-    if (hi <= lo) continue;
-    let bound = hi;
-    while (lo < bound) {
-      const mid = lo + Math.ceil((bound - lo) / 2);
+    optimistic[t] = clamp(frag[t] + suffixStat[0][t] + maxModPoints);
+    if (optimistic[t] > ceiling[t]) pending.push(t);
+  }
+  while (pending.length) {
+    const next: number[] = [];
+    for (let i = 0; i < pending.length; i++) {
+      const t = pending[i];
+      const now = performance.now();
+      if (now >= globalDeadline) break;
+      const share = (globalDeadline - now) / (pending.length - i + next.length);
+      const mid = ceiling[t] + Math.ceil((optimistic[t] - ceiling[t]) / 2);
       probeMins[t] = mid;
-      const ok = feasible();
-      if (aborted) break; // don't trust a probe cut short by the budget
-      if (ok) lo = mid;
-      else bound = mid - 1;
+      const ok = feasible(Math.min(globalDeadline, now + share));
+      probeMins[t] = min[t];
+      if (ok) {
+        ceiling[t] = mid;
+        onProgress?.(ceiling.slice(0, NUM_STATS)); // stream each improvement for animation
+      } else {
+        optimistic[t] = mid - 1;
+      }
+      if (ceiling[t] < optimistic[t]) next.push(t);
     }
-    probeMins[t] = min[t];
-    ceiling[t] = lo;
-    onProgress?.(ceiling.slice(0, NUM_STATS)); // stream each refined stat for animation
-    if (aborted) break; // budget spent — remaining stats keep their seed values
+    if (performance.now() >= globalDeadline) break; // budget spent — keep proven values
+    pending = next;
   }
   return ceiling;
 }

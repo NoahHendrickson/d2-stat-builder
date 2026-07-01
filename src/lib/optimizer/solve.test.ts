@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { solve } from "./solve";
 import type { OptimizerInput, OptimizerPiece } from "./types";
+import { REAL_WARLOCK_POOL } from "./real-pool.fixture";
 
 /** A tuning-free, set-free piece — stats sum straight into the loadout total. */
 function piece(id: string, stats: number[]): OptimizerPiece {
@@ -169,6 +170,58 @@ describe("per-stat ceilings", () => {
     expect(out.ceilings).toHaveLength(6);
     expect(ms).toBeLessThan(3000); // budget is 1200ms + the (fast) top-N search
   });
+});
+
+describe("ceiling refinement", () => {
+  test("seeds include leftover mod capacity, not just target-covering mods", () => {
+    // Five identical weapons-10 pieces; weapons 60 forces 1 major, leaving 1 major spare.
+    // With no refinement budget the ceilings ARE the seeds — they must reflect that the
+    // spare major could be socketed into any one stat, not just echo the targets back.
+    const slots = [
+      [piece("h", [10, 0, 0, 0, 0, 0])],
+      [piece("a", [10, 0, 0, 0, 0, 0])],
+      [piece("c", [10, 0, 0, 0, 0, 0])],
+      [piece("l", [10, 0, 0, 0, 0, 0])],
+      [piece("k", [10, 0, 0, 0, 0, 0])],
+    ];
+    const out = solve(
+      input(slots, { mods: { major: 2, minor: 0 }, minimums: [60, 0, 0, 0, 0, 0] }),
+      { ceilingBudgetMs: 0 },
+    );
+    // Build: weapons 50 + 1 major = 60; the spare major lifts every stat's seed by 10.
+    expect(out.ceilings).toEqual([70, 10, 10, 10, 10, 10]);
+  });
+
+  test("a slow stat's refinement can't starve the stats after it (real-pool regression)", () => {
+    // Noah's real Warlock pool with his exact selections (weapon ≥ 180, grenade ≥ 110,
+    // CODA 4pc, 3 major + 2 minor mods, Solar fragments = class +10 / grenade −20).
+    // Weapon-180 + grenade-135 builds exist in this pool, but the health ceiling probe
+    // alone blows the whole refinement budget; sequential refinement aborted everything
+    // after it and reported grenade's seed (110 — the user's own target) as its max.
+    const slots = ["helmet", "arms", "chest", "legs", "classItem"].map((slot) =>
+      REAL_WARLOCK_POOL.filter((p) => p.slot === slot).map((p, i) => ({
+        id: `${slot}${i}`,
+        stats: p.stats,
+        exotic: p.exo === 1,
+        setHash: p.set || undefined,
+        tuning: { tuned: p.tuned, offStats: p.off },
+      })),
+    );
+    const out = solve(
+      {
+        slots,
+        minimums: [180, 0, 0, 110, 0, 0],
+        mods: { major: 3, minor: 2 },
+        setRequirements: [{ setHash: 1490136267, count: 4 }],
+        exotic: { mode: "any" },
+        allowTuning: true,
+        fragmentBonus: [0, 0, 10, -20, 0, 0],
+        maxResults: 200,
+      },
+      { topNBudgetMs: 500 },
+    );
+    expect(out.ceilings[3]).toBeGreaterThanOrEqual(135); // grenade
+  }, 30_000);
 });
 
 describe("exotic tuning", () => {
