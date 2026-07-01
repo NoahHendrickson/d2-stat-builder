@@ -404,7 +404,7 @@ export function BuilderPanel() {
                           max={200}
                           step={1}
                           value={[targets[i]]}
-                          onValueChange={(v) => setTarget(i, v[0])}
+                          onValueChange={(v) => setTarget(i, Array.isArray(v) ? v[0] : v)}
                           ceiling={ceilingValue}
                           aria-label={`${STAT_LABELS[key]} target`}
                           className="cursor-pointer py-1.5"
@@ -554,7 +554,7 @@ export function BuilderPanel() {
                   pressed={allowTuning}
                   onPressedChange={setAllowTuning}
                   aria-label="Toggle Tier-5 tuning"
-                  className="data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+                  className="aria-pressed:bg-primary aria-pressed:text-primary-foreground"
                 >
                   {allowTuning ? "On" : "Off"}
                 </Toggle>
@@ -576,7 +576,7 @@ export function BuilderPanel() {
                   pressed={useLegacyArmor}
                   disabled
                   aria-label="Use legacy armor (coming soon)"
-                  className="data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+                  className="aria-pressed:bg-primary aria-pressed:text-primary-foreground"
                 >
                   {useLegacyArmor ? "On" : "Off"}
                 </Toggle>
@@ -672,7 +672,7 @@ function SetToggle({
       disabled={disabled}
       onPressedChange={onToggle}
       aria-label="Toggle set bonus"
-      className="size-7 min-w-7 justify-self-center p-0 data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+      className="size-7 min-w-7 justify-self-center p-0 aria-pressed:bg-primary aria-pressed:text-primary-foreground"
     >
       {active && <CheckIcon className="size-3.5" />}
     </Toggle>

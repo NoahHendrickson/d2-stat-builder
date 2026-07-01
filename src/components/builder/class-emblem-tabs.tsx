@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Image from "next/image";
-import { Tabs as TabsPrimitive } from "radix-ui";
+import { Tabs as TabsPrimitive } from "@base-ui/react/tabs";
 import { cn } from "@/lib/utils";
 import { BUNGIE_IMAGE_BASE } from "@/lib/bungie/constants";
 import { CLASS_NAMES } from "@/lib/armory/stats";
@@ -48,7 +48,7 @@ function EmblemTab({
     : undefined;
 
   return (
-    <TabsPrimitive.Trigger
+    <TabsPrimitive.Tab
       value={String(character.classType)}
       aria-label={`${name}, Power ${character.light}`}
       className={cn(
@@ -90,13 +90,13 @@ function EmblemTab({
           ✦ {character.light}
         </span>
       </div>
-    </TabsPrimitive.Trigger>
+    </TabsPrimitive.Tab>
   );
 }
 
 /**
  * Class selector rendered as Destiny emblem nameplates — one per class, pulled from
- * the player's own characters. Built on the Radix Tabs primitive (matching the app's
+ * the player's own characters. Built on the Base UI Tabs primitive (matching the app's
  * shadcn Tabs) so keyboard navigation and tablist semantics come for free.
  */
 export function ClassEmblemTabs({
