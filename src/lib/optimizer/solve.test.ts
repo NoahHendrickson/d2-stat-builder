@@ -451,3 +451,37 @@ describe("legacy exotics (artifice +3)", () => {
     expect(out.loadouts[0].artificeBonus.reduce((a, b) => a + b, 0)).toBe(3);
   });
 });
+
+/**
+ * D2ArmorPicker parity regression (Noah's real case, 2026-07-02): legacy Verity's Brow
+ * (+2-all-six masterwork assumption, artifice) + four CODA Tier-5 pieces must reach
+ * weapon >= 147 while holding grenade >= 170 with 3 majors + 2 minors. Before the
+ * legacy masterwork fix, Verity's normalized 2 low on its high stats and the app
+ * reported a weapon ceiling of 145.
+ */
+test("legacy Verity's Brow reaches weapon 147+ at grenade 170 (D2AP parity)", () => {
+  const slots: OptimizerPiece[][] = [
+    [{ id: "verity", stats: [17, 4, 19, 32, 4, 4], exotic: true, hash: 999, artifice: true }],
+    [{ id: "wraps", stats: [30, 20, 5, 25, 5, 5], exotic: false, tuning: { tuned: 0, offStats: [2, 4, 5] } }],
+    [{ id: "robes", stats: [30, 5, 20, 25, 5, 5], exotic: false, tuning: { tuned: 0, offStats: [1, 4, 5] } }],
+    [{ id: "treads", stats: [30, 5, 20, 25, 5, 5], exotic: false, tuning: { tuned: 3, offStats: [1, 4, 5] } }],
+    [{ id: "bond", stats: [30, 5, 5, 25, 20, 5], exotic: false, tuning: { tuned: 3, offStats: [1, 2, 5] } }],
+  ];
+  const at = solve(
+    input(slots, {
+      minimums: [147, 0, 0, 170, 0, 0],
+      mods: { major: 3, minor: 2 },
+      allowTuning: true,
+    }),
+  );
+  expect(at.loadouts.length).toBeGreaterThan(0);
+
+  const ceil = solve(
+    input(slots, {
+      minimums: [0, 0, 0, 170, 0, 0],
+      mods: { major: 3, minor: 2 },
+      allowTuning: true,
+    }),
+  );
+  expect(ceil.ceilings[0]).toBeGreaterThanOrEqual(147);
+});

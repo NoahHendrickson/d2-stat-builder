@@ -18,10 +18,25 @@ import {
 } from "./stats";
 
 // Plug categories whose stat contributions are stripped to recover the base roll.
-// NOTE: masterwork is deliberately NOT here — its manifest bonus (+5 to all six) doesn't
-// match the game (archetype stats are fixed/capped), so subtracting it corrupts the archetype.
-// Masterwork is instead re-applied as an assumption in applyMasterwork().
+// NOTE: masterwork is deliberately NOT here — on Armor 3.0 its manifest bonus (+5 to all
+// six) doesn't match the game (archetype stats are fixed/capped), so subtracting it
+// corrupts the archetype. Masterwork is instead re-applied as an assumption in
+// applyMasterwork(). LEGACY pieces have no archetype caps — their +2-all-six masterwork
+// plug contributes at face value, so for them it IS stripped (LEGACY_PLUG_PATTERNS) and
+// re-applied as an assumption in applyLegacyMasterwork().
 const CHANGEABLE_PLUG_PATTERNS = ["enhancements", "tuning"];
+const LEGACY_PLUG_PATTERNS = [...CHANGEABLE_PLUG_PATTERNS, "masterworks"];
+
+/** Fully-masterworked legacy (Armor 2.0) armor: +2 to all six stats (the
+ * v460.plugs.armor.masterworks.stat plugs list exactly this). */
+const LEGACY_MASTERWORK_BONUS = 2;
+
+/**
+ * Artifice mod-socket plug category prefix. Matches the empty/socketed artifice mod
+ * socket (`enhancements.artifice`) and the legacy-exotic "Locked Artifice Socket"
+ * (`enhancements.artifice.exotic`).
+ */
+const ARTIFICE_SOCKET_CATEGORY = "enhancements.artifice";
 
 export type ArmorLocation = "equipped" | "inventory" | "vault";
 
@@ -59,7 +74,8 @@ const TIER_TYPE_EXOTIC = 6;
 
 /**
  * Base roll = the instance's current stats (component 304) minus the stat
- * contributions of mods / tuning (masterwork is left in — see applyMasterwork).
+ * contributions of mods / tuning (3.0 masterwork is left in — see applyMasterwork;
+ * legacy masterwork IS stripped when `legacy` is set — see LEGACY_PLUG_PATTERNS).
  * Works for legendaries AND exotics — exotics expose no intrinsic stat plugs, so
  * their stats only appear in component 304.
  */
@@ -67,17 +83,19 @@ export function computeBaseStats(
   instanceId: string,
   profile: DestinyProfileResponse,
   manifest: Manifest,
+  legacy = false,
 ): StatArray {
   const base = readCurrentStats(instanceId, profile);
   const sockets = profile.itemComponents?.sockets?.data?.[instanceId]?.sockets;
   if (!sockets) return base;
 
+  const patterns = legacy ? LEGACY_PLUG_PATTERNS : CHANGEABLE_PLUG_PATTERNS;
   for (const socket of sockets) {
     const plugHash = socket.plugHash;
     if (!plugHash) continue;
     const plug = manifest.def("DestinyInventoryItemDefinition", plugHash);
     const cat = plug?.plug?.plugCategoryIdentifier;
-    if (!cat || !CHANGEABLE_PLUG_PATTERNS.some((p) => cat.includes(p))) continue;
+    if (!cat || !patterns.some((p) => cat.includes(p))) continue;
     const inv = plug.investmentStats ?? [];
     // Balanced Tuning's manifest entry lists +1 to ALL SIX stats, but in-game the archetype
     // stats are capped (like masterwork) so only the 3 off-archetype stats actually moved.
@@ -111,13 +129,23 @@ function readCurrentStats(
   return out;
 }
 
-/** Assume MW5: ensure the 3 off-archetype stats (the 3 lowest) are at least +5. */
+/** Assume MW5 (Armor 3.0): ensure the 3 off-archetype stats (the 3 lowest) are at least +5. */
 function applyMasterwork(base: StatArray): StatArray {
   const out = base.slice() as StatArray;
   for (const i of offArchetypeIndices(base)) {
     out[i] = Math.max(out[i], MASTERWORK_OFF_STAT_BONUS);
   }
   return out;
+}
+
+/**
+ * Assume full legacy (Armor 2.0) masterwork: +2 to all six stats. Legacy pieces have
+ * no archetype caps, so the bonus applies flat — using the 3.0 raise-the-lowest model
+ * here deflated the three high stats by 2 each (real-world case: legacy Verity's Brow
+ * normalized to weapons 15 vs D2ArmorPicker's 17, under-reporting ceilings by 2).
+ */
+function applyLegacyMasterwork(base: StatArray): StatArray {
+  return base.map((v) => v + LEGACY_MASTERWORK_BONUS) as StatArray;
 }
 
 /**
@@ -200,13 +228,26 @@ function archetypeName(
   return undefined;
 }
 
-/** A piece is artifice if it carries the artifice intrinsic perk. */
+/**
+ * A piece is artifice if it carries the artifice intrinsic perk (legendary artifice
+ * armor) OR any socket plugged in an enhancements.artifice* category (legacy exotics,
+ * which have the mod socket + a "Locked Artifice Socket" but NOT the intrinsic perk).
+ */
 function isArtificePiece(
   instanceId: string,
   profile: DestinyProfileResponse,
+  manifest: Manifest,
 ): boolean {
   const sockets = profile.itemComponents?.sockets?.data?.[instanceId]?.sockets;
-  return sockets?.some((s) => s.plugHash === ARTIFICE_PERK_HASH) ?? false;
+  if (!sockets) return false;
+  for (const socket of sockets) {
+    if (!socket.plugHash) continue;
+    if (socket.plugHash === ARTIFICE_PERK_HASH) return true;
+    const cat = manifest.def("DestinyInventoryItemDefinition", socket.plugHash)?.plug
+      ?.plugCategoryIdentifier;
+    if (cat?.startsWith(ARTIFICE_SOCKET_CATEGORY)) return true;
+  }
+  return false;
 }
 
 function buildPiece(
@@ -226,12 +267,17 @@ function buildPiece(
     ARMOR_BUCKETS[def.inventory?.bucketTypeHash as keyof typeof ARMOR_BUCKETS];
   if (!slot) return null;
 
-  const baseStats = computeBaseStats(item.itemInstanceId, profile, manifest);
   const tunedStat = computeTunedStat(item.itemInstanceId, profile, manifest);
+  const archetype = archetypeName(item.itemInstanceId, profile, manifest);
+  // No tuning socket AND no archetype plug → legacy (Armor 2.0). (Sub-Tier-5 Armor
+  // 3.0 pieces lack the tuning socket but still carry an archetype.)
+  const legacy = tunedStat === undefined && archetype === undefined;
 
-  // A tuning socket marks the piece as Armor 3.0 — the only system where the
+  const baseStats = computeBaseStats(item.itemInstanceId, profile, manifest, legacy);
+
+  // A tuning socket marks the piece as Tier-5 Armor 3.0 — the only system where the
   // def-level intrinsic bonus is active in-game.
-  const stats = applyMasterwork(baseStats);
+  const stats = legacy ? applyLegacyMasterwork(baseStats) : applyMasterwork(baseStats);
   if (tunedStat !== undefined) {
     const bonus = intrinsicStats(def);
     for (let i = 0; i < stats.length; i++) stats[i] += bonus[i];
@@ -245,9 +291,9 @@ function buildPiece(
     slot,
     classType: def.classType ?? 3,
     isExotic: def.inventory?.tierType === TIER_TYPE_EXOTIC,
-    isArtifice: isArtificePiece(item.itemInstanceId, profile),
+    isArtifice: isArtificePiece(item.itemInstanceId, profile, manifest),
     setHash: def.equippingBlock?.equipableItemSetHash || undefined,
-    archetype: archetypeName(item.itemInstanceId, profile, manifest),
+    archetype,
     baseStats,
     stats,
     tunedStat,

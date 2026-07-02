@@ -154,7 +154,169 @@ test("a Tier-5 exotic's def-level intrinsic stats are added to stats, not baseSt
   } as unknown as DestinyProfileResponse;
   const lp = normalizeArmory(legacy, manifest)[0];
   expect(lp.tunedStat).toBeUndefined();
-  expect(lp.stats).toEqual([30, 5, 20, 5, 25, 5]);
+  // No tuning socket and no archetype → legacy piece → +2-all-six masterwork model.
+  expect(lp.stats).toEqual([32, 2, 22, 2, 27, 2]);
+});
+
+/**
+ * Legacy (Armor 2.0) masterwork is +2 to ALL SIX stats (the v460
+ * armor.masterworks.stat plugs), not the Armor 3.0 raise-the-3-lowest-to-5 model.
+ * Real-world regression: an unmasterworked legacy Verity's Brow normalized to
+ * weapons 15 instead of 17, under-reporting the weapon ceiling 145 vs D2AP's 147.
+ */
+test("legacy piece: assume-masterwork adds +2 to all six stats", () => {
+  const ITEM = 888;
+  // Unmasterworked legacy Verity's Brow roll (canonical order).
+  const cur = {
+    [H.weapons]: 15,
+    [H.health]: 2,
+    [H.class]: 17,
+    [H.grenade]: 30,
+    [H.super]: 2,
+    [H.melee]: 2,
+  };
+  const defs: Record<number, object> = {
+    [ITEM]: {
+      itemType: 2,
+      classType: 2,
+      displayProperties: { name: "Verity's Brow" },
+      inventory: { bucketTypeHash: 3448274439, tierType: 6 }, // helmet, exotic
+    },
+  };
+  const manifest = {
+    def: (_table: string, hash: number | null | undefined) =>
+      hash == null ? undefined : defs[hash],
+  } as unknown as Manifest;
+  const profile = {
+    itemComponents: {
+      stats: {
+        data: {
+          v1: {
+            stats: Object.fromEntries(
+              Object.entries(cur).map(([h, v]) => [h, { value: v }]),
+            ),
+          },
+        },
+      },
+      sockets: { data: { v1: { sockets: [] } } },
+    },
+    profileInventory: { data: { items: [{ itemInstanceId: "v1", itemHash: ITEM }] } },
+  } as unknown as DestinyProfileResponse;
+
+  const p = normalizeArmory(profile, manifest)[0];
+  expect(p.baseStats).toEqual([15, 2, 17, 30, 2, 2]);
+  expect(p.stats).toEqual([17, 4, 19, 32, 4, 4]);
+});
+
+test("legacy piece already masterworked: the MW plug is stripped, +2 re-applied (no double count)", () => {
+  const ITEM = 889;
+  const MW_PLUG = 2248916764;
+  // Current stats INCLUDE the real +2-all masterwork plug.
+  const cur = {
+    [H.weapons]: 17,
+    [H.health]: 4,
+    [H.class]: 19,
+    [H.grenade]: 32,
+    [H.super]: 4,
+    [H.melee]: 4,
+  };
+  const defs: Record<number, object> = {
+    [ITEM]: {
+      itemType: 2,
+      classType: 2,
+      displayProperties: { name: "Verity's Brow" },
+      inventory: { bucketTypeHash: 3448274439, tierType: 6 },
+    },
+    [MW_PLUG]: {
+      plug: {
+        plugCategoryIdentifier: "v460.plugs.armor.masterworks.stat.resistance_3",
+      },
+      investmentStats: Object.values(H).map((statTypeHash) => ({
+        statTypeHash,
+        value: 2,
+      })),
+    },
+  };
+  const manifest = {
+    def: (_table: string, hash: number | null | undefined) =>
+      hash == null ? undefined : defs[hash],
+  } as unknown as Manifest;
+  const profile = {
+    itemComponents: {
+      stats: {
+        data: {
+          v2: {
+            stats: Object.fromEntries(
+              Object.entries(cur).map(([h, v]) => [h, { value: v }]),
+            ),
+          },
+        },
+      },
+      sockets: { data: { v2: { sockets: [{ plugHash: MW_PLUG }] } } },
+    },
+    profileInventory: { data: { items: [{ itemInstanceId: "v2", itemHash: ITEM }] } },
+  } as unknown as DestinyProfileResponse;
+
+  const p = normalizeArmory(profile, manifest)[0];
+  expect(p.baseStats).toEqual([15, 2, 17, 30, 2, 2]);
+  expect(p.stats).toEqual([17, 4, 19, 32, 4, 4]);
+});
+
+/**
+ * Legacy exotics don't carry the "Artifice Armor" intrinsic perk (3727270518) —
+ * their artifice capability appears as sockets in the enhancements.artifice
+ * categories (the mod socket, plus a "Locked Artifice Socket" in
+ * enhancements.artifice.exotic). Real-world regression: isArtifice was false for
+ * every legacy exotic, so the artifice +3 never applied in-app.
+ */
+test("artifice detection: perk hash OR an enhancements.artifice-category socket", () => {
+  const ITEM = 890;
+  const EMPTY_ARTIFICE = 4173924323;
+  const LOCKED_ARTIFICE = 1656746282;
+  const cur = { [H.weapons]: 15 };
+  const defs: Record<number, object> = {
+    [ITEM]: {
+      itemType: 2,
+      classType: 2,
+      displayProperties: { name: "Verity's Brow" },
+      inventory: { bucketTypeHash: 3448274439, tierType: 6 },
+    },
+    [EMPTY_ARTIFICE]: {
+      plug: { plugCategoryIdentifier: "enhancements.artifice" },
+    },
+    [LOCKED_ARTIFICE]: {
+      plug: { plugCategoryIdentifier: "enhancements.artifice.exotic" },
+    },
+  };
+  const manifest = {
+    def: (_table: string, hash: number | null | undefined) =>
+      hash == null ? undefined : defs[hash],
+  } as unknown as Manifest;
+  const mk = (sockets: { plugHash: number }[]) =>
+    ({
+      itemComponents: {
+        stats: {
+          data: {
+            a1: {
+              stats: Object.fromEntries(
+                Object.entries(cur).map(([h, v]) => [h, { value: v }]),
+              ),
+            },
+          },
+        },
+        sockets: { data: { a1: { sockets } } },
+      },
+      profileInventory: {
+        data: { items: [{ itemInstanceId: "a1", itemHash: ITEM }] },
+      },
+    }) as unknown as DestinyProfileResponse;
+
+  // The artifice mod socket alone marks the piece (legacy exotic shape).
+  expect(normalizeArmory(mk([{ plugHash: EMPTY_ARTIFICE }]), manifest)[0].isArtifice).toBe(true);
+  // The locked exotic artifice socket counts too.
+  expect(normalizeArmory(mk([{ plugHash: LOCKED_ARTIFICE }]), manifest)[0].isArtifice).toBe(true);
+  // No artifice sockets, no perk → false.
+  expect(normalizeArmory(mk([]), manifest)[0].isArtifice).toBe(false);
 });
 
 test("the archetype plug's name is captured; pieces without one get undefined", () => {
