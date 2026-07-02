@@ -436,8 +436,8 @@ export function BuilderPanel({
     run,
   ]);
 
-  const ready =
-    Boolean(session.data?.authenticated) && Boolean(armory) && Boolean(manifest);
+  const authed = session.data?.authenticated ?? false;
+  const ready = authed && Boolean(armory) && Boolean(manifest);
 
   // Auto-search: rerun the optimizer a beat after any selection changes. `runOptimizer` is
   // memoized on exactly the build inputs, so its identity changing is the "something
@@ -786,7 +786,6 @@ export function BuilderPanel({
           </>
         )}
 
-        {/* Status + sign-in. Lives here for now; slated to be hidden later. */}
         <div className="space-y-4 py-4 opacity-80">
           <SignInCard />
           {showInlineStatusCards && <BuilderStatusCards />}

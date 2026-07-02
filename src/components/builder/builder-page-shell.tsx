@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { SignInCard } from "@/components/auth/sign-in-card";
+import { useSession } from "@/lib/auth/use-session";
 import { BuilderPanel } from "@/components/builder/builder-panel";
 import { BuilderStatusCards } from "@/components/builder/builder-status-cards";
 
@@ -22,6 +24,16 @@ function useMinWidth(minWidth: number) {
 
 export function BuilderPageShell() {
   const wide = useMinWidth(WIDE_BREAKPOINT_PX);
+  const session = useSession();
+  const authed = session.data?.authenticated ?? false;
+
+  if (!authed) {
+    return (
+      <main className="mx-auto max-w-md px-6 py-6">
+        <SignInCard />
+      </main>
+    );
+  }
 
   if (wide) {
     return (
