@@ -79,7 +79,7 @@ export function ArmorTableToolbar({
   };
 
   return (
-    <div className="@container/toolbar flex items-center gap-2 px-3 py-3">
+    <div className="@container/toolbar flex items-center gap-2 px-3 py-4">
       <span
         className="text-muted-foreground shrink-0 text-xs tabular-nums"
         aria-label={`${filteredCount} results`}

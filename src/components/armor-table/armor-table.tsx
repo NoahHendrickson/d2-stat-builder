@@ -57,7 +57,10 @@ import { NewDropsFeed } from "@/components/armor-table/new-drops-feed";
 const ESTIMATED_ROW_HEIGHT_PX = 38;
 
 const TABLE_HEAD_CELL =
-  "border-border/50 border-b bg-muted py-2.5 pr-3 text-sm font-medium whitespace-nowrap first:pl-3";
+  "border-border/50 border-b bg-[color-mix(in_oklch,var(--muted)_55%,var(--background))] py-2.5 pr-3 text-sm font-medium whitespace-nowrap first:pl-3";
+
+const TABLE_HEADER_BG =
+  "bg-[color-mix(in_oklch,var(--muted)_55%,var(--background))]";
 
 function TableHeader({
   label,
@@ -287,7 +290,7 @@ export function ArmorTable() {
           anatomy — the toolbar sits outside the scroller so it survives
           horizontal scrolling, the thead stays sticky inside it. */}
       <div className="border-border/50 flex min-w-0 flex-1 flex-col overflow-hidden rounded-lg border">
-        <div className="border-border/50 bg-muted border-b">
+        <div className={cn("border-border/50 border-b", TABLE_HEADER_BG)}>
           <ArmorTableToolbar
             search={search}
             onSearchChange={setSearch}
@@ -309,7 +312,7 @@ export function ArmorTable() {
         <div ref={setScrollerEl} className="min-h-0 flex-1 overflow-auto">
           <table className="w-full min-w-[66rem] table-fixed text-sm">
             {TABLE_COLGROUP}
-            <thead className="bg-muted sticky top-0 z-10">
+            <thead className={cn("sticky top-0 z-10", TABLE_HEADER_BG)}>
               <tr className="text-muted-foreground text-left">
                 <TableHeader label="Name" />
                 <TableHeader label="Class" />
