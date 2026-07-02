@@ -122,7 +122,11 @@
   --accent-foreground: oklch(0.93 0 0);
   --destructive: oklch(0.704 0.191 22.216);
   --border: oklch(0.35 0 0);
-  --input: oklch(0.28 0 0);
+  /* Translucent white (upstream shadcn dark) instead of opaque 0.28: checkbox
+     and switch outlines need to stay visible on bg/popover (0.21) AND on
+     card/muted (0.25/0.28) surfaces — an opaque near-0.28 gray vanishes on
+     all of them. */
+  --input: oklch(1 0 0 / 15%);
   --ring: oklch(0.62 0 0);
   --chart-1: oklch(0.87 0 0);
   --chart-2: oklch(0.556 0 0);
