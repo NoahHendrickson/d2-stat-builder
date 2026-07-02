@@ -18,7 +18,7 @@ export interface ExoticOption {
  * Selected ring/glow wraps the full frame including the lip band.
  */
 const tileBase =
-  "group/tile relative w-10 shrink-0 rounded-[6px] border border-[var(--exotic-line)] bg-[var(--exotic-lip)] pb-0.5 outline-none transition-all active:translate-y-0.5 active:pb-px focus-visible:ring-3 focus-visible:ring-ring/50";
+  "group/tile relative w-9 shrink-0 rounded-[5px] border border-[var(--exotic-line)] bg-[var(--exotic-lip)] pb-0.5 outline-none transition-all active:translate-y-0.5 active:pb-px focus-visible:ring-3 focus-visible:ring-ring/50";
 
 const tileSelected =
   "shadow-[0_0_0_1px_var(--exotic-ring-outer),0_0_12px_3px_var(--exotic-ring-glow)]";
@@ -60,13 +60,13 @@ export function ExoticPicker({
               className={cn(tileBase, active && tileSelected)}
             >
               {/* -mx/-mt-px overlaps the face border onto the frame border so they read as one line */}
-              <span className="relative -mx-px -mt-px block aspect-square overflow-hidden rounded-[6px] border border-[var(--exotic-line)]">
+              <span className="relative -mx-px -mt-px block aspect-square overflow-hidden rounded-[5px] border border-[var(--exotic-line)]">
                 {exotic.icon ? (
                   <Image
                     src={`${BUNGIE_IMAGE_BASE}${exotic.icon}`}
                     alt={exotic.name}
                     fill
-                    sizes="40px"
+                    sizes="36px"
                     className="object-cover"
                     unoptimized
                   />

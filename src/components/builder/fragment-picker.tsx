@@ -39,7 +39,7 @@ export function FragmentPicker({
         value={activeSubclass}
         onValueChange={(v) => onSubclassChange(v as Subclass)}
       >
-        <TabsList className="w-full">
+        <TabsList>
           {SUBCLASSES.map((s) => (
             <TabsTrigger key={s} value={s} className="text-xs">
               {s}

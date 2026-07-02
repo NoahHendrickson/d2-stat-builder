@@ -213,10 +213,10 @@ function BuildRow({
             const met = targets[i] > 0 && loadout.stats[i] >= targets[i];
             return (
               <span key={key} className="flex items-center gap-1 tabular-nums">
-                <span className={met ? "text-emerald-500" : "text-foreground"}>
+                <StatGlyph src={statIcons[key]} label={STAT_LABELS[key]} />
+                <span className={met ? "text-brand" : "text-foreground"}>
                   {loadout.stats[i]}
                 </span>
-                <StatGlyph src={statIcons[key]} label={STAT_LABELS[key]} />
               </span>
             );
           })}

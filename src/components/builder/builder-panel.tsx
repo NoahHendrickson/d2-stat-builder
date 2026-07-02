@@ -40,6 +40,10 @@ import {
 import { Slider, sliderEdgeAlignedLeft } from "@/components/ui/slider";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import {
+  field3dFocusVisibleClasses,
+  field3dSurfaceClasses,
+} from "@/lib/field-surface";
 import { cn } from "@/lib/utils";
 import { BUNGIE_IMAGE_BASE } from "@/lib/bungie/constants";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -47,7 +51,6 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SignInCard } from "@/components/auth/sign-in-card";
-import { PieceInspector } from "@/components/armory/piece-inspector";
 import { BuilderStatusCards } from "@/components/builder/builder-status-cards";
 import { ExoticPicker } from "@/components/builder/exotic-picker";
 import { FragmentPicker } from "@/components/builder/fragment-picker";
@@ -784,14 +787,12 @@ export function BuilderPanel({
                 <div className="shrink-0">
                   <Popover>
                     <PopoverTrigger
-                      render={
-                        <Button
-                          variant="outlineSubtle"
-                          size="icon"
-                          aria-label="Armor set list settings"
-                          className="rounded-lg before:rounded-lg after:rounded-lg"
-                        />
-                      }
+                      aria-label="Armor set list settings"
+                      className={cn(
+                        "inline-flex size-8 shrink-0 items-center justify-center rounded-[6px] border border-transparent text-muted-foreground transition-colors hover:text-foreground",
+                        field3dSurfaceClasses,
+                        field3dFocusVisibleClasses,
+                      )}
                     >
                       <SlidersHorizontal className="size-4" aria-hidden />
                     </PopoverTrigger>
@@ -899,7 +900,6 @@ export function BuilderPanel({
         <div className="space-y-4 py-4 opacity-80">
           <SignInCard />
           {showInlineStatusCards && <BuilderStatusCards />}
-          <PieceInspector />
         </div>
       </div>
 
