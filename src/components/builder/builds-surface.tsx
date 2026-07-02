@@ -52,12 +52,8 @@ export function BuildsSurface(props: BuildsColumnContentProps) {
         open={sheetOpen}
         onOpen={() => setSheetOpen(true)}
       />
-      <Sheet open={sheetOpen} onOpenChange={setSheetOpen}>
-        <SheetContent
-          id="builds-mobile-sheet"
-          side="bottom"
-          className="gap-0 p-0"
-        >
+      <Sheet open={sheetOpen} onOpenChange={setSheetOpen} side="bottom">
+        <SheetContent id="builds-mobile-sheet" className="gap-0 p-0">
           <SheetBody className="pt-2">
             <BuildsColumnContent {...props} />
           </SheetBody>
