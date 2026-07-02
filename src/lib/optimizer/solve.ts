@@ -315,6 +315,8 @@ export function solve(
           tuning: best.applied,
           modBonus: best.modBonus,
           modsUsed: best.modsUsed,
+          artificeBonus: new Array(NUM_STATS).fill(0),
+          artifice: new Array(NUM_SLOTS).fill(null),
           total: best.total,
           exotic: exoticCount > 0,
         });

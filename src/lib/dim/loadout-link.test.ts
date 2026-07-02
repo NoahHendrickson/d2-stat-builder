@@ -39,6 +39,8 @@ function makeLoadout(over: Partial<OptimizerLoadout> = {}): OptimizerLoadout {
     tuning: [null, null, null, null, null],
     modBonus: [...ZERO] as StatArray,
     modsUsed: { major: 0, minor: 0 },
+    artificeBonus: [...ZERO] as StatArray,
+    artifice: [null, null, null, null, null],
     total: 300,
     exotic: false,
     ...over,
