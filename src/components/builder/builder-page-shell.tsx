@@ -3,8 +3,8 @@
 import { useEffect, useState } from "react";
 import { SignInCard } from "@/components/auth/sign-in-card";
 import { useSession } from "@/lib/auth/use-session";
+import { ArmoryStatus } from "@/components/armory/armory-status";
 import { BuilderPanel } from "@/components/builder/builder-panel";
-import { BuilderStatusCards } from "@/components/builder/builder-status-cards";
 
 const WIDE_BREAKPOINT_PX = 1536;
 
@@ -39,7 +39,9 @@ export function BuilderPageShell() {
     return (
       <div className="mx-auto flex max-w-[calc(80rem+22rem+2rem)] gap-8 px-6 py-6">
         <aside className="w-[22rem] shrink-0 self-start">
-          <BuilderStatusCards />
+          <div className="sticky top-[58px] opacity-80">
+            <ArmoryStatus />
+          </div>
         </aside>
         <div className="min-w-0 flex-1">
           <BuilderPanel showInlineStatusCards={false} />

@@ -51,7 +51,8 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SignInCard } from "@/components/auth/sign-in-card";
-import { BuilderStatusCards } from "@/components/builder/builder-status-cards";
+import { ArmoryStatus } from "@/components/armory/armory-status";
+import { ManifestStatus } from "@/components/manifest/manifest-status";
 import { ExoticPicker } from "@/components/builder/exotic-picker";
 import { FragmentPicker } from "@/components/builder/fragment-picker";
 import { ClassEmblemTabs } from "@/components/builder/class-emblem-tabs";
@@ -931,7 +932,8 @@ export function BuilderPanel({
 
         <div className="space-y-4 py-4 opacity-80">
           <SignInCard />
-          {showInlineStatusCards && <BuilderStatusCards />}
+          {showInlineStatusCards && <ArmoryStatus />}
+          <ManifestStatus />
         </div>
       </div>
 
