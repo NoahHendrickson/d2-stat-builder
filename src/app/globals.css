@@ -4,6 +4,7 @@
 
 /* App `dark:` utilities follow next-themes' `.dark` class. */
 @custom-variant dark (&:where(.dark, .dark *));
+@custom-variant fine-pointer (@media (hover: hover) and (pointer: fine));
 
 :root {
   --background: oklch(1 0 0);
