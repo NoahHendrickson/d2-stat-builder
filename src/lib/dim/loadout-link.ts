@@ -52,6 +52,8 @@ export interface DimLoadoutInput {
   statModHashes: StatModHashes[];
   /** Directional tuning plugs keyed "plus-minus" from getTuningPlugHashes. */
   tuningPlugHashes: Map<string, number>;
+  /** Per-stat artifice +3 mod plug hashes (STAT_ORDER) from getArtificeModHashes. */
+  artificeModHashes: (number | undefined)[];
   /** Fragments carrier; omitted entirely when no fragments are selected. */
   subclass?: { itemHash: number; fragmentHashes: number[]; socketStart: number };
   name: string;
@@ -87,6 +89,7 @@ export function buildDimLoadout(input: DimLoadoutInput): DimLoadout {
     targets,
     statModHashes,
     tuningPlugHashes,
+    artificeModHashes,
     subclass,
     name,
   } = input;
@@ -128,6 +131,16 @@ export function buildDimLoadout(input: DimLoadoutInput): DimLoadout {
     const hash = tuningPlugHashes.get(`${tune.plus}-${tune.minus}`);
     if (hash === undefined) {
       console.warn(`DIM link: no tuning plug for +${tune.plus}/-${tune.minus}`);
+      continue;
+    }
+    mods.push(hash);
+  }
+
+  for (const pick of loadout.artifice) {
+    if (pick === null) continue;
+    const hash = artificeModHashes[pick];
+    if (hash === undefined) {
+      console.warn(`DIM link: no artifice mod hash for stat ${STAT_ORDER[pick]}`);
       continue;
     }
     mods.push(hash);

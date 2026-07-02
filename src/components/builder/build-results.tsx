@@ -148,6 +148,7 @@ interface BuildActionProps {
   characters: ArmoryCharacter[];
   statModHashes: StatModHashes[] | null;
   tuningPlugHashes: Map<string, number> | null;
+  artificeModHashes: (number | undefined)[] | null;
   subclass?: DimSubclassInput;
   onEquipped?: () => void;
 }
@@ -163,6 +164,7 @@ function BuildRow({
   characters,
   statModHashes,
   tuningPlugHashes,
+  artificeModHashes,
   subclass,
   onEquipped,
 }: {
@@ -347,6 +349,7 @@ function BuildRow({
             characters={characters}
             statModHashes={statModHashes}
             tuningPlugHashes={tuningPlugHashes}
+            artificeModHashes={artificeModHashes}
             subclass={subclass}
             onEquipped={onEquipped}
           />
@@ -370,6 +373,7 @@ function BuildActions({
   characters,
   statModHashes,
   tuningPlugHashes,
+  artificeModHashes,
   subclass,
   onEquipped,
 }: {
@@ -392,7 +396,8 @@ function BuildActions({
     : "Refresh your gear — a piece in this build is missing";
 
   const openInDim = () => {
-    if (!complete || !statModHashes || !tuningPlugHashes) return;
+    if (!complete || !statModHashes || !tuningPlugHashes || !artificeModHashes)
+      return;
     const url = buildDimLoadoutUrl(
       buildDimLoadout({
         loadout,
@@ -401,6 +406,7 @@ function BuildActions({
         targets,
         statModHashes,
         tuningPlugHashes,
+        artificeModHashes,
         subclass:
           subclass?.itemHash !== undefined
             ? {
@@ -478,7 +484,9 @@ function BuildActions({
       <Button
         size="sm"
         onClick={openInDim}
-        disabled={!complete || !statModHashes || !tuningPlugHashes}
+        disabled={
+          !complete || !statModHashes || !tuningPlugHashes || !artificeModHashes
+        }
         title={missingTitle}
       >
         <ArrowSquareOut weight="duotone" aria-hidden />
@@ -498,6 +506,7 @@ export function BuildResults({
   characters,
   statModHashes,
   tuningPlugHashes,
+  artificeModHashes,
   subclass,
   onEquipped,
 }: {
@@ -538,6 +547,7 @@ export function BuildResults({
             characters={characters}
             statModHashes={statModHashes}
             tuningPlugHashes={tuningPlugHashes}
+            artificeModHashes={artificeModHashes}
             subclass={subclass}
             onEquipped={onEquipped}
           />

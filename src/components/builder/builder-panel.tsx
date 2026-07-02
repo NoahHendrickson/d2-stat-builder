@@ -62,7 +62,11 @@ import {
   resolveExoticIndex,
   SCHEMA_VERSION,
 } from "@/lib/builder/selection-storage";
-import { getStatModHashes, getTuningPlugHashes } from "@/lib/dim/mod-hashes";
+import {
+  getArtificeModHashes,
+  getStatModHashes,
+  getTuningPlugHashes,
+} from "@/lib/dim/mod-hashes";
 import {
   FRAGMENT_SOCKET_START,
   SUBCLASS_ITEM_HASHES,
@@ -330,6 +334,10 @@ export function BuilderPanel({
   );
   const tuningPlugHashes = useMemo(
     () => (manifest ? getTuningPlugHashes(manifest) : null),
+    [manifest],
+  );
+  const artificeModHashes = useMemo(
+    () => (manifest ? getArtificeModHashes(manifest) : null),
     [manifest],
   );
   const dimSubclass = useMemo(
@@ -971,6 +979,7 @@ export function BuilderPanel({
             characters={armory?.characters ?? []}
             statModHashes={statModHashes}
             tuningPlugHashes={tuningPlugHashes}
+            artificeModHashes={artificeModHashes}
             subclass={dimSubclass}
             onEquipped={() => void armoryQuery.refetch()}
           />

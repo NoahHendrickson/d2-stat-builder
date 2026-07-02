@@ -64,6 +64,7 @@ function makeInput(over: Partial<DimLoadoutInput> = {}): DimLoadoutInput {
       ["0-1", 7001],
       ["3-5", 7035],
     ]),
+    artificeModHashes: [8000, 8001, 8002, 8003, 8004, 8005],
     name: "Test build",
     ...over,
   };
@@ -115,6 +116,21 @@ test("tuning mods: balanced + directional resolve to plug hashes; unknown skippe
     }),
   );
   expect(dim.parameters.mods).toEqual([BALANCED_TUNING_PLUG_HASH, 7001]);
+});
+
+test("artifice picks resolve to artifice mod hashes; missing hash warns and skips", () => {
+  const dim = buildDimLoadout(
+    makeInput({
+      loadout: makeLoadout({
+        artifice: [0, null, null, null, 4], // +3 weapons on slot 0, +3 super on slot 4
+        artificeBonus: [3, 0, 0, 0, 3, 0],
+      }),
+      artificeModHashes: [8000, undefined, undefined, undefined, undefined, undefined],
+    }),
+  );
+  expect(dim.parameters.mods).toContain(8000); // weapons artifice mod
+  // stat 4 has no hash — skipped, not crashed; nothing else sneaks in
+  expect(dim.parameters.mods).toEqual([8000]);
 });
 
 test("equipped carries the 5 pieces with string instance ids", () => {

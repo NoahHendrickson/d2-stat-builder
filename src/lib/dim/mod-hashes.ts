@@ -71,3 +71,31 @@ export function getTuningPlugHashes(manifest: Manifest): Map<string, number> {
   }
   return out;
 }
+
+/** Artifice armor's socket-specific +3 stat mods (DIM keys on the same category). */
+const ARTIFICE_MOD_CATEGORY = "enhancements.artifice";
+const ARTIFICE_BONUS = 3;
+
+/**
+ * Per-stat (STAT_ORDER-indexed) plug hashes of the artifice +3 stat mods, scanned
+ * from the manifest like the general mods: artifice-category plugs whose investment
+ * is a single armor stat worth 3.
+ */
+export function getArtificeModHashes(manifest: Manifest): (number | undefined)[] {
+  const out: (number | undefined)[] = new Array(6).fill(undefined);
+  const table = manifest.all("DestinyInventoryItemDefinition");
+  for (const key in table) {
+    const def = table[key];
+    if (def.plug?.plugCategoryIdentifier !== ARTIFICE_MOD_CATEGORY) continue;
+    if (def.redacted || !def.displayProperties?.name) continue;
+
+    const inv = (def.investmentStats ?? []).filter(
+      (s) => STAT_HASH_TO_INDEX[s.statTypeHash] !== undefined,
+    );
+    if (inv.length !== 1 || inv[0].value !== ARTIFICE_BONUS) continue;
+
+    const idx = STAT_HASH_TO_INDEX[inv[0].statTypeHash];
+    out[idx] ??= Number(key);
+  }
+  return out;
+}
