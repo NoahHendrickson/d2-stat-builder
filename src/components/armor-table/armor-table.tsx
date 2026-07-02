@@ -349,7 +349,7 @@ export function ArmorTable() {
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative min-w-56 flex-1">
           <MagnifyingGlass
-            className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2"
+            className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 z-10 size-3.5 -translate-y-1/2"
             aria-hidden
           />
           <Input
@@ -364,7 +364,7 @@ export function ArmorTable() {
             }}
             placeholder="Press F to search"
             aria-label="Search armor by name"
-            className="pl-8"
+            className="pl-6"
           />
         </div>
         <div className="grid w-full grid-cols-2 gap-2 sm:grid-cols-3 xl:flex xl:w-auto xl:*:w-40">

@@ -27,16 +27,16 @@ function TabsList({
   return (
     <TabsPrimitive.List
       data-slot="tabs-list"
-      // A light-gray border around the row. Top and sides flush; 3px of bottom
-      // room so the selected indicator's hard shadow sits inside the border.
+      // Accent-filled track; extra bottom room so the selected indicator's hard
+      // shadow sits inside the container.
       className={cn(
-        "relative inline-flex w-fit items-center rounded-xl border border-border pb-[3px] text-muted-foreground group-data-vertical/tabs:h-fit group-data-vertical/tabs:flex-col group-data-vertical/tabs:items-stretch",
+        "relative inline-flex w-fit items-center rounded-xl bg-accent px-0.5 pt-0.5 pb-[5px] text-muted-foreground group-data-vertical/tabs:h-fit group-data-vertical/tabs:flex-col group-data-vertical/tabs:items-stretch",
         className
       )}
       {...props}
     >
-      {/* The selected "button" — a single element that slides/resizes between
-          tabs. Base UI keeps --active-tab-* in sync with the active tab. */}
+      {/* The selected 3D "button" — slides/resizes between tabs. Base UI keeps
+          --active-tab-* in sync with the active tab. */}
       <TabsPrimitive.Indicator
         data-slot="tabs-indicator"
         className="absolute top-[var(--active-tab-top)] left-[var(--active-tab-left)] z-0 h-[var(--active-tab-height)] w-[var(--active-tab-width)] rounded-lg border-2 border-brand bg-background shadow-[0_3px_0_0_var(--brand-shadow)] transition-[top,left,width,height] duration-200 ease-out"
@@ -50,8 +50,8 @@ function TabsTrigger({ className, ...props }: TabsPrimitive.Tab.Props) {
   return (
     <TabsPrimitive.Tab
       data-slot="tabs-trigger"
-      // Just the label, sitting above the sliding indicator (z-10). Selected
-      // text turns to foreground; the blue button visual comes from the indicator.
+      // Label above the sliding indicator (z-10). Selected text turns to
+      // foreground; the 3D button visual comes from the indicator.
       className={cn(
         "relative z-10 inline-flex items-center justify-center gap-1.5 rounded-lg border-2 border-transparent px-3 py-1 text-sm font-semibold whitespace-nowrap text-foreground/60 transition-colors outline-none select-none",
         "hover:text-foreground",

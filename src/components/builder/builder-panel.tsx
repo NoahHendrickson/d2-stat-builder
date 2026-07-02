@@ -681,7 +681,8 @@ export function BuilderPanel({
                                 : 0,
                             );
                           }}
-                          className="h-7 w-14 px-2 text-right tabular-nums"
+                          className="w-14 tabular-nums"
+                          style={{ textAlign: "right" }}
                         />
                         {cap !== null && (
                           <>
@@ -768,7 +769,7 @@ export function BuilderPanel({
               <div className="flex items-center gap-2">
                 <div className="relative min-w-0 flex-1">
                   <MagnifyingGlass
-                    className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2"
+                    className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 z-10 size-3.5 -translate-y-1/2"
                     aria-hidden
                   />
                   <Input
@@ -777,7 +778,7 @@ export function BuilderPanel({
                     onChange={(e) => setSetQuery(e.target.value)}
                     placeholder="Find armor sets"
                     aria-label="Find armor sets"
-                    className="pl-8"
+                    className="pl-6"
                   />
                 </div>
                 <div className="shrink-0">
