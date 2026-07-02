@@ -2,7 +2,12 @@
 
 import { Fragment, useState, type ReactNode } from "react";
 import Image from "next/image";
-import { ArrowSquareOut, CaretDown, CircleNotch } from "@phosphor-icons/react";
+import {
+  ArrowSquareOut,
+  CaretDown,
+  CircleNotch,
+  Copy,
+} from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import type { ArmorPiece } from "@/lib/armory/normalize";
@@ -403,9 +408,10 @@ function BuildRow({
 }
 
 /**
- * Footer of an expanded build: hand the build to DIM's loadout editor, or pull
- * the pieces to a character and equip them. Both need every piece still present
- * in the armory (a refetch can drop instances from stale results).
+ * Footer of an expanded build: copy the piece IDs as a DIM search, hand the
+ * build to DIM's loadout editor, or pull the pieces to a character and equip
+ * them. All need every piece still present in the armory (a refetch can drop
+ * instances from stale results).
  */
 function BuildActions({
   loadout,
@@ -469,6 +475,17 @@ function BuildActions({
     window.open(url, "_blank", "noopener,noreferrer");
   };
 
+  const copyItemIds = async () => {
+    if (!complete) return;
+    const query = resolved.map((p) => `id:'${p.instanceId}'`).join(" OR ");
+    try {
+      await navigator.clipboard.writeText(query);
+      toast.success("Item IDs copied — paste into DIM search");
+    } catch {
+      toast.error("Couldn't copy to clipboard");
+    }
+  };
+
   const equip = async () => {
     if (!complete || !targetCharacter || equipping) return;
     setEquipping(true);
@@ -507,6 +524,16 @@ function BuildActions({
 
   return (
     <div className="border-border/60 col-span-full mt-1 flex items-center justify-end gap-2 border-t py-2.5">
+      <Button
+        size="sm"
+        variant="outline"
+        onClick={copyItemIds}
+        disabled={!complete}
+        title={missingTitle}
+      >
+        <Copy weight="duotone" aria-hidden />
+        Copy item IDs
+      </Button>
       <Button
         size="sm"
         variant="outline"
