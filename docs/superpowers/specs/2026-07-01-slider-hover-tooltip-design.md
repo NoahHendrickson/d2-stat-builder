@@ -32,7 +32,9 @@ tooltip stays visible and live during drags.
 - **Touch:** shown during touch drags too — extra useful since the finger obscures the
   thumb.
 - **Hide:** on pointer leave and pointer cancel.
-- The badge x position is clamped to the control bounds so it never overhangs the ends.
+- The badge anchor x is clamped to the control bounds; the badge is centered on the
+  anchor, so at the extreme ends up to half the badge may overhang — it stays
+  cursor-anchored rather than snapping inward.
 
 ## Implementation
 
