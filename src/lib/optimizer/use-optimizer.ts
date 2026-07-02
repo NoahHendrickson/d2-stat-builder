@@ -18,6 +18,9 @@ import type {
 export function useOptimizer() {
   const workerRef = useRef<Worker | null>(null);
   const seqRef = useRef(0);
+  // Whether a solve is in flight on the current worker. A worker is single-threaded, so a
+  // message posted mid-solve would queue behind it — run() checks this to terminate first.
+  const inFlightRef = useRef(false);
   const [result, setResult] = useState<OptimizerOutput | null>(null);
   const [ceilings, setCeilings] = useState<StatArray | null>(null);
   const [running, setRunning] = useState(false);
@@ -38,12 +41,16 @@ export function useOptimizer() {
         } else if (msg.kind === "ceilings") {
           setCeilings(msg.ceilings);
         } else {
+          inFlightRef.current = false;
           setResult(msg.output);
           setCeilings(msg.output.ceilings);
           setRunning(false);
         }
       };
-      worker.onerror = () => setRunning(false);
+      worker.onerror = () => {
+        inFlightRef.current = false;
+        setRunning(false);
+      };
       workerRef.current = worker;
     }
     return workerRef.current;
@@ -60,6 +67,13 @@ export function useOptimizer() {
   const run = useCallback(
     (input: OptimizerInput) => {
       const seq = ++seqRef.current;
+      // Kill a superseded solve so this one starts immediately instead of queueing
+      // behind it (the worker is stateless — recreating it costs single-digit ms).
+      if (inFlightRef.current) {
+        workerRef.current?.terminate();
+        workerRef.current = null;
+      }
+      inFlightRef.current = true;
       setRunning(true);
       setProgress(0);
       setRunId(seq);
@@ -72,6 +86,7 @@ export function useOptimizer() {
   // the worker down so its CPU work stops.
   const cancel = useCallback(() => {
     seqRef.current++;
+    inFlightRef.current = false;
     workerRef.current?.terminate();
     workerRef.current = null;
     setRunning(false);

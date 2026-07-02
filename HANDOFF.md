@@ -154,5 +154,5 @@ Loading/skeleton/error/empty states; better result ranking (currently by total s
 - **Component `310` (ItemReusablePlugs) 500s on the full vault** — see Tuning above.
 - **Vault items report the vault bucket**, not their armor slot — resolve the slot from `def.inventory.bucketTypeHash`, not the item's live `bucketHash` (see `normalize.ts`).
 - **Manifest:** download per-table JSON (not the ~379MB aggregate); filter the item table to armor + plugs (~17k of ~39k); cache in IndexedDB keyed on the `version` string.
-- **Web Worker** bundles fine with Turbopack via `new Worker(new URL("./worker.ts", import.meta.url), { type: "module" })`.
+- **Web Worker** bundles fine with Turbopack via `new Worker(new URL("./worker.ts", import.meta.url), { type: "module" })`. The worker is single-threaded and stateless — a message posted mid-solve queues *behind* the in-flight run, so `run()` in `use-optimizer.ts` terminates and recreates the worker when a solve is in flight (cheap; the pool is re-serialized every `postMessage` anyway). Keep that behavior if you touch the worker lifecycle.
 - Memory notes live in `/Users/noey/.claude/projects/-Users-noey-Developer-stat-builder/memory/`.
