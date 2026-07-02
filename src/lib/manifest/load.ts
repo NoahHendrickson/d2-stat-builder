@@ -94,39 +94,43 @@ export async function loadManifest(
   const version = info.version;
   const paths = info.jsonWorldComponentContentPaths.en;
 
-  // Cache hit: load every needed table from IndexedDB.
+  // Cache hit: load every needed table from IndexedDB (in parallel).
   if ((await getCachedVersion()) === version) {
     const tables = {} as ManifestTables;
-    let complete = true;
-    for (const table of MANIFEST_TABLES) {
-      const data = await getCachedTable(table);
-      if (!data) {
-        complete = false;
-        break;
-      }
-      tables[table] = data as never;
-    }
-    if (complete) {
+    const cached = await Promise.all(
+      MANIFEST_TABLES.map((table) => getCachedTable(table)),
+    );
+    if (cached.every((data) => data)) {
+      MANIFEST_TABLES.forEach((table, i) => {
+        tables[table] = cached[i] as never;
+      });
       onProgress?.("Loaded manifest from cache");
       return makeManifest(version, tables);
     }
   }
 
-  // Stale or incomplete: re-download.
+  // Stale or incomplete: re-download all tables concurrently. The version stamp is
+  // written only after every table lands, so a failed download leaves no stamp and the
+  // next load re-downloads cleanly.
   await clearCache();
   const tables = {} as ManifestTables;
-  for (const table of MANIFEST_TABLES) {
-    onProgress?.(`Downloading ${table.replace("Destiny", "").replace("Definition", "")}…`);
-    const raw = await downloadTable(paths[table]);
-    const data =
-      table === "DestinyInventoryItemDefinition"
-        ? filterInventoryItems(
-            raw as Record<number, DestinyInventoryItemDefinition>,
-          )
-        : raw;
-    tables[table] = data as never;
-    await setCachedTable(table, data as Record<number, unknown>);
-  }
+  let done = 0;
+  onProgress?.(`Downloading game data (0/${MANIFEST_TABLES.length})…`);
+  await Promise.all(
+    MANIFEST_TABLES.map(async (table) => {
+      const raw = await downloadTable(paths[table]);
+      const data =
+        table === "DestinyInventoryItemDefinition"
+          ? filterInventoryItems(
+              raw as Record<number, DestinyInventoryItemDefinition>,
+            )
+          : raw;
+      tables[table] = data as never;
+      await setCachedTable(table, data as Record<number, unknown>);
+      done++;
+      onProgress?.(`Downloading game data (${done}/${MANIFEST_TABLES.length})…`);
+    }),
+  );
   await setCachedVersion(version);
   onProgress?.("Manifest ready");
   return makeManifest(version, tables);

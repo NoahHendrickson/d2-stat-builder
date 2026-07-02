@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle2Icon, Loader2Icon, XCircleIcon } from "lucide-react";
+import { CheckCircle, CircleNotch, XCircle } from "@phosphor-icons/react";
 import { useArmory } from "@/lib/armory/use-armory";
 import { useSession } from "@/lib/auth/use-session";
 import {
@@ -48,9 +48,9 @@ export function ArmoryStatus() {
     <Card className="w-full">
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          {isLoading && <Loader2Icon className="size-4 animate-spin" />}
-          {isError && <XCircleIcon className="text-destructive size-4" />}
-          {data && <CheckCircle2Icon className="size-4 text-emerald-500" />}
+          {isLoading && <CircleNotch weight="duotone" className="size-4 animate-spin" />}
+          {isError && <XCircle weight="duotone" className="text-destructive size-4" />}
+          {data && <CheckCircle weight="duotone" className="size-4 text-emerald-500" />}
           Your armor
         </CardTitle>
         <CardDescription>

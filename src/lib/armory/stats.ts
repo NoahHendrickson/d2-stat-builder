@@ -31,6 +31,19 @@ export const STAT_LABELS: Record<StatKey, string> = {
   melee: "Melee",
 };
 
+/** UI stat order, top-to-bottom / left-to-right (icon-only rows map back to STAT_ORDER indices). */
+export const STAT_DISPLAY_ORDER = [
+  "health",
+  "melee",
+  "grenade",
+  "super",
+  "class",
+  "weapons",
+] as const satisfies readonly StatKey[];
+
+/** Per-stat icon paths resolved from the manifest (undefined until it's loaded). */
+export type StatIconMap = Record<StatKey, string | undefined>;
+
 /** Reverse map: stat hash -> index in STAT_ORDER (0..5). */
 export const STAT_HASH_TO_INDEX: Record<number, number> = Object.fromEntries(
   STAT_ORDER.map((key, i) => [STAT_HASHES[key], i]),
@@ -56,6 +69,9 @@ export const TUNING_PLUG_CATEGORY = "tuning";
 
 /** Directional tuning: +5 to the piece's tuned stat, −5 to a chosen other stat, 0 energy. */
 export const DIRECTIONAL_TUNING_BONUS = 5;
+
+/** Balanced Tuning plug item hash (verified against the live manifest). */
+export const BALANCED_TUNING_PLUG_HASH = 3122197216;
 
 /**
  * Balanced Tuning grants +1 to each of the 3 off-archetype stats — NOT all six.

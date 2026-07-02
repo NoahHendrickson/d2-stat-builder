@@ -110,10 +110,11 @@ export interface OptimizerRequest {
 }
 
 /**
- * Worker → main thread, echoing the request's seq so stale runs can be dropped. Ceilings
- * stream first (seed, then each refined stat) for the live slider animation; the final
- * "result" carries the full output.
+ * Worker → main thread, echoing the request's seq so stale runs can be dropped. Progress
+ * (a 0–1 fraction) and ceilings (seed, then each refined stat) stream ahead of the final
+ * "result", which carries the full output.
  */
 export type OptimizerResponse =
+  | { seq: number; kind: "progress"; progress: number }
   | { seq: number; kind: "ceilings"; ceilings: StatArray }
   | { seq: number; kind: "result"; output: OptimizerOutput };

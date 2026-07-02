@@ -42,6 +42,15 @@
   --brand-shadow: #75bcff;
   --neutral-line: #a1a1aa;
   --neutral-shadow: #c9c9ce;
+  --exotic: #ceae33;
+  /* Figma Destiny-exotics 127:9 — border line (both states). */
+  --exotic-line: #ffd400;
+  /* Figma Destiny-exotics 127:9 — lip fill (both states). */
+  --exotic-lip: #af8b31;
+  /* Figma Destiny-exotics 127:9 — selected outer ring (127:7). */
+  --exotic-ring-inner: #3f3f3f;
+  --exotic-ring-outer: #ffffff;
+  --exotic-ring-glow: rgb(255 255 255 / 0.45);
 }
 
 @theme inline {
@@ -89,6 +98,11 @@
   --color-brand-shadow: var(--brand-shadow);
   --color-neutral-shadow: var(--neutral-shadow);
   --color-neutral-line: var(--neutral-line);
+  --color-exotic: var(--exotic);
+  --color-exotic-line: var(--exotic-line);
+  --color-exotic-lip: var(--exotic-lip);
+  --color-exotic-ring-inner: var(--exotic-ring-inner);
+  --color-exotic-ring-outer: var(--exotic-ring-outer);
 }
 
 .dark {

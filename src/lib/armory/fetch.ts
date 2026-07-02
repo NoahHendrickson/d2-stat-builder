@@ -22,12 +22,26 @@ export interface Armory {
   characters: ArmoryCharacter[];
 }
 
+/** A failed armory fetch, carrying the proxy's HTTP status (401 = session expired). */
+export class ArmoryError extends Error {
+  constructor(
+    public readonly status: number,
+    message: string,
+  ) {
+    super(message);
+    this.name = "ArmoryError";
+  }
+}
+
 /** Fetch the player's profile from our server proxy and normalize the armor. */
 export async function fetchArmory(manifest: Manifest): Promise<Armory> {
   const res = await fetch("/api/bungie/profile", { cache: "no-store" });
   if (!res.ok) {
     const body = (await res.json().catch(() => null)) as { error?: string } | null;
-    throw new Error(body?.error ?? `Profile request failed: ${res.status}`);
+    throw new ArmoryError(
+      res.status,
+      body?.error ?? `Profile request failed: ${res.status}`,
+    );
   }
 
   const profile = (await res.json()) as DestinyProfileResponse;

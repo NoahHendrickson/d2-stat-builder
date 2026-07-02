@@ -2,10 +2,10 @@
 
 import { Fragment } from "react";
 import Image from "next/image";
-import { CheckIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { BUNGIE_IMAGE_BASE } from "@/lib/bungie/constants";
 import { STAT_LABELS, STAT_ORDER } from "@/lib/armory/stats";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   SUBCLASSES,
@@ -55,7 +55,7 @@ export function FragmentPicker({
       ) : (
         <div className="overflow-x-auto">
           <div className="grid min-w-max grid-cols-[1fr_repeat(6,2rem)] items-center gap-x-2 gap-y-1">
-            <span className="text-muted-foreground text-xs">Fragment</span>
+            <span aria-hidden />
             {STAT_ORDER.map((key) => (
               <span
                 key={key}
@@ -69,27 +69,20 @@ export function FragmentPicker({
               const on = selected.has(f.hash);
               return (
                 <Fragment key={f.hash}>
-                  <button
-                    type="button"
-                    onClick={() => onToggle(f.hash)}
-                    aria-pressed={on}
+                  <label
                     className={cn(
-                      "flex items-center gap-2 rounded-md px-1 py-0.5 text-left text-sm transition-colors",
+                      "group flex cursor-pointer items-center gap-2 rounded-md px-1 py-0.5 text-left text-sm transition-colors",
                       on
                         ? "text-foreground"
                         : "text-muted-foreground hover:text-foreground",
                     )}
                   >
-                    <span
-                      className={cn(
-                        "flex size-4 shrink-0 items-center justify-center rounded border",
-                        on
-                          ? "border-primary bg-primary text-primary-foreground"
-                          : "border-border/60",
-                      )}
-                    >
-                      {on && <CheckIcon className="size-3" />}
-                    </span>
+                    <Checkbox
+                      size="lg"
+                      checked={on}
+                      onCheckedChange={() => onToggle(f.hash)}
+                      className="group-hover:border-primary/60"
+                    />
                     {f.icon && (
                       <Image
                         src={`${BUNGIE_IMAGE_BASE}${f.icon}`}
@@ -101,7 +94,7 @@ export function FragmentPicker({
                       />
                     )}
                     <span className="truncate">{f.name}</span>
-                  </button>
+                  </label>
                   {STAT_ORDER.map((key, i) => (
                     <span
                       key={key}

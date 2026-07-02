@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle2Icon, Loader2Icon, XCircleIcon } from "lucide-react";
+import { CheckCircle, CircleNotch, XCircle } from "@phosphor-icons/react";
 import { useManifest } from "@/lib/manifest/use-manifest";
 import {
   Card,
@@ -18,13 +18,13 @@ export function ManifestStatus() {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           {status.state === "loading" && (
-            <Loader2Icon className="size-4 animate-spin" />
+            <CircleNotch weight="duotone" className="size-4 animate-spin" />
           )}
           {status.state === "ready" && (
-            <CheckCircle2Icon className="size-4 text-emerald-500" />
+            <CheckCircle weight="duotone" className="size-4 text-emerald-500" />
           )}
           {status.state === "error" && (
-            <XCircleIcon className="text-destructive size-4" />
+            <XCircle weight="duotone" className="text-destructive size-4" />
           )}
           Game data
         </CardTitle>

@@ -16,6 +16,8 @@ export async function GET(req: NextRequest) {
 
   const jar = await cookies();
   const expectedState = jar.get("d2_oauth_state")?.value;
+  // Deliberate delete-before-validate: the state is single-use and burns whether or not
+  // validation passes (expectedState was already captured above).
   jar.delete("d2_oauth_state");
 
   if (!code || !state || !expectedState || state !== expectedState) {

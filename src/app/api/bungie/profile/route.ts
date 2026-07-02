@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getProfile, type DestinyComponentType } from "bungie-api-ts/destiny2";
-import { createBungieHttp } from "@/lib/bungie/http";
-import { getValidAccessToken, readUser } from "@/lib/bungie/session";
+import { BungieHttpError, createBungieHttp } from "@/lib/bungie/http";
+import { clearSession, getValidAccessToken, readUser } from "@/lib/bungie/session";
 
 export const dynamic = "force-dynamic";
 
@@ -33,6 +33,17 @@ export async function GET() {
     });
     return NextResponse.json(res.Response);
   } catch (err) {
+    // A Bungie 401 means the token looks locally valid but Bungie rejects it — clear the
+    // session so the client's session query flips to unauthenticated instead of retrying
+    // into a dead token. (403s stay 502: they're API-key/privacy refusals, not expiry —
+    // force-logout would be wrong for a server-config problem.)
+    if (err instanceof BungieHttpError && err.status === 401) {
+      await clearSession();
+      return NextResponse.json(
+        { error: "Session expired — sign in again" },
+        { status: 401 },
+      );
+    }
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "Bungie request failed" },
       { status: 502 },

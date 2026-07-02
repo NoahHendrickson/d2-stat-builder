@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  Fragment,
   useCallback,
   useEffect,
   useMemo,
@@ -10,13 +9,12 @@ import {
   type ReactNode,
 } from "react";
 import Image from "next/image";
-import { CheckIcon, ChevronDownIcon } from "lucide-react";
+import { MagnifyingGlass, PushPin } from "@phosphor-icons/react";
 import { useSession } from "@/lib/auth/use-session";
 import { useArmory } from "@/lib/armory/use-armory";
 import { useManifest } from "@/lib/manifest/use-manifest";
 import { useOptimizer } from "@/lib/optimizer/use-optimizer";
-import type { ArmorPiece } from "@/lib/armory/normalize";
-import { availableSets, type ArmorSetInfo } from "@/lib/armory/sets";
+import { availableSets } from "@/lib/armory/sets";
 import {
   availableFragments,
   SUBCLASSES,
@@ -24,19 +22,22 @@ import {
 } from "@/lib/armory/fragments";
 import {
   ARMOR_SLOTS,
+  BALANCED_TUNING_PLUG_HASH,
   CLASS_NAMES,
+  STAT_DISPLAY_ORDER,
   STAT_HASHES,
   STAT_LABELS,
   STAT_ORDER,
   offArchetypeIndices,
-  type StatKey,
+  type StatIconMap,
 } from "@/lib/armory/stats";
 import { Slider } from "@/components/ui/slider";
 import { Input } from "@/components/ui/input";
-import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { BUNGIE_IMAGE_BASE } from "@/lib/bungie/constants";
-import { Toggle } from "@/components/ui/toggle";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SignInCard } from "@/components/auth/sign-in-card";
 import { ManifestStatus } from "@/components/manifest/manifest-status";
@@ -45,11 +46,8 @@ import { PieceInspector } from "@/components/armory/piece-inspector";
 import { ExoticPicker } from "@/components/builder/exotic-picker";
 import { FragmentPicker } from "@/components/builder/fragment-picker";
 import { ClassEmblemTabs } from "@/components/builder/class-emblem-tabs";
-import type {
-  AppliedTuning,
-  ExoticConstraint,
-  OptimizerLoadout,
-} from "@/lib/optimizer/types";
+import { BuildResults } from "@/components/builder/build-results";
+import type { ExoticConstraint } from "@/lib/optimizer/types";
 import {
   loadSelections,
   saveSelections,
@@ -59,30 +57,82 @@ import {
   SCHEMA_VERSION,
 } from "@/lib/builder/selection-storage";
 
-const MAX_SHOWN = 25;
 const MAX_MODS = 5;
 /** Clickable preset markers under each stat slider. */
 const STAT_TARGET_TICKS = [0, 50, 100, 150, 200] as const;
-/** Stat rows top-to-bottom (icon-only); each maps back to its STAT_ORDER index. */
-const STAT_DISPLAY_ORDER = [
-  "health",
-  "melee",
-  "grenade",
-  "super",
-  "class",
-  "weapons",
-] as const;
-/** Display stat columns paired with their STAT_ORDER index (used by the build breakdown). */
-const STAT_COLS = STAT_DISPLAY_ORDER.map((key) => ({
-  key,
-  i: STAT_ORDER.indexOf(key),
-}));
+/** Skeleton rows shown while a search is in flight. */
+const LOADING_ROWS = 5;
+
+/**
+ * Smooths the worker's raw progress into a fluid displayed value. A rAF loop eases the
+ * displayed fraction toward the reported progress while the run is live (with a slight
+ * forward trickle so the bar never sits dead, capped just ahead of the real value), and
+ * sweeps it to 100% once the run finishes. `showLoading` stays true through that final
+ * sweep, so even instant searches render a brief fluid fill instead of a flash.
+ */
+function useSmoothedProgress(progress: number, running: boolean, runId: number) {
+  const [displayed, setDisplayed] = useState(0);
+  const [showLoading, setShowLoading] = useState(false);
+  const displayedRef = useRef(0);
+  const targetRef = useRef({ progress, running });
+  targetRef.current = { progress, running };
+
+  // Each new run (including one superseding an in-flight run) restarts the sweep.
+  useEffect(() => {
+    if (runId === 0) return;
+    displayedRef.current = 0;
+    setDisplayed(0);
+    setShowLoading(true);
+  }, [runId]);
+
+  useEffect(() => {
+    if (!showLoading) return;
+    let raf = 0;
+    let last = performance.now();
+    const tick = (now: number) => {
+      // rAF timestamps can predate the performance.now() that seeded `last` — clamp so
+      // a bogus negative dt can't run the easing math backwards.
+      const dt = Math.max(0, Math.min(0.1, (now - last) / 1000));
+      last = now;
+      const { progress: p, running: r } = targetRef.current;
+      const prev = displayedRef.current;
+      let next: number;
+      if (r) {
+        // Track the worker's progress near-real-time; when it's quiet, trickle forward
+        // slowly but never more than a touch ahead of the real value.
+        const eased = prev + Math.max(0, p - prev) * (1 - Math.exp(-14 * dt));
+        const trickle = Math.min(prev + dt * 0.04, p + 0.06);
+        next = Math.min(0.98, Math.max(prev, eased, trickle));
+      } else {
+        // Run finished — sweep quickly to full, then hand back to the results.
+        next = prev + (1 - prev) * (1 - Math.exp(-25 * dt));
+        if (next >= 0.995) {
+          displayedRef.current = 0;
+          setShowLoading(false);
+          return;
+        }
+      }
+      displayedRef.current = next;
+      setDisplayed(next);
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [showLoading]);
+
+  return { displayedProgress: displayed, showLoading };
+}
 
 export function BuilderPanel() {
   const session = useSession();
   const armoryQuery = useArmory();
   const manifestStatus = useManifest();
-  const { run, cancel, result, ceilings, running } = useOptimizer();
+  const { run, cancel, result, ceilings, running, progress, runId } = useOptimizer();
+  const { displayedProgress, showLoading } = useSmoothedProgress(
+    progress,
+    running,
+    runId,
+  );
 
   const armory = armoryQuery.data;
   const manifest =
@@ -92,6 +142,8 @@ export function BuilderPanel() {
   const [targets, setTargets] = useState<number[]>(() => [0, 0, 0, 0, 0, 0]);
   const [major, setMajor] = useState(0);
   const [setReqs, setSetReqs] = useState<Record<number, 2 | 4>>({});
+  const [pinnedSets, setPinnedSets] = useState<number[]>([]);
+  const [setQuery, setSetQuery] = useState("");
   const [selectedExotic, setSelectedExotic] = useState<number | null>(null);
   const [allowTuning, setAllowTuning] = useState(true);
   const [activeSubclass, setActiveSubclass] = useState<Subclass>("Prismatic");
@@ -118,6 +170,7 @@ export function BuilderPanel() {
       setTargets(saved.targets);
       setMajor(saved.major);
       setSetReqs(saved.setReqs);
+      setPinnedSets(saved.pinnedSets);
       setAllowTuning(saved.allowTuning);
       setActiveSubclass(saved.activeSubclass);
       setFragSel(fragSelFromArrays(saved.fragSel));
@@ -169,6 +222,19 @@ export function BuilderPanel() {
   );
   const setMap = useMemo(() => new Map(sets.map((s) => [s.setHash, s])), [sets]);
 
+  // Pinned sets float to the top; within each group the ownedCount order is kept.
+  // Pins for sets outside the current list (e.g. another class) simply don't show.
+  // Both groups are narrowed by the search query (case-insensitive substring).
+  const { pinnedList, unpinnedList } = useMemo(() => {
+    const q = setQuery.trim().toLowerCase();
+    const shown = q ? sets.filter((s) => s.name.toLowerCase().includes(q)) : sets;
+    const pinned = new Set(pinnedSets);
+    return {
+      pinnedList: shown.filter((s) => pinned.has(s.setHash)),
+      unpinnedList: shown.filter((s) => !pinned.has(s.setHash)),
+    };
+  }, [sets, pinnedSets, setQuery]);
+
   // After a restore (or a class correction), drop set requirements for sets the player no
   // longer owns — an unowned requirement would make every build infeasible.
   useEffect(() => {
@@ -188,7 +254,7 @@ export function BuilderPanel() {
   );
 
   const statIcons = useMemo(() => {
-    const out = {} as Record<StatKey, string | undefined>;
+    const out = {} as StatIconMap;
     if (manifest) {
       for (const key of STAT_ORDER) {
         out[key] = manifest.def(
@@ -200,13 +266,21 @@ export function BuilderPanel() {
     return out;
   }, [manifest]);
 
+  const balancedTuningIcon = useMemo(
+    () =>
+      manifest?.def(
+        "DestinyInventoryItemDefinition",
+        BALANCED_TUNING_PLUG_HASH,
+      )?.displayProperties?.icon,
+    [manifest],
+  );
+
   const fragmentBonus = useMemo(() => {
     const v = [0, 0, 0, 0, 0, 0];
     if (!fragments) return v;
-    const list = fragments[activeSubclass];
-    for (const hash of fragSel[activeSubclass]) {
-      const f = list.find((x) => x.hash === hash);
-      if (f) for (let i = 0; i < 6; i++) v[i] += f.stats[i];
+    const sel = fragSel[activeSubclass];
+    for (const f of fragments[activeSubclass]) {
+      if (sel.has(f.hash)) for (let i = 0; i < 6; i++) v[i] += f.stats[i];
     }
     return v;
   }, [fragments, fragSel, activeSubclass]);
@@ -264,6 +338,7 @@ export function BuilderPanel() {
         targets,
         major,
         setReqs,
+        pinnedSets,
         exoticName:
           selectedExotic === null ? null : (exotics[selectedExotic]?.name ?? null),
         allowTuning,
@@ -277,6 +352,7 @@ export function BuilderPanel() {
     targets,
     major,
     setReqs,
+    pinnedSets,
     selectedExotic,
     exotics,
     allowTuning,
@@ -357,6 +433,55 @@ export function BuilderPanel() {
       return next;
     });
 
+  const togglePin = (setHash: number) =>
+    setPinnedSets((prev) =>
+      prev.includes(setHash)
+        ? prev.filter((h) => h !== setHash)
+        : [...prev, setHash],
+    );
+
+  const renderSetRow = (s: (typeof sets)[number]) => {
+    const pinned = pinnedSets.includes(s.setHash);
+    return (
+      <div
+        key={s.setHash}
+        className="group col-span-4 grid grid-cols-subgrid items-center"
+      >
+        <span className="truncate text-xs">
+          {s.name}{" "}
+          <span className="text-muted-foreground">({s.ownedCount})</span>
+        </span>
+        <button
+          type="button"
+          onClick={() => togglePin(s.setHash)}
+          aria-label={pinned ? "Unpin set" : "Pin set"}
+          className={cn(
+            "justify-self-center transition-opacity focus-visible:opacity-100",
+            pinned
+              ? "text-foreground"
+              : "text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100",
+          )}
+        >
+          <PushPin
+            weight={pinned ? "fill" : "duotone"}
+            className="size-3.5"
+            aria-hidden
+          />
+        </button>
+        <SetToggle
+          active={setReqs[s.setHash] === 2}
+          disabled={s.ownedCount < 2}
+          onToggle={() => toggleSet(s.setHash, 2)}
+        />
+        <SetToggle
+          active={setReqs[s.setHash] === 4}
+          disabled={s.ownedCount < 4}
+          onToggle={() => toggleSet(s.setHash, 4)}
+        />
+      </div>
+    );
+  };
+
   return (
     <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 lg:items-start">
       {/* Left — configure the build */}
@@ -364,27 +489,28 @@ export function BuilderPanel() {
         {ready && (
           <>
             {classes.length > 1 && classType !== null && (
-              <Section title="Class">
-                <ClassEmblemTabs
-                  characters={armory?.characters ?? []}
-                  value={classType}
-                  onChange={onClassChange}
-                />
-              </Section>
+              <ClassEmblemTabs
+                characters={armory?.characters ?? []}
+                value={classType}
+                onChange={onClassChange}
+              />
             )}
 
-            <Section title="Stat targets">
+            <Section>
               <div className="space-y-3">
                 {STAT_DISPLAY_ORDER.map((key) => {
                   const i = STAT_ORDER.indexOf(key);
                   const icon = statIcons[key];
                   // Achievable ceiling for this stat given the others. Overlay it as a
-                  // lighter fill up to that max; omit once it's the full range (200) or
+                  // lighter fill up to that max (full-width at 200); omit only while
                   // unknown (before the first search).
                   const cap = ceilings ? ceilings[i] : null;
-                  const ceilingValue = cap !== null && cap < 200 ? cap : undefined;
+                  const ceilingValue = cap ?? undefined;
                   return (
-                    <div key={key} className="flex items-center gap-3">
+                    <div
+                      key={key}
+                      className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1"
+                    >
                       {icon ? (
                         <Image
                           src={`${BUNGIE_IMAGE_BASE}${icon}`}
@@ -398,93 +524,105 @@ export function BuilderPanel() {
                       ) : (
                         <span className="size-6 shrink-0" aria-hidden />
                       )}
-                      <div className="min-w-0 flex-1 space-y-1">
-                        <Slider
-                          min={0}
-                          max={200}
-                          step={1}
-                          value={[targets[i]]}
-                          onValueChange={(v) => setTarget(i, Array.isArray(v) ? v[0] : v)}
-                          ceiling={ceilingValue}
-                          aria-label={`${STAT_LABELS[key]} target`}
-                          className="cursor-pointer py-1.5"
-                        />
-                        <div className="flex justify-between px-0.5">
-                          {STAT_TARGET_TICKS.map((t) => {
-                            // Once a ceiling is predicted, the top tick reads "max" and
-                            // jumps the target to that achievable maximum instead of 200.
-                            const tickValue =
-                              t === 200 && cap !== null ? cap : t;
-                            const tickLabel =
-                              t === 200 && cap !== null ? "max" : String(t);
-                            return (
-                              <button
-                                key={t}
-                                type="button"
-                                onClick={() => setTarget(i, tickValue)}
-                                aria-label={
-                                  tickLabel === "max"
-                                    ? `Set ${STAT_LABELS[key]} to its max (${tickValue})`
-                                    : `Set ${STAT_LABELS[key]} to ${t}`
-                                }
-                                className={cn(
-                                  "text-[10px] tabular-nums transition-colors",
-                                  targets[i] === tickValue
-                                    ? "text-foreground"
-                                    : "text-muted-foreground hover:text-foreground",
-                                )}
-                              >
-                                {tickLabel}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-                      <Input
-                        type="number"
+                      <Slider
                         min={0}
                         max={200}
                         step={1}
-                        value={targets[i]}
-                        aria-label={`${STAT_LABELS[key]} target value`}
-                        onFocus={(e) => e.target.select()}
-                        onChange={(e) => {
-                          const n = Math.round(Number(e.target.value));
-                          setTarget(
-                            i,
-                            Number.isFinite(n)
-                              ? Math.max(0, Math.min(200, n))
-                              : 0,
-                          );
-                        }}
-                        className="h-7 w-14 shrink-0 px-2 text-right tabular-nums"
+                        value={[targets[i]]}
+                        onValueChange={(v) => setTarget(i, Array.isArray(v) ? v[0] : v)}
+                        ceiling={ceilingValue}
+                        aria-label={`${STAT_LABELS[key]} target`}
+                        className="cursor-pointer py-1.5"
                       />
+                      <div className="flex shrink-0 items-center gap-1">
+                        <Input
+                          type="number"
+                          min={0}
+                          max={200}
+                          step={1}
+                          value={targets[i]}
+                          aria-label={`${STAT_LABELS[key]} target value`}
+                          onFocus={(e) => e.target.select()}
+                          onChange={(e) => {
+                            const n = Math.round(Number(e.target.value));
+                            setTarget(
+                              i,
+                              Number.isFinite(n)
+                                ? Math.max(0, Math.min(200, n))
+                                : 0,
+                            );
+                          }}
+                          className="h-7 w-14 px-2 text-right tabular-nums"
+                        />
+                        {cap !== null && (
+                          <>
+                            <span
+                              className="sr-only"
+                            >{`${STAT_LABELS[key]} achievable max: ${cap}`}</span>
+                            <span
+                              className="text-muted-foreground inline-flex shrink-0 items-baseline text-xs tabular-nums"
+                              aria-hidden
+                            >
+                              /
+                              <span className="inline-block w-7 text-right">
+                                {cap}
+                              </span>
+                            </span>
+                          </>
+                        )}
+                      </div>
+                      <div className="col-start-2 flex justify-between px-0.5">
+                        {STAT_TARGET_TICKS.map((t) => {
+                          // Once a ceiling is predicted, the top tick reads "max" and
+                          // jumps the target to that achievable maximum instead of 200.
+                          const tickValue =
+                            t === 200 && cap !== null ? cap : t;
+                          const tickLabel =
+                            t === 200 && cap !== null ? "max" : String(t);
+                          return (
+                            <button
+                              key={t}
+                              type="button"
+                              onClick={() => setTarget(i, tickValue)}
+                              aria-label={
+                                tickLabel === "max"
+                                  ? `Set ${STAT_LABELS[key]} to its max (${tickValue})`
+                                  : `Set ${STAT_LABELS[key]} to ${t}`
+                              }
+                              className={cn(
+                                "text-[10px] tabular-nums transition-colors",
+                                targets[i] === tickValue
+                                  ? "text-foreground"
+                                  : "text-muted-foreground hover:text-foreground",
+                              )}
+                            >
+                              {tickLabel}
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
                   );
                 })}
               </div>
+              <div className="border-border/60 space-y-2 border-t pt-3">
+                <h3 className="text-sm font-medium">Major Mods</h3>
+                <Tabs
+                  value={String(major)}
+                  onValueChange={(v) => setMajor(Number(v))}
+                >
+                  <TabsList>
+                    {[0, 1, 2, 3, 4, 5].map((n) => (
+                      <TabsTrigger key={n} value={String(n)}>
+                        {n}
+                      </TabsTrigger>
+                    ))}
+                  </TabsList>
+                </Tabs>
+              </div>
             </Section>
 
-            <Section title="Mod budget">
-              <Tabs
-                value={String(major)}
-                onValueChange={(v) => setMajor(Number(v))}
-              >
-                <TabsList className="w-full">
-                  {[0, 1, 2, 3, 4, 5].map((n) => (
-                    <TabsTrigger key={n} value={String(n)}>
-                      {n}
-                    </TabsTrigger>
-                  ))}
-                </TabsList>
-              </Tabs>
-              <p className="text-muted-foreground text-xs">
-                {major} major (+10) · {MAX_MODS - major} minor (+5). Auto-assigned
-                as needed to hit your targets.
-              </p>
-            </Section>
-
-            <Section title="Exotic">
+            <Section>
               <ExoticPicker
                 options={exotics}
                 selected={selectedExotic}
@@ -492,40 +630,47 @@ export function BuilderPanel() {
               />
             </Section>
 
-            <Section title="Set bonuses">
+            <Section>
+              <div className="relative">
+                <MagnifyingGlass
+                  className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2"
+                  aria-hidden
+                />
+                <Input
+                  type="search"
+                  value={setQuery}
+                  onChange={(e) => setSetQuery(e.target.value)}
+                  placeholder="Find armor sets"
+                  aria-label="Find armor sets"
+                  className="pl-8"
+                />
+              </div>
               {sets.length === 0 ? (
                 <p className="text-muted-foreground text-xs">
                   No set-bonus armor found for this class.
                 </p>
+              ) : pinnedList.length === 0 && unpinnedList.length === 0 ? (
+                <p className="text-muted-foreground text-xs">
+                  No sets match &ldquo;{setQuery.trim()}&rdquo;.
+                </p>
               ) : (
-                <div className="grid grid-cols-[1fr_auto_auto] items-center gap-x-3 gap-y-1.5">
-                  <span className="text-muted-foreground text-xs">Set</span>
+                <div className="grid grid-cols-[1fr_auto_auto_auto] items-center gap-x-3 gap-y-1.5">
+                  <span aria-hidden />
+                  <span aria-hidden />
                   <span className="text-muted-foreground w-7 text-center text-xs">
                     2pc
                   </span>
                   <span className="text-muted-foreground w-7 text-center text-xs">
                     4pc
                   </span>
-                  {sets.map((s) => (
-                    <Fragment key={s.setHash}>
-                      <span className="truncate text-xs">
-                        {s.name}{" "}
-                        <span className="text-muted-foreground">
-                          ({s.ownedCount})
-                        </span>
-                      </span>
-                      <SetToggle
-                        active={setReqs[s.setHash] === 2}
-                        disabled={s.ownedCount < 2}
-                        onToggle={() => toggleSet(s.setHash, 2)}
-                      />
-                      <SetToggle
-                        active={setReqs[s.setHash] === 4}
-                        disabled={s.ownedCount < 4}
-                        onToggle={() => toggleSet(s.setHash, 4)}
-                      />
-                    </Fragment>
-                  ))}
+                  {pinnedList.map(renderSetRow)}
+                  {pinnedList.length > 0 && unpinnedList.length > 0 && (
+                    <div
+                      className="border-border/60 col-span-4 my-0.5 border-t"
+                      aria-hidden
+                    />
+                  )}
+                  {unpinnedList.map(renderSetRow)}
                 </div>
               )}
             </Section>
@@ -548,16 +693,11 @@ export function BuilderPanel() {
                   Auto-apply Balanced (+1 to off-stats) or a directional (+5/−5)
                   tune on tunable pieces to hit your targets.
                 </p>
-                <Toggle
-                  variant="outline"
-                  size="sm"
-                  pressed={allowTuning}
-                  onPressedChange={setAllowTuning}
+                <Switch
+                  checked={allowTuning}
+                  onCheckedChange={setAllowTuning}
                   aria-label="Toggle Tier-5 tuning"
-                  className="aria-pressed:bg-primary aria-pressed:text-primary-foreground"
-                >
-                  {allowTuning ? "On" : "Off"}
-                </Toggle>
+                />
               </div>
             </Section>
 
@@ -570,16 +710,11 @@ export function BuilderPanel() {
                     Tier-5 armor only.
                   </p>
                 </div>
-                <Toggle
-                  variant="outline"
-                  size="sm"
-                  pressed={useLegacyArmor}
+                <Switch
+                  checked={useLegacyArmor}
                   disabled
                   aria-label="Use legacy armor (coming soon)"
-                  className="aria-pressed:bg-primary aria-pressed:text-primary-foreground"
-                >
-                  {useLegacyArmor ? "On" : "Off"}
-                </Toggle>
+                />
               </div>
             </Section>
           </>
@@ -600,13 +735,13 @@ export function BuilderPanel() {
           <h2 className="text-lg font-medium">Builds</h2>
           <div className="flex items-center gap-3">
             {running && (
-              <button
-                type="button"
+              <Button
+                variant="link"
                 onClick={cancel}
-                className="text-muted-foreground hover:text-foreground text-xs underline-offset-2 hover:underline"
+                className="text-muted-foreground hover:text-foreground h-auto p-0 text-xs font-normal"
               >
                 Cancel
-              </button>
+              </Button>
             )}
             <span
               className="text-muted-foreground text-sm tabular-nums"
@@ -614,7 +749,7 @@ export function BuilderPanel() {
             >
               {!ready
                 ? ""
-                : running
+                : showLoading
                   ? "Searching…"
                   : result
                     ? result.loadouts.length === 0
@@ -628,13 +763,16 @@ export function BuilderPanel() {
           <p className="text-muted-foreground text-sm">
             Sign in and load your gear to generate builds.
           </p>
+        ) : showLoading ? (
+          <BuildsLoading progress={displayedProgress} />
         ) : result ? (
-          <Results
+          <BuildResults
             result={result}
             pieceMap={pieceMap}
             targets={targets}
             setMap={setMap}
             statIcons={statIcons}
+            balancedTuningIcon={balancedTuningIcon}
           />
         ) : (
           <p className="text-muted-foreground text-sm">
@@ -646,10 +784,49 @@ export function BuilderPanel() {
   );
 }
 
-function Section({ title, children }: { title: string; children: ReactNode }) {
+/** In-place loading state for the results column: a progress bar over pulsing skeleton rows. */
+function BuildsLoading({ progress }: { progress: number }) {
+  return (
+    <div className="space-y-3">
+      <div
+        role="progressbar"
+        aria-label="Search progress"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={Math.round(progress * 100)}
+        className="bg-muted h-1 w-full overflow-hidden rounded-full"
+      >
+        <div
+          className="bg-primary h-full rounded-full"
+          style={{ width: `${progress * 100}%` }}
+        />
+      </div>
+      <div className="space-y-1.5">
+        {Array.from({ length: LOADING_ROWS }, (_, i) => (
+          <div
+            key={i}
+            className="border-border/60 flex animate-pulse items-center gap-3 rounded-lg border p-2.5"
+            style={{ animationDelay: `${i * 120}ms` }}
+            aria-hidden
+          >
+            <span className="bg-muted size-7 shrink-0 rounded" />
+            <div className="flex flex-1 items-center gap-3">
+              {Array.from({ length: 6 }, (_, j) => (
+                <span key={j} className="bg-muted h-3.5 w-10 rounded" />
+              ))}
+            </div>
+            <span className="bg-muted h-3.5 w-8 shrink-0 rounded" />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function Section({ title, children }: { title?: string; children: ReactNode }) {
   return (
     <section className="border-border/60 bg-card space-y-3 rounded-xl border p-4">
-      <h3 className="text-sm font-medium">{title}</h3>
+      {title ? <h3 className="text-sm font-medium">{title}</h3> : null}
       {children}
     </section>
   );
@@ -665,323 +842,13 @@ function SetToggle({
   onToggle: () => void;
 }) {
   return (
-    <Toggle
-      variant="outline"
-      size="sm"
-      pressed={active}
+    <Checkbox
+      size="lg"
+      checked={active}
       disabled={disabled}
-      onPressedChange={onToggle}
+      onCheckedChange={onToggle}
       aria-label="Toggle set bonus"
-      className="size-7 min-w-7 justify-self-center p-0 aria-pressed:bg-primary aria-pressed:text-primary-foreground"
-    >
-      {active && <CheckIcon className="size-3.5" />}
-    </Toggle>
-  );
-}
-
-/**
- * The Tuned-column cell for one piece: the tuned stat's icon for a directional tune
- * (the +5 is implied by the icon), "Balanced" for a balanced tune, and nothing when the
- * piece was left untuned.
- */
-function TunedCell({
-  tune,
-  statIcons,
-}: {
-  tune: AppliedTuning | null;
-  statIcons: Record<StatKey, string | undefined>;
-}) {
-  if (!tune) return null;
-  if (tune.kind === "balanced")
-    return <span className="text-sky-400/70">Balanced</span>;
-  const key = STAT_ORDER[tune.plus];
-  return (
-    <StatGlyph src={statIcons[key]} label={`Tuned +5 ${STAT_LABELS[key]}`} />
-  );
-}
-
-function StatGlyph({
-  src,
-  label,
-  className,
-}: {
-  src?: string;
-  label: string;
-  className?: string;
-}) {
-  if (!src)
-    return (
-      <span
-        className={cn("inline-block size-4 shrink-0", className)}
-        aria-hidden
-      />
-    );
-  return (
-    <Image
-      src={`${BUNGIE_IMAGE_BASE}${src}`}
-      alt={label}
-      title={label}
-      width={16}
-      height={16}
-      className={cn("inline-block size-4 shrink-0 invert dark:invert-0", className)}
-      unoptimized
+      className="justify-self-center"
     />
-  );
-}
-
-const BREAKDOWN_COLS =
-  "minmax(0,1fr) repeat(6, minmax(1.75rem, 1fr)) minmax(2.75rem, auto)";
-
-/** One aligned row of the breakdown grid: a label cell, the six stat cells, and a trailing (empty) Tuned cell. */
-function BreakdownRow({
-  label,
-  labelClass,
-  render,
-}: {
-  label: string;
-  labelClass?: string;
-  render: (i: number) => ReactNode;
-}) {
-  return (
-    <>
-      <div className={cn("text-muted-foreground truncate", labelClass)}>
-        {label}
-      </div>
-      {STAT_COLS.map(({ key, i }) => (
-        <div key={key} className="text-center tabular-nums">
-          {render(i)}
-        </div>
-      ))}
-      <div />
-    </>
-  );
-}
-
-/** A single build: a collapsed stat header that expands to a per-piece breakdown. */
-function BuildRow({
-  loadout,
-  pieceMap,
-  setMap,
-  statIcons,
-  targets,
-}: {
-  loadout: OptimizerLoadout;
-  pieceMap: Map<string, ArmorPiece>;
-  setMap: Map<number, ArmorSetInfo>;
-  statIcons: Record<StatKey, string | undefined>;
-  targets: number[];
-}) {
-  const [open, setOpen] = useState(false);
-  const pieces = loadout.pieceIds.map((id) => pieceMap.get(id));
-  const exotic = pieces.find((p) => p?.isExotic);
-
-  const setCounts = new Map<number, number>();
-  for (const p of pieces) {
-    if (p?.setHash) setCounts.set(p.setHash, (setCounts.get(p.setHash) ?? 0) + 1);
-  }
-  const setBadges: { name: string; count: number }[] = [];
-  for (const [hash, cnt] of setCounts) {
-    if (cnt < 2) continue;
-    const info = setMap.get(hash);
-    if (info) setBadges.push({ name: info.name, count: cnt });
-  }
-
-  return (
-    <div className="border-border/60 overflow-hidden rounded-lg border">
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        aria-expanded={open}
-        className="hover:bg-muted/40 flex w-full items-center gap-3 p-2.5 text-left transition-colors"
-      >
-        {exotic?.icon ? (
-          <Image
-            src={`${BUNGIE_IMAGE_BASE}${exotic.icon}`}
-            alt={exotic.name}
-            width={28}
-            height={28}
-            className="size-7 shrink-0 rounded"
-            unoptimized
-          />
-        ) : (
-          <span className="bg-muted size-7 shrink-0 rounded" aria-hidden />
-        )}
-        <div className="flex flex-1 flex-wrap items-center gap-x-3 gap-y-1 text-sm">
-          {STAT_COLS.map(({ key, i }) => {
-            const met = targets[i] > 0 && loadout.stats[i] >= targets[i];
-            return (
-              <span key={key} className="flex items-center gap-1 tabular-nums">
-                <span className={met ? "text-emerald-500" : "text-foreground"}>
-                  {loadout.stats[i]}
-                </span>
-                <StatGlyph src={statIcons[key]} label={STAT_LABELS[key]} />
-              </span>
-            );
-          })}
-        </div>
-        <span className="text-muted-foreground shrink-0 text-sm tabular-nums">
-          {loadout.total}
-        </span>
-        {setBadges.map((b) => (
-          <Badge
-            key={b.name}
-            variant="secondary"
-            className="shrink-0 px-1.5 py-0 text-[10px]"
-            title={b.name}
-          >
-            {b.count}pc
-          </Badge>
-        ))}
-        <ChevronDownIcon
-          className={cn(
-            "text-muted-foreground size-4 shrink-0 transition-transform",
-            open && "rotate-180",
-          )}
-        />
-      </button>
-
-      {open && (
-        <div
-          className="border-border/60 grid items-center gap-x-1 gap-y-1 border-t px-2.5 py-2 text-xs"
-          style={{ gridTemplateColumns: BREAKDOWN_COLS }}
-        >
-          <div />
-          {STAT_COLS.map(({ key }) => (
-            <div key={key} className="flex justify-center pb-0.5">
-              <StatGlyph src={statIcons[key]} label={STAT_LABELS[key]} />
-            </div>
-          ))}
-          <div className="text-muted-foreground pb-0.5 text-center text-[10px] leading-4">
-            Tuned
-          </div>
-
-          {loadout.pieceIds.map((id, pi) => {
-            const piece = pieceMap.get(id);
-            if (!piece) return null;
-            return (
-              <Fragment key={id}>
-                <div className="flex min-w-0 items-center gap-1.5">
-                  {piece.icon ? (
-                    <Image
-                      src={`${BUNGIE_IMAGE_BASE}${piece.icon}`}
-                      alt=""
-                      width={20}
-                      height={20}
-                      className="size-5 shrink-0 rounded-sm"
-                      unoptimized
-                    />
-                  ) : (
-                    <span
-                      className="bg-muted size-5 shrink-0 rounded-sm"
-                      aria-hidden
-                    />
-                  )}
-                  <span className="truncate">{piece.name}</span>
-                </div>
-                {STAT_COLS.map(({ key, i }) => (
-                  <div
-                    key={key}
-                    className="text-muted-foreground text-center tabular-nums"
-                  >
-                    {piece.stats[i] || ""}
-                  </div>
-                ))}
-                <div className="flex justify-center">
-                  <TunedCell tune={loadout.tuning[pi]} statIcons={statIcons} />
-                </div>
-              </Fragment>
-            );
-          })}
-
-          <div className="border-border/60 col-span-full my-0.5 border-t" />
-
-          <BreakdownRow label="Armor" render={(i) => loadout.baseStats[i] || ""} />
-          <BreakdownRow
-            label="Mods"
-            render={(i) =>
-              loadout.modBonus[i] ? (
-                <span className="text-sky-400/80">+{loadout.modBonus[i]}</span>
-              ) : (
-                ""
-              )
-            }
-          />
-          <BreakdownRow
-            label="Tuning"
-            render={(i) => {
-              const v = loadout.tuningBonus[i];
-              if (!v) return "";
-              return (
-                <span className={v < 0 ? "text-red-400/80" : "text-sky-400/80"}>
-                  {v > 0 ? `+${v}` : v}
-                </span>
-              );
-            }}
-          />
-
-          <div className="border-border/60 col-span-full my-0.5 border-t" />
-
-          <BreakdownRow
-            label="Total"
-            labelClass="text-foreground font-medium"
-            render={(i) => (
-              <span className="text-foreground font-medium">
-                {loadout.stats[i]}
-              </span>
-            )}
-          />
-        </div>
-      )}
-    </div>
-  );
-}
-
-function Results({
-  result,
-  pieceMap,
-  targets,
-  setMap,
-  statIcons,
-}: {
-  result: NonNullable<ReturnType<typeof useOptimizer>["result"]>;
-  pieceMap: Map<string, ArmorPiece>;
-  targets: number[];
-  setMap: Map<number, ArmorSetInfo>;
-  statIcons: Record<StatKey, string | undefined>;
-}) {
-  if (result.loadouts.length === 0) {
-    return (
-      <p className="text-muted-foreground text-sm">
-        No loadouts from your gear meet those constraints — even with mods. Try
-        easing a target, a set bonus, or raising your mod budget.
-      </p>
-    );
-  }
-
-  return (
-    <div className="space-y-3">
-      <p className="text-muted-foreground text-sm">
-        {result.combosValid.toLocaleString()} matching loadouts · showing top{" "}
-        {Math.min(MAX_SHOWN, result.loadouts.length)}
-      </p>
-      {result.capped && (
-        <p className="text-xs text-amber-600/90 dark:text-amber-500/90">
-          Hit the time limit — showing the best found so far. Narrow your targets
-          for an exhaustive search.
-        </p>
-      )}
-      <div className="space-y-1.5">
-        {result.loadouts.slice(0, MAX_SHOWN).map((loadout, idx) => (
-          <BuildRow
-            key={idx}
-            loadout={loadout}
-            pieceMap={pieceMap}
-            setMap={setMap}
-            statIcons={statIcons}
-            targets={targets}
-          />
-        ))}
-      </div>
-    </div>
   );
 }

@@ -21,6 +21,9 @@ export function useOptimizer() {
   const [result, setResult] = useState<OptimizerOutput | null>(null);
   const [ceilings, setCeilings] = useState<StatArray | null>(null);
   const [running, setRunning] = useState(false);
+  const [progress, setProgress] = useState(0);
+  // Identity of the latest run — lets the UI restart progress animation per search.
+  const [runId, setRunId] = useState(0);
 
   const getWorker = useCallback(() => {
     if (!workerRef.current) {
@@ -30,7 +33,9 @@ export function useOptimizer() {
       worker.onmessage = (e: MessageEvent<OptimizerResponse>) => {
         const msg = e.data;
         if (msg.seq !== seqRef.current) return; // superseded run — ignore
-        if (msg.kind === "ceilings") {
+        if (msg.kind === "progress") {
+          setProgress(msg.progress);
+        } else if (msg.kind === "ceilings") {
           setCeilings(msg.ceilings);
         } else {
           setResult(msg.output);
@@ -56,6 +61,8 @@ export function useOptimizer() {
     (input: OptimizerInput) => {
       const seq = ++seqRef.current;
       setRunning(true);
+      setProgress(0);
+      setRunId(seq);
       getWorker().postMessage({ seq, input } satisfies OptimizerRequest);
     },
     [getWorker],
@@ -70,5 +77,5 @@ export function useOptimizer() {
     setRunning(false);
   }, []);
 
-  return { run, cancel, result, ceilings, running };
+  return { run, cancel, result, ceilings, running, progress, runId };
 }

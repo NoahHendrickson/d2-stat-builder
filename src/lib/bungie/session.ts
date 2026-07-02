@@ -4,14 +4,18 @@ import { refreshTokens, type BungieTokens } from "./oauth";
 /**
  * Session storage via cookies.
  *  - `d2_refresh` (httpOnly): the 90-day refresh token. Never leaves the server.
- *  - `d2_access`  (httpOnly): the short-lived access token (server reads it, then
- *                 hands it to the client via /api/auth/session for direct Bungie calls).
+ *  - `d2_access`  (httpOnly): the short-lived access token. Never leaves the server —
+ *                 server routes use it for Bungie calls; /api/auth/session returns only
+ *                 `{authenticated, user}`.
  *  - `d2_user`    (readable): non-sensitive identity for "signed in as" without a round trip.
  */
 
 const REFRESH_COOKIE = "d2_refresh";
 const ACCESS_COOKIE = "d2_access";
 const USER_COOKIE = "d2_user";
+
+/** Refresh the access token this long before it actually expires. */
+const ACCESS_REFRESH_SKEW_MS = 60_000;
 
 export interface SessionUser {
   membershipId: string; // bungie.net membership id
@@ -36,19 +40,9 @@ function baseCookie(refreshExpiresAt: number) {
 }
 
 export async function writeSession(tokens: BungieTokens, user: SessionUser) {
+  await updateTokens(tokens);
   const jar = await cookies();
   const opts = baseCookie(tokens.refreshExpiresAt);
-
-  jar.set(
-    REFRESH_COOKIE,
-    JSON.stringify({ token: tokens.refreshToken, expiresAt: tokens.refreshExpiresAt }),
-    opts,
-  );
-  jar.set(
-    ACCESS_COOKIE,
-    JSON.stringify({ token: tokens.accessToken, expiresAt: tokens.accessExpiresAt }),
-    opts,
-  );
   jar.set(USER_COOKIE, JSON.stringify(user), { ...opts, httpOnly: false });
 }
 
@@ -113,7 +107,7 @@ export async function getValidAccessToken(): Promise<string | null> {
   }
 
   const access = await readAccess();
-  if (access && access.expiresAt - 60_000 > Date.now()) {
+  if (access && access.expiresAt - ACCESS_REFRESH_SKEW_MS > Date.now()) {
     return access.token;
   }
 

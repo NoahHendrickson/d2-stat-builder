@@ -37,7 +37,10 @@ export interface ArmorPiece {
   setHash?: number;
   /** True base roll: intrinsic stat plugs only — no mods, masterwork, or tuning. */
   baseStats: StatArray;
-  /** Base roll + assumed MW5 (+5 to the 3 off-archetype stats). What the optimizer consumes. */
+  /**
+   * Base roll + assumed MW5 (+5 to the 3 off-archetype stats) + the def-level exotic
+   * intrinsic bonus on Armor 3.0 pieces. What the optimizer consumes.
+   */
   stats: StatArray;
   /**
    * Tier-5 tuning: index (0–5) of this instance's rolled tuned stat (the stat its
@@ -155,6 +158,26 @@ function computeTunedStat(
   return undefined;
 }
 
+/**
+ * Armor 3.0 exotics carry an intrinsic stat bonus on the item DEFINITION's
+ * investmentStats (e.g. Sanguine Alchemy: +10 health, +10 class) — it appears in
+ * neither the live stats component (304) nor any socket plug, so it must be added
+ * on top of the rolled stats. Armor 3.0 legendaries list no def-level stats, and
+ * conditionally-active entries don't apply passively, so both contribute 0. The
+ * bonus is NOT part of the base roll: archetype / off-archetype classification
+ * (masterwork + Balanced Tuning targets) must come from the roll alone.
+ */
+function intrinsicStats(
+  def: { investmentStats?: { statTypeHash: number; value: number; isConditionallyActive?: boolean }[] },
+): StatArray {
+  const out: StatArray = [0, 0, 0, 0, 0, 0];
+  for (const s of def.investmentStats ?? []) {
+    const idx = STAT_HASH_TO_INDEX[s.statTypeHash];
+    if (idx !== undefined && !s.isConditionallyActive) out[idx] += s.value;
+  }
+  return out;
+}
+
 /** A piece is artifice if it carries the artifice intrinsic perk. */
 function isArtificePiece(
   instanceId: string,
@@ -182,6 +205,15 @@ function buildPiece(
   if (!slot) return null;
 
   const baseStats = computeBaseStats(item.itemInstanceId, profile, manifest);
+  const tunedStat = computeTunedStat(item.itemInstanceId, profile, manifest);
+
+  // A tuning socket marks the piece as Armor 3.0 — the only system where the
+  // def-level intrinsic bonus is active in-game.
+  const stats = applyMasterwork(baseStats);
+  if (tunedStat !== undefined) {
+    const bonus = intrinsicStats(def);
+    for (let i = 0; i < stats.length; i++) stats[i] += bonus[i];
+  }
 
   return {
     instanceId: item.itemInstanceId,
@@ -194,8 +226,8 @@ function buildPiece(
     isArtifice: isArtificePiece(item.itemInstanceId, profile),
     setHash: def.equippingBlock?.equipableItemSetHash || undefined,
     baseStats,
-    stats: applyMasterwork(baseStats),
-    tunedStat: computeTunedStat(item.itemInstanceId, profile, manifest),
+    stats,
+    tunedStat,
     location,
     characterId,
   };

@@ -56,6 +56,7 @@ function sampleSelections(): PersistedSelections {
     targets: [100, 0, 50, 0, 0, 30],
     major: 3,
     setReqs: { 987654: 4, 123456: 2 },
+    pinnedSets: [123456, 555],
     exoticName: "Gyrfalcon's Hauberk",
     allowTuning: true,
     activeSubclass: "Void",
@@ -82,6 +83,13 @@ test("load returns null on a schema version mismatch", () => {
 test("load returns null on corrupt JSON", () => {
   localStorage.setItem(SELECTIONS_KEY, "{not valid json");
   expect(loadSelections()).toBeNull();
+});
+
+test("load defaults pinnedSets to [] for data stored before the field existed", () => {
+  const old: Partial<PersistedSelections> = sampleSelections();
+  delete old.pinnedSets;
+  localStorage.setItem(SELECTIONS_KEY, JSON.stringify(old));
+  expect(loadSelections()).toEqual({ ...old, pinnedSets: [] });
 });
 
 test("load returns null when the shape is malformed (targets wrong length)", () => {

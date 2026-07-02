@@ -7,6 +7,17 @@ interface BungieErrorBody {
   Message?: string;
 }
 
+/** A failed Bungie API response, carrying the HTTP status so callers can categorize it. */
+export class BungieHttpError extends Error {
+  constructor(
+    public readonly status: number,
+    message: string,
+  ) {
+    super(message);
+    this.name = "BungieHttpError";
+  }
+}
+
 /**
  * Builds an HttpClient compatible with `bungie-api-ts` request functions.
  * Adds the API key (and a Bearer token when authenticated), surfaces Bungie's
@@ -16,6 +27,12 @@ interface BungieErrorBody {
  * Bungie's OriginHeaderDoesNotMatchKey check never fires).
  */
 export function createBungieHttp(accessToken?: string): HttpClient {
+  // Fail fast with a clear message — every Bungie call flows through here, and without
+  // the key Bungie returns opaque errors. (A module-level throw in constants.ts would
+  // break `next build` when the env is absent.)
+  if (!BUNGIE_API_KEY) {
+    throw new Error("NEXT_PUBLIC_BUNGIE_API_KEY is not set — see .env.example");
+  }
   const http = async (config: HttpClientConfig) => {
     const url = new URL(config.url);
     if (config.params) {
@@ -52,7 +69,10 @@ export function createBungieHttp(accessToken?: string): HttpClient {
       const detail = json?.ErrorStatus
         ? `${json.ErrorStatus}${json.Message ? ` — ${json.Message}` : ""}`
         : `HTTP ${res.status}`;
-      lastError = new Error(`Bungie ${config.method} ${url.pathname}: ${detail}`);
+      lastError = new BungieHttpError(
+        res.status,
+        `Bungie ${config.method} ${url.pathname}: ${detail}`,
+      );
       if (res.status < 500) break; // 4xx won't fix itself
       await new Promise((r) => setTimeout(r, 600));
     }

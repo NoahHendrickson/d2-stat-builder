@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useArmory } from "@/lib/armory/use-armory";
 import { useSession } from "@/lib/auth/use-session";
 import {
@@ -25,13 +25,18 @@ export function PieceInspector() {
   const { data } = useArmory();
   const [query, setQuery] = useState("");
 
-  if (!session.data?.authenticated || !data) return null;
-
+  // Must run before the early return (rules of hooks), so the guard lives inside.
+  const pieces = data?.pieces;
   const q = query.trim().toLowerCase();
-  const matches =
-    q.length >= 2
-      ? data.pieces.filter((p) => p.name.toLowerCase().includes(q)).slice(0, 10)
-      : [];
+  const matches = useMemo(
+    () =>
+      pieces && q.length >= 2
+        ? pieces.filter((p) => p.name.toLowerCase().includes(q)).slice(0, 10)
+        : [],
+    [pieces, q],
+  );
+
+  if (!session.data?.authenticated || !data) return null;
 
   return (
     <Card className="w-full">

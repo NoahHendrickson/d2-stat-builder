@@ -21,6 +21,8 @@ export interface PersistedSelections {
   targets: number[];
   major: number;
   setReqs: Record<number, 2 | 4>;
+  /** Set hashes pinned to the top of the set-bonus list, in pin order. */
+  pinnedSets: number[];
   exoticName: string | null;
   allowTuning: boolean;
   activeSubclass: Subclass;
@@ -95,6 +97,10 @@ function parse(raw: string | null): PersistedSelections | null {
     return null;
   if (typeof o.major !== "number") return null;
   if (typeof o.setReqs !== "object" || o.setReqs === null) return null;
+  // Optional (added after v1 shipped) — older stored blobs won't have it.
+  const pinnedSets = Array.isArray(o.pinnedSets)
+    ? o.pinnedSets.filter((n): n is number => typeof n === "number")
+    : [];
   if (!(typeof o.exoticName === "string" || o.exoticName === null)) return null;
   if (typeof o.allowTuning !== "boolean") return null;
   if (typeof o.activeSubclass !== "string" || !SUBCLASS_SET.has(o.activeSubclass))
@@ -118,6 +124,7 @@ function parse(raw: string | null): PersistedSelections | null {
     targets: o.targets as number[],
     major: o.major as number,
     setReqs: o.setReqs as Record<number, 2 | 4>,
+    pinnedSets,
     exoticName: o.exoticName as string | null,
     allowTuning: o.allowTuning as boolean,
     activeSubclass: o.activeSubclass as Subclass,
