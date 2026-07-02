@@ -10,7 +10,6 @@ import { tokenizeSearchQuery } from "./search";
 const piece = (overrides: Partial<FilterablePiece> = {}): FilterablePiece => ({
   name: "Ferropotent Helm",
   classType: 1,
-  slot: "helmet",
   setHash: 42,
   archetype: "Gunner",
   tunedStat: 0,
@@ -41,6 +40,24 @@ test('tuning facet: "none" matches untunable pieces, indices match tuned stats',
   expect(pieceMatchesFilters(piece({ tunedStat: undefined }), 3, f, [])).toBe(true);
   expect(pieceMatchesFilters(piece({ tunedStat: 2 }), 3, f, [])).toBe(true);
   expect(pieceMatchesFilters(piece({ tunedStat: 0 }), 3, f, [])).toBe(false);
+});
+
+test("armor version facet filters by tuning socket", () => {
+  const only30 = { ...emptyFilters(), armorVersions: ["3.0" as const] };
+  expect(pieceMatchesFilters(piece({ tunedStat: 0 }), 3, only30, [])).toBe(true);
+  expect(pieceMatchesFilters(piece({ tunedStat: undefined }), 3, only30, [])).toBe(
+    false,
+  );
+
+  const only20 = { ...emptyFilters(), armorVersions: ["2.0" as const] };
+  expect(pieceMatchesFilters(piece({ tunedStat: undefined }), 3, only20, [])).toBe(
+    true,
+  );
+  expect(pieceMatchesFilters(piece({ tunedStat: 0 }), 3, only20, [])).toBe(false);
+
+  const both = { ...emptyFilters(), armorVersions: ["2.0" as const, "3.0" as const] };
+  expect(pieceMatchesFilters(piece({ tunedStat: 0 }), 3, both, [])).toBe(true);
+  expect(pieceMatchesFilters(piece({ tunedStat: undefined }), 3, both, [])).toBe(true);
 });
 
 test("search tokens AND with the other facets", () => {

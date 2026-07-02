@@ -7,22 +7,20 @@ import type { ArmoryCharacter } from "@/lib/armory/fetch";
 import { BUNGIE_IMAGE_BASE } from "@/lib/bungie/constants";
 import {
   CLASS_NAMES,
-  SLOT_LABELS,
   STAT_DISPLAY_ORDER,
   STAT_ORDER,
 } from "@/lib/armory/stats";
-import { LOCATION_LABELS, statLabel } from "@/lib/armor-table/sort";
+import { statLabel } from "@/lib/armor-table/sort";
 import { Badge } from "@/components/ui/badge";
 import { ArmorRowActions } from "@/components/armor-table/armor-row-actions";
 
-export const COLUMN_COUNT = 15;
+export const COLUMN_COUNT = 13;
 
 /** Fixed column widths keep the layout steady while rows virtualize in and out. */
 export const TABLE_COLGROUP = (
   <colgroup>
     <col /* name */ />
     <col style={{ width: "4.5rem" }} /* class */ />
-    <col style={{ width: "5rem" }} /* slot */ />
     <col style={{ width: "6.5rem" }} /* archetype */ />
     <col style={{ width: "5rem" }} /* tertiary */ />
     <col style={{ width: "5rem" }} /* tuned */ />
@@ -30,7 +28,6 @@ export const TABLE_COLGROUP = (
     {STAT_ORDER.map((key) => (
       <col key={key} style={{ width: "3rem" }} />
     ))}
-    <col style={{ width: "5.5rem" }} /* location */ />
     <col style={{ width: "8rem" }} /* actions */ />
   </colgroup>
 );
@@ -91,7 +88,6 @@ export const ArmorRow = memo(function ArmorRow({
       <td className="py-1.5 pr-3 whitespace-nowrap">
         {CLASS_NAMES[piece.classType] ?? "—"}
       </td>
-      <td className="py-1.5 pr-3 whitespace-nowrap">{SLOT_LABELS[piece.slot]}</td>
       <td className="truncate py-1.5 pr-3">{piece.archetype ?? "—"}</td>
       <td className="py-1.5 pr-3 whitespace-nowrap">
         {row.tertiary !== undefined ? statLabel(row.tertiary) : "—"}
@@ -105,9 +101,6 @@ export const ArmorRow = memo(function ArmorRow({
           {piece.stats[STAT_ORDER.indexOf(key)]}
         </td>
       ))}
-      <td className="text-muted-foreground py-1.5 pr-3 whitespace-nowrap">
-        {LOCATION_LABELS[piece.location]}
-      </td>
       <td className="py-1.5">
         <ArmorRowActions
           piece={piece}

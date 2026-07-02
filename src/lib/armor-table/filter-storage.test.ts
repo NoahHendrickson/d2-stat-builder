@@ -42,11 +42,11 @@ function sampleState(): PersistedTableState {
     filters: {
       search: "ferro",
       classes: [0, 2],
-      slots: ["helmet", "classItem"],
       setHashes: [123456],
       archetypes: ["Gunner"],
       tunings: ["none", 4],
       tertiaries: [3],
+      armorVersions: ["3.0"],
     },
     sort: { key: "stat-super", asc: false },
   };
@@ -76,7 +76,7 @@ test("drops invalid entries and falls back to defaults", () => {
       filters: {
         search: 7, // wrong type
         classes: [1, "x"],
-        slots: ["helmet", "belt"],
+        armorVersions: ["3.0", "4.0"],
         tunings: [2, "sometimes"],
       },
       sort: { key: "not-a-column", asc: true },
@@ -87,9 +87,21 @@ test("drops invalid entries and falls back to defaults", () => {
     filters: {
       ...emptyFilters(),
       classes: [1],
-      slots: ["helmet"],
+      armorVersions: ["3.0"],
       tunings: [2],
     },
     sort: { key: "name", asc: true },
   });
+});
+
+test("falls back to default sort when saved sort key was removed", () => {
+  localStorage.setItem(
+    TABLE_STATE_KEY,
+    JSON.stringify({
+      version: TABLE_SCHEMA_VERSION,
+      filters: emptyFilters(),
+      sort: { key: "slot", asc: false },
+    }),
+  );
+  expect(loadTableState()?.sort).toEqual({ key: "name", asc: true });
 });

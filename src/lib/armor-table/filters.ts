@@ -3,23 +3,26 @@
 //
 // Runtime imports are relative (not `@/`) — the vitest runner has no `@/` alias,
 // matching the convention in normalize.ts / solve.ts.
-import { STAT_ORDER, type ArmorSlot, type StatKey } from "../armory/stats";
+import { STAT_ORDER, type StatKey } from "../armory/stats";
 import { nameMatchesSearch } from "./search";
 
 /** A tuning facet value: a tuned-stat index, or "none" for untunable pieces. */
 export type TuningFilter = number | "none";
 
+/** Armor generation inferred from the tuning socket (same rule as the builder pool). */
+export type ArmorVersion = "2.0" | "3.0";
+
 /** The facet selections (search is kept separate so it can be deferred while typing). */
 export interface FacetFilters {
   /** classType values (0 Titan, 1 Hunter, 2 Warlock). */
   classes: number[];
-  slots: ArmorSlot[];
   setHashes: number[];
   /** Archetype plug names (e.g. "Gunner"). */
   archetypes: string[];
   tunings: TuningFilter[];
   /** Tertiary stat indices (0–5 in STAT_ORDER). */
   tertiaries: number[];
+  armorVersions: ArmorVersion[];
 }
 
 /** Facets + search: the full filter state as persisted. */
@@ -30,11 +33,11 @@ export interface TableFilters extends FacetFilters {
 export function emptyFacets(): FacetFilters {
   return {
     classes: [],
-    slots: [],
     setHashes: [],
     archetypes: [],
     tunings: [],
     tertiaries: [],
+    armorVersions: [],
   };
 }
 
@@ -46,11 +49,11 @@ export function hasActiveFilters(f: TableFilters): boolean {
   return (
     f.search.trim() !== "" ||
     f.classes.length > 0 ||
-    f.slots.length > 0 ||
     f.setHashes.length > 0 ||
     f.archetypes.length > 0 ||
     f.tunings.length > 0 ||
-    f.tertiaries.length > 0
+    f.tertiaries.length > 0 ||
+    f.armorVersions.length > 0
   );
 }
 
@@ -58,10 +61,13 @@ export function hasActiveFilters(f: TableFilters): boolean {
 export interface FilterablePiece {
   name: string;
   classType: number;
-  slot: ArmorSlot;
   setHash?: number;
   archetype?: string;
   tunedStat?: number;
+}
+
+function pieceArmorVersion(piece: FilterablePiece): ArmorVersion {
+  return piece.tunedStat !== undefined ? "3.0" : "2.0";
 }
 
 /**
@@ -76,7 +82,11 @@ export function pieceMatchesFilters(
   searchTokens: readonly string[],
 ): boolean {
   if (f.classes.length > 0 && !f.classes.includes(piece.classType)) return false;
-  if (f.slots.length > 0 && !f.slots.includes(piece.slot)) return false;
+  if (
+    f.armorVersions.length > 0 &&
+    !f.armorVersions.includes(pieceArmorVersion(piece))
+  )
+    return false;
   if (
     f.setHashes.length > 0 &&
     (piece.setHash === undefined || !f.setHashes.includes(piece.setHash))
@@ -102,12 +112,10 @@ export function pieceMatchesFilters(
 export type ColumnKey =
   | "name"
   | "class"
-  | "slot"
   | "archetype"
   | "tertiary"
   | "tuned"
-  | "set"
-  | "location";
+  | "set";
 
 /** Stat columns are namespaced ("stat-class") so they can't collide with the class column. */
 export type SortKey = ColumnKey | `stat-${StatKey}`;
@@ -122,12 +130,10 @@ export const DEFAULT_SORT: SortState = { key: "name", asc: true };
 const COLUMN_KEYS: ColumnKey[] = [
   "name",
   "class",
-  "slot",
   "archetype",
   "tertiary",
   "tuned",
   "set",
-  "location",
 ];
 
 export const SORT_KEYS = new Set<string>([

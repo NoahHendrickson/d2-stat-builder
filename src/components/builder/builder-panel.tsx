@@ -860,6 +860,7 @@ export function BuilderPanel({
                   onSubclassChange={setActiveSubclass}
                   selected={fragSel[activeSubclass]}
                   onToggle={toggleFragment}
+                  statIcons={statIcons}
                 />
               )}
             </Section>

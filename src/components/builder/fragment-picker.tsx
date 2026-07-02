@@ -1,10 +1,9 @@
 "use client";
 
-import { Fragment } from "react";
 import Image from "next/image";
 import { cn } from "@/lib/utils";
 import { BUNGIE_IMAGE_BASE } from "@/lib/bungie/constants";
-import { STAT_LABELS, STAT_ORDER } from "@/lib/armory/stats";
+import { STAT_LABELS, STAT_ORDER, type StatIconMap } from "@/lib/armory/stats";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -24,12 +23,14 @@ export function FragmentPicker({
   onSubclassChange,
   selected,
   onToggle,
+  statIcons,
 }: {
   fragments: Record<Subclass, FragmentInfo[]>;
   activeSubclass: Subclass;
   onSubclassChange: (s: Subclass) => void;
   selected: Set<number>;
   onToggle: (hash: number) => void;
+  statIcons: StatIconMap;
 }) {
   const rows = fragments[activeSubclass];
 
@@ -54,24 +55,38 @@ export function FragmentPicker({
         </p>
       ) : (
         <div className="overflow-x-auto">
-          <div className="grid min-w-max grid-cols-[1fr_repeat(6,2rem)] items-center gap-x-2 gap-y-1">
-            <span aria-hidden />
-            {STAT_ORDER.map((key) => (
-              <span
-                key={key}
-                className="text-muted-foreground text-center text-[10px]"
-              >
-                {STAT_LABELS[key].slice(0, 3)}
-              </span>
-            ))}
+          <div className="divide-border/60 min-w-max divide-y">
+            <div className="grid grid-cols-[1fr_repeat(6,2rem)] items-center gap-x-2 py-1.5">
+              <span aria-hidden />
+              {STAT_ORDER.map((key) => (
+                <span key={key} className="flex justify-center">
+                  {statIcons[key] ? (
+                    <Image
+                      src={`${BUNGIE_IMAGE_BASE}${statIcons[key]}`}
+                      alt={STAT_LABELS[key]}
+                      title={STAT_LABELS[key]}
+                      width={16}
+                      height={16}
+                      className="size-4 shrink-0 invert dark:invert-0"
+                      unoptimized
+                    />
+                  ) : (
+                    <span className="size-4 shrink-0" aria-hidden />
+                  )}
+                </span>
+              ))}
+            </div>
 
             {rows.map((f) => {
               const on = selected.has(f.hash);
               return (
-                <Fragment key={f.hash}>
+                <div
+                  key={f.hash}
+                  className="grid grid-cols-[1fr_repeat(6,2rem)] items-center gap-x-2 py-1.5"
+                >
                   <label
                     className={cn(
-                      "group flex cursor-pointer items-center gap-2 rounded-md px-1 py-0.5 text-left text-sm transition-colors",
+                      "group flex cursor-pointer items-center gap-2 rounded-md px-1 text-left text-sm transition-colors",
                       on
                         ? "text-foreground"
                         : "text-muted-foreground hover:text-foreground",
@@ -109,7 +124,7 @@ export function FragmentPicker({
                         : ""}
                     </span>
                   ))}
-                </Fragment>
+                </div>
               );
             })}
           </div>

@@ -3,10 +3,11 @@
 import type { RefObject } from "react";
 import { MagnifyingGlass, X } from "@phosphor-icons/react";
 import type { FilterOption } from "@/lib/armor-table/pinned";
-import type { FacetFilters, TuningFilter } from "@/lib/armor-table/filters";
-import { ARMOR_SLOTS, CLASS_NAMES, SLOT_LABELS } from "@/lib/armory/stats";
+import type { ArmorVersion, FacetFilters, TuningFilter } from "@/lib/armor-table/filters";
+import { CLASS_NAMES } from "@/lib/armory/stats";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { FilterCascadeMenu } from "@/components/armor-table/filter-cascade-menu";
 import { FilterMultiselect } from "@/components/armor-table/filter-multiselect";
 
 const CLASS_OPTIONS: FilterOption<number>[] = [0, 1, 2].map((c) => ({
@@ -14,8 +15,10 @@ const CLASS_OPTIONS: FilterOption<number>[] = [0, 1, 2].map((c) => ({
   label: CLASS_NAMES[c],
 }));
 
-const SLOT_OPTIONS: FilterOption<(typeof ARMOR_SLOTS)[number]>[] =
-  ARMOR_SLOTS.map((s) => ({ value: s, label: SLOT_LABELS[s] }));
+const ARMOR_VERSION_OPTIONS: FilterOption<ArmorVersion>[] = [
+  { value: "3.0", label: "Armor 3.0" },
+  { value: "2.0", label: "Armor 2.0" },
+];
 
 /**
  * The table's filter bar: search, the six multiselect filters, and the
@@ -82,7 +85,7 @@ export function ArmorTableToolbar({
           className="pl-6"
         />
       </div>
-      <div className="grid w-full grid-cols-2 gap-2.5 sm:grid-cols-3 xl:flex xl:w-auto xl:*:w-40">
+      <div className="hidden xl:flex xl:items-center xl:gap-2.5 xl:*:w-40">
         <FilterMultiselect
           allLabel="All classes"
           value={facets.classes}
@@ -90,10 +93,10 @@ export function ArmorTableToolbar({
           options={CLASS_OPTIONS}
         />
         <FilterMultiselect
-          allLabel="All slots"
-          value={facets.slots}
-          onChange={(v) => onFacetChange("slots", v)}
-          options={SLOT_OPTIONS}
+          allLabel="All armor"
+          value={facets.armorVersions}
+          onChange={(v) => onFacetChange("armorVersions", v)}
+          options={ARMOR_VERSION_OPTIONS}
         />
         <FilterMultiselect
           allLabel="All sets"
@@ -129,6 +132,23 @@ export function ArmorTableToolbar({
           value={facets.tertiaries}
           onChange={(v) => onFacetChange("tertiaries", v)}
           options={statOptions}
+        />
+      </div>
+      <div className="shrink-0 xl:hidden">
+        <FilterCascadeMenu
+          facets={facets}
+          onFacetChange={onFacetChange}
+          setOptions={setOptions}
+          archetypeOptions={archetypeOptions}
+          statOptions={statOptions}
+          pinnedSets={pinnedSets}
+          pinnedArchetypes={pinnedArchetypes}
+          onTogglePinnedSet={onTogglePinnedSet}
+          onTogglePinnedArchetype={onTogglePinnedArchetype}
+          filtersActive={filtersActive}
+          onClearFilters={onClearFilters}
+          classOptions={CLASS_OPTIONS}
+          armorVersionOptions={ARMOR_VERSION_OPTIONS}
         />
       </div>
       <div className="text-muted-foreground ml-auto flex items-center gap-2 text-xs">

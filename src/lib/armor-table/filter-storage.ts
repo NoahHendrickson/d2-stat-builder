@@ -3,18 +3,18 @@
 // no backend, malformed or stale data falls back to defaults, I/O never throws).
 //
 // Runtime imports are relative (not `@/`) — the vitest runner has no `@/` alias.
-import { ARMOR_SLOTS, type ArmorSlot } from "../armory/stats";
 import {
   DEFAULT_SORT,
   emptyFilters,
   isSortKey,
+  type ArmorVersion,
   type SortState,
   type TableFilters,
   type TuningFilter,
 } from "./filters";
 
 export const TABLE_STATE_KEY = "stat-builder:armor-table";
-export const TABLE_SCHEMA_VERSION = 1;
+export const TABLE_SCHEMA_VERSION = 2;
 
 export interface PersistedTableState {
   version: number;
@@ -31,13 +31,24 @@ function storage(): Storage | undefined {
   }
 }
 
-const SLOT_SET = new Set<string>(ARMOR_SLOTS);
-
 const numbers = (v: unknown): number[] =>
   Array.isArray(v) ? v.filter((n): n is number => typeof n === "number") : [];
 
 const strings = (v: unknown): string[] =>
   Array.isArray(v) ? v.filter((s): s is string => typeof s === "string") : [];
+
+const ARMOR_VERSION_SET = new Set<string>(["2.0", "3.0"]);
+
+const armorVersions = (v: unknown): ArmorVersion[] =>
+  strings(v).filter((s): s is ArmorVersion => ARMOR_VERSION_SET.has(s));
+
+const REMOVED_SORT_KEYS = new Set(["slot", "location"]);
+
+function parseSort(s: Record<string, unknown> | null | undefined): SortState {
+  if (!s || !isSortKey(s.key) || typeof s.asc !== "boolean") return DEFAULT_SORT;
+  if (REMOVED_SORT_KEYS.has(s.key)) return DEFAULT_SORT;
+  return { key: s.key, asc: s.asc };
+}
 
 /** Parse + validate a stored string. Returns null on any malformed / stale / corrupt input. */
 function parse(raw: string | null): PersistedTableState | null {
@@ -58,7 +69,6 @@ function parse(raw: string | null): PersistedTableState | null {
     ...emptyFilters(),
     search: typeof f.search === "string" ? f.search : "",
     classes: numbers(f.classes),
-    slots: strings(f.slots).filter((s): s is ArmorSlot => SLOT_SET.has(s)),
     setHashes: numbers(f.setHashes),
     archetypes: strings(f.archetypes),
     tunings: Array.isArray(f.tunings)
@@ -67,13 +77,10 @@ function parse(raw: string | null): PersistedTableState | null {
         )
       : [],
     tertiaries: numbers(f.tertiaries),
+    armorVersions: armorVersions(f.armorVersions),
   };
 
-  const s = o.sort as Record<string, unknown> | null | undefined;
-  const sort: SortState =
-    s && isSortKey(s.key) && typeof s.asc === "boolean"
-      ? { key: s.key, asc: s.asc }
-      : DEFAULT_SORT;
+  const sort = parseSort(o.sort as Record<string, unknown> | null | undefined);
 
   return { version: TABLE_SCHEMA_VERSION, filters, sort };
 }

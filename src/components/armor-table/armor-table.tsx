@@ -8,17 +8,21 @@ import {
   useRef,
   useState,
 } from "react";
+import Image from "next/image";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { CaretDown, CaretUp } from "@phosphor-icons/react";
+import { BUNGIE_IMAGE_BASE } from "@/lib/bungie/constants";
 import { useArmory } from "@/lib/armory/use-armory";
 import { useManifest } from "@/lib/manifest/use-manifest";
 import { availableSets } from "@/lib/armory/sets";
 import type { ArmoryCharacter } from "@/lib/armory/fetch";
 import {
   STAT_DISPLAY_ORDER,
+  STAT_HASHES,
   STAT_LABELS,
   STAT_ORDER,
   tertiaryStatIndex,
+  type StatIconMap,
 } from "@/lib/armory/stats";
 import {
   DEFAULT_SORT,
@@ -60,6 +64,7 @@ const TABLE_HEAD_CELL =
 
 function SortHeader({
   label,
+  icon,
   sortKey,
   sort,
   onSort,
@@ -67,6 +72,7 @@ function SortHeader({
   title,
 }: {
   label: string;
+  icon?: string;
   sortKey: SortKey;
   sort: SortState;
   onSort: (key: SortKey) => void;
@@ -74,11 +80,12 @@ function SortHeader({
   title?: string;
 }) {
   const active = sort.key === sortKey;
+  const accessibleLabel = title ?? label;
   return (
     <th className={TABLE_HEAD_CELL}>
       <button
         type="button"
-        title={title}
+        title={accessibleLabel}
         onClick={() => onSort(sortKey)}
         className={cn(
           "hover:text-foreground -my-0.5 inline-flex items-center gap-0.5 transition-colors",
@@ -86,7 +93,18 @@ function SortHeader({
           active && "text-foreground",
         )}
       >
-        {label}
+        {icon ? (
+          <Image
+            src={`${BUNGIE_IMAGE_BASE}${icon}`}
+            alt={accessibleLabel}
+            width={16}
+            height={16}
+            className="size-4 shrink-0 invert dark:invert-0"
+            unoptimized
+          />
+        ) : (
+          label
+        )}
         {active &&
           (sort.asc ? (
             <CaretUp weight="bold" className="size-3" aria-hidden />
@@ -221,6 +239,19 @@ export function ArmorTable() {
     label: STAT_LABELS[key],
   }));
 
+  const statIcons = useMemo(() => {
+    const out = {} as StatIconMap;
+    if (manifest) {
+      for (const key of STAT_ORDER) {
+        out[key] = manifest.def(
+          "DestinyStatDefinition",
+          STAT_HASHES[key],
+        )?.displayProperties?.icon;
+      }
+    }
+    return out;
+  }, [manifest]);
+
   // Search is deferred so the filter pass can lag typing without blocking input.
   const deferredSearch = useDeferredValue(search);
   const searchTokens = useMemo(
@@ -307,13 +338,12 @@ export function ArmorTable() {
           />
         </div>
         <div ref={setScrollerEl} className="min-h-0 flex-1 overflow-auto">
-          <table className="w-full min-w-[78rem] table-fixed text-sm">
+          <table className="w-full min-w-[66rem] table-fixed text-sm">
             {TABLE_COLGROUP}
             <thead className="bg-muted sticky top-0 z-10">
               <tr className="text-muted-foreground text-left">
                 <SortHeader label="Name" sortKey="name" sort={sort} onSort={handleSort} />
                 <SortHeader label="Class" sortKey="class" sort={sort} onSort={handleSort} />
-                <SortHeader label="Slot" sortKey="slot" sort={sort} onSort={handleSort} />
                 <SortHeader label="Archetype" sortKey="archetype" sort={sort} onSort={handleSort} />
                 <SortHeader label="Tertiary" sortKey="tertiary" sort={sort} onSort={handleSort} />
                 <SortHeader label="Tuned" sortKey="tuned" sort={sort} onSort={handleSort} />
@@ -321,7 +351,8 @@ export function ArmorTable() {
                 {STAT_DISPLAY_ORDER.map((key) => (
                   <SortHeader
                     key={key}
-                    label={STAT_LABELS[key].slice(0, 3)}
+                    label={STAT_LABELS[key]}
+                    icon={statIcons[key]}
                     title={STAT_LABELS[key]}
                     sortKey={`stat-${key}`}
                     sort={sort}
@@ -329,7 +360,6 @@ export function ArmorTable() {
                     align="right"
                   />
                 ))}
-                <SortHeader label="Location" sortKey="location" sort={sort} onSort={handleSort} />
                 <th className={cn(TABLE_HEAD_CELL, "text-left")}>Actions</th>
               </tr>
             </thead>

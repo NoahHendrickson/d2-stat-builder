@@ -27,11 +27,6 @@ test("sortValue reads stat columns by STAT_ORDER index", () => {
   expect(sortValue(r, "stat-super")).toBe(5);
 });
 
-test("sortValue keeps slots in game order, not alphabetical", () => {
-  expect(sortValue(row({ slot: "helmet" }), "slot")).toBe(0);
-  expect(sortValue(row({ slot: "classItem" }), "slot")).toBe(4);
-});
-
 test("compareRows sorts numbers numerically and flips with direction", () => {
   const lo = row({ stats: [5, 0, 0, 0, 0, 0] });
   const hi = row({ stats: [30, 0, 0, 0, 0, 0] });

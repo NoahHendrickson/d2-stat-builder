@@ -22,7 +22,7 @@ import {
 const MAX_SUMMARY_LABELS = 2;
 
 /** Trigger text: `allLabel` when nothing is selected, else "A, B +n". */
-function selectionSummary<V>(
+export function selectionSummary<V>(
   selected: readonly V[],
   options: readonly FilterOption<V>[],
   allLabel: string,
@@ -39,39 +39,40 @@ function selectionSummary<V>(
     : shown;
 }
 
-/**
- * Checkbox-multiselect filter dropdown (ported UX from armorset-tracker):
- * popover panel with one checkbox row per option, optional in-panel search,
- * optional pin-to-top per option, and a Clear footer. The trigger mirrors
- * SelectTrigger's 3D field treatment and tints brand-blue while any value is
- * selected.
- */
-export function FilterMultiselect<V extends string | number>({
-  allLabel,
-  options,
-  value,
-  onChange,
-  searchable = false,
-  pinnable = false,
-  pinned = [],
-  onTogglePin,
-  className,
-}: {
+export const filterMultiselectTriggerClasses = cn(
+  "flex h-8 items-center justify-between gap-1.5 rounded-[6px] border border-transparent bg-clip-padding py-2 pr-2 pl-2.5 text-sm whitespace-nowrap outline-none select-none",
+  field3dSurfaceClasses,
+  field3dInteractiveClasses,
+  field3dFocusVisibleClasses,
+  "data-active:after:border-brand/60 data-active:after:bg-brand/10 data-active:hover:after:bg-brand/15",
+);
+
+type FilterMultiselectPanelProps<V extends string | number> = {
   allLabel: string;
   options: FilterOption<V>[];
   value: V[];
   onChange: (value: V[]) => void;
-  /** Render a search input at the top of the panel (long lists). */
+  query: string;
+  onQueryChange: (query: string) => void;
   searchable?: boolean;
-  /** Render a pin-to-top button on each option row. */
   pinnable?: boolean;
-  /** Pinned values, in pin order. */
   pinned?: V[];
   onTogglePin?: (value: V) => void;
-  className?: string;
-}) {
-  const [query, setQuery] = useState("");
+};
 
+/** Checkbox list body shared by FilterMultiselect and FilterCascadeMenu submenus. */
+export function FilterMultiselectPanel<V extends string | number>({
+  allLabel,
+  options,
+  value,
+  onChange,
+  query,
+  onQueryChange,
+  searchable = false,
+  pinnable = false,
+  pinned = [],
+  onTogglePin,
+}: FilterMultiselectPanelProps<V>) {
   const active = value.length > 0;
   const partition = partitionByPin(options, pinnable ? pinned : [], query);
 
@@ -97,8 +98,6 @@ export function FilterMultiselect<V extends string | number>({
             type="button"
             aria-label={isPinned ? `Unpin ${opt.label}` : `Pin ${opt.label}`}
             onClick={(e) => {
-              // preventDefault keeps the wrapping label from also toggling the
-              // checkbox; stopPropagation keeps the row hover state sane.
               e.preventDefault();
               e.stopPropagation();
               onTogglePin(opt.value);
@@ -122,6 +121,93 @@ export function FilterMultiselect<V extends string | number>({
   };
 
   return (
+    <>
+      {searchable && (
+        <div className="border-border/50 border-b p-2">
+          <div className="relative">
+            <MagnifyingGlass
+              className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 z-10 size-3.5 -translate-y-1/2"
+              aria-hidden
+            />
+            <Input
+              autoFocus
+              type="search"
+              value={query}
+              onChange={(e) => onQueryChange(e.target.value)}
+              placeholder="Search…"
+              aria-label={`Search ${allLabel.toLowerCase()}`}
+              className="pl-6"
+            />
+          </div>
+        </div>
+      )}
+      <div className="max-h-72 overflow-y-auto p-1">
+        {partition.pinned.length > 0 && (
+          <>
+            <div className="text-muted-foreground px-1.5 py-1 text-xs">
+              Pinned
+            </div>
+            {partition.pinned.map(renderOption)}
+            <div className="bg-border my-1 h-px" aria-hidden />
+          </>
+        )}
+        {partition.rest.map(renderOption)}
+        {partition.pinned.length === 0 && partition.rest.length === 0 && (
+          <p className="text-muted-foreground px-1.5 py-2 text-center text-xs">
+            No matches.
+          </p>
+        )}
+      </div>
+      <div className="border-border/50 flex items-center justify-between gap-2 border-t p-1.5">
+        <span className="text-muted-foreground px-1 text-xs tabular-nums">
+          {active ? `${value.length} selected` : ""}
+        </span>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-6 px-1.5 text-xs"
+          disabled={!active}
+          onClick={() => onChange([])}
+        >
+          Clear
+        </Button>
+      </div>
+    </>
+  );
+}
+
+/**
+ * Checkbox-multiselect filter dropdown (ported UX from armorset-tracker):
+ * popover panel with one checkbox row per option, optional in-panel search,
+ * optional pin-to-top per option, and a Clear footer. The trigger mirrors
+ * SelectTrigger's 3D field treatment and tints brand-blue while any value is
+ * selected.
+ */
+export function FilterMultiselect<V extends string | number>({
+  allLabel,
+  options,
+  value,
+  onChange,
+  searchable = false,
+  pinnable = false,
+  pinned = [],
+  onTogglePin,
+  className,
+}: {
+  allLabel: string;
+  options: FilterOption<V>[];
+  value: V[];
+  onChange: (value: V[]) => void;
+  searchable?: boolean;
+  pinnable?: boolean;
+  pinned?: V[];
+  onTogglePin?: (value: V) => void;
+  className?: string;
+}) {
+  const [query, setQuery] = useState("");
+  const active = value.length > 0;
+
+  return (
     // Uncontrolled open state: Base UI wires trigger association (and with it
     // outside-click/Escape dismissal) itself; we only listen to reset the
     // query on close. Don't cancel() the escape-key close to make Escape
@@ -137,16 +223,7 @@ export function FilterMultiselect<V extends string | number>({
           active ? `${allLabel} — ${value.length} selected` : allLabel
         }
         data-active={active || undefined}
-        className={cn(
-          "flex h-8 items-center justify-between gap-1.5 rounded-[6px] border border-transparent bg-clip-padding py-2 pr-2 pl-2.5 text-sm whitespace-nowrap outline-none select-none",
-          field3dSurfaceClasses,
-          field3dInteractiveClasses,
-          field3dFocusVisibleClasses,
-          // Active tint paints the ::after face layer (the visible surface of
-          // the 3D field); the stacked hover variant outranks hover:after:bg-muted.
-          "data-active:after:border-brand/60 data-active:after:bg-brand/10 data-active:hover:after:bg-brand/15",
-          className,
-        )}
+        className={cn(filterMultiselectTriggerClasses, className)}
       >
         <span className="min-w-0 flex-1 truncate text-left">
           {selectionSummary(value, options, allLabel)}
@@ -166,56 +243,18 @@ export function FilterMultiselect<V extends string | number>({
         />
       </PopoverTrigger>
       <PopoverContent align="start" className="w-64 p-0">
-        {searchable && (
-          <div className="border-border/50 border-b p-2">
-            <div className="relative">
-              <MagnifyingGlass
-                className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 z-10 size-3.5 -translate-y-1/2"
-                aria-hidden
-              />
-              <Input
-                autoFocus
-                type="search"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search…"
-                aria-label={`Search ${allLabel.toLowerCase()}`}
-                className="pl-6"
-              />
-            </div>
-          </div>
-        )}
-        <div className="max-h-72 overflow-y-auto p-1">
-          {partition.pinned.length > 0 && (
-            <>
-              <div className="text-muted-foreground px-1.5 py-1 text-xs">
-                Pinned
-              </div>
-              {partition.pinned.map(renderOption)}
-              <div className="bg-border my-1 h-px" aria-hidden />
-            </>
-          )}
-          {partition.rest.map(renderOption)}
-          {partition.pinned.length === 0 && partition.rest.length === 0 && (
-            <p className="text-muted-foreground px-1.5 py-2 text-center text-xs">
-              No matches.
-            </p>
-          )}
-        </div>
-        <div className="border-border/50 flex items-center justify-between gap-2 border-t p-1.5">
-          <span className="text-muted-foreground px-1 text-xs tabular-nums">
-            {active ? `${value.length} selected` : ""}
-          </span>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-6 px-1.5 text-xs"
-            disabled={!active}
-            onClick={() => onChange([])}
-          >
-            Clear
-          </Button>
-        </div>
+        <FilterMultiselectPanel
+          allLabel={allLabel}
+          options={options}
+          value={value}
+          onChange={onChange}
+          query={query}
+          onQueryChange={setQuery}
+          searchable={searchable}
+          pinnable={pinnable}
+          pinned={pinned}
+          onTogglePin={onTogglePin}
+        />
       </PopoverContent>
     </Popover>
   );

@@ -4,7 +4,6 @@
 // Runtime imports are relative (not `@/`) — the vitest runner has no `@/` alias,
 // matching the convention in filters.ts / search.ts.
 import {
-  ARMOR_SLOTS,
   CLASS_NAMES,
   STAT_LABELS,
   STAT_ORDER,
@@ -52,8 +51,6 @@ export function sortValue(
       return row.piece.name;
     case "class":
       return CLASS_NAMES[row.piece.classType];
-    case "slot":
-      return ARMOR_SLOTS.indexOf(row.piece.slot); // game order, not alphabetical
     case "archetype":
       return row.piece.archetype;
     case "tertiary":
@@ -64,8 +61,6 @@ export function sortValue(
         : undefined;
     case "set":
       return row.setName;
-    case "location":
-      return LOCATION_LABELS[row.piece.location];
     default: {
       const exhaustive: never = key as never;
       return exhaustive;
