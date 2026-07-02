@@ -73,6 +73,28 @@ function TunedCell({
   );
 }
 
+/**
+ * The Tuned-column cell for an artifice piece: the picked stat's icon + "+3".
+ * Renders nothing for non-artifice pieces (tuning and artifice are mutually
+ * exclusive on a piece, so the column is shared).
+ */
+function ArtificeCell({
+  pick,
+  statIcons,
+}: {
+  pick: number | null;
+  statIcons: StatIconMap;
+}) {
+  if (pick === null) return null;
+  const key = STAT_ORDER[pick];
+  return (
+    <span className="flex items-center gap-0.5 text-[10px] text-sky-400/80 tabular-nums">
+      <StatGlyph src={statIcons[key]} label={`Artifice +3 ${STAT_LABELS[key]}`} />
+      +3
+    </span>
+  );
+}
+
 function StatGlyph({
   src,
   label,
@@ -292,11 +314,18 @@ function BuildRow({
                   </div>
                 ))}
                 <div className="flex justify-center">
-                  <TunedCell
-                    tune={loadout.tuning[pi]}
-                    statIcons={statIcons}
-                    balancedTuningIcon={balancedTuningIcon}
-                  />
+                  {loadout.tuning[pi] ? (
+                    <TunedCell
+                      tune={loadout.tuning[pi]}
+                      statIcons={statIcons}
+                      balancedTuningIcon={balancedTuningIcon}
+                    />
+                  ) : (
+                    <ArtificeCell
+                      pick={loadout.artifice[pi]}
+                      statIcons={statIcons}
+                    />
+                  )}
                 </div>
               </Fragment>
             );
@@ -315,6 +344,20 @@ function BuildRow({
               )
             }
           />
+          {loadout.artificeBonus.some((v) => v > 0) && (
+            <BreakdownRow
+              label="Artifice"
+              render={(i) =>
+                loadout.artificeBonus[i] ? (
+                  <span className="text-sky-400/80">
+                    +{loadout.artificeBonus[i]}
+                  </span>
+                ) : (
+                  ""
+                )
+              }
+            />
+          )}
           <BreakdownRow
             label="Tuning"
             render={(i) => {
