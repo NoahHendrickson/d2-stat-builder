@@ -53,5 +53,11 @@ export const fieldControlInnerTriggerClasses = cn(
   "items-center justify-between gap-1.5 pr-2 pl-2.5 text-sm whitespace-nowrap select-none",
 );
 
+/** Filter trigger outer shell: wrapper-based control + active-selection border. */
+export const fieldFilterControlShellClasses = cn(
+  fieldControlOuterShellClasses,
+  "data-active:after:border-brand data-active:hover:after:bg-background",
+);
+
 export const field3dDisabledClasses =
   "has-disabled:pointer-events-none has-disabled:opacity-50 has-disabled:after:bg-input/50"

@@ -9,14 +9,16 @@ import type {
   TuningFilter,
 } from "@/lib/armor-table/filters";
 import { cn } from "@/lib/utils";
+import {
+  fieldControlInnerTriggerClasses,
+  fieldFilterControlShellClasses,
+} from "@/lib/field-surface";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Menu } from "@/components/ui/menu";
 import {
   FilterMultiselectPanel,
   filterMultiselectActiveBadgeClasses,
-  filterMultiselectTriggerInnerClasses,
-  filterMultiselectTriggerShellClasses,
   selectionSummary,
 } from "@/components/armor-table/filter-multiselect";
 
@@ -168,7 +170,7 @@ export function FilterCascadeMenu({
     <Menu.Root>
       <div
         className={cn(
-          filterMultiselectTriggerShellClasses,
+          fieldFilterControlShellClasses,
           "h-full min-w-28 shrink-0",
         )}
         data-active={active || undefined}
@@ -179,7 +181,7 @@ export function FilterCascadeMenu({
               ? `${triggerLabel} — ${totalSelected} selected`
               : triggerLabel
           }
-          className={filterMultiselectTriggerInnerClasses}
+          className={fieldControlInnerTriggerClasses}
         >
           <span className="min-w-0 flex-1 truncate text-left">{triggerLabel}</span>
           {active && (

@@ -5,7 +5,7 @@ import { CaretDown, MagnifyingGlass, PushPin, X } from "@phosphor-icons/react";
 import { partitionByPin, type FilterOption } from "@/lib/armor-table/pinned";
 import {
   fieldControlInnerTriggerClasses,
-  fieldControlOuterShellClasses,
+  fieldFilterControlShellClasses,
 } from "@/lib/field-surface";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -46,19 +46,6 @@ export function selectionSummary<V>(
 
 export const filterMultiselectActiveBadgeClasses =
   "h-4 shrink-0 border-transparent bg-brand px-1 text-[10px] text-white tabular-nums";
-
-export const filterMultiselectTriggerShellClasses = cn(
-  fieldControlOuterShellClasses,
-  "data-active:after:border-brand data-active:hover:after:bg-background",
-);
-
-export const filterMultiselectTriggerInnerClasses =
-  fieldControlInnerTriggerClasses;
-
-export const filterMultiselectTriggerClasses = cn(
-  filterMultiselectTriggerShellClasses,
-  filterMultiselectTriggerInnerClasses,
-);
 
 type FilterMultiselectPanelProps<V extends string | number> = {
   allLabel: string;
@@ -238,7 +225,7 @@ export function FilterMultiselect<V extends string | number>({
       >
         <div
           className={cn(
-            filterMultiselectTriggerShellClasses,
+            fieldFilterControlShellClasses,
             "peer/filter box-border w-full",
           )}
           data-active={active || undefined}
@@ -250,7 +237,7 @@ export function FilterMultiselect<V extends string | number>({
                 ? `${label}: ${summaryText} — ${value.length} selected`
                 : `${label}: ${allLabel}`
             }
-            className={filterMultiselectTriggerInnerClasses}
+            className={fieldControlInnerTriggerClasses}
           >
             <span className="min-w-0 flex-1 truncate text-left">
               {selectionSummary(value, options, allLabel)}
