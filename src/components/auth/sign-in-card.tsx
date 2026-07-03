@@ -49,7 +49,13 @@ export function SignInCard() {
             className="w-full"
             onClick={async () => {
               // POST, not a GET link — the logout route is POST-only to avoid CSRF.
-              await fetch("/api/auth/logout", { method: "POST" });
+              const res = await fetch("/api/auth/logout", { method: "POST" }).catch(
+                () => null,
+              );
+              if (!res?.ok) {
+                toast.error("Sign out failed. Please try again.");
+                return;
+              }
               window.location.assign("/");
             }}
           >
