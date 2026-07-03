@@ -166,7 +166,12 @@ export function BuilderPanel({
   const manifest =
     manifestStatus.state === "ready" ? manifestStatus.manifest : undefined;
 
-  const [classType, setClassType] = useState<number | null>(null);
+  // One localStorage read on mount — shared by the class initializer and restore effect.
+  const initialSaved = useRef(loadSelections());
+
+  const [classType, setClassType] = useState<number | null>(
+    () => initialSaved.current?.classType ?? null,
+  );
   const [targets, setTargets] = useState<number[]>(() => [0, 0, 0, 0, 0, 0]);
   const [major, setMajor] = useState(0);
   const [setReqs, setSetReqs] = useState<Record<number, 2 | 4>>({});
@@ -196,8 +201,9 @@ export function BuilderPanel({
 
   // Restore last session's selections on mount. Inventory-independent fields apply now; the
   // exotic is stashed for resolution once its list is built. Absent/stale/corrupt → defaults.
+  // classType is initialized synchronously from initialSaved above.
   useEffect(() => {
-    const saved = loadSelections();
+    const saved = initialSaved.current;
     if (saved) {
       setTargets(saved.targets);
       setMajor(saved.major);
@@ -208,7 +214,6 @@ export function BuilderPanel({
       setUseLegacyExotics(saved.legacyExotics);
       setActiveSubclass(saved.activeSubclass);
       setFragSel(fragSelFromArrays(saved.fragSel));
-      if (saved.classType !== null) setClassType(saved.classType);
       pendingExoticName.current = saved.exoticName;
     }
     restored.current = true;
