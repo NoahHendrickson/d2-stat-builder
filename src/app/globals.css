@@ -172,3 +172,24 @@ input[type="number"] {
   -moz-appearance: textfield;
   appearance: textfield;
 }
+
+/* Loading-screen exotics: the outer wrapper drifts across the viewport while
+   the inner image bobs and tilts, so the two motions compose independently.
+   Tiles start parked offscreen left; negative animation delays scatter them
+   mid-flight on first paint (and reduced motion simply leaves them hidden). */
+@keyframes loading-drift {
+  from {
+    transform: translateX(-160px);
+  }
+  to {
+    transform: translateX(calc(100vw + 160px));
+  }
+}
+@keyframes loading-bob {
+  from {
+    transform: translateY(-11px) rotate(-3deg);
+  }
+  to {
+    transform: translateY(11px) rotate(3deg);
+  }
+}

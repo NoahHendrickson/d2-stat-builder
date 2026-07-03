@@ -15,7 +15,8 @@ const isSessionExpired = (error: unknown): boolean =>
  */
 export function useArmory() {
   const session = useSession();
-  const manifestStatus = useManifest();
+  // Don't kick off the manifest download until we know the user is signed in.
+  const manifestStatus = useManifest(Boolean(session.data?.authenticated));
   const queryClient = useQueryClient();
   const manifest =
     manifestStatus.state === "ready" ? manifestStatus.manifest : undefined;

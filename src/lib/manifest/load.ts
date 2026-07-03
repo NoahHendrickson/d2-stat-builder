@@ -83,12 +83,14 @@ async function downloadTable(path: string): Promise<Record<number, unknown>> {
  * Ensure the manifest is available locally and return typed accessors.
  * Uses the IndexedDB cache when the version matches; otherwise re-downloads
  * the needed tables (filtering the item table down to armor + plugs).
+ *
+ * `onProgress` also reports how far along the load is as a 0–1 fraction.
  */
 export async function loadManifest(
-  onProgress?: (message: string) => void,
+  onProgress?: (message: string, progress: number) => void,
 ): Promise<Manifest> {
   const http = createBungieHttp();
-  onProgress?.("Checking manifest version…");
+  onProgress?.("Checking manifest version…", 0);
   const res = await getDestinyManifest(http);
   const info = res.Response;
   const version = info.version;
@@ -104,7 +106,7 @@ export async function loadManifest(
       MANIFEST_TABLES.forEach((table, i) => {
         tables[table] = cached[i] as never;
       });
-      onProgress?.("Loaded manifest from cache");
+      onProgress?.("Loaded manifest from cache", 1);
       return makeManifest(version, tables);
     }
   }
@@ -115,7 +117,7 @@ export async function loadManifest(
   await clearCache();
   const tables = {} as ManifestTables;
   let done = 0;
-  onProgress?.(`Downloading game data (0/${MANIFEST_TABLES.length})…`);
+  onProgress?.(`Downloading game data (0/${MANIFEST_TABLES.length})…`, 0);
   await Promise.all(
     MANIFEST_TABLES.map(async (table) => {
       const raw = await downloadTable(paths[table]);
@@ -128,10 +130,13 @@ export async function loadManifest(
       tables[table] = data as never;
       await setCachedTable(table, data as Record<number, unknown>);
       done++;
-      onProgress?.(`Downloading game data (${done}/${MANIFEST_TABLES.length})…`);
+      onProgress?.(
+        `Downloading game data (${done}/${MANIFEST_TABLES.length})…`,
+        done / MANIFEST_TABLES.length,
+      );
     }),
   );
   await setCachedVersion(version);
-  onProgress?.("Manifest ready");
+  onProgress?.("Manifest ready", 1);
   return makeManifest(version, tables);
 }
