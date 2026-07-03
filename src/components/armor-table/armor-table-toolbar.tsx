@@ -172,7 +172,7 @@ export function ArmorTableToolbar({
         />
       </div>
       <div className="shrink-0 @[58rem]/toolbar:hidden">
-        <FilterCascadeMenu {...cascadeMenuProps} />
+        <FilterCascadeMenu {...cascadeMenuProps} toggleSubmenusOnClick />
       </div>
     </div>
   );

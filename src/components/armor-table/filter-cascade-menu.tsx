@@ -45,6 +45,7 @@ function CascadeFacetSubmenu<V extends string | number>({
   pinnable = false,
   pinned = [],
   onTogglePin,
+  toggleOnClick = false,
 }: {
   label: string;
   allLabel: string;
@@ -55,6 +56,7 @@ function CascadeFacetSubmenu<V extends string | number>({
   pinnable?: boolean;
   pinned?: V[];
   onTogglePin?: (value: V) => void;
+  toggleOnClick?: boolean;
 }) {
   const [query, setQuery] = useState("");
   const active = value.length > 0;
@@ -65,7 +67,10 @@ function CascadeFacetSubmenu<V extends string | number>({
         if (!open) setQuery("");
       }}
     >
-      <Menu.SubmenuTrigger className="justify-between gap-3">
+      <Menu.SubmenuTrigger
+        openOnHover={!toggleOnClick}
+        className="justify-between gap-3"
+      >
         <span className="shrink-0 font-medium">{label}</span>
         <span className="flex min-w-0 items-center gap-1.5">
           <span className="min-w-0 truncate text-right text-xs">
@@ -125,6 +130,7 @@ export function FilterCascadeMenu({
   armorVersionOptions,
   includedFacets = ALL_FACET_KEYS,
   triggerLabel = "Filters",
+  toggleSubmenusOnClick = false,
 }: {
   facets: FacetFilters;
   onFacetChange: <K extends keyof FacetFilters>(
@@ -144,6 +150,7 @@ export function FilterCascadeMenu({
   armorVersionOptions: FilterOption<ArmorVersion>[];
   includedFacets?: readonly (keyof FacetFilters)[];
   triggerLabel?: string;
+  toggleSubmenusOnClick?: boolean;
 }) {
   const totalSelected = countFacetSelections(facets, includedFacets);
   const active = totalSelected > 0;
@@ -189,6 +196,7 @@ export function FilterCascadeMenu({
                 options={classOptions}
                 value={facets.classes}
                 onChange={(v) => onFacetChange("classes", v)}
+                toggleOnClick={toggleSubmenusOnClick}
               />
             )}
             {includes("armorVersions") && (
@@ -198,6 +206,7 @@ export function FilterCascadeMenu({
                 options={armorVersionOptions}
                 value={facets.armorVersions}
                 onChange={(v) => onFacetChange("armorVersions", v)}
+                toggleOnClick={toggleSubmenusOnClick}
               />
             )}
             {includes("setHashes") && (
@@ -211,6 +220,7 @@ export function FilterCascadeMenu({
                 pinnable
                 pinned={pinnedSets}
                 onTogglePin={onTogglePinnedSet}
+                toggleOnClick={toggleSubmenusOnClick}
               />
             )}
             {includes("archetypes") && (
@@ -224,6 +234,7 @@ export function FilterCascadeMenu({
                 pinnable
                 pinned={pinnedArchetypes}
                 onTogglePin={onTogglePinnedArchetype}
+                toggleOnClick={toggleSubmenusOnClick}
               />
             )}
             {includes("tunings") && (
@@ -233,6 +244,7 @@ export function FilterCascadeMenu({
                 options={tuningOptions}
                 value={facets.tunings}
                 onChange={(v) => onFacetChange("tunings", v)}
+                toggleOnClick={toggleSubmenusOnClick}
               />
             )}
             {includes("tertiaries") && (
@@ -242,6 +254,7 @@ export function FilterCascadeMenu({
                 options={statOptions}
                 value={facets.tertiaries}
                 onChange={(v) => onFacetChange("tertiaries", v)}
+                toggleOnClick={toggleSubmenusOnClick}
               />
             )}
             {showClearAll && (
