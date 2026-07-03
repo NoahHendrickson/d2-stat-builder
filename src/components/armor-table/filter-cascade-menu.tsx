@@ -172,7 +172,7 @@ export function FilterCascadeMenu({
             : triggerLabel
         }
         data-active={active || undefined}
-        className={cn(filterMultiselectTriggerClasses, "min-w-28")}
+        className={cn(filterMultiselectTriggerClasses, "min-w-28 shrink-0 box-border")}
       >
         <span className="min-w-0 flex-1 truncate text-left">{triggerLabel}</span>
         {active && (
