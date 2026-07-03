@@ -44,10 +44,20 @@ export function SignInCard() {
       <CardContent>
         {authed ? (
           <Button
-            render={<a href="/api/auth/logout" />}
             variant="outline"
             size="lg"
             className="w-full"
+            onClick={async () => {
+              // POST, not a GET link — the logout route is POST-only to avoid CSRF.
+              const res = await fetch("/api/auth/logout", { method: "POST" }).catch(
+                () => null,
+              );
+              if (!res?.ok) {
+                toast.error("Sign out failed. Please try again.");
+                return;
+              }
+              window.location.assign("/");
+            }}
           >
             Sign out
           </Button>

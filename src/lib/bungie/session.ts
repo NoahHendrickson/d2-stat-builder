@@ -7,7 +7,9 @@ import { refreshTokens, type BungieTokens } from "./oauth";
  *  - `d2_access`  (httpOnly): the short-lived access token. Never leaves the server —
  *                 server routes use it for Bungie calls; /api/auth/session returns only
  *                 `{authenticated, user}`.
- *  - `d2_user`    (readable): non-sensitive identity for "signed in as" without a round trip.
+ *  - `d2_user`    (httpOnly): identity for server routes. Server code trusts its
+ *                 destinyMembershipId/Type, so it must not be client-writable;
+ *                 the client gets identity from /api/auth/session instead.
  */
 
 const REFRESH_COOKIE = "d2_refresh";
@@ -43,7 +45,7 @@ export async function writeSession(tokens: BungieTokens, user: SessionUser) {
   await updateTokens(tokens);
   const jar = await cookies();
   const opts = baseCookie(tokens.refreshExpiresAt);
-  jar.set(USER_COOKIE, JSON.stringify(user), { ...opts, httpOnly: false });
+  jar.set(USER_COOKIE, JSON.stringify(user), opts);
 }
 
 /** Replace the access + (rotated) refresh tokens after a refresh. */

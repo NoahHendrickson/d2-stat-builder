@@ -50,7 +50,11 @@ export async function GET(req: NextRequest) {
     await writeSession(tokens, user);
     return NextResponse.redirect(`${APP_URL}/?auth=success`);
   } catch (err) {
-    console.error("OAuth callback failed", err);
+    // Message only — the full error can carry Bungie response bodies.
+    console.error(
+      "OAuth callback failed:",
+      err instanceof Error ? err.message : "unknown error",
+    );
     return NextResponse.redirect(`${APP_URL}/?auth=error`);
   }
 }
