@@ -14,7 +14,7 @@ import { useSession } from "@/lib/auth/use-session";
 import { useArmory } from "@/lib/armory/use-armory";
 import { useManifest } from "@/lib/manifest/use-manifest";
 import { useOptimizer } from "@/lib/optimizer/use-optimizer";
-import { availableSets } from "@/lib/armory/sets";
+import { availableSets, type SetPerkInfo } from "@/lib/armory/sets";
 import {
   DEFAULT_SET_FILTERS,
   hasCustomSetFilters,
@@ -49,6 +49,11 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { SignInCard } from "@/components/auth/sign-in-card";
 import { ArmoryStatus } from "@/components/armory/armory-status";
 import { ManifestStatus } from "@/components/manifest/manifest-status";
@@ -559,8 +564,8 @@ export function BuilderPanel({
   const renderSetRow = (s: (typeof sets)[number]) => {
     const pinned = pinnedSets.includes(s.setHash);
     const pinVisible = pinned || hoveredSetHash === s.setHash;
-    const perk2 = s.perks.find((p) => p.requiredCount === 2)?.name;
-    const perk4 = s.perks.find((p) => p.requiredCount === 4)?.name;
+    const perk2Info = s.perks.find((p) => p.requiredCount === 2);
+    const perk4Info = s.perks.find((p) => p.requiredCount === 4);
     return (
       <div
         key={s.setHash}
@@ -598,35 +603,21 @@ export function BuilderPanel({
           disabled={s.ownedCount < 2}
           onToggle={() => toggleSet(s.setHash, 2)}
         />
-        <button
-          type="button"
+        <SetPerkLabel
+          perk={perk2Info}
           disabled={s.ownedCount < 2}
           onClick={() => toggleSet(s.setHash, 2)}
-          className={cn(
-            "text-muted-foreground min-w-0 truncate text-left text-sm disabled:cursor-not-allowed disabled:opacity-50",
-            s.ownedCount >= 2 && "cursor-pointer hover:text-foreground",
-          )}
-          title={perk2}
-        >
-          {perk2}
-        </button>
+        />
         <SetToggle
           active={setReqs[s.setHash] === 4}
           disabled={s.ownedCount < 4}
           onToggle={() => toggleSet(s.setHash, 4)}
         />
-        <button
-          type="button"
+        <SetPerkLabel
+          perk={perk4Info}
           disabled={s.ownedCount < 4}
           onClick={() => toggleSet(s.setHash, 4)}
-          className={cn(
-            "text-muted-foreground min-w-0 truncate text-left text-sm disabled:cursor-not-allowed disabled:opacity-50",
-            s.ownedCount >= 4 && "cursor-pointer hover:text-foreground",
-          )}
-          title={perk4}
-        >
-          {perk4}
-        </button>
+        />
       </div>
     );
   };
@@ -1015,6 +1006,52 @@ function Section({ title, children }: { title?: string; children: ReactNode }) {
       {title ? <h3 className="text-sm font-medium">{title}</h3> : null}
       {children}
     </section>
+  );
+}
+
+function perkTooltipContent(perk: SetPerkInfo | undefined): string | null {
+  if (!perk) return null;
+  return perk.description?.trim() || perk.name;
+}
+
+function SetPerkLabel({
+  perk,
+  disabled,
+  onClick,
+}: {
+  perk: SetPerkInfo | undefined;
+  disabled: boolean;
+  onClick: () => void;
+}) {
+  const tooltipContent = perkTooltipContent(perk);
+  const button = (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      aria-label={perk?.name}
+      className={cn(
+        "text-muted-foreground min-w-0 max-w-full truncate text-left text-sm disabled:cursor-not-allowed disabled:opacity-50",
+        !disabled && "cursor-pointer hover:text-foreground",
+      )}
+    >
+      {perk?.name}
+    </button>
+  );
+
+  if (!tooltipContent) return button;
+
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        render={<span className="w-fit max-w-full min-w-0" />}
+      >
+        {button}
+      </TooltipTrigger>
+      <TooltipContent side="top" align="start">
+        {tooltipContent}
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
