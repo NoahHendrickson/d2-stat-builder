@@ -764,7 +764,7 @@ export function BuilderPanel({
                           </>
                         )}
                       </div>
-                      <div className="col-start-2 relative h-3.5">
+                      <div className="col-start-2 relative h-5">
                         {STAT_TARGET_TICKS.map((t) => {
                           // Once a ceiling is predicted, the top tick reads "max" and
                           // jumps the target to that achievable maximum instead of 200.
@@ -788,7 +788,7 @@ export function BuilderPanel({
                                 left: sliderEdgeAlignedLeft(t, 0, STAT_SLIDER_MAX),
                               }}
                               className={cn(
-                                "absolute top-0 -translate-x-1/2 text-[10px] tabular-nums transition-colors",
+                                "absolute top-0 -translate-x-1/2 cursor-pointer text-[10px] tabular-nums transition-colors after:absolute after:-inset-x-2 after:-inset-y-1.5 after:content-[''] focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-hidden",
                                 targets[i] === tickValue
                                   ? "text-foreground"
                                   : "text-muted-foreground hover:text-foreground",
