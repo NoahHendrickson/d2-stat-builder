@@ -4,12 +4,15 @@
  * overall progress target so the bar only ever moves forward.
  */
 
-/** Mirror of ManifestStatus with only what the loading screen needs. */
+import type { ManifestStatus } from "../manifest/use-manifest";
+
+/**
+ * ManifestStatus, minus the ready payload (the stage model never touches the
+ * manifest itself). Derived from the shared union so the variants can't drift.
+ */
 export type ManifestInput =
-  | { state: "idle" }
-  | { state: "loading"; message: string; progress: number }
-  | { state: "ready" }
-  | { state: "error"; message: string };
+  | Exclude<ManifestStatus, { state: "ready" }>
+  | Pick<Extract<ManifestStatus, { state: "ready" }>, "state">;
 
 export interface LoadingInputs {
   /** Session query has no result yet (first load / hard refresh). */

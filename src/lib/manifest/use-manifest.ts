@@ -1,6 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import {
+  skipToken,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
+import { useSession } from "@/lib/auth/use-session";
 import { loadManifest, type Manifest } from "./load";
 
 export type ManifestStatus =
@@ -9,68 +14,64 @@ export type ManifestStatus =
   | { state: "ready"; manifest: Manifest }
   | { state: "error"; message: string };
 
-// Load once per page session; share across components. Progress is broadcast to
-// every mounted hook instance (not just the one that kicked off the load), with
-// the latest loading snapshot kept for subscribers that mount mid-download.
-let cachedManifest: Manifest | null = null;
-let inflight: Promise<Manifest> | null = null;
-let lastLoading = { message: "Loading manifest…", progress: 0 };
-const listeners = new Set<(status: ManifestStatus) => void>();
-
-function broadcast(status: ManifestStatus) {
-  if (status.state === "loading") {
-    lastLoading = { message: status.message, progress: status.progress };
-  }
-  for (const listener of listeners) listener(status);
+interface ManifestProgress {
+  message: string;
+  progress: number;
 }
 
+const MANIFEST_KEY = ["manifest"];
+const PROGRESS_KEY = ["manifest-progress"];
+
 /**
- * Pass `enabled: false` to subscribe without kicking off the download (the
- * load starts once some mounted subscriber is enabled — e.g. after the session
- * resolves as authenticated, so signed-out visitors never fetch game data).
+ * Loads the Destiny manifest once per page session via the shared query cache,
+ * so every subscriber sees the same status and download progress. Gated on an
+ * authenticated session: signed-out visitors never fetch game data.
  */
-export function useManifest(enabled = true): ManifestStatus {
-  const [status, setStatus] = useState<ManifestStatus>(() =>
-    cachedManifest
-      ? { state: "ready", manifest: cachedManifest }
-      : { state: "idle" },
-  );
+export function useManifest(): ManifestStatus {
+  const session = useSession();
+  const enabled = Boolean(session.data?.authenticated);
+  const queryClient = useQueryClient();
 
-  useEffect(() => {
-    if (!enabled) return;
-    if (cachedManifest) {
-      setStatus({ state: "ready", manifest: cachedManifest });
-      return;
-    }
+  // Subscribe-only view of download progress; written from the query function.
+  const progress = useQuery<ManifestProgress>({
+    queryKey: PROGRESS_KEY,
+    queryFn: skipToken,
+    staleTime: Infinity,
+    gcTime: Infinity,
+  });
 
-    const listener = setStatus;
-    listeners.add(listener);
-
-    if (!inflight) {
-      lastLoading = { message: "Loading manifest…", progress: 0 };
-      inflight = loadManifest((message, progress) => {
-        broadcast({ state: "loading", message, progress });
-      });
-      inflight
-        .then((manifest) => {
-          cachedManifest = manifest;
-          inflight = null;
-          broadcast({ state: "ready", manifest });
-        })
-        .catch((err: unknown) => {
-          inflight = null;
-          broadcast({
-            state: "error",
-            message: err instanceof Error ? err.message : String(err),
-          });
+  const manifest = useQuery<Manifest>({
+    queryKey: MANIFEST_KEY,
+    enabled,
+    // The manifest is version-stamped and immutable for the page session:
+    // never refetch, never garbage-collect. A failed load surfaces as an
+    // error status and refetches on the next mount.
+    staleTime: Infinity,
+    gcTime: Infinity,
+    retry: false,
+    queryFn: () =>
+      loadManifest((message, fraction) => {
+        queryClient.setQueryData<ManifestProgress>(PROGRESS_KEY, {
+          message,
+          progress: fraction,
         });
-    }
-    setStatus({ state: "loading", ...lastLoading });
+      }),
+  });
 
-    return () => {
-      listeners.delete(listener);
+  if (manifest.data) return { state: "ready", manifest: manifest.data };
+  if (manifest.isError) {
+    const err = manifest.error;
+    return {
+      state: "error",
+      message: err instanceof Error ? err.message : String(err),
     };
-  }, [enabled]);
-
-  return status;
+  }
+  if (manifest.isFetching) {
+    return {
+      state: "loading",
+      message: progress.data?.message ?? "Loading manifest…",
+      progress: progress.data?.progress ?? 0,
+    };
+  }
+  return { state: "idle" };
 }

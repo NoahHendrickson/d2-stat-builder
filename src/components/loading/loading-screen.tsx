@@ -1,13 +1,61 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSession } from "@/lib/auth/use-session";
 import { useManifest } from "@/lib/manifest/use-manifest";
 import { useArmory } from "@/lib/armory/use-armory";
 import { loadingView } from "@/lib/loading/progress";
-import { useSmoothedProgress } from "@/lib/use-smoothed-progress";
 import { cn } from "@/lib/utils";
+
+/**
+ * Startup-specific progress smoother: eases the displayed fraction toward the
+ * stage target (with a slight forward trickle so the bar never sits dead,
+ * capped just ahead of the target), sweeps to 100% once `done`, and holds
+ * there — the component owns fade-out/unmount timing. One-shot by design;
+ * the optimizer's multi-run smoothing lives in `useSmoothedProgress`.
+ */
+function useEasedProgress(target: number, done: boolean): number {
+  const [displayed, setDisplayed] = useState(0);
+  const displayedRef = useRef(0);
+  const goalRef = useRef({ target, done });
+
+  useEffect(() => {
+    goalRef.current = { target, done };
+  }, [target, done]);
+
+  useEffect(() => {
+    let raf = 0;
+    let last = performance.now();
+    const tick = (now: number) => {
+      const dt = Math.max(0, Math.min(0.1, (now - last) / 1000));
+      last = now;
+      const { target: t, done: d } = goalRef.current;
+      const prev = displayedRef.current;
+      let next: number;
+      if (d) {
+        next = prev + (1 - prev) * (1 - Math.exp(-25 * dt));
+        if (next >= 0.995) {
+          // Landed — pin at 100% and stop the loop (nothing left to animate).
+          displayedRef.current = 1;
+          setDisplayed(1);
+          return;
+        }
+      } else {
+        const eased = prev + Math.max(0, t - prev) * (1 - Math.exp(-14 * dt));
+        const trickle = Math.min(prev + dt * 0.04, t + 0.06);
+        next = Math.min(0.98, Math.max(prev, eased, trickle));
+      }
+      displayedRef.current = next;
+      setDisplayed(next);
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, []);
+
+  return displayed;
+}
 
 /**
  * One pixel-art exotic drifting across the screen. `delay` is negative so the
@@ -49,8 +97,7 @@ const TILES: TileSpec[] = [
  */
 export function LoadingScreen() {
   const session = useSession();
-  // Gated so signed-out visitors never trigger the manifest download.
-  const manifestStatus = useManifest(Boolean(session.data?.authenticated));
+  const manifestStatus = useManifest();
   const armory = useArmory();
   const [fading, setFading] = useState(false);
   const [dismissed, setDismissed] = useState(false);
@@ -64,14 +111,7 @@ export function LoadingScreen() {
     armoryError: armory.isError,
   });
   const done = view.phase === "done";
-
-  // runId=1: a single "run" per page load, started on mount. `showLoading`
-  // stays true through the hook's sweep-to-100% once loading finishes.
-  const { displayedProgress, showLoading } = useSmoothedProgress(
-    view.target,
-    view.phase === "loading",
-    1,
-  );
+  const progress = useEasedProgress(view.target, done);
 
   // Once everything is ready, let the sweep land (~250ms), then fade out and
   // unmount. Cancelled if `done` flips back (e.g. session expiry mid-sweep).
@@ -86,10 +126,6 @@ export function LoadingScreen() {
   }, [done]);
 
   if (dismissed || view.phase === "hidden") return null;
-
-  // The hook resets its displayed value after the final sweep; pin the bar at
-  // full once loading is done and the sweep has finished.
-  const progress = done && !showLoading ? 1 : displayedProgress;
 
   return (
     <LoadingScreenView progress={progress} message={view.message} fading={fading} />
