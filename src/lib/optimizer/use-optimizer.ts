@@ -10,11 +10,13 @@ import type {
 } from "./types";
 
 /**
- * How a background ceilings refinement ended: it proved higher per-stat maxima than
- * the capped search reported (the slider overlays rose — raise a target to explore),
- * or it found none. Null while no refinement has resolved. The build list itself is
- * frozen at what the capped search found, by design — refinement only ever moves the
- * overlays.
+ * How the background refinement ended: "improved" = it proved higher per-stat maxima
+ * than the capped search reported (the slider overlays rose — raise a target to
+ * explore); "confirmed" = the background build search ran to exhaustion and found no
+ * higher maxima (a proven "nothing better exists"). Null while unresolved, or when the
+ * background pass itself timed out unverified. The shown build list is frozen by
+ * design — a strictly-better background list is offered via `pendingResult` and only
+ * applied on explicit user action (`applyPending`).
  */
 export type RefineOutcome = "improved" | "confirmed" | null;
 
@@ -42,7 +44,10 @@ export function useOptimizer() {
   // stable onmessage closure.
   const refiningRef = useRef(false);
   const interimRef = useRef<OptimizerOutput | null>(null);
+  const pendingRef = useRef<OptimizerOutput | null>(null);
   const [result, setResult] = useState<OptimizerOutput | null>(null);
+  // A strictly-better list the background search found — held, never auto-applied.
+  const [pendingResult, setPendingResult] = useState<OptimizerOutput | null>(null);
   const [ceilings, setCeilings] = useState<StatArray | null>(null);
   const [running, setRunning] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -74,6 +79,10 @@ export function useOptimizer() {
           } else {
             setCeilings(msg.ceilings);
           }
+        } else if (msg.kind === "better") {
+          // The background search beat the frozen list — offer it, don't apply it.
+          pendingRef.current = msg.output;
+          setPendingResult(msg.output);
         } else if (msg.refining) {
           // Time-capped search: its build list is final and shown now (and never
           // replaced); the worker is still refining ceilings, so stay "in flight"
@@ -104,7 +113,12 @@ export function useOptimizer() {
             const rose = msg.output.ceilings.some(
               (v, s) => v > interim.ceilings[s],
             );
-            setRefineOutcome(rose ? "improved" : "confirmed");
+            // "confirmed" is a proven claim — only when the background build search
+            // ran to exhaustion. An unverified quiet pass resolves to null (the amber
+            // time-limit banner stays).
+            setRefineOutcome(
+              rose ? "improved" : msg.verified ? "confirmed" : null,
+            );
           }
         }
       };
@@ -112,6 +126,8 @@ export function useOptimizer() {
         inFlightRef.current = false;
         refiningRef.current = false;
         interimRef.current = null;
+        pendingRef.current = null;
+        setPendingResult(null);
         setRunning(false);
         setRefining(false);
       };
@@ -141,6 +157,8 @@ export function useOptimizer() {
       inFlightRef.current = true;
       refiningRef.current = false;
       interimRef.current = null;
+      pendingRef.current = null;
+      setPendingResult(null);
       setRunning(true);
       setProgress(0);
       setRefining(false);
@@ -159,11 +177,27 @@ export function useOptimizer() {
     inFlightRef.current = false;
     refiningRef.current = false;
     interimRef.current = null;
+    pendingRef.current = null;
     workerRef.current?.terminate();
     workerRef.current = null;
+    setPendingResult(null);
     setRunning(false);
     setRefining(false);
     setRefineOutcome(null);
+  }, []);
+
+  // Swap the offered better list in — the explicit user action that lets a shown list
+  // change. Ceilings only max-merge (both lists' ceilings are proven-achievable).
+  const applyPending = useCallback(() => {
+    const pending = pendingRef.current;
+    if (!pending) return;
+    pendingRef.current = null;
+    setPendingResult(null);
+    setRefineOutcome(null);
+    setResult(pending);
+    setCeilings((prev) =>
+      prev ? pending.ceilings.map((v, s) => Math.max(v, prev[s])) : pending.ceilings,
+    );
   }, []);
 
   return {
@@ -177,5 +211,7 @@ export function useOptimizer() {
     refining,
     refineProgress,
     refineOutcome,
+    pendingResult,
+    applyPending,
   };
 }

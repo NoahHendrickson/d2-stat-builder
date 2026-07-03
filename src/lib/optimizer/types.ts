@@ -122,13 +122,23 @@ export interface OptimizerRequest {
 /**
  * Worker → main thread, echoing the request's seq so stale runs can be dropped. Progress
  * (a 0–1 fraction) and ceilings (seed, then each refined stat) stream ahead of "result".
- * A time-capped search posts its result with `refining: true` — its build list is final
- * for this query (frozen; a list never changes under the reader), but the stat ceilings
- * keep refining in the background — and is always followed by a `refining: false` result
- * carrying the SAME loadouts with the refined ceilings (progress/ceilings keep streaming
- * between the two).
+ *
+ * A time-capped search posts its result with `refining: true` — its build list is frozen
+ * for this query (a list never changes under the reader) — then the background session
+ * refines the ceilings AND re-runs the build search exhaustively. If that beats the
+ * frozen list, a "better" message offers the replacement (the UI swaps it in only on an
+ * explicit user action). A final `refining: false` result always follows, carrying the
+ * SAME frozen loadouts with the refined ceilings; `verified` is true when the background
+ * build search ran to exhaustion (so "nothing better exists" is a proven claim).
  */
 export type OptimizerResponse =
   | { seq: number; kind: "progress"; progress: number }
   | { seq: number; kind: "ceilings"; ceilings: StatArray }
-  | { seq: number; kind: "result"; output: OptimizerOutput; refining: boolean };
+  | { seq: number; kind: "better"; output: OptimizerOutput }
+  | {
+      seq: number;
+      kind: "result";
+      output: OptimizerOutput;
+      refining: boolean;
+      verified: boolean;
+    };

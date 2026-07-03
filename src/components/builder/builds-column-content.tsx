@@ -79,6 +79,10 @@ export interface BuildsColumnContentProps {
   refineProgress: number;
   /** How the last background refinement resolved (null = none ran / still running). */
   refineOutcome: RefineOutcome;
+  /** A strictly-better background list is waiting behind the "show them" action. */
+  hasPending: boolean;
+  /** Apply the waiting better list (the explicit user action that changes the list). */
+  onShowPending: () => void;
   onCancel: () => void;
   pieceMap: Map<string, ArmorPiece>;
   targets: number[];
@@ -102,6 +106,8 @@ export function BuildsColumnContent({
   refining,
   refineProgress,
   refineOutcome,
+  hasPending,
+  onShowPending,
   onCancel,
   pieceMap,
   targets,
@@ -151,6 +157,8 @@ export function BuildsColumnContent({
           refining={refining}
           refineProgress={refineProgress}
           refineOutcome={refineOutcome}
+          hasPending={hasPending}
+          onShowPending={onShowPending}
           pieceMap={pieceMap}
           targets={targets}
           setMap={setMap}

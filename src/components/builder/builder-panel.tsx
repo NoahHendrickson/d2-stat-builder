@@ -107,6 +107,8 @@ export function BuilderPanel({
     refining,
     refineProgress,
     refineOutcome,
+    pendingResult,
+    applyPending,
   } = useOptimizer();
   const { displayedProgress, showLoading } = useSmoothedProgress(
     progress,
@@ -589,6 +591,8 @@ export function BuilderPanel({
       refining,
       refineProgress,
       refineOutcome,
+      hasPending: pendingResult !== null,
+      onShowPending: applyPending,
       onCancel: cancel,
       pieceMap,
       targets,
@@ -611,6 +615,8 @@ export function BuilderPanel({
       refining,
       refineProgress,
       refineOutcome,
+      pendingResult,
+      applyPending,
       cancel,
       pieceMap,
       targets,

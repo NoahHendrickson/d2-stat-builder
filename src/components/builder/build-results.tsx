@@ -568,48 +568,75 @@ function BuildActions({
 }
 
 /**
- * Search-exactness status above the results. The build list below is FROZEN once shown
- * (it never changes under the reader); post-cap discovery surfaces only through the
- * stat sliders' max overlays. Three states: the background ceilings refinement is
- * running (overlays may still rise — live progress so that's unmissable), it resolved
- * (higher maxima found, or none), or the plain time-limit banner (refinement never
- * resolved, e.g. a worker error).
+ * Search-exactness status above the results. The build list below never changes on its
+ * own once shown; post-cap discovery surfaces as the stat sliders' max overlays rising
+ * and, when the background search strictly beats the frozen list, as a "Show them"
+ * action (the explicit user input that swaps the list). States, in priority order:
+ * background refinement running (live progress), a waiting better list (+ optionally
+ * higher maxima), higher maxima only, a verified all-clear, or the plain time-limit
+ * banner (background never resolved, e.g. a worker error or an unverified quiet pass).
  */
 function SearchStatus({
   capped,
   refining,
   refineProgress,
   refineOutcome,
+  hasPending,
+  onShowPending,
 }: {
   capped: boolean;
   refining: boolean;
   refineProgress: number;
   refineOutcome: RefineOutcome;
+  hasPending: boolean;
+  onShowPending: () => void;
 }) {
   if (refining) {
     return (
       <p className="text-foreground/85 flex items-center gap-1.5 text-xs" aria-live="polite">
         <CircleNotch className="animate-spin" aria-hidden />
-        Builds locked in — checking the stat targets for higher maximums (
+        Builds locked in — searching for higher maximums and stronger builds (
         {Math.round(refineProgress * 100)}%)
       </p>
     );
   }
+  const lines: ReactNode[] = [];
+  if (hasPending) {
+    lines.push(
+      <p
+        key="pending"
+        className="flex items-center gap-2 text-xs text-emerald-600/90 dark:text-emerald-500/90"
+        aria-live="polite"
+      >
+        Stronger builds found
+        <Button
+          variant="link"
+          onClick={onShowPending}
+          className="h-auto p-0 text-xs font-medium text-emerald-600 dark:text-emerald-500"
+        >
+          Show them
+        </Button>
+      </p>,
+    );
+  }
   if (refineOutcome === "improved") {
-    return (
-      <p className="text-xs text-emerald-600/90 dark:text-emerald-500/90" aria-live="polite">
+    lines.push(
+      <p
+        key="improved"
+        className="text-xs text-emerald-600/90 dark:text-emerald-500/90"
+        aria-live="polite"
+      >
         Higher stat maximums found — raise a stat target to explore them.
-      </p>
+      </p>,
+    );
+  } else if (!hasPending && refineOutcome === "confirmed") {
+    lines.push(
+      <p key="confirmed" className="text-muted-foreground text-xs" aria-live="polite">
+        Verified — no better builds or higher maximums exist for these targets.
+      </p>,
     );
   }
-  if (refineOutcome === "confirmed") {
-    return (
-      <p className="text-muted-foreground text-xs" aria-live="polite">
-        No higher stat maximums found.
-      </p>
-    );
-  }
-  if (capped) {
+  if (lines.length === 0 && capped) {
     return (
       <p className="text-xs text-amber-600/90 dark:text-amber-500/90">
         Hit the time limit — showing the best found so far. Narrow your targets
@@ -617,7 +644,7 @@ function SearchStatus({
       </p>
     );
   }
-  return null;
+  return lines.length > 0 ? <>{lines}</> : null;
 }
 
 export function BuildResults({
@@ -625,6 +652,8 @@ export function BuildResults({
   refining,
   refineProgress,
   refineOutcome,
+  hasPending,
+  onShowPending,
   pieceMap,
   targets,
   setMap,
@@ -641,6 +670,8 @@ export function BuildResults({
   refining: boolean;
   refineProgress: number;
   refineOutcome: RefineOutcome;
+  hasPending: boolean;
+  onShowPending: () => void;
   pieceMap: Map<string, ArmorPiece>;
   targets: number[];
   setMap: Map<number, ArmorSetInfo>;
@@ -653,6 +684,8 @@ export function BuildResults({
       refining={refining}
       refineProgress={refineProgress}
       refineOutcome={refineOutcome}
+      hasPending={hasPending}
+      onShowPending={onShowPending}
     />
   );
   if (result.loadouts.length === 0) {
