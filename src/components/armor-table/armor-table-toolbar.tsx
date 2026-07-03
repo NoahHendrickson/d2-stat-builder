@@ -79,15 +79,15 @@ export function ArmorTableToolbar({
   };
 
   return (
-    <div className="@container/toolbar flex items-center gap-2 px-3 py-4">
+    <div className="@container/toolbar flex items-stretch gap-2 px-3 py-4">
       <span
-        className="text-muted-foreground shrink-0 text-xs tabular-nums"
+        className="text-muted-foreground shrink-0 self-center text-xs tabular-nums"
         aria-label={`${filteredCount} results`}
       >
         {filteredCount}
       </span>
-      <div className="bg-border h-4 w-px shrink-0" aria-hidden />
-      <div className="relative min-w-0 flex-1">
+      <div className="bg-border h-4 w-px shrink-0 self-center" aria-hidden />
+      <div className="relative h-8 min-w-0 flex-1 self-stretch">
         <MagnifyingGlass
           className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 z-10 size-3.5 -translate-y-1/2"
           aria-hidden
@@ -171,7 +171,7 @@ export function ArmorTableToolbar({
           triggerLabel="More filters"
         />
       </div>
-      <div className="shrink-0 @[58rem]/toolbar:hidden">
+      <div className="h-8 shrink-0 self-stretch @[58rem]/toolbar:hidden">
         <FilterCascadeMenu {...cascadeMenuProps} toggleSubmenusOnClick />
       </div>
     </div>
