@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import { useSession } from "@/lib/auth/use-session";
 import { useManifest } from "@/lib/manifest/use-manifest";
 import { useArmory } from "@/lib/armory/use-armory";
@@ -158,11 +158,15 @@ export function LoadingScreenView({
         {TILES.map((tile, i) => (
           <div
             key={i}
-            className="absolute left-0 will-change-transform"
-            style={{
-              top: tile.top,
-              animation: `loading-drift ${tile.duration}s linear ${tile.delay}s infinite ${tile.reverse ? "reverse" : "normal"}`,
-            }}
+            className="loading-tile-drift absolute left-0 will-change-transform"
+            style={
+              {
+                top: tile.top,
+                "--drift-duration": `${tile.duration}s`,
+                "--drift-delay": `${tile.delay}s`,
+                "--drift-direction": tile.reverse ? "reverse" : "normal",
+              } as CSSProperties
+            }
           >
             <Image
               src={`/loading-exotics/exotic-${tile.img}.svg`}
@@ -171,46 +175,44 @@ export function LoadingScreenView({
               height={tile.size}
               unoptimized
               draggable={false}
-              className={cn("select-none", tile.blur && "blur-[1.5px]")}
-              style={{
-                opacity: tile.opacity,
-                animation: `loading-bob ${tile.bob}s ease-in-out ${tile.delay}s infinite alternate`,
-              }}
+              className={cn(
+                "loading-tile-bob select-none",
+                tile.blur && "blur-[1.5px]",
+              )}
+              style={
+                {
+                  opacity: tile.opacity,
+                  "--bob-duration": `${tile.bob}s`,
+                  "--drift-delay": `${tile.delay}s`,
+                } as CSSProperties
+              }
             />
           </div>
         ))}
       </div>
 
-      {/* Soft dim behind the center content so text stays readable as tiles pass. */}
-      <div
-        aria-hidden
-        className="absolute inset-0"
-        style={{
-          background:
-            "radial-gradient(40rem 18rem at 50% 50%, var(--background) 35%, transparent 100%)",
-        }}
-      />
-
-      <div className="relative flex h-full flex-col items-center justify-center gap-4 px-6">
-        <h1 className="text-lg font-semibold tracking-tight">
-          Loading your armor
-        </h1>
-        <div
-          role="progressbar"
-          aria-label="Loading progress"
-          aria-valuemin={0}
-          aria-valuemax={100}
-          aria-valuenow={pct}
-          className="bg-muted h-1.5 w-full max-w-xs overflow-hidden rounded-full"
-        >
+      <div className="relative z-10 flex h-full flex-col items-center justify-center px-6">
+        <div className="bg-background/90 flex w-full max-w-sm flex-col items-center gap-4 rounded-2xl px-8 py-6 backdrop-blur-sm">
+          <h1 className="text-lg font-semibold tracking-tight">
+            Loading your armor
+          </h1>
           <div
-            className="bg-primary h-full rounded-full"
-            style={{ width: `${pct}%` }}
-          />
-        </div>
-        <div className="text-muted-foreground flex w-full max-w-xs items-baseline justify-between gap-4 text-xs">
-          <span className="truncate">{message}</span>
-          <span className="tabular-nums">{pct}%</span>
+            role="progressbar"
+            aria-label="Loading progress"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={pct}
+            className="bg-muted h-1.5 w-full max-w-xs overflow-hidden rounded-full"
+          >
+            <div
+              className="bg-primary h-full rounded-full"
+              style={{ width: `${pct}%` }}
+            />
+          </div>
+          <div className="text-muted-foreground flex w-full max-w-xs items-baseline justify-between gap-4 text-xs">
+            <span className="truncate">{message}</span>
+            <span className="tabular-nums">{pct}%</span>
+          </div>
         </div>
       </div>
     </div>
