@@ -29,9 +29,12 @@ const CEILING_BUDGET_MS = 1200;
 /**
  * Wall-clock budget for the top-N build search. Demanding *joint* stat targets can push
  * the combinatorial search into a performance cliff (minutes); past this budget it stops
- * and returns the best builds found so far with `capped: true`.
+ * and returns the best builds found so far with `capped: true`. The list shown to the
+ * user is FROZEN at whatever this window found (deliberate UX: a list never changes
+ * under the reader) — post-cap discovery continues through solveCeilings() in the
+ * worker session and surfaces only as the stat sliders' rising max overlays.
  */
-const TOPN_BUDGET_MS = 4000;
+const TOPN_BUDGET_MS = 6000;
 /** Check the wall clock every this many combos (a power of two for a cheap mask). */
 const BUDGET_CHECK_MASK = 65535;
 /** Portion of the progress bar covered by the top-N walk; ceilings fill the rest. */
@@ -243,6 +246,33 @@ class TopNHeap {
 }
 
 /**
+ * Build the per-slot search pool shared by solve() and solveCeilings(): pre-filter
+ * pieces the exotic constraint excludes (they can never appear in a valid loadout,
+ * but left in the pool they inflate every suffix bound — looser bounds → less
+ * pruning — and slot sizes), then dedupe + dominance-prune, sorted by total.
+ */
+function buildSlots(
+  input: OptimizerInput,
+  dominancePruning: boolean,
+): InternalPiece[][] {
+  const reqs = input.setRequirements ?? [];
+  const allowTuning = input.allowTuning ?? true;
+  const exoticMode = input.exotic?.mode ?? "any";
+  const exoticHashes = input.exotic?.hashes;
+  const eligible = (p: OptimizerPiece): boolean =>
+    !p.exotic ||
+    (exoticMode === "none"
+      ? false
+      : exoticMode !== "specific" ||
+        (p.hash !== undefined && !!exoticHashes?.includes(p.hash)));
+  return input.slots.map((s) =>
+    dedupe(s.filter(eligible), reqs.length > 0, allowTuning, dominancePruning).sort(
+      (a, b) => b.total - a.total,
+    ),
+  );
+}
+
+/**
  * Find the best loadouts (one piece per slot, ≤1 exotic) that meet the stat
  * minimums (auto-assigning the mod budget) and satisfy all required set bonuses,
  * ranked by total stats. Brute-force enumeration with dedupe + pruning on stat
@@ -283,7 +313,6 @@ export function solve(
   const min = input.minimums;
   const mods: ModBudget = input.mods ?? { major: 0, minor: 0 };
   const maxModPoints = mods.major * 10 + mods.minor * 5;
-  const allowTuning = input.allowTuning ?? true;
   // Build-wide fragment constant, folded into every loadout's effective stats. May be
   // negative. fragUpside = its positive part, added to the top-N bound to keep it admissible.
   const frag = input.fragmentBonus ?? new Array(NUM_STATS).fill(0);
@@ -299,23 +328,7 @@ export function solve(
       ? p.hash !== undefined && !!exoticHashes?.includes(p.hash)
       : true);
 
-  // Pieces the exotic constraint excludes can never appear in a valid loadout, but
-  // leaving them in the pool inflates every suffix bound (looser bounds → less pruning)
-  // and slot sizes — drop them before dedupe so the search never sees them.
-  const eligible = (p: OptimizerPiece): boolean =>
-    !p.exotic ||
-    (exoticMode === "none"
-      ? false
-      : exoticMode !== "specific" ||
-        (p.hash !== undefined && !!exoticHashes?.includes(p.hash)));
-  const slots = input.slots.map((s) =>
-    dedupe(
-      s.filter(eligible),
-      reqs.length > 0,
-      allowTuning,
-      opts.dominancePruning ?? true,
-    ).sort((a, b) => b.total - a.total),
-  );
+  const slots = buildSlots(input, opts.dominancePruning ?? true);
   if (slots.length !== NUM_SLOTS || slots.some((s) => s.length === 0)) {
     return {
       loadouts: [],
@@ -516,6 +529,28 @@ export function solve(
   );
   onProgress?.(1);
   return { loadouts, combosTried, combosValid, ceilings, capped };
+}
+
+/**
+ * Ceilings-only entry for the worker's background refinement after a capped search:
+ * recompute the per-stat maxima for `input` under a much larger budget, starting from
+ * `seed` — proven-achievable values from an earlier full solve of the SAME input. The
+ * build list is deliberately NOT recomputed: the UI freezes whatever list the capped
+ * search returned (a list must never change under the reader), so post-cap discovery
+ * surfaces only through these rising ceilings.
+ */
+export function solveCeilings(
+  input: OptimizerInput,
+  seed: number[],
+  budgetMs: number,
+  onCeilings?: (ceilings: number[]) => void,
+  onProbe?: () => void,
+): number[] {
+  const slots = buildSlots(input, true);
+  if (slots.length !== NUM_SLOTS || slots.some((s) => s.length === 0)) {
+    return seed.slice(0, NUM_STATS);
+  }
+  return runCeilings(input, slots, seed, budgetMs, onCeilings, onProbe);
 }
 
 /**

@@ -9,19 +9,12 @@ import type {
   StatArray,
 } from "./types";
 
-/** Did the exhaustive pass beat the interim answer anywhere in the ranked list? */
-function foundBetter(interim: OptimizerOutput, final: OptimizerOutput): boolean {
-  if (final.loadouts.length > interim.loadouts.length) return true;
-  return final.loadouts.some(
-    (lo, i) => lo.total > (interim.loadouts[i]?.total ?? -1),
-  );
-}
-
 /**
- * How a background refinement pass ended: the exhaustive search found better builds
- * than the responsive pass showed, or it confirmed nothing better exists. Null while
- * no refinement has resolved (including when even the background pass was capped —
- * that surfaces through `result.capped` instead).
+ * How a background ceilings refinement ended: it proved higher per-stat maxima than
+ * the capped search reported (the slider overlays rose — raise a target to explore),
+ * or it found none. Null while no refinement has resolved. The build list itself is
+ * frozen at what the capped search found, by design — refinement only ever moves the
+ * overlays.
  */
 export type RefineOutcome = "improved" | "confirmed" | null;
 
@@ -31,10 +24,12 @@ export type RefineOutcome = "improved" | "confirmed" | null;
  * (stale ones are dropped). Ceilings stream in ahead of the final result for live slider
  * animation; the previous result stays visible while a new run is in flight (no flicker).
  *
- * A time-capped search posts an interim result (`refining` becomes true) and keeps
- * searching in the background; `refineProgress` streams the background pass, and when it
- * lands `refineOutcome` says whether it improved on the interim answer. The worker stays
- * "in flight" through refinement so a new run (or cancel) terminates the background CPU
+ * A time-capped search posts its result (`refining` becomes true) with a build list
+ * that is FINAL for this query — the list never changes under the reader — while the
+ * worker keeps refining the per-stat ceilings in the background. `refineProgress`
+ * streams that pass; rising ceilings surface live in the slider overlays; and when it
+ * lands `refineOutcome` says whether higher maxima were found. The worker stays "in
+ * flight" through refinement so a new run (or cancel) terminates the background CPU
  * work immediately.
  */
 export function useOptimizer() {
@@ -80,8 +75,9 @@ export function useOptimizer() {
             setCeilings(msg.ceilings);
           }
         } else if (msg.refining) {
-          // Time-capped responsive pass: show its best-effort answer now; the worker is
-          // still busy on the exhaustive pass, so stay "in flight" for cancellation.
+          // Time-capped search: its build list is final and shown now (and never
+          // replaced); the worker is still refining ceilings, so stay "in flight"
+          // for cancellation.
           refiningRef.current = true;
           interimRef.current = msg.output;
           setResult(msg.output);
@@ -94,6 +90,8 @@ export function useOptimizer() {
           refiningRef.current = false;
           interimRef.current = null;
           inFlightRef.current = false;
+          // After a refinement this carries the SAME loadouts (list stays frozen) with
+          // the refined ceilings — setting it only updates ceilings/refine state.
           setResult(msg.output);
           setCeilings((prev) =>
             interim && prev
@@ -102,12 +100,11 @@ export function useOptimizer() {
           );
           setRunning(false);
           setRefining(false);
-          // A background pass that was itself capped proves nothing — leave the outcome
-          // unset and let result.capped drive the time-limit messaging.
-          if (interim && !msg.output.capped) {
-            setRefineOutcome(
-              foundBetter(interim, msg.output) ? "improved" : "confirmed",
+          if (interim) {
+            const rose = msg.output.ceilings.some(
+              (v, s) => v > interim.ceilings[s],
             );
+            setRefineOutcome(rose ? "improved" : "confirmed");
           }
         }
       };

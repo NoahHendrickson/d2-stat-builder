@@ -122,10 +122,11 @@ export interface OptimizerRequest {
 /**
  * Worker → main thread, echoing the request's seq so stale runs can be dropped. Progress
  * (a 0–1 fraction) and ceilings (seed, then each refined stat) stream ahead of "result".
- * A time-capped responsive pass posts its result with `refining: true` — the best found
- * so far, shown immediately while an exhaustive background pass runs — and is always
- * followed by a final `refining: false` result (progress/ceilings keep streaming between
- * the two).
+ * A time-capped search posts its result with `refining: true` — its build list is final
+ * for this query (frozen; a list never changes under the reader), but the stat ceilings
+ * keep refining in the background — and is always followed by a `refining: false` result
+ * carrying the SAME loadouts with the refined ceilings (progress/ceilings keep streaming
+ * between the two).
  */
 export type OptimizerResponse =
   | { seq: number; kind: "progress"; progress: number }

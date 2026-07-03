@@ -568,11 +568,12 @@ function BuildActions({
 }
 
 /**
- * Search-exactness status above the results. Three states: an active background
- * refinement (the responsive pass was time-capped — best-so-far is shown while the
- * exhaustive pass runs, with live progress so it's unmissable that better may come),
- * a resolved refinement (better builds landed, or the interim answer was confirmed
- * optimal), or the gave-up amber banner (even the background pass hit its time cap).
+ * Search-exactness status above the results. The build list below is FROZEN once shown
+ * (it never changes under the reader); post-cap discovery surfaces only through the
+ * stat sliders' max overlays. Three states: the background ceilings refinement is
+ * running (overlays may still rise — live progress so that's unmissable), it resolved
+ * (higher maxima found, or none), or the plain time-limit banner (refinement never
+ * resolved, e.g. a worker error).
  */
 function SearchStatus({
   capped,
@@ -589,8 +590,22 @@ function SearchStatus({
     return (
       <p className="text-foreground/85 flex items-center gap-1.5 text-xs" aria-live="polite">
         <CircleNotch className="animate-spin" aria-hidden />
-        Best found so far — still searching for better builds (
+        Builds locked in — checking the stat targets for higher maximums (
         {Math.round(refineProgress * 100)}%)
+      </p>
+    );
+  }
+  if (refineOutcome === "improved") {
+    return (
+      <p className="text-xs text-emerald-600/90 dark:text-emerald-500/90" aria-live="polite">
+        Higher stat maximums found — raise a stat target to explore them.
+      </p>
+    );
+  }
+  if (refineOutcome === "confirmed") {
+    return (
+      <p className="text-muted-foreground text-xs" aria-live="polite">
+        No higher stat maximums found.
       </p>
     );
   }
@@ -599,20 +614,6 @@ function SearchStatus({
       <p className="text-xs text-amber-600/90 dark:text-amber-500/90">
         Hit the time limit — showing the best found so far. Narrow your targets
         for an exhaustive search.
-      </p>
-    );
-  }
-  if (refineOutcome === "improved") {
-    return (
-      <p className="text-xs text-emerald-600/90 dark:text-emerald-500/90" aria-live="polite">
-        Search complete — found better builds than the first results.
-      </p>
-    );
-  }
-  if (refineOutcome === "confirmed") {
-    return (
-      <p className="text-muted-foreground text-xs" aria-live="polite">
-        Search complete — nothing better exists for these targets.
       </p>
     );
   }
