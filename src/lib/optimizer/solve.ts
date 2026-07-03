@@ -16,6 +16,7 @@ import {
   makeInternalPiece,
   type InternalPiece,
 } from "./tuning";
+import { paretoWithinGroup } from "./pareto";
 
 const DEFAULT_MAX_RESULTS = 200;
 /**
@@ -38,13 +39,21 @@ const TOPN_PROGRESS_SHARE = 0.9;
 /** Minimum wall-clock gap between progress emissions. */
 const PROGRESS_INTERVAL_MS = 100;
 
-/** Collapse pieces with an identical stat vector (+ exotic, + set, + tuning) to one representative. */
+/**
+ * Collapse pieces with an identical stat vector (+ exotic, + set, + tuning) to one
+ * representative, then drop Pareto-dominated pieces within each dominance group (same
+ * key minus the stat vector — see paretoWithinGroup for the soundness argument). The
+ * group key is carved out of the very same expression as the dedupe key so the two can
+ * never drift apart.
+ */
 function dedupe(
   pieces: OptimizerPiece[],
   keyIncludesSet: boolean,
   allowTuning: boolean,
+  dominancePruning: boolean,
 ): InternalPiece[] {
-  const map = new Map<string, InternalPiece>();
+  const seen = new Set<string>();
+  const groups = new Map<string, InternalPiece[]>();
   for (const p of pieces) {
     // Two pieces with the same stats but different tuned stats aren't interchangeable
     // (except exotics, whose flexible slot makes the rolled tuned stat irrelevant).
@@ -52,17 +61,28 @@ function dedupe(
       allowTuning && p.tuning
         ? `${p.exotic ? "X" : p.tuning.tuned}:${p.tuning.offStats.join(".")}`
         : "-";
-    const key =
+    const groupKey =
       (p.exotic ? `E${p.hash ?? 0}` : "L") +
       (p.artifice ? "A" : "") +
       (keyIncludesSet ? `|${p.setHash ?? 0}|` : "|") +
-      `T${tuneKey}|` +
-      p.stats.join(",");
-    if (!map.has(key)) {
-      map.set(key, makeInternalPiece(p, allowTuning));
+      `T${tuneKey}`;
+    const fullKey = groupKey + "|" + p.stats.join(",");
+    if (seen.has(fullKey)) continue;
+    seen.add(fullKey);
+    const piece = makeInternalPiece(p, allowTuning);
+    const group = groups.get(groupKey);
+    if (group) {
+      group.push(piece);
+    } else {
+      groups.set(groupKey, [piece]);
     }
   }
-  return Array.from(map.values());
+  const out: InternalPiece[] = [];
+  for (const group of groups.values()) {
+    const kept = dominancePruning ? paretoWithinGroup(group) : group;
+    for (const piece of kept) out.push(piece);
+  }
+  return out;
 }
 
 /**
@@ -237,6 +257,12 @@ export interface SolveOptions {
   topNBudgetMs?: number;
   /** Wall-clock cap for refining the ceilings past their seeds (defaults to CEILING_BUDGET_MS). */
   ceilingBudgetMs?: number;
+  /**
+   * Drop Pareto-dominated pieces before the search (defaults to true). Never changes
+   * the best totals or the exact ceilings — the escape hatch exists only so tests can
+   * compare pruned vs unpruned runs and measure the reduction.
+   */
+  dominancePruning?: boolean;
 }
 
 export function solve(
@@ -266,7 +292,9 @@ export function solve(
       : true);
 
   const slots = input.slots.map((s) =>
-    dedupe(s, reqs.length > 0, allowTuning).sort((a, b) => b.total - a.total),
+    dedupe(s, reqs.length > 0, allowTuning, opts.dominancePruning ?? true).sort(
+      (a, b) => b.total - a.total,
+    ),
   );
   if (slots.length !== NUM_SLOTS || slots.some((s) => s.length === 0)) {
     return {

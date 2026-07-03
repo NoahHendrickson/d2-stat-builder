@@ -452,6 +452,174 @@ describe("legacy exotics (artifice +3)", () => {
   });
 });
 
+describe("dominance pruning", () => {
+  const zeros = (id: string): OptimizerPiece => piece(id, [0, 0, 0, 0, 0, 0]);
+  const restSlots = [[zeros("a")], [zeros("b")], [zeros("c")], [zeros("d")]];
+
+  test("a stat-better legendary never eliminates a required exotic", () => {
+    const slots = [
+      [
+        piece("leg", [30, 10, 0, 0, 0, 0]),
+        { id: "exo", stats: [20, 5, 0, 0, 0, 0], exotic: true, hash: 42 },
+      ],
+      ...restSlots,
+    ] as OptimizerPiece[][];
+    const out = solve(input(slots, { exotic: { mode: "require" } }));
+    expect(out.loadouts.length).toBeGreaterThan(0);
+    expect(out.loadouts[0].pieceIds[0]).toBe("exo");
+  });
+
+  test("a stat-worse artifice piece survives a better plain piece", () => {
+    const slots = [
+      [
+        piece("plain", [30, 0, 0, 0, 0, 0]),
+        { id: "art", stats: [28, 0, 0, 0, 0, 0], exotic: false, artifice: true },
+      ],
+      ...restSlots,
+    ] as OptimizerPiece[][];
+    // Weapons 31 is only reachable as art's 28 + its free artifice +3; plain caps at 30.
+    const out = solve(input(slots, { minimums: [31, 0, 0, 0, 0, 0] }));
+    expect(out.loadouts.length).toBe(1);
+    expect(out.loadouts[0].pieceIds[0]).toBe("art");
+  });
+
+  test("a stat-worse piece with a different tuned stat survives while tuning is on", () => {
+    const tunedSuper: OptimizerPiece = {
+      id: "ts",
+      stats: [10, 5, 5, 0, 25, 0],
+      exotic: false,
+      tuning: { tuned: 4, offStats: [1, 2, 3] },
+    };
+    const tunedWeapons: OptimizerPiece = {
+      id: "tw",
+      stats: [12, 6, 6, 0, 25, 0], // dominates ts on raw stats
+      exotic: false,
+      tuning: { tuned: 0, offStats: [1, 2, 3] },
+    };
+    const slots = [[tunedSuper, tunedWeapons], ...restSlots] as OptimizerPiece[][];
+    // Super 30 needs a directional +5 into super — only ts is tuned to super.
+    const on = solve(input(slots, { allowTuning: true, minimums: [0, 0, 0, 0, 30, 0] }));
+    expect(on.loadouts.length).toBeGreaterThan(0);
+    expect(on.loadouts[0].pieceIds[0]).toBe("ts");
+    // With tuning off the tune signatures collapse into one group and ts is pruned —
+    // results must still match an unpruned run exactly.
+    const cfg = input(slots, { allowTuning: false });
+    const pruned = solve(cfg);
+    const unpruned = solve(cfg, { dominancePruning: false });
+    expect(pruned.combosTried).toBeLessThan(unpruned.combosTried); // ts was pruned
+    expect(pruned.loadouts[0].total).toBe(unpruned.loadouts[0].total);
+    expect(pruned.ceilings).toEqual(unpruned.ceilings);
+  });
+
+  test("a stat-worse set piece survives only while its set is required", () => {
+    const slots = [
+      [piece("noset", [30, 0, 0, 0, 0, 0]), { ...piece("coda", [10, 0, 0, 0, 0, 0]), setHash: 7 }],
+      ...restSlots,
+    ] as OptimizerPiece[][];
+    const withReq = solve(
+      input(slots, { setRequirements: [{ setHash: 7, count: 1 }] }),
+    );
+    expect(withReq.loadouts.length).toBeGreaterThan(0);
+    expect(withReq.loadouts[0].pieceIds[0]).toBe("coda");
+    // Without the requirement the set piece is dominated and pruned; results must
+    // match an unpruned run exactly.
+    const pruned = solve(input(slots));
+    const unpruned = solve(input(slots), { dominancePruning: false });
+    expect(pruned.loadouts[0].total).toBe(unpruned.loadouts[0].total);
+    expect(pruned.ceilings).toEqual(unpruned.ceilings);
+  });
+});
+
+describe("dominance pruning equivalence (real pool)", () => {
+  const slots = ["helmet", "arms", "chest", "legs", "classItem"].map((slot) =>
+    REAL_WARLOCK_POOL.filter((p) => p.slot === slot).map((p, i) => ({
+      id: `${slot}${i}`,
+      stats: p.stats,
+      exotic: p.exo === 1,
+      setHash: p.set || undefined,
+      tuning: { tuned: p.tuned, offStats: p.off },
+    })),
+  );
+  const configs: [string, OptimizerInput][] = [
+    ["unconstrained", { slots, minimums: [0, 0, 0, 0, 0, 0], allowTuning: true }],
+    [
+      "tight real-world targets",
+      {
+        slots,
+        minimums: [180, 0, 0, 110, 0, 0],
+        mods: { major: 3, minor: 2 },
+        setRequirements: [{ setHash: 1490136267, count: 4 }],
+        exotic: { mode: "any" },
+        allowTuning: true,
+        fragmentBonus: [0, 0, 10, -20, 0, 0],
+      },
+    ],
+    [
+      "tuning off",
+      {
+        slots,
+        minimums: [100, 60, 0, 0, 0, 0],
+        mods: { major: 2, minor: 3 },
+        allowTuning: false,
+      },
+    ],
+    [
+      "exotic required",
+      {
+        slots,
+        minimums: [120, 0, 0, 80, 0, 0],
+        mods: { major: 3, minor: 2 },
+        exotic: { mode: "require" },
+        allowTuning: true,
+      },
+    ],
+    [
+      "no exotics",
+      {
+        slots,
+        minimums: [0, 90, 90, 0, 0, 0],
+        mods: { major: 0, minor: 5 },
+        exotic: { mode: "none" },
+        allowTuning: true,
+      },
+    ],
+  ];
+
+  test.each(configs)(
+    "pruned run matches unpruned optimum: %s",
+    (name, cfg) => {
+      // Generous budgets so neither run is time-capped — the comparison is only
+      // meaningful between two exhaustive searches.
+      const budgets = { topNBudgetMs: 60_000, ceilingBudgetMs: 15_000 };
+      const pruned = solve(cfg, budgets);
+      const unpruned = solve(cfg, { ...budgets, dominancePruning: false });
+      expect(pruned.capped).toBe(false);
+      expect(unpruned.capped).toBe(false);
+      console.info(
+        `[pareto] ${name}: combosTried ${unpruned.combosTried} -> ${pruned.combosTried}` +
+          ` (${((1 - pruned.combosTried / Math.max(1, unpruned.combosTried)) * 100).toFixed(1)}% fewer)`,
+      );
+      expect(pruned.combosTried).toBeLessThanOrEqual(unpruned.combosTried);
+      // Same feasibility and same optimum.
+      expect(pruned.loadouts.length > 0).toBe(unpruned.loadouts.length > 0);
+      if (unpruned.loadouts.length > 0) {
+        expect(pruned.loadouts[0].total).toBe(unpruned.loadouts[0].total);
+      }
+      // Rank-for-rank, the unpruned top-N can only be >= (dominated alternates may
+      // drop out of the pruned list's tail, replaced by lower-total builds).
+      const n = Math.min(pruned.loadouts.length, unpruned.loadouts.length);
+      for (let i = 0; i < n; i++) {
+        expect(unpruned.loadouts[i].total).toBeGreaterThanOrEqual(
+          pruned.loadouts[i].total,
+        );
+      }
+      // Exact ceilings are identical when both refinements complete in budget.
+      expect(pruned.ceilings).toEqual(unpruned.ceilings);
+    },
+    180_000,
+  );
+});
+
 /**
  * D2ArmorPicker parity regression (Noah's real case, 2026-07-02): legacy Verity's Brow
  * (+2-all-six masterwork assumption, artifice) + four CODA Tier-5 pieces must reach
