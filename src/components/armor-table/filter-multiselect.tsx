@@ -4,11 +4,8 @@ import { useRef, useState } from "react";
 import { CaretDown, MagnifyingGlass, PushPin, X } from "@phosphor-icons/react";
 import { partitionByPin, type FilterOption } from "@/lib/armor-table/pinned";
 import {
-  field3dFocusVisibleClasses,
-  field3dInteractiveClasses,
-  field3dSurfaceClasses,
-  fieldControlShellClasses,
-  fieldControlTriggerResetClasses,
+  fieldControlInnerTriggerClasses,
+  fieldControlOuterShellClasses,
 } from "@/lib/field-surface";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -50,14 +47,17 @@ export function selectionSummary<V>(
 export const filterMultiselectActiveBadgeClasses =
   "h-4 shrink-0 border-transparent bg-brand px-1 text-[10px] text-white tabular-nums";
 
-export const filterMultiselectTriggerClasses = cn(
-  "items-center justify-between gap-1.5 pr-2 pl-2.5 text-sm whitespace-nowrap outline-none select-none",
-  fieldControlShellClasses,
-  fieldControlTriggerResetClasses,
-  field3dSurfaceClasses,
-  field3dInteractiveClasses,
-  field3dFocusVisibleClasses,
+export const filterMultiselectTriggerShellClasses = cn(
+  fieldControlOuterShellClasses,
   "data-active:after:border-brand data-active:hover:after:bg-background",
+);
+
+export const filterMultiselectTriggerInnerClasses =
+  fieldControlInnerTriggerClasses;
+
+export const filterMultiselectTriggerClasses = cn(
+  filterMultiselectTriggerShellClasses,
+  filterMultiselectTriggerInnerClasses,
 );
 
 type FilterMultiselectPanelProps<V extends string | number> = {
@@ -236,34 +236,38 @@ export function FilterMultiselect<V extends string | number>({
           if (!next) setQuery("");
         }}
       >
-        <PopoverTrigger
-          ref={triggerRef}
-          aria-label={
-            active
-              ? `${label}: ${summaryText} — ${value.length} selected`
-              : `${label}: ${allLabel}`
-          }
-          data-active={active || undefined}
+        <div
           className={cn(
-            filterMultiselectTriggerClasses,
+            filterMultiselectTriggerShellClasses,
             "peer/filter box-border w-full",
           )}
+          data-active={active || undefined}
         >
-          <span className="min-w-0 flex-1 truncate text-left">
-            {selectionSummary(value, options, allLabel)}
-          </span>
-          {active ? (
-            // Placeholder for the caret slot; the clear button overlays it
-            // from outside (it can't live in here — no button-in-button).
-            <span className="size-4 shrink-0" aria-hidden />
-          ) : (
-            <CaretDown
-              weight="duotone"
-              className="text-muted-foreground pointer-events-none size-4 shrink-0"
-              aria-hidden
-            />
-          )}
-        </PopoverTrigger>
+          <PopoverTrigger
+            ref={triggerRef}
+            aria-label={
+              active
+                ? `${label}: ${summaryText} — ${value.length} selected`
+                : `${label}: ${allLabel}`
+            }
+            className={filterMultiselectTriggerInnerClasses}
+          >
+            <span className="min-w-0 flex-1 truncate text-left">
+              {selectionSummary(value, options, allLabel)}
+            </span>
+            {active ? (
+              // Placeholder for the caret slot; the clear button overlays it
+              // from outside (it can't live in here — no button-in-button).
+              <span className="size-4 shrink-0" aria-hidden />
+            ) : (
+              <CaretDown
+                weight="duotone"
+                className="text-muted-foreground pointer-events-none size-4 shrink-0"
+                aria-hidden
+              />
+            )}
+          </PopoverTrigger>
+        </div>
         {active && (
           <button
             type="button"
@@ -272,7 +276,7 @@ export function FilterMultiselect<V extends string | number>({
               onChange([]);
               triggerRef.current?.focus();
             }}
-            className="text-muted-foreground hover:text-foreground focus-visible:ring-ring/50 absolute top-1/2 right-1.5 flex size-5 -translate-y-1/2 items-center justify-center rounded-[4px] outline-none focus-visible:ring-3 peer-active/filter:translate-y-[calc(-50%+4px)]"
+            className="text-muted-foreground hover:text-foreground focus-visible:ring-ring/50 absolute top-1/2 right-1.5 flex size-5 -translate-y-1/2 items-center justify-center rounded-[4px] outline-none focus-visible:ring-3 peer-has-[:active]/filter:translate-y-[calc(-50%+4px)]"
           >
             <X weight="bold" className="size-3.5" aria-hidden />
           </button>

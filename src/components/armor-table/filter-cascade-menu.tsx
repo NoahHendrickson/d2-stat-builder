@@ -15,7 +15,8 @@ import { Menu } from "@/components/ui/menu";
 import {
   FilterMultiselectPanel,
   filterMultiselectActiveBadgeClasses,
-  filterMultiselectTriggerClasses,
+  filterMultiselectTriggerInnerClasses,
+  filterMultiselectTriggerShellClasses,
   selectionSummary,
 } from "@/components/armor-table/filter-multiselect";
 
@@ -165,27 +166,34 @@ export function FilterCascadeMenu({
 
   return (
     <Menu.Root>
-      <Menu.Trigger
-        aria-label={
-          active
-            ? `${triggerLabel} — ${totalSelected} selected`
-            : triggerLabel
-        }
-        data-active={active || undefined}
-        className={cn(filterMultiselectTriggerClasses, "min-w-28 shrink-0 box-border")}
-      >
-        <span className="min-w-0 flex-1 truncate text-left">{triggerLabel}</span>
-        {active && (
-          <Badge className={filterMultiselectActiveBadgeClasses}>
-            {totalSelected}
-          </Badge>
+      <div
+        className={cn(
+          filterMultiselectTriggerShellClasses,
+          "h-full min-w-28 shrink-0",
         )}
-        <CaretDown
-          weight="duotone"
-          className="text-muted-foreground pointer-events-none size-4 shrink-0"
-          aria-hidden
-        />
-      </Menu.Trigger>
+        data-active={active || undefined}
+      >
+        <Menu.Trigger
+          aria-label={
+            active
+              ? `${triggerLabel} — ${totalSelected} selected`
+              : triggerLabel
+          }
+          className={filterMultiselectTriggerInnerClasses}
+        >
+          <span className="min-w-0 flex-1 truncate text-left">{triggerLabel}</span>
+          {active && (
+            <Badge className={filterMultiselectActiveBadgeClasses}>
+              {totalSelected}
+            </Badge>
+          )}
+          <CaretDown
+            weight="duotone"
+            className="text-muted-foreground pointer-events-none size-4 shrink-0"
+            aria-hidden
+          />
+        </Menu.Trigger>
+      </div>
       <Menu.Portal>
         <Menu.Positioner side="bottom" align="start">
           <Menu.Popup className="w-56 p-1">
