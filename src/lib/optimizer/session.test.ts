@@ -153,6 +153,88 @@ test("a capped search freezes its list, refines ceilings, and offers a better li
   expect(betterIdx).toBeLessThan(finalIdx);
 }, 180_000);
 
+// Noah's 81-vs-85 report (2026-07-03): a heavily constrained query (specific exotic +
+// two 2pc sets) finishes the build walk well inside its budget, but the joint weapon/
+// grenade minimums make the ceiling probes expensive enough to blow THEIR budget — an
+// uncapped solve with ceilingsExact=false. The session used to end right there, freezing
+// unproven lower bounds as the displayed maxima.
+const uncappedInexactInput = (): OptimizerInput => {
+  // Simulate a specific exotic (only one exotic in the pool, on legs).
+  let kept = false;
+  const slots = realWarlockSlots().map((slot, i) =>
+    slot.filter((p) => {
+      if (!p.exotic) return true;
+      if (i === 3 && !kept) {
+        kept = true;
+        return true;
+      }
+      return false;
+    }),
+  );
+  return {
+    slots,
+    minimums: [180, 0, 0, 105, 0, 0],
+    mods: { major: 0, minor: 5 },
+    exotic: { mode: "require" },
+    setRequirements: [
+      { setHash: 1490136267, count: 2 },
+      { setHash: 3734029045, count: 2 },
+    ],
+    allowTuning: true,
+  };
+};
+
+test("an uncapped search with inexact ceilings refines them in the background", () => {
+  const input = uncappedInexactInput();
+  const { results, better, cb } = collector();
+  runSolveSession(input, cb, {
+    topNBudgetMs: 60_000, // the walk completes uncapped
+    ceilingBudgetMs: 10, // …but the ceilings can't settle in-line
+    refineCeilingBudgetMs: 120_000, // background refinement converges
+  });
+
+  expect(results()).toHaveLength(2);
+  const [interim, final] = results();
+  // The build walk ran to exhaustion, so even the interim post is a verified list…
+  expect(interim.refining).toBe(true);
+  expect(interim.output.capped).toBe(false);
+  expect(interim.verified).toBe(true);
+  expect(interim.output.ceilingsExact).toBe(false);
+  // …and the final post repeats it verbatim (the list was never in question).
+  expect(final.refining).toBe(false);
+  expect(final.verified).toBe(true);
+  expect(final.output.loadouts).toEqual(interim.output.loadouts);
+  // The refinement settles every stat and must prove strictly more headroom than the
+  // in-line pass found (this query under-reports several stats at the small budget).
+  expect(final.output.ceilingsExact).toBe(true);
+  for (let s = 0; s < 6; s++) {
+    expect(final.output.ceilings[s]).toBeGreaterThanOrEqual(
+      interim.output.ceilings[s],
+    );
+  }
+  expect(
+    final.output.ceilings.some((v, s) => v > interim.output.ceilings[s]),
+  ).toBe(true);
+  // No phase-2 build search runs: an exhaustive walk can't beat itself.
+  expect(better()).toHaveLength(0);
+}, 180_000);
+
+test("a ceilings-only refinement that also times out stays honest", () => {
+  const input = uncappedInexactInput();
+  const { results, better, cb } = collector();
+  runSolveSession(input, cb, {
+    topNBudgetMs: 60_000,
+    ceilingBudgetMs: 10,
+    refineCeilingBudgetMs: 10, // background refinement expires too
+  });
+  expect(results()).toHaveLength(2);
+  const [interim, final] = results();
+  expect(final.verified).toBe(true); // the WALK was exhaustive…
+  expect(final.output.ceilingsExact).toBe(false); // …but the ceilings stay unproven
+  expect(final.output.loadouts).toEqual(interim.output.loadouts);
+  expect(better()).toHaveLength(0);
+}, 60_000);
+
 test("an unverified background pass never claims exhaustion", () => {
   const input = realInput();
   const { results, better, cb } = collector();

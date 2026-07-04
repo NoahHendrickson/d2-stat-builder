@@ -44,6 +44,10 @@ export function useOptimizer() {
   const inFlightRef = useRef(false);
   const [result, setResult] = useState<OptimizerOutput | null>(null);
   const [ceilings, setCeilings] = useState<StatArray | null>(null);
+  // Are the displayed ceilings PROVEN maxima? False while a run streams or a background
+  // refinement is still probing — every displayed ceiling is achievable either way, but
+  // the UI must present unproven ones as "at least", never as "max" (solve.ts contract).
+  const [ceilingsExact, setCeilingsExact] = useState(false);
   const [running, setRunning] = useState(false);
   const [progress, setProgress] = useState(0);
   // Single source of truth for the background-refinement lifecycle. The ref mirrors
@@ -88,6 +92,7 @@ export function useOptimizer() {
             }
             break;
           case "result":
+            setCeilingsExact(msg.output.ceilingsExact);
             if (msg.refining) {
               // Time-capped search: its build list is final and shown now (and never
               // replaced); the worker is still refining, so stay "in flight" for
@@ -170,6 +175,7 @@ export function useOptimizer() {
       inFlightRef.current = true;
       setRunning(true);
       setProgress(0);
+      setCeilingsExact(false); // the new query's ceilings are unproven until its result lands
       setRefinement(IDLE);
       setRunId(seq);
       getWorker().postMessage({ seq, input } satisfies OptimizerRequest);
@@ -197,6 +203,7 @@ export function useOptimizer() {
     setRefinement(IDLE);
     setResult(pending);
     setCeilings((prev) => mergeCeilingsMonotone(prev, pending.ceilings));
+    setCeilingsExact(pending.ceilingsExact);
   }, [setRefinement]);
 
   return {
@@ -204,6 +211,7 @@ export function useOptimizer() {
     cancel,
     result,
     ceilings,
+    ceilingsExact,
     running,
     progress,
     runId,

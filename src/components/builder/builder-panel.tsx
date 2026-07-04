@@ -101,6 +101,7 @@ export function BuilderPanel({
     cancel,
     result,
     ceilings,
+    ceilingsExact,
     running,
     progress,
     runId,
@@ -700,14 +701,19 @@ export function BuilderPanel({
                         />
                         {cap !== null && (
                           <>
-                            <span
-                              className="sr-only"
-                            >{`${STAT_LABELS[key]} achievable max: ${cap}`}</span>
+                            <span className="sr-only">
+                              {ceilingsExact
+                                ? `${STAT_LABELS[key]} achievable max: ${cap}`
+                                : `${STAT_LABELS[key]} achievable: at least ${cap}`}
+                            </span>
                             <span
                               className="text-muted-foreground inline-flex shrink-0 items-baseline text-xs tabular-nums"
                               aria-hidden
                             >
-                              /
+                              {/* "≥" while the ceiling is an unproven lower bound (still
+                                  refining, or the refinement budget expired) — only a
+                                  proven-exact ceiling may read as a hard "/ max". */}
+                              {ceilingsExact ? "/" : "≥"}
                               <span className="inline-block w-7 text-right">
                                 {cap}
                               </span>
@@ -717,13 +723,17 @@ export function BuilderPanel({
                       </div>
                       <div className="col-start-2 relative h-5">
                         {STAT_TARGET_TICKS.map((t) => {
-                          // Once a ceiling is predicted, the top tick reads "max" and
-                          // jumps the target to that achievable maximum instead of 200.
+                          // Once a ceiling is known, the top tick jumps the target to
+                          // that achievable value instead of 200. It reads "max" only
+                          // when the ceiling is proven exact; an unproven bound reads
+                          // "81+" (achievable, but possibly more out there).
                           const tickValue =
                             t === STAT_SLIDER_MAX && cap !== null ? cap : t;
                           const tickLabel =
                             t === STAT_SLIDER_MAX && cap !== null
-                              ? "max"
+                              ? ceilingsExact
+                                ? "max"
+                                : `${cap}+`
                               : String(t);
                           return (
                             <button
@@ -731,8 +741,10 @@ export function BuilderPanel({
                               type="button"
                               onClick={() => setTarget(i, tickValue)}
                               aria-label={
-                                tickLabel === "max"
-                                  ? `Set ${STAT_LABELS[key]} to its max (${tickValue})`
+                                t === STAT_SLIDER_MAX && cap !== null
+                                  ? ceilingsExact
+                                    ? `Set ${STAT_LABELS[key]} to its max (${tickValue})`
+                                    : `Set ${STAT_LABELS[key]} to its highest proven value (${tickValue})`
                                   : `Set ${STAT_LABELS[key]} to ${t}`
                               }
                               style={{

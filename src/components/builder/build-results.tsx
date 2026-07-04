@@ -603,7 +603,11 @@ function SearchStatus({
       return (
         <p className="text-foreground/85 flex items-center gap-1.5 text-xs" aria-live="polite">
           <CircleNotch className="animate-spin" aria-hidden />
-          First pass done — searching deeper for higher maximums and stronger builds (
+          {refinement.interim.capped
+            ? "First pass done — searching deeper for higher maximums and stronger builds ("
+            : // Uncapped walk, unproven ceilings: the list is final and only the stat
+              // maximums are still being proven — don't promise a build search.
+              "Builds are final — proving higher stat maximums ("}
           {Math.round(refinement.progress * 100)}%)
         </p>
       );

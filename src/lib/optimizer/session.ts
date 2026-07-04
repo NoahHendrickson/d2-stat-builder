@@ -78,13 +78,19 @@ export function runSolveSession(
     topNBudgetMs: budgets.topNBudgetMs,
     ceilingBudgetMs: budgets.ceilingBudgetMs,
   });
-  if (!first.capped) {
+  if (!first.capped && first.ceilingsExact) {
     cb.onResult(first, false, true);
     return;
   }
-  cb.onResult(first, true, false);
+  // `verified` on the interim post is a claim about the list it carries: an uncapped
+  // walk was exhaustive even though its ceilings still need background work.
+  cb.onResult(first, true, !first.capped);
 
-  // Phase 1: exact ceilings (overlays rise live; time-based progress share).
+  // Phase 1: exact ceilings (overlays rise live; time-based progress share). When the
+  // walk completed and only the ceilings were budget-starved (Noah's 81-vs-85 report:
+  // constrained pools walk fast, but joint minimums make the probes expensive), this
+  // is the ONLY background phase and covers the whole progress bar.
+  const share = first.capped ? CEILING_PROGRESS_SHARE : 1;
   const ceilingBudgetMs = budgets.refineCeilingBudgetMs ?? REFINE_CEILING_BUDGET_MS;
   const ceilingStart = performance.now();
   const phase1 = solveCeilings(
@@ -94,13 +100,23 @@ export function runSolveSession(
     cb.onCeilings,
     () =>
       cb.onProgress(
-        CEILING_PROGRESS_SHARE *
-          Math.min(1, (performance.now() - ceilingStart) / ceilingBudgetMs),
+        share * Math.min(1, (performance.now() - ceilingStart) / ceilingBudgetMs),
       ),
   );
   // Phase boundary: solveCeilings may run zero probes (everything already settled) and
   // emit nothing — pin the bar at the boundary so it never sits at 0% for the phase.
-  cb.onProgress(CEILING_PROGRESS_SHARE);
+  cb.onProgress(share);
+
+  if (!first.capped) {
+    // The walk already ran to exhaustion — no better list can exist, so skip phase 2;
+    // only the ceilings needed more time.
+    cb.onResult(
+      { ...first, ceilings: phase1.ceilings, ceilingsExact: phase1.exact },
+      false,
+      true,
+    );
+    return;
+  }
 
   // Phase 2: exhaustive build search. Its ceilings are instant (budget 0, seeded from
   // phase 1) and its heap is seeded with the frozen list, so the deterministic walk's
@@ -114,12 +130,16 @@ export function runSolveSession(
     onProgress: (p) =>
       cb.onProgress(CEILING_PROGRESS_SHARE + (1 - CEILING_PROGRESS_SHARE) * p),
   });
-  if (beats(second, first)) cb.onBetter(second);
-  // The final post keeps the FROZEN loadouts but takes the best proven ceilings from
-  // both phases: phase 2's deeper walk can prove per-stat maxima (its top-200 seeds)
-  // that phase 1's probes timed out short of. The merge preserves exactness: when
-  // phase 1 is exact, phase 2's achievable values can't exceed it.
+  // Both the offered list and the final post take the best proven ceilings from both
+  // phases: phase 2's deeper walk can prove per-stat maxima (its top-200 seeds) that
+  // phase 1's probes timed out short of. The merge preserves exactness: when phase 1
+  // is exact, phase 2's achievable values can't exceed it. Ceilings are a property of
+  // the QUERY, not the list, so the offer carries the same merged values — applying it
+  // must not regress the displayed exactness.
   const ceilings = phase1.ceilings.map((v, s) => Math.max(v, second.ceilings[s]));
+  if (beats(second, first)) {
+    cb.onBetter({ ...second, ceilings, ceilingsExact: phase1.exact });
+  }
   cb.onResult(
     { ...first, ceilings, ceilingsExact: phase1.exact },
     false,
