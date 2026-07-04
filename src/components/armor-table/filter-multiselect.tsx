@@ -86,7 +86,7 @@ export function FilterMultiselectPanel<V extends string | number>({
     return (
       <label
         key={String(opt.value)}
-        className="group/option hover:bg-accent flex cursor-default items-center gap-2 rounded-md px-1.5 py-1 text-sm"
+        className="group/option hover:bg-accent flex cursor-pointer items-center gap-2 rounded-md px-1.5 py-1 text-sm"
       >
         <Checkbox
           checked={value.includes(opt.value)}
@@ -103,7 +103,7 @@ export function FilterMultiselectPanel<V extends string | number>({
               onTogglePin(opt.value);
             }}
             className={cn(
-              "shrink-0 transition-opacity focus-visible:opacity-100",
+              "relative flex size-7 shrink-0 items-center justify-center rounded-md transition-opacity outline-none focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring/50",
               isPinned
                 ? "text-foreground"
                 : "text-muted-foreground hover:text-foreground opacity-0 group-hover/option:opacity-100",

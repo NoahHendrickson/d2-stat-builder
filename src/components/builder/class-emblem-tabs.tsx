@@ -10,7 +10,7 @@ import type { ArmoryCharacter } from "@/lib/armory/fetch";
 
 /** Figma 127:9 frame+face recipe — outer tab carries border + lip; inner span is the face. */
 const tabFrameBase =
-  "relative flex-1 shrink-0 rounded-md border pb-0.5 text-left outline-none transition-all active:translate-y-0.5 active:pb-px focus-visible:ring-3 focus-visible:ring-ring/50";
+  "relative flex-1 shrink-0 cursor-pointer rounded-md border pb-0.5 text-left outline-none transition-all active:translate-y-0.5 active:pb-px focus-visible:ring-3 focus-visible:ring-ring/50";
 
 const tabFrameInactive =
   "border-[var(--neutral-line)] bg-[var(--neutral-shadow)] opacity-80 hover:opacity-100";

@@ -53,7 +53,7 @@ function TabsTrigger({ className, ...props }: TabsPrimitive.Tab.Props) {
       // Label above the sliding indicator (z-10). Selected text turns to
       // foreground; the 3D button visual comes from the indicator.
       className={cn(
-        "relative z-10 inline-flex items-center justify-center gap-1.5 rounded-lg border border-transparent px-3 py-1 text-sm font-semibold whitespace-nowrap text-foreground/60 transition-colors outline-none select-none",
+        "relative z-10 inline-flex cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-transparent px-3 py-1 text-sm font-semibold whitespace-nowrap text-foreground/60 transition-colors outline-none select-none",
         "hover:text-foreground",
         "focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50",
         "disabled:pointer-events-none disabled:opacity-50 aria-disabled:pointer-events-none aria-disabled:opacity-50",

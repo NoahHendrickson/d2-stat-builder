@@ -535,7 +535,7 @@ export function BuilderPanel({
             onClick={() => togglePin(s.setHash)}
             aria-label={pinned ? "Unpin set" : "Pin set"}
             className={cn(
-              "shrink-0 transition-opacity focus-visible:opacity-100",
+              "relative -ml-1 flex size-7 shrink-0 items-center justify-center rounded-md transition-opacity outline-none focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring/50",
               pinned
                 ? "text-foreground"
                 : cn(

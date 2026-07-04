@@ -43,7 +43,7 @@ function MenuSubmenuTrigger({
     <MenuPrimitive.SubmenuTrigger
       data-slot="menu-submenu-trigger"
       className={cn(
-        "hover:bg-accent focus-visible:bg-accent flex cursor-default items-center gap-2 rounded-md px-2 py-1.5 text-sm outline-none select-none",
+        "hover:bg-accent focus-visible:bg-accent flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm outline-none select-none",
         className,
       )}
       {...props}
