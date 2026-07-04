@@ -60,6 +60,34 @@
  * a two-stat conservation argument (the mask fires at the root or not at all there),
  * which is what witness harvest / bound carryover (Steps 2–3) target. Exact ceilings
  * are bit-identical to baseline in both scenarios, as an admissible tightening must be.
+ *
+ * After Step 2 (witness harvest) — captured 2026-07-03, same machine, single run:
+ *
+ * Scenario: realWarlockTwoSetInput (180/0/0/105/0/0, exotic require, two 2pc sets)
+ *   seed:            [180, 38, 85, 125, 110, 71]
+ *   time to exact:   8593 ms
+ *   stats:           { probes: 30, feasible: 11, disproven: 19, timedOut: 0, nodes: 61852167 }
+ *   exact ceilings:  [200, 55, 115, 145, 125, 105]   (bit-identical to Step 1 / baseline)
+ *   at 1200ms:       ceilings [200, 55, 110, 145, 125, 90], exact=false,
+ *                    stats { probes: 31, feasible: 10, disproven: 9, timedOut: 12, nodes: 8630273 }
+ *
+ * Scenario: realWarlockCodaInput (190/0/0/120/0/0, CODA 4pc, mods 3/2, frag [0,0,10,-20,0,0])
+ *   seed:            [190, 41, 96, 120, 71, 71]
+ *   time to exact:   99 ms
+ *   stats:           { probes: 29, feasible: 9, disproven: 20, timedOut: 0, nodes: 664374 }
+ *   exact ceilings:  [200, 60, 120, 130, 95, 95]   (bit-identical to Step 1 / baseline)
+ *   at 1200ms:       ceilings [200, 60, 120, 130, 95, 95], exact=TRUE at 98ms,
+ *                    stats { probes: 29, feasible: 9, disproven: 20, timedOut: 0, nodes: 664374 }
+ *
+ * Step 2 takeaway: harvest removes redundant probes by proving several stats' ceilings
+ * from ONE feasible probe's witness build — the coupled stat never probes. Two-set
+ * to-exact 37→30 probes (feasible 19→11: the eliminated 8 are exactly the probes a
+ * discarded witness had already demonstrated), 9.2s→8.6s, 63.3M→61.9M nodes. CODA
+ * 38→29 probes (feasible 16→9), 116→99ms. Modest wall-clock wins here because the
+ * survivors are the EXPENSIVE disproof probes (harvest can't shortcut an impossibility
+ * proof — only rediscovery), which is what bound carryover (Step 3) targets. Exact
+ * ceilings bit-identical to Step 1 in both scenarios — harvest only raises the proven
+ * low side, never the optimistic bound, so it cannot over- or under-report a maximum.
  */
 import { test } from "vitest";
 import { solve, solveCeilings } from "./solve";

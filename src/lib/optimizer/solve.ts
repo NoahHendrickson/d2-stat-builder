@@ -15,6 +15,7 @@ import {
   deficitPoints,
   makeInternalPiece,
   type InternalPiece,
+  type TuningOutcome,
 } from "./tuning";
 
 const DEFAULT_MAX_RESULTS = 200;
@@ -42,6 +43,39 @@ const TOPN_PROGRESS_SHARE = 0.9;
 const PROGRESS_INTERVAL_MS = 100;
 /** Number of stat-subset masks for the subset-sum suffix bound (2^NUM_STATS). */
 const NUM_MASKS = 1 << NUM_STATS;
+
+/**
+ * Raise each of `floors` to what a single real build proves is achievable for that stat:
+ * the build's final `stats[s]` PLUS its spare mod capacity (every mod point not consumed
+ * by the build) dumped into that ONE stat, clamped to STAT_CAP. Mutates `floors` in place;
+ * returns whether any floor rose.
+ *
+ * Why every raised value is achievable: the build already meets the query's minimums, and
+ * mods are only auto-assigned to cover deficits — so its unspent capacity could genuinely
+ * be re-socketed into any single stat while the other five keep their achieved values
+ * (still ≥ their minimums). This is the shared primitive behind both the top-N seed dump
+ * and the ceiling witness harvest. (Feasible-mode witnesses don't dump leftover artifice
+ * +3s, so a harvested value can slightly UNDER-state the true max — it stays a valid lower
+ * bound, never an over-report.)
+ */
+export function raiseAchievableFloors(
+  floors: number[],
+  stats: number[],
+  modsUsed: { major: number; minor: number },
+  mods: ModBudget,
+): boolean {
+  const spare =
+    (mods.major - modsUsed.major) * 10 + (mods.minor - modsUsed.minor) * 5;
+  let rose = false;
+  for (let s = 0; s < NUM_STATS; s++) {
+    const v = clamp(stats[s] + spare);
+    if (v > floors[s]) {
+      floors[s] = v;
+      rose = true;
+    }
+  }
+  return rose;
+}
 
 /**
  * Collapse pieces with an identical stat vector (+ exotic, + set, + tuning) to one
@@ -584,12 +618,7 @@ export function solve(
   // stat, so each stat's seed gets the full spare added (still achievable per stat).
   const seed = new Array(NUM_STATS).fill(0);
   for (const lo of loadouts) {
-    const spare =
-      (mods.major - lo.modsUsed.major) * 10 + (mods.minor - lo.modsUsed.minor) * 5;
-    for (let s = 0; s < NUM_STATS; s++) {
-      const v = clamp(lo.stats[s] + spare);
-      if (v > seed[s]) seed[s] = v;
-    }
+    raiseAchievableFloors(seed, lo.stats, lo.modsUsed, mods);
   }
   if (opts.ceilingSeed) {
     for (let s = 0; s < NUM_STATS; s++) {
@@ -752,6 +781,9 @@ function runCeilings(
   let aborted = false;
   let nodes = 0;
   let found = false;
+  // The full outcome of the build the probe found (stats + mods used), captured so the
+  // probe loop can harvest it into EVERY stat's floor (witness harvest). Null until found.
+  let witness: TuningOutcome | null = null;
   // Long probes must still stream progress ticks — probe-completion granularity alone
   // can sit silent for a probe's whole fair share (seconds on hard pools).
   let lastTickAt = 0;
@@ -774,7 +806,11 @@ function runCeilings(
       for (let r = 0; r < reqs.length; r++) {
         if (setCounts[r] < reqs[r].count) return;
       }
-      if (tuner(chosen, sum, probeMins, "feasible")) found = true;
+      const w = tuner(chosen, sum, probeMins, "feasible");
+      if (w) {
+        found = true;
+        witness = w;
+      }
       return;
     }
     if (!canReachMin(k)) return;
@@ -805,12 +841,15 @@ function runCeilings(
       }
     }
   };
-  const feasible = (deadline: number): boolean => {
+  // Returns the build the probe found (a witness to harvest from), or null if none —
+  // `found`/`aborted` still record feasibility vs. timeout for the probe loop.
+  const feasible = (deadline: number): TuningOutcome | null => {
     probeDeadline = deadline;
     aborted = false;
     found = false;
+    witness = null;
     search(0, 0);
-    return found;
+    return witness;
   };
 
   // For each stat, binary-search the highest value it can reach while the OTHER minimums
@@ -838,18 +877,37 @@ function runCeilings(
     const next: number[] = [];
     for (let i = 0; i < pending.length; i++) {
       const t = pending[i];
+      // A witness harvest earlier this pass may have already lifted this stat's floor to
+      // its optimistic bound — it's settled, so don't probe it (and don't re-queue it or
+      // count it as a probe; a skip is not a probe). The share denominator over-counts a
+      // skipped stat by one, which only makes later shares slightly smaller (safe); the
+      // loop still terminates because `next` never re-adds a settled stat.
+      if (ceiling[t] >= optimistic[t]) continue;
       const now = performance.now();
       if (now >= globalDeadline) break;
       const share = (globalDeadline - now) / (pending.length - i + next.length);
       const mid = ceiling[t] + Math.ceil((optimistic[t] - ceiling[t]) / 2);
       probeMins[t] = mid;
-      const ok = feasible(Math.min(globalDeadline, now + share));
+      const w = feasible(Math.min(globalDeadline, now + share));
       probeMins[t] = min[t];
       onProbe?.();
       stats.probes++;
-      if (ok) {
+      if (w) {
         stats.feasible++;
         ceiling[t] = mid;
+        // Witness harvest: the probe replaced min[t] with `mid`, so the witness meets
+        // probeMins = (min with position t set to mid). That is a superset of the query's
+        // real minimums ONLY when mid >= min[t] — then the witness is a legal build for
+        // THIS query and its final stats (plus spare mods dumped into any one stat) are a
+        // valid achievable floor for EVERY stat's ceiling, letting a later stat settle
+        // without a probe of its own (see the settled-skip guard above). When mid < min[t]
+        // (a probe BELOW the user's own minimum, e.g. a stat whose min is unsatisfiable so
+        // its ceiling is searched from 0) the witness may violate min[t], so it is NOT a
+        // legal build and we must not harvest it into the other stats. `exact` is untouched
+        // either way: harvest only lifts the proven low side, never `optimistic`.
+        if (mid >= min[t]) {
+          raiseAchievableFloors(ceiling, w.stats, w.modsUsed, mods);
+        }
         onProgress?.(ceiling.slice(0, NUM_STATS)); // stream each improvement for animation
       } else {
         if (aborted) {

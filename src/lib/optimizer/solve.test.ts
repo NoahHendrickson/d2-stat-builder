@@ -279,6 +279,43 @@ describe("ceiling refinement", () => {
     expect(stats.feasible + stats.disproven + stats.timedOut).toBe(stats.probes);
     expect(stats.nodes).toBeGreaterThan(0);
   });
+
+  test("witness harvest settles a coupled stat with no probe of its own", () => {
+    // The only meaningful choice is slot 0: piece W carries weapons AND super together, so
+    // any build reaching weapons necessarily maxes super; piece H carries health instead.
+    // Slots 1–4 are inert. This makes weapons/super perfectly coupled: the weapons probe's
+    // witness (the W build) already proves super's ceiling, so harvest settles super with
+    // zero super probes.
+    const slots = [
+      [piece("W", [100, 0, 0, 0, 100, 0]), piece("H", [0, 100, 0, 0, 0, 0])],
+      [piece("f1", [0, 0, 0, 0, 0, 0])],
+      [piece("f2", [0, 0, 0, 0, 0, 0])],
+      [piece("f3", [0, 0, 0, 0, 0, 0])],
+      [piece("f4", [0, 0, 0, 0, 0, 0])],
+    ];
+    const query = {
+      slots,
+      minimums: [0, 0, 0, 0, 0, 0],
+      mods: { major: 0, minor: 0 },
+      allowTuning: false,
+    };
+    const { ceilings, stats } = solveCeilings(query, [0, 0, 0, 0, 0, 0], 5000);
+
+    // Brute-verifiable: W build → weapons 100 & super 100; H build → health 100.
+    expect(ceilings).toEqual([100, 100, 0, 0, 100, 0]);
+
+    // Without harvest each of the three pending stats (weapons, health, super) would run
+    // its own binary search over the window [0,100] = 7 probes each = 21 total. With
+    // harvest, the weapons probe's witness (W build: weapons 100, super 100) raises BOTH
+    // ceilings to their optimistic bound on the very first probe, so weapons settles after
+    // 1 probe, super never probes at all, and only health needs its own probe: 2 total.
+    expect(stats.probes).toBe(2);
+    // The coupled stat (super, index 4) contributed no probe — proof the harvest, not a
+    // binary search, settled it.
+    expect(stats.feasible).toBe(2);
+    expect(stats.disproven).toBe(0);
+    expect(stats.timedOut).toBe(0);
+  });
 });
 
 describe("exotic tuning", () => {
