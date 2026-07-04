@@ -19,11 +19,13 @@ export interface SessionCallbacks {
   /** Ceiling updates as they refine (seed first, then per-stat improvements). */
   onCeilings: (ceilings: number[]) => void;
   /**
-   * A results post. `refining: true` means the search was time-capped: this build list
-   * is frozen for this query (the UI never changes a shown list on its own), and the
-   * background phases are still running. A final post always follows with the SAME
-   * loadouts and the refined ceilings (`refining: false`); its `verified` flag is true
-   * when the background build search ran to exhaustion.
+   * A results post. `refining: true` means background work is still running and this
+   * build list is frozen for this query (the UI never changes a shown list on its own)
+   * — either the search was time-capped (both background phases follow) or the walk
+   * completed but the ceilings are unproven (ceilings-only refinement follows). A
+   * final post always follows with the SAME loadouts and the refined ceilings
+   * (`refining: false`). `verified` is a claim about the POST's list: true when a
+   * build walk — the in-line one or the background re-run — ran it to exhaustion.
    */
   onResult: (output: OptimizerOutput, refining: boolean, verified: boolean) => void;
   /**
@@ -57,13 +59,15 @@ export function beats(next: OptimizerOutput, prev: OptimizerOutput): boolean {
 
 /**
  * The worker's search session. The solve runs on the responsive default budgets; if it
- * completes (the common case) its result is final and verified. If it was time-capped,
- * the capped result is posted immediately with a FROZEN build list, then two background
- * phases run: (1) ceilings-only refinement — higher per-stat maxima surface live as the
- * slider overlays rise; (2) an exhaustive re-run of the build search — covering the
- * blind spot where a higher-TOTAL build hides inside already-proven ceilings (balanced
- * builds move no overlay). A strictly-better phase-2 list is offered via onBetter for
- * the user to apply; the final post repeats the frozen loadouts with refined ceilings.
+ * completes with proven ceilings (the common case) its result is final and verified.
+ * Otherwise the result is posted immediately with a FROZEN build list and background
+ * work follows: (1) ceilings-only refinement — higher per-stat maxima surface live as
+ * the slider overlays rise; (2) only if the walk was time-capped, an exhaustive re-run
+ * of the build search — covering the blind spot where a higher-TOTAL build hides
+ * inside already-proven ceilings (balanced builds move no overlay). An uncapped walk
+ * whose ceilings were merely budget-starved skips phase 2 (it can't beat itself). A
+ * strictly-better phase-2 list is offered via onBetter for the user to apply; the
+ * final post repeats the frozen loadouts with refined ceilings.
  * Cancellation is the caller's problem (the main thread terminates the whole worker),
  * which is why this can be a plain synchronous function.
  */
