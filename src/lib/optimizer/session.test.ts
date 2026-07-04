@@ -9,6 +9,19 @@ type SessionEvent =
   | { type: "better"; output: OptimizerOutput }
   | { type: "result"; output: OptimizerOutput; refining: boolean; verified: boolean };
 
+/**
+ * Every posted result must carry proven per-stat uppers that dominate its ceilings, and
+ * its exactness flag must equal the elementwise ceilings===uppers equality.
+ */
+function assertUpperInvariants(out: OptimizerOutput) {
+  let allEqual = true;
+  for (let s = 0; s < 6; s++) {
+    expect(out.ceilings[s]).toBeLessThanOrEqual(out.ceilingUppers[s]);
+    if (out.ceilings[s] !== out.ceilingUppers[s]) allEqual = false;
+  }
+  expect(out.ceilingsExact).toBe(allEqual);
+}
+
 function collector() {
   const events: SessionEvent[] = [];
   const results = () =>
@@ -125,6 +138,9 @@ test("a capped search freezes its list, refines ceilings, and offers a better li
   // With a 30s budget the refinement settles every stat — the final post must carry
   // the proven-exact flag (the "Verified" claim in the UI hangs off it).
   expect(final.output.ceilingsExact).toBe(true);
+  // Every posted result carries proven uppers ≥ its ceilings; exact ⇔ they're equal.
+  assertUpperInvariants(interim.output);
+  assertUpperInvariants(final.output);
 
   // Ceilings only ever rise across the refinement…
   for (let s = 0; s < 6; s++) {
@@ -142,6 +158,7 @@ test("a capped search freezes its list, refines ceilings, and offers a better li
   // 339), must offer a rank-wise better list.
   expect(better()).toHaveLength(1);
   const offered = better()[0].output;
+  assertUpperInvariants(offered);
   expect(offered.capped).toBe(false);
   expect(offered.loadouts.length).toBeGreaterThanOrEqual(
     interim.output.loadouts.length,
@@ -232,6 +249,10 @@ test("a ceilings-only refinement that also times out stays honest", () => {
   expect(final.verified).toBe(true); // the WALK was exhaustive…
   expect(final.output.ceilingsExact).toBe(false); // …but the ceilings stay unproven
   expect(final.output.loadouts).toEqual(interim.output.loadouts);
+  // Both posts stay honest: proven uppers dominate their ceilings, and the unproven
+  // exactness is consistent with the ceilings/uppers pair (some stat still short).
+  assertUpperInvariants(interim.output);
+  assertUpperInvariants(final.output);
   expect(better()).toHaveLength(0);
 }, 60_000);
 

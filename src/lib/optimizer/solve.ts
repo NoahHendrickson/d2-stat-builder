@@ -401,6 +401,14 @@ export interface SolveOptions {
    */
   ceilingSeed?: number[];
   /**
+   * Per-stat PROVEN upper bounds on the ceilings from a prior pass over this EXACT input
+   * (its `ceilingUppers`) — MUST be genuine proven bounds, same trust contract as
+   * `ceilingSeed`: a value too low would clamp a real ceiling shut. Lets a re-run start
+   * each stat's binary search with the upper side already narrowed (often already closed),
+   * so the background pass doesn't re-prove what an earlier pass established.
+   */
+  ceilingUpperSeed?: number[];
+  /**
    * Loadouts from a prior (shorter-budget) solve of this exact input, used to pre-fill
    * the top-N heap so the deterministic walk's already-covered prefix is pruned by the
    * admission bound instead of re-evaluated. MUST be valid loadouts for the SAME input
@@ -434,6 +442,7 @@ export function solve(
       combosTried: 0,
       combosValid: 0,
       ceilings: [0, 0, 0, 0, 0, 0],
+      ceilingUppers: [0, 0, 0, 0, 0, 0],
       ceilingsExact: true,
       capped: false,
     };
@@ -632,21 +641,30 @@ export function solve(
   // Ceilings fill the remaining progress share by wall-clock share of their budget —
   // their true cost isn't predictable, but time elapsed is monotonic and bounded.
   const ceilingStart = performance.now();
-  const { ceilings, exact: ceilingsExact } = runCeilings(
-    input,
-    slots,
-    seed,
-    ceilingBudgetMs,
+  const {
+    ceilings,
+    uppers: ceilingUppers,
+    exact: ceilingsExact,
+  } = runCeilings(input, slots, seed, ceilingBudgetMs, {
+    upperSeed: opts.ceilingUpperSeed,
     onCeilings,
-    () =>
+    onProbe: () =>
       onProgress?.(
         TOPN_PROGRESS_SHARE +
           (1 - TOPN_PROGRESS_SHARE) *
             Math.min(1, (performance.now() - ceilingStart) / ceilingBudgetMs),
       ),
-  );
+  });
   onProgress?.(1);
-  return { loadouts, combosTried, combosValid, ceilings, ceilingsExact, capped };
+  return {
+    loadouts,
+    combosTried,
+    combosValid,
+    ceilings,
+    ceilingUppers,
+    ceilingsExact,
+    capped,
+  };
 }
 
 /** Options for {@link solveCeilings} — an object since later steps grow this list. */
@@ -655,6 +673,14 @@ export interface SolveCeilingsOptions {
   onCeilings?: (ceilings: number[]) => void;
   /** Fired on every probe completion (and periodically during long probes). */
   onProbe?: () => void;
+  /**
+   * Per-stat PROVEN upper bounds from a prior pass over this EXACT input — MUST be genuine
+   * proven bounds (same trust contract as `seed`, which must be proven-achievable): a value
+   * too low would clamp a real ceiling shut. Each stat's binary search starts with its upper
+   * side narrowed to this seed (often already closed against the seed), so a background pass
+   * doesn't re-prove what an earlier pass established.
+   */
+  upperSeed?: number[];
 }
 
 const EMPTY_CEILING_STATS: CeilingStats = {
@@ -678,12 +704,22 @@ export function solveCeilings(
   seed: number[],
   budgetMs: number,
   opts: SolveCeilingsOptions = {},
-): { ceilings: number[]; exact: boolean; stats: CeilingStats } {
+): { ceilings: number[]; uppers: number[]; exact: boolean; stats: CeilingStats } {
   const slots = buildSlots(input);
   if (slots.length !== NUM_SLOTS || slots.some((s) => s.length === 0)) {
-    return { ceilings: seed.slice(0, NUM_STATS), exact: false, stats: EMPTY_CEILING_STATS };
+    // Degenerate return keeps the ceilings ≤ uppers invariant (uppers = ceilings here).
+    return {
+      ceilings: seed.slice(0, NUM_STATS),
+      uppers: seed.slice(0, NUM_STATS),
+      exact: false,
+      stats: EMPTY_CEILING_STATS,
+    };
   }
-  return runCeilings(input, slots, seed, budgetMs, opts.onCeilings, opts.onProbe);
+  return runCeilings(input, slots, seed, budgetMs, {
+    upperSeed: opts.upperSeed,
+    onCeilings: opts.onCeilings,
+    onProbe: opts.onProbe,
+  });
 }
 
 /**
@@ -710,19 +746,31 @@ export interface CeilingStats {
  * the current minimums on the OTHER five stats. Each stat's ceiling is pinned by binary-
  * searching feasibility probes between `seed` (achievable, from the top-N's builds) and
  * the optimistic suffix bound; probes for the six stats are interleaved round-robin under
- * the shared budget (see the scheduling comment below). `exact` reports whether every
- * ceiling was PROVEN (all binary searches converged with no probe timing out); when
- * false the ceilings are guaranteed-achievable lower bounds. An infeasible query (no
- * build meets the minimums) yields zeros.
+ * the shared budget (see the scheduling comment below).
+ *
+ * `uppers` is the PROVEN upper side, tracked separately from the working `optimistic`
+ * window: it starts at the suffix bound (itself proven) and shrinks ONLY when a probe
+ * runs to completion infeasible (a certified `mid−1` upper), never on a timeout. `exact`
+ * is derived from `ceilings[t] === uppers[t]` for every stat — strictly more accurate
+ * than incrementally clearing a flag, since a stat whose window closes provenly (or is
+ * settled by `upperSeed` with zero probes) is exact even if an unrelated probe timed out.
+ * When inexact the ceilings are guaranteed-achievable lower bounds. An infeasible query
+ * (no build meets the minimums) yields zeros.
  */
 function runCeilings(
   input: OptimizerInput,
   slots: InternalPiece[][],
   seed: number[],
   budgetMs: number,
-  onProgress?: (ceilings: number[]) => void,
-  onProbe?: () => void,
-): { ceilings: number[]; exact: boolean; stats: CeilingStats } {
+  opts: {
+    upperSeed?: number[];
+    onCeilings?: (ceilings: number[]) => void;
+    onProbe?: () => void;
+  } = {},
+): { ceilings: number[]; uppers: number[]; exact: boolean; stats: CeilingStats } {
+  const onProgress = opts.onCeilings;
+  const onProbe = opts.onProbe;
+  const upperSeed = opts.upperSeed;
   const min = input.minimums;
   const mods: ModBudget = input.mods ?? { major: 0, minor: 0 };
   const maxModPoints = mods.major * 10 + mods.minor * 5;
@@ -865,12 +913,23 @@ function runCeilings(
   // starving every stat scheduled after it (previously sequential refinement reported
   // those stats' raw seeds as maxima).
   const globalDeadline = performance.now() + budgetMs;
+  // `uppers[t]` is the PROVEN high side (suffix bound, then shrunk only by completed
+  // infeasible probes); `optimistic[t]` is the working binary-search window (also shrunk
+  // by timeouts). They start equal; a timeout pulls `optimistic` below `uppers`.
+  const uppers = new Array(NUM_STATS).fill(0);
   const optimistic = new Array(NUM_STATS).fill(0);
-  let exact = true;
   let pending: number[] = [];
   const stats: CeilingStats = { probes: 0, feasible: 0, disproven: 0, timedOut: 0, nodes: 0 };
   for (let t = 0; t < NUM_STATS; t++) {
-    optimistic[t] = clamp(frag[t] + suffixStat[0][t] + maxModPoints + artSuffix[0] * 3);
+    const init = clamp(frag[t] + suffixStat[0][t] + maxModPoints + artSuffix[0] * 3);
+    // With a proven upperSeed, narrow the proven high side to it — but never below the
+    // seed's own achievable ceiling (defends against a too-low seed clamping a real
+    // ceiling shut; the min(init, …) keeps a bogus-high seed from loosening the bound).
+    uppers[t] =
+      upperSeed !== undefined
+        ? Math.max(ceiling[t], Math.min(init, upperSeed[t]))
+        : init;
+    optimistic[t] = uppers[t];
     if (optimistic[t] > ceiling[t]) pending.push(t);
   }
   while (pending.length) {
@@ -912,20 +971,27 @@ function runCeilings(
       } else {
         if (aborted) {
           stats.timedOut++;
-          exact = false; // timed out, not disproven — unproven shrink
+          // Unproven shrink: narrow only the working window, never the proven upper.
+          optimistic[t] = mid - 1;
         } else {
           stats.disproven++;
+          // Proven infeasible: `mid−1` is a certified upper — shrink BOTH sides.
+          uppers[t] = Math.min(uppers[t], mid - 1);
+          optimistic[t] = mid - 1;
         }
-        optimistic[t] = mid - 1;
       }
       if (ceiling[t] < optimistic[t]) next.push(t);
     }
     if (performance.now() >= globalDeadline) break; // budget spent — keep proven values
     pending = next;
   }
+  // Exactness is the equality of the proven pair: a stat is exact iff its achievable
+  // ceiling has met its proven upper. Any gap (a timed-out or budget-starved window that
+  // never closed provenly) makes the whole result inexact.
+  let exact = true;
   for (let t = 0; t < NUM_STATS; t++) {
-    if (ceiling[t] < optimistic[t]) exact = false; // ran out of budget unsettled
+    if (ceiling[t] < uppers[t]) exact = false;
   }
   stats.nodes = nodes;
-  return { ceilings: ceiling, exact, stats };
+  return { ceilings: ceiling, uppers, exact, stats };
 }

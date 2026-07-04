@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { solve, solveCeilings } from "./solve";
 import type { OptimizerInput, OptimizerPiece } from "./types";
-import { realWarlockSlots } from "./real-pool.fixture";
+import { realWarlockSlots, realWarlockTwoSetInput } from "./real-pool.fixture";
 
 /** A tuning-free, set-free piece — stats sum straight into the loadout total. */
 function piece(id: string, stats: number[]): OptimizerPiece {
@@ -316,6 +316,82 @@ describe("ceiling refinement", () => {
     expect(stats.disproven).toBe(0);
     expect(stats.timedOut).toBe(0);
   });
+});
+
+describe("ceiling upper-bound provenance", () => {
+  // Invariant across pools and budgets: the returned ceilings never exceed their PROVEN
+  // upper bounds, and exactness is exactly the elementwise-equality of the two.
+  test("ceilings <= ceilingUppers ∀s and ceilingsExact ⇔ elementwise equal", () => {
+    const easyOut = solve(
+      input([
+        [piece("h", [30, 0, 0, 0, 0, 0])],
+        [piece("a", [0, 20, 0, 0, 0, 0])],
+        [piece("c", [0, 0, 10, 0, 0, 0])],
+        [piece("l", [0, 0, 0, 40, 0, 0])],
+        [piece("ci", [0, 0, 0, 0, 15, 0])],
+      ]),
+    );
+    const hardInput: OptimizerInput = {
+      slots: realWarlockSlots(),
+      minimums: [190, 0, 0, 120, 0, 0],
+      mods: { major: 3, minor: 2 },
+      setRequirements: [{ setHash: 1490136267, count: 4 }],
+      allowTuning: true,
+      fragmentBonus: [0, 0, 10, -20, 0, 0],
+    };
+    const checkOut = (out: {
+      ceilings: number[];
+      ceilingUppers: number[];
+      ceilingsExact: boolean;
+    }) => {
+      let allEqual = true;
+      for (let s = 0; s < 6; s++) {
+        expect(out.ceilings[s]).toBeLessThanOrEqual(out.ceilingUppers[s]);
+        if (out.ceilings[s] !== out.ceilingUppers[s]) allEqual = false;
+      }
+      expect(out.ceilingsExact).toBe(allEqual);
+    };
+    checkOut(easyOut);
+    // Generous budget (should converge exact) and a tiny budget (forces timeouts) — the
+    // invariant must hold either way.
+    checkOut(solve(hardInput, { topNBudgetMs: 60_000, ceilingBudgetMs: 30_000 }));
+    checkOut(solve(hardInput, { topNBudgetMs: 500, ceilingBudgetMs: 1 }));
+  }, 120_000);
+
+  // Provenance honesty: on a hard pool with a tiny budget (forces probe timeouts), the
+  // uppers must remain a HONEST proven bound — never below a value later proven achievable
+  // by a generous exact reference run. An unproven timeout-shrink leaking into `uppers`
+  // would drop it below the reference ceiling and fail this.
+  test("timeout-starved uppers never fall below a proven-achievable reference", () => {
+    const input = realWarlockTwoSetInput();
+    const first = solve(input, { ceilingBudgetMs: 0 });
+    const cheap = solveCeilings(input, first.ceilings, 50);
+    const reference = solveCeilings(input, first.ceilings, 120_000);
+    expect(cheap.exact).toBe(false); // 50ms can't prove this pool
+    expect(reference.exact).toBe(true);
+    for (let s = 0; s < 6; s++) {
+      expect(cheap.uppers[s]).toBeGreaterThanOrEqual(reference.ceilings[s]);
+      // And the reference proved exactly (ceilings === uppers everywhere).
+      expect(reference.ceilings[s]).toBe(reference.uppers[s]);
+    }
+  }, 180_000);
+
+  // upperSeed narrows the windows: re-running seeded with a prior exact run's uppers (and
+  // its ceilings) must reproduce the same result with no MORE probes (windows start
+  // already closed, so many stats settle with zero probes).
+  test("upperSeed narrows windows: identical result, no more probes", () => {
+    const input = realWarlockTwoSetInput();
+    const first = solve(input, { ceilingBudgetMs: 0 });
+    const run1 = solveCeilings(input, first.ceilings, 120_000);
+    expect(run1.exact).toBe(true);
+    const run2 = solveCeilings(input, run1.ceilings, 120_000, {
+      upperSeed: run1.uppers,
+    });
+    expect(run2.ceilings).toEqual(run1.ceilings);
+    expect(run2.uppers).toEqual(run1.uppers);
+    expect(run2.exact).toBe(true);
+    expect(run2.stats.probes).toBeLessThanOrEqual(run1.stats.probes);
+  }, 180_000);
 });
 
 describe("exotic tuning", () => {

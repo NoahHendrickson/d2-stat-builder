@@ -110,6 +110,15 @@ export interface OptimizerOutput {
    */
   ceilings: StatArray;
   /**
+   * Per-stat PROVEN upper bounds on the ceilings — the tightest value each stat has been
+   * proven unable to exceed (a suffix bound, then shrunk only by probes that ran to
+   * completion infeasible; timeouts never touch it). Dominates `ceilings` elementwise
+   * (`ceilingUppers[s] >= ceilings[s]`), and all-equal ⇔ `ceilingsExact`. Threading these
+   * back into a re-solve as `ceilingUpperSeed` lets a background pass skip re-proving the
+   * upper side an earlier pass already established. All zero when there are no pieces.
+   */
+  ceilingUppers: StatArray;
+  /**
    * True when every ceiling was PROVEN exact (all refinement probes converged in
    * budget). False means the ceilings are guaranteed-achievable lower bounds — real,
    * but possibly understated — and must never be presented as proven maxima.
