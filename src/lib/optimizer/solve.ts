@@ -536,6 +536,22 @@ export function solve(
   return { loadouts, combosTried, combosValid, ceilings, ceilingsExact, capped };
 }
 
+/** Options for {@link solveCeilings} — an object since later steps grow this list. */
+export interface SolveCeilingsOptions {
+  /** Ceiling updates as they refine (seed first, then per-stat improvements). */
+  onCeilings?: (ceilings: number[]) => void;
+  /** Fired on every probe completion (and periodically during long probes). */
+  onProbe?: () => void;
+}
+
+const EMPTY_CEILING_STATS: CeilingStats = {
+  probes: 0,
+  feasible: 0,
+  disproven: 0,
+  timedOut: 0,
+  nodes: 0,
+};
+
 /**
  * Ceilings-only entry for the worker's background refinement after a capped search:
  * recompute the per-stat maxima for `input` under a much larger budget, starting from
@@ -548,14 +564,31 @@ export function solveCeilings(
   input: OptimizerInput,
   seed: number[],
   budgetMs: number,
-  onCeilings?: (ceilings: number[]) => void,
-  onProbe?: () => void,
-): { ceilings: number[]; exact: boolean } {
+  opts: SolveCeilingsOptions = {},
+): { ceilings: number[]; exact: boolean; stats: CeilingStats } {
   const slots = buildSlots(input);
   if (slots.length !== NUM_SLOTS || slots.some((s) => s.length === 0)) {
-    return { ceilings: seed.slice(0, NUM_STATS), exact: false };
+    return { ceilings: seed.slice(0, NUM_STATS), exact: false, stats: EMPTY_CEILING_STATS };
   }
-  return runCeilings(input, slots, seed, budgetMs, onCeilings, onProbe);
+  return runCeilings(input, slots, seed, budgetMs, opts.onCeilings, opts.onProbe);
+}
+
+/**
+ * Instrumentation for a `runCeilings`/`solveCeilings` call — purely observational (never
+ * consulted by the solver itself), so later speedups (subset-mask bound, witness harvest,
+ * bound carryover) can be judged against a measured baseline instead of vibes.
+ * `probes` = binary-search feasibility probes run; `feasible` = probes that found a build;
+ * `disproven` = probes that ran to completion without finding one (aborted === false);
+ * `timedOut` = probes that hit their fair-share deadline (aborted === true); `nodes` =
+ * total DFS nodes visited across every probe. Always `feasible + disproven + timedOut ===
+ * probes`.
+ */
+export interface CeilingStats {
+  probes: number;
+  feasible: number;
+  disproven: number;
+  timedOut: number;
+  nodes: number;
 }
 
 /**
@@ -576,7 +609,7 @@ function runCeilings(
   budgetMs: number,
   onProgress?: (ceilings: number[]) => void,
   onProbe?: () => void,
-): { ceilings: number[]; exact: boolean } {
+): { ceilings: number[]; exact: boolean; stats: CeilingStats } {
   const min = input.minimums;
   const mods: ModBudget = input.mods ?? { major: 0, minor: 0 };
   const maxModPoints = mods.major * 10 + mods.minor * 5;
@@ -715,6 +748,7 @@ function runCeilings(
   const optimistic = new Array(NUM_STATS).fill(0);
   let exact = true;
   let pending: number[] = [];
+  const stats: CeilingStats = { probes: 0, feasible: 0, disproven: 0, timedOut: 0, nodes: 0 };
   for (let t = 0; t < NUM_STATS; t++) {
     optimistic[t] = clamp(frag[t] + suffixStat[0][t] + maxModPoints + artSuffix[0] * 3);
     if (optimistic[t] > ceiling[t]) pending.push(t);
@@ -731,12 +765,19 @@ function runCeilings(
       const ok = feasible(Math.min(globalDeadline, now + share));
       probeMins[t] = min[t];
       onProbe?.();
+      stats.probes++;
       if (ok) {
+        stats.feasible++;
         ceiling[t] = mid;
         onProgress?.(ceiling.slice(0, NUM_STATS)); // stream each improvement for animation
       } else {
+        if (aborted) {
+          stats.timedOut++;
+          exact = false; // timed out, not disproven — unproven shrink
+        } else {
+          stats.disproven++;
+        }
         optimistic[t] = mid - 1;
-        if (aborted) exact = false; // timed out, not disproven — unproven shrink
       }
       if (ceiling[t] < optimistic[t]) next.push(t);
     }
@@ -746,5 +787,6 @@ function runCeilings(
   for (let t = 0; t < NUM_STATS; t++) {
     if (ceiling[t] < optimistic[t]) exact = false; // ran out of budget unsettled
   }
-  return { ceilings: ceiling, exact };
+  stats.nodes = nodes;
+  return { ceilings: ceiling, exact, stats };
 }

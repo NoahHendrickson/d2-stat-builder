@@ -2,7 +2,7 @@ import { expect, test } from "vitest";
 import { beats, runSolveSession } from "./session";
 import { solve } from "./solve";
 import type { OptimizerInput, OptimizerOutput, OptimizerPiece } from "./types";
-import { realWarlockSlots } from "./real-pool.fixture";
+import { realWarlockCodaInput, realWarlockTwoSetInput } from "./real-pool.fixture";
 
 type SessionEvent =
   | { type: "progress"; value: number }
@@ -66,15 +66,7 @@ test("an uncapped search posts exactly one final, verified result", () => {
 // and, measured, the capped walk's best build (total 483) is beaten by the exhaustive
 // walk's (486). That is exactly the hidden better-TOTAL blind spot the pending offer
 // exists to cover: the better build moves no per-stat ceiling, only the sum.
-const realInput = (): OptimizerInput => ({
-  slots: realWarlockSlots(),
-  minimums: [190, 0, 0, 120, 0, 0],
-  mods: { major: 3, minor: 2 },
-  setRequirements: [{ setHash: 1490136267, count: 4 }],
-  exotic: { mode: "any" },
-  allowTuning: true,
-  fragmentBonus: [0, 0, 10, -20, 0, 0],
-});
+const realInput = realWarlockCodaInput;
 
 test("a capped search freezes its list, refines ceilings, and offers a better list", () => {
   const input = realInput();
@@ -158,34 +150,8 @@ test("a capped search freezes its list, refines ceilings, and offers a better li
 // grenade minimums make the ceiling probes expensive enough to blow THEIR budget — an
 // uncapped solve with ceilingsExact=false. The session used to end right there, freezing
 // unproven lower bounds as the displayed maxima.
-const uncappedInexactInput = (): OptimizerInput => {
-  // Simulate a specific exotic (only one exotic in the pool, on legs).
-  let kept = false;
-  const slots = realWarlockSlots().map((slot, i) =>
-    slot.filter((p) => {
-      if (!p.exotic) return true;
-      if (i === 3 && !kept) {
-        kept = true;
-        return true;
-      }
-      return false;
-    }),
-  );
-  return {
-    slots,
-    minimums: [180, 0, 0, 105, 0, 0],
-    mods: { major: 0, minor: 5 },
-    exotic: { mode: "require" },
-    setRequirements: [
-      { setHash: 1490136267, count: 2 },
-      { setHash: 3734029045, count: 2 },
-    ],
-    allowTuning: true,
-  };
-};
-
 test("an uncapped search with inexact ceilings refines them in the background", () => {
-  const input = uncappedInexactInput();
+  const input = realWarlockTwoSetInput();
   const { results, better, cb } = collector();
   runSolveSession(input, cb, {
     topNBudgetMs: 60_000, // the walk completes uncapped
@@ -220,7 +186,7 @@ test("an uncapped search with inexact ceilings refines them in the background", 
 }, 180_000);
 
 test("a ceilings-only refinement that also times out stays honest", () => {
-  const input = uncappedInexactInput();
+  const input = realWarlockTwoSetInput();
   const { results, better, cb } = collector();
   runSolveSession(input, cb, {
     topNBudgetMs: 60_000,

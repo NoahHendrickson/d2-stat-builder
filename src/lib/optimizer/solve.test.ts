@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { solve } from "./solve";
+import { solve, solveCeilings } from "./solve";
 import type { OptimizerInput, OptimizerPiece } from "./types";
 import { realWarlockSlots } from "./real-pool.fixture";
 
@@ -259,6 +259,26 @@ describe("ceiling refinement", () => {
     );
     expect(out.ceilings[3]).toBeGreaterThanOrEqual(135); // grenade
   }, 30_000);
+
+  test("solveCeilings reports probe stats consistent with its own counting", () => {
+    // A tiny pool: one probe per stat that needs refining, all trivially feasible.
+    const slots = [
+      [piece("h", [30, 0, 0, 0, 0, 0])],
+      [piece("a", [0, 20, 0, 0, 0, 0])],
+      [piece("c", [0, 0, 10, 0, 0, 0])],
+      [piece("l", [0, 0, 0, 40, 0, 0])],
+      [piece("ci", [0, 0, 0, 0, 15, 0])],
+    ];
+    const seed = [0, 0, 0, 0, 0, 0];
+    const { stats } = solveCeilings(
+      { slots, minimums: [0, 0, 0, 0, 0, 0], mods: { major: 0, minor: 0 }, allowTuning: false },
+      seed,
+      1000,
+    );
+    expect(stats.probes).toBeGreaterThan(0);
+    expect(stats.feasible + stats.disproven + stats.timedOut).toBe(stats.probes);
+    expect(stats.nodes).toBeGreaterThan(0);
+  });
 });
 
 describe("exotic tuning", () => {

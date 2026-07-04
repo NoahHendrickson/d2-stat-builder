@@ -97,16 +97,13 @@ export function runSolveSession(
   const share = first.capped ? CEILING_PROGRESS_SHARE : 1;
   const ceilingBudgetMs = budgets.refineCeilingBudgetMs ?? REFINE_CEILING_BUDGET_MS;
   const ceilingStart = performance.now();
-  const phase1 = solveCeilings(
-    input,
-    first.ceilings,
-    ceilingBudgetMs,
-    cb.onCeilings,
-    () =>
+  const phase1 = solveCeilings(input, first.ceilings, ceilingBudgetMs, {
+    onCeilings: cb.onCeilings,
+    onProbe: () =>
       cb.onProgress(
         share * Math.min(1, (performance.now() - ceilingStart) / ceilingBudgetMs),
       ),
-  );
+  });
   // Phase boundary: solveCeilings may run zero probes (everything already settled) and
   // emit nothing — pin the bar at the boundary so it never sits at 0% for the phase.
   cb.onProgress(share);
