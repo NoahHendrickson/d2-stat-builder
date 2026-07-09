@@ -16,17 +16,18 @@ import { ArmorRowActions } from "@/components/armor-table/armor-row-actions";
 
 export const COLUMN_COUNT = 13;
 
-/** Fixed column widths keep the layout steady while rows virtualize in and out. */
+/** Column widths: name is capped; Class→Set share leftover so wide screens
+ *  don't leave a huge empty gap after the piece name. Stats/actions stay fixed. */
 export const TABLE_COLGROUP = (
   <colgroup>
-    <col /* name */ />
-    <col style={{ width: "4.5rem" }} /* class */ />
-    <col style={{ width: "6.5rem" }} /* archetype */ />
-    <col style={{ width: "5rem" }} /* tertiary */ />
-    <col style={{ width: "5rem" }} /* tuned */ />
-    <col style={{ width: "9.5rem" }} /* set */ />
-    {STAT_ORDER.map((key) => (
-      <col key={key} style={{ width: "3rem" }} />
+    <col style={{ width: "18rem" }} /* name */ />
+    <col /* class — flexible */ />
+    <col /* archetype — flexible */ />
+    <col /* tertiary — flexible */ />
+    <col /* tuned — flexible */ />
+    <col /* set — flexible */ />
+    {STAT_DISPLAY_ORDER.map((key) => (
+      <col key={key} style={{ width: "3.25rem" }} />
     ))}
     <col style={{ width: "8rem" }} /* actions */ />
   </colgroup>
@@ -80,19 +81,17 @@ export const ArmorRow = memo(function ArmorRow({
           )}
         </div>
       </td>
-      <td className="py-1.5 pr-3 whitespace-nowrap">
-        {CLASS_NAMES[piece.classType] ?? "—"}
-      </td>
+      <td className="truncate py-1.5 pr-3">{CLASS_NAMES[piece.classType] ?? "—"}</td>
       <td className="truncate py-1.5 pr-3">{piece.archetype ?? "—"}</td>
-      <td className="py-1.5 pr-3 whitespace-nowrap">
+      <td className="truncate py-1.5 pr-3">
         {row.tertiary !== undefined ? statLabel(row.tertiary) : "—"}
       </td>
-      <td className="py-1.5 pr-3 whitespace-nowrap">
+      <td className="truncate py-1.5 pr-3">
         {piece.tunedStat !== undefined ? statLabel(piece.tunedStat) : "—"}
       </td>
       <td className="truncate py-1.5 pr-3">{row.setName ?? "—"}</td>
       {STAT_DISPLAY_ORDER.map((key) => (
-        <td key={key} className="py-1.5 pr-3 text-right tabular-nums">
+        <td key={key} className="py-1.5 text-center tabular-nums">
           {piece.stats[STAT_ORDER.indexOf(key)]}
         </td>
       ))}

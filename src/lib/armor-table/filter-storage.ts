@@ -4,22 +4,30 @@
 //
 // Runtime imports are relative (not `@/`) — the vitest runner has no `@/` alias.
 import {
+  CUSTOM_ORDER_COLUMNS,
   DEFAULT_SORT,
   emptyFilters,
   isSortKey,
   type ArmorVersion,
+  type CustomOrders,
+  type SortKey,
+  type SortLevel,
   type SortState,
   type TableFilters,
   type TuningFilter,
 } from "./filters";
 
 export const TABLE_STATE_KEY = "stat-builder:armor-table";
-export const TABLE_SCHEMA_VERSION = 2;
+/** v3: sort is an ordered nest chain (array). v2 single-object sorts migrate in. */
+export const TABLE_SCHEMA_VERSION = 3;
+const LEGACY_SCHEMA_VERSION = 2;
 
 export interface PersistedTableState {
   version: number;
   filters: TableFilters;
   sort: SortState;
+  /** Per-column custom value orders (empty object = all defaults). */
+  customOrders: CustomOrders;
 }
 
 function storage(): Storage | undefined {
@@ -44,28 +52,55 @@ const armorVersions = (v: unknown): ArmorVersion[] =>
 
 const REMOVED_SORT_KEYS = new Set(["slot", "location"]);
 
-function parseSort(s: Record<string, unknown> | null | undefined): SortState {
-  if (!s || !isSortKey(s.key) || typeof s.asc !== "boolean") return DEFAULT_SORT;
-  if (REMOVED_SORT_KEYS.has(s.key)) return DEFAULT_SORT;
-  return { key: s.key, asc: s.asc };
+function parseSortLevel(s: unknown): SortLevel | null {
+  if (typeof s !== "object" || s === null) return null;
+  const o = s as Record<string, unknown>;
+  if (!isSortKey(o.key) || typeof o.asc !== "boolean") return null;
+  if (REMOVED_SORT_KEYS.has(o.key)) return null;
+  return { key: o.key as SortKey, asc: o.asc };
 }
 
-/** Parse + validate a stored string. Returns null on any malformed / stale / corrupt input. */
-function parse(raw: string | null): PersistedTableState | null {
-  if (!raw) return null;
-  let obj: unknown;
-  try {
-    obj = JSON.parse(raw);
-  } catch {
-    return null;
+/**
+ * Parse a nest chain. Accepts v3 arrays, v2 single objects, and null (unsorted).
+ * Drops unknown / removed keys and duplicate columns. Explicit `[]` / null →
+ * unsorted; a non-empty array that yields no valid levels → DEFAULT_SORT.
+ */
+function parseSort(s: unknown): SortState {
+  if (s === null) return [];
+  if (Array.isArray(s)) {
+    const seen = new Set<SortKey>();
+    const out: SortLevel[] = [];
+    for (const item of s) {
+      const level = parseSortLevel(item);
+      if (!level || seen.has(level.key)) continue;
+      seen.add(level.key);
+      out.push(level);
+    }
+    if (out.length > 0) return out;
+    return s.length === 0 ? [] : DEFAULT_SORT;
   }
-  if (typeof obj !== "object" || obj === null) return null;
-  const o = obj as Record<string, unknown>;
-  if (o.version !== TABLE_SCHEMA_VERSION) return null;
-  if (typeof o.filters !== "object" || o.filters === null) return null;
-  const f = o.filters as Record<string, unknown>;
+  // v2 single-object shape → one-element chain.
+  const level = parseSortLevel(s);
+  if (level) return [level];
+  return DEFAULT_SORT;
+}
 
-  const filters: TableFilters = {
+/** Keep only known columns with all-string value lists (else drop the column). */
+function parseCustomOrders(v: unknown): CustomOrders {
+  if (typeof v !== "object" || v === null) return {};
+  const o = v as Record<string, unknown>;
+  const out: CustomOrders = {};
+  for (const col of CUSTOM_ORDER_COLUMNS) {
+    const list = o[col];
+    if (Array.isArray(list) && list.every((s) => typeof s === "string")) {
+      out[col] = list;
+    }
+  }
+  return out;
+}
+
+function parseFilters(f: Record<string, unknown>): TableFilters {
+  return {
     ...emptyFilters(),
     search: typeof f.search === "string" ? f.search : "",
     classes: numbers(f.classes),
@@ -79,10 +114,31 @@ function parse(raw: string | null): PersistedTableState | null {
     tertiaries: numbers(f.tertiaries),
     armorVersions: armorVersions(f.armorVersions),
   };
+}
 
-  const sort = parseSort(o.sort as Record<string, unknown> | null | undefined);
+/** Parse + validate a stored string. Returns null on any malformed / stale / corrupt input. */
+function parse(raw: string | null): PersistedTableState | null {
+  if (!raw) return null;
+  let obj: unknown;
+  try {
+    obj = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (typeof obj !== "object" || obj === null) return null;
+  const o = obj as Record<string, unknown>;
+  const version = o.version;
+  if (version !== TABLE_SCHEMA_VERSION && version !== LEGACY_SCHEMA_VERSION) {
+    return null;
+  }
+  if (typeof o.filters !== "object" || o.filters === null) return null;
 
-  return { version: TABLE_SCHEMA_VERSION, filters, sort };
+  const filters = parseFilters(o.filters as Record<string, unknown>);
+  // v2 used null for unsorted; v3 uses [].
+  const sort = parseSort(o.sort);
+  const customOrders = parseCustomOrders(o.customOrders);
+
+  return { version: TABLE_SCHEMA_VERSION, filters, sort, customOrders };
 }
 
 /** Read the stored table state, or null if absent / unreadable / stale / corrupt. */

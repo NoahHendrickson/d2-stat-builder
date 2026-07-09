@@ -7,6 +7,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type PointerEvent as ReactPointerEvent,
 } from "react";
 import Image from "next/image";
 import { useVirtualizer } from "@tanstack/react-virtual";
@@ -24,13 +25,23 @@ import {
   type StatIconMap,
 } from "@/lib/armory/stats";
 import {
+  CUSTOM_ORDER_COLUMNS,
   DEFAULT_SORT,
   emptyFacets,
   hasActiveFilters,
+  isCustomOrderColumn,
   pieceMatchesFilters,
+  type CustomOrderColumn,
+  type CustomOrders,
   type FacetFilters,
+  type SortKey,
+  type SortState,
 } from "@/lib/armor-table/filters";
-import { compareRows } from "@/lib/armor-table/sort";
+import {
+  applyCustomOrder,
+  compareRows,
+  sortValue,
+} from "@/lib/armor-table/sort";
 import { tokenizeSearchQuery } from "@/lib/armor-table/search";
 import {
   TABLE_SCHEMA_VERSION,
@@ -51,6 +62,7 @@ import {
   TABLE_COLGROUP,
   type Row,
 } from "@/components/armor-table/armor-table-row";
+import { SortMenu } from "@/components/armor-table/sort-menu";
 import { NewDropsFeed } from "@/components/armor-table/new-drops-feed";
 
 /** Approximate single-row height; the virtualizer remeasures real rows on mount. */
@@ -62,39 +74,88 @@ const TABLE_HEAD_CELL =
 const TABLE_HEADER_BG =
   "bg-[color-mix(in_oklch,var(--muted)_55%,var(--background))]";
 
+/** Header-cell order → sort key; `undefined` marks unsortable columns (Actions). */
+const COLUMN_SORT_KEYS: readonly (SortKey | undefined)[] = [
+  "name",
+  "class",
+  "archetype",
+  "tertiary",
+  "tuned",
+  "set",
+  ...STAT_DISPLAY_ORDER.map((key) => `stat-${key}` as const),
+  undefined, // actions
+];
+
 function TableHeader({
   label,
   icon,
   align = "left",
   title,
+  sortKey,
+  sort,
+  customOrders,
+  values,
+  hovered,
+  sortUndo,
+  onSortChange,
+  onCustomOrderChange,
+  onUndoSort,
 }: {
   label: string;
   icon?: string;
   align?: "left" | "right";
   title?: string;
+  sortKey: SortKey;
+  sort: SortState;
+  customOrders: CustomOrders;
+  values?: string[];
+  hovered: boolean;
+  sortUndo: SortState | null;
+  onSortChange: (
+    next: SortState,
+    opts?: { discardedChain?: SortState },
+  ) => void;
+  onCustomOrderChange: (order: string[] | undefined) => void;
+  onUndoSort: () => void;
 }) {
   const accessibleLabel = title ?? label;
+  // HTML aria-sort only describes the primary column; nested levels still show
+  // brand arrows via SortMenu.
+  const primary = sort[0];
+  const isPrimary = primary?.key === sortKey;
   return (
-    <th className={TABLE_HEAD_CELL}>
-      <span
-        className={cn(
-          "-my-0.5 inline-flex items-center gap-0.5",
-          align === "right" && "w-full justify-end",
-        )}
-      >
-        {icon ? (
-          <Image
-            src={`${BUNGIE_IMAGE_BASE}${icon}`}
-            alt={accessibleLabel}
-            width={16}
-            height={16}
-            className="size-4 shrink-0 invert dark:invert-0"
-            unoptimized
-          />
-        ) : (
-          label
-        )}
-      </span>
+    <th
+      className={cn(TABLE_HEAD_CELL, align === "right" && "pr-0")}
+      aria-sort={
+        isPrimary ? (primary.asc ? "ascending" : "descending") : "none"
+      }
+    >
+      <SortMenu
+        label={label}
+        title={accessibleLabel}
+        align={align}
+        sortKey={sortKey}
+        sort={sort}
+        customOrders={customOrders}
+        values={values}
+        hovered={hovered}
+        sortUndo={sortUndo}
+        onSortChange={onSortChange}
+        onCustomOrderChange={onCustomOrderChange}
+        onUndoSort={onUndoSort}
+        icon={
+          icon ? (
+            <Image
+              src={`${BUNGIE_IMAGE_BASE}${icon}`}
+              alt={accessibleLabel}
+              width={16}
+              height={16}
+              className="size-4 shrink-0 invert dark:invert-0"
+              unoptimized
+            />
+          ) : undefined
+        }
+      />
     </th>
   );
 }
@@ -107,6 +168,9 @@ export function ArmorTable() {
 
   const [search, setSearch] = useState("");
   const [facets, setFacets] = useState<FacetFilters>(emptyFacets);
+  const [sort, setSort] = useState<SortState>(DEFAULT_SORT);
+  const [sortUndo, setSortUndo] = useState<SortState | null>(null);
+  const [customOrders, setCustomOrders] = useState<CustomOrders>({});
   const [pinnedSets, setPinnedSets] = useState<number[]>([]);
   const [pinnedArchetypes, setPinnedArchetypes] = useState<string[]>([]);
   const searchRef = useRef<HTMLInputElement>(null);
@@ -119,6 +183,9 @@ export function ArmorTable() {
       const { search: savedSearch, ...savedFacets } = saved.filters;
       setSearch(savedSearch);
       setFacets(savedFacets);
+      setSort(saved.sort);
+      setSortUndo(null);
+      setCustomOrders(saved.customOrders);
     }
     const savedPins = loadTablePins();
     if (savedPins) {
@@ -136,11 +203,12 @@ export function ArmorTable() {
       saveTableState({
         version: TABLE_SCHEMA_VERSION,
         filters: { ...facets, search },
-        sort: DEFAULT_SORT,
+        sort,
+        customOrders,
       });
     }, 300);
     return () => window.clearTimeout(t);
-  }, [facets, search]);
+  }, [facets, search, sort, customOrders]);
 
   // Pins persist debounced like the filters above — the delay also keeps the
   // initial empty state from clobbering stored pins before the restore's
@@ -243,8 +311,9 @@ export function ArmorTable() {
     const matches = rows.filter((r) =>
       pieceMatchesFilters(r.piece, r.tertiary, facets, searchTokens),
     );
-    return matches.sort((a, b) => compareRows(a, b, DEFAULT_SORT));
-  }, [rows, facets, searchTokens]);
+    if (sort.length === 0) return matches;
+    return matches.sort((a, b) => compareRows(a, b, sort, customOrders));
+  }, [rows, facets, searchTokens, sort, customOrders]);
 
   const filtersActive = hasActiveFilters({ ...facets, search });
 
@@ -257,6 +326,91 @@ export function ArmorTable() {
     key: K,
     value: FacetFilters[K],
   ) => setFacets((f) => ({ ...f, [key]: value }));
+
+  // Distinct values per custom-orderable column, in effective sort order —
+  // this feeds each header's Custom tab, which returns a full new order.
+  const orderedColumnValues = useMemo(() => {
+    const distinct: Record<CustomOrderColumn, Set<string>> = {
+      class: new Set(),
+      archetype: new Set(),
+      tertiary: new Set(),
+      tuned: new Set(),
+      set: new Set(),
+    };
+    for (const r of rows) {
+      for (const col of CUSTOM_ORDER_COLUMNS) {
+        const v = sortValue(r, col);
+        if (typeof v === "string") distinct[col].add(v);
+      }
+    }
+    const out = {} as Record<CustomOrderColumn, string[]>;
+    for (const col of CUSTOM_ORDER_COLUMNS) {
+      out[col] = applyCustomOrder([...distinct[col]], customOrders[col]);
+    }
+    return out;
+  }, [rows, customOrders]);
+
+  const setColumnOrder = useCallback(
+    (col: CustomOrderColumn, order: string[] | undefined) => {
+      setCustomOrders((prev) => {
+        if (order === undefined) {
+          const next = { ...prev };
+          delete next[col];
+          return next;
+        }
+        return { ...prev, [col]: order };
+      });
+    },
+    [],
+  );
+
+  // Track which column the pointer is over (via cell delegation) so the header
+  // can reveal its sort arrow when hovering anywhere in the column. Rows are
+  // memoized, so this state change only re-renders the header.
+  const [hoveredCol, setHoveredCol] = useState<number | null>(null);
+  const onTablePointerOver = (e: ReactPointerEvent<HTMLTableElement>) => {
+    const cell = (e.target as Element).closest("td,th");
+    setHoveredCol(
+      cell instanceof HTMLTableCellElement ? cell.cellIndex : null,
+    );
+  };
+  const hoveredSortKey =
+    hoveredCol !== null ? COLUMN_SORT_KEYS[hoveredCol] : undefined;
+
+  const changeSort = useCallback(
+    (next: SortState, opts?: { discardedChain?: SortState }) => {
+      if (opts?.discardedChain && opts.discardedChain.length > 0) {
+        setSortUndo(opts.discardedChain);
+      } else {
+        setSortUndo(null);
+      }
+      setSort(next);
+    },
+    [],
+  );
+
+  const undoSort = useCallback(() => {
+    setSortUndo((prev) => {
+      if (prev) setSort(prev);
+      return null;
+    });
+  }, []);
+
+  const headerProps = (sortKey: SortKey) => ({
+    sortKey,
+    sort,
+    customOrders,
+    hovered: hoveredSortKey === sortKey,
+    sortUndo,
+    onSortChange: changeSort,
+    onUndoSort: undoSort,
+    onCustomOrderChange: (order: string[] | undefined) => {
+      if (isCustomOrderColumn(sortKey)) setColumnOrder(sortKey, order);
+    },
+    values: isCustomOrderColumn(sortKey)
+      ? orderedColumnValues[sortKey]
+      : undefined,
+  });
 
   const togglePinnedSet = (hash: number) =>
     setPinnedSets((prev) => togglePinned(prev, hash));
@@ -310,16 +464,20 @@ export function ArmorTable() {
           />
         </div>
         <div ref={setScrollerEl} className="min-h-0 flex-1 overflow-auto">
-          <table className="w-full min-w-[66rem] table-fixed text-sm">
+          <table
+            className="w-full min-w-[66rem] table-fixed text-sm"
+            onPointerOver={onTablePointerOver}
+            onPointerLeave={() => setHoveredCol(null)}
+          >
             {TABLE_COLGROUP}
             <thead className={cn("sticky top-0 z-10", TABLE_HEADER_BG)}>
               <tr className="text-muted-foreground text-left">
-                <TableHeader label="Name" />
-                <TableHeader label="Class" />
-                <TableHeader label="Archetype" />
-                <TableHeader label="Tertiary" />
-                <TableHeader label="Tuned" />
-                <TableHeader label="Set bonus" />
+                <TableHeader label="Name" {...headerProps("name")} />
+                <TableHeader label="Class" {...headerProps("class")} />
+                <TableHeader label="Archetype" {...headerProps("archetype")} />
+                <TableHeader label="Tertiary" {...headerProps("tertiary")} />
+                <TableHeader label="Tuned" {...headerProps("tuned")} />
+                <TableHeader label="Set bonus" {...headerProps("set")} />
                 {STAT_DISPLAY_ORDER.map((key) => (
                   <TableHeader
                     key={key}
@@ -327,6 +485,7 @@ export function ArmorTable() {
                     icon={statIcons[key]}
                     title={STAT_LABELS[key]}
                     align="right"
+                    {...headerProps(`stat-${key}`)}
                   />
                 ))}
                 <th className={cn(TABLE_HEAD_CELL, "text-left")}>Actions</th>
