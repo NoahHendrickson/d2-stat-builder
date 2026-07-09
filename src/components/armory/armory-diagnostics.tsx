@@ -1,38 +1,25 @@
 "use client";
 
-import { useManifest } from "@/lib/manifest/use-manifest";
 import type { ProfileItemCounts } from "@/lib/armory/profile-counts";
 
 export interface ArmoryDiagnosticsProps {
   linkedDestinyProfile: boolean;
   characterCount: number;
   normalizedArmor: number;
+  manifestLine: string;
   rawItems?: ProfileItemCounts;
   loadError?: string;
 }
 
-/**
- * Support-safe armory diagnostics: counts only, no membership IDs or item details.
- * Shown when gear looks empty or when `?debug` is in the URL.
- */
+/** Support-safe armory diagnostics: counts only, no membership IDs or item details. */
 export function ArmoryDiagnostics({
   linkedDestinyProfile,
   characterCount,
   normalizedArmor,
+  manifestLine,
   rawItems,
   loadError,
 }: ArmoryDiagnosticsProps) {
-  const manifestStatus = useManifest();
-
-  const manifestLine =
-    manifestStatus.state === "ready"
-      ? `ready (${manifestStatus.manifest.version})`
-      : manifestStatus.state === "loading"
-        ? "loading…"
-        : manifestStatus.state === "error"
-          ? `error: ${manifestStatus.message}`
-          : "idle";
-
   return (
     <div className="border-border/60 bg-muted/30 space-y-1 rounded-lg border px-3 py-2 text-xs">
       <p className="text-muted-foreground font-medium">Diagnostics</p>
