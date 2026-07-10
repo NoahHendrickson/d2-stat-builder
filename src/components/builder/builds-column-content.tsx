@@ -4,10 +4,10 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   BuildResults,
-  LoadoutSortControls,
   MAX_SHOWN,
   type DimSubclassInput,
 } from "@/components/builder/build-results";
+import { LoadoutSortControls } from "@/components/builder/loadout-sort-controls";
 import type { ArmorPiece } from "@/lib/armory/normalize";
 import type { ArmorSetInfo } from "@/lib/armory/sets";
 import type { ArmoryCharacter } from "@/lib/armory/fetch";
@@ -127,8 +127,9 @@ export function BuildsColumnContent({
       <div className="flex items-center gap-3">
         <h2 className="text-lg font-medium">Builds</h2>
         <div className="ml-auto flex min-w-0 items-center gap-3">
-          {/* Initial search only — background refinement Cancel lives in the alert. */}
-          {running && refinement.phase !== "running" && (
+          {/* Initial search only — `running` is false once refinement starts
+              (see use-optimizer); refinement Cancel lives in the status alert. */}
+          {running && (
             <Button
               variant="link"
               onClick={onCancel}

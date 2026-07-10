@@ -3,16 +3,13 @@
 import {
   Fragment,
   memo,
-  useEffect,
   useMemo,
   useState,
   type ReactNode,
 } from "react";
 import Image from "next/image";
 import {
-  ArrowDown,
   ArrowSquareOut,
-  ArrowUp,
   CaretDown,
   CheckCircle,
   CircleNotch,
@@ -33,8 +30,6 @@ import {
   type StatIconMap,
 } from "@/lib/armory/stats";
 import {
-  LOADOUT_SORT_OPTIONS,
-  loadoutSortLabel,
   sortLoadouts,
   type LoadoutSortState,
 } from "@/lib/builder/sort-loadouts";
@@ -46,12 +41,6 @@ import {
 } from "@/lib/dim/loadout-link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Menu } from "@/components/ui/menu";
-import {
-  field3dFocusVisibleClasses,
-  field3dInteractiveClasses,
-  field3dSurfaceClasses,
-} from "@/lib/field-surface";
 import { cn } from "@/lib/utils";
 import { BUNGIE_IMAGE_BASE } from "@/lib/bungie/constants";
 import {
@@ -613,6 +602,40 @@ function BuildActions({
  * higher maxima), higher maxima only, a verified all-clear, or the plain time-limit
  * banner (refinement never resolved, e.g. a worker error or an unverified quiet pass).
  */
+/** Dismissible "higher maxima" card — keeps dismiss state out of the phase switch.
+ * Remount (via parent key / unmount when outcome leaves "improved") resets dismiss. */
+function ImprovedMaximaAlert() {
+  const [dismissed, setDismissed] = useState(false);
+  if (dismissed) return null;
+  // Same alert footprint as the running card — green with a check instead of a spinner.
+  return (
+    <div
+      className="flex items-center gap-2.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2.5"
+      aria-live="polite"
+    >
+      <CheckCircle
+        weight="fill"
+        className="size-4 shrink-0 text-emerald-600 dark:text-emerald-500"
+        aria-hidden
+      />
+      <p className="text-foreground/90 min-w-0 flex-1 text-sm">
+        <span className="font-medium">Higher stat maximums found</span> — raise a
+        stat target to explore them.
+      </p>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-xs"
+        aria-label="Dismiss"
+        onClick={() => setDismissed(true)}
+        className="text-muted-foreground hover:text-foreground shrink-0"
+      >
+        <X weight="bold" className="size-3.5" aria-hidden />
+      </Button>
+    </div>
+  );
+}
+
 function SearchStatus({
   capped,
   refinement,
@@ -624,14 +647,6 @@ function SearchStatus({
   onShowPending: () => void;
   onCancel: () => void;
 }) {
-  const [improvedDismissed, setImprovedDismissed] = useState(false);
-  const showImproved =
-    refinement.phase === "done" && refinement.outcome === "improved";
-  // Reset dismiss when a new refinement cycle starts (or the improved card goes away).
-  useEffect(() => {
-    if (!showImproved) setImprovedDismissed(false);
-  }, [showImproved]);
-
   const cappedBanner = capped ? (
     <p className="text-xs text-amber-600/90 dark:text-amber-500/90">
       Hit the time limit — showing the best found so far. Narrow your targets
@@ -700,37 +715,8 @@ function SearchStatus({
           </p>,
         );
       }
-      if (outcome === "improved" && !improvedDismissed) {
-        // The running card resolves into this — same alert footprint, green with a
-        // check instead of the spinner, so completion reads as the card finishing
-        // rather than the status vanishing.
-        lines.push(
-          <div
-            key="improved"
-            className="flex items-center gap-2.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2.5"
-            aria-live="polite"
-          >
-            <CheckCircle
-              weight="fill"
-              className="size-4 shrink-0 text-emerald-600 dark:text-emerald-500"
-              aria-hidden
-            />
-            <p className="text-foreground/90 min-w-0 flex-1 text-sm">
-              <span className="font-medium">Higher stat maximums found</span> —
-              raise a stat target to explore them.
-            </p>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon-xs"
-              aria-label="Dismiss"
-              onClick={() => setImprovedDismissed(true)}
-              className="text-muted-foreground hover:text-foreground shrink-0"
-            >
-              <X weight="bold" className="size-3.5" aria-hidden />
-            </Button>
-          </div>,
-        );
+      if (outcome === "improved") {
+        lines.push(<ImprovedMaximaAlert key="improved" />);
       } else if (outcome === "confirmed" && !pending) {
         // Only rendered when both halves are PROVEN (walk exhausted + ceilings exact).
         lines.push(
@@ -760,107 +746,6 @@ function SearchStatus({
       return _exhaustive;
     }
   }
-}
-
-/** Compact sort control: each option has up/down arrows to set key + direction. */
-export function LoadoutSortControls({
-  sort,
-  onChange,
-}: {
-  sort: LoadoutSortState;
-  onChange: (next: LoadoutSortState) => void;
-}) {
-  const DirectionIcon = sort.asc ? ArrowUp : ArrowDown;
-  const directionLabel = sort.asc ? "Low to high" : "High to low";
-  const triggerLabel = loadoutSortLabel(sort.key);
-
-  return (
-    <Menu.Root>
-      <Menu.Trigger
-        aria-label={`Sort by ${triggerLabel}, ${directionLabel}`}
-        className={cn(
-          "flex h-7 w-fit min-w-28 cursor-pointer items-center justify-between gap-1.5 rounded-[6px] border border-transparent bg-clip-padding py-2 pr-2 pl-2.5 text-[0.8rem] whitespace-nowrap outline-none select-none",
-          field3dSurfaceClasses,
-          field3dInteractiveClasses,
-          field3dFocusVisibleClasses,
-        )}
-      >
-        <span className="flex min-w-0 items-center gap-1.5">
-          <span className="truncate">{triggerLabel}</span>
-          <DirectionIcon
-            weight="bold"
-            className="size-4 shrink-0"
-            aria-hidden
-          />
-        </span>
-        <CaretDown
-          weight="duotone"
-          className="text-muted-foreground pointer-events-none size-3.5 shrink-0"
-          aria-hidden
-        />
-      </Menu.Trigger>
-      <Menu.Portal>
-        <Menu.Positioner side="bottom" align="end">
-          <Menu.Popup className="min-w-40 p-1">
-            {LOADOUT_SORT_OPTIONS.map((opt) => {
-              const active = sort.key === opt.key;
-              return (
-                <div
-                  key={opt.key}
-                  className="flex items-center gap-0.5 rounded-md px-1 py-0.5"
-                >
-                  <span
-                    className={cn(
-                      "min-w-0 flex-1 truncate px-1.5 text-sm",
-                      active && "font-medium",
-                    )}
-                  >
-                    {opt.label}
-                  </span>
-                  <Menu.Item
-                    label={`${opt.label} low to high`}
-                    aria-label={`Sort by ${opt.label}, low to high`}
-                    aria-checked={active && sort.asc}
-                    className="size-7 justify-center gap-0 p-0"
-                    onClick={() => onChange({ key: opt.key, asc: true })}
-                  >
-                    <ArrowUp
-                      weight="bold"
-                      className={cn(
-                        "size-4",
-                        active && sort.asc
-                          ? "text-brand"
-                          : "text-muted-foreground",
-                      )}
-                      aria-hidden
-                    />
-                  </Menu.Item>
-                  <Menu.Item
-                    label={`${opt.label} high to low`}
-                    aria-label={`Sort by ${opt.label}, high to low`}
-                    aria-checked={active && !sort.asc}
-                    className="size-7 justify-center gap-0 p-0"
-                    onClick={() => onChange({ key: opt.key, asc: false })}
-                  >
-                    <ArrowDown
-                      weight="bold"
-                      className={cn(
-                        "size-4",
-                        active && !sort.asc
-                          ? "text-brand"
-                          : "text-muted-foreground",
-                      )}
-                      aria-hidden
-                    />
-                  </Menu.Item>
-                </div>
-              );
-            })}
-          </Menu.Popup>
-        </Menu.Positioner>
-      </Menu.Portal>
-    </Menu.Root>
-  );
 }
 
 export function BuildResults({
