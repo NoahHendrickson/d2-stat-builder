@@ -3,6 +3,10 @@ import type {
   DestinyProfileResponse,
 } from "bungie-api-ts/destiny2";
 import type { Manifest } from "@/lib/manifest/load";
+import {
+  equippedSubclassForCharacter,
+  type EquippedSubclass,
+} from "./equipped-subclass";
 import { normalizeArmory, type ArmorPiece } from "./normalize";
 
 export interface ArmoryCharacter {
@@ -15,6 +19,8 @@ export interface ArmoryCharacter {
   emblemColor?: DestinyColor;
   /** ISO timestamp; picks the emblem when a class has more than one character. */
   dateLastPlayed: string;
+  /** Equipped subclass + fragment plugs from live sockets; omitted if none. */
+  equippedSubclass?: EquippedSubclass;
 }
 
 export interface Armory {
@@ -48,14 +54,21 @@ export async function fetchArmory(manifest: Manifest): Promise<Armory> {
   const pieces = normalizeArmory(profile, manifest);
   const characters: ArmoryCharacter[] = Object.values(
     profile.characters?.data ?? {},
-  ).map((c) => ({
-    id: c.characterId,
-    classType: c.classType,
-    light: c.light,
-    emblemBackgroundPath: c.emblemBackgroundPath,
-    emblemColor: c.emblemColor,
-    dateLastPlayed: c.dateLastPlayed,
-  }));
+  ).map((c) => {
+    const equippedSubclass = equippedSubclassForCharacter(
+      profile,
+      c.characterId,
+    );
+    return {
+      id: c.characterId,
+      classType: c.classType,
+      light: c.light,
+      emblemBackgroundPath: c.emblemBackgroundPath,
+      emblemColor: c.emblemColor,
+      dateLastPlayed: c.dateLastPlayed,
+      ...(equippedSubclass ? { equippedSubclass } : {}),
+    };
+  });
 
   return { pieces, characters };
 }
