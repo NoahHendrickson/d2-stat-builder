@@ -66,7 +66,7 @@ import type {
   RefinementState,
 } from "@/lib/optimizer/types";
 
-const MAX_SHOWN = 25;
+const MAX_SHOWN = 50;
 export { MAX_SHOWN };
 /** Display stat columns paired with their STAT_ORDER index (used by the build breakdown). */
 const STAT_COLS = STAT_DISPLAY_ORDER.map((key) => ({
