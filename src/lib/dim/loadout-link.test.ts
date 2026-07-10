@@ -237,5 +237,5 @@ test("defaultLoadoutName joins exotic, subclass, and set-bonus tiers", () => {
 });
 
 test("defaultLoadoutName falls back to total when nothing else exists", () => {
-  expect(defaultLoadoutName({ total: 300 })).toBe("Stat Builder 300");
+  expect(defaultLoadoutName({ total: 300 })).toBe("d2-stat-builder 300");
 });

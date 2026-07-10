@@ -202,5 +202,5 @@ export function defaultLoadoutName(input: {
     if (s.count < 2) continue;
     parts.push(`${abbreviateSetName(s.name)} ${s.count >= 4 ? 4 : 2}pc`);
   }
-  return parts.length > 0 ? parts.join(" · ") : `Stat Builder ${input.total}`;
+  return parts.length > 0 ? parts.join(" · ") : `d2-stat-builder ${input.total}`;
 }

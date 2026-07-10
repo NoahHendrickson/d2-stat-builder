@@ -17,7 +17,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Stat Builder — Destiny 2 Armor Optimizer",
+  title: "d2-stat-builder — Destiny 2 Armor Optimizer",
   description:
     "Sign in with Bungie, set your six Armor 3.0 stat targets, set bonuses, fragments, and mods, and find which of your armor pieces to equip.",
 };

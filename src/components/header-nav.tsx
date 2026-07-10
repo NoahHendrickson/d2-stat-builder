@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const TABS = [
-  { href: "/", label: "Stat Builder" },
+  { href: "/", label: "d2-stat-builder" },
   { href: "/armor", label: "Table" },
 ] as const;
 
