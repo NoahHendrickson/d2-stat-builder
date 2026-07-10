@@ -1,9 +1,11 @@
 "use client";
 
 import Image from "next/image";
+import { CircleNotch } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
 import { BUNGIE_IMAGE_BASE } from "@/lib/bungie/constants";
 import { STAT_LABELS, STAT_ORDER, type StatIconMap } from "@/lib/armory/stats";
+import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -24,6 +26,9 @@ export function FragmentPicker({
   selected,
   onToggle,
   statIcons,
+  onApplyCurrent,
+  applyDisabled,
+  applyLoading,
 }: {
   fragments: Record<Subclass, FragmentInfo[]>;
   activeSubclass: Subclass;
@@ -31,23 +36,43 @@ export function FragmentPicker({
   selected: Set<number>;
   onToggle: (hash: number) => void;
   statIcons: StatIconMap;
+  onApplyCurrent?: () => void;
+  applyDisabled?: boolean;
+  applyLoading?: boolean;
 }) {
   const rows = fragments[activeSubclass];
 
   return (
     <div className="space-y-3">
-      <Tabs
-        value={activeSubclass}
-        onValueChange={(v) => onSubclassChange(v as Subclass)}
-      >
-        <TabsList>
-          {SUBCLASSES.map((s) => (
-            <TabsTrigger key={s} value={s} className="text-xs">
-              {s}
-            </TabsTrigger>
-          ))}
-        </TabsList>
-      </Tabs>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <Tabs
+          value={activeSubclass}
+          onValueChange={(v) => onSubclassChange(v as Subclass)}
+        >
+          <TabsList>
+            {SUBCLASSES.map((s) => (
+              <TabsTrigger key={s} value={s} className="text-xs">
+                {s}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </Tabs>
+
+        {onApplyCurrent && (
+          <Button
+            type="button"
+            variant="outlineSubtle"
+            size="xs"
+            disabled={applyDisabled || applyLoading}
+            onClick={onApplyCurrent}
+          >
+            {applyLoading ? (
+              <CircleNotch className="animate-spin" aria-hidden />
+            ) : null}
+            Apply Current
+          </Button>
+        )}
+      </div>
 
       {rows.length === 0 ? (
         <p className="text-muted-foreground text-xs">
