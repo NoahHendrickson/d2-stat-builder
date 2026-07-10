@@ -5,6 +5,7 @@ import type { QueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import type { ArmorPiece } from "../armory/normalize";
 import type { ArmoryCharacter } from "../armory/fetch";
+import { characterForClass } from "../armory/character-for-class";
 
 /** Per-item outcome from POST /api/bungie/equip. */
 export interface EquipResult {
@@ -18,11 +19,8 @@ export function lastPlayedCharacter(
   characters: ArmoryCharacter[],
   classType: number | undefined,
 ): ArmoryCharacter | undefined {
-  return characters
-    .filter((c) => c.classType === classType)
-    .sort(
-      (a, b) => Date.parse(b.dateLastPlayed) - Date.parse(a.dateLastPlayed),
-    )[0];
+  if (classType === undefined) return undefined;
+  return characterForClass(characters, classType);
 }
 
 /** The request-body item shape the equip route expects. */

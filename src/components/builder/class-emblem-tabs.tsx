@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { BUNGIE_IMAGE_BASE } from "@/lib/bungie/constants";
 import { CLASS_NAMES } from "@/lib/armory/stats";
 import type { ArmoryCharacter } from "@/lib/armory/fetch";
+import { characterForClass } from "@/lib/armory/character-for-class";
 
 /** Figma 127:9 frame+face recipe — outer tab carries border + lip; inner span is the face. */
 const tabFrameBase =
@@ -36,13 +37,10 @@ interface ClassEmblemTabsProps {
  * class ordering while letting a later, more-recently-played character win the emblem.
  */
 function emblemPerClass(characters: ArmoryCharacter[]): ArmoryCharacter[] {
-  const best = new Map<number, ArmoryCharacter>();
-  for (const c of characters) {
-    if (CLASS_NAMES[c.classType] === undefined) continue;
-    const cur = best.get(c.classType);
-    if (!cur || c.dateLastPlayed > cur.dateLastPlayed) best.set(c.classType, c);
-  }
-  return [...best.values()];
+  const classTypes = [
+    ...new Set(characters.map((c) => c.classType)),
+  ].filter((ct) => CLASS_NAMES[ct] !== undefined);
+  return classTypes.map((ct) => characterForClass(characters, ct)!);
 }
 
 /** A single class tab, rendered as the character's equipped emblem nameplate. */

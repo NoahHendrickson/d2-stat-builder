@@ -10,7 +10,6 @@ import {
 } from "react";
 import Image from "next/image";
 import { MagnifyingGlass, PushPin, SlidersHorizontal } from "@phosphor-icons/react";
-import { toast } from "sonner";
 import { useSession } from "@/lib/auth/use-session";
 import { useArmory } from "@/lib/armory/use-armory";
 import { useManifest } from "@/lib/manifest/use-manifest";
@@ -46,7 +45,6 @@ import {
   type StatIconMap,
 } from "@/lib/armory/stats";
 import type { ArmorPiece } from "@/lib/armory/normalize";
-import { characterForClass } from "@/lib/armory/character-for-class";
 import { Slider, sliderEdgeAlignedLeft } from "@/components/ui/slider";
 import { Input } from "@/components/ui/input";
 import {
@@ -91,6 +89,7 @@ import {
   FRAGMENT_SOCKET_START,
   SUBCLASS_ITEM_HASHES,
 } from "@/lib/dim/subclasses";
+import { useApplyCurrentFragments } from "@/lib/armory/use-apply-current-fragments";
 
 const MAX_MODS = 5;
 /** Clickable preset markers under each stat slider. */
@@ -372,32 +371,20 @@ export function BuilderPanel({
       return { ...prev, [activeSubclass]: next };
     });
 
-  const [applyingFragments, setApplyingFragments] = useState(false);
+  const {
+    applying: applyingFragments,
+    apply: applyCurrentFragments,
+    canApply: canApplyCurrentFragments,
+  } = useApplyCurrentFragments({ armoryQuery, classType, fragments });
 
-  const applyCurrentFragments = async () => {
-    if (classType === null || !fragments) return;
-    setApplyingFragments(true);
-    try {
-      const result = await armoryQuery.refetch();
-      if (result.error || !result.data) {
-        toast.error("Couldn't refresh profile — try again");
-        return;
-      }
-      const character = characterForClass(result.data.characters, classType);
-      const equipped = character?.equippedSubclass;
-      if (!equipped) {
-        toast.error("No subclass found on this character");
-        return;
-      }
-      const known = new Set(fragments[equipped.subclass].map((f) => f.hash));
-      const next = new Set(
-        equipped.fragmentHashes.filter((h) => known.has(h)),
-      );
-      setActiveSubclass(equipped.subclass);
-      setFragSel((prev) => ({ ...prev, [equipped.subclass]: next }));
-    } finally {
-      setApplyingFragments(false);
-    }
+  const onApplyCurrentFragments = async () => {
+    const result = await applyCurrentFragments();
+    if (!result) return;
+    setActiveSubclass(result.subclass);
+    setFragSel((prev) => ({
+      ...prev,
+      [result.subclass]: result.fragmentHashes,
+    }));
   };
 
   const setRequirements = useMemo(
@@ -1012,8 +999,8 @@ export function BuilderPanel({
                   selected={fragSel[activeSubclass]}
                   onToggle={toggleFragment}
                   statIcons={statIcons}
-                  onApplyCurrent={() => void applyCurrentFragments()}
-                  applyDisabled={classType === null || !armory}
+                  onApplyCurrent={() => void onApplyCurrentFragments()}
+                  applyDisabled={!canApplyCurrentFragments}
                   applyLoading={applyingFragments}
                 />
               )}

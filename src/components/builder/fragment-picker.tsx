@@ -36,9 +36,9 @@ export function FragmentPicker({
   selected: Set<number>;
   onToggle: (hash: number) => void;
   statIcons: StatIconMap;
-  onApplyCurrent?: () => void;
-  applyDisabled?: boolean;
-  applyLoading?: boolean;
+  onApplyCurrent: () => void;
+  applyDisabled: boolean;
+  applyLoading: boolean;
 }) {
   const rows = fragments[activeSubclass];
 
@@ -58,20 +58,18 @@ export function FragmentPicker({
           </TabsList>
         </Tabs>
 
-        {onApplyCurrent && (
-          <Button
-            type="button"
-            variant="outlineSubtle"
-            size="xs"
-            disabled={applyDisabled || applyLoading}
-            onClick={onApplyCurrent}
-          >
-            {applyLoading ? (
-              <CircleNotch className="animate-spin" aria-hidden />
-            ) : null}
-            Apply Current
-          </Button>
-        )}
+        <Button
+          type="button"
+          variant="outlineSubtle"
+          size="xs"
+          disabled={applyDisabled || applyLoading}
+          onClick={onApplyCurrent}
+        >
+          {applyLoading ? (
+            <CircleNotch className="animate-spin" aria-hidden />
+          ) : null}
+          Apply Current
+        </Button>
       </div>
 
       {rows.length === 0 ? (
