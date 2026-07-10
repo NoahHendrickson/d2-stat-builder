@@ -51,12 +51,29 @@ function MenuSubmenuTrigger({
   );
 }
 
+function MenuItem({
+  className,
+  ...props
+}: MenuPrimitive.Item.Props) {
+  return (
+    <MenuPrimitive.Item
+      data-slot="menu-item"
+      className={cn(
+        "data-highlighted:bg-accent data-highlighted:text-accent-foreground flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm outline-none select-none",
+        className,
+      )}
+      {...props}
+    />
+  );
+}
+
 const Menu = {
   Root: MenuPrimitive.Root,
   Trigger: MenuPrimitive.Trigger,
   Portal: MenuPrimitive.Portal,
   Positioner: MenuPositioner,
   Popup: MenuPopup,
+  Item: MenuItem,
   SubmenuRoot: MenuPrimitive.SubmenuRoot,
   SubmenuTrigger: MenuSubmenuTrigger,
   Separator: MenuPrimitive.Separator,

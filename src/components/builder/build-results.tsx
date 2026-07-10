@@ -1,6 +1,12 @@
 "use client";
 
-import { Fragment, memo, useState, type ReactNode } from "react";
+import {
+  Fragment,
+  memo,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 import Image from "next/image";
 import {
   ArrowSquareOut,
@@ -8,6 +14,7 @@ import {
   CheckCircle,
   CircleNotch,
   Copy,
+  X,
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
@@ -22,6 +29,10 @@ import {
   STAT_ORDER,
   type StatIconMap,
 } from "@/lib/armory/stats";
+import {
+  sortLoadouts,
+  type LoadoutSortState,
+} from "@/lib/builder/sort-loadouts";
 import type { StatModHashes } from "@/lib/dim/mod-hashes";
 import {
   buildDimLoadout,
@@ -44,7 +55,7 @@ import type {
   RefinementState,
 } from "@/lib/optimizer/types";
 
-const MAX_SHOWN = 25;
+const MAX_SHOWN = 50;
 export { MAX_SHOWN };
 /** Display stat columns paired with their STAT_ORDER index (used by the build breakdown). */
 const STAT_COLS = STAT_DISPLAY_ORDER.map((key) => ({
@@ -591,14 +602,50 @@ function BuildActions({
  * higher maxima), higher maxima only, a verified all-clear, or the plain time-limit
  * banner (refinement never resolved, e.g. a worker error or an unverified quiet pass).
  */
+/** Dismissible "higher maxima" card — keeps dismiss state out of the phase switch.
+ * Remount (via parent key / unmount when outcome leaves "improved") resets dismiss. */
+function ImprovedMaximaAlert() {
+  const [dismissed, setDismissed] = useState(false);
+  if (dismissed) return null;
+  // Same alert footprint as the running card — green with a check instead of a spinner.
+  return (
+    <div
+      className="flex items-center gap-2.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2.5"
+      aria-live="polite"
+    >
+      <CheckCircle
+        weight="fill"
+        className="size-4 shrink-0 text-emerald-600 dark:text-emerald-500"
+        aria-hidden
+      />
+      <p className="text-foreground/90 min-w-0 flex-1 text-sm">
+        <span className="font-medium">Higher stat maximums found</span> — raise a
+        stat target to explore them.
+      </p>
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-xs"
+        aria-label="Dismiss"
+        onClick={() => setDismissed(true)}
+        className="text-muted-foreground hover:text-foreground shrink-0"
+      >
+        <X weight="bold" className="size-3.5" aria-hidden />
+      </Button>
+    </div>
+  );
+}
+
 function SearchStatus({
   capped,
   refinement,
   onShowPending,
+  onCancel,
 }: {
   capped: boolean;
   refinement: RefinementState;
   onShowPending: () => void;
+  onCancel: () => void;
 }) {
   const cappedBanner = capped ? (
     <p className="text-xs text-amber-600/90 dark:text-amber-500/90">
@@ -622,7 +669,7 @@ function SearchStatus({
             className="size-4 shrink-0 animate-spin text-primary"
             aria-hidden
           />
-          <p className="text-foreground/90 text-sm">
+          <p className="text-foreground/90 min-w-0 flex-1 text-sm">
             {refinement.interim.capped ? (
               <>
                 <span className="font-medium">First pass done</span> — searching
@@ -638,6 +685,13 @@ function SearchStatus({
             )}
             {Math.round(refinement.progress * 100)}%)
           </p>
+          <Button
+            variant="link"
+            onClick={onCancel}
+            className="text-muted-foreground hover:text-foreground h-auto shrink-0 p-0 text-xs font-normal"
+          >
+            Cancel
+          </Button>
         </div>
       );
     case "done": {
@@ -662,26 +716,7 @@ function SearchStatus({
         );
       }
       if (outcome === "improved") {
-        // The running card resolves into this — same alert footprint, green with a
-        // check instead of the spinner, so completion reads as the card finishing
-        // rather than the status vanishing.
-        lines.push(
-          <div
-            key="improved"
-            className="flex items-center gap-2.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2.5"
-            aria-live="polite"
-          >
-            <CheckCircle
-              weight="fill"
-              className="size-4 shrink-0 text-emerald-600 dark:text-emerald-500"
-              aria-hidden
-            />
-            <p className="text-foreground/90 text-sm">
-              <span className="font-medium">Higher stat maximums found</span> —
-              raise a stat target to explore them.
-            </p>
-          </div>,
-        );
+        lines.push(<ImprovedMaximaAlert key="improved" />);
       } else if (outcome === "confirmed" && !pending) {
         // Only rendered when both halves are PROVEN (walk exhausted + ceilings exact).
         lines.push(
@@ -717,6 +752,7 @@ export function BuildResults({
   result,
   refinement,
   onShowPending,
+  onCancel,
   pieceMap,
   targets,
   setMap,
@@ -728,21 +764,29 @@ export function BuildResults({
   artificeModHashes,
   subclass,
   onEquipped,
+  sort,
 }: {
   result: OptimizerOutput;
   refinement: RefinementState;
   onShowPending: () => void;
+  onCancel: () => void;
   pieceMap: Map<string, ArmorPiece>;
   targets: number[];
   setMap: Map<number, ArmorSetInfo>;
   statIcons: StatIconMap;
   balancedTuningIcon?: string;
+  sort: LoadoutSortState;
 } & BuildActionProps) {
+  const sortedLoadouts = useMemo(
+    () => sortLoadouts(result.loadouts, sort),
+    [result.loadouts, sort],
+  );
   const status = (
     <SearchStatus
       capped={result.capped}
       refinement={refinement}
       onShowPending={onShowPending}
+      onCancel={onCancel}
     />
   );
   if (result.loadouts.length === 0) {
@@ -766,9 +810,9 @@ export function BuildResults({
     <div className="space-y-3">
       {status}
       <div className="space-y-1.5">
-        {result.loadouts.slice(0, MAX_SHOWN).map((loadout, idx) => (
+        {sortedLoadouts.slice(0, MAX_SHOWN).map((loadout) => (
           <BuildRow
-            key={idx}
+            key={loadout.pieceIds.join("|")}
             loadout={loadout}
             pieceMap={pieceMap}
             setMap={setMap}
