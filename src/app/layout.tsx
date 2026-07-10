@@ -4,6 +4,7 @@ import "./globals.css";
 import { AppHeader } from "@/components/app-header";
 import { LoadingScreen } from "@/components/loading/loading-screen";
 import { Providers } from "@/components/providers";
+import { Analytics } from "@vercel/analytics/next";
 
 const geistSans = Geist({
   variable: "--font-sans",
@@ -38,6 +39,7 @@ export default function RootLayout({
           {children}
           <LoadingScreen />
         </Providers>
+        <Analytics />
       </body>
     </html>
   );
