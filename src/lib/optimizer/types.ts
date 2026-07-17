@@ -64,6 +64,13 @@ export interface OptimizerInput {
   exotic?: ExoticConstraint;
   /** Allow the optimizer to apply Tier-5 tuning on tunable pieces (defaults to true). */
   allowTuning?: boolean;
+  /**
+   * Allow the optimizer to apply Balanced Tuning (+1 to each off-archetype stat) on
+   * tunable pieces (defaults to true). When false, tunable pieces are left untuned
+   * unless a directional (+5/−5) tune is needed to reach the minimums. Ignored when
+   * `allowTuning` is false.
+   */
+  allowBalancedTuning?: boolean;
   /** Build-wide stat constant from selected subclass fragments (may be negative). */
   fragmentBonus?: StatArray;
   /** Max loadouts to return (default 200). */

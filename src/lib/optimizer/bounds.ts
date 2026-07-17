@@ -29,14 +29,18 @@ function dedupe(
   pieces: OptimizerPiece[],
   keyIncludesSet: boolean,
   allowTuning: boolean,
+  allowBalanced: boolean,
 ): InternalPiece[] {
   const map = new Map<string, InternalPiece>();
   for (const p of pieces) {
     // Two pieces with the same stats but different tuned stats aren't interchangeable
     // (except exotics, whose flexible slot makes the rolled tuned stat irrelevant).
+    // offStats only feed the Balanced option, so with Balanced disallowed they drop
+    // out of the key (pieces differing only in offStats become interchangeable).
     const tuneKey =
       allowTuning && p.tuning
-        ? `${p.exotic ? "X" : p.tuning.tuned}:${p.tuning.offStats.join(".")}`
+        ? (p.exotic ? "X" : `${p.tuning.tuned}`) +
+          (allowBalanced ? `:${p.tuning.offStats.join(".")}` : "")
         : "-";
     const key =
       (p.exotic ? `E${p.hash ?? 0}` : "L") +
@@ -45,7 +49,7 @@ function dedupe(
       `T${tuneKey}|` +
       p.stats.join(",");
     if (!map.has(key)) {
-      map.set(key, makeInternalPiece(p, allowTuning));
+      map.set(key, makeInternalPiece(p, allowTuning, allowBalanced));
     }
   }
   return Array.from(map.values());
@@ -248,6 +252,7 @@ export function makeJointMinCheck(
 export function buildSlots(input: OptimizerInput): InternalPiece[][] {
   const reqs = input.setRequirements ?? [];
   const allowTuning = input.allowTuning ?? true;
+  const allowBalanced = input.allowBalancedTuning ?? true;
   const exoticMode = input.exotic?.mode ?? "any";
   const exoticHashes = input.exotic?.hashes;
   const eligible = (p: OptimizerPiece): boolean =>
@@ -257,7 +262,7 @@ export function buildSlots(input: OptimizerInput): InternalPiece[][] {
       : exoticMode !== "specific" ||
         (p.hash !== undefined && !!exoticHashes?.includes(p.hash)));
   return input.slots.map((s) =>
-    dedupe(s.filter(eligible), reqs.length > 0, allowTuning).sort(
+    dedupe(s.filter(eligible), reqs.length > 0, allowTuning, allowBalanced).sort(
       (a, b) => b.total - a.total,
     ),
   );

@@ -148,6 +148,7 @@ export function BuilderPanel({
     null,
   ]);
   const [allowTuning, setAllowTuning] = useState(true);
+  const [useBalancedTuning, setUseBalancedTuning] = useState(true);
   const [activeSubclass, setActiveSubclass] = useState<Subclass>("Prismatic");
   const [fragSel, setFragSel] = useState<Record<Subclass, Set<number>>>(
     () =>
@@ -177,6 +178,7 @@ export function BuilderPanel({
       setPinnedSets(saved.pinnedSets);
       setSetFilters(saved.setFilters);
       setAllowTuning(saved.allowTuning);
+      setUseBalancedTuning(saved.balancedTuning);
       setUseLegacyExotics(saved.legacyExotics);
       setActiveSubclass(saved.activeSubclass);
       setFragSel(fragSelFromArrays(saved.fragSel));
@@ -491,6 +493,7 @@ export function BuilderPanel({
           selectedExotic === null ? null : (exotics[selectedExotic]?.name ?? null),
         exoticPerks,
         allowTuning,
+        balancedTuning: useBalancedTuning,
         legacyExotics: useLegacyExotics,
         activeSubclass,
         fragSel: fragSelToArrays(fragSel),
@@ -508,6 +511,7 @@ export function BuilderPanel({
     exotics,
     exoticPerks,
     allowTuning,
+    useBalancedTuning,
     useLegacyExotics,
     activeSubclass,
     fragSel,
@@ -550,6 +554,7 @@ export function BuilderPanel({
       setRequirements,
       exotic,
       allowTuning,
+      allowBalancedTuning: useBalancedTuning,
       fragmentBonus,
       maxResults: 200,
     });
@@ -563,6 +568,7 @@ export function BuilderPanel({
     selectedExotic,
     exotics,
     allowTuning,
+    useBalancedTuning,
     fragmentBonus,
     run,
   ]);
@@ -1007,16 +1013,33 @@ export function BuilderPanel({
             </Section>
 
             <Section title="Tier-5 tuning">
-              <div className="flex items-center justify-between gap-4">
-                <p className="text-muted-foreground text-xs">
-                  Auto-apply Balanced (+1 to off-stats) or a directional (+5/−5)
-                  tune on tunable pieces to hit your targets.
-                </p>
-                <Switch
-                  checked={allowTuning}
-                  onCheckedChange={setAllowTuning}
-                  aria-label="Toggle Tier-5 tuning"
-                />
+              <div className="space-y-3">
+                <div className="flex items-center justify-between gap-4">
+                  <p className="text-muted-foreground text-xs">
+                    Auto-apply Balanced (+1 to off-stats) or a directional (+5/−5)
+                    tune on tunable pieces to hit your targets.
+                  </p>
+                  <Switch
+                    checked={allowTuning}
+                    onCheckedChange={setAllowTuning}
+                    aria-label="Toggle Tier-5 tuning"
+                  />
+                </div>
+                <div className="flex items-center justify-between gap-4">
+                  <div className="space-y-0.5">
+                    <span className="text-sm">Use balanced tuning mods</span>
+                    <p className="text-muted-foreground text-xs">
+                      When off, builds are searched without the Balanced (+1 to
+                      off-stats) tune — directional tuning stays available.
+                    </p>
+                  </div>
+                  <Switch
+                    checked={allowTuning && useBalancedTuning}
+                    disabled={!allowTuning}
+                    onCheckedChange={setUseBalancedTuning}
+                    aria-label="Use balanced tuning mods"
+                  />
+                </div>
               </div>
             </Section>
 

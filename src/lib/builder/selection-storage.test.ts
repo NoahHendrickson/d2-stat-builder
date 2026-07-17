@@ -62,6 +62,7 @@ function sampleSelections(): PersistedSelections {
     exoticName: "Gyrfalcon's Hauberk",
     exoticPerks: [null, null],
     allowTuning: true,
+    balancedTuning: false,
     legacyExotics: false,
     activeSubclass: "Void",
     fragSel: fragSelToArrays(frag),
@@ -101,6 +102,13 @@ test("load defaults pinnedSets to [] for data stored before the field existed", 
   delete old.pinnedSets;
   localStorage.setItem(SELECTIONS_KEY, JSON.stringify(old));
   expect(loadSelections()).toEqual({ ...old, pinnedSets: [] });
+});
+
+test("load defaults balancedTuning to true for data stored before the field existed", () => {
+  const old: Partial<PersistedSelections> = sampleSelections();
+  delete old.balancedTuning;
+  localStorage.setItem(SELECTIONS_KEY, JSON.stringify(old));
+  expect(loadSelections()).toEqual({ ...old, balancedTuning: true });
 });
 
 test("load defaults legacyExotics to true for data stored before the field existed", () => {

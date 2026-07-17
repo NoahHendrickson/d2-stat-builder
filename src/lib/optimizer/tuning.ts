@@ -40,7 +40,7 @@ export interface InternalPiece {
   tuneOpts: TuneOption[];
   /** Best positive tuning contribution reachable per stat (for admissible pruning). */
   tuneStatUpside: number[];
-  /** Best total tuning contribution reachable (Balanced = +3; else 0). */
+  /** Best total tuning contribution reachable (Balanced = +3; else 0, incl. balanced-off). */
   tuneTotalUpside: number;
 }
 
@@ -72,7 +72,9 @@ function statTotal(stats: number[]): number {
  * Every tuning option for a piece: no-tune only when it can't be tuned (or tuning is
  * off), else Balanced (+1 to each off-archetype stat) plus directionals (+5 to a tuned
  * stat, −5 to another). "No tune" is omitted for tunable pieces because Balanced weakly
- * dominates it (pure upside, no downside).
+ * dominates it (pure upside, no downside) — unless Balanced itself is disallowed
+ * (`allowBalanced` false), in which case no-tune takes its place as the default option
+ * the searcher enumerates first.
  *
  * Legendaries can only put the +5 on their one rolled tuned stat. Tier-5 EXOTICS have a
  * flexible tuning slot — their +5 can go to ANY stat — so we generate a directional for
@@ -82,12 +84,17 @@ export function buildTuneOpts(
   tuning: PieceTuning | undefined,
   allow: boolean,
   isExotic: boolean,
+  allowBalanced = true,
 ): TuneOption[] {
   if (!allow || !tuning) return [{ vec: [0, 0, 0, 0, 0, 0], applied: null }];
   const opts: TuneOption[] = [];
-  const balanced = [0, 0, 0, 0, 0, 0];
-  for (const s of tuning.offStats) balanced[s] += 1;
-  opts.push({ vec: balanced, applied: { kind: "balanced" } });
+  if (allowBalanced) {
+    const balanced = [0, 0, 0, 0, 0, 0];
+    for (const s of tuning.offStats) balanced[s] += 1;
+    opts.push({ vec: balanced, applied: { kind: "balanced" } });
+  } else {
+    opts.push({ vec: [0, 0, 0, 0, 0, 0], applied: null });
+  }
   const plusStats = isExotic ? [0, 1, 2, 3, 4, 5] : [tuning.tuned];
   for (const plus of plusStats) {
     for (let j = 0; j < NUM_STATS; j++) {
@@ -105,8 +112,9 @@ export function buildTuneOpts(
 export function makeInternalPiece(
   p: OptimizerPiece,
   allowTuning: boolean,
+  allowBalanced = true,
 ): InternalPiece {
-  const tuneOpts = buildTuneOpts(p.tuning, allowTuning, p.exotic);
+  const tuneOpts = buildTuneOpts(p.tuning, allowTuning, p.exotic, allowBalanced);
   const tuneStatUpside = new Array(NUM_STATS).fill(0);
   let tuneTotalUpside = 0;
   for (const opt of tuneOpts) {
@@ -257,7 +265,10 @@ export interface TuningOutcome {
  * directional tune (+5 tuned / −5 chosen) is spent only to bridge a minimum that
  * Balanced can't reach. So Balanced-everywhere is the answer whenever it already meets
  * the minimums (the common, O(pieces) case); only when it falls short is the directional
- * search run (branch-and-bound, Balanced enumerated first per piece).
+ * search run (branch-and-bound, Balanced enumerated first per piece). When Balanced
+ * Tuning is disallowed (`allowBalancedTuning` false), tuneOpts[0] is the no-tune option
+ * instead, and the same structure holds: untuned-everywhere unless a directional is
+ * needed to bridge a minimum.
  *
  * The factory owns the search's scratch arrays, so a caller allocates them once and pays
  * nothing per leaf. `sum` is the chosen pieces' summed base stats; `mins` the per-stat
@@ -393,9 +404,9 @@ export function createTuningSearcher(
     let artCount = 0;
     for (let i = 0; i < NUM_SLOTS; i++) if (chosen[i].artifice) artCount++;
     const maxLeafPoints = maxModPoints + artCount * ARTIFICE_MOD_BONUS;
-    // Fast path: Balanced on every tunable piece (tuneOpts[0] is Balanced, or the
-    // no-tune option for a piece that can't be tuned). If that already clears the
-    // minimums, it's this loadout's best tuning — return without touching directionals.
+    // Fast path: each piece's default option (tuneOpts[0] — Balanced when allowed, else
+    // the no-tune option). If that already clears the minimums, it's this loadout's best
+    // tuning — return without touching directionals.
     for (let s = 0; s < NUM_STATS; s++) aug[s] = sum[s] + frag[s];
     for (let i = 0; i < NUM_SLOTS; i++) {
       const bal = chosen[i].tuneOpts[0];

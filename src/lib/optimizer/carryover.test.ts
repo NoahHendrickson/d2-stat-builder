@@ -94,6 +94,15 @@ describe("sameQueryExceptMinimums", () => {
     ).toBe(true);
   });
 
+  test("default normalization: allowBalancedTuning undefined ≡ true", () => {
+    expect(
+      sameQueryExceptMinimums(
+        baseInput({ allowBalancedTuning: undefined }),
+        baseInput({ allowBalancedTuning: true }),
+      ),
+    ).toBe(true);
+  });
+
   test("default normalization: fragmentBonus undefined ≡ zeros", () => {
     expect(
       sameQueryExceptMinimums(
@@ -172,6 +181,15 @@ describe("sameQueryExceptMinimums", () => {
       sameQueryExceptMinimums(
         baseInput({ allowTuning: true }),
         baseInput({ allowTuning: false }),
+      ),
+    ).toBe(false);
+  });
+
+  test("allowBalancedTuning changed → not same", () => {
+    expect(
+      sameQueryExceptMinimums(
+        baseInput({ allowBalancedTuning: true }),
+        baseInput({ allowBalancedTuning: false }),
       ),
     ).toBe(false);
   });

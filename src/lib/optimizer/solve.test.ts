@@ -762,6 +762,89 @@ describe("exotic pre-filter", () => {
   });
 });
 
+describe("balanced tuning toggle (allowBalancedTuning)", () => {
+  const zero = (id: string) => piece(id, [0, 0, 0, 0, 0, 0]);
+  /** One tunable piece (weapons 30, health 5, tuned to weapons) + four blanks. */
+  const tunableSlots = (): OptimizerPiece[][] => [
+    [
+      {
+        id: "t",
+        stats: [30, 5, 0, 0, 0, 0],
+        exotic: false,
+        tuning: { tuned: 0, offStats: [2, 3, 4] },
+      },
+    ],
+    [zero("a")],
+    [zero("b")],
+    [zero("c")],
+    [zero("d")],
+  ];
+
+  test("off: Balanced is never applied and the free +3 disappears from totals", () => {
+    const on = solve(input(tunableSlots(), { allowTuning: true }));
+    // Default model: Balanced everywhere → 35 base + 3 off-stat points.
+    expect(on.loadouts[0].total).toBe(38);
+    expect(on.loadouts[0].tuning[0]).toEqual({ kind: "balanced" });
+
+    const off = solve(
+      input(tunableSlots(), { allowTuning: true, allowBalancedTuning: false }),
+    );
+    // No minimums to bridge → the piece stays untuned entirely.
+    expect(off.loadouts[0].total).toBe(35);
+    expect(off.loadouts.every((lo) => lo.tuning.every((t) => t === null))).toBe(
+      true,
+    );
+    expect(off.loadouts[0].tuningBonus).toEqual([0, 0, 0, 0, 0, 0]);
+  });
+
+  test("off: directional tuning still bridges minimums and lifts ceilings", () => {
+    const cfg = { allowTuning: true, allowBalancedTuning: false };
+    // Directional (+5 weapons, −5 health) still reaches weapons 35, but not 36.
+    const out = solve(input(tunableSlots(), cfg));
+    expect(out.ceilings[0]).toBe(35);
+    const at = solve(
+      input(tunableSlots(), { ...cfg, minimums: [35, 0, 0, 0, 0, 0] }),
+    );
+    expect(at.loadouts.length).toBeGreaterThan(0);
+    expect(at.loadouts[0].tuning[0]).toEqual({
+      kind: "directional",
+      plus: 0,
+      minus: 1,
+    });
+    expect(
+      solve(input(tunableSlots(), { ...cfg, minimums: [36, 0, 0, 0, 0, 0] }))
+        .loadouts.length,
+    ).toBe(0);
+  });
+
+  test("off: a minimum reachable only through Balanced becomes infeasible", () => {
+    // Health 1 needs Balanced's +1 (the directional can only feed weapons, the tuned stat).
+    const mins = { minimums: [0, 1, 0, 0, 0, 0] };
+    const slots = (): OptimizerPiece[][] => [
+      [
+        {
+          id: "t",
+          stats: [10, 0, 0, 0, 0, 0],
+          exotic: false,
+          tuning: { tuned: 0, offStats: [1, 2, 3] },
+        },
+      ],
+      [zero("a")],
+      [zero("b")],
+      [zero("c")],
+      [zero("d")],
+    ];
+    expect(
+      solve(input(slots(), { allowTuning: true, ...mins })).loadouts.length,
+    ).toBeGreaterThan(0);
+    expect(
+      solve(
+        input(slots(), { allowTuning: true, allowBalancedTuning: false, ...mins }),
+      ).loadouts.length,
+    ).toBe(0);
+  });
+});
+
 /**
  * D2ArmorPicker parity regression (Noah's real case, 2026-07-02): legacy Verity's Brow
  * (+2-all-six masterwork assumption, artifice) + four CODA Tier-5 pieces must reach
