@@ -33,6 +33,8 @@ export interface PersistedSelections {
    */
   exoticPerks: [number | null, number | null];
   allowTuning: boolean;
+  /** Let the optimizer apply Balanced Tuning (+1 off-stats) on tunable pieces. */
+  balancedTuning: boolean;
   /** Include legacy (Armor 2.0 / non-tunable) exotics in the optimizer pool. */
   legacyExotics: boolean;
   activeSubclass: Subclass;
@@ -142,6 +144,9 @@ function parse(raw: string | null): PersistedSelections | null {
   if (!(typeof o.exoticName === "string" || o.exoticName === null)) return null;
   if (typeof o.allowTuning !== "boolean") return null;
   // Optional (added after v1 shipped) — older stored blobs won't have it. Default ON.
+  const balancedTuning =
+    typeof o.balancedTuning === "boolean" ? o.balancedTuning : true;
+  // Optional (added after v1 shipped) — older stored blobs won't have it. Default ON.
   const legacyExotics =
     typeof o.legacyExotics === "boolean" ? o.legacyExotics : true;
   // Optional — exotic class item Spirit pair; default Any/Any.
@@ -172,6 +177,7 @@ function parse(raw: string | null): PersistedSelections | null {
     exoticName: o.exoticName as string | null,
     exoticPerks,
     allowTuning: o.allowTuning as boolean,
+    balancedTuning,
     legacyExotics,
     activeSubclass: o.activeSubclass as Subclass,
     fragSel,

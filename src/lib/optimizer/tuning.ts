@@ -40,7 +40,11 @@ export interface InternalPiece {
   tuneOpts: TuneOption[];
   /** Best positive tuning contribution reachable per stat (for admissible pruning). */
   tuneStatUpside: number[];
-  /** Best total tuning contribution reachable (Balanced = +3; else 0). */
+  /**
+   * Best realizable total tuning contribution: the max over options of the sum of
+   * positive vec components (directional = +5, Balanced = +3, no-tune = 0). Negative
+   * components don't count against it — the 0-clamp can absorb them entirely.
+   */
   tuneTotalUpside: number;
 }
 
@@ -52,6 +56,35 @@ export interface InternalPiece {
  */
 export const deficitPoints = (d: number, artificeReachable: boolean): number =>
   artificeReachable ? d : Math.ceil(d / 5) * 5;
+
+/**
+ * Pre-clamp shortfall of `have` against a stat minimum — the ONE definition of "how far
+ * below its minimum is this stat". A zero minimum is always met: realized stats clamp
+ * at ≥0, so even a negative pre-clamp value (directional −5 overshoot, negative
+ * fragment bonuses) needs no mod points to reach it. Every deficit the solver derives
+ * (leaf fast path, slow-path prune, slow-path leaf, both joint min checks) goes through
+ * this rule; deriving one inline is how the scattered zero-min bug happened.
+ */
+export const minShortfall = (min: number, have: number): number =>
+  min > 0 && have < min ? min - have : 0;
+
+/**
+ * The directional-branching policy: a piece's directional tunes are only worth
+ * branching where the +5 can land on a short stat — a legendary's +5 goes only to its
+ * rolled tuned stat, an exotic's flexible slot to any stat. One definition shared by
+ * the leaf searcher (dynamic per-call shortfalls) and the pool-time total-upside bound
+ * (static: only a stat with a positive minimum can ever be short), so the two
+ * encodings of the policy cannot drift.
+ */
+export function directionalsBranchable(
+  exotic: boolean,
+  tuned: number,
+  short: (s: number) => boolean,
+): boolean {
+  if (!exotic) return tuned >= 0 && short(tuned);
+  for (let s = 0; s < NUM_STATS; s++) if (short(s)) return true;
+  return false;
+}
 
 /**
  * Shared results for the overwhelmingly common zero-artifice leaf (every all-Tier-5
@@ -72,7 +105,9 @@ function statTotal(stats: number[]): number {
  * Every tuning option for a piece: no-tune only when it can't be tuned (or tuning is
  * off), else Balanced (+1 to each off-archetype stat) plus directionals (+5 to a tuned
  * stat, −5 to another). "No tune" is omitted for tunable pieces because Balanced weakly
- * dominates it (pure upside, no downside).
+ * dominates it (pure upside, no downside) — unless Balanced itself is disallowed
+ * (`allowBalanced` false), in which case no-tune takes its place as the default option
+ * the searcher enumerates first.
  *
  * Legendaries can only put the +5 on their one rolled tuned stat. Tier-5 EXOTICS have a
  * flexible tuning slot — their +5 can go to ANY stat — so we generate a directional for
@@ -82,12 +117,17 @@ export function buildTuneOpts(
   tuning: PieceTuning | undefined,
   allow: boolean,
   isExotic: boolean,
+  allowBalanced: boolean,
 ): TuneOption[] {
   if (!allow || !tuning) return [{ vec: [0, 0, 0, 0, 0, 0], applied: null }];
   const opts: TuneOption[] = [];
-  const balanced = [0, 0, 0, 0, 0, 0];
-  for (const s of tuning.offStats) balanced[s] += 1;
-  opts.push({ vec: balanced, applied: { kind: "balanced" } });
+  if (allowBalanced) {
+    const balanced = [0, 0, 0, 0, 0, 0];
+    for (const s of tuning.offStats) balanced[s] += 1;
+    opts.push({ vec: balanced, applied: { kind: "balanced" } });
+  } else {
+    opts.push({ vec: [0, 0, 0, 0, 0, 0], applied: null });
+  }
   const plusStats = isExotic ? [0, 1, 2, 3, 4, 5] : [tuning.tuned];
   for (const plus of plusStats) {
     for (let j = 0; j < NUM_STATS; j++) {
@@ -101,20 +141,43 @@ export function buildTuneOpts(
   return opts;
 }
 
-/** Build the optimizer's internal piece representation (tune options + upside bounds). */
+/**
+ * Build the optimizer's internal piece representation (tune options + upside bounds).
+ *
+ * `mins` (the query's minimums, when known at pool-build time) tightens
+ * `tuneTotalUpside`: the leaf searcher only ever branches a piece's directionals to
+ * bridge a minimum-driven shortfall (`directionalsBranchable` — the same policy object
+ * the searcher's `limit` uses). Directionals the searcher can never apply must not
+ * inflate the top-N prune bound (the flat +5 credit costs real pruning power). Omitted
+ * `mins` falls back to the conservative all-options credit, which is always admissible.
+ */
 export function makeInternalPiece(
   p: OptimizerPiece,
   allowTuning: boolean,
+  allowBalanced: boolean,
+  mins?: number[],
 ): InternalPiece {
-  const tuneOpts = buildTuneOpts(p.tuning, allowTuning, p.exotic);
+  const tuneOpts = buildTuneOpts(p.tuning, allowTuning, p.exotic, allowBalanced);
+  // Same policy as the searcher's directional branching, evaluated statically: a stat
+  // can only ever be short if its minimum is positive. Omitted mins ⇒ conservative
+  // (credit every option), which is always admissible.
+  const dirReachable =
+    mins === undefined ||
+    directionalsBranchable(p.exotic, p.tuning ? p.tuning.tuned : -1, (s) => mins[s] > 0);
   const tuneStatUpside = new Array(NUM_STATS).fill(0);
   let tuneTotalUpside = 0;
   for (const opt of tuneOpts) {
     let optTotal = 0;
     for (let s = 0; s < NUM_STATS; s++) {
+      // Per-stat upside stays unconditioned: ceiling probes raise minimums past the
+      // query's, so canReachMin/suffixUp must keep crediting every option's +5.
       if (opt.vec[s] > tuneStatUpside[s]) tuneStatUpside[s] = opt.vec[s];
-      optTotal += opt.vec[s];
+      // Positive components only: a directional's −5 can be fully absorbed by the
+      // 0-clamp (the minus stat is already ≤0 at the leaf), so a signed sum would
+      // undercount its realizable gain and make the top-N prune bound inadmissible.
+      if (opt.vec[s] > 0) optTotal += opt.vec[s];
     }
+    if (opt.applied?.kind === "directional" && !dirReachable) continue;
     if (optTotal > tuneTotalUpside) tuneTotalUpside = optTotal;
   }
   return {
@@ -257,7 +320,10 @@ export interface TuningOutcome {
  * directional tune (+5 tuned / −5 chosen) is spent only to bridge a minimum that
  * Balanced can't reach. So Balanced-everywhere is the answer whenever it already meets
  * the minimums (the common, O(pieces) case); only when it falls short is the directional
- * search run (branch-and-bound, Balanced enumerated first per piece).
+ * search run (branch-and-bound, Balanced enumerated first per piece). When Balanced
+ * Tuning is disallowed (`allowBalancedTuning` false), tuneOpts[0] is the no-tune option
+ * instead, and the same structure holds: untuned-everywhere unless a directional is
+ * needed to bridge a minimum.
  *
  * The factory owns the search's scratch arrays, so a caller allocates them once and pays
  * nothing per leaf. `sum` is the chosen pieces' summed base stats; `mins` the per-stat
@@ -275,8 +341,10 @@ export function createTuningSearcher(
   const maxModPoints = mods.major * 10 + mods.minor * 5;
   const aug = new Array(NUM_STATS).fill(0);
   const deficits = new Array(NUM_STATS).fill(0);
-  // Which stats Balanced left short (so a directional on a piece tuned to that stat can help).
+  // Which stats the fast path left short (so a directional that can feed one may help).
   const shortStat: boolean[] = new Array(NUM_STATS).fill(false);
+  // Hoisted predicate for directionalsBranchable — no per-node closure allocation.
+  const isShort = (s: number): boolean => shortStat[s];
   const curApplied: (AppliedTuning | null)[] = new Array(NUM_SLOTS).fill(null);
   const artificePoints = new Array(NUM_STATS).fill(0);
   // suffixUp[i][s] = max tuning upside to stat s reachable from chosen pieces i..4.
@@ -359,7 +427,7 @@ export function createTuningSearcher(
   /**
    * Finish a leaf whose mods were assigned: record the covering artifice points into
    * the `artificePoints` scratch, dump leftovers in maximize mode, and return the
-   * leaf's clamped total. Shared by the Balanced fast path and the slow-path leaf so
+   * leaf's clamped total. Shared by the fast path and the slow-path leaf so
    * the two can't drift (this module exists because two copies of this search once did).
    */
   const settleLeaf = (
@@ -393,17 +461,17 @@ export function createTuningSearcher(
     let artCount = 0;
     for (let i = 0; i < NUM_SLOTS; i++) if (chosen[i].artifice) artCount++;
     const maxLeafPoints = maxModPoints + artCount * ARTIFICE_MOD_BONUS;
-    // Fast path: Balanced on every tunable piece (tuneOpts[0] is Balanced, or the
-    // no-tune option for a piece that can't be tuned). If that already clears the
-    // minimums, it's this loadout's best tuning — return without touching directionals.
+    // Fast path: each piece's default option (tuneOpts[0] — Balanced when allowed, else
+    // the no-tune option). If that already clears the minimums, it's this loadout's best
+    // tuning — return without touching directionals.
     for (let s = 0; s < NUM_STATS; s++) aug[s] = sum[s] + frag[s];
     for (let i = 0; i < NUM_SLOTS; i++) {
-      const bal = chosen[i].tuneOpts[0];
-      curApplied[i] = bal.applied;
-      for (let s = 0; s < NUM_STATS; s++) aug[s] += bal.vec[s];
+      const def = chosen[i].tuneOpts[0];
+      curApplied[i] = def.applied;
+      for (let s = 0; s < NUM_STATS; s++) aug[s] += def.vec[s];
     }
     for (let s = 0; s < NUM_STATS; s++) {
-      deficits[s] = Math.max(0, mins[s] - aug[s]);
+      deficits[s] = minShortfall(mins[s], aug[s]);
     }
     const balAsg = assignMods(deficits, mods.major, mods.minor, artCount);
     if (balAsg) {
@@ -424,11 +492,12 @@ export function createTuningSearcher(
       });
     }
 
-    // Slow path: Balanced falls short of a minimum — branch the directional tunes.
-    // `deficits` still holds Balanced's shortfall: a directional only helps a short stat.
+    // Slow path: the default option falls short of a minimum — branch the directional
+    // tunes. `deficits` still holds the fast path's shortfall: a directional only helps
+    // a short stat.
     for (let s = 0; s < NUM_STATS; s++) shortStat[s] = deficits[s] > 0;
-    // Reset the fast path's Balanced accumulation: rec() re-adds every piece's tuning
-    // (Balanced is tuneOpts[0]), so aug must restart at sum+frag or Balanced would be
+    // Reset the fast path's accumulation: rec() re-adds every piece's tuning (the
+    // default option is tuneOpts[0]), so aug must restart at sum+frag or it would be
     // double-counted (the exact drift bug that once over-reported a ceiling).
     for (let s = 0; s < NUM_STATS; s++) aug[s] = sum[s] + frag[s];
     for (let s = 0; s < NUM_STATS; s++) suffixUp[NUM_SLOTS][s] = 0;
@@ -449,7 +518,7 @@ export function createTuningSearcher(
       // UNsatisfiable ceiling probes from degenerating into exhaustive walks.
       let needed = 0;
       for (let s = 0; s < NUM_STATS; s++) {
-        const d = mins[s] - (aug[s] + suffixUp[i][s]);
+        const d = minShortfall(mins[s], aug[s] + suffixUp[i][s]);
         if (d > 0) {
           needed += deficitPoints(d, artCount > 0);
           if (needed > maxLeafPoints) return;
@@ -457,8 +526,8 @@ export function createTuningSearcher(
       }
       // Branch-and-bound on the best reachable total (maximize only — feasible mode
       // takes any feasible leaf): clamp(x+m) ≤ clamp(x)+m, so this over-estimates the
-      // best total still reachable from here. Balanced is enumerated first (highest
-      // total), seeding a strong bound that prunes directional branches.
+      // best total still reachable from here. The default option (Balanced when
+      // allowed) is enumerated first, seeding a strong bound that prunes directionals.
       const w = box.winner;
       if (mode === "maximize" && w) {
         let ub = maxLeafPoints;
@@ -467,7 +536,7 @@ export function createTuningSearcher(
       }
       if (i === NUM_SLOTS) {
         for (let s = 0; s < NUM_STATS; s++) {
-          deficits[s] = Math.max(0, mins[s] - aug[s]);
+          deficits[s] = minShortfall(mins[s], aug[s]);
         }
         const asg = assignMods(deficits, mods.major, mods.minor, artCount);
         if (!asg) return;
@@ -491,12 +560,13 @@ export function createTuningSearcher(
         }
         return;
       }
-      // A directional only helps if this piece is tuned to a still-short stat; otherwise
-      // Balanced (opts[0]) dominates it, so don't branch the directionals. Exotics are
-      // flexible — they can put +5 into any short stat — so always branch their options.
+      // Branch a piece's directionals only where they can feed a still-short stat
+      // (directionalsBranchable — the same policy the pool-time upside bound uses);
+      // otherwise the default option (opts[0]) dominates and only it is enumerated.
       const opts = chosen[i].tuneOpts;
-      const t = chosen[i].tuned;
-      const limit = chosen[i].exotic || (t >= 0 && shortStat[t]) ? opts.length : 1;
+      const limit = directionalsBranchable(chosen[i].exotic, chosen[i].tuned, isShort)
+        ? opts.length
+        : 1;
       for (let o = 0; o < limit; o++) {
         // Feasible mode early-exits at the first feasible leaf found.
         if (mode === "feasible" && box.winner) return;

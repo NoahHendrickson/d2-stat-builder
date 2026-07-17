@@ -7,6 +7,7 @@ import { NUM_SLOTS, NUM_STATS } from "./floors";
 import {
   deficitPoints,
   makeInternalPiece,
+  minShortfall,
   type InternalPiece,
 } from "./tuning";
 
@@ -29,14 +30,19 @@ function dedupe(
   pieces: OptimizerPiece[],
   keyIncludesSet: boolean,
   allowTuning: boolean,
+  allowBalanced: boolean,
+  mins: number[],
 ): InternalPiece[] {
   const map = new Map<string, InternalPiece>();
   for (const p of pieces) {
     // Two pieces with the same stats but different tuned stats aren't interchangeable
     // (except exotics, whose flexible slot makes the rolled tuned stat irrelevant).
+    // offStats only feed the Balanced option, so with Balanced disallowed they drop
+    // out of the key (pieces differing only in offStats become interchangeable).
     const tuneKey =
       allowTuning && p.tuning
-        ? `${p.exotic ? "X" : p.tuning.tuned}:${p.tuning.offStats.join(".")}`
+        ? (p.exotic ? "X" : `${p.tuning.tuned}`) +
+          (allowBalanced ? `:${p.tuning.offStats.join(".")}` : "")
         : "-";
     const key =
       (p.exotic ? `E${p.hash ?? 0}` : "L") +
@@ -45,7 +51,7 @@ function dedupe(
       `T${tuneKey}|` +
       p.stats.join(",");
     if (!map.has(key)) {
-      map.set(key, makeInternalPiece(p, allowTuning));
+      map.set(key, makeInternalPiece(p, allowTuning, allowBalanced, mins));
     }
   }
   return Array.from(map.values());
@@ -193,9 +199,10 @@ export function makeJointMinCheck(
       let mask = 0;
       let maskShort = 0;
       for (let s = 0; s < NUM_STATS; s++) {
-        // Deficit before suffix help; suffixStat ≥ 0, so short ≤ 0 implies d ≤ 0.
-        const short = mins[s] - (sum[s] + frag[s] + sumTuneUp[s]);
-        if (short <= 0) continue;
+        // Shortfall before suffix help (minShortfall owns the zero-minimum/clamp
+        // rule); suffixStat ≥ 0, so short = 0 implies d ≤ 0.
+        const short = minShortfall(mins[s], sum[s] + frag[s] + sumTuneUp[s]);
+        if (short === 0) continue;
         mask |= 1 << s;
         maskShort += short;
         const d = short - suffixStat[k][s];
@@ -219,9 +226,10 @@ export function makeJointMinCheck(
     let mask = 0;
     let maskShort = 0;
     for (let s = 0; s < NUM_STATS; s++) {
-      // Deficit before suffix help; suffixStat ≥ 0, so short ≤ 0 implies d ≤ 0.
-      const short = mins[s] - (sum[s] + frag[s] + sumTuneUp[s]);
-      if (short <= 0) continue;
+      // Shortfall before suffix help (minShortfall owns the zero-minimum/clamp
+      // rule); suffixStat ≥ 0, so short = 0 implies d ≤ 0.
+      const short = minShortfall(mins[s], sum[s] + frag[s] + sumTuneUp[s]);
+      if (short === 0) continue;
       mask |= 1 << s;
       maskShort += short;
       const d = short - suffixStat[k][s];
@@ -248,6 +256,7 @@ export function makeJointMinCheck(
 export function buildSlots(input: OptimizerInput): InternalPiece[][] {
   const reqs = input.setRequirements ?? [];
   const allowTuning = input.allowTuning ?? true;
+  const allowBalanced = input.allowBalancedTuning ?? true;
   const exoticMode = input.exotic?.mode ?? "any";
   const exoticHashes = input.exotic?.hashes;
   const eligible = (p: OptimizerPiece): boolean =>
@@ -257,7 +266,7 @@ export function buildSlots(input: OptimizerInput): InternalPiece[][] {
       : exoticMode !== "specific" ||
         (p.hash !== undefined && !!exoticHashes?.includes(p.hash)));
   return input.slots.map((s) =>
-    dedupe(s.filter(eligible), reqs.length > 0, allowTuning).sort(
+    dedupe(s.filter(eligible), reqs.length > 0, allowTuning, allowBalanced, input.minimums).sort(
       (a, b) => b.total - a.total,
     ),
   );

@@ -164,12 +164,16 @@ describe("per-stat ceilings", () => {
       });
     const slots = [0, 1, 2, 3, 4].map((i) => bigSlot(`s${i}`));
     const start = performance.now();
+    // Explicit top-N cap: with the admissible (clamp-aware) upside bound this pool
+    // legitimately explores past the old sub-second walk — the guard here is that the
+    // deadline is honored, not that the walk finishes early.
     const out = solve(
       input(slots, { allowTuning: true, mods: { major: 1, minor: 4 }, minimums: [120, 100, 50, 0, 0, 0] }),
+      { topNBudgetMs: 1500 },
     );
     const ms = performance.now() - start;
     expect(out.ceilings).toHaveLength(6);
-    expect(ms).toBeLessThan(3000); // budget is 1200ms + the (fast) top-N search
+    expect(ms).toBeLessThan(3000); // 1500ms top-N cap + 1200ms ceiling budget + slack
   });
 });
 
@@ -759,6 +763,152 @@ describe("exotic pre-filter", () => {
     // The chosen exotic is still found and used.
     expect(filtered.loadouts.length).toBeGreaterThan(0);
     expect(filtered.loadouts[0].pieceIds[0]).toBe("xh");
+  });
+});
+
+describe("balanced tuning toggle (allowBalancedTuning)", () => {
+  const zero = (id: string) => piece(id, [0, 0, 0, 0, 0, 0]);
+  /** One tunable piece (weapons 30, health 5, tuned to weapons) + four blanks. */
+  const tunableSlots = (): OptimizerPiece[][] => [
+    [
+      {
+        id: "t",
+        stats: [30, 5, 0, 0, 0, 0],
+        exotic: false,
+        tuning: { tuned: 0, offStats: [2, 3, 4] },
+      },
+    ],
+    [zero("a")],
+    [zero("b")],
+    [zero("c")],
+    [zero("d")],
+  ];
+
+  test("off: Balanced is never applied and the free +3 disappears from totals", () => {
+    const on = solve(input(tunableSlots(), { allowTuning: true }));
+    // Default model: Balanced everywhere → 35 base + 3 off-stat points.
+    expect(on.loadouts[0].total).toBe(38);
+    expect(on.loadouts[0].tuning[0]).toEqual({ kind: "balanced" });
+
+    const off = solve(
+      input(tunableSlots(), { allowTuning: true, allowBalancedTuning: false }),
+    );
+    // No minimums to bridge → the piece stays untuned entirely.
+    expect(off.loadouts[0].total).toBe(35);
+    expect(off.loadouts.every((lo) => lo.tuning.every((t) => t === null))).toBe(
+      true,
+    );
+    expect(off.loadouts[0].tuningBonus).toEqual([0, 0, 0, 0, 0, 0]);
+  });
+
+  test("off: directional tuning still bridges minimums and lifts ceilings", () => {
+    const cfg = { allowTuning: true, allowBalancedTuning: false };
+    // Directional (+5 weapons, −5 health) still reaches weapons 35, but not 36.
+    const out = solve(input(tunableSlots(), cfg));
+    expect(out.ceilings[0]).toBe(35);
+    const at = solve(
+      input(tunableSlots(), { ...cfg, minimums: [35, 0, 0, 0, 0, 0] }),
+    );
+    expect(at.loadouts.length).toBeGreaterThan(0);
+    // The −5 goes on an empty stat (clamped away — free), not on health (5 → 0),
+    // keeping the realized total at 40 instead of 35.
+    expect(at.loadouts[0].tuning[0]).toEqual({
+      kind: "directional",
+      plus: 0,
+      minus: 2,
+    });
+    expect(at.loadouts[0].total).toBe(40);
+    expect(
+      solve(input(tunableSlots(), { ...cfg, minimums: [36, 0, 0, 0, 0, 0] }))
+        .loadouts.length,
+    ).toBe(0);
+  });
+
+  test("off: a minimum reachable only through Balanced becomes infeasible", () => {
+    // Health 1 needs Balanced's +1 (the directional can only feed weapons, the tuned stat).
+    const mins = { minimums: [0, 1, 0, 0, 0, 0] };
+    const slots = (): OptimizerPiece[][] => [
+      [
+        {
+          id: "t",
+          stats: [10, 0, 0, 0, 0, 0],
+          exotic: false,
+          tuning: { tuned: 0, offStats: [1, 2, 3] },
+        },
+      ],
+      [zero("a")],
+      [zero("b")],
+      [zero("c")],
+      [zero("d")],
+    ];
+    expect(
+      solve(input(slots(), { allowTuning: true, ...mins })).loadouts.length,
+    ).toBeGreaterThan(0);
+    expect(
+      solve(
+        input(slots(), { allowTuning: true, allowBalancedTuning: false, ...mins }),
+      ).loadouts.length,
+    ).toBe(0);
+  });
+});
+
+describe("top-N prune bound admissibility with min-forced directionals", () => {
+  const zero = (id: string) => piece(id, [0, 0, 0, 0, 0, 0]);
+  /**
+   * A directional's −5 can land on an empty stat and clamp away entirely, so its
+   * realized gain is the full +5 — more than the piece's tuning "upside" the prune
+   * bound credits. Setup: the untunable filler is enumerated first (higher base
+   * total) and fills the 1-slot heap; the tunable piece only wins via the
+   * minimum-forced directional. An inadmissible bound prices its subtree at or
+   * below the heap's worst and silently drops the true best loadout.
+   */
+  const raceSlots = (fillerStats: number[]): OptimizerPiece[][] => [
+    [
+      piece("filler", fillerStats),
+      {
+        id: "tuned",
+        stats: [10, 4, 0, 0, 0, 0],
+        exotic: false,
+        tuning: { tuned: 0, offStats: [1, 2, 3] },
+      },
+    ],
+    [zero("a")],
+    [zero("b")],
+    [zero("c")],
+    [zero("d")],
+  ];
+  // Minimum 15 weapons forces the +5 weapons directional on "tuned" (base 10);
+  // its −5 lands on an empty stat → realized [15, 4, 0…] = 19.
+  const mins = { minimums: [15, 0, 0, 0, 0, 0], maxResults: 1 };
+
+  test("balanced off: clamp-absorbed directional build survives the prune", () => {
+    const out = solve(
+      input(raceSlots([16, 0, 0, 0, 0, 0]), {
+        allowTuning: true,
+        allowBalancedTuning: false,
+        ...mins,
+      }),
+    );
+    expect(out.loadouts[0]?.pieceIds).toContain("tuned");
+    expect(out.loadouts[0]?.total).toBe(19);
+  });
+
+  test("balanced on: same guarantee (upside credit must cover the +5, not +3)", () => {
+    // Filler total 17 > base 14 + balanced credit 3, so a +3-only bound prunes.
+    const out = solve(
+      input(raceSlots([17, 0, 0, 0, 0, 0]), { allowTuning: true, ...mins }),
+    );
+    expect(out.loadouts[0]?.pieceIds).toContain("tuned");
+    expect(out.loadouts[0]?.total).toBe(19);
+  });
+
+  test("negative fragment bonus with a zero minimum doesn't fake a deficit", () => {
+    // Weapons goes to −5 pre-clamp with no mod budget to "fix" it; the realized stat
+    // clamps to 0, which trivially satisfies the zero minimum — the build is valid.
+    const slots = [[zero("h")], [zero("a")], [zero("c")], [zero("l")], [zero("ci")]];
+    const out = solve(input(slots, { fragmentBonus: [-5, 0, 0, 0, 0, 0] }));
+    expect(out.loadouts.length).toBe(1);
+    expect(out.loadouts[0].stats).toEqual([0, 0, 0, 0, 0, 0]);
   });
 });
 

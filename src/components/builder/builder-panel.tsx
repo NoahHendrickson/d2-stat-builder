@@ -69,6 +69,7 @@ import { ExoticPicker } from "@/components/builder/exotic-picker";
 import { ExoticClassPerkPicker } from "@/components/builder/exotic-class-perk-picker";
 import { FragmentPicker } from "@/components/builder/fragment-picker";
 import { ClassEmblemTabs } from "@/components/builder/class-emblem-tabs";
+import { TuningControls } from "@/components/builder/tuning-controls";
 import { BuildsSurface } from "@/components/builder/builds-surface";
 import type { BuildsColumnContentProps } from "@/components/builder/builds-column-content";
 import type { ExoticConstraint, OptimizerPiece } from "@/lib/optimizer/types";
@@ -148,6 +149,7 @@ export function BuilderPanel({
     null,
   ]);
   const [allowTuning, setAllowTuning] = useState(true);
+  const [useBalancedTuning, setUseBalancedTuning] = useState(true);
   const [activeSubclass, setActiveSubclass] = useState<Subclass>("Prismatic");
   const [fragSel, setFragSel] = useState<Record<Subclass, Set<number>>>(
     () =>
@@ -177,6 +179,7 @@ export function BuilderPanel({
       setPinnedSets(saved.pinnedSets);
       setSetFilters(saved.setFilters);
       setAllowTuning(saved.allowTuning);
+      setUseBalancedTuning(saved.balancedTuning);
       setUseLegacyExotics(saved.legacyExotics);
       setActiveSubclass(saved.activeSubclass);
       setFragSel(fragSelFromArrays(saved.fragSel));
@@ -491,6 +494,7 @@ export function BuilderPanel({
           selectedExotic === null ? null : (exotics[selectedExotic]?.name ?? null),
         exoticPerks,
         allowTuning,
+        balancedTuning: useBalancedTuning,
         legacyExotics: useLegacyExotics,
         activeSubclass,
         fragSel: fragSelToArrays(fragSel),
@@ -508,6 +512,7 @@ export function BuilderPanel({
     exotics,
     exoticPerks,
     allowTuning,
+    useBalancedTuning,
     useLegacyExotics,
     activeSubclass,
     fragSel,
@@ -550,6 +555,7 @@ export function BuilderPanel({
       setRequirements,
       exotic,
       allowTuning,
+      allowBalancedTuning: useBalancedTuning,
       fragmentBonus,
       maxResults: 200,
     });
@@ -563,6 +569,7 @@ export function BuilderPanel({
     selectedExotic,
     exotics,
     allowTuning,
+    useBalancedTuning,
     fragmentBonus,
     run,
   ]);
@@ -1007,17 +1014,12 @@ export function BuilderPanel({
             </Section>
 
             <Section title="Tier-5 tuning">
-              <div className="flex items-center justify-between gap-4">
-                <p className="text-muted-foreground text-xs">
-                  Auto-apply Balanced (+1 to off-stats) or a directional (+5/−5)
-                  tune on tunable pieces to hit your targets.
-                </p>
-                <Switch
-                  checked={allowTuning}
-                  onCheckedChange={setAllowTuning}
-                  aria-label="Toggle Tier-5 tuning"
-                />
-              </div>
+              <TuningControls
+                allowTuning={allowTuning}
+                onAllowTuningChange={setAllowTuning}
+                useBalancedTuning={useBalancedTuning}
+                onUseBalancedTuningChange={setUseBalancedTuning}
+              />
             </Section>
 
             <Section title="Armor pool">

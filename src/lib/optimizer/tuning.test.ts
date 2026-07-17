@@ -2,7 +2,9 @@ import { describe, expect, test } from "vitest";
 import {
   assignMods,
   createTuningSearcher,
+  directionalsBranchable,
   makeInternalPiece,
+  minShortfall,
   type InternalPiece,
 } from "./tuning";
 import type { OptimizerPiece } from "./types";
@@ -185,7 +187,7 @@ describe("maximize/feasible consistency (property)", () => {
     for (let iter = 0; iter < 300; iter++) {
       const exoticSlot = rnd() < 0.5 ? Math.floor(rnd() * 5) : -1;
       const chosen: InternalPiece[] = Array.from({ length: 5 }, (_, i) =>
-        makeInternalPiece(randomPiece(rnd, `p${i}`, i === exoticSlot), true),
+        makeInternalPiece(randomPiece(rnd, `p${i}`, i === exoticSlot), true, true),
       );
       const sum = [0, 0, 0, 0, 0, 0];
       for (const p of chosen) {
@@ -226,7 +228,7 @@ describe("artifice in the tuning searcher", () => {
   const ZERO6 = [0, 0, 0, 0, 0, 0];
 
   function internal(p: Partial<OptimizerPiece> & { id: string }): InternalPiece {
-    return makeInternalPiece({ stats: ZERO6.slice(), exotic: false, ...p }, true);
+    return makeInternalPiece({ stats: ZERO6.slice(), exotic: false, ...p }, true, true);
   }
 
   /** 5 plain pieces, the first optionally artifice. */
@@ -280,5 +282,46 @@ describe("artifice in the tuning searcher", () => {
     const out = search(loadout(false), [10, 0, 0, 0, 0, 0], ZERO6.slice(), "maximize");
     expect(out!.artificeBonus).toEqual(ZERO6);
     expect(out!.artifice).toEqual([null, null, null, null, null]);
+  });
+});
+
+describe("minShortfall (the canonical zero-min / clamp rule)", () => {
+  test("a zero minimum is always met, even from a negative pre-clamp value", () => {
+    expect(minShortfall(0, -5)).toBe(0);
+    expect(minShortfall(0, 0)).toBe(0);
+    expect(minShortfall(0, 50)).toBe(0);
+  });
+
+  test("a positive minimum charges the raw gap, floored at zero", () => {
+    expect(minShortfall(30, 25)).toBe(5);
+    expect(minShortfall(30, -5)).toBe(35); // real cost: the clamp doesn't help above 0
+    expect(minShortfall(30, 30)).toBe(0);
+    expect(minShortfall(30, 40)).toBe(0);
+  });
+});
+
+describe("directionalsBranchable (shared searcher/bound policy)", () => {
+  const short = (arr: boolean[]) => (s: number) => arr[s];
+
+  test("legendary: only its rolled tuned stat qualifies", () => {
+    expect(
+      directionalsBranchable(false, 2, short([true, false, false, false, false, false])),
+    ).toBe(false);
+    expect(
+      directionalsBranchable(false, 2, short([false, false, true, false, false, false])),
+    ).toBe(true);
+    // Untunable piece (tuned = -1) never branches.
+    expect(directionalsBranchable(false, -1, short([true, true, true, true, true, true]))).toBe(
+      false,
+    );
+  });
+
+  test("exotic: any short stat qualifies (flexible +5)", () => {
+    expect(
+      directionalsBranchable(true, 2, short([false, false, false, false, false, true])),
+    ).toBe(true);
+    expect(
+      directionalsBranchable(true, 2, short([false, false, false, false, false, false])),
+    ).toBe(false);
   });
 });

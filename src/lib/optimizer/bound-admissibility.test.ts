@@ -68,7 +68,7 @@ function randomCase(rng: () => number): RandomCase {
         }
         p.tuning = { tuned: order[0], offStats: order.slice(1, 4) };
       }
-      pieces.push(makeInternalPiece(p, true));
+      pieces.push(makeInternalPiece(p, true, true));
     }
     slots.push(pieces);
   }
@@ -226,7 +226,7 @@ describe("subset-mask suffix bound effectiveness", () => {
   });
 
   test("singleton masks coincide with the per-stat suffix bound on the real pool", () => {
-    const slots = realWarlockSlots().map((sp) => sp.map((p) => makeInternalPiece(p, true)));
+    const slots = realWarlockSlots().map((sp) => sp.map((p) => makeInternalPiece(p, true, true)));
     const { suffixStat, subsetSuffix } = computeSuffixBounds(slots, [], false, () => false);
     for (let k = 0; k <= NUM_SLOTS; k++) {
       for (let s = 0; s < NUM_STATS; s++) {

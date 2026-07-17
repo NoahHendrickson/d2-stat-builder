@@ -94,6 +94,15 @@ describe("sameQueryExceptMinimums", () => {
     ).toBe(true);
   });
 
+  test("default normalization: allowBalancedTuning undefined ≡ true", () => {
+    expect(
+      sameQueryExceptMinimums(
+        baseInput({ allowBalancedTuning: undefined }),
+        baseInput({ allowBalancedTuning: true }),
+      ),
+    ).toBe(true);
+  });
+
   test("default normalization: fragmentBonus undefined ≡ zeros", () => {
     expect(
       sameQueryExceptMinimums(
@@ -174,6 +183,26 @@ describe("sameQueryExceptMinimums", () => {
         baseInput({ allowTuning: false }),
       ),
     ).toBe(false);
+  });
+
+  test("allowBalancedTuning changed → not same", () => {
+    expect(
+      sameQueryExceptMinimums(
+        baseInput({ allowBalancedTuning: true }),
+        baseInput({ allowBalancedTuning: false }),
+      ),
+    ).toBe(false);
+  });
+
+  test("allowBalancedTuning is inert while tuning is off on both sides", () => {
+    // buildTuneOpts ignores the balanced flag when allowTuning is false, so these are
+    // behaviorally the same query — a balanced difference must not kill the carry.
+    expect(
+      sameQueryExceptMinimums(
+        baseInput({ allowTuning: false, allowBalancedTuning: true }),
+        baseInput({ allowTuning: false, allowBalancedTuning: false }),
+      ),
+    ).toBe(true);
   });
 
   test("exotic mode changed → not same", () => {

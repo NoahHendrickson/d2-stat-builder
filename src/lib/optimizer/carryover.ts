@@ -156,6 +156,7 @@ const HANDLED_INPUT_KEYS = {
   setRequirements: true,
   exotic: true,
   allowTuning: true,
+  allowBalancedTuning: true,
   fragmentBonus: true,
   maxResults: true,
 } satisfies Record<keyof OptimizerInput, true>;
@@ -182,6 +183,7 @@ export function sameQueryExceptMinimums(a: OptimizerInput, b: OptimizerInput): b
     setRequirements: aReqs,
     exotic: aExotic,
     allowTuning: aTuning,
+    allowBalancedTuning: aBalanced,
     fragmentBonus: aFrag,
     maxResults: aMax,
   } = a;
@@ -192,14 +194,20 @@ export function sameQueryExceptMinimums(a: OptimizerInput, b: OptimizerInput): b
     setRequirements: bReqs,
     exotic: bExotic,
     allowTuning: bTuning,
+    allowBalancedTuning: bBalanced,
     fragmentBonus: bFrag,
     maxResults: bMax,
   } = b;
   void _aMin;
   void _bMin;
 
-  // allowTuning defaults to true (see solve.ts); ?? true normalizes both sides.
-  if ((aTuning ?? true) !== (bTuning ?? true)) return false;
+  // allowTuning / allowBalancedTuning default to true (see bounds.ts); ?? true
+  // normalizes both sides. The balanced flag only shapes the query while tuning is
+  // on (buildTuneOpts ignores it otherwise), so with tuning off on both sides a
+  // balanced difference must not spuriously kill the carry.
+  const tuningOn = aTuning ?? true;
+  if (tuningOn !== (bTuning ?? true)) return false;
+  if (tuningOn && (aBalanced ?? true) !== (bBalanced ?? true)) return false;
   // maxResults defaults to DEFAULT_MAX_RESULTS (200).
   if ((aMax ?? 200) !== (bMax ?? 200)) return false;
 
