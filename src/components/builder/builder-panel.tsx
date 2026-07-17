@@ -69,6 +69,7 @@ import { ExoticPicker } from "@/components/builder/exotic-picker";
 import { ExoticClassPerkPicker } from "@/components/builder/exotic-class-perk-picker";
 import { FragmentPicker } from "@/components/builder/fragment-picker";
 import { ClassEmblemTabs } from "@/components/builder/class-emblem-tabs";
+import { TuningControls } from "@/components/builder/tuning-controls";
 import { BuildsSurface } from "@/components/builder/builds-surface";
 import type { BuildsColumnContentProps } from "@/components/builder/builds-column-content";
 import type { ExoticConstraint, OptimizerPiece } from "@/lib/optimizer/types";
@@ -1013,35 +1014,12 @@ export function BuilderPanel({
             </Section>
 
             <Section title="Tier-5 tuning">
-              <div className="space-y-3">
-                <div className="flex items-center justify-between gap-4">
-                  <p className="text-muted-foreground text-xs">
-                    Auto-apply tuning on tunable pieces to hit your targets:
-                    directional (+5/−5) tunes, plus Balanced (+1 to off-stats)
-                    when enabled below.
-                  </p>
-                  <Switch
-                    checked={allowTuning}
-                    onCheckedChange={setAllowTuning}
-                    aria-label="Toggle Tier-5 tuning"
-                  />
-                </div>
-                <div className="flex items-center justify-between gap-4">
-                  <div className="space-y-0.5">
-                    <span className="text-sm">Use balanced tuning mods</span>
-                    <p className="text-muted-foreground text-xs">
-                      When off, builds are searched without the Balanced (+1 to
-                      off-stats) tune — directional tuning stays available.
-                    </p>
-                  </div>
-                  <Switch
-                    checked={allowTuning && useBalancedTuning}
-                    disabled={!allowTuning}
-                    onCheckedChange={setUseBalancedTuning}
-                    aria-label="Use balanced tuning mods"
-                  />
-                </div>
-              </div>
+              <TuningControls
+                allowTuning={allowTuning}
+                onAllowTuningChange={setAllowTuning}
+                useBalancedTuning={useBalancedTuning}
+                onUseBalancedTuningChange={setUseBalancedTuning}
+              />
             </Section>
 
             <Section title="Armor pool">
