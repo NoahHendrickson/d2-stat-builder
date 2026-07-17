@@ -1016,8 +1016,9 @@ export function BuilderPanel({
               <div className="space-y-3">
                 <div className="flex items-center justify-between gap-4">
                   <p className="text-muted-foreground text-xs">
-                    Auto-apply Balanced (+1 to off-stats) or a directional (+5/−5)
-                    tune on tunable pieces to hit your targets.
+                    Auto-apply tuning on tunable pieces to hit your targets:
+                    directional (+5/−5) tunes, plus Balanced (+1 to off-stats)
+                    when enabled below.
                   </p>
                   <Switch
                     checked={allowTuning}

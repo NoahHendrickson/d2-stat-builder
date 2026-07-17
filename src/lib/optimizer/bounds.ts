@@ -7,6 +7,7 @@ import { NUM_SLOTS, NUM_STATS } from "./floors";
 import {
   deficitPoints,
   makeInternalPiece,
+  minShortfall,
   type InternalPiece,
 } from "./tuning";
 
@@ -198,12 +199,10 @@ export function makeJointMinCheck(
       let mask = 0;
       let maskShort = 0;
       for (let s = 0; s < NUM_STATS; s++) {
-        // Deficit before suffix help; suffixStat ≥ 0, so short ≤ 0 implies d ≤ 0.
-        // A zero minimum is always met (realized stats clamp at 0), even when a
-        // negative fragment bonus drives the pre-clamp sum below zero.
-        if (mins[s] === 0) continue;
-        const short = mins[s] - (sum[s] + frag[s] + sumTuneUp[s]);
-        if (short <= 0) continue;
+        // Shortfall before suffix help (minShortfall owns the zero-minimum/clamp
+        // rule); suffixStat ≥ 0, so short = 0 implies d ≤ 0.
+        const short = minShortfall(mins[s], sum[s] + frag[s] + sumTuneUp[s]);
+        if (short === 0) continue;
         mask |= 1 << s;
         maskShort += short;
         const d = short - suffixStat[k][s];
@@ -227,12 +226,10 @@ export function makeJointMinCheck(
     let mask = 0;
     let maskShort = 0;
     for (let s = 0; s < NUM_STATS; s++) {
-      // Deficit before suffix help; suffixStat ≥ 0, so short ≤ 0 implies d ≤ 0.
-      // A zero minimum is always met (realized stats clamp at 0), even when a
-      // negative fragment bonus drives the pre-clamp sum below zero.
-      if (mins[s] === 0) continue;
-      const short = mins[s] - (sum[s] + frag[s] + sumTuneUp[s]);
-      if (short <= 0) continue;
+      // Shortfall before suffix help (minShortfall owns the zero-minimum/clamp
+      // rule); suffixStat ≥ 0, so short = 0 implies d ≤ 0.
+      const short = minShortfall(mins[s], sum[s] + frag[s] + sumTuneUp[s]);
+      if (short === 0) continue;
       mask |= 1 << s;
       maskShort += short;
       const d = short - suffixStat[k][s];
