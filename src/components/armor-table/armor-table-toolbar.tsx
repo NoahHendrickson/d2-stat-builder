@@ -87,7 +87,7 @@ export function ArmorTableToolbar({
         {filteredCount}
       </span>
       <div className="bg-border h-4 w-px shrink-0 self-center" aria-hidden />
-      <div className="relative h-8 min-w-0 flex-1 self-stretch">
+      <div className="relative h-8 min-w-0 flex-1 self-stretch @[58rem]/toolbar:max-w-56">
         <MagnifyingGlass
           className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 z-10 size-3.5 -translate-y-1/2"
           aria-hidden
@@ -107,7 +107,7 @@ export function ArmorTableToolbar({
           className="pl-6"
         />
       </div>
-      <div className="hidden shrink-0 items-center gap-2.5 @[58rem]/toolbar:flex">
+      <div className="hidden flex-1 shrink-0 items-center gap-2.5 @[58rem]/toolbar:flex">
         <FilterMultiselect
           label="Class"
           allLabel="All classes"
@@ -134,7 +134,7 @@ export function ArmorTableToolbar({
           onTogglePin={onTogglePinnedSet}
         />
       </div>
-      <div className="hidden shrink-0 items-center gap-2.5 @[82.5rem]/toolbar:flex">
+      <div className="hidden flex-1 shrink-0 items-center gap-2.5 @[82.5rem]/toolbar:flex">
         <FilterMultiselect
           label="Archetype"
           allLabel="All archetypes"

@@ -212,7 +212,7 @@ export function FilterMultiselect<V extends string | number>({
   const summaryText = selectionSummaryText(value, options);
 
   return (
-    <div className={cn("relative w-40 shrink-0 overflow-visible", className)}>
+    <div className={cn("relative min-w-40 flex-1 overflow-visible", className)}>
       {/* Uncontrolled open state: Base UI wires trigger association (and with it
           outside-click/Escape dismissal) itself; we only listen to reset the
           query on close. Don't cancel() the escape-key close to make Escape
