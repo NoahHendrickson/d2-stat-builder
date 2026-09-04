@@ -62,7 +62,12 @@ export function SignInCard() {
             Sign out
           </Button>
         ) : (
-          <Button render={<a href="/api/auth/login" />} size="lg" className="w-full">
+          <Button
+            render={<a href="/api/auth/login" />}
+            nativeButton={false}
+            size="lg"
+            className="w-full"
+          >
             {isLoading ? "Loading…" : "Sign in with Bungie"}
           </Button>
         )}
