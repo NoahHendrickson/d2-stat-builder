@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { CircleNotch } from "@phosphor-icons/react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import type { ArmorPiece } from "@/lib/armory/normalize";
 import type { ArmoryCharacter } from "@/lib/armory/fetch";
 import { CLASS_NAMES } from "@/lib/armory/stats";

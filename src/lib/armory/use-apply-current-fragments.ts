@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import type { UseQueryResult } from "@tanstack/react-query";
 import type { Armory } from "./fetch";
 import type { FragmentInfo, Subclass } from "./fragments";

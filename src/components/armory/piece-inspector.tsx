@@ -65,7 +65,7 @@ export function PieceInspector() {
                 {p.location}
               </span>
               {p.isExotic && (
-                <Badge variant="secondary" className="px-1 py-0 text-[10px]">
+                <Badge variant="outline" className="px-1 py-0 text-[10px]">
                   Exotic
                 </Badge>
               )}

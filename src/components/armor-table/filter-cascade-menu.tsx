@@ -15,7 +15,15 @@ import {
 } from "@/lib/field-surface";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Menu } from "@/components/ui/menu";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   FilterMultiselectPanel,
   filterMultiselectActiveBadgeClasses,
@@ -65,14 +73,14 @@ function CascadeFacetSubmenu<V extends string | number>({
   const active = value.length > 0;
 
   return (
-    <Menu.SubmenuRoot
+    <DropdownMenuSub
       onOpenChange={(open) => {
         if (!open) setQuery("");
       }}
     >
-      <Menu.SubmenuTrigger
+      <DropdownMenuSubTrigger
         openOnHover={!toggleOnClick}
-        className="justify-between gap-3"
+        className="h-auto justify-between gap-3 py-1.5 [&>svg:last-child]:hidden"
       >
         <span className="shrink-0 font-medium">{label}</span>
         <span className="flex min-w-0 items-center gap-1.5">
@@ -90,26 +98,22 @@ function CascadeFacetSubmenu<V extends string | number>({
             aria-hidden
           />
         </span>
-      </Menu.SubmenuTrigger>
-      <Menu.Portal>
-        <Menu.Positioner side="inline-end" align="start">
-          <Menu.Popup className="w-64 p-0">
-            <FilterMultiselectPanel
-              allLabel={allLabel}
-              options={options}
-              value={value}
-              onChange={onChange}
-              query={query}
-              onQueryChange={setQuery}
-              searchable={searchable}
-              pinnable={pinnable}
-              pinned={pinned}
+      </DropdownMenuSubTrigger>
+      <DropdownMenuSubContent side="inline-end" align="start" className="w-64 p-0">
+        <FilterMultiselectPanel
+          allLabel={allLabel}
+          options={options}
+          value={value}
+          onChange={onChange}
+          query={query}
+          onQueryChange={setQuery}
+          searchable={searchable}
+          pinnable={pinnable}
+          pinned={pinned}
               onTogglePin={onTogglePin}
-            />
-          </Menu.Popup>
-        </Menu.Positioner>
-      </Menu.Portal>
-    </Menu.SubmenuRoot>
+        />
+      </DropdownMenuSubContent>
+    </DropdownMenuSub>
   );
 }
 
@@ -167,7 +171,7 @@ export function FilterCascadeMenu({
   ];
 
   return (
-    <Menu.Root>
+    <DropdownMenu>
       <div
         className={cn(
           fieldFilterControlShellClasses,
@@ -175,7 +179,7 @@ export function FilterCascadeMenu({
         )}
         data-active={active || undefined}
       >
-        <Menu.Trigger
+        <DropdownMenuTrigger
           aria-label={
             active
               ? `${triggerLabel} — ${totalSelected} selected`
@@ -194,11 +198,9 @@ export function FilterCascadeMenu({
             className="text-muted-foreground pointer-events-none size-4 shrink-0"
             aria-hidden
           />
-        </Menu.Trigger>
+        </DropdownMenuTrigger>
       </div>
-      <Menu.Portal>
-        <Menu.Positioner side="bottom" align="start">
-          <Menu.Popup className="w-56 p-1">
+      <DropdownMenuContent side="bottom" align="start" className="w-56 p-1">
             {includes("classes") && (
               <CascadeFacetSubmenu
                 label="Class"
@@ -269,7 +271,7 @@ export function FilterCascadeMenu({
             )}
             {showClearAll && (
               <>
-                <Menu.Separator className="bg-border my-1 h-px" />
+                <DropdownMenuSeparator />
                 <div className="flex justify-end p-1">
                   <Button
                     variant="ghost"
@@ -283,9 +285,7 @@ export function FilterCascadeMenu({
                 </div>
               </>
             )}
-          </Menu.Popup>
-        </Menu.Positioner>
-      </Menu.Portal>
-    </Menu.Root>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }

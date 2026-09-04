@@ -5,6 +5,11 @@ import { Slider as SliderPrimitive } from "@base-ui/react/slider"
 
 import { cn } from "@/lib/utils"
 
+// App-specific fork of @noey-ui/slider: keeps the achievable-ceiling overlay,
+// hover/drag value tooltip and `sliderEdgeAlignedLeft` (used by builder-panel
+// ticks), restyled with noey-ui's track and thumb. Re-adding from the registry
+// with --overwrite will drop those features.
+
 function clampNumber(n: number, lo: number, hi: number) {
   return Math.min(hi, Math.max(lo, n))
 }
@@ -116,7 +121,7 @@ function Slider({
       >
         <SliderPrimitive.Track
           data-slot="slider-track"
-          className="relative grow overflow-hidden rounded-full bg-muted select-none data-horizontal:h-1.5 data-horizontal:w-full data-vertical:h-full data-vertical:w-1"
+          className="relative grow overflow-hidden rounded-full bg-muted select-none data-horizontal:h-1 data-horizontal:w-full data-vertical:h-full data-vertical:w-1"
         >
           {ceiling != null && (
             <div
@@ -147,7 +152,7 @@ function Slider({
           <SliderPrimitive.Thumb
             data-slot="slider-thumb"
             key={index}
-            className="relative isolate block size-3.5 shrink-0 rounded-full border-0 bg-transparent transition-transform duration-150 ease-out select-none before:absolute before:-inset-x-px before:-top-px before:-bottom-[3px] before:rounded-full before:border before:border-brand before:bg-[var(--brand-shadow)] before:transition-[bottom] before:duration-150 before:ease-out before:content-[''] after:absolute after:-inset-px after:rounded-full after:border after:border-brand after:bg-white after:content-[''] active:translate-y-0.5 active:before:-bottom-px focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-hidden focus-visible:after:border-ring motion-reduce:transition-none motion-reduce:active:translate-y-0 disabled:pointer-events-none disabled:opacity-50"
+            className="relative block size-3.5 shrink-0 rounded-full border border-ring bg-white ring-ring/50 transition-[color,box-shadow] select-none after:absolute after:-inset-2 hover:ring-3 focus-visible:ring-3 focus-visible:outline-hidden active:ring-3 disabled:pointer-events-none disabled:opacity-50"
           />
         ))}
       </SliderPrimitive.Control>

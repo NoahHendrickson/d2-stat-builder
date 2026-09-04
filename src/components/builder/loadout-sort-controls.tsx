@@ -1,7 +1,12 @@
 "use client";
 
 import { ArrowDown, ArrowUp, CaretDown } from "@phosphor-icons/react";
-import { Menu } from "@/components/ui/menu";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   LOADOUT_SORT_OPTIONS,
   loadoutSortLabel,
@@ -27,8 +32,8 @@ export function LoadoutSortControls({
   const triggerLabel = loadoutSortLabel(sort.key);
 
   return (
-    <Menu.Root>
-      <Menu.Trigger
+    <DropdownMenu>
+      <DropdownMenuTrigger
         aria-label={`Sort by ${triggerLabel}, ${directionLabel}`}
         className={cn(
           "flex h-7 w-fit min-w-28 cursor-pointer items-center justify-between gap-1.5 rounded-[6px] border border-transparent bg-clip-padding py-2 pr-2 pl-2.5 text-[0.8rem] whitespace-nowrap outline-none select-none",
@@ -50,10 +55,8 @@ export function LoadoutSortControls({
           className="text-muted-foreground pointer-events-none size-3.5 shrink-0"
           aria-hidden
         />
-      </Menu.Trigger>
-      <Menu.Portal>
-        <Menu.Positioner side="bottom" align="end">
-          <Menu.Popup className="min-w-40 p-1">
+      </DropdownMenuTrigger>
+      <DropdownMenuContent side="bottom" align="end" className="w-auto min-w-40 p-1">
             {LOADOUT_SORT_OPTIONS.map((opt) => {
               const active = sort.key === opt.key;
               return (
@@ -69,7 +72,7 @@ export function LoadoutSortControls({
                   >
                     {opt.label}
                   </span>
-                  <Menu.Item
+                  <DropdownMenuItem
                     label={`${opt.label} low to high`}
                     aria-label={`Sort by ${opt.label}, low to high`}
                     aria-checked={active && sort.asc}
@@ -86,8 +89,8 @@ export function LoadoutSortControls({
                       )}
                       aria-hidden
                     />
-                  </Menu.Item>
-                  <Menu.Item
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
                     label={`${opt.label} high to low`}
                     aria-label={`Sort by ${opt.label}, high to low`}
                     aria-checked={active && !sort.asc}
@@ -104,13 +107,11 @@ export function LoadoutSortControls({
                       )}
                       aria-hidden
                     />
-                  </Menu.Item>
+                  </DropdownMenuItem>
                 </div>
               );
             })}
-          </Menu.Popup>
-        </Menu.Positioner>
-      </Menu.Portal>
-    </Menu.Root>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }

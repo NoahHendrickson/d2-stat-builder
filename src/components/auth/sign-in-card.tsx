@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { useQueryClient } from "@tanstack/react-query";
 import { useSession } from "@/lib/auth/use-session";
 import { Button } from "@/components/ui/button";

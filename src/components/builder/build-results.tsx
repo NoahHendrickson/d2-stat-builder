@@ -16,7 +16,7 @@ import {
   Copy,
   X,
 } from "@phosphor-icons/react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { useQueryClient } from "@tanstack/react-query";
 import type { ArmorPiece } from "@/lib/armory/normalize";
 import type { ArmorSetInfo } from "@/lib/armory/sets";
@@ -275,7 +275,7 @@ const BuildRow = memo(function BuildRow({
         {setBadges.map((b) => (
           <Badge
             key={b.name}
-            variant="secondary"
+            variant="outline"
             className="max-lg:hidden shrink-0 px-1.5 py-0 text-[10px]"
             title={b.name}
           >

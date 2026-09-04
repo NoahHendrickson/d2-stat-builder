@@ -60,7 +60,7 @@ export function FragmentPicker({
 
         <Button
           type="button"
-          variant="outlineSubtle"
+          variant="ghost"
           size="xs"
           disabled={applyDisabled || applyLoading}
           onClick={onApplyCurrent}

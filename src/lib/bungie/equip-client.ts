@@ -2,7 +2,7 @@
 // and the armor table's per-row Move/Equip: one request/response contract for
 // POST /api/bungie/equip, including the reauth handshake.
 import type { QueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import type { ArmorPiece } from "../armory/normalize";
 import type { ArmoryCharacter } from "../armory/fetch";
 import { characterForClass } from "../armory/character-for-class";
