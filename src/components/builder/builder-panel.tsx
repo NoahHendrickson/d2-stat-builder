@@ -119,6 +119,8 @@ export function BuilderPanel({
     refinement,
     applyPending,
   } = useOptimizer();
+  // `progress` is a value store: the smoother reads it per frame and writes the eased
+  // value to another store; neither touches this component's render.
   const { displayedProgress, showLoading } = useSmoothedProgress(
     progress,
     running,

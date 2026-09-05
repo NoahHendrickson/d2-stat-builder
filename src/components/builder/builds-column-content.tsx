@@ -20,6 +20,7 @@ import type { StatModHashes } from "@/lib/dim/mod-hashes";
 import type { BuilderSnapshot } from "@/lib/loadouts/types";
 import type { Manifest } from "@/lib/manifest/load";
 import type { OptimizerOutput, RefinementState } from "@/lib/optimizer/types";
+import { useStoreValue, type ValueStore } from "@/lib/value-store";
 
 const LOADING_ROWS = 5;
 
@@ -79,7 +80,8 @@ export interface BuildsColumnContentProps {
   showLoading: boolean;
   running: boolean;
   result: OptimizerOutput | null;
-  displayedProgress: number;
+  /** Eased 0–1 progress; only the progress bar subscribes to it. */
+  displayedProgress: ValueStore<number>;
   /** Background-refinement lifecycle (idle / running / done, with any pending list). */
   refinement: RefinementState;
   /** Apply the waiting better list (the explicit user action that changes the list). */
@@ -190,7 +192,8 @@ export function BuildsColumnContent({
 }
 
 /** In-place loading state for the results column: a progress bar over pulsing skeleton rows. */
-export function BuildsLoading({ progress }: { progress: number }) {
+export function BuildsLoading({ progress: store }: { progress: ValueStore<number> }) {
+  const progress = useStoreValue(store);
   return (
     <div className="space-y-3">
       <div
