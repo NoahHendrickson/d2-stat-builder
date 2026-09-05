@@ -7,6 +7,7 @@ import type { ArmorPiece, ArmorSocket } from "@/lib/armory/normalize";
 import { SLOT_LABELS } from "@/lib/armory/stats";
 import { BUNGIE_IMAGE_BASE } from "@/lib/bungie/constants";
 import type { ModOption, ModOptionCatalog } from "@/lib/loadouts/mod-options";
+import { pieceEnergyUsed } from "@/lib/loadouts/mod-placement";
 import type { ModPlacement } from "@/lib/loadouts/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,38 +20,6 @@ const KIND_LABEL: Record<ArmorSocket["kind"], string> = {
   tuning: "Tuning",
   artifice: "Artifice",
 };
-
-/** Energy a piece would use with the editor's choices (unchosen sockets keep their current plug). */
-export function pieceEnergyUsed(
-  piece: ArmorPiece,
-  chosen: Record<number, number> | undefined,
-  costOf: (hash: number) => number,
-): number {
-  const sockets = piece.armorSockets ?? [];
-  let managedCurrent = 0;
-  let after = 0;
-  for (const s of sockets) {
-    managedCurrent += s.plugHash ? costOf(s.plugHash) : 0;
-    const next = chosen?.[s.index] ?? s.plugHash;
-    after += next ? costOf(next) : 0;
-  }
-  const base = piece.energy ? Math.max(0, piece.energy.used - managedCurrent) : 0;
-  return base + after;
-}
-
-/** Flatten editor choices to the dim-api mods list (loadout order: piece, then socket). */
-export function placementToMods(placement: ModPlacement, pieces: ArmorPiece[]): number[] {
-  const out: number[] = [];
-  for (const p of pieces) {
-    const sockets = placement[p.instanceId];
-    if (!sockets) continue;
-    for (const s of p.armorSockets ?? []) {
-      const hash = sockets[s.index];
-      if (hash !== undefined) out.push(hash);
-    }
-  }
-  return out;
-}
 
 function ModIcon({ option, className }: { option: ModOption | undefined; className?: string }) {
   if (!option?.icon) {
@@ -84,7 +53,11 @@ function SocketPicker({
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const options = useMemo(() => catalog.optionsFor(piece, socket), [catalog, piece, socket]);
-  const current = socket.plugHash ? catalog.option(socket.plugHash) : undefined;
+  // An "Empty … Socket" plug reads as no current mod.
+  const current =
+    socket.plugHash && socket.plugHash !== socket.emptyPlugHash
+      ? catalog.option(socket.plugHash)
+      : undefined;
   const chosenOption = chosen !== undefined ? catalog.option(chosen) : undefined;
   const shown = useMemo(() => {
     const q = query.trim().toLowerCase();

@@ -8,7 +8,8 @@
 // honored first, everything left is auto-placed. So it applies equally to loadouts
 // saved from the builder, edited in the mod picker, and imported.
 // Runtime imports are relative so the module runs under vitest.
-import type { ArmorSocketKind } from "../armory/normalize";
+import type { ArmorSocketKind } from "../armory/stats";
+import { baselineEnergy } from "./energy";
 
 export interface PlanSocket {
   index: number;
@@ -55,6 +56,12 @@ export interface ApplyPlan {
   alreadyApplied: string[];
   /** Plugs that couldn't be placed, with the reason. */
   skipped: string[];
+  /**
+   * The `modHashes` entries behind `skipped` (multiset, loadout order). Editors that
+   * rebuild `parameters.mods` from `assigned` must append these so a mod that merely
+   * doesn't fit the player's CURRENT armor isn't silently dropped from the loadout.
+   */
+  unplaced: number[];
   /** Final plug per (piece, socket) the plan arrives at — for previews. */
   placement: Record<string, Record<number, number>>;
   /** Only the sockets this plan assigned a loadout mod to (new or already correct). */
@@ -95,21 +102,18 @@ export function planLoadoutPlugs(input: PlanInput): ApplyPlan {
   const plugs: PlugAction[] = [];
   const alreadyApplied: string[] = [];
   const skipped: string[] = [];
+  const unplaced: number[] = [];
   const cost = (h: number | undefined) => (h === undefined ? 0 : (plugInfo(h)?.cost ?? 0));
 
   const states = new Map<string, PieceState>();
   for (const piece of input.pieces) {
     const plugsMap = new Map<number, number | undefined>();
-    let managedCost = 0;
-    for (const s of piece.sockets) {
-      plugsMap.set(s.index, s.current);
-      managedCost += cost(s.current);
-    }
+    for (const s of piece.sockets) plugsMap.set(s.index, s.current);
     states.set(piece.instanceId, {
       piece,
       plugs: plugsMap,
       taken: new Set(),
-      baseUsed: piece.energy ? Math.max(0, piece.energy.used - managedCost) : 0,
+      baseUsed: baselineEnergy(piece.energy, plugsMap.values(), cost),
     });
   }
 
@@ -150,8 +154,10 @@ export function planLoadoutPlugs(input: PlanInput): ApplyPlan {
   const remaining: { hash: number; info: PlugInfo }[] = [];
   for (const hash of input.modHashes) {
     const info = plugInfo(hash);
-    if (!info) skipped.push(`Unknown mod #${hash}`);
-    else remaining.push({ hash, info });
+    if (!info) {
+      skipped.push(`Unknown mod #${hash}`);
+      unplaced.push(hash);
+    } else remaining.push({ hash, info });
   }
   const takeRemaining = (hash: number) => {
     const i = remaining.findIndex((r) => r.hash === hash);
@@ -229,6 +235,7 @@ export function planLoadoutPlugs(input: PlanInput): ApplyPlan {
     takeRemaining(entry.hash);
     if (candidates.length === 0) {
       skipped.push(`${entry.info.name}: ${skipReason(entry.info)}`);
+      unplaced.push(entry.hash);
       continue;
     }
     // Tuning: keep flexible exotics for last so a directional lands on its exact roll.
@@ -276,5 +283,5 @@ export function planLoadoutPlugs(input: PlanInput): ApplyPlan {
     placement[st.piece.instanceId] = row;
   }
 
-  return { plugs, alreadyApplied, skipped, placement, assigned };
+  return { plugs, alreadyApplied, skipped, unplaced, placement, assigned };
 }

@@ -170,6 +170,8 @@ describe("tuning + artifice", () => {
       "Artifice +3: no artifice piece left",
       "Balanced Tuning: no tunable piece left",
     ]);
+    // …and the same mods by hash, so an editor rebuilding the mod list can keep them.
+    expect(plan.unplaced).toEqual([401, 300]);
   });
 
   test("a directional with no matching piece falls back to a flexible exotic", () => {
@@ -229,4 +231,17 @@ test("a mod no socket accepts is reported, not applied", () => {
   });
   expect(plan.plugs).toEqual([]);
   expect(plan.skipped).toEqual(["Shader: no socket on this armor takes it (or not enough energy)"]);
+  expect(plan.unplaced).toEqual([999]);
+});
+
+test("an unknown mod hash is reported and kept as unplaced", () => {
+  const plan = planLoadoutPlugs({ pieces: [piece({ instanceId: "p" })], modHashes: [7777, 201], plugInfo });
+  expect(plan.skipped).toEqual(["Unknown mod #7777"]);
+  expect(plan.unplaced).toEqual([7777]);
+  expect(plan.plugs.map((p) => p.plugItemHash)).toEqual([201]);
+});
+
+test("a fully placed loadout has nothing unplaced", () => {
+  const plan = planLoadoutPlugs({ pieces: [piece({ instanceId: "p" })], modHashes: [101], plugInfo });
+  expect(plan.unplaced).toEqual([]);
 });

@@ -27,14 +27,20 @@ export const EQUIP_MESSAGES: Record<number, string> = {
   1671: "Can't equip during an activity — go to orbit or a social space",
 };
 
-/** Friendly text for the PlatformErrorCodes a plug insert realistically returns. */
+/**
+ * Friendly text for the PlatformErrorCodes a plug insert realistically returns
+ * (values per bungie-api-ts `PlatformErrorCodes`).
+ */
 const PLUG_MESSAGES: Record<number, string> = {
-  1623: "Item not found — refresh your gear",
-  1650: "That mod can't go in that socket",
-  1651: "Not enough armor energy — remove another mod first",
-  1671: "Can't change mods during an activity — go to orbit or a social space",
-  1679: "Socket is locked — the subclass can't hold that fragment yet",
+  1623: "Item not found — refresh your gear", // DestinyItemNotFound
+  1671: "Can't change mods during an activity — go to orbit or a social space", // DestinyCannotPerformActionAtThisLocation
+  1676: "That mod can't go in that socket (or there isn't enough armor energy)", // DestinyFailedPlugInsertionRules
+  1677: "Socket not found — refresh your gear", // DestinySocketNotFound
+  1678: "Socket is locked — unlock it in-game first (e.g. a fragment slot)", // DestinySocketActionNotAllowed
+  1680: "You don't own that mod (or it isn't unlocked this season)", // DestinyPlugItemNotAvailable
 };
+/** DestinySocketAlreadyHasPlug — the plug is already there, which is what we wanted. */
+const SOCKET_ALREADY_HAS_PLUG = 1679;
 
 export interface ItemResult {
   itemInstanceId: string;
@@ -180,6 +186,10 @@ export async function insertPlugs({
     } catch (err) {
       if (err instanceof BungieHttpError && err.status === 401) throw err;
       const code = err instanceof BungieHttpError ? err.code : undefined;
+      if (code === SOCKET_ALREADY_HAS_PLUG) {
+        results.push({ ...plug, ok: true });
+        continue;
+      }
       if (code === 1671) inActivity = true;
       results.push({
         ...plug,

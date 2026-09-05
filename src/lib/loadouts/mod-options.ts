@@ -13,14 +13,9 @@ export interface ModOption {
   cost: number;
 }
 
-/** Empty-socket plugs ("Empty Mod Socket") are not pickable mods. */
-function isEmptyPlug(def: { displayProperties?: { name?: string }; plug?: { isDummyPlug?: boolean } }) {
-  return def.plug?.isDummyPlug === true || /^empty /i.test(def.displayProperties?.name ?? "");
-}
-
 function optionFor(manifest: Manifest, hash: number): ModOption | undefined {
   const def = manifest.def("DestinyInventoryItemDefinition", hash);
-  if (!def || def.redacted || !def.displayProperties?.name || isEmptyPlug(def)) return undefined;
+  if (!def || def.redacted || !def.displayProperties?.name || def.plug?.isDummyPlug) return undefined;
   return {
     hash,
     name: def.displayProperties.name,
@@ -56,7 +51,7 @@ export class ModOptionCatalog {
 
   /** The mods that can go in `socket` on `piece` (deduped, name-sorted; tuning by stat). */
   optionsFor(piece: ArmorPiece, socket: ArmorSocket): ModOption[] {
-    const key = `${socket.kind}:${socket.plugSetHash ?? 0}:${piece.tunedStat ?? "-"}:${piece.isExotic ? "x" : "l"}`;
+    const key = `${socket.kind}:${socket.plugSetHash ?? 0}:${socket.emptyPlugHash ?? 0}:${piece.tunedStat ?? "-"}:${piece.isExotic ? "x" : "l"}`;
     const cached = this.cache.get(key);
     if (cached) return cached;
     let out: ModOption[];
@@ -68,7 +63,10 @@ export class ModOptionCatalog {
         out = this.artifice.flatMap((h) => (h ? (optionFor(this.manifest, h) ?? []) : []));
         break;
       default:
+        // The socket's own "Empty … Socket" plug (its definition's initial item) is in
+        // the plug set too; it's a no-op, not a mod, so it's excluded by hash.
         out = [...plugSetHashes(this.manifest, socket.plugSetHash)]
+          .filter((h) => h !== socket.emptyPlugHash)
           .flatMap((h) => optionFor(this.manifest, h) ?? [])
           .sort((a, b) => a.cost - b.cost || a.name.localeCompare(b.name));
     }

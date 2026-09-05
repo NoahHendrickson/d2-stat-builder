@@ -13,6 +13,7 @@ import {
 import {
   ARMOR_ARCHETYPE_PLUG_CATEGORY,
   ARMOR_BUCKETS,
+  ARTIFICE_MOD_CATEGORY,
   ARTIFICE_PERK_HASH,
   MASTERWORK_OFF_STAT_BONUS,
   STAT_HASHES,
@@ -20,9 +21,13 @@ import {
   STAT_ORDER,
   TUNING_PLUG_CATEGORY,
   offArchetypeIndices,
+  plugKindForCategory,
   type ArmorSlot,
+  type ArmorSocketKind,
   type StatArray,
 } from "./stats";
+
+export type { ArmorSocketKind } from "./stats";
 
 // Plug categories whose stat contributions are stripped to recover the base roll.
 // NOTE: masterwork is deliberately NOT here — on Armor 3.0 its manifest bonus (+5 to all
@@ -38,18 +43,7 @@ const LEGACY_PLUG_PATTERNS = [...CHANGEABLE_PLUG_PATTERNS, "masterworks"];
  * v460.plugs.armor.masterworks.stat plugs list exactly this). */
 const LEGACY_MASTERWORK_BONUS = 2;
 
-/**
- * Usable artifice mod-socket category (`Empty Mod Socket` / Forged +3 mods).
- * Deliberately excludes `enhancements.artifice.exotic` — that is the unpaid
- * "Locked Artifice Socket" / "Upgrade to Artifice Armor" payment slot. Exotic
- * class items still ship that locked socket in the def even though Edge of Fate
- * removed their artifice capability in favor of Tier-5 tuning.
- */
-const ARTIFICE_SOCKET_CATEGORY = "enhancements.artifice";
-
 export type ArmorLocation = "equipped" | "inventory" | "vault";
-
-export type ArmorSocketKind = "general" | "other" | "tuning" | "artifice";
 
 /** One writable mod socket on a piece, from its live sockets + definition. */
 export interface ArmorSocket {
@@ -62,20 +56,9 @@ export interface ArmorSocket {
   plugHash?: number;
   /** DestinyPlugSetDefinition listing the mods that fit here, from the item definition. */
   plugSetHash?: number;
+  /** The socket's "Empty … Socket" plug (its definition's initial item) — not a pickable mod. */
+  emptyPlugHash?: number;
 }
-
-/** Socket indices of the mod sockets a loadout apply can write to. */
-export interface ArmorModSockets {
-  /** General (+10 / +5 stat mod) socket. */
-  general?: number;
-  /** Tier-5 tuning socket. */
-  tuning?: number;
-  /** Artifice +3 socket (legacy artifice pieces). */
-  artifice?: number;
-}
-
-/** Live socket plug category → which mod socket it is (empty sockets carry the category too). */
-const GENERAL_MOD_CATEGORY = "enhancements.v2_general";
 
 export interface ArmorPiece {
   instanceId: string;
@@ -111,10 +94,6 @@ export interface ArmorPiece {
   characterId?: string;
   /** Every writable mod socket (for the mod picker + applying loadouts). */
   armorSockets?: ArmorSocket[];
-  /** First general / tuning / artifice socket index (derived from `armorSockets`). */
-  modSockets?: ArmorModSockets;
-  /** Current plug hash per mod socket index (only the sockets in `modSockets`). */
-  socketPlugs?: Record<number, number>;
   /** Armor energy (component 300) — capacity and what current plugs use. */
   energy?: { capacity: number; used: number };
 }
@@ -329,12 +308,10 @@ function isArtificePiece(
     if (socket.plugHash === ARTIFICE_PERK_HASH) return true;
     const cat = manifest.def("DestinyInventoryItemDefinition", socket.plugHash)?.plug
       ?.plugCategoryIdentifier;
-    if (cat === ARTIFICE_SOCKET_CATEGORY) return true;
+    if (cat === ARTIFICE_MOD_CATEGORY) return true;
   }
   return false;
 }
-
-const MOD_CATEGORY_PREFIX = "enhancements.";
 
 /**
  * Every writable mod socket, classified from the live sockets' current plugs (an empty
@@ -345,7 +322,15 @@ const MOD_CATEGORY_PREFIX = "enhancements.";
  */
 function findArmorSockets(
   instanceId: string,
-  def: { sockets?: { socketEntries?: { reusablePlugSetHash?: number; randomizedPlugSetHash?: number }[] } },
+  def: {
+    sockets?: {
+      socketEntries?: {
+        reusablePlugSetHash?: number;
+        randomizedPlugSetHash?: number;
+        singleInitialItemHash?: number;
+      }[];
+    };
+  },
   profile: DestinyProfileResponse,
   manifest: Manifest,
 ): ArmorSocket[] | undefined {
@@ -357,38 +342,21 @@ function findArmorSockets(
     const cat = manifest.def("DestinyInventoryItemDefinition", socket.plugHash)?.plug
       ?.plugCategoryIdentifier;
     if (!cat) return;
-    let kind: ArmorSocketKind;
-    if (cat === GENERAL_MOD_CATEGORY) kind = "general";
-    else if (cat === ARTIFICE_SOCKET_CATEGORY) kind = "artifice";
-    else if (cat.includes(TUNING_PLUG_CATEGORY)) kind = "tuning";
-    else if (cat.startsWith(MOD_CATEGORY_PREFIX) && !cat.includes(".exotic")) kind = "other";
-    else return;
+    const kind = plugKindForCategory(cat);
+    if (!kind) return;
     const entry = def.sockets?.socketEntries?.[i];
     const plugSetHash = entry?.reusablePlugSetHash || entry?.randomizedPlugSetHash || undefined;
+    const emptyPlugHash = entry?.singleInitialItemHash || undefined;
     out.push({
       index: i,
       kind,
       category: cat,
       plugHash: socket.plugHash,
       ...(plugSetHash ? { plugSetHash } : {}),
+      ...(emptyPlugHash ? { emptyPlugHash } : {}),
     });
   });
   return out;
-}
-
-/** First general / tuning / artifice socket + the plug in each (compat view). */
-function summarizeModSockets(sockets: ArmorSocket[]): {
-  modSockets: ArmorModSockets;
-  socketPlugs: Record<number, number>;
-} {
-  const modSockets: ArmorModSockets = {};
-  const socketPlugs: Record<number, number> = {};
-  for (const s of sockets) {
-    if (s.kind === "other" || modSockets[s.kind] !== undefined) continue;
-    modSockets[s.kind] = s.index;
-    if (s.plugHash) socketPlugs[s.index] = s.plugHash;
-  }
-  return { modSockets, socketPlugs };
 }
 
 function readEnergy(
@@ -475,7 +443,6 @@ function buildPiece(
   }
 
   const armorSockets = findArmorSockets(item.itemInstanceId, def, profile, manifest);
-  const sockets = armorSockets ? summarizeModSockets(armorSockets) : undefined;
   const energy = readEnergy(item.itemInstanceId, profile);
 
   return {
@@ -500,7 +467,6 @@ function buildPiece(
     location,
     characterId,
     ...(armorSockets ? { armorSockets } : {}),
-    ...(sockets ? { modSockets: sockets.modSockets, socketPlugs: sockets.socketPlugs } : {}),
     ...(energy ? { energy } : {}),
   };
 }

@@ -47,7 +47,7 @@ import {
   type LoadoutDetailsValues,
   type ModsSection,
 } from "@/components/loadouts/loadout-details-dialog";
-import { placementToMods } from "@/components/loadouts/loadout-mods-editor";
+import { modsFromEditor, modsSectionFromPlan } from "@/lib/loadouts/mod-placement";
 import { useLoadoutMutations } from "@/lib/loadouts/use-loadouts";
 import { LOADOUT_SCHEMA_VERSION, type BuilderSnapshot } from "@/lib/loadouts/types";
 import { planLoadoutPlugs } from "@/lib/loadouts/apply-plan";
@@ -477,7 +477,8 @@ function BuildActions({
 } & BuildActionProps) {
   const queryClient = useQueryClient();
   const [equipping, setEquipping] = useState(false);
-  const [saveOpen, setSaveOpen] = useState(false);
+  // The Save dialog's mod picker, built when the dialog opens (null = closed).
+  const [saveMods, setSaveMods] = useState<ModsSection | null>(null);
   const { create: createLoadout } = useLoadoutMutations();
 
   const resolved = pieces.filter((p): p is ArmorPiece => p !== undefined);
@@ -538,23 +539,25 @@ function BuildActions({
 
   // Mod picker for the Save dialog: the optimizer's stat mods / tuning / artifice are
   // pre-placed exactly as Apply would place them; the user adds other mods on top.
-  const modsSection = useMemo<ModsSection | undefined>(() => {
-    if (!saveOpen || !canSave || !manifest) return undefined;
+  // Built at click time from the inputs as they are right then (no memo to go stale).
+  // Mods the planner can't place on the live pieces — e.g. the class item's stat mod
+  // when the build uses a theoretical (socket-less) exotic class item — are kept in
+  // the saved loadout, not dropped.
+  const openSave = () => {
+    if (!canSave || !manifest) return;
     const dim = makeDimLoadout(defaultName);
     const plan = planLoadoutPlugs({
       pieces: planPiecesFromArmor(resolved, manifest),
       modHashes: dim.parameters.mods,
       plugInfo: plugInfoFromManifest(manifest),
     });
-    return { pieces: resolved, catalog: getModCatalog(manifest), initial: plan.assigned };
-    // makeDimLoadout/resolved derive from loadout + pieces, which are stable per row.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [saveOpen, canSave, manifest, loadout, pieces]);
+    setSaveMods(modsSectionFromPlan(resolved, getModCatalog(manifest), plan));
+  };
 
   const saveLoadout = ({ name, notes, placement }: LoadoutDetailsValues) => {
     if (!canSave) return;
     const dim = makeDimLoadout(name, notes || undefined);
-    if (placement) dim.parameters.mods = placementToMods(placement, resolved);
+    if (placement && saveMods) dim.parameters.mods = modsFromEditor(saveMods, placement);
     dim.equipped = dim.equipped.map((item) =>
       item.id !== undefined && isSyntheticClassItemId(item.id)
         ? { hash: item.hash }
@@ -570,7 +573,7 @@ function BuildActions({
       },
       {
         onSuccess: () => {
-          setSaveOpen(false);
+          setSaveMods(null);
           toast.success("Loadout saved", "Find it under the Loadouts tab");
         },
         onError: (err) => {
@@ -636,7 +639,7 @@ function BuildActions({
       <Button
         size="sm"
         variant="outline"
-        onClick={() => setSaveOpen(true)}
+        onClick={openSave}
         disabled={!canSave}
         title={!complete ? missingTitle : undefined}
       >
@@ -644,13 +647,15 @@ function BuildActions({
         Save
       </Button>
       <LoadoutDetailsDialog
-        open={saveOpen}
-        onOpenChange={setSaveOpen}
+        open={saveMods !== null}
+        onOpenChange={(open) => {
+          if (!open) setSaveMods(null);
+        }}
         title="Save loadout"
         description="Armor, mods, tuning, fragments, and your builder targets are saved together. Add other armor mods below."
         submitLabel="Save"
         initialName={defaultName}
-        mods={modsSection}
+        mods={saveMods ?? undefined}
         busy={createLoadout.isPending}
         onSubmit={saveLoadout}
       />

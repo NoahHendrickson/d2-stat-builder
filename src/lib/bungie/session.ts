@@ -92,9 +92,15 @@ export const readAccess = () => readToken(ACCESS_COOKIE);
 export async function readUser(): Promise<SessionUser | null> {
   const jar = await cookies();
   const raw = jar.get(USER_COOKIE)?.value;
-  // No cookie → anonymous; don't demand the secret (a misconfigured deploy still 401s).
   if (!raw) return null;
-  const user = await decodeSigned<SessionUser>(raw, cookieSecret());
+  // A cookie we can't verify — unsigned (pre-signing sessions), tampered, or a deploy
+  // missing the secret — reads as anonymous rather than throwing out of every route.
+  let user: SessionUser | null;
+  try {
+    user = await decodeSigned<SessionUser>(raw, cookieSecret());
+  } catch {
+    return null;
+  }
   if (!user || typeof user.membershipId !== "string" || !user.membershipId) return null;
   return user;
 }

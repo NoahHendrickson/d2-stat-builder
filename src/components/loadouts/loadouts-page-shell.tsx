@@ -1,5 +1,6 @@
 "use client";
 
+import { useCallback } from "react";
 import { SignInCard } from "@/components/auth/sign-in-card";
 import { useSession } from "@/lib/auth/use-session";
 import { useArmory } from "@/lib/armory/use-armory";
@@ -13,6 +14,11 @@ export function LoadoutsPageShell() {
   const armory = useArmory();
   const manifestStatus = useManifest();
   const authed = session.data?.authenticated ?? false;
+
+  // Stable identity: this reaches every memoized row, so a fresh closure per render
+  // would re-render the whole visible list each time an observer notifies the shell.
+  const { refetch: refetchArmory } = armory;
+  const onArmoryChanged = useCallback(() => void refetchArmory(), [refetchArmory]);
 
   if (!authed) {
     return (
@@ -38,7 +44,7 @@ export function LoadoutsPageShell() {
       <LoadoutsList
         armory={armory.data}
         manifest={manifestStatus.manifest}
-        onArmoryChanged={() => void armory.refetch()}
+        onArmoryChanged={onArmoryChanged}
       />
     </main>
   );

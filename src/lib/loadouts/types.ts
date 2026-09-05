@@ -13,7 +13,8 @@ export const LOADOUT_SCHEMA_VERSION = 1;
 export const MAX_NAME_LENGTH = 120;
 export const MAX_NOTES_LENGTH = 4000;
 const MAX_ITEMS = 12;
-const MAX_MODS = 40;
+/** Also bounds how many plug inserts one apply request may carry (see apply-loadout route). */
+export const MAX_MODS = 40;
 const MAX_SOCKET_OVERRIDES = 24;
 const MAX_ARTIFACT_UNLOCKS = 40;
 const MAX_PLACEMENT_ITEMS = 8;

@@ -1,6 +1,6 @@
 // Pure filtering + sorting for the loadouts page. Runtime imports are relative so the
 // module runs under vitest.
-import { loadoutHashtags, type SavedLoadout } from "./types";
+import { MAX_NAME_LENGTH, loadoutHashtags, type SavedLoadout } from "./types";
 
 export type LoadoutListSortKey = "edited" | "name" | "total";
 
@@ -76,10 +76,14 @@ export function collectHashtags(loadouts: readonly SavedLoadout[]): string[] {
   return [...counts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([t]) => t);
 }
 
-/** "Name (copy)", "Name (copy 2)", … — the first title not already in `existing`. */
+/**
+ * "Name (copy)", "Name (copy 2)", … — the first title not already in `existing`. The base
+ * is trimmed so the result always fits MAX_NAME_LENGTH (the parser rejects longer names).
+ */
 export function duplicateName(name: string, existing: readonly string[]): string {
   const taken = new Set(existing.map((n) => n.toLowerCase()));
-  let candidate = `${name} (copy)`;
-  for (let n = 2; taken.has(candidate.toLowerCase()); n++) candidate = `${name} (copy ${n})`;
+  const fit = (suffix: string) => `${name.slice(0, MAX_NAME_LENGTH - suffix.length).trimEnd()}${suffix}`;
+  let candidate = fit(" (copy)");
+  for (let n = 2; taken.has(candidate.toLowerCase()); n++) candidate = fit(` (copy ${n})`);
   return candidate;
 }

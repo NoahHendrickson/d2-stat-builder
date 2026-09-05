@@ -1,6 +1,6 @@
 import { test, expect } from "vitest";
 import { collectHashtags, duplicateName, filterLoadouts, sortSavedLoadouts } from "./list";
-import type { SavedLoadout } from "./types";
+import { MAX_NAME_LENGTH, type SavedLoadout } from "./types";
 
 function make(
   name: string,
@@ -77,4 +77,15 @@ test("duplicateName avoids collisions", () => {
   expect(duplicateName("Build", [])).toBe("Build (copy)");
   expect(duplicateName("Build", ["build (copy)"])).toBe("Build (copy 2)");
   expect(duplicateName("Build", ["Build (copy)", "Build (copy 2)"])).toBe("Build (copy 3)");
+});
+
+test("duplicateName never exceeds the name length cap", () => {
+  const long = "x".repeat(MAX_NAME_LENGTH);
+  const first = duplicateName(long, []);
+  expect(first.length).toBeLessThanOrEqual(MAX_NAME_LENGTH);
+  expect(first.endsWith(" (copy)")).toBe(true);
+  const second = duplicateName(long, [first]);
+  expect(second.length).toBeLessThanOrEqual(MAX_NAME_LENGTH);
+  expect(second.endsWith(" (copy 2)")).toBe(true);
+  expect(second).not.toBe(first);
 });

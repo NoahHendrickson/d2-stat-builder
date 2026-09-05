@@ -1,6 +1,9 @@
 import type { HttpClient, HttpClientConfig } from "bungie-api-ts/http";
 import { BUNGIE_API_KEY } from "./constants";
 
+/** PlatformErrorCodes.Success */
+const BUNGIE_SUCCESS = 1;
+
 interface BungieErrorBody {
   ErrorCode?: number;
   ErrorStatus?: string;
@@ -66,7 +69,10 @@ export function createBungieHttp(accessToken?: string): HttpClient {
         json = undefined;
       }
 
-      if (res.ok) return json;
+      // Bungie reports platform errors in the body (ErrorCode ≠ 1 = Success), sometimes
+      // under an HTTP 200 — so a 2xx alone doesn't mean the action happened.
+      const bodyFailed = json?.ErrorCode !== undefined && json.ErrorCode !== BUNGIE_SUCCESS;
+      if (res.ok && !bodyFailed) return json;
 
       const detail = json?.ErrorStatus
         ? `${json.ErrorStatus}${json.Message ? ` — ${json.Message}` : ""}`
@@ -76,7 +82,7 @@ export function createBungieHttp(accessToken?: string): HttpClient {
         `Bungie ${config.method} ${url.pathname}: ${detail}`,
         json?.ErrorCode,
       );
-      if (res.status < 500) break; // 4xx won't fix itself
+      if (res.status < 500) break; // 4xx (and in-body errors on a 200) won't fix themselves
       await new Promise((r) => setTimeout(r, 600));
     }
     throw lastError ?? new Error("Bungie request failed");

@@ -13,7 +13,12 @@ import {
   statIconsFromManifest,
 } from "@/lib/manifest/stat-icons";
 import { loadSelections, saveSelections } from "@/lib/builder/selection-storage";
-import { useLoadoutMutations, useLoadouts } from "@/lib/loadouts/use-loadouts";
+import { useQueryClient } from "@tanstack/react-query";
+import {
+  LOADOUTS_QUERY_KEY,
+  useLoadoutMutations,
+  useLoadouts,
+} from "@/lib/loadouts/use-loadouts";
 import {
   collectHashtags,
   duplicateName,
@@ -45,7 +50,7 @@ import {
   type LoadoutDetailsValues,
   type ModsSection,
 } from "@/components/loadouts/loadout-details-dialog";
-import { placementToMods } from "@/components/loadouts/loadout-mods-editor";
+import { modsFromEditor, modsSectionFromPlan } from "@/lib/loadouts/mod-placement";
 import { resolveLoadout } from "@/lib/loadouts/resolve";
 import { planLoadoutPlugs } from "@/lib/loadouts/apply-plan";
 import { planPiecesFromArmor } from "@/lib/loadouts/plan-pieces";
@@ -75,6 +80,7 @@ export function LoadoutsList({
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const queryClient = useQueryClient();
   const loadouts = useLoadouts();
   const { create, update, remove } = useLoadoutMutations();
 
@@ -135,7 +141,6 @@ export function LoadoutsList({
       ),
     [all, deferredQuery, classFilter, sortKey],
   );
-  const existingNames = useMemo(() => all.map((l) => l.loadout.name), [all]);
 
   // Rows are virtualized against the document scroller: only the visible slice
   // (plus overscan) resolves items and renders, however long the list gets.
@@ -172,7 +177,7 @@ export function LoadoutsList({
           plugInfo: plugInfoFromManifest(manifest),
           placements: saved.modPlacement,
         });
-        mods = { pieces, catalog: getModCatalog(manifest), initial: plan.assigned };
+        mods = modsSectionFromPlan(pieces, getModCatalog(manifest), plan);
       }
       setDialog({ kind: "edit", loadout: saved, mods });
     },
@@ -186,8 +191,9 @@ export function LoadoutsList({
   const editLoadout = ({ name, notes, placement }: LoadoutDetailsValues) => {
     if (dialog.kind !== "edit") return;
     const { id, loadout, optimizer, builder, modPlacement } = dialog.loadout;
+    // Mods the planner couldn't place on the current armor are kept, not dropped.
     const mods =
-      placement && dialog.mods ? placementToMods(placement, dialog.mods.pieces) : loadout.parameters.mods;
+      placement && dialog.mods ? modsFromEditor(dialog.mods, placement) : loadout.parameters.mods;
     const nextPlacement = placement ?? modPlacement;
     const next: SavedLoadoutData = {
       version: LOADOUT_SCHEMA_VERSION,
@@ -229,6 +235,11 @@ export function LoadoutsList({
   const createMutate = create.mutate;
   const duplicateLoadout = useCallback(
     (saved: SavedLoadout) => {
+      // Read the names at click time (not via a dependency) so this callback — and with
+      // it every memoized row — doesn't change identity after each mutation.
+      const existingNames = (queryClient.getQueryData<SavedLoadout[]>(LOADOUTS_QUERY_KEY) ?? []).map(
+        (l) => l.loadout.name,
+      );
       const data: SavedLoadoutData = {
         version: LOADOUT_SCHEMA_VERSION,
         loadout: { ...saved.loadout, name: duplicateName(saved.loadout.name, existingNames) },
@@ -241,7 +252,7 @@ export function LoadoutsList({
         onError: onMutationError,
       });
     },
-    [createMutate, existingNames],
+    [createMutate, queryClient],
   );
 
   const importLoadout = ({ name, notes }: { name: string; notes: string }) => {

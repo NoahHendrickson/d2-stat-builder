@@ -19,14 +19,16 @@ export interface SubclassItem {
   instanceId: string;
   subclass: Subclass;
   equipped: boolean;
-  /** Live plug hash per fragment socket index (absent = empty / unknown). */
+  /** Live plug hash per fragment socket index (absent = empty / unknown / locked). */
   fragmentSockets: Record<number, number>;
 }
 
 /**
  * Every subclass item on a character (equipped + inventory) with its live fragment
  * sockets — what applying a loadout needs to equip the right subclass and plan
- * fragment inserts.
+ * fragment inserts. Fragment slots the player hasn't unlocked yet (Bungie reports them
+ * as not visible / not enabled) are left out, so the planner never targets a locked
+ * socket; a zero plug (nothing socketed) is left out too.
  */
 export function subclassItemsForCharacter(
   profile: DestinyProfileResponse,
@@ -45,8 +47,10 @@ export function subclassItemsForCharacter(
       const start = FRAGMENT_SOCKET_START[subclass];
       const fragmentSockets: Record<number, number> = {};
       for (let i = start; i < start + FRAGMENT_SOCKET_COUNT; i++) {
-        const plugHash = sockets[i]?.plugHash;
-        if (plugHash) fragmentSockets[i] = plugHash;
+        const socket = sockets[i];
+        if (!socket?.plugHash) continue;
+        if (socket.isVisible === false || socket.isEnabled === false) continue;
+        fragmentSockets[i] = socket.plugHash;
       }
       out.push({
         itemHash: item.itemHash,
@@ -67,29 +71,8 @@ export function equippedSubclassForCharacter(
   profile: DestinyProfileResponse,
   characterId: string,
 ): EquippedSubclass | undefined {
-  const items = profile.characterEquipment?.data?.[characterId]?.items;
-  if (!items) return undefined;
-
-  let subclass: Subclass | undefined;
-  let instanceId: string | undefined;
-  for (const item of items) {
-    const sc = subclassFromItemHash(item.itemHash);
-    if (sc && item.itemInstanceId) {
-      subclass = sc;
-      instanceId = item.itemInstanceId;
-      break;
-    }
-  }
-  if (!subclass || !instanceId) return undefined;
-
-  const sockets =
-    profile.itemComponents?.sockets?.data?.[instanceId]?.sockets ?? [];
-  const start = FRAGMENT_SOCKET_START[subclass];
-  const fragmentHashes: number[] = [];
-  for (let i = 0; i < FRAGMENT_SOCKET_COUNT; i++) {
-    const plugHash = sockets[start + i]?.plugHash;
-    if (plugHash) fragmentHashes.push(plugHash);
-  }
-
-  return { subclass, fragmentHashes };
+  const equipped = subclassItemsForCharacter(profile, characterId).find((s) => s.equipped);
+  if (!equipped) return undefined;
+  // Integer keys enumerate in ascending order — socket order.
+  return { subclass: equipped.subclass, fragmentHashes: Object.values(equipped.fragmentSockets) };
 }

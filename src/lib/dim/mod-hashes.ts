@@ -1,11 +1,10 @@
 import type { Manifest } from "@/lib/manifest/load";
-import { STAT_HASH_TO_INDEX, TUNING_PLUG_CATEGORY } from "../armory/stats";
-
-/**
- * General armor stat-mod plug category — the socketable +10 ("major") and +5
- * ("minor") stat mods. Same category DIM/D2ArmorPicker key on.
- */
-const GENERAL_MOD_CATEGORY = "enhancements.v2_general";
+import {
+  ARTIFICE_MOD_CATEGORY,
+  GENERAL_MOD_CATEGORY,
+  STAT_HASH_TO_INDEX,
+  TUNING_PLUG_CATEGORY,
+} from "../armory/stats";
 
 const MAJOR_MOD_BONUS = 10;
 const MINOR_MOD_BONUS = 5;
@@ -73,7 +72,6 @@ export function getTuningPlugHashes(manifest: Manifest): Map<string, number> {
 }
 
 /** Artifice armor's socket-specific +3 stat mods (DIM keys on the same category). */
-const ARTIFICE_MOD_CATEGORY = "enhancements.artifice";
 const ARTIFICE_BONUS = 3;
 
 /**

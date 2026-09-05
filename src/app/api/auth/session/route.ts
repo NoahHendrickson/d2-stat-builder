@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getValidAccessToken, readUser } from "@/lib/bungie/session";
+import { clearSession, getValidAccessToken, readRefresh, readUser } from "@/lib/bungie/session";
 
 export const dynamic = "force-dynamic";
 
@@ -9,8 +9,14 @@ export const dynamic = "force-dynamic";
  */
 export async function GET() {
   const user = await readUser();
+  if (!user) {
+    // Tokens without a verifiable identity cookie (e.g. a session from before the
+    // identity cookie was signed) are dead weight: drop them so the next sign-in is clean.
+    if (await readRefresh()) await clearSession();
+    return NextResponse.json({ authenticated: false });
+  }
   const token = await getValidAccessToken();
-  if (!user || !token) {
+  if (!token) {
     return NextResponse.json({ authenticated: false });
   }
   return NextResponse.json({ authenticated: true, user });

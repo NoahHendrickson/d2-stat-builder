@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { BungieHttpError, createBungieHttp } from "@/lib/bungie/http";
-import { clearSession, getValidAccessToken, readUser } from "@/lib/bungie/session";
+import { createBungieHttp } from "@/lib/bungie/http";
+import { getValidAccessToken, readUser } from "@/lib/bungie/session";
 import type { EquipItemState } from "@/lib/bungie/equip-plan";
 import {
   insertPlugs,
@@ -9,13 +9,20 @@ import {
   type PlugRequest,
   type PlugResult,
 } from "@/lib/bungie/equip-server";
+import { bungieErrorResponse, parseEquipItems } from "@/lib/bungie/equip-route";
+import { FRAGMENT_SOCKET_COUNT } from "@/lib/armory/equipped-subclass";
+import { MAX_MODS } from "@/lib/loadouts/types";
 
 export const dynamic = "force-dynamic";
 
 /** 5 armor + 1 subclass. */
 const MAX_ITEMS = 6;
-/** 5 stat mods + 5 tuning + 5 artifice + 6 fragments, with headroom. */
-const MAX_PLUGS = 30;
+/**
+ * Every mod a loadout may list (stat / tuning / artifice / slot-specific — the same cap
+ * the loadout parser enforces) plus a full set of fragments. Anything the client plans
+ * within a valid loadout must fit, or a fully-modded build could never be applied.
+ */
+const MAX_PLUGS = MAX_MODS + FRAGMENT_SOCKET_COUNT;
 
 interface ApplyRequestBody {
   characterId: string;
@@ -23,20 +30,6 @@ interface ApplyRequestBody {
   items: EquipItemState[];
   /** Socket inserts to run after equipping (planned client-side, see apply-plan.ts). */
   plugs: PlugRequest[];
-}
-
-function parseItems(v: unknown): EquipItemState[] | null {
-  if (!Array.isArray(v) || v.length > MAX_ITEMS) return null;
-  for (const i of v as Partial<EquipItemState>[]) {
-    if (
-      typeof i?.itemInstanceId !== "string" ||
-      !i.itemInstanceId ||
-      typeof i.itemHash !== "number" ||
-      (i.characterId !== undefined && typeof i.characterId !== "string")
-    )
-      return null;
-  }
-  return v as EquipItemState[];
 }
 
 function parsePlugs(v: unknown): PlugRequest[] | null {
@@ -57,7 +50,7 @@ function parsePlugs(v: unknown): PlugRequest[] | null {
 function parseBody(body: unknown): ApplyRequestBody | null {
   const b = body as Partial<ApplyRequestBody> | null;
   if (!b || typeof b.characterId !== "string" || !b.characterId) return null;
-  const items = parseItems(b.items ?? []);
+  const items = parseEquipItems(b.items ?? [], { min: 0, max: MAX_ITEMS });
   const plugs = parsePlugs(b.plugs ?? []);
   if (!items || !plugs || (items.length === 0 && plugs.length === 0)) return null;
   return { characterId: b.characterId, items, plugs };
@@ -113,19 +106,6 @@ export async function POST(request: Request) {
     const response: ApplyResponse = { equip, plugs };
     return NextResponse.json(response);
   } catch (err) {
-    if (err instanceof BungieHttpError && err.status === 401) {
-      await clearSession();
-      return NextResponse.json(
-        {
-          error: "Bungie needs new permissions — sign in again to allow equipping",
-          reauth: true,
-        },
-        { status: 401 },
-      );
-    }
-    return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Bungie request failed" },
-      { status: 502 },
-    );
+    return bungieErrorResponse(err);
   }
 }

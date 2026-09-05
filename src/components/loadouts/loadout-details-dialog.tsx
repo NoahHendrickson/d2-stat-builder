@@ -13,22 +13,12 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import type { ArmorPiece } from "@/lib/armory/normalize";
-import type { ModOptionCatalog } from "@/lib/loadouts/mod-options";
+import { pieceEnergyUsed, type ModsSection } from "@/lib/loadouts/mod-placement";
 import { MAX_NAME_LENGTH, MAX_NOTES_LENGTH, type ModPlacement } from "@/lib/loadouts/types";
-import {
-  LoadoutModsEditor,
-  pieceEnergyUsed,
-} from "@/components/loadouts/loadout-mods-editor";
+import { LoadoutModsEditor } from "@/components/loadouts/loadout-mods-editor";
 import { cn } from "@/lib/utils";
 
-/** When present, the dialog also shows the socket-by-socket mod picker. */
-export interface ModsSection {
-  /** Live pieces in slot order (every piece must be resolved). */
-  pieces: ArmorPiece[];
-  catalog: ModOptionCatalog;
-  initial: ModPlacement;
-}
+export type { ModsSection } from "@/lib/loadouts/mod-placement";
 
 export interface LoadoutDetailsValues {
   name: string;
@@ -152,6 +142,24 @@ function DetailsForm({
             value={placement}
             onChange={setPlacement}
           />
+        )}
+        {mods && mods.skipped.length > 0 && (
+          <div className="border-border/60 bg-muted/40 rounded-lg border px-3 py-2 text-xs">
+            <p className="font-medium">
+              {mods.skipped.length === 1
+                ? "1 mod doesn't fit your current armor"
+                : `${mods.skipped.length} mods don't fit your current armor`}
+            </p>
+            <p className="text-muted-foreground mt-0.5">
+              They stay in the loadout and will be socketed when the armor can take them
+              (or place them by hand above).
+            </p>
+            <ul className="text-muted-foreground mt-1 list-disc space-y-0.5 pl-4">
+              {mods.skipped.map((s) => (
+                <li key={s}>{s}</li>
+              ))}
+            </ul>
+          </div>
         )}
       </div>
       <DialogFooter>
