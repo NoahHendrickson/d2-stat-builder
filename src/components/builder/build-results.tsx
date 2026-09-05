@@ -14,6 +14,7 @@ import {
   CheckCircle,
   CircleNotch,
   Copy,
+  FloppyDisk,
   X,
 } from "@phosphor-icons/react";
 import { toast } from "@/lib/toast";
@@ -41,6 +42,9 @@ import {
 } from "@/lib/dim/loadout-link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { LoadoutDetailsDialog } from "@/components/loadouts/loadout-details-dialog";
+import { useLoadoutMutations } from "@/lib/loadouts/use-loadouts";
+import { LOADOUT_SCHEMA_VERSION, type BuilderSnapshot } from "@/lib/loadouts/types";
 import { cn } from "@/lib/utils";
 import { BUNGIE_IMAGE_BASE } from "@/lib/bungie/constants";
 import {
@@ -114,7 +118,7 @@ function ArtificeCell({
   );
 }
 
-function StatGlyph({
+export function StatGlyph({
   src,
   label,
   className,
@@ -191,6 +195,8 @@ interface BuildActionProps {
   tuningPlugHashes: Map<string, number> | null;
   artificeModHashes: (number | undefined)[] | null;
   subclass?: DimSubclassInput;
+  /** The builder state behind these results — stored with a saved loadout. */
+  builderSnapshot?: BuilderSnapshot;
   onEquipped?: () => void;
 }
 
@@ -212,6 +218,7 @@ const BuildRow = memo(function BuildRow({
   tuningPlugHashes,
   artificeModHashes,
   subclass,
+  builderSnapshot,
   onEquipped,
 }: {
   loadout: OptimizerLoadout;
@@ -418,6 +425,7 @@ const BuildRow = memo(function BuildRow({
             tuningPlugHashes={tuningPlugHashes}
             artificeModHashes={artificeModHashes}
             subclass={subclass}
+            builderSnapshot={builderSnapshot}
             onEquipped={onEquipped}
           />
         </div>
@@ -443,6 +451,7 @@ function BuildActions({
   tuningPlugHashes,
   artificeModHashes,
   subclass,
+  builderSnapshot,
   onEquipped,
 }: {
   loadout: OptimizerLoadout;
@@ -453,6 +462,8 @@ function BuildActions({
 } & BuildActionProps) {
   const queryClient = useQueryClient();
   const [equipping, setEquipping] = useState(false);
+  const [saveOpen, setSaveOpen] = useState(false);
+  const { create: createLoadout } = useLoadoutMutations();
 
   const resolved = pieces.filter((p): p is ArmorPiece => p !== undefined);
   const complete = resolved.length === loadout.pieceIds.length;
@@ -467,36 +478,77 @@ function BuildActions({
       : undefined;
 
   const canActOnItems = complete && !hasSynthetic;
+  const hasModHashes = Boolean(statModHashes && tuningPlugHashes && artificeModHashes);
+
+  const defaultName = defaultLoadoutName({
+    exoticName,
+    subclassName: subclass?.name,
+    sets: setBadges,
+    total: loadout.total,
+  });
+
+  /** The dim-api object for this build (shared by Open in DIM and Save). */
+  const makeDimLoadout = (name: string, notes?: string) =>
+    buildDimLoadout({
+      loadout,
+      pieces: resolved,
+      classType: buildClass ?? 3,
+      targets,
+      statModHashes: statModHashes!,
+      tuningPlugHashes: tuningPlugHashes!,
+      artificeModHashes: artificeModHashes!,
+      subclass:
+        subclass?.itemHash !== undefined
+          ? {
+              itemHash: subclass.itemHash,
+              fragmentHashes: subclass.fragmentHashes,
+              socketStart: subclass.socketStart,
+            }
+          : undefined,
+      name,
+      notes,
+      setBonuses: builderSnapshot?.setReqs,
+      artifactUnlocks: targetCharacter?.artifactUnlocks,
+    });
 
   const openInDim = () => {
-    if (!canActOnItems || !statModHashes || !tuningPlugHashes || !artificeModHashes)
-      return;
-    const url = buildDimLoadoutUrl(
-      buildDimLoadout({
-        loadout,
-        pieces: resolved,
-        classType: buildClass ?? 3,
-        targets,
-        statModHashes,
-        tuningPlugHashes,
-        artificeModHashes,
-        subclass:
-          subclass?.itemHash !== undefined
-            ? {
-                itemHash: subclass.itemHash,
-                fragmentHashes: subclass.fragmentHashes,
-                socketStart: subclass.socketStart,
-              }
-            : undefined,
-        name: defaultLoadoutName({
-          exoticName,
-          subclassName: subclass?.name,
-          sets: setBadges,
-          total: loadout.total,
-        }),
-      }),
-    );
+    if (!canActOnItems || !hasModHashes) return;
+    const url = buildDimLoadoutUrl(makeDimLoadout(defaultName));
     window.open(url, "_blank", "noopener,noreferrer");
+  };
+
+  // Saving allows a theoretical class-item roll: it's stored hash-only (no instance id),
+  // like a DIM loadout item you don't own yet, and shows as missing until you have one.
+  const canSave = complete && hasModHashes;
+  const saveLoadout = ({ name, notes }: { name: string; notes: string }) => {
+    if (!canSave) return;
+    const dim = makeDimLoadout(name, notes || undefined);
+    dim.equipped = dim.equipped.map((item) =>
+      item.id !== undefined && isSyntheticClassItemId(item.id)
+        ? { hash: item.hash }
+        : item,
+    );
+    createLoadout.mutate(
+      {
+        version: LOADOUT_SCHEMA_VERSION,
+        loadout: dim,
+        optimizer: loadout,
+        ...(builderSnapshot ? { builder: builderSnapshot } : {}),
+      },
+      {
+        onSuccess: () => {
+          setSaveOpen(false);
+          toast.success("Loadout saved", "Find it under the Loadouts tab");
+        },
+        onError: (err) => {
+          toast.error(
+            err.notConfigured
+              ? "Saving needs loadout storage — set DATABASE_URL (see .env.example)"
+              : err.message,
+          );
+        },
+      },
+    );
   };
 
   const copyItemIds = async () => {
@@ -547,7 +599,27 @@ function BuildActions({
   };
 
   return (
-    <div className="border-border/60 col-span-full mt-1 flex items-center justify-end gap-2 border-t py-2.5">
+    <div className="border-border/60 col-span-full mt-1 flex flex-wrap items-center justify-end gap-2 border-t py-2.5">
+      <Button
+        size="sm"
+        variant="outline"
+        onClick={() => setSaveOpen(true)}
+        disabled={!canSave}
+        title={!complete ? missingTitle : undefined}
+      >
+        <FloppyDisk weight="duotone" aria-hidden />
+        Save
+      </Button>
+      <LoadoutDetailsDialog
+        open={saveOpen}
+        onOpenChange={setSaveOpen}
+        title="Save loadout"
+        description="Armor, mods, tuning, fragments, and your builder targets are saved together."
+        submitLabel="Save"
+        initialName={defaultName}
+        busy={createLoadout.isPending}
+        onSubmit={saveLoadout}
+      />
       <Button
         size="sm"
         variant="outline"
@@ -578,12 +650,7 @@ function BuildActions({
       <Button
         size="sm"
         onClick={openInDim}
-        disabled={
-          !canActOnItems ||
-          !statModHashes ||
-          !tuningPlugHashes ||
-          !artificeModHashes
-        }
+        disabled={!canActOnItems || !hasModHashes}
         title={missingTitle}
       >
         <ArrowSquareOut weight="duotone" aria-hidden />
@@ -763,6 +830,7 @@ export function BuildResults({
   tuningPlugHashes,
   artificeModHashes,
   subclass,
+  builderSnapshot,
   onEquipped,
   sort,
 }: {
@@ -824,6 +892,7 @@ export function BuildResults({
             tuningPlugHashes={tuningPlugHashes}
             artificeModHashes={artificeModHashes}
             subclass={subclass}
+            builderSnapshot={builderSnapshot}
             onEquipped={onEquipped}
           />
         ))}

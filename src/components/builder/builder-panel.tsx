@@ -91,6 +91,7 @@ import {
   SUBCLASS_ITEM_HASHES,
 } from "@/lib/dim/subclasses";
 import { useApplyCurrentFragments } from "@/lib/armory/use-apply-current-fragments";
+import type { BuilderSnapshot } from "@/lib/loadouts/types";
 
 const MAX_MODS = 5;
 /** Clickable preset markers under each stat slider. */
@@ -680,6 +681,36 @@ export function BuilderPanel({
     );
   };
 
+  // What a saved loadout remembers about this session, so "Load in builder" restores it.
+  const builderSnapshot = useMemo<BuilderSnapshot>(
+    () => ({
+      targets,
+      major,
+      setReqs,
+      exoticName:
+        selectedExotic === null ? null : (exotics[selectedExotic]?.name ?? null),
+      exoticPerks,
+      allowTuning,
+      balancedTuning: useBalancedTuning,
+      legacyExotics: useLegacyExotics,
+      activeSubclass,
+      fragmentHashes: [...fragSel[activeSubclass]],
+    }),
+    [
+      targets,
+      major,
+      setReqs,
+      selectedExotic,
+      exotics,
+      exoticPerks,
+      allowTuning,
+      useBalancedTuning,
+      useLegacyExotics,
+      activeSubclass,
+      fragSel,
+    ],
+  );
+
   const buildsProps: BuildsColumnContentProps = useMemo(
     () => ({
       ready,
@@ -700,6 +731,7 @@ export function BuilderPanel({
       tuningPlugHashes,
       artificeModHashes,
       subclass: dimSubclass,
+      builderSnapshot,
       onEquipped: () => void armoryQuery.refetch(),
     }),
     [
@@ -721,6 +753,7 @@ export function BuilderPanel({
       tuningPlugHashes,
       artificeModHashes,
       dimSubclass,
+      builderSnapshot,
       armoryQuery,
     ],
   );

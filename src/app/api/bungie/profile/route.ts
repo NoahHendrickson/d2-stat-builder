@@ -11,12 +11,14 @@ import { clearSession, getValidAccessToken, readUser } from "@/lib/bungie/sessio
 
 export const dynamic = "force-dynamic";
 
-// 102 Vault · 200 Characters · 201 CharacterInventories · 205 CharacterEquipment
-// 300 ItemInstances · 304 ItemStats · 305 ItemSockets · 310 ItemReusablePlugs
+// 100 Profiles (currentSeasonHash) · 102 Vault · 200 Characters · 201 CharacterInventories
+// 202 CharacterProgressions (seasonal artifact unlocks, for saved loadouts)
+// 205 CharacterEquipment · 300 ItemInstances · 304 ItemStats · 305 ItemSockets
+// 310 ItemReusablePlugs
 // 310 is needed for tuning: it exposes each Tier-5 piece's available tuning plugs
 // (which reveal its rolled "tuned stat"). It 500'd client-side on the full vault;
 // re-added here to test whether the server-to-server call handles the larger payload.
-const COMPONENTS = [102, 200, 201, 205, 300, 304, 305, 310] as DestinyComponentType[];
+const COMPONENTS = [100, 102, 200, 201, 202, 205, 300, 304, 305, 310] as DestinyComponentType[];
 
 /**
  * Server-side proxy for the player's Destiny profile. Runs server-to-server so
