@@ -3,18 +3,26 @@
 // caller feeds it live piece data (sockets, energy, current plugs) and manifest-derived
 // plug facts, and hands the resulting actions to the server route.
 //
-// Works from the dim-api flat `parameters.mods` list (the loadout's source of truth),
-// so it applies equally to loadouts saved from the builder and to imported ones.
+// Works from the dim-api flat `parameters.mods` list (the loadout's source of truth)
+// plus the user's optional socket-by-socket `modPlacement`: explicit placements are
+// honored first, everything left is auto-placed. So it applies equally to loadouts
+// saved from the builder, edited in the mod picker, and imported.
 // Runtime imports are relative so the module runs under vitest.
-import type { ArmorModSockets } from "../armory/normalize";
+import type { ArmorSocketKind } from "../armory/normalize";
+
+export interface PlanSocket {
+  index: number;
+  kind: ArmorSocketKind;
+  /** Currently socketed plug. */
+  current?: number;
+  /** Plug hashes this socket accepts (its plug set). Undefined = judge by kind only. */
+  accepts?: ReadonlySet<number>;
+}
 
 export interface PlanPiece {
   instanceId: string;
   name: string;
-  /** Socket indices for the general / tuning / artifice mod sockets, when present. */
-  modSockets?: ArmorModSockets;
-  /** Current plug hash per socket index (live sockets). */
-  socketPlugs?: Record<number, number>;
+  sockets: PlanSocket[];
   energy?: { capacity: number; used: number };
   /** Rolled tuned stat (directional +5 target); undefined when not tunable. */
   tunedStat?: number;
@@ -47,6 +55,10 @@ export interface ApplyPlan {
   alreadyApplied: string[];
   /** Plugs that couldn't be placed, with the reason. */
   skipped: string[];
+  /** Final plug per (piece, socket) the plan arrives at — for previews. */
+  placement: Record<string, Record<number, number>>;
+  /** Only the sockets this plan assigned a loadout mod to (new or already correct). */
+  assigned: Record<string, Record<number, number>>;
 }
 
 export interface SubclassPlan {
@@ -60,112 +72,170 @@ export interface SubclassPlan {
 
 export interface PlanInput {
   pieces: PlanPiece[];
-  /** dim-api `parameters.mods` — general stat mods, tuning plugs, artifice mods. */
+  /** dim-api `parameters.mods` — every armor mod the loadout wants socketed. */
   modHashes: number[];
   plugInfo: (hash: number) => PlugInfo | undefined;
+  /** Explicit socket choices (itemInstanceId → socketIndex → plug hash). */
+  placements?: Record<string, Record<number, number>>;
   subclass?: SubclassPlan;
 }
 
-function freeEnergy(piece: PlanPiece, socket: number, cost: (h: number) => number): number {
-  if (!piece.energy) return Number.POSITIVE_INFINITY; // unknown → let Bungie decide
-  const current = piece.socketPlugs?.[socket];
-  return piece.energy.capacity - piece.energy.used + (current ? cost(current) : 0);
+interface PieceState {
+  piece: PlanPiece;
+  /** socket index → plug the plan will leave there (current until changed). */
+  plugs: Map<number, number | undefined>;
+  /** Sockets already given a plug by this plan (or locked as already correct). */
+  taken: Set<number>;
+  /** Energy consumed by sockets we don't manage (baseline). */
+  baseUsed: number;
 }
 
 export function planLoadoutPlugs(input: PlanInput): ApplyPlan {
-  const { pieces, plugInfo } = input;
+  const { plugInfo } = input;
   const plugs: PlugAction[] = [];
   const alreadyApplied: string[] = [];
   const skipped: string[] = [];
-  const cost = (h: number) => plugInfo(h)?.cost ?? 0;
+  const cost = (h: number | undefined) => (h === undefined ? 0 : (plugInfo(h)?.cost ?? 0));
 
-  const place = (piece: PlanPiece, socket: number, hash: number, name: string) => {
-    const label = `${name} → ${piece.name}`;
-    if (piece.socketPlugs?.[socket] === hash) alreadyApplied.push(label);
-    else plugs.push({ itemInstanceId: piece.instanceId, socketIndex: socket, plugItemHash: hash, label });
+  const states = new Map<string, PieceState>();
+  for (const piece of input.pieces) {
+    const plugsMap = new Map<number, number | undefined>();
+    let managedCost = 0;
+    for (const s of piece.sockets) {
+      plugsMap.set(s.index, s.current);
+      managedCost += cost(s.current);
+    }
+    states.set(piece.instanceId, {
+      piece,
+      plugs: plugsMap,
+      taken: new Set(),
+      baseUsed: piece.energy ? Math.max(0, piece.energy.used - managedCost) : 0,
+    });
+  }
+
+  const energyUsed = (st: PieceState) => {
+    let used = st.baseUsed;
+    for (const h of st.plugs.values()) used += cost(h);
+    return used;
+  };
+  const capacity = (st: PieceState) => st.piece.energy?.capacity ?? Number.POSITIVE_INFINITY;
+  const freeEnergy = (st: PieceState) => capacity(st) - energyUsed(st);
+
+  /** Can `hash` go into this socket now (kind, plug set, tuning roll, energy)? */
+  const fits = (st: PieceState, socket: PlanSocket, hash: number, info: PlugInfo) => {
+    if (st.taken.has(socket.index)) return false;
+    if (socket.kind !== info.kind) return false;
+    if (socket.accepts && !socket.accepts.has(hash)) return false;
+    if (info.kind === "tuning" && info.tunedPlus !== undefined) {
+      if (!(st.piece.tunedStat === info.tunedPlus || st.piece.flexibleTuning)) return false;
+    }
+    const after = energyUsed(st) - cost(st.plugs.get(socket.index)) + info.cost;
+    return after <= capacity(st);
   };
 
-  const general: { hash: number; info: PlugInfo }[] = [];
-  const directional: { hash: number; info: PlugInfo }[] = [];
-  const balanced: { hash: number; info: PlugInfo }[] = [];
-  const artifice: { hash: number; info: PlugInfo }[] = [];
+  const assigned: Record<string, Record<number, number>> = {};
+  const place = (st: PieceState, socket: PlanSocket, hash: number, info: PlugInfo) => {
+    const label = `${info.name} → ${st.piece.name}`;
+    st.taken.add(socket.index);
+    (assigned[st.piece.instanceId] ??= {})[socket.index] = hash;
+    if (st.plugs.get(socket.index) === hash) {
+      alreadyApplied.push(label);
+      return;
+    }
+    st.plugs.set(socket.index, hash);
+    plugs.push({ itemInstanceId: st.piece.instanceId, socketIndex: socket.index, plugItemHash: hash, label });
+  };
+
+  // Mods still to place (multiset, in loadout order).
+  const remaining: { hash: number; info: PlugInfo }[] = [];
   for (const hash of input.modHashes) {
     const info = plugInfo(hash);
-    if (!info) {
-      skipped.push(`Unknown mod #${hash}`);
-      continue;
+    if (!info) skipped.push(`Unknown mod #${hash}`);
+    else remaining.push({ hash, info });
+  }
+  const takeRemaining = (hash: number) => {
+    const i = remaining.findIndex((r) => r.hash === hash);
+    return i >= 0 ? remaining.splice(i, 1)[0] : undefined;
+  };
+
+  // --- Pass 1: explicit placements the user chose in the mod picker.
+  for (const [instanceId, sockets] of Object.entries(input.placements ?? {})) {
+    const st = states.get(instanceId);
+    if (!st) continue;
+    for (const [idx, hash] of Object.entries(sockets)) {
+      const socket = st.piece.sockets.find((s) => s.index === Number(idx));
+      if (!socket) continue;
+      const entry = remaining.find((r) => r.hash === hash);
+      if (!entry) continue; // placement for a mod the loadout no longer lists
+      if (fits(st, socket, hash, entry.info)) {
+        takeRemaining(hash);
+        place(st, socket, hash, entry.info);
+      }
+      // Otherwise leave it for auto-placement (which reports a reason if nothing fits).
     }
-    if (info.kind === "general") general.push({ hash, info });
-    else if (info.kind === "tuning") (info.tunedPlus === undefined ? balanced : directional).push({ hash, info });
-    else if (info.kind === "artifice") artifice.push({ hash, info });
-    else skipped.push(`${info.name}: not an armor mod this app can apply`);
   }
 
-  // --- General stat mods: one per piece, costliest first, onto the piece with the most
-  // free energy (preferring a piece that already has that exact mod).
-  const usedGeneral = new Set<string>();
-  general.sort((a, b) => b.info.cost - a.info.cost);
-  for (const { hash, info } of general) {
-    const candidates = pieces.filter(
-      (p) => p.modSockets?.general !== undefined && !usedGeneral.has(p.instanceId),
-    );
-    const already = candidates.find((p) => p.socketPlugs?.[p.modSockets!.general!] === hash);
-    const fits = candidates
-      .filter((p) => freeEnergy(p, p.modSockets!.general!, cost) >= info.cost)
+  // --- Pass 2: lock in mods already sitting in a matching socket.
+  for (const entry of [...remaining]) {
+    for (const st of states.values()) {
+      const socket = st.piece.sockets.find(
+        (s) => !st.taken.has(s.index) && s.current === entry.hash && s.kind === entry.info.kind,
+      );
+      if (socket) {
+        takeRemaining(entry.hash);
+        place(st, socket, entry.hash, entry.info);
+        break;
+      }
+    }
+  }
+
+  // --- Pass 3: auto-place the rest, most-constrained first (fewest candidate
+  // sockets), then costliest; each onto the piece with the most free energy.
+  const candidatesFor = (hash: number, info: PlugInfo) => {
+    const out: { st: PieceState; socket: PlanSocket }[] = [];
+    for (const st of states.values()) {
+      for (const socket of st.piece.sockets) {
+        if (fits(st, socket, hash, info)) out.push({ st, socket });
+      }
+    }
+    return out;
+  };
+  const skipReason = (info: PlugInfo) => {
+    switch (info.kind) {
+      case "general":
+        return "no free mod socket with enough energy — remove other mods first";
+      case "tuning":
+        return info.tunedPlus === undefined ? "no tunable piece left" : "no piece tuned for that stat";
+      case "artifice":
+        return "no artifice piece left";
+      default:
+        return "no socket on this armor takes it (or not enough energy)";
+    }
+  };
+  // Directional tuning is pickier than Balanced (it needs a specific roll), so on a
+  // candidate-count tie it goes first and Balanced takes what's left.
+  const specificity = (info: PlugInfo) =>
+    info.kind === "tuning" && info.tunedPlus !== undefined ? 1 : 0;
+  while (remaining.length > 0) {
+    const ranked = remaining
+      .map((entry) => ({ entry, candidates: candidatesFor(entry.hash, entry.info) }))
       .sort(
         (a, b) =>
-          freeEnergy(b, b.modSockets!.general!, cost) - freeEnergy(a, a.modSockets!.general!, cost),
+          a.candidates.length - b.candidates.length ||
+          specificity(b.entry.info) - specificity(a.entry.info) ||
+          b.entry.info.cost - a.entry.info.cost,
       );
-    const target = already ?? fits[0];
-    if (!target) {
-      skipped.push(
-        candidates.length === 0
-          ? `${info.name}: no free mod socket`
-          : `${info.name}: not enough armor energy — remove other mods first`,
-      );
+    const { entry, candidates } = ranked[0];
+    takeRemaining(entry.hash);
+    if (candidates.length === 0) {
+      skipped.push(`${entry.info.name}: ${skipReason(entry.info)}`);
       continue;
     }
-    usedGeneral.add(target.instanceId);
-    place(target, target.modSockets!.general!, hash, info.name);
-  }
-
-  // --- Tuning: directional plugs need a piece whose rolled tuned stat matches (exotics
-  // are flexible); Balanced goes on any remaining tunable piece.
-  const usedTuning = new Set<string>();
-  const tunable = () =>
-    pieces.filter((p) => p.modSockets?.tuning !== undefined && !usedTuning.has(p.instanceId));
-  for (const { hash, info } of directional) {
-    const exact = tunable().find((p) => p.tunedStat === info.tunedPlus && !p.flexibleTuning);
-    const target = exact ?? tunable().find((p) => p.flexibleTuning);
-    if (!target) {
-      skipped.push(`${info.name}: no piece tuned for that stat`);
-      continue;
-    }
-    usedTuning.add(target.instanceId);
-    place(target, target.modSockets!.tuning!, hash, info.name);
-  }
-  for (const { hash, info } of balanced) {
-    const target = tunable()[0];
-    if (!target) {
-      skipped.push(`${info.name}: no tunable piece left`);
-      continue;
-    }
-    usedTuning.add(target.instanceId);
-    place(target, target.modSockets!.tuning!, hash, info.name);
-  }
-
-  // --- Artifice: one +3 per artifice piece.
-  const usedArtifice = new Set<string>();
-  for (const { hash, info } of artifice) {
-    const target = pieces.find(
-      (p) => p.modSockets?.artifice !== undefined && !usedArtifice.has(p.instanceId),
-    );
-    if (!target) {
-      skipped.push(`${info.name}: no artifice piece left`);
-      continue;
-    }
-    usedArtifice.add(target.instanceId);
-    place(target, target.modSockets!.artifice!, hash, info.name);
+    // Tuning: keep flexible exotics for last so a directional lands on its exact roll.
+    const flex = (c: { st: PieceState }) =>
+      entry.info.kind === "tuning" && c.st.piece.flexibleTuning ? 1 : 0;
+    candidates.sort((a, b) => flex(a) - flex(b) || freeEnergy(b.st) - freeEnergy(a.st));
+    place(candidates[0].st, candidates[0].socket, entry.hash, entry.info);
   }
 
   // --- Fragments: keep ones already socketed; put the rest into sockets holding
@@ -199,5 +269,12 @@ export function planLoadoutPlugs(input: PlanInput): ApplyPlan {
     }
   }
 
-  return { plugs, alreadyApplied, skipped };
+  const placement: Record<string, Record<number, number>> = {};
+  for (const st of states.values()) {
+    const row: Record<number, number> = {};
+    for (const [idx, hash] of st.plugs) if (hash !== undefined) row[idx] = hash;
+    placement[st.piece.instanceId] = row;
+  }
+
+  return { plugs, alreadyApplied, skipped, placement, assigned };
 }

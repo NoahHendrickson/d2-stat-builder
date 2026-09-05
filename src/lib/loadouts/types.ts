@@ -16,6 +16,8 @@ const MAX_ITEMS = 12;
 const MAX_MODS = 40;
 const MAX_SOCKET_OVERRIDES = 24;
 const MAX_ARTIFACT_UNLOCKS = 40;
+const MAX_PLACEMENT_ITEMS = 8;
+const MAX_PLACEMENT_SOCKETS = 12;
 const MAX_STAT_CONSTRAINTS = 6;
 const MAX_SET_BONUSES = 8;
 
@@ -39,10 +41,18 @@ export interface BuilderSnapshot {
 }
 
 /** What the client sends to create/update; the server adds id + timestamps. */
+/** itemInstanceId → socketIndex → plug hash: where the user put each armor mod. */
+export type ModPlacement = Record<string, Record<number, number>>;
+
 export interface SavedLoadoutData {
   version: number;
   /** dim-api shape — source of truth for Open in DIM, share links, and apply. */
   loadout: DimLoadout;
+  /**
+   * The user's socket-by-socket mod choices (app-level; DIM only has the flat list in
+   * `loadout.parameters.mods`). Apply honors these first, then auto-places the rest.
+   */
+  modPlacement?: ModPlacement;
   /**
    * The optimizer result the loadout was saved from (per-slot tuning/artifice picks,
    * stat breakdown). Absent for loadouts created another way (import, snapshot).
@@ -275,6 +285,22 @@ export function parseBuilderSnapshot(v: unknown): BuilderSnapshot | null {
   };
 }
 
+// --- ModPlacement ---
+
+export function parseModPlacement(v: unknown): ModPlacement | null {
+  if (!isObj(v)) return null;
+  const entries = Object.entries(v);
+  if (entries.length > MAX_PLACEMENT_ITEMS) return null;
+  const out: ModPlacement = {};
+  for (const [id, sockets] of entries) {
+    if (!id || id.length > 64) return null;
+    const parsed = intKeyedRecord(sockets, MAX_PLACEMENT_SOCKETS, isInt);
+    if (!parsed) return null;
+    out[id] = parsed;
+  }
+  return out;
+}
+
 // --- SavedLoadout ---
 
 /** Validate a client-supplied body (create / update / import). */
@@ -292,6 +318,11 @@ export function parseSavedLoadoutData(v: unknown): SavedLoadoutData | null {
     const b = parseBuilderSnapshot(v.builder);
     if (!b) return null;
     out.builder = b;
+  }
+  if (v.modPlacement !== undefined && v.modPlacement !== null) {
+    const mp = parseModPlacement(v.modPlacement);
+    if (!mp) return null;
+    if (Object.keys(mp).length > 0) out.modPlacement = mp;
   }
   return out;
 }

@@ -11,7 +11,8 @@ import type { EquipItemState } from "@/lib/bungie/equip-plan";
 import type { ItemResult, PlugRequest, PlugResult } from "@/lib/bungie/equip-server";
 import type { ResolvedLoadout } from "./resolve";
 import type { SavedLoadout } from "./types";
-import { planLoadoutPlugs, type ApplyPlan, type PlanPiece } from "./apply-plan";
+import { planLoadoutPlugs, type ApplyPlan } from "./apply-plan";
+import { planPiecesFromArmor } from "./plan-pieces";
 import { plugInfoFromManifest } from "./plug-info";
 
 export interface ApplyOutcome {
@@ -54,20 +55,11 @@ export async function applySavedLoadout({
     });
   }
 
-  const planPieces: PlanPiece[] = pieces.map((p) => ({
-    instanceId: p.instanceId,
-    name: p.name,
-    modSockets: p.modSockets,
-    socketPlugs: p.socketPlugs,
-    energy: p.energy,
-    tunedStat: p.tunedStat,
-    flexibleTuning: p.isExotic && p.tunedStat !== undefined,
-  }));
-
   const plan = planLoadoutPlugs({
-    pieces: planPieces,
+    pieces: planPiecesFromArmor(pieces, manifest),
     modHashes: saved.loadout.parameters.mods,
     plugInfo: plugInfoFromManifest(manifest),
+    placements: saved.modPlacement,
     subclass:
       subclassItem && resolved.subclass?.subclass
         ? {

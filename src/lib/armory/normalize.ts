@@ -49,6 +49,21 @@ const ARTIFICE_SOCKET_CATEGORY = "enhancements.artifice";
 
 export type ArmorLocation = "equipped" | "inventory" | "vault";
 
+export type ArmorSocketKind = "general" | "other" | "tuning" | "artifice";
+
+/** One writable mod socket on a piece, from its live sockets + definition. */
+export interface ArmorSocket {
+  index: number;
+  /** general = stat mod; other = slot-specific / activity; tuning; artifice. */
+  kind: ArmorSocketKind;
+  /** The current plug's category identifier (what this socket is for). */
+  category: string;
+  /** Currently socketed plug. */
+  plugHash?: number;
+  /** DestinyPlugSetDefinition listing the mods that fit here, from the item definition. */
+  plugSetHash?: number;
+}
+
 /** Socket indices of the mod sockets a loadout apply can write to. */
 export interface ArmorModSockets {
   /** General (+10 / +5 stat mod) socket. */
@@ -94,7 +109,9 @@ export interface ArmorPiece {
   exoticPerkHashes?: [number, number];
   location: ArmorLocation;
   characterId?: string;
-  /** Mod socket indices (for applying loadouts); absent when no socket data. */
+  /** Every writable mod socket (for the mod picker + applying loadouts). */
+  armorSockets?: ArmorSocket[];
+  /** First general / tuning / artifice socket index (derived from `armorSockets`). */
   modSockets?: ArmorModSockets;
   /** Current plug hash per mod socket index (only the sockets in `modSockets`). */
   socketPlugs?: Record<number, number>;
@@ -317,33 +334,60 @@ function isArtificePiece(
   return false;
 }
 
+const MOD_CATEGORY_PREFIX = "enhancements.";
+
 /**
- * Locate the general / tuning / artifice mod sockets from the live sockets' current
- * plugs (an empty socket still holds an "Empty … Socket" plug of the right category),
- * plus the plug in each. First match per kind wins.
+ * Every writable mod socket, classified from the live sockets' current plugs (an empty
+ * socket still holds an "Empty … Socket" plug of the right category): general stat
+ * mod, tuning, artifice, and "other" (slot-specific / activity). Locked exotic
+ * payment sockets (`enhancements.artifice.exotic`, `enhancements.exotic…`) are skipped.
+ * The item definition supplies each socket's plug set (the mods that fit).
  */
-function findModSockets(
+function findArmorSockets(
   instanceId: string,
+  def: { sockets?: { socketEntries?: { reusablePlugSetHash?: number; randomizedPlugSetHash?: number }[] } },
   profile: DestinyProfileResponse,
   manifest: Manifest,
-): { modSockets: ArmorModSockets; socketPlugs: Record<number, number> } | undefined {
+): ArmorSocket[] | undefined {
   const sockets = profile.itemComponents?.sockets?.data?.[instanceId]?.sockets;
   if (!sockets) return undefined;
-  const modSockets: ArmorModSockets = {};
-  const socketPlugs: Record<number, number> = {};
+  const out: ArmorSocket[] = [];
   sockets.forEach((socket, i) => {
     if (!socket.plugHash) return;
     const cat = manifest.def("DestinyInventoryItemDefinition", socket.plugHash)?.plug
       ?.plugCategoryIdentifier;
     if (!cat) return;
-    let kind: keyof ArmorModSockets | undefined;
+    let kind: ArmorSocketKind;
     if (cat === GENERAL_MOD_CATEGORY) kind = "general";
     else if (cat === ARTIFICE_SOCKET_CATEGORY) kind = "artifice";
     else if (cat.includes(TUNING_PLUG_CATEGORY)) kind = "tuning";
-    if (!kind || modSockets[kind] !== undefined) return;
-    modSockets[kind] = i;
-    socketPlugs[i] = socket.plugHash;
+    else if (cat.startsWith(MOD_CATEGORY_PREFIX) && !cat.includes(".exotic")) kind = "other";
+    else return;
+    const entry = def.sockets?.socketEntries?.[i];
+    const plugSetHash = entry?.reusablePlugSetHash || entry?.randomizedPlugSetHash || undefined;
+    out.push({
+      index: i,
+      kind,
+      category: cat,
+      plugHash: socket.plugHash,
+      ...(plugSetHash ? { plugSetHash } : {}),
+    });
   });
+  return out;
+}
+
+/** First general / tuning / artifice socket + the plug in each (compat view). */
+function summarizeModSockets(sockets: ArmorSocket[]): {
+  modSockets: ArmorModSockets;
+  socketPlugs: Record<number, number>;
+} {
+  const modSockets: ArmorModSockets = {};
+  const socketPlugs: Record<number, number> = {};
+  for (const s of sockets) {
+    if (s.kind === "other" || modSockets[s.kind] !== undefined) continue;
+    modSockets[s.kind] = s.index;
+    if (s.plugHash) socketPlugs[s.index] = s.plugHash;
+  }
   return { modSockets, socketPlugs };
 }
 
@@ -430,7 +474,8 @@ function buildPiece(
     for (let i = 0; i < stats.length; i++) stats[i] += bonus[i];
   }
 
-  const sockets = findModSockets(item.itemInstanceId, profile, manifest);
+  const armorSockets = findArmorSockets(item.itemInstanceId, def, profile, manifest);
+  const sockets = armorSockets ? summarizeModSockets(armorSockets) : undefined;
   const energy = readEnergy(item.itemInstanceId, profile);
 
   return {
@@ -454,6 +499,7 @@ function buildPiece(
     exoticPerkHashes,
     location,
     characterId,
+    ...(armorSockets ? { armorSockets } : {}),
     ...(sockets ? { modSockets: sockets.modSockets, socketPlugs: sockets.socketPlugs } : {}),
     ...(energy ? { energy } : {}),
   };

@@ -732,6 +732,7 @@ export function BuilderPanel({
       artificeModHashes,
       subclass: dimSubclass,
       builderSnapshot,
+      manifest,
       onEquipped: () => void armoryQuery.refetch(),
     }),
     [
@@ -754,6 +755,7 @@ export function BuilderPanel({
       artificeModHashes,
       dimSubclass,
       builderSnapshot,
+      manifest,
       armoryQuery,
     ],
   );

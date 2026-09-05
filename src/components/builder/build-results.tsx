@@ -42,9 +42,19 @@ import {
 } from "@/lib/dim/loadout-link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { LoadoutDetailsDialog } from "@/components/loadouts/loadout-details-dialog";
+import {
+  LoadoutDetailsDialog,
+  type LoadoutDetailsValues,
+  type ModsSection,
+} from "@/components/loadouts/loadout-details-dialog";
+import { placementToMods } from "@/components/loadouts/loadout-mods-editor";
 import { useLoadoutMutations } from "@/lib/loadouts/use-loadouts";
 import { LOADOUT_SCHEMA_VERSION, type BuilderSnapshot } from "@/lib/loadouts/types";
+import { planLoadoutPlugs } from "@/lib/loadouts/apply-plan";
+import { planPiecesFromArmor } from "@/lib/loadouts/plan-pieces";
+import { plugInfoFromManifest } from "@/lib/loadouts/plug-info";
+import { getModCatalog } from "@/lib/loadouts/mod-options";
+import type { Manifest } from "@/lib/manifest/load";
 import { cn } from "@/lib/utils";
 import { BUNGIE_IMAGE_BASE } from "@/lib/bungie/constants";
 import {
@@ -197,6 +207,8 @@ interface BuildActionProps {
   subclass?: DimSubclassInput;
   /** The builder state behind these results — stored with a saved loadout. */
   builderSnapshot?: BuilderSnapshot;
+  /** For the Save dialog's mod picker (socket options come from the manifest). */
+  manifest?: Manifest;
   onEquipped?: () => void;
 }
 
@@ -219,6 +231,7 @@ const BuildRow = memo(function BuildRow({
   artificeModHashes,
   subclass,
   builderSnapshot,
+  manifest,
   onEquipped,
 }: {
   loadout: OptimizerLoadout;
@@ -426,6 +439,7 @@ const BuildRow = memo(function BuildRow({
             artificeModHashes={artificeModHashes}
             subclass={subclass}
             builderSnapshot={builderSnapshot}
+            manifest={manifest}
             onEquipped={onEquipped}
           />
         </div>
@@ -452,6 +466,7 @@ function BuildActions({
   artificeModHashes,
   subclass,
   builderSnapshot,
+  manifest,
   onEquipped,
 }: {
   loadout: OptimizerLoadout;
@@ -520,9 +535,26 @@ function BuildActions({
   // Saving allows a theoretical class-item roll: it's stored hash-only (no instance id),
   // like a DIM loadout item you don't own yet, and shows as missing until you have one.
   const canSave = complete && hasModHashes;
-  const saveLoadout = ({ name, notes }: { name: string; notes: string }) => {
+
+  // Mod picker for the Save dialog: the optimizer's stat mods / tuning / artifice are
+  // pre-placed exactly as Apply would place them; the user adds other mods on top.
+  const modsSection = useMemo<ModsSection | undefined>(() => {
+    if (!saveOpen || !canSave || !manifest) return undefined;
+    const dim = makeDimLoadout(defaultName);
+    const plan = planLoadoutPlugs({
+      pieces: planPiecesFromArmor(resolved, manifest),
+      modHashes: dim.parameters.mods,
+      plugInfo: plugInfoFromManifest(manifest),
+    });
+    return { pieces: resolved, catalog: getModCatalog(manifest), initial: plan.assigned };
+    // makeDimLoadout/resolved derive from loadout + pieces, which are stable per row.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [saveOpen, canSave, manifest, loadout, pieces]);
+
+  const saveLoadout = ({ name, notes, placement }: LoadoutDetailsValues) => {
     if (!canSave) return;
     const dim = makeDimLoadout(name, notes || undefined);
+    if (placement) dim.parameters.mods = placementToMods(placement, resolved);
     dim.equipped = dim.equipped.map((item) =>
       item.id !== undefined && isSyntheticClassItemId(item.id)
         ? { hash: item.hash }
@@ -534,6 +566,7 @@ function BuildActions({
         loadout: dim,
         optimizer: loadout,
         ...(builderSnapshot ? { builder: builderSnapshot } : {}),
+        ...(placement && Object.keys(placement).length > 0 ? { modPlacement: placement } : {}),
       },
       {
         onSuccess: () => {
@@ -614,9 +647,10 @@ function BuildActions({
         open={saveOpen}
         onOpenChange={setSaveOpen}
         title="Save loadout"
-        description="Armor, mods, tuning, fragments, and your builder targets are saved together."
+        description="Armor, mods, tuning, fragments, and your builder targets are saved together. Add other armor mods below."
         submitLabel="Save"
         initialName={defaultName}
+        mods={modsSection}
         busy={createLoadout.isPending}
         onSubmit={saveLoadout}
       />
@@ -831,6 +865,7 @@ export function BuildResults({
   artificeModHashes,
   subclass,
   builderSnapshot,
+  manifest,
   onEquipped,
   sort,
 }: {
@@ -893,6 +928,7 @@ export function BuildResults({
             artificeModHashes={artificeModHashes}
             subclass={subclass}
             builderSnapshot={builderSnapshot}
+            manifest={manifest}
             onEquipped={onEquipped}
           />
         ))}

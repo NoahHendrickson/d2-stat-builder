@@ -18,6 +18,7 @@ import {
 } from "@/lib/builder/sort-loadouts";
 import type { StatModHashes } from "@/lib/dim/mod-hashes";
 import type { BuilderSnapshot } from "@/lib/loadouts/types";
+import type { Manifest } from "@/lib/manifest/load";
 import type { OptimizerOutput, RefinementState } from "@/lib/optimizer/types";
 
 const LOADING_ROWS = 5;
@@ -95,6 +96,7 @@ export interface BuildsColumnContentProps {
   artificeModHashes: (number | undefined)[] | null;
   subclass?: DimSubclassInput;
   builderSnapshot?: BuilderSnapshot;
+  manifest?: Manifest;
   onEquipped: () => void;
 }
 
@@ -118,6 +120,7 @@ export function BuildsColumnContent({
   artificeModHashes,
   subclass,
   builderSnapshot,
+  manifest,
   onEquipped,
 }: BuildsColumnContentProps) {
   const [sort, setSort] = useState<LoadoutSortState>(DEFAULT_LOADOUT_SORT);
@@ -173,6 +176,7 @@ export function BuildsColumnContent({
           artificeModHashes={artificeModHashes}
           subclass={subclass}
           builderSnapshot={builderSnapshot}
+          manifest={manifest}
           onEquipped={onEquipped}
           sort={sort}
         />

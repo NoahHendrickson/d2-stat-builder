@@ -269,15 +269,21 @@ against a live Bungie session** (no `.env.local` in this checkout — Noah verif
 | Loadouts page: list, class filter, sort, #hashtag search, edit/duplicate/delete/share/import, Load in builder, Open in DIM | `src/components/loadouts/*`, `src/lib/loadouts/{list,resolve,share,load-in-builder}.ts` |
 | Artifact perks saved per character (components 100 + 202, `DestinySeasonDefinition`) and diffed on the row | `src/lib/armory/artifact.ts` |
 | Apply: equip armor + subclass, then `InsertSocketPlugFree` for stat mods, tuning, artifice, fragments | `src/lib/loadouts/apply-plan.ts` (pure), `apply-client.ts`, `src/app/api/bungie/apply-loadout/route.ts`, `src/lib/bungie/equip-server.ts` |
+| Mod picker on Save and Edit: every writable socket per piece (general / slot-specific / activity / tuning / artifice) with options from the item's plug sets, per-piece energy, optimizer mods pre-placed; choices stored as `modPlacement` and honored first on apply | `src/components/loadouts/loadout-mods-editor.tsx`, `src/lib/loadouts/mod-options.ts`, `plan-pieces.ts`; `ArmorPiece.armorSockets` in `normalize.ts` |
 
 Setup: create a Neon database (Vercel Marketplace, free plan) and set `DATABASE_URL`;
 the table is created on first request. Existing sessions are signed out once by the
 cookie-signing change.
 
-Things to verify in a signed-in browser, in order: save a build → row shows correct
-stats/mods/fragments → Apply in orbit (watch the summary toast) → Load in builder
-restores targets/exotic/fragments → share link imports on a second account.
+Things to verify in a signed-in browser, in order: save a build → in the Save dialog the
+optimizer's stat mods show pre-placed and each socket's picker lists the right mods
+(helmet mods on the helmet, tuning limited to the piece's roll) → row shows correct
+stats/mods/fragments → Apply in orbit (watch the summary toast) → Edit a loadout and
+swap a mod → Load in builder restores targets/exotic/fragments → share link imports on
+a second account.
 
-Known limits (by decision, §7): armor-only; artifact perks are saved and diffed, not
+Known limits (by decision, §7): armor-only; sockets left unpicked keep whatever mod is
+in them at apply time (no "clear other mods" option yet); mutually exclusive mods aren't
+checked client-side (Bungie rejects them per plug with a message); artifact perks are saved and diffed, not
 applied (no Bungie endpoint); fragment capacity isn't known client-side, so a fragment
 beyond the subclass's unlocked sockets surfaces as a per-plug error from Bungie.

@@ -168,6 +168,15 @@ export function LoadoutRow({
     loadout.classType === 3 ? resolved.armor[0]?.piece?.classType : loadout.classType,
   );
   const hashtags = loadoutHashtags(loadout);
+  // Piece each mod is placed on (from the saved placement) for the Mods line tooltips.
+  const modPieceNames = new Map<number, string[]>();
+  for (const [instanceId, sockets] of Object.entries(saved.modPlacement ?? {})) {
+    const name = resolved.armor.find((a) => a.ref.id === instanceId)?.name;
+    if (!name) continue;
+    for (const hash of Object.values(sockets)) {
+      modPieceNames.set(hash, [...(modPieceNames.get(hash) ?? []), name]);
+    }
+  }
 
   // Artifact perks: which of the saved unlocks the target character currently has active.
   const artifact = loadout.parameters.artifactUnlocks;
@@ -434,7 +443,12 @@ export function LoadoutRow({
               <span className="text-muted-foreground w-16 shrink-0">Mods</span>
               <div className="flex flex-wrap gap-1">
                 {loadout.parameters.mods.map((hash, i) => (
-                  <PlugIcon key={`${hash}-${i}`} hash={hash} manifest={manifest} />
+                  <PlugIcon
+                    key={`${hash}-${i}`}
+                    hash={hash}
+                    manifest={manifest}
+                    suffix={modPieceNames.get(hash)?.shift()}
+                  />
                 ))}
               </div>
             </div>

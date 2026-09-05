@@ -39,13 +39,23 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ConfirmDialog } from "@/components/loadouts/confirm-dialog";
-import { LoadoutDetailsDialog } from "@/components/loadouts/loadout-details-dialog";
+import {
+  LoadoutDetailsDialog,
+  type LoadoutDetailsValues,
+  type ModsSection,
+} from "@/components/loadouts/loadout-details-dialog";
+import { placementToMods } from "@/components/loadouts/loadout-mods-editor";
+import { resolveLoadout } from "@/lib/loadouts/resolve";
+import { planLoadoutPlugs } from "@/lib/loadouts/apply-plan";
+import { planPiecesFromArmor } from "@/lib/loadouts/plan-pieces";
+import { plugInfoFromManifest } from "@/lib/loadouts/plug-info";
+import { getModCatalog } from "@/lib/loadouts/mod-options";
 import { LoadoutRow } from "@/components/loadouts/loadout-row";
 import { cn } from "@/lib/utils";
 
 type DialogState =
   | { kind: "none" }
-  | { kind: "edit"; loadout: SavedLoadout }
+  | { kind: "edit"; loadout: SavedLoadout; mods?: ModsSection }
   | { kind: "delete"; loadout: SavedLoadout };
 
 export function LoadoutsList({
@@ -113,14 +123,42 @@ export function LoadoutsList({
         : err.message,
     );
 
-  const editLoadout = ({ name, notes }: { name: string; notes: string }) => {
+  /** Open Edit; the mod picker is available when every piece is still in the armory. */
+  const openEdit = (saved: SavedLoadout) => {
+    const resolved = resolveLoadout(saved.loadout, pieceMap, manifest);
+    let mods: ModsSection | undefined;
+    if (resolved.armor.length > 0 && !resolved.missing) {
+      const pieces = resolved.armor.map((a) => a.piece!);
+      const plan = planLoadoutPlugs({
+        pieces: planPiecesFromArmor(pieces, manifest),
+        modHashes: saved.loadout.parameters.mods,
+        plugInfo: plugInfoFromManifest(manifest),
+        placements: saved.modPlacement,
+      });
+      mods = { pieces, catalog: getModCatalog(manifest), initial: plan.assigned };
+    }
+    setDialog({ kind: "edit", loadout: saved, mods });
+  };
+
+  const editLoadout = ({ name, notes, placement }: LoadoutDetailsValues) => {
     if (dialog.kind !== "edit") return;
-    const { id, loadout, optimizer, builder } = dialog.loadout;
+    const { id, loadout, optimizer, builder, modPlacement } = dialog.loadout;
+    const mods =
+      placement && dialog.mods ? placementToMods(placement, dialog.mods.pieces) : loadout.parameters.mods;
+    const nextPlacement = placement ?? modPlacement;
     const next: SavedLoadoutData = {
       version: LOADOUT_SCHEMA_VERSION,
-      loadout: { ...loadout, name, ...(notes ? { notes } : { notes: undefined }) },
+      loadout: {
+        ...loadout,
+        name,
+        ...(notes ? { notes } : { notes: undefined }),
+        parameters: { ...loadout.parameters, mods },
+      },
       ...(optimizer ? { optimizer } : {}),
       ...(builder ? { builder } : {}),
+      ...(nextPlacement && Object.keys(nextPlacement).length > 0
+        ? { modPlacement: nextPlacement }
+        : {}),
     };
     update.mutate(
       { id, data: next },
@@ -151,6 +189,7 @@ export function LoadoutsList({
       loadout: { ...saved.loadout, name: duplicateName(saved.loadout.name, existingNames) },
       ...(saved.optimizer ? { optimizer: saved.optimizer } : {}),
       ...(saved.builder ? { builder: saved.builder } : {}),
+      ...(saved.modPlacement ? { modPlacement: saved.modPlacement } : {}),
     };
     create.mutate(data, {
       onSuccess: () => toast.success("Loadout duplicated"),
@@ -307,7 +346,7 @@ export function LoadoutsList({
               statIcons={statIcons}
               balancedTuningIcon={balancedTuningIcon}
               now={now}
-              onEdit={() => setDialog({ kind: "edit", loadout: saved })}
+              onEdit={() => openEdit(saved)}
               onDuplicate={() => duplicateLoadout(saved)}
               onDelete={() => setDialog({ kind: "delete", loadout: saved })}
               onShare={() => void shareLoadout(saved)}
@@ -322,9 +361,15 @@ export function LoadoutsList({
         open={dialog.kind === "edit"}
         onOpenChange={(open) => !open && setDialog({ kind: "none" })}
         title="Edit loadout"
+        description={
+          dialog.kind === "edit" && !dialog.mods
+            ? "Mods can't be edited while a piece is missing from your inventory."
+            : undefined
+        }
         submitLabel="Save changes"
         initialName={dialog.kind === "edit" ? dialog.loadout.loadout.name : ""}
         initialNotes={dialog.kind === "edit" ? (dialog.loadout.loadout.notes ?? "") : ""}
+        mods={dialog.kind === "edit" ? dialog.mods : undefined}
         busy={update.isPending}
         onSubmit={editLoadout}
       />
