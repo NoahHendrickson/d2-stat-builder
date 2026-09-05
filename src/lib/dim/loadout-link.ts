@@ -27,9 +27,20 @@ export interface DimLoadoutItem {
   socketOverrides?: Record<number, number>;
 }
 
+/** dim-api `LoadoutParameters.artifactUnlocks` — the seasonal artifact perks a build assumes. */
+export interface DimArtifactUnlocks {
+  unlockedItemHashes: number[];
+  seasonNumber: number;
+}
+
+/**
+ * dim-api `Loadout` (the subset this app produces). Everything here is understood by
+ * DIM's `/loadouts?loadout=` import and is the source of truth for saved loadouts.
+ */
 export interface DimLoadout {
   id: string;
   name: string;
+  notes?: string;
   classType: number;
   equipped: DimLoadoutItem[];
   unequipped: DimLoadoutItem[];
@@ -38,6 +49,9 @@ export interface DimLoadout {
     exoticArmorHash?: number;
     assumeArmorMasterwork: number;
     statConstraints?: { statHash: number; minStat: number }[];
+    /** Required set-bonus piece counts (set hash → 2 | 4). */
+    setBonuses?: Record<number, number>;
+    artifactUnlocks?: DimArtifactUnlocks;
   };
 }
 
@@ -57,6 +71,10 @@ export interface DimLoadoutInput {
   /** Fragments carrier; omitted entirely when no fragments are selected. */
   subclass?: { itemHash: number; fragmentHashes: number[]; socketStart: number };
   name: string;
+  notes?: string;
+  /** Required set-bonus counts (set hash → 2 | 4); omitted when empty. */
+  setBonuses?: Record<number, number>;
+  artifactUnlocks?: DimArtifactUnlocks;
 }
 
 /**
@@ -92,6 +110,9 @@ export function buildDimLoadout(input: DimLoadoutInput): DimLoadout {
     artificeModHashes,
     subclass,
     name,
+    notes,
+    setBonuses,
+    artifactUnlocks,
   } = input;
 
   const equipped: DimLoadoutItem[] = pieces.map((p) => ({
@@ -152,9 +173,11 @@ export function buildDimLoadout(input: DimLoadoutInput): DimLoadout {
       : [],
   );
 
+  const hasSetBonuses = setBonuses && Object.keys(setBonuses).length > 0;
   return {
     id: "stat-builder", // required by DIM's type; replaced with a UUID on import
     name,
+    ...(notes ? { notes } : {}),
     classType,
     equipped,
     unequipped: [],
@@ -165,6 +188,8 @@ export function buildDimLoadout(input: DimLoadoutInput): DimLoadout {
         : undefined,
       assumeArmorMasterwork: ASSUME_MASTERWORK_ALL,
       ...(statConstraints.length > 0 ? { statConstraints } : {}),
+      ...(hasSetBonuses ? { setBonuses } : {}),
+      ...(artifactUnlocks ? { artifactUnlocks } : {}),
     },
   };
 }
