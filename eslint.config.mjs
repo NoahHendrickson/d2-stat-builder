@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Scratch worktree copies live here; linting them doubles every finding.
+    ".claude/**",
   ]),
 ]);
 
