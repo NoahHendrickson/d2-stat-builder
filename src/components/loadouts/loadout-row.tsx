@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, useMemo, useState } from "react";
+import { Fragment, memo, useMemo, useState } from "react";
 import Image from "next/image";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -106,8 +106,16 @@ function DetailRow({
   );
 }
 
-export function LoadoutRow({
+/**
+ * One saved loadout. Memoized: the list renders (virtualized) rows with stable,
+ * loadout-taking callbacks, so a keystroke in the search box or one row's expansion
+ * doesn't re-render every other row. Expansion lives in the list so it survives the
+ * row scrolling out of the virtual window.
+ */
+export const LoadoutRow = memo(function LoadoutRow({
   saved,
+  open,
+  onToggle,
   pieceMap,
   manifest,
   characters,
@@ -122,22 +130,23 @@ export function LoadoutRow({
   onArmoryChanged,
 }: {
   saved: SavedLoadout;
-  pieceMap: Map<string, ArmorPiece>;
+  open: boolean;
+  onToggle: (id: string) => void;
+  pieceMap: ReadonlyMap<string, ArmorPiece>;
   manifest: Manifest;
   characters: ArmoryCharacter[];
   statIcons: StatIconMap;
   balancedTuningIcon?: string;
   /** Reference time for "edited … ago" (captured once by the list). */
   now: number;
-  onEdit: () => void;
-  onDuplicate: () => void;
-  onDelete: () => void;
-  onShare: () => void;
-  onLoadInBuilder: () => void;
+  onEdit: (saved: SavedLoadout) => void;
+  onDuplicate: (saved: SavedLoadout) => void;
+  onDelete: (saved: SavedLoadout) => void;
+  onShare: (saved: SavedLoadout) => void;
+  onLoadInBuilder: (saved: SavedLoadout) => void;
   onArmoryChanged: () => void;
 }) {
   const queryClient = useQueryClient();
-  const [open, setOpen] = useState(false);
   const [applying, setApplying] = useState(false);
   const { loadout, optimizer } = saved;
 
@@ -232,7 +241,7 @@ export function LoadoutRow({
     <div className="border-border/60 overflow-hidden rounded-lg border">
       <button
         type="button"
-        onClick={() => setOpen((o) => !o)}
+        onClick={() => onToggle(saved.id)}
         aria-expanded={open}
         className="hover:bg-muted/40 flex w-full items-center gap-3 p-2.5 text-left transition-colors max-lg:gap-2"
       >
@@ -488,11 +497,11 @@ export function LoadoutRow({
           )}
 
           <div className="border-border/60 flex flex-wrap items-center justify-end gap-2 border-t pt-2.5">
-            <Button size="sm" variant="outline" onClick={onLoadInBuilder}>
+            <Button size="sm" variant="outline" onClick={() => onLoadInBuilder(saved)}>
               <SlidersHorizontal weight="duotone" aria-hidden />
               Load in builder
             </Button>
-            <Button size="sm" variant="outline" onClick={onEdit}>
+            <Button size="sm" variant="outline" onClick={() => onEdit(saved)}>
               <PencilSimple weight="duotone" aria-hidden />
               Edit
             </Button>
@@ -520,11 +529,11 @@ export function LoadoutRow({
                 <DotsThree weight="bold" aria-hidden />
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={onDuplicate}>
+                <DropdownMenuItem onClick={() => onDuplicate(saved)}>
                   <Copy weight="duotone" aria-hidden />
                   Duplicate
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={onShare}>
+                <DropdownMenuItem onClick={() => onShare(saved)}>
                   <ShareNetwork weight="duotone" aria-hidden />
                   Copy share link
                 </DropdownMenuItem>
@@ -533,7 +542,7 @@ export function LoadoutRow({
                   Copy item IDs
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem variant="destructive" onClick={onDelete}>
+                <DropdownMenuItem variant="destructive" onClick={() => onDelete(saved)}>
                   <Trash weight="duotone" aria-hidden />
                   Delete
                 </DropdownMenuItem>
@@ -544,4 +553,4 @@ export function LoadoutRow({
       )}
     </div>
   );
-}
+});

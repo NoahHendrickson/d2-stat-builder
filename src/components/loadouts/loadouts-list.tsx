@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useDeferredValue, useMemo, useState } from "react";
+import { useWindowVirtualizer } from "@tanstack/react-virtual";
 import { useRouter, useSearchParams } from "next/navigation";
 import { CaretDown, MagnifyingGlass } from "@phosphor-icons/react";
 import { toast } from "@/lib/toast";
@@ -58,6 +59,11 @@ type DialogState =
   | { kind: "edit"; loadout: SavedLoadout; mods?: ModsSection }
   | { kind: "delete"; loadout: SavedLoadout };
 
+/** Collapsed row height; expanded rows are remeasured on mount. */
+const ESTIMATED_ROW_HEIGHT_PX = 58;
+/** Vertical gap between rows (matches the builder's build list). */
+const ROW_GAP_PX = 6;
+
 export function LoadoutsList({
   armory,
   manifest,
@@ -73,9 +79,20 @@ export function LoadoutsList({
   const { create, update, remove } = useLoadoutMutations();
 
   const [query, setQuery] = useState("");
+  // The filter pass runs on the deferred value so typing never waits on it.
+  const deferredQuery = useDeferredValue(query);
   const [classFilter, setClassFilter] = useState<number | null>(null);
   const [sortKey, setSortKey] = useState<LoadoutListSortKey>("edited");
   const [dialog, setDialog] = useState<DialogState>({ kind: "none" });
+  // Expanded rows, by id — kept here (not in the row) so it survives virtualization.
+  const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set());
+  const toggleExpanded = useCallback((id: string) => {
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    });
+  }, []);
 
   // A share link lands here with ?import=<json>; offer to save a copy.
   const importParam = searchParams.get(SHARE_PARAM);
@@ -111,10 +128,26 @@ export function LoadoutsList({
   const [now] = useState(() => Date.now());
   const hashtags = useMemo(() => collectHashtags(all), [all]);
   const shown = useMemo(
-    () => sortSavedLoadouts(filterLoadouts(all, { query, classType: classFilter }), sortKey),
-    [all, query, classFilter, sortKey],
+    () =>
+      sortSavedLoadouts(
+        filterLoadouts(all, { query: deferredQuery, classType: classFilter }),
+        sortKey,
+      ),
+    [all, deferredQuery, classFilter, sortKey],
   );
   const existingNames = useMemo(() => all.map((l) => l.loadout.name), [all]);
+
+  // Rows are virtualized against the document scroller: only the visible slice
+  // (plus overscan) resolves items and renders, however long the list gets.
+  const [listEl, setListEl] = useState<HTMLDivElement | null>(null);
+  const virtualizer = useWindowVirtualizer({
+    count: shown.length,
+    estimateSize: () => ESTIMATED_ROW_HEIGHT_PX,
+    overscan: 6,
+    gap: ROW_GAP_PX,
+    scrollMargin: listEl?.offsetTop ?? 0,
+    getItemKey: (index) => shown[index].id,
+  });
 
   const onMutationError = (err: { notConfigured: boolean; message: string }) =>
     toast.error(
@@ -123,22 +156,32 @@ export function LoadoutsList({
         : err.message,
     );
 
+  // Row callbacks take the loadout as an argument and are memoized so the rows
+  // (React.memo) only re-render when their own data changes.
+
   /** Open Edit; the mod picker is available when every piece is still in the armory. */
-  const openEdit = (saved: SavedLoadout) => {
-    const resolved = resolveLoadout(saved.loadout, pieceMap, manifest);
-    let mods: ModsSection | undefined;
-    if (resolved.armor.length > 0 && !resolved.missing) {
-      const pieces = resolved.armor.map((a) => a.piece!);
-      const plan = planLoadoutPlugs({
-        pieces: planPiecesFromArmor(pieces, manifest),
-        modHashes: saved.loadout.parameters.mods,
-        plugInfo: plugInfoFromManifest(manifest),
-        placements: saved.modPlacement,
-      });
-      mods = { pieces, catalog: getModCatalog(manifest), initial: plan.assigned };
-    }
-    setDialog({ kind: "edit", loadout: saved, mods });
-  };
+  const openEdit = useCallback(
+    (saved: SavedLoadout) => {
+      const resolved = resolveLoadout(saved.loadout, pieceMap, manifest);
+      let mods: ModsSection | undefined;
+      if (resolved.armor.length > 0 && !resolved.missing) {
+        const pieces = resolved.armor.map((a) => a.piece!);
+        const plan = planLoadoutPlugs({
+          pieces: planPiecesFromArmor(pieces, manifest),
+          modHashes: saved.loadout.parameters.mods,
+          plugInfo: plugInfoFromManifest(manifest),
+          placements: saved.modPlacement,
+        });
+        mods = { pieces, catalog: getModCatalog(manifest), initial: plan.assigned };
+      }
+      setDialog({ kind: "edit", loadout: saved, mods });
+    },
+    [pieceMap, manifest],
+  );
+  const openDelete = useCallback(
+    (saved: SavedLoadout) => setDialog({ kind: "delete", loadout: saved }),
+    [],
+  );
 
   const editLoadout = ({ name, notes, placement }: LoadoutDetailsValues) => {
     if (dialog.kind !== "edit") return;
@@ -183,19 +226,23 @@ export function LoadoutsList({
     });
   };
 
-  const duplicateLoadout = (saved: SavedLoadout) => {
-    const data: SavedLoadoutData = {
-      version: LOADOUT_SCHEMA_VERSION,
-      loadout: { ...saved.loadout, name: duplicateName(saved.loadout.name, existingNames) },
-      ...(saved.optimizer ? { optimizer: saved.optimizer } : {}),
-      ...(saved.builder ? { builder: saved.builder } : {}),
-      ...(saved.modPlacement ? { modPlacement: saved.modPlacement } : {}),
-    };
-    create.mutate(data, {
-      onSuccess: () => toast.success("Loadout duplicated"),
-      onError: onMutationError,
-    });
-  };
+  const createMutate = create.mutate;
+  const duplicateLoadout = useCallback(
+    (saved: SavedLoadout) => {
+      const data: SavedLoadoutData = {
+        version: LOADOUT_SCHEMA_VERSION,
+        loadout: { ...saved.loadout, name: duplicateName(saved.loadout.name, existingNames) },
+        ...(saved.optimizer ? { optimizer: saved.optimizer } : {}),
+        ...(saved.builder ? { builder: saved.builder } : {}),
+        ...(saved.modPlacement ? { modPlacement: saved.modPlacement } : {}),
+      };
+      createMutate(data, {
+        onSuccess: () => toast.success("Loadout duplicated"),
+        onError: onMutationError,
+      });
+    },
+    [createMutate, existingNames],
+  );
 
   const importLoadout = ({ name, notes }: { name: string; notes: string }) => {
     if (!importData) return;
@@ -212,29 +259,30 @@ export function LoadoutsList({
     });
   };
 
-  const shareLoadout = async (saved: SavedLoadout) => {
+  const shareLoadout = useCallback((saved: SavedLoadout) => {
     const url = buildShareUrl(window.location.origin, saved);
-    try {
-      await navigator.clipboard.writeText(url);
-      toast.success("Share link copied", "Anyone with the link can import a copy");
-    } catch {
-      toast.error("Couldn't copy to clipboard");
-    }
-  };
-
-  const loadInBuilder = (saved: SavedLoadout) => {
-    const exoticName = manifest.def(
-      "DestinyInventoryItemDefinition",
-      saved.loadout.parameters.exoticArmorHash,
-    )?.displayProperties?.name;
-    saveSelections(
-      selectionsForLoadout(saved, loadSelections(), {
-        statHashToIndex: STAT_HASH_TO_INDEX,
-        exoticName,
-      }),
+    navigator.clipboard.writeText(url).then(
+      () => toast.success("Share link copied", "Anyone with the link can import a copy"),
+      () => toast.error("Couldn't copy to clipboard"),
     );
-    router.push("/");
-  };
+  }, []);
+
+  const loadInBuilder = useCallback(
+    (saved: SavedLoadout) => {
+      const exoticName = manifest.def(
+        "DestinyInventoryItemDefinition",
+        saved.loadout.parameters.exoticArmorHash,
+      )?.displayProperties?.name;
+      saveSelections(
+        selectionsForLoadout(saved, loadSelections(), {
+          statHashToIndex: STAT_HASH_TO_INDEX,
+          exoticName,
+        }),
+      );
+      router.push("/");
+    },
+    [manifest, router],
+  );
 
   const sortLabel =
     LOADOUT_LIST_SORT_OPTIONS.find((o) => o.key === sortKey)?.label ?? "Sort";
@@ -335,25 +383,43 @@ export function LoadoutsList({
       ) : shown.length === 0 ? (
         <p className="text-muted-foreground text-sm">No loadouts match.</p>
       ) : (
-        <div className="space-y-1.5">
-          {shown.map((saved) => (
-            <LoadoutRow
-              key={saved.id}
-              saved={saved}
-              pieceMap={pieceMap}
-              manifest={manifest}
-              characters={armory.characters}
-              statIcons={statIcons}
-              balancedTuningIcon={balancedTuningIcon}
-              now={now}
-              onEdit={() => openEdit(saved)}
-              onDuplicate={() => duplicateLoadout(saved)}
-              onDelete={() => setDialog({ kind: "delete", loadout: saved })}
-              onShare={() => void shareLoadout(saved)}
-              onLoadInBuilder={() => loadInBuilder(saved)}
-              onArmoryChanged={onArmoryChanged}
-            />
-          ))}
+        <div
+          ref={setListEl}
+          className="relative w-full"
+          style={{ height: virtualizer.getTotalSize() }}
+        >
+          {virtualizer.getVirtualItems().map((item) => {
+            const saved = shown[item.index];
+            return (
+              <div
+                key={item.key}
+                ref={virtualizer.measureElement}
+                data-index={item.index}
+                className="absolute top-0 left-0 w-full"
+                style={{
+                  transform: `translateY(${item.start - virtualizer.options.scrollMargin}px)`,
+                }}
+              >
+                <LoadoutRow
+                  saved={saved}
+                  open={expanded.has(saved.id)}
+                  onToggle={toggleExpanded}
+                  pieceMap={pieceMap}
+                  manifest={manifest}
+                  characters={armory.characters}
+                  statIcons={statIcons}
+                  balancedTuningIcon={balancedTuningIcon}
+                  now={now}
+                  onEdit={openEdit}
+                  onDuplicate={duplicateLoadout}
+                  onDelete={openDelete}
+                  onShare={shareLoadout}
+                  onLoadInBuilder={loadInBuilder}
+                  onArmoryChanged={onArmoryChanged}
+                />
+              </div>
+            );
+          })}
         </div>
       )}
 

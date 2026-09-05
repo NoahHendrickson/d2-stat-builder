@@ -53,10 +53,18 @@ export function useLoadouts() {
   });
 }
 
-/** Create / update / delete, each invalidating the list on success. */
+/**
+ * Create / update / delete. Each writes the server's response straight into the cached
+ * list instead of invalidating it: the row that came back is authoritative, and a
+ * refetch of the whole list (which grows with every save) after every edit would be a
+ * full-list re-render for nothing.
+ */
 export function useLoadoutMutations() {
   const queryClient = useQueryClient();
-  const invalidate = () => queryClient.invalidateQueries({ queryKey: LOADOUTS_QUERY_KEY });
+  const patchList = (fn: (list: SavedLoadout[]) => SavedLoadout[]) =>
+    queryClient.setQueryData<SavedLoadout[]>(LOADOUTS_QUERY_KEY, (list) =>
+      list ? fn(list) : list,
+    );
 
   const create = useMutation<SavedLoadout, LoadoutsApiError, SavedLoadoutData>({
     mutationFn: async (data) => {
@@ -68,7 +76,7 @@ export function useLoadoutMutations() {
       if (!parsed) throw new LoadoutsApiError(500, "Server returned an unreadable loadout");
       return parsed;
     },
-    onSuccess: invalidate,
+    onSuccess: (saved) => patchList((list) => [saved, ...list]),
   });
 
   const update = useMutation<
@@ -85,14 +93,14 @@ export function useLoadoutMutations() {
       if (!parsed) throw new LoadoutsApiError(500, "Server returned an unreadable loadout");
       return parsed;
     },
-    onSuccess: invalidate,
+    onSuccess: (saved) => patchList((list) => list.map((l) => (l.id === saved.id ? saved : l))),
   });
 
   const remove = useMutation<void, LoadoutsApiError, string>({
     mutationFn: async (id) => {
       await api(`/api/loadouts/${id}`, { method: "DELETE" });
     },
-    onSuccess: invalidate,
+    onSuccess: (_, id) => patchList((list) => list.filter((l) => l.id !== id)),
   });
 
   return { create, update, remove };
