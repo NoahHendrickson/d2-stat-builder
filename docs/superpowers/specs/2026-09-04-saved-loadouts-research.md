@@ -1,6 +1,6 @@
 # Saved loadouts (DIM parity) — research
 
-**Date:** 2026-09-04 · **Branch:** `feat/saved-loadouts` (off `feat/noey-ui-overhaul`) · **Status:** research — no code yet
+**Date:** 2026-09-04 · **Branch:** `feat/saved-loadouts` (off `feat/noey-ui-overhaul`) · **Status:** phases 1–3 implemented (see §8); pending Noah's signed-in verification
 
 ## Goal
 
@@ -252,3 +252,32 @@ state (pins, set filters).
 4. **Manifest expansion is fine.** The cache is keyed on Bungie's manifest version, which
    Bungie bumps roughly weekly anyway, so users already re-download at that cadence; adding
    tables or widening the filter just needs a cache-key bump so the next load refetches once.
+
+---
+
+## 8. Implementation status (2026-09-04)
+
+Shipped on the branch, unit-tested where pure, type- and lint-clean; **not yet exercised
+against a live Bungie session** (no `.env.local` in this checkout — Noah verifies):
+
+| Piece | Where |
+|---|---|
+| Model + parser (`SavedLoadout` = dim-api loadout + optimizer result + `BuilderSnapshot`) | `src/lib/loadouts/types.ts` |
+| Store interface, in-memory + Neon (lazy `CREATE TABLE IF NOT EXISTS loadouts`) | `src/lib/loadouts/store.ts`, `neon-store.ts` |
+| CRUD API keyed on the **HMAC-signed** `d2_user` cookie | `src/app/api/loadouts/*`, `src/lib/bungie/signed-cookie.ts` |
+| Save from a build (name/notes dialog), builder snapshot threading | `build-results.tsx`, `builder-panel.tsx` |
+| Loadouts page: list, class filter, sort, #hashtag search, edit/duplicate/delete/share/import, Load in builder, Open in DIM | `src/components/loadouts/*`, `src/lib/loadouts/{list,resolve,share,load-in-builder}.ts` |
+| Artifact perks saved per character (components 100 + 202, `DestinySeasonDefinition`) and diffed on the row | `src/lib/armory/artifact.ts` |
+| Apply: equip armor + subclass, then `InsertSocketPlugFree` for stat mods, tuning, artifice, fragments | `src/lib/loadouts/apply-plan.ts` (pure), `apply-client.ts`, `src/app/api/bungie/apply-loadout/route.ts`, `src/lib/bungie/equip-server.ts` |
+
+Setup: create a Neon database (Vercel Marketplace, free plan) and set `DATABASE_URL`;
+the table is created on first request. Existing sessions are signed out once by the
+cookie-signing change.
+
+Things to verify in a signed-in browser, in order: save a build → row shows correct
+stats/mods/fragments → Apply in orbit (watch the summary toast) → Load in builder
+restores targets/exotic/fragments → share link imports on a second account.
+
+Known limits (by decision, §7): armor-only; artifact perks are saved and diffed, not
+applied (no Bungie endpoint); fragment capacity isn't known client-side, so a fragment
+beyond the subclass's unlocked sockets surfaces as a per-plug error from Bungie.

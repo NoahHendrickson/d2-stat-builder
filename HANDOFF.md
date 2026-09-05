@@ -61,6 +61,10 @@ src/
     manifest/{load,db,tables,use-manifest}.ts  download armor tables, IndexedDB cache keyed on manifest version
     armory/{fetch,normalize,stats,sets,use-armory}.ts   GetProfile → ArmorPiece[]; stat/slot/set constants
     optimizer/{types,solve,use-optimizer,worker}.ts     PURE solver + Web Worker wrapper
+    loadouts/{types,store,neon-store,apply-plan,...}.ts Saved loadouts: model+parser, Neon store,
+                                                        apply planner (see docs/superpowers/specs/2026-09-04-saved-loadouts-research.md)
+    bungie/{signed-cookie,equip-server}.ts             HMAC-signed identity cookie; shared equip + InsertSocketPlugFree helpers
+  app/loadouts, app/api/loadouts, app/api/bungie/apply-loadout   Loadouts page, CRUD API, apply route
 ```
 
 **Data flow:** browser → `/api/bungie/profile` (server calls Bungie) → raw `DestinyProfileResponse` → `normalizeArmory()` (client, needs manifest from IndexedDB) → `ArmorPiece[]` → `BuilderPanel` maps to `OptimizerPiece[]` → Web Worker `solve()` → ranked loadouts.

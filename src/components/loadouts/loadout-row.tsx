@@ -28,12 +28,9 @@ import {
   type StatIconMap,
 } from "@/lib/armory/stats";
 import { BUNGIE_IMAGE_BASE } from "@/lib/bungie/constants";
-import {
-  equipItemRef,
-  lastPlayedCharacter,
-  postEquipRequest,
-} from "@/lib/bungie/equip-client";
+import { lastPlayedCharacter } from "@/lib/bungie/equip-client";
 import { buildDimLoadoutUrl } from "@/lib/dim/loadout-link";
+import { applySavedLoadout } from "@/lib/loadouts/apply-client";
 import { formatRelativeTime } from "@/lib/armor-table/relative-time";
 import { resolveLoadout } from "@/lib/loadouts/resolve";
 import { loadoutHashtags, type SavedLoadout } from "@/lib/loadouts/types";
@@ -141,7 +138,7 @@ export function LoadoutRow({
 }) {
   const queryClient = useQueryClient();
   const [open, setOpen] = useState(false);
-  const [equipping, setEquipping] = useState(false);
+  const [applying, setApplying] = useState(false);
   const { loadout, optimizer } = saved;
 
   const resolved = useMemo(
@@ -179,31 +176,23 @@ export function LoadoutRow({
     ? artifact.unlockedItemHashes.filter((h) => currentUnlocks.has(h)).length
     : 0;
 
-  const equipArmor = async () => {
-    if (!resolved.actionable || !targetCharacter || equipping) return;
-    const pieces = resolved.armor.map((a) => a.piece!);
-    setEquipping(true);
+  // Equip the armor (+ subclass), then socket mods / tuning / artifice / fragments.
+  const applyLoadout = async () => {
+    if (!resolved.actionable || !targetCharacter || applying) return;
+    setApplying(true);
     try {
-      const results = await postEquipRequest(
-        { characterId: targetCharacter.id, items: pieces.map(equipItemRef) },
-        { queryClient, failureMessage: "Equip failed" },
-      );
-      if (!results) return;
-      const failed = results.filter((r) => !r.ok);
-      if (failed.length === 0) {
-        toast.success(`Equipped on your ${CLASS_NAMES[targetCharacter.classType]}`);
-      } else {
-        const names = failed.map((f) => {
-          const piece = pieces.find((p) => p.instanceId === f.itemInstanceId);
-          return `${piece?.name ?? "Unknown piece"}: ${f.message ?? "failed"}`;
-        });
-        toast.warning(`Some items didn't equip — ${names.join("; ")}`);
-      }
-      onArmoryChanged();
+      const outcome = await applySavedLoadout({
+        saved,
+        resolved,
+        character: targetCharacter,
+        manifest,
+        queryClient,
+      });
+      if (outcome) onArmoryChanged();
     } catch {
-      toast.error("Equip failed — check your connection and try again");
+      toast.error("Apply failed — check your connection and try again");
     } finally {
-      setEquipping(false);
+      setApplying(false);
     }
   };
 
@@ -499,12 +488,15 @@ export function LoadoutRow({
             </Button>
             <Button
               size="sm"
-              onClick={equipArmor}
-              disabled={!resolved.actionable || !targetCharacter || equipping}
-              title={disabledReason}
+              onClick={applyLoadout}
+              disabled={!resolved.actionable || !targetCharacter || applying}
+              title={
+                disabledReason ??
+                "Equips the armor and subclass, then sockets mods, tuning, and fragments (be in orbit)"
+              }
             >
-              {equipping ? <CircleNotch className="animate-spin" aria-hidden /> : null}
-              Equip armor
+              {applying ? <CircleNotch className="animate-spin" aria-hidden /> : null}
+              Apply loadout
             </Button>
             <DropdownMenu>
               <DropdownMenuTrigger

@@ -49,6 +49,19 @@ const ARTIFICE_SOCKET_CATEGORY = "enhancements.artifice";
 
 export type ArmorLocation = "equipped" | "inventory" | "vault";
 
+/** Socket indices of the mod sockets a loadout apply can write to. */
+export interface ArmorModSockets {
+  /** General (+10 / +5 stat mod) socket. */
+  general?: number;
+  /** Tier-5 tuning socket. */
+  tuning?: number;
+  /** Artifice +3 socket (legacy artifice pieces). */
+  artifice?: number;
+}
+
+/** Live socket plug category → which mod socket it is (empty sockets carry the category too). */
+const GENERAL_MOD_CATEGORY = "enhancements.v2_general";
+
 export interface ArmorPiece {
   instanceId: string;
   itemHash: number;
@@ -81,6 +94,12 @@ export interface ArmorPiece {
   exoticPerkHashes?: [number, number];
   location: ArmorLocation;
   characterId?: string;
+  /** Mod socket indices (for applying loadouts); absent when no socket data. */
+  modSockets?: ArmorModSockets;
+  /** Current plug hash per mod socket index (only the sockets in `modSockets`). */
+  socketPlugs?: Record<number, number>;
+  /** Armor energy (component 300) — capacity and what current plugs use. */
+  energy?: { capacity: number; used: number };
 }
 
 const ITEM_TYPE_ARMOR = 2;
@@ -298,6 +317,45 @@ function isArtificePiece(
   return false;
 }
 
+/**
+ * Locate the general / tuning / artifice mod sockets from the live sockets' current
+ * plugs (an empty socket still holds an "Empty … Socket" plug of the right category),
+ * plus the plug in each. First match per kind wins.
+ */
+function findModSockets(
+  instanceId: string,
+  profile: DestinyProfileResponse,
+  manifest: Manifest,
+): { modSockets: ArmorModSockets; socketPlugs: Record<number, number> } | undefined {
+  const sockets = profile.itemComponents?.sockets?.data?.[instanceId]?.sockets;
+  if (!sockets) return undefined;
+  const modSockets: ArmorModSockets = {};
+  const socketPlugs: Record<number, number> = {};
+  sockets.forEach((socket, i) => {
+    if (!socket.plugHash) return;
+    const cat = manifest.def("DestinyInventoryItemDefinition", socket.plugHash)?.plug
+      ?.plugCategoryIdentifier;
+    if (!cat) return;
+    let kind: keyof ArmorModSockets | undefined;
+    if (cat === GENERAL_MOD_CATEGORY) kind = "general";
+    else if (cat === ARTIFICE_SOCKET_CATEGORY) kind = "artifice";
+    else if (cat.includes(TUNING_PLUG_CATEGORY)) kind = "tuning";
+    if (!kind || modSockets[kind] !== undefined) return;
+    modSockets[kind] = i;
+    socketPlugs[i] = socket.plugHash;
+  });
+  return { modSockets, socketPlugs };
+}
+
+function readEnergy(
+  instanceId: string,
+  profile: DestinyProfileResponse,
+): { capacity: number; used: number } | undefined {
+  const energy = profile.itemComponents?.instances?.data?.[instanceId]?.energy;
+  if (!energy) return undefined;
+  return { capacity: energy.energyCapacity, used: energy.energyUsed };
+}
+
 /** True when a tuning-category plug is currently in any socket (empty or slotted). */
 function hasTuningSocket(
   instanceId: string,
@@ -372,6 +430,9 @@ function buildPiece(
     for (let i = 0; i < stats.length; i++) stats[i] += bonus[i];
   }
 
+  const sockets = findModSockets(item.itemInstanceId, profile, manifest);
+  const energy = readEnergy(item.itemInstanceId, profile);
+
   return {
     instanceId: item.itemInstanceId,
     itemHash: item.itemHash,
@@ -393,6 +454,8 @@ function buildPiece(
     exoticPerkHashes,
     location,
     characterId,
+    ...(sockets ? { modSockets: sockets.modSockets, socketPlugs: sockets.socketPlugs } : {}),
+    ...(energy ? { energy } : {}),
   };
 }
 

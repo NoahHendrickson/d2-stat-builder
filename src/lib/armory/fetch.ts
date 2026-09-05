@@ -5,7 +5,9 @@ import type {
 import type { Manifest } from "@/lib/manifest/load";
 import {
   equippedSubclassForCharacter,
+  subclassItemsForCharacter,
   type EquippedSubclass,
+  type SubclassItem,
 } from "./equipped-subclass";
 import { normalizeArmory, type ArmorPiece } from "./normalize";
 import { artifactUnlocksForCharacter } from "./artifact";
@@ -25,6 +27,8 @@ export interface ArmoryCharacter {
   equippedSubclass?: EquippedSubclass;
   /** Currently unlocked seasonal-artifact perks (dim-api shape); omitted if unavailable. */
   artifactUnlocks?: DimArtifactUnlocks;
+  /** The character's subclass items with live fragment sockets (for applying loadouts). */
+  subclassItems: SubclassItem[];
 }
 
 export interface Armory {
@@ -77,6 +81,7 @@ export async function fetchArmory(manifest: Manifest): Promise<Armory> {
       dateLastPlayed: c.dateLastPlayed,
       ...(equippedSubclass ? { equippedSubclass } : {}),
       ...(artifactUnlocks ? { artifactUnlocks } : {}),
+      subclassItems: subclassItemsForCharacter(profile, c.characterId),
     };
   });
 
