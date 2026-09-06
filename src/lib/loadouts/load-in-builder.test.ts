@@ -1,4 +1,5 @@
 import { test, expect } from "vitest";
+import { countMajorStatMods, isMajorStatMod } from "../dim/mod-hashes";
 import { selectionsForLoadout } from "./load-in-builder";
 import type { SavedLoadout } from "./types";
 import type { PersistedSelections } from "../builder/selection-storage";
@@ -87,4 +88,57 @@ test("any-class loadout keeps the current class", () => {
   const s = saved();
   s.loadout.classType = 3;
   expect(selectionsForLoadout(s, existing, { statHashToIndex }).classType).toBe(0);
+});
+
+test("imports restore the saved subclass and fragments instead of unrelated current selections", () => {
+  const out = selectionsForLoadout(saved(), existing, {
+    statHashToIndex, subclass: { subclass: "Void", fragmentHashes: [101, 102] },
+  });
+  expect(out.activeSubclass).toBe("Void");
+  expect(out.fragSel.Void).toEqual([101, 102]);
+  expect(out.fragSel.Arc).toEqual([5]);
+});
+
+test("opts.major overrides a stale builder snapshot (Optimize from edited mods)", () => {
+  const out = selectionsForLoadout(
+    saved({
+      builder: {
+        targets: [0, 100, 0, 0, 0, 0],
+        major: 0,
+        setReqs: {},
+        exoticName: null,
+        exoticPerks: [null, null],
+        allowTuning: true,
+        balancedTuning: true,
+        legacyExotics: true,
+        activeSubclass: "Prismatic",
+        fragmentHashes: [],
+      },
+    }),
+    existing,
+    { statHashToIndex, major: 3 },
+  );
+  expect(out.major).toBe(3);
+});
+
+test("without a snapshot, opts.major is the selector value", () => {
+  const out = selectionsForLoadout(saved(), null, { statHashToIndex, major: 2 });
+  expect(out.major).toBe(2);
+});
+
+test("countMajorStatMods counts matching plugs and caps at 5", () => {
+  const isMajor = (h: number) => h === 100 || h === 200 || h === 300;
+  expect(countMajorStatMods([100, 50, 200, 100], isMajor)).toBe(3);
+  expect(countMajorStatMods([100, 100, 100, 100, 200, 300], isMajor)).toBe(5);
+  expect(countMajorStatMods([50, 51], isMajor)).toBe(0);
+});
+
+test("isMajorStatMod is a general-category +10 armor-stat plug", () => {
+  const major = {
+    plug: { plugCategoryIdentifier: "enhancements.v2_general" },
+    investmentStats: [{ statTypeHash: 392767087, value: 10 }],
+  };
+  expect(isMajorStatMod(major)).toBe(true);
+  expect(isMajorStatMod({ ...major, investmentStats: [{ statTypeHash: 392767087, value: 5 }] })).toBe(false);
+  expect(isMajorStatMod(undefined)).toBe(false);
 });

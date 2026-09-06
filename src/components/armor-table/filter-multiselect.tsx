@@ -1,5 +1,6 @@
 "use client";
 
+import { TooltipLabel } from "@/components/ui/tooltip";
 import { useRef, useState } from "react";
 import { CaretDown, MagnifyingGlass, PushPin, X } from "@phosphor-icons/react";
 import { partitionByPin, type FilterOption } from "@/lib/armor-table/pinned";
@@ -26,9 +27,7 @@ export function selectionSummaryText<V>(
   const first =
     options.find((o) => Object.is(o.value, selected[0]))?.label ??
     String(selected[0]);
-  return selected.length > 1
-    ? `${first} +${selected.length - 1} more`
-    : first;
+  return selected.length > 1 ? `${first} +${selected.length - 1} more` : first;
 }
 
 /** Trigger text: muted `allLabel` when nothing is selected, else the summary. */
@@ -94,27 +93,31 @@ export function FilterMultiselectPanel<V extends string | number>({
         />
         <span className="min-w-0 flex-1 truncate">{opt.label}</span>
         {pinnable && onTogglePin && (
-          <button
-            type="button"
-            aria-label={isPinned ? `Unpin ${opt.label}` : `Pin ${opt.label}`}
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              onTogglePin(opt.value);
-            }}
-            className={cn(
-              "relative flex size-7 shrink-0 items-center justify-center rounded-md transition-opacity outline-none focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring/50",
-              isPinned
-                ? "text-foreground"
-                : "text-muted-foreground hover:text-foreground opacity-0 group-hover/option:opacity-100",
-            )}
+          <TooltipLabel
+            label={isPinned ? `Unpin ${opt.label}` : `Pin ${opt.label}`}
           >
-            <PushPin
-              weight={isPinned ? "fill" : "duotone"}
-              className="size-3.5"
-              aria-hidden
-            />
-          </button>
+            <button
+              type="button"
+              aria-label={isPinned ? `Unpin ${opt.label}` : `Pin ${opt.label}`}
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                onTogglePin(opt.value);
+              }}
+              className={cn(
+                "relative flex size-7 shrink-0 items-center justify-center rounded-md transition-opacity outline-none focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring/50",
+                isPinned
+                  ? "text-foreground"
+                  : "text-muted-foreground hover:text-foreground opacity-0 group-hover/option:opacity-100",
+              )}
+            >
+              <PushPin
+                weight={isPinned ? "fill" : "duotone"}
+                className="size-3.5"
+                aria-hidden
+              />
+            </button>
+          </TooltipLabel>
         )}
       </label>
     );
@@ -230,43 +233,53 @@ export function FilterMultiselect<V extends string | number>({
           )}
           data-active={active || undefined}
         >
-          <PopoverTrigger
-            ref={triggerRef}
-            aria-label={
+          <TooltipLabel
+            label={
               active
                 ? `${label}: ${summaryText} — ${value.length} selected`
                 : `${label}: ${allLabel}`
             }
-            className={fieldControlInnerTriggerClasses}
           >
-            <span className="min-w-0 flex-1 truncate text-left">
-              {selectionSummary(value, options, allLabel)}
-            </span>
-            {active ? (
-              // Placeholder for the caret slot; the clear button overlays it
-              // from outside (it can't live in here — no button-in-button).
-              <span className="size-4 shrink-0" aria-hidden />
-            ) : (
-              <CaretDown
-                weight="duotone"
-                className="text-muted-foreground pointer-events-none size-4 shrink-0"
-                aria-hidden
-              />
-            )}
-          </PopoverTrigger>
+            <PopoverTrigger
+              ref={triggerRef}
+              aria-label={
+                active
+                  ? `${label}: ${summaryText} — ${value.length} selected`
+                  : `${label}: ${allLabel}`
+              }
+              className={fieldControlInnerTriggerClasses}
+            >
+              <span className="min-w-0 flex-1 truncate text-left">
+                {selectionSummary(value, options, allLabel)}
+              </span>
+              {active ? (
+                // Placeholder for the caret slot; the clear button overlays it
+                // from outside (it can't live in here — no button-in-button).
+                <span className="size-4 shrink-0" aria-hidden />
+              ) : (
+                <CaretDown
+                  weight="duotone"
+                  className="text-muted-foreground pointer-events-none size-4 shrink-0"
+                  aria-hidden
+                />
+              )}
+            </PopoverTrigger>
+          </TooltipLabel>
         </div>
         {active && (
-          <button
-            type="button"
-            aria-label={`Clear ${label.toLowerCase()} filter`}
-            onClick={() => {
-              onChange([]);
-              triggerRef.current?.focus();
-            }}
-            className="text-muted-foreground hover:text-foreground focus-visible:ring-ring/50 absolute top-1/2 right-1.5 flex size-5 -translate-y-1/2 items-center justify-center rounded-[4px] outline-none focus-visible:ring-3 peer-has-[:active]/filter:translate-y-[calc(-50%+4px)]"
-          >
-            <X weight="bold" className="size-3.5" aria-hidden />
-          </button>
+          <TooltipLabel label={`Clear ${label.toLowerCase()} filter`}>
+            <button
+              type="button"
+              aria-label={`Clear ${label.toLowerCase()} filter`}
+              onClick={() => {
+                onChange([]);
+                triggerRef.current?.focus();
+              }}
+              className="text-muted-foreground hover:text-foreground focus-visible:ring-ring/50 absolute top-1/2 right-1.5 flex size-5 -translate-y-1/2 items-center justify-center rounded-[4px] outline-none focus-visible:ring-3 peer-has-[:active]/filter:translate-y-[calc(-50%+4px)]"
+            >
+              <X weight="bold" className="size-3.5" aria-hidden />
+            </button>
+          </TooltipLabel>
         )}
         <PopoverContent align="start" className="w-64 p-0">
           <FilterMultiselectPanel

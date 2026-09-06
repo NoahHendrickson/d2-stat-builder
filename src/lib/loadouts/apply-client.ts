@@ -11,7 +11,8 @@ import type { EquipItemState } from "@/lib/bungie/equip-plan";
 import type { ItemResult, PlugRequest, PlugResult } from "@/lib/bungie/equip-server";
 import type { ResolvedLoadout } from "./resolve";
 import type { SavedLoadout } from "./types";
-import { planLoadoutPlugs, type ApplyPlan } from "./apply-plan";
+import { planLoadoutPlugs, type ApplyPlan, type SubclassPlugGroup } from "./apply-plan";
+import { subclassOptions, selectedSubclassPlugs, subclassFragmentCapacity } from "./subclass";
 import { planPiecesFromArmor } from "./plan-pieces";
 import { plugInfoFromManifest } from "./plug-info";
 
@@ -55,6 +56,31 @@ export async function applySavedLoadout({
     });
   }
 
+  const groups: SubclassPlugGroup[] = [];
+  if (subclassItem && resolved.subclass?.subclass) {
+    const options = subclassOptions(manifest, character.classType, resolved.subclass.subclass);
+    const carrier = { hash: subclassItem.itemHash, socketOverrides: resolved.subclass.socketOverrides };
+    const currentFor = {
+      super: subclassItem.superSockets,
+      aspects: subclassItem.aspectSockets,
+      fragments: subclassItem.fragmentSockets,
+    } as const;
+    for (const kind of ["super", "aspects", "fragments"] as const) {
+      const group = options[kind];
+      const entries = Object.entries(carrier.socketOverrides).filter(([i]) => Number(i) >= group.start && Number(i) < group.start + group.count);
+      if (!entries.length) continue;
+      groups.push({
+        kind: kind === "super" ? "super" : kind === "aspects" ? "aspect" : "fragment",
+        start: group.start,
+        count: kind === "fragments" ? Math.min(group.count, subclassFragmentCapacity(carrier, options.aspects)) : group.count,
+        current: currentFor[kind],
+        desired: selectedSubclassPlugs(carrier, group),
+        emptyHash: group.emptyHash,
+        clearUnused: entries.some(([, hash]) => hash === group.emptyHash),
+      });
+    }
+  }
+
   const plan = planLoadoutPlugs({
     pieces: planPiecesFromArmor(pieces, manifest),
     modHashes: saved.loadout.parameters.mods,
@@ -68,9 +94,11 @@ export async function applySavedLoadout({
             socketStart: FRAGMENT_SOCKET_START[resolved.subclass.subclass],
             socketCount: FRAGMENT_SOCKET_COUNT,
             desiredFragments: resolved.subclass.fragmentHashes,
+            groups,
           }
         : undefined,
   });
+  if (resolved.subclass && !subclassItem) plan.skipped.push("Subclass is not available on this character");
 
   const plugs: PlugRequest[] = plan.plugs.map(({ itemInstanceId, socketIndex, plugItemHash }) => ({
     itemInstanceId,

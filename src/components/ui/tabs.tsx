@@ -32,8 +32,9 @@ const tabsListVariants = cva(
         // #E8E4E1 on light, #313131 on dark, radius matches Button (10px).
         default:
           "overflow-clip rounded-[10px] corner-smooth bg-[#E8E4E1] dark:bg-[#313131]",
-        // Figma "IconTabList" (174:881 / 225:927 dark): 32px icon track, radius matches Button.
-        icon: "overflow-clip rounded-[10px] corner-smooth bg-[#E8E4E1] dark:bg-[#313131]",
+        // Figma "IconTabList" (1:229): 32px icon track filled with foreground at 6%
+        // (the file's --primary), radius matches Button.
+        icon: "overflow-clip rounded-[10px] corner-smooth bg-foreground/6",
         line: "gap-1 rounded-none bg-transparent p-[3px]",
       },
     },
@@ -52,7 +53,9 @@ const tabsIndicatorVariants = cva(
         // into the track, bordered with the track colour — not a lighter raise.
         default:
           "rounded-[10px] corner-smooth border border-foreground/12 bg-background dark:border-[#313131]",
-        icon: "rounded-[10px] corner-smooth border border-border bg-background dark:border-[#313131]",
+        // Figma "IconTab" active (1:229): the sidebar fill recessed into the track, edged
+        // with the track colour — it lives in the sidebar, so it must match that surface.
+        icon: "rounded-[10px] corner-smooth border border-foreground/6 bg-sidebar",
         line: "bg-primary group-data-horizontal/tabs:top-[calc(var(--active-tab-top)+var(--active-tab-height)+3px)] group-data-horizontal/tabs:h-0.5 group-data-horizontal/tabs:translate-y-0 group-data-vertical/tabs:left-[calc(var(--active-tab-left)+var(--active-tab-width)+2px)] group-data-vertical/tabs:w-0.5 group-data-vertical/tabs:translate-x-0",
       },
     },

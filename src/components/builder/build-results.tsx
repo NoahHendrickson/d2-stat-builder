@@ -1,12 +1,7 @@
 "use client";
 
-import {
-  Fragment,
-  memo,
-  useMemo,
-  useState,
-  type ReactNode,
-} from "react";
+import { TooltipLabel } from "@/components/ui/tooltip";
+import { Fragment, memo, useMemo, useState, type ReactNode } from "react";
 import Image from "next/image";
 import {
   ArrowSquareOut,
@@ -47,9 +42,16 @@ import {
   type LoadoutDetailsValues,
   type ModsSection,
 } from "@/components/loadouts/loadout-details-dialog";
-import { modsFromEditor, modsSectionFromPlan } from "@/lib/loadouts/mod-placement";
+import {
+  modsFromEditor,
+  modsSectionFromPlan,
+} from "@/lib/loadouts/mod-placement";
 import { useLoadoutMutations } from "@/lib/loadouts/use-loadouts";
-import { LOADOUT_SCHEMA_VERSION, type BuilderSnapshot } from "@/lib/loadouts/types";
+import { loadoutSubclass, withLoadoutSubclass } from "@/lib/loadouts/subclass";
+import {
+  LOADOUT_SCHEMA_VERSION,
+  type BuilderSnapshot,
+} from "@/lib/loadouts/types";
 import { planLoadoutPlugs } from "@/lib/loadouts/apply-plan";
 import { planPiecesFromArmor } from "@/lib/loadouts/plan-pieces";
 import { plugInfoFromManifest } from "@/lib/loadouts/plug-info";
@@ -122,7 +124,10 @@ function ArtificeCell({
   const key = STAT_ORDER[pick];
   return (
     <span className="flex items-center gap-0.5 text-[10px] text-brand/80 tabular-nums">
-      <StatGlyph src={statIcons[key]} label={`Artifice +3 ${STAT_LABELS[key]}`} />
+      <StatGlyph
+        src={statIcons[key]}
+        label={`Artifice +3 ${STAT_LABELS[key]}`}
+      />
       +3
     </span>
   );
@@ -147,19 +152,21 @@ export function StatGlyph({
       />
     );
   return (
-    <Image
-      src={`${BUNGIE_IMAGE_BASE}${src}`}
-      alt={label}
-      title={label}
-      width={16}
-      height={16}
-      className={cn(
-        "inline-block size-4 shrink-0",
-        invert && "invert dark:invert-0",
-        className,
-      )}
-      unoptimized
-    />
+    <TooltipLabel label={label}>
+      <Image
+        src={`${BUNGIE_IMAGE_BASE}${src}`}
+        alt={label}
+        tabIndex={0}
+        width={16}
+        height={16}
+        className={cn(
+          "inline-block size-4 shrink-0",
+          invert && "invert dark:invert-0",
+          className,
+        )}
+        unoptimized
+      />
+    </TooltipLabel>
   );
 }
 
@@ -247,7 +254,8 @@ const BuildRow = memo(function BuildRow({
 
   const setCounts = new Map<number, number>();
   for (const p of pieces) {
-    if (p?.setHash) setCounts.set(p.setHash, (setCounts.get(p.setHash) ?? 0) + 1);
+    if (p?.setHash)
+      setCounts.set(p.setHash, (setCounts.get(p.setHash) ?? 0) + 1);
   }
   const setBadges: { name: string; count: number }[] = [];
   for (const [hash, cnt] of setCounts) {
@@ -265,14 +273,17 @@ const BuildRow = memo(function BuildRow({
         className="hover:bg-muted/40 flex w-full items-center gap-3 p-2.5 text-left transition-colors max-lg:gap-2"
       >
         {exotic?.icon ? (
-          <Image
-            src={`${BUNGIE_IMAGE_BASE}${exotic.icon}`}
-            alt={exotic.name}
-            width={28}
-            height={28}
-            className="size-7 shrink-0 rounded"
-            unoptimized
-          />
+          <TooltipLabel label={exotic.name} delay={100}>
+            <Image
+              tabIndex={0}
+              src={`${BUNGIE_IMAGE_BASE}${exotic.icon}`}
+              alt={exotic.name}
+              width={28}
+              height={28}
+              className="size-7 shrink-0 rounded"
+              unoptimized
+            />
+          </TooltipLabel>
         ) : (
           <span className="bg-muted size-7 shrink-0 rounded" aria-hidden />
         )}
@@ -293,14 +304,14 @@ const BuildRow = memo(function BuildRow({
           {loadout.total}
         </span>
         {setBadges.map((b) => (
-          <Badge
-            key={b.name}
-            variant="outline"
-            className="max-lg:hidden shrink-0 px-1.5 py-0 text-[10px]"
-            title={b.name}
-          >
-            {b.count}pc
-          </Badge>
+          <TooltipLabel key={b.name} label={b.name} delay={100}>
+            <Badge
+              variant="outline"
+              className="max-lg:hidden shrink-0 px-1.5 py-0 text-[10px]"
+            >
+              {b.count}pc
+            </Badge>
+          </TooltipLabel>
         ))}
         <CaretDown
           weight="duotone"
@@ -377,7 +388,10 @@ const BuildRow = memo(function BuildRow({
 
           <div className="border-border/60 col-span-full my-0.5 border-t" />
 
-          <BreakdownRow label="Armor" render={(i) => loadout.baseStats[i] || ""} />
+          <BreakdownRow
+            label="Armor"
+            render={(i) => loadout.baseStats[i] || ""}
+          />
           <BreakdownRow
             label="Mods"
             render={(i) =>
@@ -483,7 +497,9 @@ function BuildActions({
 
   const resolved = pieces.filter((p): p is ArmorPiece => p !== undefined);
   const complete = resolved.length === loadout.pieceIds.length;
-  const hasSynthetic = resolved.some((p) => isSyntheticClassItemId(p.instanceId));
+  const hasSynthetic = resolved.some((p) =>
+    isSyntheticClassItemId(p.instanceId),
+  );
   const buildClass = resolved[0]?.classType;
   const targetCharacter = lastPlayedCharacter(characters, buildClass);
 
@@ -494,7 +510,9 @@ function BuildActions({
       : undefined;
 
   const canActOnItems = complete && !hasSynthetic;
-  const hasModHashes = Boolean(statModHashes && tuningPlugHashes && artificeModHashes);
+  const hasModHashes = Boolean(
+    statModHashes && tuningPlugHashes && artificeModHashes,
+  );
 
   const defaultName = defaultLoadoutName({
     exoticName,
@@ -554,23 +572,36 @@ function BuildActions({
     setSaveMods(modsSectionFromPlan(resolved, getModCatalog(manifest), plan));
   };
 
-  const saveLoadout = ({ name, notes, placement }: LoadoutDetailsValues) => {
-    if (!canSave) return;
+  const saveLoadout = ({
+    name,
+    notes,
+    placement,
+    subclass: subclassItem,
+  }: LoadoutDetailsValues) => {
+    if (!canSave || !manifest) return;
     const dim = makeDimLoadout(name, notes || undefined);
-    if (placement && saveMods) dim.parameters.mods = modsFromEditor(saveMods, placement);
+    if (placement && saveMods)
+      dim.parameters.mods = modsFromEditor(saveMods, placement);
     dim.equipped = dim.equipped.map((item) =>
       item.id !== undefined && isSyntheticClassItemId(item.id)
         ? { hash: item.hash }
         : item,
     );
     createLoadout.mutate(
-      {
-        version: LOADOUT_SCHEMA_VERSION,
-        loadout: dim,
-        optimizer: loadout,
-        ...(builderSnapshot ? { builder: builderSnapshot } : {}),
-        ...(placement && Object.keys(placement).length > 0 ? { modPlacement: placement } : {}),
-      },
+      withLoadoutSubclass(
+        {
+          version: LOADOUT_SCHEMA_VERSION,
+          loadout: dim,
+          optimizer: loadout,
+          ...(builderSnapshot ? { builder: builderSnapshot } : {}),
+          ...(placement && Object.keys(placement).length > 0
+            ? { modPlacement: placement }
+            : {}),
+        },
+        subclassItem,
+        manifest,
+        resolved[0]?.stats.map((_, i) => resolved.reduce((sum, piece) => sum + piece.stats[i], 0)),
+      ),
       {
         onSuccess: () => {
           setSaveMods(null);
@@ -622,9 +653,7 @@ function BuildActions({
           const piece = resolved.find((p) => p.instanceId === f.itemInstanceId);
           return `${piece?.name ?? "Unknown piece"}: ${f.message ?? "failed"}`;
         });
-        toast.warning(
-          `Some items didn't equip — ${names.join("; ")}`,
-        );
+        toast.warning(`Some items didn't equip — ${names.join("; ")}`);
         onEquipped?.();
       }
     } catch {
@@ -636,65 +665,89 @@ function BuildActions({
 
   return (
     <div className="border-border/60 col-span-full mt-1 flex flex-wrap items-center justify-end gap-2 border-t py-2.5">
-      <Button
-        size="sm"
-        variant="outline"
-        onClick={openSave}
+      <TooltipLabel
+        label={!complete ? missingTitle : undefined}
         disabled={!canSave}
-        title={!complete ? missingTitle : undefined}
       >
-        <FloppyDisk weight="duotone" aria-hidden />
-        Save
-      </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={openSave}
+          disabled={!canSave}
+        >
+          <FloppyDisk weight="duotone" aria-hidden />
+          Save
+        </Button>
+      </TooltipLabel>
       <LoadoutDetailsDialog
         open={saveMods !== null}
         onOpenChange={(open) => {
           if (!open) setSaveMods(null);
         }}
         title="Save loadout"
-        description="Armor, mods, tuning, fragments, and your builder targets are saved together. Add other armor mods below."
+        description="Save your armor and builder targets, and customize your subclass, aspects, fragments, and mods below."
         submitLabel="Save"
         initialName={defaultName}
         mods={saveMods ?? undefined}
+        subclass={
+          saveMods && manifest && buildClass !== undefined && buildClass < 3
+            ? {
+                manifest,
+                classType: buildClass,
+                initial:
+                  loadoutSubclass(makeDimLoadout(defaultName)) ??
+                  (subclass?.itemHash ? { hash: subclass.itemHash } : null),
+              }
+            : undefined
+        }
         busy={createLoadout.isPending}
         onSubmit={saveLoadout}
       />
-      <Button
-        size="sm"
-        variant="outline"
-        onClick={copyItemIds}
-        disabled={!canActOnItems}
-        title={missingTitle}
-      >
-        <Copy weight="duotone" aria-hidden />
-        Copy item IDs
-      </Button>
-      <Button
-        size="sm"
-        variant="outline"
-        onClick={equip}
-        disabled={!canActOnItems || !targetCharacter || equipping}
-        title={
+      <TooltipLabel label={missingTitle} disabled={!canActOnItems}>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={copyItemIds}
+          disabled={!canActOnItems}
+        >
+          <Copy weight="duotone" aria-hidden />
+          Copy item IDs
+        </Button>
+      </TooltipLabel>
+      <TooltipLabel
+        label={
           missingTitle ??
           (targetCharacter
             ? undefined
             : `No ${CLASS_NAMES[buildClass ?? -1] ?? "matching"} character`)
         }
+        disabled={!canActOnItems || !targetCharacter || equipping}
       >
-        {equipping ? (
-          <CircleNotch className="animate-spin" aria-hidden />
-        ) : null}
-        Equip items
-      </Button>
-      <Button
-        size="sm"
-        onClick={openInDim}
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={equip}
+          disabled={!canActOnItems || !targetCharacter || equipping}
+        >
+          {equipping ? (
+            <CircleNotch className="animate-spin" aria-hidden />
+          ) : null}
+          Equip items
+        </Button>
+      </TooltipLabel>
+      <TooltipLabel
+        label={missingTitle}
         disabled={!canActOnItems || !hasModHashes}
-        title={missingTitle}
       >
-        <ArrowSquareOut weight="duotone" aria-hidden />
-        Open in DIM
-      </Button>
+        <Button
+          size="sm"
+          onClick={openInDim}
+          disabled={!canActOnItems || !hasModHashes}
+        >
+          <ArrowSquareOut weight="duotone" aria-hidden />
+          Open in DIM
+        </Button>
+      </TooltipLabel>
     </div>
   );
 }
@@ -725,19 +778,21 @@ function ImprovedMaximaAlert() {
         aria-hidden
       />
       <p className="text-foreground/90 min-w-0 flex-1 text-sm">
-        <span className="font-medium">Higher stat maximums found</span> — raise a
-        stat target to explore them.
+        <span className="font-medium">Higher stat maximums found</span> — raise
+        a stat target to explore them.
       </p>
-      <Button
-        type="button"
-        variant="ghost"
-        size="icon-xs"
-        aria-label="Dismiss"
-        onClick={() => setDismissed(true)}
-        className="text-muted-foreground hover:text-foreground shrink-0"
-      >
-        <X weight="bold" className="size-3.5" aria-hidden />
-      </Button>
+      <TooltipLabel label="Dismiss">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-xs"
+          aria-label="Dismiss"
+          onClick={() => setDismissed(true)}
+          className="text-muted-foreground hover:text-foreground shrink-0"
+        >
+          <X weight="bold" className="size-3.5" aria-hidden />
+        </Button>
+      </TooltipLabel>
     </div>
   );
 }
@@ -826,17 +881,26 @@ function SearchStatus({
       } else if (outcome === "confirmed" && !pending) {
         // Only rendered when both halves are PROVEN (walk exhausted + ceilings exact).
         lines.push(
-          <p key="confirmed" className="text-muted-foreground text-xs" aria-live="polite">
-            Verified — no better builds or higher maximums exist for these targets.
+          <p
+            key="confirmed"
+            className="text-muted-foreground text-xs"
+            aria-live="polite"
+          >
+            Verified — no better builds or higher maximums exist for these
+            targets.
           </p>,
         );
       } else if (outcome === null && verified && !pending) {
         // Build walk proven exhaustive, but some ceiling probes ran out of budget —
         // claim only what was proven.
         lines.push(
-          <p key="verified-list" className="text-muted-foreground text-xs" aria-live="polite">
-            Search complete — no better builds exist for these targets (stat maximums
-            shown are best-effort).
+          <p
+            key="verified-list"
+            className="text-muted-foreground text-xs"
+            aria-live="polite"
+          >
+            Search complete — no better builds exist for these targets (stat
+            maximums shown are best-effort).
           </p>,
         );
       }

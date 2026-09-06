@@ -41,6 +41,38 @@ export function getStatModHashes(manifest: Manifest): StatModHashes[] {
   return out;
 }
 
+/** Builder major-mod selector range is 0–5 (the remaining slots are minors). */
+const BUILDER_MAJOR_MOD_CAP = 5;
+
+type PlugDef = {
+  plug?: { plugCategoryIdentifier?: string };
+  investmentStats?: { statTypeHash: number; value: number }[];
+};
+
+/** True for a general-armor +10 stat mod (the builder's "major"). */
+export function isMajorStatMod(def: PlugDef | undefined): boolean {
+  if (!def || def.plug?.plugCategoryIdentifier !== GENERAL_MOD_CATEGORY) return false;
+  const inv = (def.investmentStats ?? []).filter(
+    (s) => STAT_HASH_TO_INDEX[s.statTypeHash] !== undefined,
+  );
+  return inv.length === 1 && inv[0].value === MAJOR_MOD_BONUS;
+}
+
+/**
+ * How many general +10 stat mods are in `mods`. Caps at the builder selector max
+ * so Optimize can set the budget from what's actually on the loadout.
+ */
+export function countMajorStatMods(
+  mods: readonly number[],
+  isMajor: (hash: number) => boolean,
+): number {
+  let n = 0;
+  for (const h of mods) {
+    if (isMajor(h)) n++;
+  }
+  return Math.min(BUILDER_MAJOR_MOD_CAP, n);
+}
+
 /**
  * Directional Tier-5 tuning plugs keyed `"plus-minus"` (STAT_ORDER indices).
  * A directional tuning mod is a tuning-category plug investing +5 in one armor

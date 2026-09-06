@@ -1,5 +1,6 @@
 "use client";
 
+import { TooltipLabel } from "@/components/ui/tooltip";
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { CircleNotch } from "@phosphor-icons/react";
@@ -20,7 +21,8 @@ function moveDisabledReason(
   piece: ArmorPiece,
   target: ArmoryCharacter | undefined,
 ): string | null {
-  if (!target) return `No ${CLASS_NAMES[piece.classType] ?? "matching"} character`;
+  if (!target)
+    return `No ${CLASS_NAMES[piece.classType] ?? "matching"} character`;
   if (piece.location === "equipped")
     return "Equipped items can't be moved — equip something else first";
   if (piece.location === "inventory" && piece.characterId === target.id)
@@ -32,7 +34,8 @@ function equipDisabledReason(
   piece: ArmorPiece,
   target: ArmoryCharacter | undefined,
 ): string | null {
-  if (!target) return `No ${CLASS_NAMES[piece.classType] ?? "matching"} character`;
+  if (!target)
+    return `No ${CLASS_NAMES[piece.classType] ?? "matching"} character`;
   if (piece.location === "equipped") {
     return piece.characterId === target.id
       ? "Already equipped"
@@ -103,20 +106,25 @@ export function ArmorRowActions({
   return (
     <div className="flex items-center gap-1">
       {(["move", "equip"] as const).map((action) => (
-        <Button
+        <TooltipLabel
+          label={reasons[action] ?? undefined}
           key={action}
-          size="sm"
-          variant="outline"
-          className="h-6 px-2 text-xs"
           disabled={Boolean(reasons[action]) || busy !== null}
-          title={reasons[action] ?? undefined}
-          onClick={() => void run(action)}
         >
-          {busy === action && (
-            <CircleNotch className="animate-spin" aria-hidden />
-          )}
-          {action === "move" ? "Move" : "Equip"}
-        </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-6 px-2 text-xs"
+            disabled={Boolean(reasons[action]) || busy !== null}
+
+            onClick={() => void run(action)}
+          >
+            {busy === action && (
+              <CircleNotch className="animate-spin" aria-hidden />
+            )}
+            {action === "move" ? "Move" : "Equip"}
+          </Button>
+        </TooltipLabel>
       ))}
     </div>
   );

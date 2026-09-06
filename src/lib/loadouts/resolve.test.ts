@@ -1,12 +1,22 @@
 import { test, expect } from "vitest";
 import type { ArmorPiece } from "../armory/normalize";
+import { SUPER_SOCKET_CATEGORY_HASH } from "../dim/subclasses";
 import { resolveLoadout, type DefLookup } from "./resolve";
 
+const SUPER_TYPE = 50;
 const manifest: DefLookup = {
-  def: (_t, hash) =>
-    hash === 200
-      ? { displayProperties: { name: "Gone Helm", icon: "/h.png" }, inventory: { bucketTypeHash: 3448274439 } }
-      : undefined,
+  def: (table, hash) => {
+    if (table === "DestinySocketTypeDefinition" && hash === SUPER_TYPE) {
+      return { socketCategoryHash: SUPER_SOCKET_CATEGORY_HASH };
+    }
+    if (hash === 4282591831) {
+      return { sockets: { socketEntries: [{ singleInitialItemHash: 0, socketTypeHash: SUPER_TYPE }] } };
+    }
+    if (hash === 200) {
+      return { displayProperties: { name: "Gone Helm", icon: "/h.png" }, inventory: { bucketTypeHash: 3448274439 } };
+    }
+    return undefined;
+  },
 };
 
 const piece = (instanceId: string, slot: ArmorPiece["slot"]): ArmorPiece =>
@@ -30,7 +40,7 @@ test("resolves live pieces, flags missing ones, orders by slot, extracts fragmen
         { id: "gone", hash: 200 },
         { id: "a1", hash: 1 },
         // Prismatic Hunter carrier: fragments start at socket 9
-        { id: "12345", hash: 4282591831, socketOverrides: { 10: 22, 9: 11 } },
+        { id: "12345", hash: 4282591831, socketOverrides: { 0: 77, 10: 22, 9: 11 } },
       ],
     },
     pieceMap,
@@ -45,6 +55,9 @@ test("resolves live pieces, flags missing ones, orders by slot, extracts fragmen
     itemHash: 4282591831,
     subclass: "Prismatic",
     fragmentHashes: [11, 22],
+    aspectHashes: [],
+    superHash: 77,
+    socketOverrides: { 0: 77, 10: 22, 9: 11 },
   });
   expect(out.missing).toBe(true);
   expect(out.actionable).toBe(false);

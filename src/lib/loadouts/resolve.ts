@@ -9,17 +9,21 @@ import type { Subclass } from "../armory/fragments";
 import { isSyntheticClassItemId } from "../armory/exotic-class-perks";
 import { ARMOR_BUCKETS, ARMOR_SLOTS, type ArmorSlot } from "../armory/stats";
 import type { DimLoadout, DimLoadoutItem } from "../dim/loadout-link";
-import { FRAGMENT_SOCKET_START, subclassFromItemHash } from "../dim/subclasses";
+import { ASPECT_SOCKET_COUNT, FRAGMENT_SOCKET_COUNT, FRAGMENT_SOCKET_START, SUPER_SOCKET_COUNT, aspectSocketStart, subclassFromItemHash } from "../dim/subclasses";
+import { superSocketIndex } from "./subclass";
 
 /** The manifest access this module needs (keeps tests free of a full Manifest). */
 export interface DefLookup {
   def(
-    table: "DestinyInventoryItemDefinition",
+    table: "DestinyInventoryItemDefinition" | "DestinySocketTypeDefinition",
     hash: number | undefined | null,
   ):
     | {
         displayProperties?: { name?: string; icon?: string };
         inventory?: { bucketTypeHash?: number };
+        sockets?: { socketEntries: { singleInitialItemHash: number; socketTypeHash?: number }[] };
+        socketCategoryHash?: number;
+        plug?: { plugCategoryIdentifier?: string };
       }
     | undefined;
 }
@@ -40,6 +44,10 @@ export interface ResolvedSubclass {
   subclass?: Subclass;
   /** Fragment plug hashes from the carrier's socketOverrides, in socket order. */
   fragmentHashes: number[];
+  aspectHashes: number[];
+  /** Super plug hash when the loadout specifies one. */
+  superHash?: number;
+  socketOverrides: Record<number, number>;
 }
 
 export interface ResolvedLoadout {
@@ -69,12 +77,17 @@ export function resolveLoadout(
       // Subclass carrier — fragments live in socketOverrides from the subclass's first
       // fragment socket onward.
       const start = sc ? FRAGMENT_SOCKET_START[sc] : 0;
-      const fragmentHashes = Object.entries(ref.socketOverrides ?? {})
+      const sockets = manifest.def("DestinyInventoryItemDefinition", ref.hash)?.sockets?.socketEntries;
+      const hashesIn = (start: number, count: number) => Object.entries(ref.socketOverrides ?? {})
         .map(([i, h]) => [Number(i), h] as const)
-        .filter(([i]) => i >= start)
+        .filter(([i, h]) => i >= start && i < start + count && h !== sockets?.[i]?.singleInitialItemHash)
         .sort((a, b) => a[0] - b[0])
         .map(([, h]) => h);
-      subclass = { itemHash: ref.hash, subclass: sc, fragmentHashes };
+      const fragmentHashes = hashesIn(start, FRAGMENT_SOCKET_COUNT);
+      const aspectHashes = sc ? hashesIn(aspectSocketStart(sc), ASPECT_SOCKET_COUNT) : [];
+      const superStart = superSocketIndex(manifest, ref.hash);
+      const superHash = superStart !== undefined ? hashesIn(superStart, SUPER_SOCKET_COUNT)[0] : undefined;
+      subclass = { itemHash: ref.hash, subclass: sc, fragmentHashes, aspectHashes, superHash, socketOverrides: ref.socketOverrides ?? {} };
       continue;
     }
     const piece = ref.id ? pieceMap.get(ref.id) : undefined;

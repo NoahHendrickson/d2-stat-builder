@@ -19,7 +19,7 @@ export function shareableData(saved: SavedLoadout): SavedLoadoutData {
 }
 
 export function buildShareUrl(origin: string, saved: SavedLoadout): string {
-  const url = new URL("/loadouts", origin);
+  const url = new URL("/", origin);
   url.searchParams.set(SHARE_PARAM, JSON.stringify(shareableData(saved)));
   return url.toString();
 }

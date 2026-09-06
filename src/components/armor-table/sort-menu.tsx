@@ -1,5 +1,6 @@
 "use client";
 
+import { TooltipLabel } from "@/components/ui/tooltip";
 import { useState, type ReactNode } from "react";
 import Image from "next/image";
 import {
@@ -85,9 +86,7 @@ export function SortMenu({
   const canNest = !active && sort.length > 0;
   const customized = level?.kind === "custom";
   const mode = activeSortMode(sort, sortKey);
-  const asc = active
-    ? sortLevelAsc(level!)
-    : preferredAsc(sortKey);
+  const asc = active ? sortLevelAsc(level!) : preferredAsc(sortKey);
   const Arrow = asc ? ArrowUp : ArrowDown;
   const numeric = isStatSortKey(sortKey);
   const canCustom = isCustomOrderColumn(sortKey);
@@ -127,7 +126,9 @@ export function SortMenu({
       className={cn(TABLE_HEAD_CELL, align === "right" && "pr-0")}
       aria-sort={
         isPrimary
-          ? sortLevelAsc(primary) ? "ascending" : "descending"
+          ? sortLevelAsc(primary)
+            ? "ascending"
+            : "descending"
           : "none"
       }
     >
@@ -136,38 +137,40 @@ export function SortMenu({
           if (open) setNest(false);
         }}
       >
-        <PopoverTrigger
-          aria-label={sortTitle}
-          title={sortTitle}
-          className={cn(
-            "group relative -my-0.5 inline-flex cursor-pointer items-center",
-            align === "right" ? "w-full justify-center" : "pr-[18px]",
-          )}
-        >
-          {iconNode ?? label}
-          <span
-            aria-hidden
+        <TooltipLabel label={sortTitle}>
+          <PopoverTrigger
+            aria-label={sortTitle}
+
             className={cn(
-              "absolute flex size-4 items-center justify-center rounded-[4px] transition-colors",
-              "hover:bg-accent group-data-popup-open:bg-accent",
-              align === "right"
-                ? "top-1/2 left-[calc(50%+0.5rem+2px)] -translate-y-1/2"
-                : "top-1/2 right-0 -translate-y-1/2",
+              "group relative -my-0.5 inline-flex cursor-pointer items-center",
+              align === "right" ? "w-full justify-center" : "pr-[18px]",
             )}
           >
-            <Arrow
-              weight="bold"
+            {iconNode ?? label}
+            <span
+              aria-hidden
               className={cn(
-                "size-3 transition-opacity",
-                active
-                  ? "text-brand opacity-100"
-                  : hovered
-                    ? "opacity-40"
-                    : "opacity-0 group-hover:opacity-40 group-data-popup-open:opacity-100",
+                "absolute flex size-4 items-center justify-center rounded-[4px] transition-colors",
+                "hover:bg-accent group-data-popup-open:bg-accent",
+                align === "right"
+                  ? "top-1/2 left-[calc(50%+0.5rem+2px)] -translate-y-1/2"
+                  : "top-1/2 right-0 -translate-y-1/2",
               )}
-            />
-          </span>
-        </PopoverTrigger>
+            >
+              <Arrow
+                weight="bold"
+                className={cn(
+                  "size-3 transition-opacity",
+                  active
+                    ? "text-brand opacity-100"
+                    : hovered
+                      ? "opacity-40"
+                      : "opacity-0 group-hover:opacity-40 group-data-popup-open:opacity-100",
+                )}
+              />
+            </span>
+          </PopoverTrigger>
+        </TooltipLabel>
         <PopoverContent
           align={align === "right" ? "end" : "start"}
           className="w-64 p-0"
@@ -183,30 +186,34 @@ export function SortMenu({
             </div>
             <div className="-mr-1 flex shrink-0 items-center">
               {sortUndo && (
+                <TooltipLabel label="Undo previous sort">
+                  <button
+                    type="button"
+                    aria-label="Undo previous sort"
+
+                    onClick={onUndoSort}
+                    className="text-muted-foreground hover:text-foreground hover:bg-accent focus-visible:ring-ring/50 flex size-7 cursor-pointer items-center justify-center rounded-md outline-none focus-visible:ring-2"
+                  >
+                    <ArrowCounterClockwise
+                      weight="bold"
+                      className="size-3.5"
+                      aria-hidden
+                    />
+                  </button>
+                </TooltipLabel>
+              )}
+              <TooltipLabel label="Clear sort">
                 <button
                   type="button"
-                  aria-label="Undo previous sort"
-                  title="Undo previous sort"
-                  onClick={onUndoSort}
-                  className="text-muted-foreground hover:text-foreground hover:bg-accent focus-visible:ring-ring/50 flex size-7 cursor-pointer items-center justify-center rounded-md outline-none focus-visible:ring-2"
+                  aria-label="Clear sort"
+
+                  disabled={!active}
+                  onClick={() => onClearLevel(sortKey)}
+                  className="text-muted-foreground hover:text-foreground hover:bg-accent focus-visible:ring-ring/50 flex size-7 cursor-pointer items-center justify-center rounded-md outline-none focus-visible:ring-2 disabled:pointer-events-none disabled:opacity-30"
                 >
-                  <ArrowCounterClockwise
-                    weight="bold"
-                    className="size-3.5"
-                    aria-hidden
-                  />
+                  <Trash weight="bold" className="size-3.5" aria-hidden />
                 </button>
-              )}
-              <button
-                type="button"
-                aria-label="Clear sort"
-                title="Clear sort"
-                disabled={!active}
-                onClick={() => onClearLevel(sortKey)}
-                className="text-muted-foreground hover:text-foreground hover:bg-accent focus-visible:ring-ring/50 flex size-7 cursor-pointer items-center justify-center rounded-md outline-none focus-visible:ring-2 disabled:pointer-events-none disabled:opacity-30"
-              >
-                <Trash weight="bold" className="size-3.5" aria-hidden />
-              </button>
+              </TooltipLabel>
             </div>
           </div>
           {canNest && (
@@ -270,9 +277,7 @@ export function SortMenu({
                     size="sm"
                     className="h-6 px-1.5 text-xs"
                     disabled={!customized}
-                    onClick={() =>
-                      onApplyMode(sortKey, "asc", nest && canNest)
-                    }
+                    onClick={() => onApplyMode(sortKey, "asc", nest && canNest)}
                   >
                     Reset
                   </Button>

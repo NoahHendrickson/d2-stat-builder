@@ -150,27 +150,39 @@ function DropdownMenuCheckboxItem({
   children,
   checked,
   inset,
+  indicator = "end",
   ...props
 }: MenuPrimitive.CheckboxItem.Props & {
   inset?: boolean
+  /** Check mark at the end (sort menus) or a boxed checkbox at the start (filters). */
+  indicator?: "start" | "end"
 }) {
   return (
     <MenuPrimitive.CheckboxItem
       data-slot="dropdown-menu-checkbox-item"
       data-inset={inset}
+      data-indicator={indicator}
       className={cn(
-        "relative flex h-8 cursor-default items-center gap-1.5 rounded-[4px] pr-8 pl-1.5 text-sm outline-hidden select-none focus:bg-accent focus:text-accent-foreground focus:**:text-accent-foreground data-inset:pl-7 data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+        "group/dropdown-menu-checkbox-item relative flex h-8 cursor-default items-center gap-1.5 rounded-[4px] text-sm outline-hidden select-none focus:bg-accent focus:text-accent-foreground focus:**:text-accent-foreground data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+        indicator === "end" ? "pr-8 pl-1.5" : "pr-1.5 pl-8",
+        inset && "pl-7",
         className
       )}
       checked={checked}
       {...props}
     >
       <span
-        className="pointer-events-none absolute right-2 flex items-center justify-center"
+        className={cn(
+          "pointer-events-none absolute flex items-center justify-center",
+          indicator === "end"
+            ? "right-2"
+            : "left-2 size-4 rounded-[4px] border border-input group-data-checked/dropdown-menu-checkbox-item:border-emphatic group-data-checked/dropdown-menu-checkbox-item:bg-emphatic group-data-checked/dropdown-menu-checkbox-item:text-emphatic-foreground",
+        )}
         data-slot="dropdown-menu-checkbox-item-indicator"
       >
         <MenuPrimitive.CheckboxItemIndicator>
           <CheckIcon
+            className={indicator === "end" ? "text-emphatic!" : "size-2.5"}
           />
         </MenuPrimitive.CheckboxItemIndicator>
       </span>
@@ -211,8 +223,7 @@ function DropdownMenuRadioItem({
         data-slot="dropdown-menu-radio-item-indicator"
       >
         <MenuPrimitive.RadioItemIndicator>
-          <CheckIcon
-          />
+          <CheckIcon className="text-emphatic!" />
         </MenuPrimitive.RadioItemIndicator>
       </span>
       {children}

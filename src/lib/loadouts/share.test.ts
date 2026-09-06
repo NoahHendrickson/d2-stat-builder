@@ -20,7 +20,7 @@ const saved: SavedLoadout = {
 
 test("round-trips through a URL without owner fields", () => {
   const url = new URL(buildShareUrl("https://example.com", saved));
-  expect(url.pathname).toBe("/loadouts");
+  expect(url.pathname).toBe("/");
   const data = parseShareParam(url.searchParams.get(SHARE_PARAM))!;
   expect(data.loadout).toEqual(saved.loadout);
   expect("id" in data).toBe(false);

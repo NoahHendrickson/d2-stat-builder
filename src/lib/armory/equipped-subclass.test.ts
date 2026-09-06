@@ -113,8 +113,8 @@ describe("subclassItemsForCharacter", () => {
       itemComponents: {
         sockets: {
           data: {
-            pris: sockets([0, 0, 0, 0, 0, 0, 0, 0, 0, 501, 502, undefined, 0, 0, 0]),
-            arc: sockets([0, 0, 0, 0, 0, 0, 0, 601, undefined, undefined, undefined, undefined, undefined]),
+            pris: sockets([801, 0, 0, 0, 0, 0, 0, 701, 702, 501, 502, undefined, 0, 0, 0]),
+            arc: sockets([802, 0, 0, 0, 0, 703, 704, 601, undefined, undefined, undefined, undefined, undefined]),
           },
         },
       },
@@ -122,7 +122,7 @@ describe("subclassItemsForCharacter", () => {
   }
 
   test("lists equipped + inventory subclasses with their fragment sockets", () => {
-    const out = subclassItemsForCharacter(profile(), "c1");
+    const out = subclassItemsForCharacter(profile(), "c1", () => 0);
     expect(out).toEqual([
       {
         itemHash: 4282591831,
@@ -130,6 +130,8 @@ describe("subclassItemsForCharacter", () => {
         subclass: "Prismatic",
         equipped: true,
         fragmentSockets: { 9: 501, 10: 502 },
+        aspectSockets: { 7: 701, 8: 702 },
+        superSockets: { 0: 801 },
       },
       {
         itemHash: 2328211300,
@@ -137,6 +139,8 @@ describe("subclassItemsForCharacter", () => {
         subclass: "Arc",
         equipped: false,
         fragmentSockets: { 7: 601 },
+        aspectSockets: { 5: 703, 6: 704 },
+        superSockets: { 0: 802 },
       },
     ]);
   });
@@ -155,6 +159,6 @@ describe("subclassItemsForCharacter", () => {
   });
 
   test("unknown character → empty", () => {
-    expect(subclassItemsForCharacter(profile(), "nope")).toEqual([]);
+    expect(subclassItemsForCharacter(profile(), "nope", () => 0)).toEqual([]);
   });
 });

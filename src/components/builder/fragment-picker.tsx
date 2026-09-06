@@ -1,5 +1,6 @@
 "use client";
 
+import { TooltipLabel } from "@/components/ui/tooltip";
 import Image from "next/image";
 import { CircleNotch } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
@@ -84,15 +85,17 @@ export function FragmentPicker({
               {STAT_ORDER.map((key) => (
                 <span key={key} className="flex justify-center">
                   {statIcons[key] ? (
-                    <Image
-                      src={`${BUNGIE_IMAGE_BASE}${statIcons[key]}`}
-                      alt={STAT_LABELS[key]}
-                      title={STAT_LABELS[key]}
-                      width={16}
-                      height={16}
-                      className="size-4 shrink-0 invert dark:invert-0"
-                      unoptimized
-                    />
+                    <TooltipLabel label={STAT_LABELS[key]}>
+                      <Image
+                        src={`${BUNGIE_IMAGE_BASE}${statIcons[key]}`}
+                        alt={STAT_LABELS[key]}
+                        tabIndex={0}
+                        width={16}
+                        height={16}
+                        className="size-4 shrink-0 invert dark:invert-0"
+                        unoptimized
+                      />
+                    </TooltipLabel>
                   ) : (
                     <span className="size-4 shrink-0" aria-hidden />
                   )}

@@ -1,5 +1,6 @@
 "use client";
 
+import { TooltipLabel } from "@/components/ui/tooltip";
 import Image from "next/image";
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { X } from "@phosphor-icons/react";
@@ -125,58 +126,62 @@ export function NewDropsFeed({ rows }: { rows: Row[] }) {
             </p>
           ) : (
             entries.map(({ row, firstSeen }) => {
-            const { piece } = row;
-            const subtitle = [
-              piece.archetype,
-              row.tertiary !== undefined ? statLabel(row.tertiary) : undefined,
-              piece.tunedStat !== undefined
-                ? `${statLabel(piece.tunedStat)} tuned`
-                : undefined,
-            ]
-              .filter(Boolean)
-              .join(" · ");
-            return (
-              <div
-                key={piece.instanceId}
-                className="group/entry hover:bg-accent flex items-start gap-2 rounded-md p-1.5"
-              >
-                {piece.icon ? (
-                  <Image
-                    src={`${BUNGIE_IMAGE_BASE}${piece.icon}`}
-                    alt=""
-                    width={24}
-                    height={24}
-                    className="mt-0.5 shrink-0 rounded-sm"
-                  />
-                ) : (
-                  <span
-                    className="bg-muted mt-0.5 size-6 shrink-0 rounded-sm"
-                    aria-hidden
-                  />
-                )}
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium">{piece.name}</p>
-                  {subtitle && (
-                    <p className="text-muted-foreground truncate text-xs">
-                      {subtitle}
-                    </p>
-                  )}
-                  <p className="text-muted-foreground text-xs">
-                    {formatRelativeTime(firstSeen, now)}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  aria-label={`Dismiss ${piece.name}`}
-                  onClick={() =>
-                    seen && setSeenMap(acknowledge(seen, piece.instanceId))
-                  }
-                  className="text-muted-foreground hover:text-foreground shrink-0 opacity-0 transition-opacity focus-visible:opacity-100 group-hover/entry:opacity-100"
+              const { piece } = row;
+              const subtitle = [
+                piece.archetype,
+                row.tertiary !== undefined
+                  ? statLabel(row.tertiary)
+                  : undefined,
+                piece.tunedStat !== undefined
+                  ? `${statLabel(piece.tunedStat)} tuned`
+                  : undefined,
+              ]
+                .filter(Boolean)
+                .join(" · ");
+              return (
+                <div
+                  key={piece.instanceId}
+                  className="group/entry hover:bg-accent flex items-start gap-2 rounded-md p-1.5"
                 >
-                  <X className="size-3.5" aria-hidden />
-                </button>
-              </div>
-            );
+                  {piece.icon ? (
+                    <Image
+                      src={`${BUNGIE_IMAGE_BASE}${piece.icon}`}
+                      alt=""
+                      width={24}
+                      height={24}
+                      className="mt-0.5 shrink-0 rounded-sm"
+                    />
+                  ) : (
+                    <span
+                      className="bg-muted mt-0.5 size-6 shrink-0 rounded-sm"
+                      aria-hidden
+                    />
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium">{piece.name}</p>
+                    {subtitle && (
+                      <p className="text-muted-foreground truncate text-xs">
+                        {subtitle}
+                      </p>
+                    )}
+                    <p className="text-muted-foreground text-xs">
+                      {formatRelativeTime(firstSeen, now)}
+                    </p>
+                  </div>
+                  <TooltipLabel label={`Dismiss ${piece.name}`}>
+                    <button
+                      type="button"
+                      aria-label={`Dismiss ${piece.name}`}
+                      onClick={() =>
+                        seen && setSeenMap(acknowledge(seen, piece.instanceId))
+                      }
+                      className="text-muted-foreground hover:text-foreground shrink-0 opacity-0 transition-opacity focus-visible:opacity-100 group-hover/entry:opacity-100"
+                    >
+                      <X className="size-3.5" aria-hidden />
+                    </button>
+                  </TooltipLabel>
+                </div>
+              );
             })
           )}
         </div>

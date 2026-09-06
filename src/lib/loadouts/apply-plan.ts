@@ -75,6 +75,18 @@ export interface SubclassPlan {
   socketStart: number;
   socketCount: number;
   desiredFragments: number[];
+  /** Super, then aspects, then fragments. Absent for legacy fragment-only callers. */
+  groups?: SubclassPlugGroup[];
+}
+
+export interface SubclassPlugGroup {
+  kind: "super" | "aspect" | "fragment";
+  start: number;
+  count: number;
+  current: Record<number, number>;
+  desired: number[];
+  emptyHash?: number;
+  clearUnused?: boolean;
 }
 
 export interface PlanInput {
@@ -249,30 +261,42 @@ export function planLoadoutPlugs(input: PlanInput): ApplyPlan {
   // fragments the loadout doesn't want (or nothing), lowest index first.
   if (input.subclass) {
     const sc = input.subclass;
-    const desired = [...new Set(sc.desiredFragments)];
-    const indices = Array.from({ length: sc.socketCount }, (_, i) => sc.socketStart + i);
-    const present = new Set(indices.map((i) => sc.fragmentSockets[i]).filter(Boolean));
-    const free = indices.filter((i) => {
-      const cur = sc.fragmentSockets[i];
-      return !cur || !desired.includes(cur);
-    });
-    for (const hash of desired) {
-      const name = plugInfo(hash)?.name ?? `Fragment #${hash}`;
-      if (present.has(hash)) {
-        alreadyApplied.push(`${name} → subclass`);
-        continue;
-      }
-      const socket = free.shift();
-      if (socket === undefined) {
-        skipped.push(`${name}: no fragment socket left`);
-        continue;
-      }
-      plugs.push({
-        itemInstanceId: sc.instanceId,
-        socketIndex: socket,
-        plugItemHash: hash,
-        label: `${name} → subclass`,
+    const groups = sc.groups ?? [{ kind: "fragment" as const, start: sc.socketStart, count: sc.socketCount, current: sc.fragmentSockets, desired: sc.desiredFragments }];
+    for (const group of groups) {
+      const desired = [...new Set(group.desired)];
+      const indices = Array.from({ length: group.count }, (_, i) => group.start + i);
+      const present = new Set(indices.map((i) => group.current[i]).filter(Boolean));
+      const free = indices.filter((i) => {
+        const cur = group.current[i];
+        return !cur || !desired.includes(cur);
       });
+      for (const hash of desired) {
+        const name = plugInfo(hash)?.name ?? `${group.kind === "super" ? "Super" : group.kind === "aspect" ? "Aspect" : "Fragment"} #${hash}`;
+        if (present.has(hash)) {
+          alreadyApplied.push(`${name} → subclass`);
+          continue;
+        }
+        const socket = free.shift();
+        if (socket === undefined) {
+          skipped.push(`${name}: no ${group.kind} socket left`);
+          continue;
+        }
+        plugs.push({
+          itemInstanceId: sc.instanceId,
+          socketIndex: socket,
+          plugItemHash: hash,
+          label: `${name} → subclass`,
+        });
+      }
+      // Only clear known live sockets; invisible slots may be locked. Keep desired
+      // plugs in their current positions to avoid duplicate-plug failures on swaps.
+      if (group.clearUnused && group.emptyHash !== undefined) {
+        for (const socketIndex of free) {
+          const current = group.current[socketIndex];
+          if (!current || current === group.emptyHash) continue;
+          plugs.push({ itemInstanceId: sc.instanceId, socketIndex, plugItemHash: group.emptyHash, label: `Clear ${group.kind} → subclass` });
+        }
+      }
     }
   }
 

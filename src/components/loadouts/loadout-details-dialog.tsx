@@ -17,6 +17,9 @@ import { pieceEnergyUsed, type ModsSection } from "@/lib/loadouts/mod-placement"
 import { MAX_NAME_LENGTH, MAX_NOTES_LENGTH, type ModPlacement } from "@/lib/loadouts/types";
 import { LoadoutModsEditor } from "@/components/loadouts/loadout-mods-editor";
 import { cn } from "@/lib/utils";
+import { subclassSelectionValid } from "@/lib/loadouts/subclass";
+import type { DimLoadoutItem } from "@/lib/dim/loadout-link";
+import { LoadoutSubclassEditor, type SubclassSection } from "./loadout-subclass-editor";
 
 export type { ModsSection } from "@/lib/loadouts/mod-placement";
 
@@ -25,6 +28,7 @@ export interface LoadoutDetailsValues {
   notes: string;
   /** Present only when a `mods` section was shown. */
   placement?: ModPlacement;
+  subclass?: DimLoadoutItem | null;
 }
 
 interface DetailsProps {
@@ -34,6 +38,7 @@ interface DetailsProps {
   initialName: string;
   initialNotes?: string;
   mods?: ModsSection;
+  subclass?: SubclassSection;
   busy?: boolean;
   onSubmit: (values: LoadoutDetailsValues) => void;
   onCancel: () => void;
@@ -55,7 +60,7 @@ export function LoadoutDetailsDialog({
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className={cn(form.mods && "sm:max-w-2xl")}>
+      <DialogContent className={cn((form.mods || form.subclass) && "sm:max-w-2xl")}>
         {open && <DetailsForm {...form} onCancel={() => onOpenChange(false)} />}
       </DialogContent>
     </Dialog>
@@ -69,6 +74,7 @@ function DetailsForm({
   initialName,
   initialNotes = "",
   mods,
+  subclass,
   busy = false,
   onSubmit,
   onCancel,
@@ -76,6 +82,7 @@ function DetailsForm({
   const [name, setName] = useState(initialName);
   const [notes, setNotes] = useState(initialNotes);
   const [placement, setPlacement] = useState<ModPlacement>(mods?.initial ?? {});
+  const [subclassItem, setSubclassItem] = useState(subclass?.initial ?? null);
   const nameId = useId();
   const notesId = useId();
 
@@ -91,12 +98,13 @@ function DetailsForm({
       );
     });
   const canSubmit =
-    trimmed.length > 0 && trimmed.length <= MAX_NAME_LENGTH && !busy && !overEnergy;
+    trimmed.length > 0 && trimmed.length <= MAX_NAME_LENGTH && !busy && !overEnergy &&
+    (!subclass || subclassSelectionValid(subclass, subclassItem));
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
     if (!canSubmit) return;
-    onSubmit({ name: trimmed, notes: notes.trim(), ...(mods ? { placement } : {}) });
+    onSubmit({ name: trimmed, notes: notes.trim(), ...(mods ? { placement } : {}), ...(subclass ? { subclass: subclassItem } : {}) });
   };
 
   return (
@@ -135,6 +143,7 @@ function DetailsForm({
             placeholder="#raid #pve, what it's for, swap notes…"
           />
         </div>
+        {subclass && <LoadoutSubclassEditor section={subclass} value={subclassItem} onChange={setSubclassItem} />}
         {mods && (
           <LoadoutModsEditor
             pieces={mods.pieces}

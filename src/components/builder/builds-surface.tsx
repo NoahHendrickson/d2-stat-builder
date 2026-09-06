@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 import {
   BuildsColumnContent,
@@ -8,22 +8,9 @@ import {
 } from "@/components/builder/builds-column-content";
 import { BuildsMobileBar } from "@/components/builder/builds-mobile-bar";
 import { Drawer, DrawerContent } from "@/components/ui/drawer";
+import { useMinWidth } from "@/lib/use-min-width";
 
 const DESKTOP_BUILDS_MIN_PX = 1024;
-
-function useMinWidth(minWidth: number) {
-  const [matches, setMatches] = useState(false);
-
-  useEffect(() => {
-    const mq = window.matchMedia(`(min-width: ${minWidth}px)`);
-    const update = () => setMatches(mq.matches);
-    update();
-    mq.addEventListener("change", update);
-    return () => mq.removeEventListener("change", update);
-  }, [minWidth]);
-
-  return matches;
-}
 
 /** Places the builds column inline on desktop or in a mobile bottom sheet. */
 export function BuildsSurface(props: BuildsColumnContentProps) {

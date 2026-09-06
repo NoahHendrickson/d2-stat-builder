@@ -1,5 +1,6 @@
 "use client";
 
+import { TooltipLabel } from "@/components/ui/tooltip";
 import Image from "next/image";
 import { cn } from "@/lib/utils";
 import { BUNGIE_IMAGE_BASE } from "@/lib/bungie/constants";
@@ -50,33 +51,35 @@ export function ExoticPicker({
         {options.map((exotic, index) => {
           const active = selected === index;
           return (
-            <button
-              key={exotic.name}
-              type="button"
-              title={exotic.name}
-              aria-label={exotic.name}
-              aria-pressed={active}
-              onClick={() => onSelect(active ? null : index)}
-              className={cn(tileBase, active && tileSelected)}
-            >
-              {/* -mx/-mt-px overlaps the face border onto the frame border so they read as one line */}
-              <span className="relative -mx-px -mt-px block aspect-square overflow-hidden rounded-[5px] border border-[var(--exotic-line)]">
-                {exotic.icon ? (
-                  <Image
-                    src={`${BUNGIE_IMAGE_BASE}${exotic.icon}`}
-                    alt={exotic.name}
-                    fill
-                    sizes="36px"
-                    className="object-cover"
-                    unoptimized
-                  />
-                ) : (
-                  <span className="bg-card text-muted-foreground flex size-full items-center justify-center text-xs">
-                    {exotic.name.slice(0, 2)}
-                  </span>
-                )}
-              </span>
-            </button>
+            <TooltipLabel label={exotic.name} key={exotic.name}>
+              <button
+                key={exotic.name}
+                type="button"
+
+                aria-label={exotic.name}
+                aria-pressed={active}
+                onClick={() => onSelect(active ? null : index)}
+                className={cn(tileBase, active && tileSelected)}
+              >
+                {/* -mx/-mt-px overlaps the face border onto the frame border so they read as one line */}
+                <span className="relative -mx-px -mt-px block aspect-square overflow-hidden rounded-[5px] border border-[var(--exotic-line)]">
+                  {exotic.icon ? (
+                    <Image
+                      src={`${BUNGIE_IMAGE_BASE}${exotic.icon}`}
+                      alt={exotic.name}
+                      fill
+                      sizes="36px"
+                      className="object-cover"
+                      unoptimized
+                    />
+                  ) : (
+                    <span className="bg-card text-muted-foreground flex size-full items-center justify-center text-xs">
+                      {exotic.name.slice(0, 2)}
+                    </span>
+                  )}
+                </span>
+              </button>
+            </TooltipLabel>
           );
         })}
       </div>

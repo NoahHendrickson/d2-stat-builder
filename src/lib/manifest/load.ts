@@ -21,6 +21,9 @@ const BUNGIE_ROOT = "https://www.bungie.net";
 // DestinyItemType values we keep from the (huge) item table.
 const ITEM_TYPE_ARMOR = 2;
 const ITEM_TYPE_MOD = 19;
+const ITEM_TYPE_SUBCLASS = 16;
+// The previous cache omitted subclass socket definitions.
+const CACHE_REVISION = "subclasses-v1";
 
 export interface Manifest {
   version: string;
@@ -55,7 +58,7 @@ function makeManifest(version: string, tables: ManifestTables): Manifest {
   };
 }
 
-/** Keep only armor pieces + plugs/mods from the full item table (it's ~190MB otherwise). */
+/** Keep armor, subclasses, and plugs/mods from the full item table. */
 function filterInventoryItems(
   all: Record<number, DestinyInventoryItemDefinition>,
 ): Record<number, DestinyInventoryItemDefinition> {
@@ -65,6 +68,7 @@ function filterInventoryItems(
     if (
       def.itemType === ITEM_TYPE_ARMOR ||
       def.itemType === ITEM_TYPE_MOD ||
+      def.itemType === ITEM_TYPE_SUBCLASS ||
       def.plug
     ) {
       out[key as unknown as number] = def;
@@ -94,10 +98,11 @@ export async function loadManifest(
   const res = await getDestinyManifest(http);
   const info = res.Response;
   const version = info.version;
+  const cacheVersion = `${version}:${CACHE_REVISION}`;
   const paths = info.jsonWorldComponentContentPaths.en;
 
   // Cache hit: load every needed table from IndexedDB (in parallel).
-  if ((await getCachedVersion()) === version) {
+  if ((await getCachedVersion()) === cacheVersion) {
     const tables = {} as ManifestTables;
     const cached = await Promise.all(
       MANIFEST_TABLES.map((table) => getCachedTable(table)),
@@ -136,7 +141,7 @@ export async function loadManifest(
       );
     }),
   );
-  await setCachedVersion(version);
+  await setCachedVersion(cacheVersion);
   onProgress?.("Manifest ready", 1);
   return makeManifest(version, tables);
 }

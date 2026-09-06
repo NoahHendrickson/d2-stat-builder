@@ -1,5 +1,6 @@
 "use client";
 
+import { TooltipLabel } from "@/components/ui/tooltip";
 import { useState, type DragEvent } from "react";
 import { CaretDown, CaretUp, DotsSixVertical } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
@@ -102,24 +103,28 @@ export function CustomOrderList({
             </span>
             <span className="min-w-0 flex-1 truncate">{value}</span>
             <span className="flex shrink-0 opacity-0 group-hover/row:opacity-100 has-focus-visible:opacity-100">
-              <button
-                type="button"
-                aria-label={`Move ${value} up`}
-                disabled={i === 0}
-                onClick={() => onMove(i, i - 1)}
-                className="text-muted-foreground hover:text-foreground focus-visible:ring-ring/50 flex size-6 cursor-pointer items-center justify-center rounded outline-none focus-visible:ring-2 disabled:pointer-events-none disabled:opacity-30"
-              >
-                <CaretUp weight="bold" className="size-3.5" aria-hidden />
-              </button>
-              <button
-                type="button"
-                aria-label={`Move ${value} down`}
-                disabled={i === values.length - 1}
-                onClick={() => onMove(i, i + 1)}
-                className="text-muted-foreground hover:text-foreground focus-visible:ring-ring/50 flex size-6 cursor-pointer items-center justify-center rounded outline-none focus-visible:ring-2 disabled:pointer-events-none disabled:opacity-30"
-              >
-                <CaretDown weight="bold" className="size-3.5" aria-hidden />
-              </button>
+              <TooltipLabel label={`Move ${value} up`}>
+                <button
+                  type="button"
+                  aria-label={`Move ${value} up`}
+                  disabled={i === 0}
+                  onClick={() => onMove(i, i - 1)}
+                  className="text-muted-foreground hover:text-foreground focus-visible:ring-ring/50 flex size-6 cursor-pointer items-center justify-center rounded outline-none focus-visible:ring-2 disabled:pointer-events-none disabled:opacity-30"
+                >
+                  <CaretUp weight="bold" className="size-3.5" aria-hidden />
+                </button>
+              </TooltipLabel>
+              <TooltipLabel label={`Move ${value} down`}>
+                <button
+                  type="button"
+                  aria-label={`Move ${value} down`}
+                  disabled={i === values.length - 1}
+                  onClick={() => onMove(i, i + 1)}
+                  className="text-muted-foreground hover:text-foreground focus-visible:ring-ring/50 flex size-6 cursor-pointer items-center justify-center rounded outline-none focus-visible:ring-2 disabled:pointer-events-none disabled:opacity-30"
+                >
+                  <CaretDown weight="bold" className="size-3.5" aria-hidden />
+                </button>
+              </TooltipLabel>
             </span>
           </div>
           {i === values.length - 1 && showSlot(values.length) && (

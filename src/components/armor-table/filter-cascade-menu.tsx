@@ -1,5 +1,6 @@
 "use client";
 
+import { TooltipLabel } from "@/components/ui/tooltip";
 import { useState } from "react";
 import { CaretDown, CaretRight } from "@phosphor-icons/react";
 import type { FilterOption } from "@/lib/armor-table/pinned";
@@ -99,7 +100,11 @@ function CascadeFacetSubmenu<V extends string | number>({
           />
         </span>
       </DropdownMenuSubTrigger>
-      <DropdownMenuSubContent side="inline-end" align="start" className="w-64 p-0">
+      <DropdownMenuSubContent
+        side="inline-end"
+        align="start"
+        className="w-64 p-0"
+      >
         <FilterMultiselectPanel
           allLabel={allLabel}
           options={options}
@@ -110,7 +115,7 @@ function CascadeFacetSubmenu<V extends string | number>({
           searchable={searchable}
           pinnable={pinnable}
           pinned={pinned}
-              onTogglePin={onTogglePin}
+          onTogglePin={onTogglePin}
         />
       </DropdownMenuSubContent>
     </DropdownMenuSub>
@@ -179,112 +184,122 @@ export function FilterCascadeMenu({
         )}
         data-active={active || undefined}
       >
-        <DropdownMenuTrigger
-          aria-label={
+        <TooltipLabel
+          label={
             active
               ? `${triggerLabel} — ${totalSelected} selected`
               : triggerLabel
           }
-          className={fieldControlInnerTriggerClasses}
         >
-          <span className="min-w-0 flex-1 truncate text-left">{triggerLabel}</span>
-          {active && (
-            <Badge className={filterMultiselectActiveBadgeClasses}>
-              {totalSelected}
-            </Badge>
-          )}
-          <CaretDown
-            weight="duotone"
-            className="text-muted-foreground pointer-events-none size-4 shrink-0"
-            aria-hidden
-          />
-        </DropdownMenuTrigger>
+          <DropdownMenuTrigger
+            aria-label={
+              active
+                ? `${triggerLabel} — ${totalSelected} selected`
+                : triggerLabel
+            }
+            className={fieldControlInnerTriggerClasses}
+          >
+            <span className="min-w-0 flex-1 truncate text-left">
+              {triggerLabel}
+            </span>
+            {active && (
+              <Badge className={filterMultiselectActiveBadgeClasses}>
+                {totalSelected}
+              </Badge>
+            )}
+            <CaretDown
+              weight="duotone"
+              className="text-muted-foreground pointer-events-none size-4 shrink-0"
+              aria-hidden
+            />
+          </DropdownMenuTrigger>
+        </TooltipLabel>
       </div>
       <DropdownMenuContent side="bottom" align="start" className="w-56 p-1">
-            {includes("classes") && (
-              <CascadeFacetSubmenu
-                label="Class"
-                allLabel="All classes"
-                options={classOptions}
-                value={facets.classes}
-                onChange={(v) => onFacetChange("classes", v)}
-                toggleOnClick={toggleSubmenusOnClick}
-              />
-            )}
-            {includes("armorVersions") && (
-              <CascadeFacetSubmenu
-                label="Armor"
-                allLabel="All armor"
-                options={armorVersionOptions}
-                value={facets.armorVersions}
-                onChange={(v) => onFacetChange("armorVersions", v)}
-                toggleOnClick={toggleSubmenusOnClick}
-              />
-            )}
-            {includes("setHashes") && (
-              <CascadeFacetSubmenu
-                label="Set"
-                allLabel="All sets"
-                options={setOptions}
-                value={facets.setHashes}
-                onChange={(v) => onFacetChange("setHashes", v)}
-                searchable
-                pinnable
-                pinned={pinnedSets}
-                onTogglePin={onTogglePinnedSet}
-                toggleOnClick={toggleSubmenusOnClick}
-              />
-            )}
-            {includes("archetypes") && (
-              <CascadeFacetSubmenu
-                label="Archetype"
-                allLabel="All archetypes"
-                options={archetypeOptions}
-                value={facets.archetypes}
-                onChange={(v) => onFacetChange("archetypes", v)}
-                searchable
-                pinnable
-                pinned={pinnedArchetypes}
-                onTogglePin={onTogglePinnedArchetype}
-                toggleOnClick={toggleSubmenusOnClick}
-              />
-            )}
-            {includes("tunings") && (
-              <CascadeFacetSubmenu<TuningFilter>
-                label="Tuning"
-                allLabel="Any tuning"
-                options={tuningOptions}
-                value={facets.tunings}
-                onChange={(v) => onFacetChange("tunings", v)}
-                toggleOnClick={toggleSubmenusOnClick}
-              />
-            )}
-            {includes("tertiaries") && (
-              <CascadeFacetSubmenu
-                label="Tertiary"
-                allLabel="Any tertiary"
-                options={statOptions}
-                value={facets.tertiaries}
-                onChange={(v) => onFacetChange("tertiaries", v)}
-                toggleOnClick={toggleSubmenusOnClick}
-              />
-            )}
-            {showClearAll && (
-              <>
-                <DropdownMenuSeparator />
-                <div className="flex justify-end p-1">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-6 px-1.5 text-xs"
-                    disabled={!filtersActive}
-                    onClick={onClearFilters}
-                  >
-                    Clear all
-                  </Button>
-                </div>
-              </>
-            )}
+        {includes("classes") && (
+          <CascadeFacetSubmenu
+            label="Class"
+            allLabel="All classes"
+            options={classOptions}
+            value={facets.classes}
+            onChange={(v) => onFacetChange("classes", v)}
+            toggleOnClick={toggleSubmenusOnClick}
+          />
+        )}
+        {includes("armorVersions") && (
+          <CascadeFacetSubmenu
+            label="Armor"
+            allLabel="All armor"
+            options={armorVersionOptions}
+            value={facets.armorVersions}
+            onChange={(v) => onFacetChange("armorVersions", v)}
+            toggleOnClick={toggleSubmenusOnClick}
+          />
+        )}
+        {includes("setHashes") && (
+          <CascadeFacetSubmenu
+            label="Set"
+            allLabel="All sets"
+            options={setOptions}
+            value={facets.setHashes}
+            onChange={(v) => onFacetChange("setHashes", v)}
+            searchable
+            pinnable
+            pinned={pinnedSets}
+            onTogglePin={onTogglePinnedSet}
+            toggleOnClick={toggleSubmenusOnClick}
+          />
+        )}
+        {includes("archetypes") && (
+          <CascadeFacetSubmenu
+            label="Archetype"
+            allLabel="All archetypes"
+            options={archetypeOptions}
+            value={facets.archetypes}
+            onChange={(v) => onFacetChange("archetypes", v)}
+            searchable
+            pinnable
+            pinned={pinnedArchetypes}
+            onTogglePin={onTogglePinnedArchetype}
+            toggleOnClick={toggleSubmenusOnClick}
+          />
+        )}
+        {includes("tunings") && (
+          <CascadeFacetSubmenu<TuningFilter>
+            label="Tuning"
+            allLabel="Any tuning"
+            options={tuningOptions}
+            value={facets.tunings}
+            onChange={(v) => onFacetChange("tunings", v)}
+            toggleOnClick={toggleSubmenusOnClick}
+          />
+        )}
+        {includes("tertiaries") && (
+          <CascadeFacetSubmenu
+            label="Tertiary"
+            allLabel="Any tertiary"
+            options={statOptions}
+            value={facets.tertiaries}
+            onChange={(v) => onFacetChange("tertiaries", v)}
+            toggleOnClick={toggleSubmenusOnClick}
+          />
+        )}
+        {showClearAll && (
+          <>
+            <DropdownMenuSeparator />
+            <div className="flex justify-end p-1">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-6 px-1.5 text-xs"
+                disabled={!filtersActive}
+                onClick={onClearFilters}
+              >
+                Clear all
+              </Button>
+            </div>
+          </>
+        )}
       </DropdownMenuContent>
     </DropdownMenu>
   );

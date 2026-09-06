@@ -213,3 +213,18 @@ export function saveSelections(sel: PersistedSelections): void {
     // Ignore quota / security errors — persistence is best-effort.
   }
 }
+
+/** Fired on `window` by `replaceSelections` so an already-mounted builder re-reads storage. */
+export const SELECTIONS_REPLACED_EVENT = "stat-builder:selections-replaced";
+
+/**
+ * Persist `sel` as the builder's current selections and tell a mounted builder to adopt
+ * them now — on its own it only reads storage on mount, so "Optimize" from the sidebar
+ * while the optimizer view is already open would otherwise do nothing visible.
+ */
+export function replaceSelections(sel: PersistedSelections): void {
+  saveSelections(sel);
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new Event(SELECTIONS_REPLACED_EVENT));
+  }
+}

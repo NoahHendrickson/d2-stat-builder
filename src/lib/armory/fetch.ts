@@ -9,6 +9,7 @@ import {
   type EquippedSubclass,
   type SubclassItem,
 } from "./equipped-subclass";
+import { superSocketIndex } from "@/lib/loadouts/subclass";
 import { normalizeArmory, type ArmorPiece } from "./normalize";
 import { artifactUnlocksForCharacter } from "./artifact";
 import type { DimArtifactUnlocks } from "@/lib/dim/loadout-link";
@@ -81,7 +82,9 @@ export async function fetchArmory(manifest: Manifest): Promise<Armory> {
       dateLastPlayed: c.dateLastPlayed,
       ...(equippedSubclass ? { equippedSubclass } : {}),
       ...(artifactUnlocks ? { artifactUnlocks } : {}),
-      subclassItems: subclassItemsForCharacter(profile, c.characterId),
+      subclassItems: subclassItemsForCharacter(profile, c.characterId, (hash) =>
+        superSocketIndex(manifest, hash),
+      ),
     };
   });
 

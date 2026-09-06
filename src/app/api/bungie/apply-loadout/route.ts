@@ -12,6 +12,7 @@ import {
 import { bungieErrorResponse, parseEquipItems } from "@/lib/bungie/equip-route";
 import { FRAGMENT_SOCKET_COUNT } from "@/lib/armory/equipped-subclass";
 import { MAX_MODS } from "@/lib/loadouts/types";
+import { ASPECT_SOCKET_COUNT } from "@/lib/dim/subclasses";
 
 export const dynamic = "force-dynamic";
 
@@ -22,7 +23,7 @@ const MAX_ITEMS = 6;
  * the loadout parser enforces) plus a full set of fragments. Anything the client plans
  * within a valid loadout must fit, or a fully-modded build could never be applied.
  */
-const MAX_PLUGS = MAX_MODS + FRAGMENT_SOCKET_COUNT;
+const MAX_PLUGS = MAX_MODS + ASPECT_SOCKET_COUNT + FRAGMENT_SOCKET_COUNT;
 
 interface ApplyRequestBody {
   characterId: string;

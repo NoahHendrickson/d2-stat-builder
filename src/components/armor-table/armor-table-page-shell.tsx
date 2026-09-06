@@ -31,10 +31,10 @@ export function ArmorTablePageShell() {
     );
   }
 
-  // Bounded height (viewport minus the 58px sticky header) so the table body
-  // becomes the scroll container the row virtualizer needs.
+  // Fills the app shell's main area (which is the viewport height) so the table
+  // body becomes the scroll container the row virtualizer needs.
   return (
-    <main className="mx-auto flex h-[calc(100dvh-58px)] w-full max-w-7xl flex-col px-4 py-6 lg:px-6 2xl:max-w-[calc(80rem+22rem+2rem)]">
+    <main className="flex h-full w-full flex-col px-4 py-4 lg:px-6">
       <ArmorTable />
     </main>
   );

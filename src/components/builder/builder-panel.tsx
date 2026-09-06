@@ -1,5 +1,6 @@
 "use client";
 
+import { TooltipLabel } from "@/components/ui/tooltip";
 import {
   useCallback,
   useEffect,
@@ -9,7 +10,11 @@ import {
   type ReactNode,
 } from "react";
 import Image from "next/image";
-import { MagnifyingGlass, PushPin, SlidersHorizontal } from "@phosphor-icons/react";
+import {
+  MagnifyingGlass,
+  PushPin,
+  SlidersHorizontal,
+} from "@phosphor-icons/react";
 import { useSession } from "@/lib/auth/use-session";
 import { useArmory } from "@/lib/armory/use-armory";
 import { useManifest } from "@/lib/manifest/use-manifest";
@@ -54,7 +59,11 @@ import {
 import { cn } from "@/lib/utils";
 import { BUNGIE_IMAGE_BASE } from "@/lib/bungie/constants";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -80,6 +89,7 @@ import {
   fragSelFromArrays,
   resolveExoticIndex,
   SCHEMA_VERSION,
+  SELECTIONS_REPLACED_EVENT,
 } from "@/lib/builder/selection-storage";
 import {
   getArtificeModHashes,
@@ -147,10 +157,9 @@ export function BuilderPanel({
   const [setFilters, setSetFilters] = useState<SetFilters>(DEFAULT_SET_FILTERS);
   const [selectedExotic, setSelectedExotic] = useState<number | null>(null);
   /** Exotic class item Spirit pair; null = Any. Cleared when exotic/class changes. */
-  const [exoticPerks, setExoticPerks] = useState<[number | null, number | null]>([
-    null,
-    null,
-  ]);
+  const [exoticPerks, setExoticPerks] = useState<
+    [number | null, number | null]
+  >([null, null]);
   const [allowTuning, setAllowTuning] = useState(true);
   const [useBalancedTuning, setUseBalancedTuning] = useState(true);
   const [activeSubclass, setActiveSubclass] = useState<Subclass>("Prismatic");
@@ -202,7 +211,8 @@ export function BuilderPanel({
   // Default the class to the player's first — and correct a restored class they no longer have.
   useEffect(() => {
     if (!classes.length) return;
-    if (classType === null || !classes.includes(classType)) setClassType(classes[0]);
+    if (classType === null || !classes.includes(classType))
+      setClassType(classes[0]);
   }, [classes, classType]);
 
   const classPieces = useMemo(
@@ -228,7 +238,10 @@ export function BuilderPanel({
     () => (manifest ? availableSets(pool, manifest) : []),
     [pool, manifest],
   );
-  const setMap = useMemo(() => new Map(sets.map((s) => [s.setHash, s])), [sets]);
+  const setMap = useMemo(
+    () => new Map(sets.map((s) => [s.setHash, s])),
+    [sets],
+  );
 
   // Pinned sets float to the top; within each group the ownedCount order is kept.
   // Pins for sets outside the current list (e.g. another class) simply don't show.
@@ -341,10 +354,8 @@ export function BuilderPanel({
     const out = {} as StatIconMap;
     if (manifest) {
       for (const key of STAT_ORDER) {
-        out[key] = manifest.def(
-          "DestinyStatDefinition",
-          STAT_HASHES[key],
-        )?.displayProperties?.icon;
+        out[key] = manifest.def("DestinyStatDefinition", STAT_HASHES[key])
+          ?.displayProperties?.icon;
       }
     }
     return out;
@@ -352,10 +363,8 @@ export function BuilderPanel({
 
   const balancedTuningIcon = useMemo(
     () =>
-      manifest?.def(
-        "DestinyInventoryItemDefinition",
-        BALANCED_TUNING_PLUG_HASH,
-      )?.displayProperties?.icon,
+      manifest?.def("DestinyInventoryItemDefinition", BALANCED_TUNING_PLUG_HASH)
+        ?.displayProperties?.icon,
     [manifest],
   );
 
@@ -443,7 +452,11 @@ export function BuilderPanel({
   // Class-item pool with Spirit filter + optional synthetic T5 roll (owned matches win).
   const classItemPieces = useMemo(() => {
     const pieces = pool.filter((p) => p.slot === "classItem");
-    if (!manifest || classType === null || selectedClassItemHash === undefined) {
+    if (
+      !manifest ||
+      classType === null ||
+      selectedClassItemHash === undefined
+    ) {
       return pieces;
     }
     return applySpiritSelectionToClassItems(pieces, manifest, {
@@ -480,6 +493,36 @@ export function BuilderPanel({
     setSelectedExotic(resolveExoticIndex(name, exotics));
   }, [exotics]);
 
+  // "Optimize" in the sidebar replaces the stored selections while this panel may already
+  // be mounted: adopt them the way the mount-time restore does. The exotic resolves right
+  // away when the class is unchanged (its list is live); otherwise it waits for the new
+  // class's list exactly like a fresh restore.
+  useEffect(() => {
+    const adopt = () => {
+      const saved = loadSelections();
+      if (!saved) return;
+      setClassType(saved.classType);
+      setTargets(saved.targets);
+      setMajor(saved.major);
+      setSetReqs(saved.setReqs);
+      setPinnedSets(saved.pinnedSets);
+      setSetFilters(saved.setFilters);
+      setAllowTuning(saved.allowTuning);
+      setUseBalancedTuning(saved.balancedTuning);
+      setUseLegacyExotics(saved.legacyExotics);
+      setActiveSubclass(saved.activeSubclass);
+      setFragSel(fragSelFromArrays(saved.fragSel));
+      setExoticPerks(saved.exoticPerks);
+      if (saved.classType === classType && exotics.length) {
+        setSelectedExotic(resolveExoticIndex(saved.exoticName, exotics));
+      } else {
+        pendingExoticName.current = saved.exoticName;
+      }
+    };
+    window.addEventListener(SELECTIONS_REPLACED_EVENT, adopt);
+    return () => window.removeEventListener(SELECTIONS_REPLACED_EVENT, adopt);
+  }, [classType, exotics]);
+
   // Persist selections (debounced) on any change. The `restored` guard prevents the first
   // render from clobbering stored data before the restore runs; the exotic is saved by name.
   useEffect(() => {
@@ -494,7 +537,9 @@ export function BuilderPanel({
         pinnedSets,
         setFilters,
         exoticName:
-          selectedExotic === null ? null : (exotics[selectedExotic]?.name ?? null),
+          selectedExotic === null
+            ? null
+            : (exotics[selectedExotic]?.name ?? null),
         exoticPerks,
         allowTuning,
         balancedTuning: useBalancedTuning,
@@ -634,26 +679,28 @@ export function BuilderPanel({
         className="col-span-full grid grid-cols-subgrid items-center"
       >
         <span className="flex min-w-0 items-center gap-1.5 text-sm">
-          <button
-            type="button"
-            onClick={() => togglePin(s.setHash)}
-            aria-label={pinned ? "Unpin set" : "Pin set"}
-            className={cn(
-              "relative -ml-1 flex size-7 shrink-0 items-center justify-center rounded-md transition-opacity outline-none focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring/50",
-              pinned
-                ? "text-foreground"
-                : cn(
-                    "text-muted-foreground hover:text-foreground",
-                    pinVisible ? "opacity-100" : "opacity-0",
-                  ),
-            )}
-          >
-            <PushPin
-              weight={pinned ? "fill" : "duotone"}
-              className="size-3.5"
-              aria-hidden
-            />
-          </button>
+          <TooltipLabel label={pinned ? "Unpin set" : "Pin set"}>
+            <button
+              type="button"
+              onClick={() => togglePin(s.setHash)}
+              aria-label={pinned ? "Unpin set" : "Pin set"}
+              className={cn(
+                "relative -ml-1 flex size-7 shrink-0 items-center justify-center rounded-md transition-opacity outline-none focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring/50",
+                pinned
+                  ? "text-foreground"
+                  : cn(
+                      "text-muted-foreground hover:text-foreground",
+                      pinVisible ? "opacity-100" : "opacity-0",
+                    ),
+              )}
+            >
+              <PushPin
+                weight={pinned ? "fill" : "duotone"}
+                className="size-3.5"
+                aria-hidden
+              />
+            </button>
+          </TooltipLabel>
           <span className="truncate">
             {s.name}{" "}
             <span className="text-muted-foreground">({s.ownedCount})</span>
@@ -690,7 +737,9 @@ export function BuilderPanel({
       major,
       setReqs,
       exoticName:
-        selectedExotic === null ? null : (exotics[selectedExotic]?.name ?? null),
+        selectedExotic === null
+          ? null
+          : (exotics[selectedExotic]?.name ?? null),
       exoticPerks,
       allowTuning,
       balancedTuning: useBalancedTuning,
@@ -816,15 +865,17 @@ export function BuilderPanel({
                       className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 max-lg:gap-x-2"
                     >
                       {icon ? (
-                        <Image
-                          src={`${BUNGIE_IMAGE_BASE}${icon}`}
-                          alt={STAT_LABELS[key]}
-                          title={STAT_LABELS[key]}
-                          width={24}
-                          height={24}
-                          className="size-6 shrink-0 invert dark:invert-0"
-                          unoptimized
-                        />
+                        <TooltipLabel label={STAT_LABELS[key]}>
+                          <Image
+                            src={`${BUNGIE_IMAGE_BASE}${icon}`}
+                            alt={STAT_LABELS[key]}
+                            tabIndex={0}
+                            width={24}
+                            height={24}
+                            className="size-6 shrink-0 invert dark:invert-0"
+                            unoptimized
+                          />
+                        </TooltipLabel>
                       ) : (
                         <span className="size-6 shrink-0" aria-hidden />
                       )}
@@ -833,7 +884,9 @@ export function BuilderPanel({
                         max={STAT_SLIDER_MAX}
                         step={1}
                         value={[targets[i]]}
-                        onValueChange={(v) => setTarget(i, Array.isArray(v) ? v[0] : v)}
+                        onValueChange={(v) =>
+                          setTarget(i, Array.isArray(v) ? v[0] : v)
+                        }
                         ceiling={ceilingValue}
                         aria-label={`${STAT_LABELS[key]} target`}
                         className="cursor-pointer py-1.5"
@@ -878,33 +931,47 @@ export function BuilderPanel({
                         {STAT_TARGET_TICKS.map((t) => {
                           // Once a ceiling is known, the top tick jumps the target to
                           // that achievable value instead of 200 (labels per capText).
-                          const isCeilingTick = t === STAT_SLIDER_MAX && cap !== null;
+                          const isCeilingTick =
+                            t === STAT_SLIDER_MAX && cap !== null;
                           const tickValue = isCeilingTick ? cap : t;
                           const tickLabel = isCeilingTick
                             ? capText!.tickLabel
                             : String(t);
                           return (
-                            <button
-                              key={t}
-                              type="button"
-                              onClick={() => setTarget(i, tickValue)}
-                              aria-label={
+                            <TooltipLabel
+                              label={
                                 isCeilingTick
                                   ? capText!.tickAria
                                   : `Set ${STAT_LABELS[key]} to ${t}`
                               }
-                              style={{
-                                left: sliderEdgeAlignedLeft(t, 0, STAT_SLIDER_MAX),
-                              }}
-                              className={cn(
-                                "absolute top-0 -translate-x-1/2 cursor-pointer text-[10px] tabular-nums transition-colors after:absolute after:-inset-x-2 after:-inset-y-1.5 after:content-[''] focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-hidden",
-                                targets[i] === tickValue
-                                  ? "text-foreground"
-                                  : "text-muted-foreground hover:text-foreground",
-                              )}
+                              key={t}
                             >
-                              {tickLabel}
-                            </button>
+                              <button
+                                key={t}
+                                type="button"
+                                onClick={() => setTarget(i, tickValue)}
+                                aria-label={
+                                  isCeilingTick
+                                    ? capText!.tickAria
+                                    : `Set ${STAT_LABELS[key]} to ${t}`
+                                }
+                                style={{
+                                  left: sliderEdgeAlignedLeft(
+                                    t,
+                                    0,
+                                    STAT_SLIDER_MAX,
+                                  ),
+                                }}
+                                className={cn(
+                                  "absolute top-0 -translate-x-1/2 cursor-pointer text-[10px] tabular-nums transition-colors after:absolute after:-inset-x-2 after:-inset-y-1.5 after:content-[''] focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-hidden",
+                                  targets[i] === tickValue
+                                    ? "text-foreground"
+                                    : "text-muted-foreground hover:text-foreground",
+                                )}
+                              >
+                                {tickLabel}
+                              </button>
+                            </TooltipLabel>
                           );
                         })}
                       </div>
@@ -966,16 +1033,18 @@ export function BuilderPanel({
                 </div>
                 <div className="shrink-0">
                   <Popover>
-                    <PopoverTrigger
-                      aria-label="Armor set list settings"
-                      className={cn(
-                        "inline-flex size-8 shrink-0 items-center justify-center rounded-[6px] border border-transparent text-muted-foreground transition-colors hover:text-foreground",
-                        field3dSurfaceClasses,
-                        field3dFocusVisibleClasses,
-                      )}
-                    >
-                      <SlidersHorizontal className="size-4" aria-hidden />
-                    </PopoverTrigger>
+                    <TooltipLabel label="Armor set list settings">
+                      <PopoverTrigger
+                        aria-label="Armor set list settings"
+                        className={cn(
+                          "inline-flex size-8 shrink-0 items-center justify-center rounded-[6px] border border-transparent text-muted-foreground transition-colors hover:text-foreground",
+                          field3dSurfaceClasses,
+                          field3dFocusVisibleClasses,
+                        )}
+                      >
+                        <SlidersHorizontal className="size-4" aria-hidden />
+                      </PopoverTrigger>
+                    </TooltipLabel>
                     <PopoverContent align="end" className="space-y-0.5">
                       <SetListSettingRow
                         checked={setFilters.hideZero}
@@ -1013,23 +1082,23 @@ export function BuilderPanel({
                 </p>
               ) : (
                 <div className="max-lg:overflow-x-auto">
-                <div className="grid grid-cols-[minmax(0,1.4fr)_auto_minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-x-3 gap-y-1.5 max-lg:min-w-[36rem]">
-                  <span aria-hidden />
-                  <span className="text-muted-foreground col-span-2 text-sm">
-                    2pc
-                  </span>
-                  <span className="text-muted-foreground col-span-2 text-sm">
-                    4pc
-                  </span>
-                  {pinnedList.map(renderSetRow)}
-                  {pinnedList.length > 0 && unpinnedList.length > 0 && (
-                    <div
-                      className="border-border/60 col-span-full my-0.5 border-t"
-                      aria-hidden
-                    />
-                  )}
-                  {unpinnedList.map(renderSetRow)}
-                </div>
+                  <div className="grid grid-cols-[minmax(0,1.4fr)_auto_minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-x-3 gap-y-1.5 max-lg:min-w-[36rem]">
+                    <span aria-hidden />
+                    <span className="text-muted-foreground col-span-2 text-sm">
+                      2pc
+                    </span>
+                    <span className="text-muted-foreground col-span-2 text-sm">
+                      4pc
+                    </span>
+                    {pinnedList.map(renderSetRow)}
+                    {pinnedList.length > 0 && unpinnedList.length > 0 && (
+                      <div
+                        className="border-border/60 col-span-full my-0.5 border-t"
+                        aria-hidden
+                      />
+                    )}
+                    {unpinnedList.map(renderSetRow)}
+                  </div>
                 </div>
               )}
             </Section>
@@ -1170,11 +1239,7 @@ function SetPerkLabel({
 
   return (
     <Tooltip>
-      <TooltipTrigger
-        render={<span className="w-fit max-w-full min-w-0" />}
-      >
-        {button}
-      </TooltipTrigger>
+      <TooltipTrigger delay={100} render={button} />
       <TooltipContent side="top" align="start">
         {tooltipContent}
       </TooltipContent>

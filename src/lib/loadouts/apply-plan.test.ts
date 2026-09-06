@@ -185,6 +185,48 @@ describe("tuning + artifice", () => {
 });
 
 describe("fragments", () => {
+  test("swaps the super when the loadout specifies a different one", () => {
+    const plan = planLoadoutPlugs({
+      pieces: [], modHashes: [], plugInfo,
+      subclass: {
+        instanceId: "sub", socketStart: 9, socketCount: 6, fragmentSockets: {}, desiredFragments: [],
+        groups: [
+          { kind: "super", start: 0, count: 1, current: { 0: 801 }, desired: [802] },
+        ],
+      },
+    });
+    expect(plan.plugs.map((p) => [p.socketIndex, p.plugItemHash])).toEqual([[0, 802]]);
+    expect(plan.alreadyApplied).toEqual([]);
+  });
+
+  test("applies aspects before fragments, retains swaps, and clears removed selections", () => {
+    const plan = planLoadoutPlugs({
+      pieces: [], modHashes: [], plugInfo,
+      subclass: {
+        instanceId: "sub", socketStart: 9, socketCount: 6, fragmentSockets: {}, desiredFragments: [],
+        groups: [
+          { kind: "aspect", start: 7, count: 2, current: { 7: 701, 8: 702 }, desired: [703, 701], emptyHash: 700, clearUnused: true },
+          { kind: "fragment", start: 9, count: 6, current: { 9: 501, 10: 502, 11: 503 }, desired: [504, 501], emptyHash: 500, clearUnused: true },
+        ],
+      },
+    });
+    expect(plan.plugs.map((p) => [p.socketIndex, p.plugItemHash])).toEqual([
+      [8, 703], [10, 504], [11, 500],
+    ]);
+    expect(plan.skipped).toEqual([]);
+  });
+
+  test("explicit empty selections clear known sockets without touching locked ones", () => {
+    const plan = planLoadoutPlugs({
+      pieces: [], modHashes: [], plugInfo,
+      subclass: {
+        instanceId: "sub", socketStart: 7, socketCount: 6, fragmentSockets: {}, desiredFragments: [],
+        groups: [{ kind: "fragment", start: 7, count: 6, current: { 7: 501, 8: 500 }, desired: [], emptyHash: 500, clearUnused: true }],
+      },
+    });
+    expect(plan.plugs.map((p) => [p.socketIndex, p.plugItemHash])).toEqual([[7, 500]]);
+  });
+
   test("keeps present fragments, replaces unwanted ones lowest-index first", () => {
     const plan = planLoadoutPlugs({
       pieces: [],

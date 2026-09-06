@@ -1,5 +1,6 @@
 "use client";
 
+import { TooltipLabel } from "@/components/ui/tooltip";
 import { useMemo, useState } from "react";
 import Image from "next/image";
 import { MagnifyingGlass, X } from "@phosphor-icons/react";
@@ -11,7 +12,11 @@ import { pieceEnergyUsed } from "@/lib/loadouts/mod-placement";
 import type { ModPlacement } from "@/lib/loadouts/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 
 const KIND_LABEL: Record<ArmorSocket["kind"], string> = {
@@ -21,9 +26,20 @@ const KIND_LABEL: Record<ArmorSocket["kind"], string> = {
   artifice: "Artifice",
 };
 
-function ModIcon({ option, className }: { option: ModOption | undefined; className?: string }) {
+function ModIcon({
+  option,
+  className,
+}: {
+  option: ModOption | undefined;
+  className?: string;
+}) {
   if (!option?.icon) {
-    return <span className={cn("bg-muted inline-block size-8 rounded-sm", className)} aria-hidden />;
+    return (
+      <span
+        className={cn("bg-muted inline-block size-8 rounded-sm", className)}
+        aria-hidden
+      />
+    );
   }
   return (
     <Image
@@ -52,16 +68,22 @@ function SocketPicker({
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const options = useMemo(() => catalog.optionsFor(piece, socket), [catalog, piece, socket]);
+  const options = useMemo(
+    () => catalog.optionsFor(piece, socket),
+    [catalog, piece, socket],
+  );
   // An "Empty … Socket" plug reads as no current mod.
   const current =
     socket.plugHash && socket.plugHash !== socket.emptyPlugHash
       ? catalog.option(socket.plugHash)
       : undefined;
-  const chosenOption = chosen !== undefined ? catalog.option(chosen) : undefined;
+  const chosenOption =
+    chosen !== undefined ? catalog.option(chosen) : undefined;
   const shown = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return q ? options.filter((o) => o.name.toLowerCase().includes(q)) : options;
+    return q
+      ? options.filter((o) => o.name.toLowerCase().includes(q))
+      : options;
   }, [options, query]);
 
   const label = chosenOption
@@ -72,28 +94,34 @@ function SocketPicker({
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger
-        aria-label={`${KIND_LABEL[socket.kind]} on ${piece.name}: ${label}`}
-        title={label}
-        className={cn(
-          "relative flex size-9 cursor-pointer items-center justify-center rounded-md border transition-colors",
-          chosen !== undefined
-            ? "border-brand bg-brand/10"
-            : "border-border/60 hover:border-foreground/40",
-        )}
+      <TooltipLabel
+        label={`${KIND_LABEL[socket.kind]} on ${piece.name}: ${label}`}
       >
-        <ModIcon
-          option={chosenOption ?? current}
-          className={chosen === undefined ? "opacity-40" : undefined}
-        />
-        {chosenOption && chosenOption.cost > 0 && (
-          <span className="bg-background text-foreground absolute -top-1 -right-1 rounded-full border px-1 text-[9px] leading-3 tabular-nums">
-            {chosenOption.cost}
-          </span>
-        )}
-      </PopoverTrigger>
+        <PopoverTrigger
+          aria-label={`${KIND_LABEL[socket.kind]} on ${piece.name}: ${label}`}
+
+          className={cn(
+            "relative flex size-9 cursor-pointer items-center justify-center rounded-md border transition-colors",
+            chosen !== undefined
+              ? "border-brand bg-brand/10"
+              : "border-border/60 hover:border-foreground/40",
+          )}
+        >
+          <ModIcon
+            option={chosenOption ?? current}
+            className={chosen === undefined ? "opacity-40" : undefined}
+          />
+          {chosenOption && chosenOption.cost > 0 && (
+            <span className="bg-background text-foreground absolute -top-1 -right-1 rounded-full border px-1 text-[9px] leading-3 tabular-nums">
+              {chosenOption.cost}
+            </span>
+          )}
+        </PopoverTrigger>
+      </TooltipLabel>
       <PopoverContent align="start" className="w-72 p-2">
-        <div className="text-muted-foreground mb-1.5 px-1 text-xs">{KIND_LABEL[socket.kind]}</div>
+        <div className="text-muted-foreground mb-1.5 px-1 text-xs">
+          {KIND_LABEL[socket.kind]}
+        </div>
         {options.length > 8 && (
           <div className="relative mb-1.5">
             <MagnifyingGlass
@@ -129,28 +157,33 @@ function SocketPicker({
             </span>
           </button>
           {shown.length === 0 && (
-            <p className="text-muted-foreground px-1.5 py-1 text-xs">No mods match.</p>
+            <p className="text-muted-foreground px-1.5 py-1 text-xs">
+              No mods match.
+            </p>
           )}
           {shown.map((o) => (
-            <button
-              key={o.hash}
-              type="button"
-              onClick={() => {
-                onChoose(o.hash);
-                setOpen(false);
-              }}
-              title={o.description}
-              className={cn(
-                "hover:bg-muted/60 flex w-full items-center gap-2 rounded px-1.5 py-1 text-left text-xs",
-                chosen === o.hash && "bg-brand/10",
-              )}
-            >
-              <ModIcon option={o} className="size-6" />
-              <span className="min-w-0 flex-1 truncate">{o.name}</span>
-              {o.cost > 0 && (
-                <span className="text-muted-foreground shrink-0 tabular-nums">{o.cost}</span>
-              )}
-            </button>
+            <TooltipLabel label={o.description} key={o.hash}>
+              <button
+                type="button"
+                onClick={() => {
+                  onChoose(o.hash);
+                  setOpen(false);
+                }}
+
+                className={cn(
+                  "hover:bg-muted/60 flex w-full items-center gap-2 rounded px-1.5 py-1 text-left text-xs",
+                  chosen === o.hash && "bg-brand/10",
+                )}
+              >
+                <ModIcon option={o} className="size-6" />
+                <span className="min-w-0 flex-1 truncate">{o.name}</span>
+                {o.cost > 0 && (
+                  <span className="text-muted-foreground shrink-0 tabular-nums">
+                    {o.cost}
+                  </span>
+                )}
+              </button>
+            </TooltipLabel>
           ))}
         </div>
       </PopoverContent>
@@ -176,8 +209,15 @@ export function LoadoutModsEditor({
 }) {
   const costOf = (hash: number) => catalog.option(hash)?.cost ?? 0;
 
-  const choose = (instanceId: string, socketIndex: number, hash: number | undefined) => {
-    const next: ModPlacement = { ...value, [instanceId]: { ...(value[instanceId] ?? {}) } };
+  const choose = (
+    instanceId: string,
+    socketIndex: number,
+    hash: number | undefined,
+  ) => {
+    const next: ModPlacement = {
+      ...value,
+      [instanceId]: { ...(value[instanceId] ?? {}) },
+    };
     if (hash === undefined) delete next[instanceId][socketIndex];
     else next[instanceId][socketIndex] = hash;
     if (Object.keys(next[instanceId]).length === 0) delete next[instanceId];
@@ -191,7 +231,12 @@ export function LoadoutModsEditor({
       <div className="flex items-center justify-between">
         <span className="text-sm font-medium">Mods</span>
         {anyChosen && (
-          <Button type="button" variant="link" size="xs" onClick={() => onChange({})}>
+          <Button
+            type="button"
+            variant="link"
+            size="xs"
+            onClick={() => onChange({})}
+          >
             Clear all
           </Button>
         )}
@@ -203,7 +248,10 @@ export function LoadoutModsEditor({
           const capacity = piece.energy?.capacity;
           const over = capacity !== undefined && used > capacity;
           return (
-            <div key={piece.instanceId} className="flex items-center gap-3 px-2.5 py-2">
+            <div
+              key={piece.instanceId}
+              className="flex items-center gap-3 px-2.5 py-2"
+            >
               {piece.icon ? (
                 <Image
                   src={`${BUNGIE_IMAGE_BASE}${piece.icon}`}
@@ -214,7 +262,10 @@ export function LoadoutModsEditor({
                   unoptimized
                 />
               ) : (
-                <span className="bg-muted size-7 shrink-0 rounded" aria-hidden />
+                <span
+                  className="bg-muted size-7 shrink-0 rounded"
+                  aria-hidden
+                />
               )}
               <div className="min-w-0 flex-1">
                 <div className="truncate text-sm">{piece.name}</div>
@@ -223,7 +274,12 @@ export function LoadoutModsEditor({
                   {capacity !== undefined && (
                     <>
                       {" · "}
-                      <span className={cn("tabular-nums", over && "text-destructive font-medium")}>
+                      <span
+                        className={cn(
+                          "tabular-nums",
+                          over && "text-destructive font-medium",
+                        )}
+                      >
                         {used}/{capacity} energy
                       </span>
                     </>
@@ -232,7 +288,9 @@ export function LoadoutModsEditor({
               </div>
               <div className="flex shrink-0 items-center gap-1.5">
                 {sockets.length === 0 ? (
-                  <span className="text-muted-foreground text-xs">No mod sockets</span>
+                  <span className="text-muted-foreground text-xs">
+                    No mod sockets
+                  </span>
                 ) : (
                   sockets.map((socket) => (
                     <SocketPicker
@@ -241,7 +299,9 @@ export function LoadoutModsEditor({
                       socket={socket}
                       catalog={catalog}
                       chosen={value[piece.instanceId]?.[socket.index]}
-                      onChoose={(hash) => choose(piece.instanceId, socket.index, hash)}
+                      onChoose={(hash) =>
+                        choose(piece.instanceId, socket.index, hash)
+                      }
                     />
                   ))
                 )}
@@ -251,8 +311,8 @@ export function LoadoutModsEditor({
         })}
       </div>
       <p className="text-muted-foreground text-xs">
-        Highlighted sockets are part of the loadout; dimmed ones keep whatever is
-        socketed when you apply. Energy counts both.
+        Highlighted sockets are part of the loadout; dimmed ones keep whatever
+        is socketed when you apply. Energy counts both.
       </p>
     </div>
   );

@@ -1,5 +1,7 @@
 // Pure filtering + sorting for the loadouts page. Runtime imports are relative so the
 // module runs under vitest.
+import type { Subclass } from "../armory/fragments";
+import { subclassFromItemHash } from "../dim/subclasses";
 import { MAX_NAME_LENGTH, loadoutHashtags, type SavedLoadout } from "./types";
 
 export type LoadoutListSortKey = "edited" | "name" | "total";
@@ -14,10 +16,16 @@ export const LOADOUT_LIST_SORT_OPTIONS: readonly {
 ];
 
 export interface LoadoutListFilter {
-  /** Case-insensitive substring over name + notes. A leading `#` matches hashtags. */
+  /** Case-insensitive substring over name, notes, and set bonus names. A leading `#` matches hashtags. */
   query: string;
-  /** DestinyClass (0–2), or null for all. Any-class loadouts (3) always pass. */
-  classType: number | null;
+  /** DestinyClass (0–2). Empty/omitted = all. Any-class loadouts (3) always pass. */
+  classTypes?: readonly number[];
+  /** Arc / Solar / …. Empty/omitted = all. Loadouts with no subclass item fail a subclass filter. */
+  subclasses?: readonly Subclass[];
+  /** Equipable-item-set hashes. Empty/omitted = all. Matches if the loadout has any selected set. */
+  setHashes?: readonly number[];
+  /** Resolve a set hash to its display name so the query can match set bonuses. */
+  setName?: (hash: number) => string | undefined;
 }
 
 export function filterLoadouts(
@@ -28,16 +36,29 @@ export function filterLoadouts(
   const tag = q.startsWith("#") ? q.slice(1) : null;
   return loadouts.filter((l) => {
     if (
-      filter.classType !== null &&
+      filter.classTypes?.length &&
       l.loadout.classType !== 3 &&
-      l.loadout.classType !== filter.classType
+      !filter.classTypes.includes(l.loadout.classType)
     )
       return false;
+    if (filter.subclasses?.length) {
+      const sc = l.loadout.equipped
+        .map((item) => subclassFromItemHash(item.hash))
+        .find((name) => name !== undefined);
+      if (sc === undefined || !filter.subclasses.includes(sc)) return false;
+    }
+    if (filter.setHashes?.length) {
+      const sets = l.loadout.parameters.setBonuses ?? {};
+      if (!filter.setHashes.some((hash) => Object.hasOwn(sets, hash))) return false;
+    }
     if (!q) return true;
     if (tag !== null) {
       return tag === "" || loadoutHashtags(l.loadout).some((t) => t.startsWith(tag));
     }
-    const hay = `${l.loadout.name}\n${l.loadout.notes ?? ""}`.toLowerCase();
+    const sets = Object.keys(l.loadout.parameters.setBonuses ?? {})
+      .map((h) => filter.setName?.(Number(h)) ?? "")
+      .join("\n");
+    const hay = `${l.loadout.name}\n${l.loadout.notes ?? ""}\n${sets}`.toLowerCase();
     return hay.includes(q);
   });
 }
@@ -65,6 +86,18 @@ export function sortSavedLoadouts(
       out.sort((a, b) => b.updatedAt - a.updatedAt);
   }
   return out;
+}
+
+/** Unique set-bonus hashes across the list, sorted numerically. */
+export function collectSetBonusHashes(loadouts: readonly SavedLoadout[]): number[] {
+  const seen = new Set<number>();
+  for (const l of loadouts) {
+    for (const raw of Object.keys(l.loadout.parameters.setBonuses ?? {})) {
+      const hash = Number(raw);
+      if (Number.isFinite(hash)) seen.add(hash);
+    }
+  }
+  return [...seen].sort((a, b) => a - b);
 }
 
 /** Every hashtag across the list, most-used first. */
