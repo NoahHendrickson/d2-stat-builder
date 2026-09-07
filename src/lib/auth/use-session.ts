@@ -7,6 +7,8 @@ export interface SessionUser {
   destinyMembershipId?: string;
   destinyMembershipType?: number;
   displayName?: string;
+  /** Relative Bungie.net profile avatar path (e.g. `/img/profile/avatars/cc13.jpg`). */
+  iconPath?: string;
 }
 
 export interface SessionState {

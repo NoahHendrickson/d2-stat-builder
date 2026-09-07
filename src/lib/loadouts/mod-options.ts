@@ -11,18 +11,71 @@ export interface ModOption {
   description?: string;
   /** Armor energy cost (0 for tuning / artifice). */
   cost: number;
+  /** False when the game refuses a second copy ("Similar mod already applied"). */
+  stackable: boolean;
+  /**
+   * The seasonal-artifact copy of a mod (cheaper, no collectible). Every armor mod
+   * ships as a full-cost + discounted pair under one name; see `dedupeModOptions`.
+   */
+  artifactOnly: boolean;
 }
+
+/** DestinyStatDefinition hash for "Energy Cost" — every plug carries it; it says nothing about what the mod does. */
+const ENERGY_COST_STAT_HASH = 3578062600;
+/** Insertion-rule text on mods the game won't take twice on one piece. */
+const NO_STACK_RULE = "Similar mod already applied";
 
 function optionFor(manifest: Manifest, hash: number): ModOption | undefined {
   const def = manifest.def("DestinyInventoryItemDefinition", hash);
   if (!def || def.redacted || !def.displayProperties?.name || def.plug?.isDummyPlug) return undefined;
+  // "Locked Armor Mod" / "Empty Mod Socket" placeholders sit in every plug set. They
+  // are the only entries that neither grant a perk nor move a stat.
+  const doesSomething =
+    (def.perks?.length ?? 0) > 0 ||
+    (def.investmentStats ?? []).some((s) => s.statTypeHash !== ENERGY_COST_STAT_HASH);
+  if (!doesSomething) return undefined;
+  const rules = def.plug?.insertionRules ?? [];
   return {
     hash,
     name: def.displayProperties.name,
     icon: def.displayProperties.icon,
     description: def.displayProperties.description || undefined,
     cost: def.plug?.energyCost?.energyCost ?? 0,
+    stackable: !rules.some((r) => r.failureMessage?.includes(NO_STACK_RULE)),
+    artifactOnly: def.collectibleHash === undefined,
   };
+}
+
+/**
+ * One entry per mod name. Armor mods come in pairs (full cost + the artifact-discounted
+ * copy); show the copy the player can insert when plug-set data says so, else the
+ * full-cost one — its insert never depends on the current artifact. Also drops exact
+ * hash repeats.
+ */
+export function dedupeModOptions(
+  options: readonly ModOption[],
+  insertable?: ReadonlySet<number>,
+): ModOption[] {
+  const byName = new Map<string, ModOption[]>();
+  for (const o of options) {
+    const list = byName.get(o.name);
+    if (!list) byName.set(o.name, [o]);
+    else if (!list.some((x) => x.hash === o.hash)) list.push(o);
+  }
+  const out: ModOption[] = [];
+  for (const variants of byName.values()) {
+    const usable = insertable ? variants.filter((v) => insertable.has(v.hash)) : [];
+    const pool = usable.length > 0 ? usable : variants;
+    out.push(
+      [...pool].sort(
+        (a, b) =>
+          (usable.length > 0 ? a.cost - b.cost : Number(a.artifactOnly) - Number(b.artifactOnly)) ||
+          a.cost - b.cost ||
+          a.hash - b.hash,
+      )[0],
+    );
+  }
+  return out.sort((a, b) => a.cost - b.cost || a.name.localeCompare(b.name));
 }
 
 /** Plug hashes a plug set lists (everything, including the empty plug). */
@@ -49,8 +102,17 @@ export class ModOptionCatalog {
     this.artifice = getArtificeModHashes(manifest);
   }
 
-  /** The mods that can go in `socket` on `piece` (deduped, name-sorted; tuning by stat). */
-  optionsFor(piece: ArmorPiece, socket: ArmorSocket): ModOption[] {
+  /**
+   * The mods that can go in `socket` on `piece`: one per name (see `dedupeModOptions`),
+   * cost- then name-sorted; tuning by stat. `insertable` (the player's live plug sets)
+   * picks which variant of a mod to show.
+   */
+  optionsFor(piece: ArmorPiece, socket: ArmorSocket, insertable?: ReadonlySet<number>): ModOption[] {
+    return dedupeModOptions(this.rawOptionsFor(piece, socket), insertable);
+  }
+
+  /** Every variant the plug set lists (cached per socket shape). */
+  private rawOptionsFor(piece: ArmorPiece, socket: ArmorSocket): ModOption[] {
     const key = `${socket.kind}:${socket.plugSetHash ?? 0}:${socket.emptyPlugHash ?? 0}:${piece.tunedStat ?? "-"}:${piece.isExotic ? "x" : "l"}`;
     const cached = this.cache.get(key);
     if (cached) return cached;

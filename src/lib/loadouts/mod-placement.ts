@@ -1,7 +1,7 @@
 // The mod picker's data model: what the Save / Edit dialogs show, and how their
 // socket-by-socket choices turn back into the dim-api flat `parameters.mods` list.
 // Runtime imports are relative so the module runs under vitest.
-import type { ArmorPiece } from "../armory/normalize";
+import type { ArmorPiece, ArmorSocket } from "../armory/normalize";
 import type { ModOptionCatalog } from "./mod-options";
 import type { ModPlacement } from "./types";
 import type { ApplyPlan } from "./apply-plan";
@@ -21,6 +21,8 @@ export interface ModsSection {
   unplaced: number[];
   /** Human-readable reasons for `unplaced`, shown in the dialog. */
   skipped: string[];
+  /** Plugs the player can socket right now (`Armory.insertablePlugs`), if known. */
+  insertable?: ReadonlySet<number>;
 }
 
 /** A `ModsSection` seeded from an apply plan over `pieces`. */
@@ -28,8 +30,48 @@ export function modsSectionFromPlan(
   pieces: ArmorPiece[],
   catalog: ModOptionCatalog,
   plan: ApplyPlan,
+  insertable?: ReadonlySet<number>,
 ): ModsSection {
-  return { pieces, catalog, initial: plan.assigned, unplaced: plan.unplaced, skipped: plan.skipped };
+  return {
+    pieces,
+    catalog,
+    initial: plan.assigned,
+    unplaced: plan.unplaced,
+    skipped: plan.skipped,
+    ...(insertable ? { insertable } : {}),
+  };
+}
+
+/** How many of `sockets` (one kind on one piece) currently hold `hash`. */
+export function chosenCount(
+  chosen: Record<number, number> | undefined,
+  sockets: readonly ArmorSocket[],
+  hash: number,
+): number {
+  return sockets.filter((s) => chosen?.[s.index] === hash).length;
+}
+
+/**
+ * One click on a mod in a stacked grid (all same-kind sockets of a piece share one
+ * grid): put another copy in the next free socket; once the mod is at its limit —
+ * `maxStack` copies, or no socket left — the click clears every copy instead.
+ * Returns the piece's next chosen map (other mods untouched).
+ */
+export function cycleModStack(
+  chosen: Record<number, number> | undefined,
+  sockets: readonly ArmorSocket[],
+  hash: number,
+  maxStack: number,
+): Record<number, number> {
+  const next: Record<number, number> = { ...(chosen ?? {}) };
+  const count = chosenCount(chosen, sockets, hash);
+  const free = sockets.find((s) => next[s.index] === undefined);
+  if (count >= maxStack || !free) {
+    for (const s of sockets) if (next[s.index] === hash) delete next[s.index];
+    return next;
+  }
+  next[free.index] = hash;
+  return next;
 }
 
 /** Energy a piece would use with the editor's choices (unchosen sockets keep their current plug). */

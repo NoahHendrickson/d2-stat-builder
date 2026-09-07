@@ -99,6 +99,7 @@ export interface BuildsColumnContentProps {
   subclass?: DimSubclassInput;
   builderSnapshot?: BuilderSnapshot;
   manifest?: Manifest;
+  insertablePlugs?: ReadonlySet<number>;
   onEquipped: () => void;
 }
 
@@ -123,6 +124,7 @@ export function BuildsColumnContent({
   subclass,
   builderSnapshot,
   manifest,
+  insertablePlugs,
   onEquipped,
 }: BuildsColumnContentProps) {
   const [sort, setSort] = useState<LoadoutSortState>(DEFAULT_LOADOUT_SORT);
@@ -131,9 +133,9 @@ export function BuildsColumnContent({
   const showSort = viewState === "results";
 
   return (
-    <div className="space-y-3">
-      <div className="flex items-center gap-3">
-        <h2 className="text-lg font-medium">Builds</h2>
+    <div className="space-y-5">
+      <div className="flex min-h-8 items-center gap-3">
+        <h2 className="pl-1 text-xl leading-none font-normal">Builds</h2>
         <div className="ml-auto flex min-w-0 items-center gap-3">
           {/* Initial search only — `running` is false once refinement starts
               (see use-optimizer); refinement Cancel lives in the status alert. */}
@@ -179,6 +181,7 @@ export function BuildsColumnContent({
           subclass={subclass}
           builderSnapshot={builderSnapshot}
           manifest={manifest}
+          insertablePlugs={insertablePlugs}
           onEquipped={onEquipped}
           sort={sort}
         />
@@ -209,21 +212,22 @@ export function BuildsLoading({ progress: store }: { progress: ValueStore<number
           style={{ width: `${progress * 100}%` }}
         />
       </div>
-      <div className="space-y-1.5">
+      <div className="space-y-2">
         {Array.from({ length: LOADING_ROWS }, (_, i) => (
           <div
             key={i}
-            className="border-border/60 flex animate-pulse items-center gap-3 rounded-lg border p-2.5"
+            className="bg-foreground/6 flex animate-pulse items-center gap-6 rounded-[8px] p-2"
             style={{ animationDelay: `${i * 120}ms` }}
             aria-hidden
           >
-            <span className="bg-muted size-7 shrink-0 rounded" />
-            <div className="flex flex-1 items-center gap-3">
+            <span className="bg-muted size-10 shrink-0 rounded-[2px]" />
+            <div className="flex max-w-[28.5rem] flex-1 items-center justify-between gap-3">
               {Array.from({ length: 6 }, (_, j) => (
-                <span key={j} className="bg-muted h-3.5 w-10 rounded" />
+                <span key={j} className="bg-muted h-4 w-11 rounded" />
               ))}
             </div>
-            <span className="bg-muted h-3.5 w-8 shrink-0 rounded" />
+            <span className="bg-muted ml-auto h-4 w-10 shrink-0 rounded" />
+            <span className="size-8 shrink-0" />
           </div>
         ))}
       </div>

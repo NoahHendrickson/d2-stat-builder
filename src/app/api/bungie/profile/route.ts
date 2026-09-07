@@ -9,8 +9,6 @@ import {
 } from "@/lib/bungie/platform-response";
 import { clearSession, getValidAccessToken, readUser } from "@/lib/bungie/session";
 
-export const dynamic = "force-dynamic";
-
 // 100 Profiles (currentSeasonHash) · 102 Vault · 200 Characters · 201 CharacterInventories
 // 202 CharacterProgressions (seasonal artifact unlocks, for saved loadouts)
 // 205 CharacterEquipment · 300 ItemInstances · 304 ItemStats · 305 ItemSockets

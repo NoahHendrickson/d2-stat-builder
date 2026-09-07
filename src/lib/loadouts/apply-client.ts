@@ -5,7 +5,7 @@ import { toast } from "@/lib/toast";
 import type { ArmoryCharacter } from "@/lib/armory/fetch";
 import type { Manifest } from "@/lib/manifest/load";
 import { FRAGMENT_SOCKET_COUNT } from "@/lib/armory/equipped-subclass";
-import { FRAGMENT_SOCKET_START } from "@/lib/dim/subclasses";
+import { ABILITY_KINDS, FRAGMENT_SOCKET_START } from "@/lib/dim/subclasses";
 import { equipItemRef } from "@/lib/bungie/equip-client";
 import type { EquipItemState } from "@/lib/bungie/equip-plan";
 import type { ItemResult, PlugRequest, PlugResult } from "@/lib/bungie/equip-server";
@@ -60,20 +60,24 @@ export async function applySavedLoadout({
   if (subclassItem && resolved.subclass?.subclass) {
     const options = subclassOptions(manifest, character.classType, resolved.subclass.subclass);
     const carrier = { hash: subclassItem.itemHash, socketOverrides: resolved.subclass.socketOverrides };
-    const currentFor = {
-      super: subclassItem.superSockets,
-      aspects: subclassItem.aspectSockets,
-      fragments: subclassItem.fragmentSockets,
-    } as const;
-    for (const kind of ["super", "aspects", "fragments"] as const) {
-      const group = options[kind];
+    // Abilities first so a Super/aspect swap never fights a fragment that needs it.
+    const specs: { kind: SubclassPlugGroup["kind"]; group: (typeof options)["aspects"]; current: Record<number, number> }[] = [
+      ...ABILITY_KINDS.map((kind) => ({
+        kind: kind === "super" ? ("super" as const) : ("ability" as const),
+        group: options.abilities[kind],
+        current: subclassItem.abilitySockets,
+      })),
+      { kind: "aspect", group: options.aspects, current: subclassItem.aspectSockets },
+      { kind: "fragment", group: options.fragments, current: subclassItem.fragmentSockets },
+    ];
+    for (const { kind, group, current } of specs) {
       const entries = Object.entries(carrier.socketOverrides).filter(([i]) => Number(i) >= group.start && Number(i) < group.start + group.count);
       if (!entries.length) continue;
       groups.push({
-        kind: kind === "super" ? "super" : kind === "aspects" ? "aspect" : "fragment",
+        kind,
         start: group.start,
-        count: kind === "fragments" ? Math.min(group.count, subclassFragmentCapacity(carrier, options.aspects)) : group.count,
-        current: currentFor[kind],
+        count: kind === "fragment" ? Math.min(group.count, subclassFragmentCapacity(carrier, options.aspects)) : group.count,
+        current,
         desired: selectedSubclassPlugs(carrier, group),
         emptyHash: group.emptyHash,
         clearUnused: entries.some(([, hash]) => hash === group.emptyHash),

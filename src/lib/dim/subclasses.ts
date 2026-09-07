@@ -50,6 +50,33 @@ export const SUPER_SOCKET_CATEGORY_HASH = 457473665;
 export const SUPER_SOCKET_COUNT = 1;
 
 /**
+ * The ability sockets a loadout can pin, one plug each. Every subclass item lays them
+ * out as 0 class ability, 1 movement, 2 Super, 3 melee, 4 grenade (verified against the
+ * live manifest for all 18), but the index is looked up per item from the socket type's
+ * plug whitelist — its category identifier ends in the suffix below (e.g.
+ * `hunter.arc.class_abilities`, `shared.solar.grenades`). Prismatic's transcendence
+ * sockets (5–6) have no plug set and stay untouched.
+ */
+export const ABILITY_KINDS = ["super", "classAbility", "movement", "melee", "grenade"] as const;
+export type AbilityKind = (typeof ABILITY_KINDS)[number];
+export const ABILITY_PLUG_CATEGORY_SUFFIX: Record<AbilityKind, string> = {
+  super: "supers",
+  classAbility: "class_abilities",
+  movement: "movement",
+  melee: "melee",
+  grenade: "grenades",
+};
+export const ABILITY_LABELS: Record<AbilityKind, string> = {
+  super: "Super",
+  classAbility: "Class ability",
+  movement: "Jump",
+  melee: "Melee",
+  grenade: "Grenade",
+};
+/** Super + class ability + movement + melee + grenade. */
+export const ABILITY_SOCKET_COUNT = ABILITY_KINDS.length;
+
+/**
  * First fragment socket index on a subclass item, used for the DIM handoff's
  * socketOverrides. Verified against the live manifest's socketEntries: every
  * non-Prismatic subclass has fragments at sockets 7–12; Prismatic puts

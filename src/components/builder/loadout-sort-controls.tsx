@@ -1,7 +1,7 @@
 "use client";
 
 import { TooltipLabel } from "@/components/ui/tooltip";
-import { ArrowDown, ArrowUp, CaretDown } from "@phosphor-icons/react";
+import { ArrowDown, ArrowUp } from "@phosphor-icons/react";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -13,14 +13,12 @@ import {
   loadoutSortLabel,
   type LoadoutSortState,
 } from "@/lib/builder/sort-loadouts";
-import {
-  field3dFocusVisibleClasses,
-  field3dInteractiveClasses,
-  field3dSurfaceClasses,
-} from "@/lib/field-surface";
 import { cn } from "@/lib/utils";
 
-/** Compact sort control: each option has up/down arrows to set key + direction. */
+/**
+ * Figma 17:6201 "Select Trigger": a flat, input-bordered "Sort: <key> <direction>"
+ * trigger. Each option in the menu has up/down arrows to set key + direction.
+ */
 export function LoadoutSortControls({
   sort,
   onChange,
@@ -37,26 +35,11 @@ export function LoadoutSortControls({
       <TooltipLabel label={`Sort by ${triggerLabel}, ${directionLabel}`}>
         <DropdownMenuTrigger
           aria-label={`Sort by ${triggerLabel}, ${directionLabel}`}
-          className={cn(
-            "flex h-7 w-fit min-w-28 cursor-pointer items-center justify-between gap-1.5 rounded-[6px] border border-transparent bg-clip-padding py-2 pr-2 pl-2.5 text-[0.8rem] whitespace-nowrap outline-none select-none",
-            field3dSurfaceClasses,
-            field3dInteractiveClasses,
-            field3dFocusVisibleClasses,
-          )}
+          className="inline-flex h-8 w-fit shrink-0 cursor-pointer items-center gap-1.5 rounded-lg border border-input bg-transparent pr-2 pl-2.5 text-sm whitespace-nowrap transition-colors outline-none select-none hover:bg-muted/60 focus-visible:border-emphatic data-popup-open:border-emphatic dark:bg-input/30 dark:hover:bg-input/50"
         >
-          <span className="flex min-w-0 items-center gap-1.5">
-            <span className="truncate">{triggerLabel}</span>
-            <DirectionIcon
-              weight="bold"
-              className="size-4 shrink-0"
-              aria-hidden
-            />
-          </span>
-          <CaretDown
-            weight="duotone"
-            className="text-muted-foreground pointer-events-none size-3.5 shrink-0"
-            aria-hidden
-          />
+          <span className="text-muted-foreground">Sort:</span>
+          <span className="truncate">{triggerLabel}</span>
+          <DirectionIcon className="size-4 shrink-0" aria-hidden />
         </DropdownMenuTrigger>
       </TooltipLabel>
       <DropdownMenuContent
@@ -92,7 +75,7 @@ export function LoadoutSortControls({
                     className={cn(
                       "size-4",
                       active && sort.asc
-                        ? "text-brand"
+                        ? "text-emphatic"
                         : "text-muted-foreground",
                     )}
                     aria-hidden
@@ -112,7 +95,7 @@ export function LoadoutSortControls({
                     className={cn(
                       "size-4",
                       active && !sort.asc
-                        ? "text-brand"
+                        ? "text-emphatic"
                         : "text-muted-foreground",
                     )}
                     aria-hidden

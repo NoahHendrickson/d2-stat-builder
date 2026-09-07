@@ -20,11 +20,11 @@ function TooltipProvider({
 }
 
 function Tooltip({ ...props }: TooltipPrimitive.Root.Props) {
-  return <TooltipPrimitive.Root data-slot="tooltip" {...props} />;
+  return <TooltipPrimitive.Root data-slot="tooltip" {...props} disableHoverablePopup />;
 }
 
 function TooltipTrigger({ ...props }: TooltipPrimitive.Trigger.Props) {
-  return <TooltipPrimitive.Trigger data-slot="tooltip-trigger" {...props} />;
+  return <TooltipPrimitive.Trigger data-slot="tooltip-trigger" {...props} closeDelay={0} />;
 }
 
 function TooltipContent({
@@ -47,12 +47,12 @@ function TooltipContent({
         alignOffset={alignOffset}
         side={side}
         sideOffset={sideOffset}
-        className="isolate z-50"
+        className="pointer-events-none isolate z-50"
       >
         <TooltipPrimitive.Popup
           data-slot="tooltip-content"
           className={cn(
-            "z-50 w-fit max-w-xs origin-(--transform-origin) rounded-[10px] corner-smooth border border-border/70 bg-popover px-3 py-2 text-xs leading-relaxed text-popover-foreground shadow-lg whitespace-pre-line data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95 motion-reduce:animate-none",
+            "z-50 w-fit max-w-xs origin-(--transform-origin) rounded-[10px] corner-smooth border border-border/70 bg-popover px-3 py-2 text-xs leading-relaxed text-popover-foreground shadow-lg whitespace-pre-line data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:hidden motion-reduce:animate-none",
             className,
           )}
           {...props}

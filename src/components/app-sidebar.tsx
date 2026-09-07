@@ -9,7 +9,7 @@ import { LoadoutsList } from "@/components/loadouts/loadouts-list";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { ViewTabs } from "@/components/view-tabs";
 
-/** Figma "Frame 4" (1:13): header, loadouts, and the armor summary pinned at the bottom. */
+/** Figma "Frame 4" (1:13): header, loadouts, and the account card pinned at the bottom. */
 export function AppSidebar({ onNavigate }: { onNavigate?: () => void }) {
   const session = useSession();
   const armory = useArmory();
@@ -49,24 +49,23 @@ export function AppSidebar({ onNavigate }: { onNavigate?: () => void }) {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <div className="flex h-16 shrink-0 items-center justify-between p-4">
+      <div className="flex h-16 shrink-0 items-center justify-between gap-2 p-4">
         <span className="min-w-0 truncate text-sm font-medium">
           D2 stat builder
         </span>
-        <ViewTabs onNavigate={onNavigate} />
+        <div className="flex shrink-0 items-center gap-2">
+          <ThemeToggle />
+          <ViewTabs onNavigate={onNavigate} />
+        </div>
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col">{body}</div>
 
-      <div className="shrink-0 p-2">
-        {authed ? (
-          <ArmoryStatus actions={<ThemeToggle />} />
-        ) : (
-          <div className="flex justify-end">
-            <ThemeToggle />
-          </div>
-        )}
-      </div>
+      {authed && (
+        <div className="shrink-0 p-2">
+          <ArmoryStatus />
+        </div>
+      )}
     </div>
   );
 }

@@ -2,9 +2,9 @@ import type { Manifest } from "../manifest/load";
 import { buildFragmentStats, type Subclass } from "../armory/fragments";
 import type { StatArray } from "../armory/stats";
 import {
-  ASPECT_SOCKET_COUNT, FRAGMENT_SOCKET_COUNT, FRAGMENT_SOCKET_START,
-  SUBCLASS_ITEM_HASHES, SUPER_SOCKET_CATEGORY_HASH, SUPER_SOCKET_COUNT,
-  aspectSocketStart, subclassFromItemHash,
+  ABILITY_KINDS, ABILITY_PLUG_CATEGORY_SUFFIX, ASPECT_SOCKET_COUNT, FRAGMENT_SOCKET_COUNT,
+  FRAGMENT_SOCKET_START, SUBCLASS_ITEM_HASHES, SUPER_SOCKET_CATEGORY_HASH, SUPER_SOCKET_COUNT,
+  aspectSocketStart, subclassFromItemHash, type AbilityKind,
 } from "../dim/subclasses";
 import type { DimLoadout, DimLoadoutItem } from "../dim/loadout-link";
 import type { SavedLoadoutData } from "./types";
@@ -25,7 +25,7 @@ export interface SubclassSocketOptions {
   options: SubclassPlugOption[];
 }
 
-/** Manifest slice `superSocketIndex` / resolve need — inventory items + socket types. */
+/** Manifest slice the socket-index lookups / resolve need — inventory items + socket types. */
 export interface SuperSocketLookup {
   def(
     table: "DestinyInventoryItemDefinition" | "DestinySocketTypeDefinition",
@@ -33,8 +33,35 @@ export interface SuperSocketLookup {
   ): {
     sockets?: { socketEntries: { socketTypeHash?: number; singleInitialItemHash?: number; reusablePlugItems?: { plugItemHash: number }[] }[] };
     socketCategoryHash?: number;
+    plugWhitelist?: { categoryIdentifier: string }[];
     plug?: { plugCategoryIdentifier?: string };
   } | undefined;
+}
+
+/**
+ * Index of the socket for `kind` on this subclass item, or undefined if the def has
+ * none. Matches the socket type's plug whitelist first (always present on live data),
+ * then the plugs the socket lists, by plug-category suffix.
+ */
+export function abilitySocketIndex(manifest: SuperSocketLookup, itemHash: number, kind: AbilityKind): number | undefined {
+  if (kind === "super") return superSocketIndex(manifest, itemHash);
+  const suffix = `.${ABILITY_PLUG_CATEGORY_SUFFIX[kind]}`;
+  const entries = manifest.def("DestinyInventoryItemDefinition", itemHash)?.sockets?.socketEntries ?? [];
+  for (let i = 0; i < entries.length; i++) {
+    const type = manifest.def("DestinySocketTypeDefinition", entries[i].socketTypeHash);
+    if (type?.plugWhitelist?.some((w) => w.categoryIdentifier.endsWith(suffix))) return i;
+  }
+  for (let i = 0; i < entries.length; i++) {
+    const hashes = [
+      entries[i].singleInitialItemHash,
+      ...(entries[i].reusablePlugItems?.map((p) => p.plugItemHash) ?? []),
+    ];
+    if (hashes.some((h) => {
+      const cat = manifest.def("DestinyInventoryItemDefinition", h)?.plug?.plugCategoryIdentifier ?? "";
+      return cat.endsWith(suffix);
+    })) return i;
+  }
+  return undefined;
 }
 
 /** Index of the Super socket on this subclass item, or undefined if the def has none. */
@@ -61,7 +88,6 @@ export function superSocketIndex(manifest: SuperSocketLookup, itemHash: number):
 export function subclassOptions(manifest: Manifest, classType: number, subclass: Subclass) {
   const itemHash = SUBCLASS_ITEM_HASHES[subclass][classType];
   const def = manifest.def("DestinyInventoryItemDefinition", itemHash);
-  const superStart = superSocketIndex(manifest, itemHash);
   const group = (start: number, count: number, includeInitial = false): SubclassSocketOptions => {
     const socket = def?.sockets?.socketEntries[start];
     const plugs = [
@@ -88,15 +114,21 @@ export function subclassOptions(manifest: Manifest, classType: number, subclass:
       options,
     };
   };
+  // Abilities are one socket each and optional: no override = keep the in-game choice,
+  // so the socket's initial plug is a regular option and there is no "empty" plug.
+  const abilities = Object.fromEntries(ABILITY_KINDS.map((kind) => {
+    const start = abilitySocketIndex(manifest, itemHash, kind);
+    return [kind, start !== undefined ? group(start, SUPER_SOCKET_COUNT, true) : { start: 0, count: 0, options: [] }];
+  })) as Record<AbilityKind, SubclassSocketOptions>;
   return {
     itemHash, name: def?.displayProperties.name ?? subclass,
-    super: superStart !== undefined
-      ? group(superStart, SUPER_SOCKET_COUNT, true)
-      : { start: 0, count: 0, options: [] },
+    abilities,
     aspects: group(aspectSocketStart(subclass), ASPECT_SOCKET_COUNT),
     fragments: group(FRAGMENT_SOCKET_START[subclass], FRAGMENT_SOCKET_COUNT),
   };
 }
+
+export type SubclassCatalog = ReturnType<typeof subclassOptions>;
 
 export function loadoutSubclass(loadout: DimLoadout): DimLoadoutItem | null {
   return loadout.equipped.find((item) => subclassFromItemHash(item.hash)) ?? null;
@@ -126,7 +158,7 @@ export function subclassSelectionValid(section: { manifest: Manifest; classType:
   const fragments = selectedSubclassPlugs(item, options.fragments);
   return aspects.length <= ASPECT_SOCKET_COUNT &&
     fragments.length <= subclassFragmentCapacity(item, options.aspects) &&
-    [options.super, options.aspects, options.fragments].every((group) => {
+    [...Object.values(options.abilities), options.aspects, options.fragments].every((group) => {
       const selected = selectedSubclassPlugs(item, group);
       return new Set(selected).size === selected.length && selected.every((hash) => group.options.some((o) => o.hash === hash));
     });

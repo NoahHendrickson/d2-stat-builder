@@ -80,28 +80,26 @@ export function ArmorTable() {
   const manifest =
     manifestStatus.state === "ready" ? manifestStatus.manifest : undefined;
 
-  const [search, setSearch] = useState("");
-  const [facets, setFacets] = useState<FacetFilters>(emptyFacets);
-  const [pinnedSets, setPinnedSets] = useState<number[]>([]);
-  const [pinnedArchetypes, setPinnedArchetypes] = useState<string[]>([]);
-  const searchRef = useRef<HTMLInputElement>(null);
-  const restored = useRef(false);
-
-  // Restore filters + pins on mount (sort restores inside useArmorTableSort).
-  useEffect(() => {
+  // Filters + pins initialize straight from storage (sort does the same inside
+  // useArmorTableSort), so the first render is already the restored table.
+  const [initialFilters] = useState(() => {
     const saved = loadTableState();
-    if (saved) {
-      const { search: savedSearch, ...savedFacets } = saved.filters;
-      setSearch(savedSearch);
-      setFacets(savedFacets);
-    }
-    const savedPins = loadTablePins();
-    if (savedPins) {
-      setPinnedSets(savedPins.sets);
-      setPinnedArchetypes(savedPins.archetypes);
-    }
-    restored.current = true;
-  }, []);
+    if (!saved) return null;
+    const { search, ...facets } = saved.filters;
+    return { search, facets };
+  });
+  const [initialPins] = useState(loadTablePins);
+  const [search, setSearch] = useState(initialFilters?.search ?? "");
+  const [facets, setFacets] = useState<FacetFilters>(
+    () => initialFilters?.facets ?? emptyFacets(),
+  );
+  const [pinnedSets, setPinnedSets] = useState<number[]>(
+    () => initialPins?.sets ?? [],
+  );
+  const [pinnedArchetypes, setPinnedArchetypes] = useState<string[]>(
+    () => initialPins?.archetypes ?? [],
+  );
+  const searchRef = useRef<HTMLInputElement>(null);
 
   const pieces = armory.data?.pieces;
   const characters: ArmoryCharacter[] = armory.data?.characters ?? [];
@@ -134,10 +132,8 @@ export function ArmorTable() {
     columnValues,
   } = useArmorTableSort(rows);
 
-  // Persist filters + sort together (debounced). The `restored` guard prevents
-  // the first render from clobbering stored data before the restore runs.
+  // Persist filters + sort together (debounced).
   useEffect(() => {
-    if (!restored.current) return;
     const t = window.setTimeout(() => {
       saveTableState({
         version: TABLE_SCHEMA_VERSION,
@@ -148,11 +144,8 @@ export function ArmorTable() {
     return () => window.clearTimeout(t);
   }, [facets, search, sort]);
 
-  // Pins persist debounced like the filters above — the delay also keeps the
-  // initial empty state from clobbering stored pins before the restore's
-  // setState commits (StrictMode re-runs this effect before the re-render).
+  // Pins persist debounced like the filters above.
   useEffect(() => {
-    if (!restored.current) return;
     const t = window.setTimeout(() => {
       saveTablePins({
         version: PINS_SCHEMA_VERSION,

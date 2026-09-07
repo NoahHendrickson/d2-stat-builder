@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 
-const KIND_LABEL: Record<ArmorSocket["kind"], string> = {
+export const KIND_LABEL: Record<ArmorSocket["kind"], string> = {
   general: "Stat mod",
   other: "Armor mod",
   tuning: "Tuning",

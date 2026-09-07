@@ -5,8 +5,6 @@ import type { EquipItemState } from "@/lib/bungie/equip-plan";
 import { stageAndEquip } from "@/lib/bungie/equip-server";
 import { bungieErrorResponse, parseEquipItems } from "@/lib/bungie/equip-route";
 
-export const dynamic = "force-dynamic";
-
 interface EquipRequestBody {
   characterId: string;
   items: EquipItemState[];

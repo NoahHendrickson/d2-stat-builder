@@ -75,12 +75,12 @@ export interface SubclassPlan {
   socketStart: number;
   socketCount: number;
   desiredFragments: number[];
-  /** Super, then aspects, then fragments. Absent for legacy fragment-only callers. */
+  /** Abilities (Super first), then aspects, then fragments. Absent for legacy fragment-only callers. */
   groups?: SubclassPlugGroup[];
 }
 
 export interface SubclassPlugGroup {
-  kind: "super" | "aspect" | "fragment";
+  kind: "super" | "ability" | "aspect" | "fragment";
   start: number;
   count: number;
   current: Record<number, number>;
@@ -108,6 +108,10 @@ interface PieceState {
   /** Energy consumed by sockets we don't manage (baseline). */
   baseUsed: number;
 }
+
+const GROUP_LABEL: Record<SubclassPlugGroup["kind"], string> = {
+  super: "Super", ability: "Ability", aspect: "Aspect", fragment: "Fragment",
+};
 
 export function planLoadoutPlugs(input: PlanInput): ApplyPlan {
   const { plugInfo } = input;
@@ -271,7 +275,7 @@ export function planLoadoutPlugs(input: PlanInput): ApplyPlan {
         return !cur || !desired.includes(cur);
       });
       for (const hash of desired) {
-        const name = plugInfo(hash)?.name ?? `${group.kind === "super" ? "Super" : group.kind === "aspect" ? "Aspect" : "Fragment"} #${hash}`;
+        const name = plugInfo(hash)?.name ?? `${GROUP_LABEL[group.kind]} #${hash}`;
         if (present.has(hash)) {
           alreadyApplied.push(`${name} → subclass`);
           continue;

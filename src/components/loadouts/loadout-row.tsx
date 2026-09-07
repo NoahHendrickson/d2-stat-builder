@@ -25,6 +25,7 @@ import { toast } from "@/lib/toast";
 import type { ArmorPiece } from "@/lib/armory/normalize";
 import type { ArmoryCharacter } from "@/lib/armory/fetch";
 import type { Subclass } from "@/lib/armory/fragments";
+import { ABILITY_KINDS, ABILITY_LABELS } from "@/lib/dim/subclasses";
 import type { Manifest } from "@/lib/manifest/load";
 import {
   CLASS_NAMES,
@@ -294,6 +295,13 @@ export const LoadoutRow = memo(function LoadoutRow({
   const superLabel = superDef?.displayProperties?.name
     ? `${superDef.displayProperties.name} · ${subclassLabel}`
     : subclassLabel;
+  // Pinned abilities besides the Super, in socket order (class ability, jump, melee, grenade).
+  const abilityChips = subclass
+    ? ABILITY_KINDS.filter((kind) => kind !== "super").flatMap((kind) => {
+        const hash = subclass.abilityHashes[kind];
+        return hash === undefined ? [] : [{ kind, hash }];
+      })
+    : [];
 
   const className =
     loadout.classType === 3 ? "Any class" : CLASS_NAMES[loadout.classType];
@@ -402,18 +410,16 @@ export const LoadoutRow = memo(function LoadoutRow({
               Equip
             </Button>
             <DropdownMenu>
-              <TooltipLabel label={`Actions for ${loadout.name}`}>
-                <DropdownMenuTrigger
-                  render={<Button size="icon" variant="ghost" />}
-                  aria-label={`Actions for ${loadout.name}`}
-                >
-                  <DotsThreeVertical
-                    weight="bold"
-                    className="size-4"
-                    aria-hidden
-                  />
-                </DropdownMenuTrigger>
-              </TooltipLabel>
+              <DropdownMenuTrigger
+                render={<Button size="icon" variant="ghost" />}
+                aria-label={`Actions for ${loadout.name}`}
+              >
+                <DotsThreeVertical
+                  weight="bold"
+                  className="size-4"
+                  aria-hidden
+                />
+              </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-50">
                 <DropdownMenuItem onClick={() => onOptimize(saved)}>
                   <SlidersHorizontal weight="duotone" aria-hidden />
@@ -523,6 +529,16 @@ export const LoadoutRow = memo(function LoadoutRow({
                   label={superLabel}
                   size={24}
                 />
+                {abilityChips.map(({ kind, hash }) => (
+                  <PlugIcon
+                    key={kind}
+                    hash={hash}
+                    manifest={manifest}
+                    suffix={ABILITY_LABELS[kind]}
+                    size={24}
+                    className="rounded-none"
+                  />
+                ))}
                 {subclass.aspectHashes.map((hash) => (
                   <PlugIcon
                     key={hash}

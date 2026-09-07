@@ -25,10 +25,20 @@ const csp = [
 ].join("; ");
 
 const nextConfig: NextConfig = {
+  // Cache Components makes the router keep recently visited routes mounted (React
+  // <Activity> in "hidden" mode) instead of unmounting them, so switching between the
+  // optimizer and the armor table is a show/hide, not a rebuild of the whole view.
+  cacheComponents: true,
   images: {
     remotePatterns: [
       { protocol: "https", hostname: "www.bungie.net", pathname: "/common/**" },
+      { protocol: "https", hostname: "www.bungie.net", pathname: "/img/**" },
     ],
+  },
+  // Loadouts live in the sidebar now; old links (including share links, whose query
+  // string is carried over) forward to the optimizer.
+  async redirects() {
+    return [{ source: "/loadouts", destination: "/", permanent: false }];
   },
   async headers() {
     return [

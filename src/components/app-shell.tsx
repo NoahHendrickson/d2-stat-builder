@@ -69,6 +69,16 @@ export function AppShell({ children }: { children: ReactNode }) {
     setSidebarWidth(loadSidebarWidth());
   }, []);
 
+  // Portaled surfaces (the loadout editor drawer) sit beside the sidebar, not over
+  // it: publish its live width where anything under <html> can read it.
+  useEffect(() => {
+    const root = document.documentElement;
+    root.style.setProperty("--app-sidebar-width", `${desktop ? sidebarWidth : 0}px`);
+    return () => {
+      root.style.removeProperty("--app-sidebar-width");
+    };
+  }, [desktop, sidebarWidth]);
+
   useEffect(() => {
     if (!resizing) return;
     const { cursor, userSelect } = document.body.style;

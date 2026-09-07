@@ -4,8 +4,6 @@ import { getServerLoadoutStore } from "@/lib/loadouts/neon-store";
 import { parseSavedLoadoutData } from "@/lib/loadouts/types";
 import { notConfigured, storageError } from "@/lib/loadouts/api-responses";
 
-export const dynamic = "force-dynamic";
-
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 type Ctx = { params: Promise<{ id: string }> };

@@ -12,18 +12,17 @@ import {
 import { bungieErrorResponse, parseEquipItems } from "@/lib/bungie/equip-route";
 import { FRAGMENT_SOCKET_COUNT } from "@/lib/armory/equipped-subclass";
 import { MAX_MODS } from "@/lib/loadouts/types";
-import { ASPECT_SOCKET_COUNT } from "@/lib/dim/subclasses";
-
-export const dynamic = "force-dynamic";
+import { ABILITY_SOCKET_COUNT, ASPECT_SOCKET_COUNT } from "@/lib/dim/subclasses";
 
 /** 5 armor + 1 subclass. */
 const MAX_ITEMS = 6;
 /**
  * Every mod a loadout may list (stat / tuning / artifice / slot-specific — the same cap
- * the loadout parser enforces) plus a full set of fragments. Anything the client plans
- * within a valid loadout must fit, or a fully-modded build could never be applied.
+ * the loadout parser enforces) plus every subclass socket a loadout can pin: abilities,
+ * aspects, and fragments. Anything the client plans within a valid loadout must fit, or
+ * a fully-specified build could never be applied.
  */
-const MAX_PLUGS = MAX_MODS + ASPECT_SOCKET_COUNT + FRAGMENT_SOCKET_COUNT;
+const MAX_PLUGS = MAX_MODS + ABILITY_SOCKET_COUNT + ASPECT_SOCKET_COUNT + FRAGMENT_SOCKET_COUNT;
 
 interface ApplyRequestBody {
   characterId: string;

@@ -4,13 +4,20 @@ import { SUPER_SOCKET_CATEGORY_HASH } from "../dim/subclasses";
 import { resolveLoadout, type DefLookup } from "./resolve";
 
 const SUPER_TYPE = 50;
+const GRENADE_TYPE = 51;
 const manifest: DefLookup = {
   def: (table, hash) => {
     if (table === "DestinySocketTypeDefinition" && hash === SUPER_TYPE) {
       return { socketCategoryHash: SUPER_SOCKET_CATEGORY_HASH };
     }
+    if (table === "DestinySocketTypeDefinition" && hash === GRENADE_TYPE) {
+      return { plugWhitelist: [{ categoryIdentifier: "hunter.prism.grenades" }] };
+    }
     if (hash === 4282591831) {
-      return { sockets: { socketEntries: [{ singleInitialItemHash: 0, socketTypeHash: SUPER_TYPE }] } };
+      return { sockets: { socketEntries: [
+        { singleInitialItemHash: 0, socketTypeHash: SUPER_TYPE },
+        { singleInitialItemHash: 0, socketTypeHash: GRENADE_TYPE },
+      ] } };
     }
     if (hash === 200) {
       return { displayProperties: { name: "Gone Helm", icon: "/h.png" }, inventory: { bucketTypeHash: 3448274439 } };
@@ -27,7 +34,7 @@ const pieceMap = new Map([
   ["a1", piece("a1", "arms")],
 ]);
 
-test("resolves live pieces, flags missing ones, orders by slot, extracts fragments", () => {
+test("resolves live pieces, flags missing ones, orders by slot, extracts subclass plugs", () => {
   const out = resolveLoadout(
     {
       id: "x",
@@ -40,7 +47,7 @@ test("resolves live pieces, flags missing ones, orders by slot, extracts fragmen
         { id: "gone", hash: 200 },
         { id: "a1", hash: 1 },
         // Prismatic Hunter carrier: fragments start at socket 9
-        { id: "12345", hash: 4282591831, socketOverrides: { 0: 77, 10: 22, 9: 11 } },
+        { id: "12345", hash: 4282591831, socketOverrides: { 0: 77, 1: 88, 10: 22, 9: 11 } },
       ],
     },
     pieceMap,
@@ -57,7 +64,8 @@ test("resolves live pieces, flags missing ones, orders by slot, extracts fragmen
     fragmentHashes: [11, 22],
     aspectHashes: [],
     superHash: 77,
-    socketOverrides: { 0: 77, 10: 22, 9: 11 },
+    abilityHashes: { super: 77, grenade: 88 },
+    socketOverrides: { 0: 77, 1: 88, 10: 22, 9: 11 },
   });
   expect(out.missing).toBe(true);
   expect(out.actionable).toBe(false);

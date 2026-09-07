@@ -1,7 +1,14 @@
 import { test, expect } from "vitest";
 import type { ArmorPiece } from "../armory/normalize";
 import type { ModOptionCatalog } from "./mod-options";
-import { modsFromEditor, pieceEnergyUsed, placementToMods, type ModsSection } from "./mod-placement";
+import {
+  chosenCount,
+  cycleModStack,
+  modsFromEditor,
+  pieceEnergyUsed,
+  placementToMods,
+  type ModsSection,
+} from "./mod-placement";
 
 const piece = (instanceId: string, sockets: { index: number; plugHash?: number }[], used = 0): ArmorPiece =>
   ({
@@ -54,4 +61,28 @@ test("pieceEnergyUsed counts unmanaged baseline plus the chosen / current plugs"
   expect(pieceEnergyUsed(p, undefined, cost)).toBe(5);
   expect(pieceEnergyUsed(p, { 2: 20 }, cost)).toBe(6);
   expect(pieceEnergyUsed(p, { 1: 20 }, cost)).toBe(3);
+});
+
+const sockets = [1, 2, 3].map((index) => ({ index, kind: "other", category: "" }) as const);
+
+test("cycleModStack fills the next free socket, then clears at the limit", () => {
+  let chosen: Record<number, number> | undefined;
+  chosen = cycleModStack(chosen, sockets, 7, 3);
+  expect(chosen).toEqual({ 1: 7 });
+  chosen = cycleModStack(chosen, sockets, 7, 3);
+  chosen = cycleModStack(chosen, sockets, 7, 3);
+  expect(chosen).toEqual({ 1: 7, 2: 7, 3: 7 });
+  expect(chosenCount(chosen, sockets, 7)).toBe(3);
+  expect(cycleModStack(chosen, sockets, 7, 3)).toEqual({});
+});
+
+test("cycleModStack respects a non-stackable mod and leaves other mods alone", () => {
+  const once = cycleModStack({ 2: 9 }, sockets, 7, 1);
+  expect(once).toEqual({ 1: 7, 2: 9 });
+  expect(cycleModStack(once, sockets, 7, 1)).toEqual({ 2: 9 });
+});
+
+test("cycleModStack clears when every socket is taken by other mods", () => {
+  expect(cycleModStack({ 1: 8, 2: 9, 3: 8 }, sockets, 8, 3)).toEqual({ 2: 9 });
+  expect(cycleModStack({ 1: 8, 2: 9, 3: 5 }, sockets, 7, 3)).toEqual({ 1: 8, 2: 9, 3: 5 });
 });

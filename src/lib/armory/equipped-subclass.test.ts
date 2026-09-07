@@ -121,8 +121,8 @@ describe("subclassItemsForCharacter", () => {
     } as unknown as DestinyProfileResponse;
   }
 
-  test("lists equipped + inventory subclasses with their fragment sockets", () => {
-    const out = subclassItemsForCharacter(profile(), "c1", () => 0);
+  test("lists equipped + inventory subclasses with their live sockets (zero plugs left out)", () => {
+    const out = subclassItemsForCharacter(profile(), "c1", () => [0, 1]);
     expect(out).toEqual([
       {
         itemHash: 4282591831,
@@ -131,7 +131,7 @@ describe("subclassItemsForCharacter", () => {
         equipped: true,
         fragmentSockets: { 9: 501, 10: 502 },
         aspectSockets: { 7: 701, 8: 702 },
-        superSockets: { 0: 801 },
+        abilitySockets: { 0: 801 },
       },
       {
         itemHash: 2328211300,
@@ -140,7 +140,7 @@ describe("subclassItemsForCharacter", () => {
         equipped: false,
         fragmentSockets: { 7: 601 },
         aspectSockets: { 5: 703, 6: 704 },
-        superSockets: { 0: 802 },
+        abilitySockets: { 0: 802 },
       },
     ]);
   });
@@ -159,6 +159,6 @@ describe("subclassItemsForCharacter", () => {
   });
 
   test("unknown character → empty", () => {
-    expect(subclassItemsForCharacter(profile(), "nope", () => 0)).toEqual([]);
+    expect(subclassItemsForCharacter(profile(), "nope", () => [0])).toEqual([]);
   });
 });

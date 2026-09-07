@@ -78,6 +78,7 @@ import { planPiecesFromArmor } from "@/lib/loadouts/plan-pieces";
 import { plugInfoFromManifest } from "@/lib/loadouts/plug-info";
 import { getModCatalog } from "@/lib/loadouts/mod-options";
 import { LoadoutRow } from "@/components/loadouts/loadout-row";
+import { LoadoutEditorDrawer } from "@/components/loadouts/loadout-editor-drawer";
 
 type DialogState =
   | { kind: "none" }
@@ -268,11 +269,16 @@ export function LoadoutsList({
           plugInfo: plugInfoFromManifest(manifest),
           placements: saved.modPlacement,
         });
-        mods = modsSectionFromPlan(pieces, getModCatalog(manifest), plan);
+        mods = modsSectionFromPlan(
+          pieces,
+          getModCatalog(manifest),
+          plan,
+          armory.insertablePlugs,
+        );
       }
       setDialog({ kind: "edit", loadout: saved, mods });
     },
-    [pieceMap, manifest],
+    [pieceMap, manifest, armory.insertablePlugs],
   );
   const openDelete = useCallback(
     (saved: SavedLoadout) => setDialog({ kind: "delete", loadout: saved }),
@@ -666,7 +672,7 @@ export function LoadoutsList({
         </div>
       )}
 
-      <LoadoutDetailsDialog
+      <LoadoutEditorDrawer
         open={dialog.kind === "edit"}
         onOpenChange={(open) => !open && setDialog({ kind: "none" })}
         title="Edit loadout"

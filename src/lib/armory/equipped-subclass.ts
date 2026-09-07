@@ -3,7 +3,6 @@ import {
   FRAGMENT_SOCKET_START,
   FRAGMENT_SOCKET_COUNT,
   ASPECT_SOCKET_COUNT,
-  SUPER_SOCKET_COUNT,
   aspectSocketStart,
   subclassFromItemHash,
 } from "@/lib/dim/subclasses";
@@ -26,7 +25,8 @@ export interface SubclassItem {
   /** Live plug hash per fragment socket index (absent = empty / unknown / locked). */
   fragmentSockets: Record<number, number>;
   aspectSockets: Record<number, number>;
-  superSockets: Record<number, number>;
+  /** Live plug per ability socket index (Super, class ability, movement, melee, grenade). */
+  abilitySockets: Record<number, number>;
 }
 
 /**
@@ -39,7 +39,7 @@ export interface SubclassItem {
 export function subclassItemsForCharacter(
   profile: DestinyProfileResponse,
   characterId: string,
-  superIndexFor?: (itemHash: number) => number | undefined,
+  abilityIndicesFor?: (itemHash: number) => number[],
 ): SubclassItem[] {
   const out: SubclassItem[] = [];
   const collect = (
@@ -54,13 +54,10 @@ export function subclassItemsForCharacter(
       const start = FRAGMENT_SOCKET_START[subclass];
       const fragmentSockets: Record<number, number> = {};
       const aspectSockets: Record<number, number> = {};
-      const superSockets: Record<number, number> = {};
-      const superStart = superIndexFor?.(item.itemHash);
-      if (superStart !== undefined) {
-        for (let i = superStart; i < superStart + SUPER_SOCKET_COUNT; i++) {
-          const socket = sockets[i];
-          if (socket?.plugHash && socket.isVisible !== false && socket.isEnabled !== false) superSockets[i] = socket.plugHash;
-        }
+      const abilitySockets: Record<number, number> = {};
+      for (const i of abilityIndicesFor?.(item.itemHash) ?? []) {
+        const socket = sockets[i];
+        if (socket?.plugHash && socket.isVisible !== false && socket.isEnabled !== false) abilitySockets[i] = socket.plugHash;
       }
       for (let i = aspectSocketStart(subclass); i < aspectSocketStart(subclass) + ASPECT_SOCKET_COUNT; i++) {
         const socket = sockets[i];
@@ -79,7 +76,7 @@ export function subclassItemsForCharacter(
         equipped,
         fragmentSockets,
         aspectSockets,
-        superSockets,
+        abilitySockets,
       });
     }
   };

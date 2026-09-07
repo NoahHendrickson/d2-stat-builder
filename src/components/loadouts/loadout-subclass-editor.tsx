@@ -1,14 +1,14 @@
 "use client";
 
 import { TooltipLabel } from "@/components/ui/tooltip";
-import { useId, useMemo } from "react";
+import { useId, useMemo, type ReactNode } from "react";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { BUNGIE_IMAGE_BASE } from "@/lib/bungie/constants";
 import { SUBCLASSES, type Subclass } from "@/lib/armory/fragments";
 import { STAT_LABELS, STAT_ORDER } from "@/lib/armory/stats";
-import { subclassFromItemHash } from "@/lib/dim/subclasses";
+import { ABILITY_KINDS, ABILITY_LABELS, subclassFromItemHash } from "@/lib/dim/subclasses";
 import type { DimLoadoutItem } from "@/lib/dim/loadout-link";
 import type { Manifest } from "@/lib/manifest/load";
 import {
@@ -16,6 +16,9 @@ import {
   subclassFragmentCapacity,
   subclassOptions,
   withSubclassPlugs,
+  type SubclassCatalog,
+  type SubclassPlugOption,
+  type SubclassSocketOptions,
 } from "@/lib/loadouts/subclass";
 
 export interface SubclassSection {
@@ -24,14 +27,117 @@ export interface SubclassSection {
   initial: DimLoadoutItem | null;
 }
 
+function PlugOptionButton({
+  option,
+  checked,
+  disabled,
+  onClick,
+  detail,
+}: {
+  option: SubclassPlugOption;
+  checked: boolean;
+  disabled?: boolean;
+  onClick: () => void;
+  detail?: ReactNode;
+}) {
+  return (
+    <TooltipLabel label={option.description} disabled={disabled}>
+      <Button
+        type="button"
+        variant="outline"
+        aria-pressed={checked}
+        disabled={disabled}
+        className={cn(
+          "h-auto min-h-12 w-full justify-start px-2 py-2 text-left",
+          checked && "border-brand/60 bg-brand/10",
+        )}
+        onClick={onClick}
+      >
+        {option.icon && (
+          <Image
+            src={`${BUNGIE_IMAGE_BASE}${option.icon}`}
+            alt=""
+            width={28}
+            height={28}
+            className="size-7 shrink-0 rounded-sm"
+            unoptimized
+          />
+        )}
+        <span className="min-w-0 whitespace-normal">
+          <span className="block text-xs">{option.name}</span>
+          {detail && (
+            <span className="text-muted-foreground block text-[10px] font-normal">
+              {detail}
+            </span>
+          )}
+        </span>
+      </Button>
+    </TooltipLabel>
+  );
+}
+
+/** One optional, single-choice socket: Super, class ability, jump, melee, grenade. */
+function AbilityGroup({
+  label,
+  group,
+  value,
+  onChange,
+}: {
+  label: string;
+  group: SubclassSocketOptions;
+  value: DimLoadoutItem;
+  onChange: (value: DimLoadoutItem) => void;
+}) {
+  const selected = selectedSubclassPlugs(value, group)[0];
+  if (group.options.length === 0) return null;
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between text-xs">
+        <h3 className="font-medium">{label}</h3>
+        <span className="text-muted-foreground">
+          {selected !== undefined ? "1/1 selected" : "Keep in-game choice"}
+        </span>
+      </div>
+      <div className="grid gap-1.5 sm:grid-cols-2 sm:group-data-[compact]/subclass:grid-cols-1">
+        {group.options.map((option) => {
+          const checked = option.hash === selected;
+          return (
+            <PlugOptionButton
+              key={option.hash}
+              option={option}
+              checked={checked}
+              onClick={() =>
+                onChange(withSubclassPlugs(value, group, checked ? [] : [option.hash]))
+              }
+            />
+          );
+        })}
+      </div>
+      {selected !== undefined && !group.options.some((o) => o.hash === selected) && (
+        <Button
+          type="button"
+          size="xs"
+          variant="outline"
+          onClick={() => onChange(withSubclassPlugs(value, group, []))}
+        >
+          Remove unavailable {label.toLowerCase()} #{selected}
+        </Button>
+      )}
+    </div>
+  );
+}
+
 export function LoadoutSubclassEditor({
   section,
   value,
   onChange,
+  compact = false,
 }: {
   section: SubclassSection;
   value: DimLoadoutItem | null;
   onChange: (value: DimLoadoutItem | null) => void;
+  /** Narrow-column layout (the editor drawer): no frame, one option per row. */
+  compact?: boolean;
 }) {
   const id = useId();
   const active = value ? subclassFromItemHash(value.hash) : undefined;
@@ -42,11 +148,10 @@ export function LoadoutSubclassEditor({
           s,
           subclassOptions(section.manifest, section.classType, s),
         ]),
-      ) as Record<Subclass, ReturnType<typeof subclassOptions>>,
+      ) as Record<Subclass, SubclassCatalog>,
     [section.manifest, section.classType],
   );
   const options = active ? catalog[active] : undefined;
-  const superHash = options ? selectedSubclassPlugs(value, options.super)[0] : undefined;
   const aspects = options ? selectedSubclassPlugs(value, options.aspects) : [];
   const fragments = options
     ? selectedSubclassPlugs(value, options.fragments)
@@ -55,10 +160,14 @@ export function LoadoutSubclassEditor({
 
   return (
     <section
-      className="border-border/60 space-y-3 rounded-lg border p-3"
+      className={cn(
+        "group/subclass space-y-3",
+        !compact && "border-border/60 rounded-lg border p-3",
+      )}
+      data-compact={compact || undefined}
       aria-label="Subclass configuration"
     >
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex items-center justify-between gap-3 group-data-[compact]/subclass:flex-col group-data-[compact]/subclass:items-stretch group-data-[compact]/subclass:gap-1.5">
         <label htmlFor={id} className="text-sm font-medium">
           Subclass
         </label>
@@ -82,73 +191,19 @@ export function LoadoutSubclassEditor({
       {options && value && (
         <>
           <p className="text-muted-foreground text-xs">
-            Choose a super, aspects, and fragments for this loadout. Changing
-            subclass clears these selections.
+            Choose abilities, aspects, and fragments for this loadout. Any ability
+            you leave unset keeps whatever is equipped in game. Changing subclass
+            clears these selections.
           </p>
-          {options.super.options.length > 0 && (
-            <div className="space-y-2">
-              <div className="flex items-center justify-between text-xs">
-                <h3 className="font-medium">Super</h3>
-                <span className="text-muted-foreground">
-                  {superHash ? "1/1 selected" : "None selected"}
-                </span>
-              </div>
-              <div className="grid gap-1.5 sm:grid-cols-2">
-                {options.super.options.map((option) => {
-                  const checked = option.hash === superHash;
-                  return (
-                    <TooltipLabel label={option.description} key={option.hash}>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        aria-pressed={checked}
-                        className={cn(
-                          "h-auto min-h-12 w-full justify-start px-2 py-2 text-left",
-                          checked && "border-brand/60 bg-brand/10",
-                        )}
-                        onClick={() =>
-                          onChange(
-                            withSubclassPlugs(
-                              value,
-                              options.super,
-                              checked ? [] : [option.hash],
-                            ),
-                          )
-                        }
-                      >
-                        {option.icon && (
-                          <Image
-                            src={`${BUNGIE_IMAGE_BASE}${option.icon}`}
-                            alt=""
-                            width={28}
-                            height={28}
-                            className="size-7 shrink-0 rounded-sm"
-                            unoptimized
-                          />
-                        )}
-                        <span className="min-w-0 whitespace-normal">
-                          <span className="block text-xs">{option.name}</span>
-                        </span>
-                      </Button>
-                    </TooltipLabel>
-                  );
-                })}
-              </div>
-              {superHash &&
-                !options.super.options.some((o) => o.hash === superHash) && (
-                  <Button
-                    type="button"
-                    size="xs"
-                    variant="outline"
-                    onClick={() =>
-                      onChange(withSubclassPlugs(value, options.super, []))
-                    }
-                  >
-                    Remove unavailable super #{superHash}
-                  </Button>
-                )}
-            </div>
-          )}
+          {ABILITY_KINDS.map((kind) => (
+            <AbilityGroup
+              key={kind}
+              label={ABILITY_LABELS[kind]}
+              group={options.abilities[kind]}
+              value={value}
+              onChange={onChange}
+            />
+          ))}
           {(["aspects", "fragments"] as const).map((kind) => {
             const group = options[kind];
             const selected = kind === "aspects" ? aspects : fragments;
@@ -167,7 +222,7 @@ export function LoadoutSubclassEditor({
                     unspecified, your in-game aspects are kept.
                   </p>
                 )}
-                <div className="grid gap-1.5 sm:grid-cols-2">
+                <div className="grid gap-1.5 sm:grid-cols-2 sm:group-data-[compact]/subclass:grid-cols-1">
                   {group.options.map((option) => {
                     const checked = selected.includes(option.hash);
                     const statText = option.stats
@@ -180,55 +235,28 @@ export function LoadoutSubclassEditor({
                       )
                       .join(" · ");
                     return (
-                      <TooltipLabel
-                        label={option.description}
+                      <PlugOptionButton
                         key={option.hash}
+                        option={option}
+                        checked={checked}
                         disabled={!checked && selected.length >= limit}
-                      >
-                        <Button
-                          type="button"
-                          variant="outline"
-                          aria-pressed={checked}
-                          disabled={!checked && selected.length >= limit}
-
-                          className={cn(
-                            "h-auto min-h-12 w-full justify-start px-2 py-2 text-left",
-                            checked && "border-brand/60 bg-brand/10",
-                          )}
-                          onClick={() =>
-                            onChange(
-                              withSubclassPlugs(
-                                value,
-                                group,
-                                checked
-                                  ? selected.filter((h) => h !== option.hash)
-                                  : [...selected, option.hash],
-                              ),
-                            )
-                          }
-                        >
-                          {option.icon && (
-                            <Image
-                              src={`${BUNGIE_IMAGE_BASE}${option.icon}`}
-                              alt=""
-                              width={28}
-                              height={28}
-                              className="size-7 shrink-0 rounded-sm"
-                              unoptimized
-                            />
-                          )}
-                          <span className="min-w-0 whitespace-normal">
-                            <span className="block text-xs">{option.name}</span>
-                            {(kind === "aspects" || statText) && (
-                              <span className="text-muted-foreground block text-[10px] font-normal">
-                                {kind === "aspects"
-                                  ? `${option.fragmentSlots} fragment slots`
-                                  : statText}
-                              </span>
-                            )}
-                          </span>
-                        </Button>
-                      </TooltipLabel>
+                        detail={
+                          kind === "aspects"
+                            ? `${option.fragmentSlots} fragment slots`
+                            : statText || undefined
+                        }
+                        onClick={() =>
+                          onChange(
+                            withSubclassPlugs(
+                              value,
+                              group,
+                              checked
+                                ? selected.filter((h) => h !== option.hash)
+                                : [...selected, option.hash],
+                            ),
+                          )
+                        }
+                      />
                     );
                   })}
                 </div>

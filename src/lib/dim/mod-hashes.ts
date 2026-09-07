@@ -1,4 +1,4 @@
-import type { Manifest } from "@/lib/manifest/load";
+import { memoByManifest } from "@/lib/manifest/memo";
 import {
   ARTIFICE_MOD_CATEGORY,
   GENERAL_MOD_CATEGORY,
@@ -21,7 +21,7 @@ export interface StatModHashes {
  * armor stat worth 10 or 5. Redacted defs are skipped so a deprecated duplicate
  * can't shadow the live mod.
  */
-export function getStatModHashes(manifest: Manifest): StatModHashes[] {
+export const getStatModHashes = memoByManifest((manifest): StatModHashes[] => {
   const out: StatModHashes[] = Array.from({ length: 6 }, () => ({}));
   const table = manifest.all("DestinyInventoryItemDefinition");
   for (const key in table) {
@@ -39,7 +39,7 @@ export function getStatModHashes(manifest: Manifest): StatModHashes[] {
     else if (inv[0].value === MINOR_MOD_BONUS) out[idx].minor ??= Number(key);
   }
   return out;
-}
+});
 
 /** Builder major-mod selector range is 0–5 (the remaining slots are minors). */
 const BUILDER_MAJOR_MOD_CAP = 5;
@@ -79,7 +79,7 @@ export function countMajorStatMods(
  * stat and −5 in another; the plugs are shared items across pieces, so one
  * global map serves every loadout. Balanced Tuning (all-positive) never matches.
  */
-export function getTuningPlugHashes(manifest: Manifest): Map<string, number> {
+export const getTuningPlugHashes = memoByManifest((manifest): Map<string, number> => {
   const out = new Map<string, number>();
   const table = manifest.all("DestinyInventoryItemDefinition");
   for (const key in table) {
@@ -101,7 +101,7 @@ export function getTuningPlugHashes(manifest: Manifest): Map<string, number> {
     if (!out.has(mapKey)) out.set(mapKey, Number(key));
   }
   return out;
-}
+});
 
 /** Artifice armor's socket-specific +3 stat mods (DIM keys on the same category). */
 const ARTIFICE_BONUS = 3;
@@ -111,7 +111,7 @@ const ARTIFICE_BONUS = 3;
  * from the manifest like the general mods: artifice-category plugs whose investment
  * is a single armor stat worth 3.
  */
-export function getArtificeModHashes(manifest: Manifest): (number | undefined)[] {
+export const getArtificeModHashes = memoByManifest((manifest): (number | undefined)[] => {
   const out: (number | undefined)[] = new Array(6).fill(undefined);
   const table = manifest.all("DestinyInventoryItemDefinition");
   for (const key in table) {
@@ -128,4 +128,4 @@ export function getArtificeModHashes(manifest: Manifest): (number | undefined)[]
     out[idx] ??= Number(key);
   }
   return out;
-}
+});

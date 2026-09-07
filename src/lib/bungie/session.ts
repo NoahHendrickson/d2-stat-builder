@@ -28,6 +28,8 @@ export interface SessionUser {
   destinyMembershipId?: string;
   destinyMembershipType?: number;
   displayName?: string;
+  /** Relative Bungie.net profile avatar path (e.g. `/img/profile/avatars/cc13.jpg`). */
+  iconPath?: string;
 }
 
 interface StoredToken {
@@ -54,9 +56,15 @@ function cookieSecret(): string {
 
 export async function writeSession(tokens: BungieTokens, user: SessionUser) {
   await updateTokens(tokens);
+  await writeUser(user, tokens.refreshExpiresAt);
+}
+
+/** Rewrite the identity cookie (e.g. after backfilling fields on an existing session). */
+export async function writeUser(user: SessionUser, refreshExpiresAt?: number) {
+  const expiresAt = refreshExpiresAt ?? (await readRefresh())?.expiresAt;
+  if (expiresAt == null) return;
   const jar = await cookies();
-  const opts = baseCookie(tokens.refreshExpiresAt);
-  jar.set(USER_COOKIE, await encodeSigned(user, cookieSecret()), opts);
+  jar.set(USER_COOKIE, await encodeSigned(user, cookieSecret()), baseCookie(expiresAt));
 }
 
 /** Replace the access + (rotated) refresh tokens after a refresh. */

@@ -9,7 +9,6 @@ import {
   CheckCircle,
   CircleNotch,
   Copy,
-  FloppyDisk,
   X,
 } from "@phosphor-icons/react";
 import { toast } from "@/lib/toast";
@@ -38,10 +37,10 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
-  LoadoutDetailsDialog,
   type LoadoutDetailsValues,
   type ModsSection,
 } from "@/components/loadouts/loadout-details-dialog";
+import { LoadoutEditorDrawer } from "@/components/loadouts/loadout-editor-drawer";
 import {
   modsFromEditor,
   modsSectionFromPlan,
@@ -100,11 +99,16 @@ function TunedCell({
         src={balancedTuningIcon}
         label="Balanced Tuning"
         invert={false}
+        className="size-6"
       />
     );
   const key = STAT_ORDER[tune.plus];
   return (
-    <StatGlyph src={statIcons[key]} label={`Tuned +5 ${STAT_LABELS[key]}`} />
+    <StatGlyph
+      src={statIcons[key]}
+      label={`Tuned +5 ${STAT_LABELS[key]}`}
+      className="size-6"
+    />
   );
 }
 
@@ -170,11 +174,28 @@ export function StatGlyph({
   );
 }
 
-const BREAKDOWN_COLS =
-  "minmax(0,1fr) repeat(6, minmax(1.75rem, 1fr)) minmax(2.75rem, auto)";
+/**
+ * Figma 18:6865 breakdown grid: name column takes the slack, six stat columns and a
+ * Tuning column are fixed so the Armor table and the totals block line up. Compact
+ * below 2xl (icon headers, text-sm); Figma-sized at 2xl (text headers, text-base).
+ */
+const BREAKDOWN_GRID =
+  "grid grid-cols-[minmax(0,1fr)_repeat(6,2.25rem)_1.5rem] items-center gap-x-2 2xl:grid-cols-[minmax(0,1fr)_repeat(6,3.75rem)_2.75rem] 2xl:gap-x-4";
 
-/** One aligned row of the breakdown grid: a label cell, the six stat cells, and a trailing (empty) Tuned cell. */
-function BreakdownRow({
+/** Figma 18:6865 delta colours: +n green, -n destructive, 0 secondary. */
+const POSITIVE_CLASS = "text-[#1be364]";
+
+function Delta({ value }: { value: number }) {
+  if (!value) return <span className="text-text-secondary">0</span>;
+  return (
+    <span className={value > 0 ? POSITIVE_CLASS : "text-destructive"}>
+      {value > 0 ? `+${value}` : value}
+    </span>
+  );
+}
+
+/** One totals row: a label and six values (font-medium 14px), trailing empty Tuning cell. */
+function TotalsRow({
   label,
   labelClass,
   render,
@@ -185,11 +206,11 @@ function BreakdownRow({
 }) {
   return (
     <>
-      <div className={cn("text-muted-foreground truncate", labelClass)}>
+      <div className={cn("truncate text-sm font-medium", labelClass)}>
         {label}
       </div>
       {STAT_COLS.map(({ key, i }) => (
-        <div key={key} className="text-center tabular-nums">
+        <div key={key} className="text-sm font-medium tabular-nums">
           {render(i)}
         </div>
       ))}
@@ -216,6 +237,8 @@ interface BuildActionProps {
   builderSnapshot?: BuilderSnapshot;
   /** For the Save dialog's mod picker (socket options come from the manifest). */
   manifest?: Manifest;
+  /** Plugs the player can socket now — picks which copy of a mod the picker shows. */
+  insertablePlugs?: ReadonlySet<number>;
   onEquipped?: () => void;
 }
 
@@ -239,6 +262,7 @@ const BuildRow = memo(function BuildRow({
   subclass,
   builderSnapshot,
   manifest,
+  insertablePlugs,
   onEquipped,
 }: {
   loadout: OptimizerLoadout;
@@ -265,181 +289,168 @@ const BuildRow = memo(function BuildRow({
   }
 
   return (
-    <div className="border-border/60 overflow-hidden rounded-lg border">
+    <div className="bg-foreground/6 overflow-hidden rounded-[8px]">
+      {/* Figma 17:6044 — exotic tile, six stat chips spread over ~456px, total + set badge, caret */}
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
-        className="hover:bg-muted/40 flex w-full items-center gap-3 p-2.5 text-left transition-colors max-lg:gap-2"
+        className="hover:bg-foreground/4 flex w-full items-center gap-3 p-2 text-left transition-colors 2xl:gap-4"
       >
-        {exotic?.icon ? (
-          <TooltipLabel label={exotic.name} delay={100}>
-            <Image
-              tabIndex={0}
-              src={`${BUNGIE_IMAGE_BASE}${exotic.icon}`}
-              alt={exotic.name}
-              width={28}
-              height={28}
-              className="size-7 shrink-0 rounded"
-              unoptimized
-            />
-          </TooltipLabel>
-        ) : (
-          <span className="bg-muted size-7 shrink-0 rounded" aria-hidden />
-        )}
-        <div className="flex flex-1 flex-wrap items-center gap-x-3 gap-y-1 text-sm max-lg:gap-x-2">
-          {STAT_COLS.map(({ key, i }) => {
-            const met = targets[i] > 0 && loadout.stats[i] >= targets[i];
-            return (
-              <span key={key} className="flex items-center gap-1 tabular-nums">
-                <StatGlyph src={statIcons[key]} label={STAT_LABELS[key]} />
-                <span className={met ? "text-brand" : "text-foreground"}>
-                  {loadout.stats[i]}
-                </span>
-              </span>
-            );
-          })}
-        </div>
-        <span className="text-muted-foreground shrink-0 text-sm tabular-nums">
-          {loadout.total}
-        </span>
-        {setBadges.map((b) => (
-          <TooltipLabel key={b.name} label={b.name} delay={100}>
-            <Badge
-              variant="outline"
-              className="max-lg:hidden shrink-0 px-1.5 py-0 text-[10px]"
-            >
-              {b.count}pc
-            </Badge>
-          </TooltipLabel>
-        ))}
-        <CaretDown
-          weight="duotone"
-          className={cn(
-            "text-muted-foreground size-4 shrink-0 transition-transform",
-            open && "rotate-180",
+        <div className="flex min-w-0 flex-1 items-center gap-3 2xl:gap-6">
+          {exotic?.icon ? (
+            <TooltipLabel label={exotic.name} delay={100}>
+              <Image
+                tabIndex={0}
+                src={`${BUNGIE_IMAGE_BASE}${exotic.icon}`}
+                alt={exotic.name}
+                width={40}
+                height={40}
+                className="size-10 shrink-0 rounded-[2px]"
+                unoptimized
+              />
+            </TooltipLabel>
+          ) : (
+            <span className="bg-muted size-10 shrink-0 rounded-[2px]" aria-hidden />
           )}
-        />
+          {/* Six evenly spaced stat chips; type and glyphs step up at 2xl where the column is Figma-wide */}
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-0.5 text-sm xl:grid xl:grid-cols-6 xl:gap-x-0.5 lg:max-w-[28.5rem] 2xl:gap-x-2 2xl:text-base">
+            {STAT_COLS.map(({ key, i }) => (
+              <span
+                key={key}
+                className="flex min-w-0 items-center gap-1 tabular-nums"
+              >
+                <StatGlyph
+                  src={statIcons[key]}
+                  label={STAT_LABELS[key]}
+                  className="size-4 opacity-65 2xl:size-5"
+                />
+                <span>{loadout.stats[i]}</span>
+              </span>
+            ))}
+          </div>
+        </div>
+        <div className="flex shrink-0 items-center gap-2 2xl:gap-5">
+          <span className="text-sm tabular-nums 2xl:text-base">{loadout.total}</span>
+          {setBadges.map((b) => (
+            <TooltipLabel key={b.name} label={b.name} delay={100}>
+              <Badge className="px-1.5 text-[10px] max-lg:hidden 2xl:px-2 2xl:text-xs">
+                {b.count}pc
+              </Badge>
+            </TooltipLabel>
+          ))}
+        </div>
+        <span
+          className="text-foreground flex size-8 shrink-0 items-center justify-center rounded-[10px]"
+          aria-hidden
+        >
+          <CaretDown
+            className={cn(
+              "size-4 transition-transform",
+              open && "rotate-180",
+            )}
+          />
+        </span>
       </button>
 
       {open && (
-        <div
-          className="border-border/60 grid items-center gap-x-1 gap-y-1 border-t px-2.5 py-2 text-xs"
-          style={{ gridTemplateColumns: BREAKDOWN_COLS }}
-        >
-          <div />
-          {STAT_COLS.map(({ key }) => (
-            <div key={key} className="flex justify-center pb-0.5">
-              <StatGlyph src={statIcons[key]} label={STAT_LABELS[key]} />
+        <div className="bg-popover border-border border-t">
+          {/* Armor table — Figma 18:6899 */}
+          <div className={cn(BREAKDOWN_GRID, "border-border gap-y-4 border-b p-4")}>
+            <div className="text-text-secondary text-sm font-medium">Armor</div>
+            {STAT_COLS.map(({ key }) => (
+              <div
+                key={key}
+                className="text-text-secondary text-sm font-medium"
+              >
+                <span className="2xl:hidden">
+                  <StatGlyph src={statIcons[key]} label={STAT_LABELS[key]} />
+                </span>
+                <span className="hidden 2xl:inline">{STAT_LABELS[key]}</span>
+              </div>
+            ))}
+            <div className="text-text-secondary text-sm font-medium">
+              <span className="2xl:hidden" aria-hidden />
+              <span className="hidden 2xl:inline">Tuning</span>
             </div>
-          ))}
-          <div className="text-muted-foreground pb-0.5 text-center text-[10px] leading-4">
-            Tuned
+
+            {loadout.pieceIds.map((id, pi) => {
+              const piece = pieceMap.get(id);
+              if (!piece) return null;
+              return (
+                <Fragment key={id}>
+                  <div className="flex min-w-0 items-center gap-2">
+                    {piece.icon ? (
+                      <Image
+                        src={`${BUNGIE_IMAGE_BASE}${piece.icon}`}
+                        alt=""
+                        width={32}
+                        height={32}
+                        className="size-8 shrink-0 rounded-[2px]"
+                        unoptimized
+                      />
+                    ) : (
+                      <span
+                        className="bg-muted size-8 shrink-0 rounded-[2px]"
+                        aria-hidden
+                      />
+                    )}
+                    <span className="truncate text-sm 2xl:text-base">
+                      {piece.name}
+                    </span>
+                  </div>
+                  {STAT_COLS.map(({ key, i }) => (
+                    <div
+                      key={key}
+                      className="text-sm tabular-nums 2xl:text-base"
+                    >
+                      {piece.stats[i] || ""}
+                    </div>
+                  ))}
+                  <div className="flex h-8 items-center">
+                    {loadout.tuning[pi] ? (
+                      <TunedCell
+                        tune={loadout.tuning[pi]}
+                        statIcons={statIcons}
+                        balancedTuningIcon={balancedTuningIcon}
+                      />
+                    ) : (
+                      <ArtificeCell
+                        pick={loadout.artifice[pi]}
+                        statIcons={statIcons}
+                      />
+                    )}
+                  </div>
+                </Fragment>
+              );
+            })}
           </div>
 
-          {loadout.pieceIds.map((id, pi) => {
-            const piece = pieceMap.get(id);
-            if (!piece) return null;
-            return (
-              <Fragment key={id}>
-                <div className="flex min-w-0 items-center gap-1.5">
-                  {piece.icon ? (
-                    <Image
-                      src={`${BUNGIE_IMAGE_BASE}${piece.icon}`}
-                      alt=""
-                      width={20}
-                      height={20}
-                      className="size-5 shrink-0 rounded-sm"
-                      unoptimized
-                    />
-                  ) : (
-                    <span
-                      className="bg-muted size-5 shrink-0 rounded-sm"
-                      aria-hidden
-                    />
-                  )}
-                  <span className="truncate">{piece.name}</span>
-                </div>
-                {STAT_COLS.map(({ key, i }) => (
-                  <div
-                    key={key}
-                    className="text-muted-foreground text-center tabular-nums"
-                  >
-                    {piece.stats[i] || ""}
-                  </div>
-                ))}
-                <div className="flex justify-center">
-                  {loadout.tuning[pi] ? (
-                    <TunedCell
-                      tune={loadout.tuning[pi]}
-                      statIcons={statIcons}
-                      balancedTuningIcon={balancedTuningIcon}
-                    />
-                  ) : (
-                    <ArtificeCell
-                      pick={loadout.artifice[pi]}
-                      statIcons={statIcons}
-                    />
-                  )}
-                </div>
-              </Fragment>
-            );
-          })}
-
-          <div className="border-border/60 col-span-full my-0.5 border-t" />
-
-          <BreakdownRow
-            label="Armor"
-            render={(i) => loadout.baseStats[i] || ""}
-          />
-          <BreakdownRow
-            label="Mods"
-            render={(i) =>
-              loadout.modBonus[i] ? (
-                <span className="text-brand/80">+{loadout.modBonus[i]}</span>
-              ) : (
-                ""
-              )
-            }
-          />
-          {loadout.artificeBonus.some((v) => v > 0) && (
-            <BreakdownRow
-              label="Artifice"
-              render={(i) =>
-                loadout.artificeBonus[i] ? (
-                  <span className="text-brand/80">
-                    +{loadout.artificeBonus[i]}
-                  </span>
-                ) : (
-                  ""
-                )
-              }
+          {/* Totals — Figma 18:6970 */}
+          <div className={cn(BREAKDOWN_GRID, "border-border gap-y-6 border-b p-4")}>
+            <TotalsRow
+              label="Armor totals"
+              render={(i) => loadout.baseStats[i]}
             />
-          )}
-          <BreakdownRow
-            label="Tuning"
-            render={(i) => {
-              const v = loadout.tuningBonus[i];
-              if (!v) return "";
-              return (
-                <span className={v < 0 ? "text-red-400/80" : "text-brand/80"}>
-                  {v > 0 ? `+${v}` : v}
-                </span>
-              );
-            }}
-          />
-
-          <div className="border-border/60 col-span-full my-0.5 border-t" />
-
-          <BreakdownRow
-            label="Total"
-            labelClass="text-foreground font-medium"
-            render={(i) => (
-              <span className="text-foreground font-medium">
-                {loadout.stats[i]}
-              </span>
+            <TotalsRow
+              label="Mods"
+              labelClass="text-text-secondary"
+              render={(i) => <Delta value={loadout.modBonus[i]} />}
+            />
+            {loadout.artificeBonus.some((v) => v > 0) && (
+              <TotalsRow
+                label="Artifice"
+                labelClass="text-text-secondary"
+                render={(i) => <Delta value={loadout.artificeBonus[i]} />}
+              />
             )}
-          />
+            <TotalsRow
+              label="Tuning"
+              labelClass="text-text-secondary"
+              render={(i) => <Delta value={loadout.tuningBonus[i]} />}
+            />
+            <TotalsRow label="Total" render={(i) => loadout.stats[i]} />
+          </div>
 
           <BuildActions
             loadout={loadout}
@@ -454,6 +465,7 @@ const BuildRow = memo(function BuildRow({
             subclass={subclass}
             builderSnapshot={builderSnapshot}
             manifest={manifest}
+            insertablePlugs={insertablePlugs}
             onEquipped={onEquipped}
           />
         </div>
@@ -481,6 +493,7 @@ function BuildActions({
   subclass,
   builderSnapshot,
   manifest,
+  insertablePlugs,
   onEquipped,
 }: {
   loadout: OptimizerLoadout;
@@ -569,7 +582,9 @@ function BuildActions({
       modHashes: dim.parameters.mods,
       plugInfo: plugInfoFromManifest(manifest),
     });
-    setSaveMods(modsSectionFromPlan(resolved, getModCatalog(manifest), plan));
+    setSaveMods(
+      modsSectionFromPlan(resolved, getModCatalog(manifest), plan, insertablePlugs),
+    );
   };
 
   const saveLoadout = ({
@@ -664,22 +679,60 @@ function BuildActions({
   };
 
   return (
-    <div className="border-border/60 col-span-full mt-1 flex flex-wrap items-center justify-end gap-2 border-t py-2.5">
+    // Figma 18:6865 footer: outline actions, then the emphatic "Save as loadout".
+    <div className="flex flex-wrap items-center justify-end gap-2 p-4">
+      <TooltipLabel
+        label={
+          missingTitle ??
+          (targetCharacter
+            ? undefined
+            : `No ${CLASS_NAMES[buildClass ?? -1] ?? "matching"} character`)
+        }
+        disabled={!canActOnItems || !targetCharacter || equipping}
+      >
+        <Button
+          variant="outline"
+          onClick={equip}
+          disabled={!canActOnItems || !targetCharacter || equipping}
+        >
+          {equipping ? (
+            <CircleNotch className="animate-spin" aria-hidden />
+          ) : null}
+          Equip items
+        </Button>
+      </TooltipLabel>
+      <TooltipLabel label={missingTitle} disabled={!canActOnItems}>
+        <Button
+          variant="outline"
+          onClick={copyItemIds}
+          disabled={!canActOnItems}
+        >
+          <Copy data-icon="inline-start" aria-hidden />
+          Copy item IDs
+        </Button>
+      </TooltipLabel>
+      <TooltipLabel
+        label={missingTitle}
+        disabled={!canActOnItems || !hasModHashes}
+      >
+        <Button
+          variant="outline"
+          onClick={openInDim}
+          disabled={!canActOnItems || !hasModHashes}
+        >
+          Open in DIM
+          <ArrowSquareOut data-icon="inline-end" aria-hidden />
+        </Button>
+      </TooltipLabel>
       <TooltipLabel
         label={!complete ? missingTitle : undefined}
         disabled={!canSave}
       >
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={openSave}
-          disabled={!canSave}
-        >
-          <FloppyDisk weight="duotone" aria-hidden />
-          Save
+        <Button variant="emphatic" onClick={openSave} disabled={!canSave}>
+          Save as loadout
         </Button>
       </TooltipLabel>
-      <LoadoutDetailsDialog
+      <LoadoutEditorDrawer
         open={saveMods !== null}
         onOpenChange={(open) => {
           if (!open) setSaveMods(null);
@@ -703,51 +756,6 @@ function BuildActions({
         busy={createLoadout.isPending}
         onSubmit={saveLoadout}
       />
-      <TooltipLabel label={missingTitle} disabled={!canActOnItems}>
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={copyItemIds}
-          disabled={!canActOnItems}
-        >
-          <Copy weight="duotone" aria-hidden />
-          Copy item IDs
-        </Button>
-      </TooltipLabel>
-      <TooltipLabel
-        label={
-          missingTitle ??
-          (targetCharacter
-            ? undefined
-            : `No ${CLASS_NAMES[buildClass ?? -1] ?? "matching"} character`)
-        }
-        disabled={!canActOnItems || !targetCharacter || equipping}
-      >
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={equip}
-          disabled={!canActOnItems || !targetCharacter || equipping}
-        >
-          {equipping ? (
-            <CircleNotch className="animate-spin" aria-hidden />
-          ) : null}
-          Equip items
-        </Button>
-      </TooltipLabel>
-      <TooltipLabel
-        label={missingTitle}
-        disabled={!canActOnItems || !hasModHashes}
-      >
-        <Button
-          size="sm"
-          onClick={openInDim}
-          disabled={!canActOnItems || !hasModHashes}
-        >
-          <ArrowSquareOut weight="duotone" aria-hidden />
-          Open in DIM
-        </Button>
-      </TooltipLabel>
     </div>
   );
 }
@@ -935,6 +943,7 @@ export function BuildResults({
   subclass,
   builderSnapshot,
   manifest,
+  insertablePlugs,
   onEquipped,
   sort,
 }: {
@@ -981,7 +990,7 @@ export function BuildResults({
   return (
     <div className="space-y-3">
       {status}
-      <div className="space-y-1.5">
+      <div className="space-y-2">
         {sortedLoadouts.slice(0, MAX_SHOWN).map((loadout) => (
           <BuildRow
             key={loadout.pieceIds.join("|")}
@@ -998,6 +1007,7 @@ export function BuildResults({
             subclass={subclass}
             builderSnapshot={builderSnapshot}
             manifest={manifest}
+            insertablePlugs={insertablePlugs}
             onEquipped={onEquipped}
           />
         ))}

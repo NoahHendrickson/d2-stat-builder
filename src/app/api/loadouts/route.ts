@@ -4,8 +4,6 @@ import { getServerLoadoutStore } from "@/lib/loadouts/neon-store";
 import { parseSavedLoadoutData } from "@/lib/loadouts/types";
 import { notConfigured, storageError } from "@/lib/loadouts/api-responses";
 
-export const dynamic = "force-dynamic";
-
 /**
  * Saved loadouts, owned by the signed (tamper-evident) session cookie's Bungie.net
  * membership id. No Bungie call is involved, so the cookie's signature is the only

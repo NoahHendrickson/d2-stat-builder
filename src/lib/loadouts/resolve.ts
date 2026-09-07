@@ -9,8 +9,8 @@ import type { Subclass } from "../armory/fragments";
 import { isSyntheticClassItemId } from "../armory/exotic-class-perks";
 import { ARMOR_BUCKETS, ARMOR_SLOTS, type ArmorSlot } from "../armory/stats";
 import type { DimLoadout, DimLoadoutItem } from "../dim/loadout-link";
-import { ASPECT_SOCKET_COUNT, FRAGMENT_SOCKET_COUNT, FRAGMENT_SOCKET_START, SUPER_SOCKET_COUNT, aspectSocketStart, subclassFromItemHash } from "../dim/subclasses";
-import { superSocketIndex } from "./subclass";
+import { ABILITY_KINDS, ASPECT_SOCKET_COUNT, FRAGMENT_SOCKET_COUNT, FRAGMENT_SOCKET_START, SUPER_SOCKET_COUNT, aspectSocketStart, subclassFromItemHash, type AbilityKind } from "../dim/subclasses";
+import { abilitySocketIndex } from "./subclass";
 
 /** The manifest access this module needs (keeps tests free of a full Manifest). */
 export interface DefLookup {
@@ -23,6 +23,7 @@ export interface DefLookup {
         inventory?: { bucketTypeHash?: number };
         sockets?: { socketEntries: { singleInitialItemHash: number; socketTypeHash?: number }[] };
         socketCategoryHash?: number;
+        plugWhitelist?: { categoryIdentifier: string }[];
         plug?: { plugCategoryIdentifier?: string };
       }
     | undefined;
@@ -47,6 +48,8 @@ export interface ResolvedSubclass {
   aspectHashes: number[];
   /** Super plug hash when the loadout specifies one. */
   superHash?: number;
+  /** Every ability the loadout pins (Super included), by kind. Unpinned kinds are absent. */
+  abilityHashes: Partial<Record<AbilityKind, number>>;
   socketOverrides: Record<number, number>;
 }
 
@@ -85,9 +88,13 @@ export function resolveLoadout(
         .map(([, h]) => h);
       const fragmentHashes = hashesIn(start, FRAGMENT_SOCKET_COUNT);
       const aspectHashes = sc ? hashesIn(aspectSocketStart(sc), ASPECT_SOCKET_COUNT) : [];
-      const superStart = superSocketIndex(manifest, ref.hash);
-      const superHash = superStart !== undefined ? hashesIn(superStart, SUPER_SOCKET_COUNT)[0] : undefined;
-      subclass = { itemHash: ref.hash, subclass: sc, fragmentHashes, aspectHashes, superHash, socketOverrides: ref.socketOverrides ?? {} };
+      const abilityHashes: Partial<Record<AbilityKind, number>> = {};
+      for (const kind of ABILITY_KINDS) {
+        const start = abilitySocketIndex(manifest, ref.hash, kind);
+        const hash = start !== undefined ? hashesIn(start, SUPER_SOCKET_COUNT)[0] : undefined;
+        if (hash !== undefined) abilityHashes[kind] = hash;
+      }
+      subclass = { itemHash: ref.hash, subclass: sc, fragmentHashes, aspectHashes, superHash: abilityHashes.super, abilityHashes, socketOverrides: ref.socketOverrides ?? {} };
       continue;
     }
     const piece = ref.id ? pieceMap.get(ref.id) : undefined;

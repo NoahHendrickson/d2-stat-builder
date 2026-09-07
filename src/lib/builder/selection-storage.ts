@@ -224,7 +224,19 @@ export const SELECTIONS_REPLACED_EVENT = "stat-builder:selections-replaced";
  */
 export function replaceSelections(sel: PersistedSelections): void {
   saveSelections(sel);
+  generation++;
   if (typeof window !== "undefined") {
     window.dispatchEvent(new Event(SELECTIONS_REPLACED_EVENT));
   }
+}
+
+let generation = 0;
+
+/**
+ * Bumped by every `replaceSelections`. A builder whose effects were torn down while its
+ * route was hidden misses the event; comparing this against the generation it last
+ * adopted tells it to catch up when it becomes visible again.
+ */
+export function selectionsGeneration(): number {
+  return generation;
 }

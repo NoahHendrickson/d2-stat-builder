@@ -199,6 +199,21 @@ describe("fragments", () => {
     expect(plan.alreadyApplied).toEqual([]);
   });
 
+  test("pins an ability, leaving one already socketed alone", () => {
+    const plan = planLoadoutPlugs({
+      pieces: [], modHashes: [], plugInfo,
+      subclass: {
+        instanceId: "sub", socketStart: 9, socketCount: 6, fragmentSockets: {}, desiredFragments: [],
+        groups: [
+          { kind: "ability", start: 4, count: 1, current: { 0: 801, 4: 901 }, desired: [902] },
+          { kind: "ability", start: 3, count: 1, current: { 0: 801, 3: 911 }, desired: [911] },
+        ],
+      },
+    });
+    expect(plan.plugs.map((p) => [p.socketIndex, p.plugItemHash, p.label])).toEqual([[4, 902, "Ability #902 → subclass"]]);
+    expect(plan.alreadyApplied).toEqual(["Ability #911 → subclass"]);
+  });
+
   test("applies aspects before fragments, retains swaps, and clears removed selections", () => {
     const plan = planLoadoutPlugs({
       pieces: [], modHashes: [], plugInfo,

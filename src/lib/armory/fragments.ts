@@ -1,4 +1,5 @@
 import type { Manifest } from "@/lib/manifest/load";
+import { memoByManifest } from "@/lib/manifest/memo";
 import { STAT_HASH_TO_INDEX, type StatArray } from "./stats";
 
 export type Subclass = "Arc" | "Solar" | "Void" | "Stasis" | "Strand" | "Prismatic";
@@ -93,6 +94,24 @@ export interface FragmentInfo {
  * builds), matching D2ArmorPicker.
  */
 export function availableFragments(
+  manifest: Manifest,
+  classType: number,
+): Record<Subclass, FragmentInfo[]> {
+  const byClass = fragmentsByClass(manifest);
+  let out = byClass.get(classType);
+  if (!out) {
+    out = scanFragments(manifest, classType);
+    byClass.set(classType, out);
+  }
+  return out;
+}
+
+// One scan per (manifest, class) for the session — the table is immutable.
+const fragmentsByClass = memoByManifest(
+  () => new Map<number, Record<Subclass, FragmentInfo[]>>(),
+);
+
+function scanFragments(
   manifest: Manifest,
   classType: number,
 ): Record<Subclass, FragmentInfo[]> {
