@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useState, type FormEvent } from "react";
+import { useId, useMemo, useState, type FormEvent } from "react";
 import { CircleNotch } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import {
@@ -97,9 +97,13 @@ function DetailsForm({
           cap
       );
     });
+  const subclassValid = useMemo(
+    () => !subclass || subclassSelectionValid(subclass, subclassItem),
+    [subclass, subclassItem],
+  );
   const canSubmit =
     trimmed.length > 0 && trimmed.length <= MAX_NAME_LENGTH && !busy && !overEnergy &&
-    (!subclass || subclassSelectionValid(subclass, subclassItem));
+    subclassValid;
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
