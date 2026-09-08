@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, type ReactNode } from "react";
+import { memo, useId, type ReactNode } from "react";
 import { ArrowsDownUp, FunnelSimple } from "@phosphor-icons/react";
 import { TooltipLabel } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
@@ -35,7 +35,7 @@ import { cn } from "@/lib/utils";
  * settings (FunnelSimple). The settings button is tinted while a filter is
  * off its default so a narrowed list is never a surprise.
  */
-export function SetListControls({
+export const SetListControls = memo(function SetListControls({
   count,
   sort,
   onSortChange,
@@ -134,7 +134,7 @@ export function SetListControls({
       </div>
     </div>
   );
-}
+});
 
 function SetListSettingRow({
   checked,
