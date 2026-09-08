@@ -2,23 +2,28 @@
 
 import { TooltipLabel } from "@/components/ui/tooltip";
 import { useState } from "react";
-import { CaretDown, CaretRight } from "@phosphor-icons/react";
+import { CaretDown } from "@phosphor-icons/react";
 import type { FilterOption } from "@/lib/armor-table/pinned";
 import type {
   ArmorVersion,
   FacetFilters,
   TuningFilter,
 } from "@/lib/armor-table/filters";
+import {
+  STAT_DISPLAY_ORDER,
+  STAT_LABELS,
+  STAT_ORDER,
+} from "@/lib/armory/stats";
 import { cn } from "@/lib/utils";
 import {
   fieldControlInnerTriggerClasses,
   fieldFilterControlShellClasses,
 } from "@/lib/field-surface";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuSub,
   DropdownMenuSubContent,
@@ -28,8 +33,19 @@ import {
 import {
   FilterMultiselectPanel,
   filterMultiselectActiveBadgeClasses,
-  selectionSummary,
+  selectionSummaryText,
 } from "@/components/armor-table/filter-multiselect";
+
+export const STAT_FILTER_OPTIONS: FilterOption<number>[] =
+  STAT_DISPLAY_ORDER.map((key) => ({
+    value: STAT_ORDER.indexOf(key),
+    label: STAT_LABELS[key],
+  }));
+
+export const TUNING_FILTER_OPTIONS: FilterOption<TuningFilter>[] = [
+  ...STAT_FILTER_OPTIONS,
+  { value: "none", label: "Not tunable" },
+];
 
 const ALL_FACET_KEYS = [
   "classes",
@@ -79,32 +95,15 @@ function CascadeFacetSubmenu<V extends string | number>({
         if (!open) setQuery("");
       }}
     >
-      <DropdownMenuSubTrigger
-        openOnHover={!toggleOnClick}
-        className="h-auto justify-between gap-3 py-1.5 [&>svg:last-child]:hidden"
-      >
-        <span className="shrink-0 font-medium">{label}</span>
-        <span className="flex min-w-0 items-center gap-1.5">
-          <span className="min-w-0 truncate text-right text-xs">
-            {selectionSummary(value, options, allLabel)}
+      <DropdownMenuSubTrigger openOnHover={!toggleOnClick}>
+        <span className="min-w-0 flex-1 truncate">{label}</span>
+        {active ? (
+          <span className="text-muted-foreground max-w-24 truncate text-xs">
+            {selectionSummaryText(value, options)}
           </span>
-          {active && (
-            <Badge className={filterMultiselectActiveBadgeClasses}>
-              {value.length}
-            </Badge>
-          )}
-          <CaretRight
-            weight="duotone"
-            className="text-muted-foreground size-4 shrink-0"
-            aria-hidden
-          />
-        </span>
+        ) : null}
       </DropdownMenuSubTrigger>
-      <DropdownMenuSubContent
-        side="inline-end"
-        align="start"
-        className="w-64 p-0"
-      >
+      <DropdownMenuSubContent side="inline-end" align="start" className="w-64">
         <FilterMultiselectPanel
           allLabel={allLabel}
           options={options}
@@ -170,17 +169,14 @@ export function FilterCascadeMenu({
 
   const includes = (key: keyof FacetFilters) => includedFacets.includes(key);
 
-  const tuningOptions: FilterOption<TuningFilter>[] = [
-    ...statOptions,
-    { value: "none" as const, label: "Not tunable" },
-  ];
+  const tuningOptions = TUNING_FILTER_OPTIONS;
 
   return (
     <DropdownMenu>
       <div
         className={cn(
           fieldFilterControlShellClasses,
-          "h-full min-w-28 shrink-0",
+          "min-w-28 shrink-0",
         )}
         data-active={active || undefined}
       >
@@ -284,20 +280,12 @@ export function FilterCascadeMenu({
             toggleOnClick={toggleSubmenusOnClick}
           />
         )}
-        {showClearAll && (
+        {showClearAll && filtersActive && (
           <>
             <DropdownMenuSeparator />
-            <div className="flex justify-end p-1">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-6 px-1.5 text-xs"
-                disabled={!filtersActive}
-                onClick={onClearFilters}
-              >
-                Clear all
-              </Button>
-            </div>
+            <DropdownMenuItem onClick={onClearFilters}>
+              Clear filters
+            </DropdownMenuItem>
           </>
         )}
       </DropdownMenuContent>

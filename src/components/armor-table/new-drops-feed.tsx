@@ -2,7 +2,7 @@
 
 import { TooltipLabel } from "@/components/ui/tooltip";
 import Image from "next/image";
-import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { memo, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { X } from "@phosphor-icons/react";
 import {
   DROPS_SCHEMA_VERSION,
@@ -55,7 +55,11 @@ function subscribeSeen(listener: () => void) {
  * doesn't flood the feed. Hidden below xl, where the table already scrolls
  * horizontally.
  */
-export function NewDropsFeed({ rows }: { rows: Row[] }) {
+export const NewDropsFeed = memo(function NewDropsFeed({
+  rows,
+}: {
+  rows: Row[];
+}) {
   const seen = useSyncExternalStore(
     subscribeSeen,
     getSeenSnapshot,
@@ -98,12 +102,12 @@ export function NewDropsFeed({ rows }: { rows: Row[] }) {
       className="hidden w-56 shrink-0 flex-col xl:flex"
       aria-label="New drops"
     >
-      <div className="border-border/50 flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border">
-        <div className="border-border/50 flex shrink-0 items-center justify-between gap-2 border-b px-2 py-1.5">
-          <h2 className="text-sm font-medium">
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <div className="flex min-h-8 shrink-0 items-center justify-between gap-2 pl-1">
+          <h2 className="text-sm">
             New drops
             {hasEntries && (
-              <span className="text-muted-foreground ml-1.5 text-xs tabular-nums">
+              <span className="text-muted-foreground ml-1.5 text-sm tabular-nums">
                 {entries.length}
               </span>
             )}
@@ -119,9 +123,9 @@ export function NewDropsFeed({ rows }: { rows: Row[] }) {
             </Button>
           )}
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto p-1">
+        <div className="min-h-0 flex-1 overflow-y-auto pt-3">
           {!hasEntries ? (
-            <p className="text-muted-foreground px-2 py-4 text-center text-xs">
+            <p className="text-muted-foreground py-4 text-sm">
               New armor will appear here.
             </p>
           ) : (
@@ -141,24 +145,25 @@ export function NewDropsFeed({ rows }: { rows: Row[] }) {
               return (
                 <div
                   key={piece.instanceId}
-                  className="group/entry hover:bg-accent flex items-start gap-2 rounded-md p-1.5"
+                  className="group/entry hover:bg-foreground/4 flex items-start gap-2 rounded-[8px] p-2"
                 >
                   {piece.icon ? (
                     <Image
                       src={`${BUNGIE_IMAGE_BASE}${piece.icon}`}
                       alt=""
-                      width={24}
-                      height={24}
-                      className="mt-0.5 shrink-0 rounded-sm"
+                      width={32}
+                      height={32}
+                      className="mt-0.5 size-8 shrink-0 rounded-[2px]"
+                      unoptimized
                     />
                   ) : (
                     <span
-                      className="bg-muted mt-0.5 size-6 shrink-0 rounded-sm"
+                      className="bg-muted mt-0.5 size-8 shrink-0 rounded-[2px]"
                       aria-hidden
                     />
                   )}
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium">{piece.name}</p>
+                    <p className="truncate text-sm">{piece.name}</p>
                     {subtitle && (
                       <p className="text-muted-foreground truncate text-xs">
                         {subtitle}
@@ -188,4 +193,4 @@ export function NewDropsFeed({ rows }: { rows: Row[] }) {
       </div>
     </aside>
   );
-}
+});

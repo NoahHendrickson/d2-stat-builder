@@ -38,6 +38,8 @@ export interface Row {
   setName?: string;
   /** Tertiary archetype stat index — Armor 3.0 pieces only. */
   tertiary?: number;
+  /** `normalizeSearchText(piece.name)` — computed once with the row. */
+  searchName: string;
 }
 
 export const ArmorRow = memo(function ArmorRow({
@@ -58,44 +60,45 @@ export const ArmorRow = memo(function ArmorRow({
     <tr
       ref={measureRef}
       data-index={dataIndex}
-      className="border-border/50 border-t"
+      className="hover:bg-foreground/4 border-border border-t"
     >
-      <td className="overflow-hidden py-1.5 pr-3 pl-3">
+      <td className="overflow-hidden py-2 pr-3 pl-3">
         <div className="flex items-center gap-2">
           {piece.icon ? (
             <Image
               src={`${BUNGIE_IMAGE_BASE}${piece.icon}`}
               alt=""
-              width={24}
-              height={24}
-              className="shrink-0 rounded-sm"
+              width={32}
+              height={32}
+              className="size-8 shrink-0 rounded-[2px]"
+              unoptimized
             />
           ) : (
-            <span className="bg-muted size-6 shrink-0 rounded-sm" aria-hidden />
+            <span className="bg-muted size-8 shrink-0 rounded-[2px]" aria-hidden />
           )}
-          <span className="truncate font-medium">{piece.name}</span>
+          <span className="truncate text-sm">{piece.name}</span>
           {piece.isArtifice && (
-            <Badge variant="outline" className="px-1 py-0 text-[10px]">
+            <Badge variant="outline" className="px-1.5 text-[10px]">
               Artifice
             </Badge>
           )}
         </div>
       </td>
-      <td className="truncate py-1.5 pr-3">{CLASS_NAMES[piece.classType] ?? "—"}</td>
-      <td className="truncate py-1.5 pr-3">{piece.archetype ?? "—"}</td>
-      <td className="truncate py-1.5 pr-3">
+      <td className="truncate py-2 pr-3 text-sm">{CLASS_NAMES[piece.classType] ?? "—"}</td>
+      <td className="truncate py-2 pr-3 text-sm">{piece.archetype ?? "—"}</td>
+      <td className="truncate py-2 pr-3 text-sm">
         {row.tertiary !== undefined ? statLabel(row.tertiary) : "—"}
       </td>
-      <td className="truncate py-1.5 pr-3">
+      <td className="truncate py-2 pr-3 text-sm">
         {piece.tunedStat !== undefined ? statLabel(piece.tunedStat) : "—"}
       </td>
-      <td className="truncate py-1.5 pr-3">{row.setName ?? "—"}</td>
+      <td className="truncate py-2 pr-3 text-sm">{row.setName ?? "—"}</td>
       {STAT_DISPLAY_ORDER.map((key) => (
-        <td key={key} className="py-1.5 text-center tabular-nums">
+        <td key={key} className="py-2 text-center text-sm tabular-nums">
           {piece.stats[STAT_ORDER.indexOf(key)]}
         </td>
       ))}
-      <td className="py-1.5">
+      <td className="py-2">
         <ArmorRowActions
           piece={piece}
           characters={characters}
