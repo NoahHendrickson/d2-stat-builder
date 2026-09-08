@@ -84,6 +84,8 @@ export interface BuildsColumnContentProps {
   displayedProgress: ValueStore<number>;
   /** Background-refinement lifecycle (idle / running / done, with any pending list). */
   refinement: RefinementState;
+  /** Live 0–1 refinement %; only SearchStatus subscribes. */
+  refinementProgress: ValueStore<number>;
   /** Apply the waiting better list (the explicit user action that changes the list). */
   onShowPending: () => void;
   onCancel: () => void;
@@ -109,6 +111,7 @@ export function BuildsColumnContent({
   result,
   displayedProgress,
   refinement,
+  refinementProgress,
   onShowPending,
   onCancel,
   pieceMap,
@@ -171,6 +174,7 @@ export function BuildsColumnContent({
             <BuildResults
               result={result}
               refinement={refinement}
+              refinementProgress={refinementProgress}
               onShowPending={onShowPending}
               onCancel={onCancel}
               pieceMap={pieceMap}

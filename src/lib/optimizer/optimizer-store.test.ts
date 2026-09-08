@@ -101,21 +101,32 @@ describe("progress stays out of the snapshot", () => {
     expect(events.length).toBe(n);
   });
 
-  test("refinement progress is throttled into the snapshot", () => {
-    const { store, events, worker, tick } = setup();
+  test("refinement progress updates the value store without notifying snapshot subscribers", () => {
+    const { store, events, worker } = setup();
     store.run(input());
     const seq = worker().posted[0].seq;
     worker().emit({ seq, kind: "result", output: output({ capped: true }), refining: true, verified: false });
     expect(store.getSnapshot().refinement.phase).toBe("running");
     const n = events.length;
-    tick(250);
     worker().emit({ seq, kind: "progress", progress: 0.1 });
-    worker().emit({ seq, kind: "progress", progress: 0.2 }); // within 200ms → dropped
-    tick(250);
-    worker().emit({ seq, kind: "progress", progress: 0.3 });
-    expect(events.length).toBe(n + 2);
-    const ref = store.getSnapshot().refinement;
-    expect(ref.phase === "running" && ref.progress).toBe(0.3);
+    worker().emit({ seq, kind: "progress", progress: 0.2 });
+    expect(store.refinementProgress.get()).toBe(0.2);
+    expect(events.length).toBe(n);
+  });
+
+  test("ceiling messages are throttled into the ceilings view, not the snapshot", () => {
+    const { store, events, worker, tick } = setup();
+    store.run(input());
+    const seq = worker().posted[0].seq;
+    const n = events.length;
+    worker().emit({ seq, kind: "ceilings", ceilings: [10, 0, 0, 0, 0, 0] });
+    worker().emit({ seq, kind: "ceilings", ceilings: [20, 0, 0, 0, 0, 0] });
+    expect(events.length).toBe(n);
+    expect(store.ceilingsView.get().values?.[0]).toBe(10);
+    tick(100);
+    worker().emit({ seq, kind: "ceilings", ceilings: [30, 0, 0, 0, 0, 0] });
+    expect(store.ceilingsView.get().values?.[0]).toBe(30);
+    expect(events.length).toBe(n);
   });
 });
 

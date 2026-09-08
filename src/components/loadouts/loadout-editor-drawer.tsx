@@ -3,6 +3,7 @@
 import {
   memo,
   useCallback,
+  useDeferredValue,
   useId,
   useMemo,
   useRef,
@@ -11,6 +12,7 @@ import {
   type FormEvent,
   type MutableRefObject,
 } from "react";
+import { Tooltip as BaseTooltip } from "@base-ui/react/tooltip";
 import Image from "next/image";
 import { CircleNotch, Check, X } from "@phosphor-icons/react";
 import type { ArmorPiece, ArmorSocket } from "@/lib/armory/normalize";
@@ -41,7 +43,11 @@ import {
   DrawerTitle,
 } from "@/components/ui/drawer";
 import { Input } from "@/components/ui/input";
-import { TooltipLabel } from "@/components/ui/tooltip";
+import {
+  TooltipContent,
+  TooltipLabel,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { KIND_LABEL } from "@/components/loadouts/loadout-mods-editor";
 import {
   LoadoutSubclassEditor,
@@ -61,6 +67,8 @@ interface EditorProps {
   mods?: ModsSection;
   subclass?: SubclassSection;
   busy?: boolean;
+  /** Piece/subclass grids; deferred so the header can paint during the slide. */
+  showGrids?: boolean;
   onSubmit: (values: LoadoutDetailsValues) => void;
   onCancel: () => void;
 }
@@ -202,6 +210,7 @@ const ModCell = memo(function ModCell({
   blocked,
   problem,
   onPick,
+  tooltipHandle,
 }: {
   option: ModOption;
   count: number;
@@ -209,6 +218,7 @@ const ModCell = memo(function ModCell({
   blocked: boolean;
   problem?: string;
   onPick: (option: ModOption) => void;
+  tooltipHandle: BaseTooltip.Handle<string>;
 }) {
   const chosen = count > 0;
   const cost = option.cost > 0 ? `${option.cost} energy` : undefined;
@@ -223,39 +233,43 @@ const ModCell = memo(function ModCell({
     .filter(Boolean)
     .join(" · ");
   return (
-    <TooltipLabel label={option.name}>
-      <button
-        type="button"
-        aria-pressed={chosen}
-        aria-label={label}
-        aria-disabled={!chosen && blocked}
-        onClick={() => onPick(option)}
-        className={cn(
-          "focus-visible:ring-ring relative flex size-14 shrink-0 items-center justify-center rounded-none border p-1 transition-[opacity,border-color,background-color] outline-none focus-visible:ring-2",
-          chosen
-            ? "border-emphatic bg-emphatic/6 cursor-pointer"
-            : blocked
-              ? // Flagged mods stay at full strength so the badge reads.
-                cn("cursor-not-allowed border-input", !problem && "opacity-40")
-              : "hover:bg-foreground/6 focus-visible:bg-foreground/6 cursor-pointer border-input",
-        )}
-      >
-        <ItemIcon icon={option.icon} size={48} className="rounded-none" />
-        {count > 1 && (
-          <span className="bg-emphatic text-emphatic-foreground absolute -top-1 -right-1 rounded-full px-1 text-[9px] leading-3 font-medium tabular-nums">
-            ×{count}
-          </span>
-        )}
-        {problem && (
-          <span
-            className="bg-destructive absolute -top-1 -left-1 flex size-3.5 items-center justify-center rounded-full text-[9px] leading-none font-bold text-white"
-            aria-hidden
-          >
-            !
-          </span>
-        )}
-      </button>
-    </TooltipLabel>
+    <TooltipTrigger
+      handle={tooltipHandle}
+      payload={option.name}
+      render={
+        <button
+          type="button"
+          aria-pressed={chosen}
+          aria-label={label}
+          aria-disabled={!chosen && blocked}
+          onClick={() => onPick(option)}
+          className={cn(
+            "focus-visible:ring-ring relative flex size-14 shrink-0 items-center justify-center rounded-none border p-1 transition-[opacity,border-color,background-color] outline-none focus-visible:ring-2",
+            chosen
+              ? "border-emphatic bg-emphatic/6 cursor-pointer"
+              : blocked
+                ? // Flagged mods stay at full strength so the badge reads.
+                  cn("cursor-not-allowed border-input", !problem && "opacity-40")
+                : "hover:bg-foreground/6 focus-visible:bg-foreground/6 cursor-pointer border-input",
+          )}
+        >
+          <ItemIcon icon={option.icon} size={48} className="rounded-none" />
+          {count > 1 && (
+            <span className="bg-emphatic text-emphatic-foreground absolute -top-1 -right-1 rounded-full px-1 text-[9px] leading-3 font-medium tabular-nums">
+              ×{count}
+            </span>
+          )}
+          {problem && (
+            <span
+              className="bg-destructive absolute -top-1 -left-1 flex size-3.5 items-center justify-center rounded-full text-[9px] leading-none font-bold text-white"
+              aria-hidden
+            >
+              !
+            </span>
+          )}
+        </button>
+      }
+    />
   );
 });
 
@@ -321,6 +335,8 @@ function KindGrid({
     (s) => chosen?.[s.index] === undefined && s.plugHash && s.plugHash !== s.emptyPlugHash,
   ).length;
 
+  const tooltipHandle = useMemo(() => BaseTooltip.createHandle<string>(), []);
+
   const onPick = useCallback(
     (o: ModOption) => {
       const count = chosenCount(chosen, sockets, o.hash);
@@ -378,10 +394,16 @@ function KindGrid({
               blocked={count === 0 && !canAdd}
               problem={problems.get(o.hash) ?? problems.get(o.name)}
               onPick={onPick}
+              tooltipHandle={tooltipHandle}
             />
           );
         })}
       </div>
+      <BaseTooltip.Root handle={tooltipHandle} disableHoverablePopup>
+        {({ payload }) =>
+          payload !== undefined ? <TooltipContent>{payload}</TooltipContent> : null
+        }
+      </BaseTooltip.Root>
     </section>
   );
 }
@@ -555,6 +577,7 @@ function EditorForm({
   mods,
   subclass,
   busy = false,
+  showGrids = true,
   onSubmit,
   onCancel,
 }: EditorProps) {
@@ -711,47 +734,50 @@ function EditorForm({
         {description && !mods && (
           <p className="text-muted-foreground mb-3 text-xs">{description}</p>
         )}
-        {/* Subclass first, then the five pieces; at `lg` every column shares the width. */}
-        <div
-          className="grid min-h-0 flex-1 grid-cols-[repeat(auto-fit,minmax(11rem,1fr))] gap-2 lg:grid-cols-[repeat(var(--editor-cols),minmax(0,1fr))]"
-          style={{ "--editor-cols": (mods?.pieces.length ?? 0) + (subclass ? 1 : 0) } as CSSProperties}
-        >
-          {subclass && (
-            <section
-              aria-label="Subclass"
-              className="bg-sidebar flex min-h-0 min-w-0 flex-col gap-3 rounded-md px-3 py-2.5"
-            >
-              <div className="flex min-w-0 shrink-0 items-center gap-2.5">
-                <ItemIcon icon={subclassDef?.displayProperties?.icon} size={24} />
-                <div className="flex min-w-0 flex-1 flex-col">
-                  <span className="truncate text-sm font-medium">{subclassName}</span>
-                  <span className="text-muted-foreground text-xs">Subclass</span>
+        {/* Subclass first, then the five pieces; at `lg` every column shares the width.
+            Gated so the header can paint before ~550 tooltip roots and images mount. */}
+        {showGrids && (
+          <div
+            className="grid min-h-0 flex-1 grid-cols-[repeat(auto-fit,minmax(11rem,1fr))] gap-2 lg:grid-cols-[repeat(var(--editor-cols),minmax(0,1fr))]"
+            style={{ "--editor-cols": (mods?.pieces.length ?? 0) + (subclass ? 1 : 0) } as CSSProperties}
+          >
+            {subclass && (
+              <section
+                aria-label="Subclass"
+                className="bg-sidebar flex min-h-0 min-w-0 flex-col gap-3 rounded-md px-3 py-2.5"
+              >
+                <div className="flex min-w-0 shrink-0 items-center gap-2.5">
+                  <ItemIcon icon={subclassDef?.displayProperties?.icon} size={24} />
+                  <div className="flex min-w-0 flex-1 flex-col">
+                    <span className="truncate text-sm font-medium">{subclassName}</span>
+                    <span className="text-muted-foreground text-xs">Subclass</span>
+                  </div>
                 </div>
-              </div>
-              {/* The card scrolls its options; the drawer body stays put. */}
-              <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
-                <LoadoutSubclassEditor
-                  section={subclass}
-                  value={subclassItem}
-                  onChange={setSubclassItem}
-                  compact
-                />
-              </div>
-            </section>
-          )}
-          {mods?.pieces.map((piece) => (
-            <PiecePanel
-              key={piece.instanceId}
-              piece={piece}
-              catalog={mods.catalog}
-              insertable={mods.insertable}
-              placement={placement[piece.instanceId]}
-              problems={problems}
-              costOf={costOf}
-              onChange={updatePieceChosen}
-            />
-          ))}
-        </div>
+                {/* The card scrolls its options; the drawer body stays put. */}
+                <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+                  <LoadoutSubclassEditor
+                    section={subclass}
+                    value={subclassItem}
+                    onChange={setSubclassItem}
+                    compact
+                  />
+                </div>
+              </section>
+            )}
+            {mods?.pieces.map((piece) => (
+              <PiecePanel
+                key={piece.instanceId}
+                piece={piece}
+                catalog={mods.catalog}
+                insertable={mods.insertable}
+                placement={placement[piece.instanceId]}
+                problems={problems}
+                costOf={costOf}
+                onChange={updatePieceChosen}
+              />
+            ))}
+          </div>
+        )}
       </div>
     </form>
   );
@@ -769,10 +795,13 @@ export function LoadoutEditorDrawer({
   open,
   onOpenChange,
   ...form
-}: Omit<EditorProps, "onCancel"> & {
+}: Omit<EditorProps, "onCancel" | "showGrids"> & {
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
+  // Stay on the mounted parent: EditorForm only exists while `open`, so a deferred
+  // value inside it would start true and never delay the grids.
+  const showGrids = useDeferredValue(open);
   return (
     // Non-modal: no backdrop, the sidebar stays usable, and only Cancel / Save /
     // Escape close it (a stray click outside must not throw the edits away).
@@ -790,7 +819,13 @@ export function LoadoutEditorDrawer({
         // sidebar width (0 below `lg`, where the sidebar is itself a drawer).
         style={{ left: "var(--app-sidebar-width, 0px)" }}
       >
-        {open && <EditorForm {...form} onCancel={() => onOpenChange(false)} />}
+        {open && (
+          <EditorForm
+            {...form}
+            showGrids={showGrids}
+            onCancel={() => onOpenChange(false)}
+          />
+        )}
       </DrawerContent>
     </Drawer>
   );

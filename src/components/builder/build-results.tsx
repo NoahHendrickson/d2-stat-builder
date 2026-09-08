@@ -57,6 +57,7 @@ import { plugInfoFromManifest } from "@/lib/loadouts/plug-info";
 import { getModCatalog } from "@/lib/loadouts/mod-options";
 import type { Manifest } from "@/lib/manifest/load";
 import { cn } from "@/lib/utils";
+import { useStoreValue, type ValueStore } from "@/lib/value-store";
 import { BUNGIE_IMAGE_BASE } from "@/lib/bungie/constants";
 import {
   equipItemRef,
@@ -819,14 +820,21 @@ function ImprovedMaximaAlert() {
   );
 }
 
+function RefinementPercent({ store }: { store: ValueStore<number> }) {
+  const progress = useStoreValue(store);
+  return <>{Math.round(progress * 100)}%</>;
+}
+
 function SearchStatus({
   capped,
   refinement,
+  refinementProgress,
   onShowPending,
   onCancel,
 }: {
   capped: boolean;
   refinement: RefinementState;
+  refinementProgress: ValueStore<number>;
   onShowPending: () => void;
   onCancel: () => void;
 }) {
@@ -866,7 +874,7 @@ function SearchStatus({
                 higher stat maximums (
               </>
             )}
-            {Math.round(refinement.progress * 100)}%)
+            <RefinementPercent store={refinementProgress} />)
           </p>
           <Button
             variant="link"
@@ -943,6 +951,7 @@ function SearchStatus({
 export function BuildResults({
   result,
   refinement,
+  refinementProgress,
   onShowPending,
   onCancel,
   pieceMap,
@@ -962,6 +971,7 @@ export function BuildResults({
 }: {
   result: OptimizerOutput;
   refinement: RefinementState;
+  refinementProgress: ValueStore<number>;
   onShowPending: () => void;
   onCancel: () => void;
   pieceMap: Map<string, ArmorPiece>;
@@ -978,6 +988,7 @@ export function BuildResults({
     <SearchStatus
       capped={result.capped}
       refinement={refinement}
+      refinementProgress={refinementProgress}
       onShowPending={onShowPending}
       onCancel={onCancel}
     />

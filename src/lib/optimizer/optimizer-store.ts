@@ -3,9 +3,9 @@
 // the worker, and coming back re-attaches to the in-flight (or finished) run instead
 // of starting over. `useOptimizer` is a thin subscription over this store.
 //
-// Hot-path values (raw progress) live in their own value store and never touch the
-// snapshot, so a 60 Hz progress bar re-renders only the bar. Refinement progress,
-// which the status card shows as a percentage, is throttled into the snapshot.
+// Hot-path values (raw progress, refinement progress, ceiling overlays) live in
+// their own value stores and never touch the snapshot, so only the subscribed
+// widgets re-render.
 import { createValueStore, type ValueStore } from "../value-store";
 import { computeCeilingCarry } from "./carryover";
 import type {
@@ -18,8 +18,13 @@ import type {
 } from "./types";
 
 const IDLE: RefinementState = { phase: "idle" };
-/** Refinement progress lands in React state at most this often. */
-const REFINEMENT_PROGRESS_INTERVAL_MS = 200;
+/** Ceiling overlay writes land in the value store at most this often. */
+const CEILINGS_INTERVAL_MS = 100;
+
+export type CeilingsView = {
+  values: StatArray | null;
+  exact: boolean;
+};
 
 export interface OptimizerSnapshot {
   result: OptimizerOutput | null;
@@ -45,6 +50,10 @@ export interface OptimizerStore {
   getSnapshot(): OptimizerSnapshot;
   /** Raw 0–1 progress of the current run, per worker message (not in the snapshot). */
   progress: ValueStore<number>;
+  /** Background-refinement 0–1 progress; only SearchStatus subscribes. */
+  refinementProgress: ValueStore<number>;
+  /** Slider overlays; StatTargetRow subscribes so the rest of the panel can bail out. */
+  ceilingsView: ValueStore<CeilingsView>;
   run(input: OptimizerInput): void;
   cancel(): void;
   applyPending(): void;
@@ -78,6 +87,11 @@ export function createOptimizerStore(
     for (const l of listeners) l();
   };
   const progress = createValueStore(0);
+  const refinementProgress = createValueStore(0);
+  const ceilingsView = createValueStore<CeilingsView>({
+    values: null,
+    exact: false,
+  });
 
   let worker: WorkerLike | null = null;
   let seq = 0;
@@ -93,7 +107,7 @@ export function createOptimizerStore(
   // The most recent (input, output) pair — the source for cross-edit ceiling carryover.
   // Updated on EVERY result message (interim and final). cancel() leaves this intact.
   let last: { input: OptimizerInput; key: string; output: OptimizerOutput } | null = null;
-  let lastRefinementProgressAt = 0;
+  let lastCeilingsAt = Number.NEGATIVE_INFINITY;
 
   const getWorker = () => {
     if (worker) return worker;
@@ -105,23 +119,23 @@ export function createOptimizerStore(
       switch (msg.kind) {
         case "progress":
           if (ref.phase === "running") {
-            const t = now();
-            if (t - lastRefinementProgressAt >= REFINEMENT_PROGRESS_INTERVAL_MS) {
-              lastRefinementProgressAt = t;
-              setState({ refinement: { ...ref, progress: msg.progress } });
-            }
+            refinementProgress.set(msg.progress);
           } else {
             progress.set(msg.progress);
           }
           break;
-        case "ceilings":
-          setState({
-            ceilings:
-              ref.phase === "running"
-                ? mergeCeilingsMonotone(snapshot.ceilings, msg.ceilings)
-                : msg.ceilings,
-          });
+        case "ceilings": {
+          const values =
+            ref.phase === "running"
+              ? mergeCeilingsMonotone(ceilingsView.get().values, msg.ceilings)
+              : msg.ceilings;
+          const t = now();
+          if (t - lastCeilingsAt >= CEILINGS_INTERVAL_MS) {
+            lastCeilingsAt = t;
+            ceilingsView.set({ values, exact: snapshot.ceilingsExact });
+          }
           break;
+        }
         case "better":
           // The background search beat the frozen list — hold it, don't apply it.
           if (ref.phase === "running") setState({ refinement: { ...ref, pending: msg.output } });
@@ -133,7 +147,12 @@ export function createOptimizerStore(
           if (msg.refining) {
             // Time-capped search: its build list is final and shown now (and never
             // replaced); the worker is still refining, so stay "in flight" for cancellation.
-            lastRefinementProgressAt = 0;
+            refinementProgress.set(0);
+            lastCeilingsAt = now();
+            ceilingsView.set({
+              values: msg.output.ceilings,
+              exact: msg.output.ceilingsExact,
+            });
             setState({
               result: msg.output,
               ceilings: msg.output.ceilings,
@@ -143,13 +162,19 @@ export function createOptimizerStore(
             });
           } else {
             inFlight = false;
+            const ceilings =
+              ref.phase === "running"
+                ? mergeCeilingsMonotone(snapshot.ceilings, msg.output.ceilings)
+                : msg.output.ceilings;
+            lastCeilingsAt = now();
+            ceilingsView.set({
+              values: ceilings,
+              exact: msg.output.ceilingsExact,
+            });
             const patch: Partial<OptimizerSnapshot> = {
               result: msg.output,
               ceilingsExact: msg.output.ceilingsExact,
-              ceilings:
-                ref.phase === "running"
-                  ? mergeCeilingsMonotone(snapshot.ceilings, msg.output.ceilings)
-                  : msg.output.ceilings,
+              ceilings,
               running: false,
             };
             if (ref.phase === "running") {
@@ -192,6 +217,8 @@ export function createOptimizerStore(
     },
     getSnapshot: () => snapshot,
     progress,
+    refinementProgress,
+    ceilingsView,
 
     run(input) {
       const key = JSON.stringify(input);
@@ -212,6 +239,8 @@ export function createOptimizerStore(
       inFlightInput = input;
       inFlightKey = key;
       progress.set(0);
+      refinementProgress.set(0);
+      ceilingsView.set({ values: ceilingsView.get().values, exact: false });
       setState({ running: true, ceilingsExact: false, refinement: IDLE, runId: s });
       // Carry proven ceiling bounds from the previous query when this edit only changed
       // the minimums — lets the worker skip re-proving what the last query established.
@@ -236,10 +265,13 @@ export function createOptimizerStore(
       const ref = snapshot.refinement;
       if (ref.phase !== "done" || !ref.pending) return;
       const pending = ref.pending;
+      const ceilings = mergeCeilingsMonotone(snapshot.ceilings, pending.ceilings);
+      lastCeilingsAt = now();
+      ceilingsView.set({ values: ceilings, exact: pending.ceilingsExact });
       setState({
         refinement: IDLE,
         result: pending,
-        ceilings: mergeCeilingsMonotone(snapshot.ceilings, pending.ceilings),
+        ceilings,
         ceilingsExact: pending.ceilingsExact,
       });
     },

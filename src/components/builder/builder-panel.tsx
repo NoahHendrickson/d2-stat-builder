@@ -16,7 +16,9 @@ import { useSession } from "@/lib/auth/use-session";
 import { useArmory } from "@/lib/armory/use-armory";
 import { useManifest } from "@/lib/manifest/use-manifest";
 import { useOptimizer } from "@/lib/optimizer/use-optimizer";
+import type { CeilingsView } from "@/lib/optimizer/optimizer-store";
 import { useSmoothedProgress } from "@/lib/use-smoothed-progress";
+import { useStoreValue, type ValueStore } from "@/lib/value-store";
 import {
   availableSets,
   type ArmorSetInfo,
@@ -120,10 +122,10 @@ export function BuilderPanel({
     run,
     cancel,
     result,
-    ceilings,
-    ceilingsExact,
+    ceilingsView,
     running,
     progress,
+    refinementProgress,
     runId,
     refinement,
     applyPending,
@@ -718,6 +720,7 @@ export function BuilderPanel({
       result,
       displayedProgress,
       refinement,
+      refinementProgress,
       onShowPending: applyPending,
       onCancel: cancel,
       pieceMap,
@@ -741,6 +744,7 @@ export function BuilderPanel({
       result,
       displayedProgress,
       refinement,
+      refinementProgress,
       applyPending,
       cancel,
       pieceMap,
@@ -787,8 +791,7 @@ export function BuilderPanel({
                       index={i}
                       icon={statIcons[key]}
                       value={targets[i]}
-                      cap={ceilings ? ceilings[i] : null}
-                      ceilingsExact={ceilingsExact}
+                      ceilingsView={ceilingsView}
                       onChange={setTarget}
                     />
                   );
@@ -984,18 +987,18 @@ const StatTargetRow = memo(function StatTargetRow({
   index,
   icon,
   value,
-  cap,
-  ceilingsExact,
+  ceilingsView,
   onChange,
 }: {
   statKey: (typeof STAT_DISPLAY_ORDER)[number];
   index: number;
   icon?: string;
   value: number;
-  cap: number | null;
-  ceilingsExact: boolean;
+  ceilingsView: ValueStore<CeilingsView>;
   onChange: (index: number, value: number) => void;
 }) {
+  const { values: ceilings, exact: ceilingsExact } = useStoreValue(ceilingsView);
+  const cap = ceilings ? ceilings[index] : null;
   const label = STAT_LABELS[statKey];
   // Achievable ceiling for this stat given the others. Overlay it as a
   // lighter fill up to that max (full-width at 200); omit only while

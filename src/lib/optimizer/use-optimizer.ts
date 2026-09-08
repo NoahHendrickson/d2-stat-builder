@@ -18,6 +18,8 @@ export function useOptimizer() {
     cancel: store.cancel,
     applyPending: store.applyPending,
     progress: store.progress,
+    refinementProgress: store.refinementProgress,
+    ceilingsView: store.ceilingsView,
     ...snapshot,
   };
 }
