@@ -144,6 +144,16 @@ export function LoadoutsList({
 }) {
   const router = useRouter();
   const pathname = usePathname();
+  const [path] = useState(() => {
+    let value = pathname;
+    return {
+      set(next: string) {
+        value = next;
+      },
+      get: () => value,
+    };
+  });
+  path.set(pathname);
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const loadouts = useLoadouts();
@@ -410,11 +420,22 @@ export function LoadoutsList({
           ),
         }),
       );
-      if (pathname !== "/") router.push("/");
+      if (path.get() !== "/") router.push("/");
       onNavigate?.();
     },
-    [manifest, pieceMap, pathname, router, onNavigate],
+    [manifest, pieceMap, path, router, onNavigate],
   );
+
+  const editorLoadout = dialog.kind === "edit" ? dialog.loadout : undefined;
+  const editorMods = dialog.kind === "edit" ? dialog.mods : undefined;
+  const editorSubclass = useMemo(() => {
+    if (!editorLoadout || editorLoadout.loadout.classType >= 3) return undefined;
+    return {
+      manifest,
+      classType: editorLoadout.loadout.classType,
+      initial: loadoutSubclass(editorLoadout.loadout),
+    };
+  }, [editorLoadout, manifest]);
 
   const sortLabel =
     LOADOUT_LIST_SORT_OPTIONS.find((o) => o.key === sortKey)?.label ?? "Sort";
@@ -686,11 +707,8 @@ export function LoadoutsList({
         initialNotes={
           dialog.kind === "edit" ? (dialog.loadout.loadout.notes ?? "") : ""
         }
-        mods={dialog.kind === "edit" ? dialog.mods : undefined}
-        subclass={dialog.kind === "edit" && dialog.loadout.loadout.classType < 3 ? {
-          manifest, classType: dialog.loadout.loadout.classType,
-          initial: loadoutSubclass(dialog.loadout.loadout),
-        } : undefined}
+        mods={editorMods}
+        subclass={editorSubclass}
         busy={update.isPending}
         onSubmit={editLoadout}
       />

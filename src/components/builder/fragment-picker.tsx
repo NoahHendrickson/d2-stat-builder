@@ -1,5 +1,6 @@
 "use client";
 
+import { memo } from "react";
 import { TooltipLabel } from "@/components/ui/tooltip";
 import Image from "next/image";
 import { CircleNotch } from "@phosphor-icons/react";
@@ -22,7 +23,7 @@ import {
  * (Name + six stat columns). Toggle a fragment to fold its stats into the build.
  * Only the active subclass's selection applies (you run one subclass at a time).
  */
-export function FragmentPicker({
+export const FragmentPicker = memo(function FragmentPicker({
   fragments,
   activeSubclass,
   onSubclassChange,
@@ -166,4 +167,4 @@ export function FragmentPicker({
       )}
     </div>
   );
-}
+});

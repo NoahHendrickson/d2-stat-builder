@@ -1,23 +1,22 @@
 "use client";
 
 import { TooltipLabel } from "@/components/ui/tooltip";
-import { useState, type ReactNode } from "react";
+import { memo, useState, type ReactNode } from "react";
 import Image from "next/image";
-import {
-  ArrowCounterClockwise,
-  ArrowDown,
-  ArrowUp,
-  Trash,
-} from "@phosphor-icons/react";
+import { ArrowDown, ArrowUp } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { BUNGIE_IMAGE_BASE } from "@/lib/bungie/constants";
 import {
   isCustomOrderColumn,
@@ -35,14 +34,14 @@ import {
 import { CustomOrderList } from "@/components/armor-table/custom-order-list";
 
 const TABLE_HEAD_CELL =
-  "border-border/50 border-b bg-[color-mix(in_oklch,var(--muted)_55%,var(--background))] py-2.5 pr-3 text-sm font-medium whitespace-nowrap first:pl-3";
+  "border-border/50 bg-[color-mix(in_oklch,var(--muted)_55%,var(--background))] border-b py-2.5 pr-3 text-sm font-medium whitespace-nowrap first:pl-3";
 
 /**
- * Sortable column header: owns the `<th>` chrome and a tabbed popover for
+ * Sortable column header: owns the `<th>` chrome and a dropdown for
  * A→Z / Z→A (or High→Low / Low→High), optional Custom value order, nest, and
  * clear/undo. Sort state is a single nest chain of dir|custom levels.
  */
-export function SortMenu({
+export const SortMenu = memo(function SortMenu({
   label,
   icon,
   align = "left",
@@ -132,15 +131,14 @@ export function SortMenu({
           : "none"
       }
     >
-      <Popover
+      <DropdownMenu
         onOpenChange={(open) => {
           if (open) setNest(false);
         }}
       >
         <TooltipLabel label={sortTitle}>
-          <PopoverTrigger
+          <DropdownMenuTrigger
             aria-label={sortTitle}
-
             className={cn(
               "group relative -my-0.5 inline-flex cursor-pointer items-center",
               align === "right" ? "w-full justify-center" : "pr-[18px]",
@@ -169,124 +167,85 @@ export function SortMenu({
                 )}
               />
             </span>
-          </PopoverTrigger>
+          </DropdownMenuTrigger>
         </TooltipLabel>
-        <PopoverContent
+        <DropdownMenuContent
           align={align === "right" ? "end" : "start"}
-          className="w-64 p-0"
+          className="w-56"
         >
-          <div className="border-border/50 flex items-start gap-2 border-b px-3 py-2">
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-medium">Sort by {accessibleLabel}</p>
-              {active && sort.length > 1 && (
-                <p className="text-muted-foreground text-xs">
-                  Nest level {levelIndex + 1} of {sort.length}
-                </p>
-              )}
-            </div>
-            <div className="-mr-1 flex shrink-0 items-center">
-              {sortUndo && (
-                <TooltipLabel label="Undo previous sort">
-                  <button
-                    type="button"
-                    aria-label="Undo previous sort"
-
-                    onClick={onUndoSort}
-                    className="text-muted-foreground hover:text-foreground hover:bg-accent focus-visible:ring-ring/50 flex size-7 cursor-pointer items-center justify-center rounded-md outline-none focus-visible:ring-2"
-                  >
-                    <ArrowCounterClockwise
-                      weight="bold"
-                      className="size-3.5"
-                      aria-hidden
-                    />
-                  </button>
-                </TooltipLabel>
-              )}
-              <TooltipLabel label="Clear sort">
-                <button
-                  type="button"
-                  aria-label="Clear sort"
-
-                  disabled={!active}
-                  onClick={() => onClearLevel(sortKey)}
-                  className="text-muted-foreground hover:text-foreground hover:bg-accent focus-visible:ring-ring/50 flex size-7 cursor-pointer items-center justify-center rounded-md outline-none focus-visible:ring-2 disabled:pointer-events-none disabled:opacity-30"
-                >
-                  <Trash weight="bold" className="size-3.5" aria-hidden />
-                </button>
-              </TooltipLabel>
-            </div>
-          </div>
+          <DropdownMenuGroup>
+            <DropdownMenuLabel>
+              Sort by {accessibleLabel}
+              {active && sort.length > 1
+                ? ` (${levelIndex + 1} of ${sort.length})`
+                : ""}
+            </DropdownMenuLabel>
+          </DropdownMenuGroup>
           {canNest && (
-            <label className="hover:bg-accent flex cursor-pointer items-center gap-2 px-3 py-2 text-sm">
-              <Checkbox
-                checked={nest}
-                onCheckedChange={(checked) => setNest(checked === true)}
-              />
-              <span>Nest this sort</span>
-            </label>
+            <DropdownMenuCheckboxItem
+              closeOnClick={false}
+              checked={nest}
+              onCheckedChange={(checked) => setNest(checked === true)}
+            >
+              Nest this sort
+            </DropdownMenuCheckboxItem>
           )}
-          <Tabs
+          <DropdownMenuRadioGroup
             value={mode ?? ""}
             onValueChange={(v) => {
               if (v === "asc" || v === "desc" || v === "custom") applyMode(v);
             }}
-            className="gap-0 pb-2"
           >
-            <div className="px-2 pt-2">
-              <TabsList className="w-full justify-center">
-                {numeric ? (
-                  <>
-                    <TabsTrigger value="desc" className="flex-1 px-2 text-xs">
-                      High→Low
-                    </TabsTrigger>
-                    <TabsTrigger value="asc" className="flex-1 px-2 text-xs">
-                      Low→High
-                    </TabsTrigger>
-                  </>
-                ) : (
-                  <>
-                    <TabsTrigger value="asc" className="flex-1 px-2 text-xs">
-                      A→Z
-                    </TabsTrigger>
-                    <TabsTrigger value="desc" className="flex-1 px-2 text-xs">
-                      Z→A
-                    </TabsTrigger>
-                  </>
-                )}
-                {canCustom && (
-                  <TabsTrigger value="custom" className="flex-1 px-2 text-xs">
-                    Custom
-                  </TabsTrigger>
-                )}
-              </TabsList>
-            </div>
-            {canCustom && (
-              <TabsContent value="custom" className="mt-0">
-                <CustomOrderList
-                  values={values ?? []}
-                  onMove={(from, to) =>
-                    onReorderCustom(sortKey as CustomOrderColumn, from, to)
-                  }
-                />
-                <div className="border-border/50 flex items-center justify-between gap-2 border-t p-1.5">
-                  <span className="text-muted-foreground px-1 text-xs">
-                    {customized ? "Custom order" : "Default (A–Z)"}
-                  </span>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-6 px-1.5 text-xs"
-                    disabled={!customized}
-                    onClick={() => onApplyMode(sortKey, "asc", nest && canNest)}
-                  >
-                    Reset
-                  </Button>
-                </div>
-              </TabsContent>
+            {numeric ? (
+              <>
+                <DropdownMenuRadioItem value="desc">
+                  High→Low
+                </DropdownMenuRadioItem>
+                <DropdownMenuRadioItem value="asc">
+                  Low→High
+                </DropdownMenuRadioItem>
+              </>
+            ) : (
+              <>
+                <DropdownMenuRadioItem value="asc">A→Z</DropdownMenuRadioItem>
+                <DropdownMenuRadioItem value="desc">Z→A</DropdownMenuRadioItem>
+              </>
             )}
-          </Tabs>
-        </PopoverContent>
-      </Popover>
+            {canCustom && (
+              <DropdownMenuRadioItem value="custom" closeOnClick={false}>
+                Custom
+              </DropdownMenuRadioItem>
+            )}
+          </DropdownMenuRadioGroup>
+          {canCustom && mode === "custom" && (
+            <>
+              <CustomOrderList
+                values={values ?? []}
+                onMove={(from, to) =>
+                  onReorderCustom(sortKey as CustomOrderColumn, from, to)
+                }
+              />
+              <DropdownMenuItem
+                disabled={!customized}
+                onClick={() => onApplyMode(sortKey, "asc", nest && canNest)}
+              >
+                Reset order
+              </DropdownMenuItem>
+            </>
+          )}
+          {(sortUndo || active) && <DropdownMenuSeparator />}
+          {sortUndo && (
+            <DropdownMenuItem onClick={onUndoSort}>
+              Undo previous sort
+            </DropdownMenuItem>
+          )}
+          {active && (
+            <DropdownMenuItem onClick={() => onClearLevel(sortKey)}>
+              Clear sort
+            </DropdownMenuItem>
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
     </th>
   );
-}
+});

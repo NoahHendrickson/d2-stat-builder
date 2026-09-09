@@ -2,6 +2,7 @@
 
 import { TooltipLabel } from "@/components/ui/tooltip";
 import {
+  memo,
   useCallback,
   useEffect,
   useMemo,
@@ -15,8 +16,14 @@ import { useSession } from "@/lib/auth/use-session";
 import { useArmory } from "@/lib/armory/use-armory";
 import { useManifest } from "@/lib/manifest/use-manifest";
 import { useOptimizer } from "@/lib/optimizer/use-optimizer";
+import type { CeilingsView } from "@/lib/optimizer/optimizer-store";
 import { useSmoothedProgress } from "@/lib/use-smoothed-progress";
-import { availableSets, type SetPerkInfo } from "@/lib/armory/sets";
+import { useStoreValue, type ValueStore } from "@/lib/value-store";
+import {
+  availableSets,
+  type ArmorSetInfo,
+  type SetPerkInfo,
+} from "@/lib/armory/sets";
 import {
   DEFAULT_SET_FILTERS,
   hasCustomSetFilters,
@@ -115,10 +122,10 @@ export function BuilderPanel({
     run,
     cancel,
     result,
-    ceilings,
-    ceilingsExact,
+    ceilingsView,
     running,
     progress,
+    refinementProgress,
     runId,
     refinement,
     applyPending,
@@ -336,13 +343,16 @@ export function BuilderPanel({
     return v;
   }, [fragments, fragSel, activeSubclass]);
 
-  const toggleFragment = (hash: number) =>
-    setFragSel((prev) => {
-      const next = new Set(prev[activeSubclass]);
-      if (next.has(hash)) next.delete(hash);
-      else next.add(hash);
-      return { ...prev, [activeSubclass]: next };
-    });
+  const toggleFragment = useCallback(
+    (hash: number) =>
+      setFragSel((prev) => {
+        const next = new Set(prev[activeSubclass]);
+        if (next.has(hash)) next.delete(hash);
+        else next.add(hash);
+        return { ...prev, [activeSubclass]: next };
+      }),
+    [activeSubclass],
+  );
 
   const {
     applying: applyingFragments,
@@ -350,7 +360,7 @@ export function BuilderPanel({
     canApply: canApplyCurrentFragments,
   } = useApplyCurrentFragments({ armoryQuery, classType, fragments });
 
-  const onApplyCurrentFragments = async () => {
+  const onApplyCurrentFragments = useCallback(async () => {
     const result = await applyCurrentFragments();
     if (!result) return;
     setActiveSubclass(result.subclass);
@@ -358,7 +368,7 @@ export function BuilderPanel({
       ...prev,
       [result.subclass]: result.fragmentHashes,
     }));
-  };
+  }, [applyCurrentFragments]);
 
   const setRequirements = useMemo(
     () =>
@@ -611,87 +621,51 @@ export function BuilderPanel({
     return () => window.clearTimeout(t);
   }, [ready, classType, runOptimizer]);
 
-  const setTarget = (i: number, value: number) =>
-    setTargets((prev) => prev.map((v, idx) => (idx === i ? value : v)));
+  const setTarget = useCallback(
+    (i: number, value: number) =>
+      setTargets((prev) => prev.map((v, idx) => (idx === i ? value : v))),
+    [],
+  );
 
-  const onClassChange = (next: number) => {
+  const onClassChange = useCallback((next: number) => {
     setClassType(next);
     setSetReqs({});
     setSelectedExotic(null);
     setExoticPerks([null, null]);
-  };
+  }, []);
 
-  const onExoticSelect = (index: number | null) => {
+  const onExoticSelect = useCallback((index: number | null) => {
     setSelectedExotic(index);
     setExoticPerks([null, null]);
-  };
+  }, []);
 
-  const setSetFilter = (key: keyof SetFilters, value: boolean) =>
-    setSetFilters((prev) => ({ ...prev, [key]: value }));
+  const setSetFilter = useCallback(
+    (key: keyof SetFilters, value: boolean) =>
+      setSetFilters((prev) => ({ ...prev, [key]: value })),
+    [],
+  );
 
-  const toggleSet = (setHash: number, count: 2 | 4) =>
+  const toggleSet = useCallback((setHash: number, count: 2 | 4) => {
     setSetReqs((prev) => {
       const next = { ...prev };
       if (next[setHash] === count) delete next[setHash];
       else next[setHash] = count;
       return next;
     });
+  }, []);
 
-  const togglePin = (setHash: number) =>
+  const togglePin = useCallback((setHash: number) => {
     setPinnedSets((prev) =>
       prev.includes(setHash)
         ? prev.filter((h) => h !== setHash)
         : [...prev, setHash],
     );
+  }, []);
 
-  const renderSetRow = (s: (typeof sets)[number]) => {
-    const pinned = pinnedSets.includes(s.setHash);
-    const perk2Info = s.perks.find((p) => p.requiredCount === 2);
-    const perk4Info = s.perks.find((p) => p.requiredCount === 4);
-    return (
-      <div
-        key={s.setHash}
-        className="group/set-row relative col-span-full grid grid-cols-subgrid items-center before:absolute before:inset-y-0 before:-left-7 before:w-7"
-      >
-        {/* Figma 17:5828 ("when row is hovered the pin appears"): the pin floats in
-            the left margin, 24px outside the name column. */}
-        <TooltipLabel label={pinned ? "Unpin set" : "Pin set"}>
-          <button
-            type="button"
-            onClick={() => togglePin(s.setHash)}
-            aria-label={pinned ? "Unpin set" : "Pin set"}
-            className={cn(
-              "absolute top-1/2 -left-7 flex size-6 -translate-y-1/2 items-center justify-center rounded-md transition-opacity outline-none focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring/50",
-              pinned
-                ? "text-foreground"
-                : "text-muted-foreground opacity-0 group-hover/set-row:opacity-100 group-focus-within/set-row:opacity-100 hover:text-foreground",
-            )}
-          >
-            <PushPin
-              weight={pinned ? "fill" : "regular"}
-              className="size-4"
-              aria-hidden
-            />
-          </button>
-        </TooltipLabel>
-        <span className="truncate text-sm">
-          {s.name} ({s.ownedCount})
-        </span>
-        <SetPerkCell
-          active={setReqs[s.setHash] === 2}
-          disabled={s.ownedCount < 2}
-          perk={perk2Info}
-          onToggle={() => toggleSet(s.setHash, 2)}
-        />
-        <SetPerkCell
-          active={setReqs[s.setHash] === 4}
-          disabled={s.ownedCount < 4}
-          perk={perk4Info}
-          onToggle={() => toggleSet(s.setHash, 4)}
-        />
-      </div>
-    );
-  };
+  const refetchArmory = armoryQuery.refetch;
+  const onEquipped = useCallback(() => {
+    void refetchArmory();
+  }, [refetchArmory]);
 
   // What a saved loadout remembers about this session, so "Load in builder" restores it.
   const builderSnapshot = useMemo<BuilderSnapshot>(
@@ -725,6 +699,19 @@ export function BuilderPanel({
     ],
   );
 
+  // Latest targets/snapshot without changing `buildsProps` identity on slider moves.
+  const [builderState] = useState(() => {
+    let value = { targets, builderSnapshot };
+    return {
+      set(next: typeof value) {
+        value = next;
+      },
+      get: () => value,
+    };
+  });
+  builderState.set({ targets, builderSnapshot });
+  const getBuilderState = builderState.get;
+
   const buildsProps: BuildsColumnContentProps = useMemo(
     () => ({
       ready,
@@ -733,10 +720,10 @@ export function BuilderPanel({
       result,
       displayedProgress,
       refinement,
+      refinementProgress,
       onShowPending: applyPending,
       onCancel: cancel,
       pieceMap,
-      targets,
       setMap,
       statIcons,
       balancedTuningIcon,
@@ -745,10 +732,10 @@ export function BuilderPanel({
       tuningPlugHashes,
       artificeModHashes,
       subclass: dimSubclass,
-      builderSnapshot,
+      getBuilderState,
       manifest,
       insertablePlugs: armory?.insertablePlugs,
-      onEquipped: () => void armoryQuery.refetch(),
+      onEquipped,
     }),
     [
       ready,
@@ -757,10 +744,10 @@ export function BuilderPanel({
       result,
       displayedProgress,
       refinement,
+      refinementProgress,
       applyPending,
       cancel,
       pieceMap,
-      targets,
       setMap,
       statIcons,
       balancedTuningIcon,
@@ -769,10 +756,10 @@ export function BuilderPanel({
       tuningPlugHashes,
       artificeModHashes,
       dimSubclass,
-      builderSnapshot,
+      getBuilderState,
       manifest,
       armory?.insertablePlugs,
-      armoryQuery,
+      onEquipped,
     ],
   );
 
@@ -797,136 +784,16 @@ export function BuilderPanel({
               <div className="space-y-8">
                 {STAT_DISPLAY_ORDER.map((key) => {
                   const i = STAT_ORDER.indexOf(key);
-                  const icon = statIcons[key];
-                  // Achievable ceiling for this stat given the others. Overlay it as a
-                  // lighter fill up to that max (full-width at 200); omit only while
-                  // unknown (before the first search). Every wording derived from the
-                  // proven/unproven distinction lives in this ONE object so the visible
-                  // text, tick label, and accessible names can't drift apart: an exact
-                  // ceiling is a hard "/ max"; an unproven one is a lower bound ("81+"
-                  // — achievable, but possibly more out there, e.g. while a refinement
-                  // is still probing or its budget expired). Both render "/ n" inline;
-                  // only the tick label and accessible wording mark the difference.
-                  const cap = ceilings ? ceilings[i] : null;
-                  const ceilingValue = cap ?? undefined;
-                  const capText =
-                    cap === null
-                      ? null
-                      : ceilingsExact
-                        ? {
-                            srText: `${STAT_LABELS[key]} achievable max: ${cap}`,
-                            tickLabel: "Max",
-                            tickAria: `Set ${STAT_LABELS[key]} to its max (${cap})`,
-                          }
-                        : {
-                            srText: `${STAT_LABELS[key]} achievable: at least ${cap}`,
-                            tickLabel: `${cap}+`,
-                            tickAria: `Set ${STAT_LABELS[key]} to its highest proven value (${cap})`,
-                          };
                   return (
-                    // Figma 14:5183: 16px icon · Progress-style slider with tick labels
-                    // beneath · 40×28 value box + "/ max". Icon and box centre on the track.
-                    <div key={key} className="flex items-start gap-2.5">
-                      <div className="flex min-w-0 flex-1 items-start gap-1">
-                        {icon ? (
-                          <TooltipLabel label={STAT_LABELS[key]}>
-                            <Image
-                              src={`${BUNGIE_IMAGE_BASE}${icon}`}
-                              alt={STAT_LABELS[key]}
-                              tabIndex={0}
-                              width={16}
-                              height={16}
-                              className="mt-1.5 size-4 shrink-0 opacity-65 invert dark:invert-0"
-                              unoptimized
-                            />
-                          </TooltipLabel>
-                        ) : (
-                          <span className="mt-1.5 size-4 shrink-0" aria-hidden />
-                        )}
-                        <div className="min-w-0 flex-1 pt-1">
-                          <Slider
-                            min={0}
-                            max={STAT_SLIDER_MAX}
-                            step={1}
-                            value={[targets[i]]}
-                            onValueChange={(v) =>
-                              setTarget(i, Array.isArray(v) ? v[0] : v)
-                            }
-                            ceiling={ceilingValue}
-                            aria-label={`${STAT_LABELS[key]} target`}
-                            className="cursor-pointer"
-                          />
-                          <div className="relative mt-0.5 h-4">
-                            {STAT_TARGET_TICKS.map((t) => {
-                              // Once a ceiling is known, the top tick jumps the target to
-                              // that achievable value instead of 200 (labels per capText).
-                              const isCeilingTick =
-                                t === STAT_SLIDER_MAX && cap !== null;
-                              const tickValue = isCeilingTick ? cap : t;
-                              const tickLabel = isCeilingTick
-                                ? capText!.tickLabel
-                                : t === STAT_SLIDER_MAX
-                                  ? "Max"
-                                  : String(t);
-                              const tickAria = isCeilingTick
-                                ? capText!.tickAria
-                                : `Set ${STAT_LABELS[key]} to ${t}`;
-                              return (
-                                <TooltipLabel label={tickAria} key={t}>
-                                  <button
-                                    type="button"
-                                    onClick={() => setTarget(i, tickValue)}
-                                    aria-label={tickAria}
-                                    style={{
-                                      left: sliderValueLeft(t, 0, STAT_SLIDER_MAX),
-                                    }}
-                                    className={cn(
-                                      // Centered under the thumb (sliderValueLeft is the thumb's center).
-                                      "absolute top-0 -translate-x-1/2 cursor-pointer text-xs leading-4 tabular-nums transition-colors after:absolute after:-inset-x-2 after:-inset-y-1.5 after:content-[''] focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-hidden",
-                                      targets[i] === tickValue
-                                        ? "text-foreground"
-                                        : "text-foreground/75 hover:text-foreground",
-                                    )}
-                                  >
-                                    {tickLabel}
-                                  </button>
-                                </TooltipLabel>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      </div>
-                      <div className="flex shrink-0 items-center gap-0.5">
-                        <Input
-                          type="number"
-                          min={0}
-                          max={STAT_SLIDER_MAX}
-                          step={1}
-                          value={targets[i]}
-                          aria-label={`${STAT_LABELS[key]} target value`}
-                          onFocus={(e) => e.target.select()}
-                          onChange={(e) => {
-                            const n = Math.round(Number(e.target.value));
-                            setTarget(
-                              i,
-                              Number.isFinite(n)
-                                ? Math.max(0, Math.min(STAT_SLIDER_MAX, n))
-                                : 0,
-                            );
-                          }}
-                          className="h-7 w-10 px-2 text-center text-xs tabular-nums [appearance:textfield] md:text-xs [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-                        />
-                        {capText && (
-                          <span className="sr-only">{capText.srText}</span>
-                        )}
-                        <span
-                          className="text-muted-foreground w-9 shrink-0 text-xs tabular-nums whitespace-nowrap"
-                          aria-hidden
-                        >
-                          / {cap ?? STAT_SLIDER_MAX}
-                        </span>
-                      </div>
-                    </div>
+                    <StatTargetRow
+                      key={key}
+                      statKey={key}
+                      index={i}
+                      icon={statIcons[key]}
+                      value={targets[i]}
+                      ceilingsView={ceilingsView}
+                      onChange={setTarget}
+                    />
                   );
                 })}
               </div>
@@ -1011,14 +878,32 @@ export function BuilderPanel({
                   <span aria-hidden />
                   <span className="text-sm">2pc</span>
                   <span className="text-sm">4pc</span>
-                  {pinnedList.map(renderSetRow)}
+                  {pinnedList.map((s) => (
+                    <SetRow
+                      key={s.setHash}
+                      set={s}
+                      pinned
+                      req={setReqs[s.setHash]}
+                      onTogglePin={togglePin}
+                      onToggleSet={toggleSet}
+                    />
+                  ))}
                   {pinnedList.length > 0 && unpinnedList.length > 0 && (
                     <div
                       className="border-border col-span-full border-t"
                       aria-hidden
                     />
                   )}
-                  {unpinnedList.map(renderSetRow)}
+                  {unpinnedList.map((s) => (
+                    <SetRow
+                      key={s.setHash}
+                      set={s}
+                      pinned={false}
+                      req={setReqs[s.setHash]}
+                      onTogglePin={togglePin}
+                      onToggleSet={toggleSet}
+                    />
+                  ))}
                 </div>
               )}
             </Section>
@@ -1032,7 +917,7 @@ export function BuilderPanel({
                   selected={fragSel[activeSubclass]}
                   onToggle={toggleFragment}
                   statIcons={statIcons}
-                  onApplyCurrent={() => void onApplyCurrentFragments()}
+                  onApplyCurrent={onApplyCurrentFragments}
                   applyDisabled={!canApplyCurrentFragments}
                   applyLoading={applyingFragments}
                 />
@@ -1096,6 +981,207 @@ export function BuilderPanel({
     </div>
   );
 }
+
+const StatTargetRow = memo(function StatTargetRow({
+  statKey,
+  index,
+  icon,
+  value,
+  ceilingsView,
+  onChange,
+}: {
+  statKey: (typeof STAT_DISPLAY_ORDER)[number];
+  index: number;
+  icon?: string;
+  value: number;
+  ceilingsView: ValueStore<CeilingsView>;
+  onChange: (index: number, value: number) => void;
+}) {
+  const { values: ceilings, exact: ceilingsExact } = useStoreValue(ceilingsView);
+  const cap = ceilings ? ceilings[index] : null;
+  const label = STAT_LABELS[statKey];
+  // Achievable ceiling for this stat given the others. Overlay it as a
+  // lighter fill up to that max (full-width at 200); omit only while
+  // unknown (before the first search). Every wording derived from the
+  // proven/unproven distinction lives in this ONE object so the visible
+  // text, tick label, and accessible names can't drift apart: an exact
+  // ceiling is a hard "/ max"; an unproven one is a lower bound ("81+"
+  // — achievable, but possibly more out there, e.g. while a refinement
+  // is still probing or its budget expired). Both render "/ n" inline;
+  // only the tick label and accessible wording mark the difference.
+  const ceilingValue = cap ?? undefined;
+  const capText =
+    cap === null
+      ? null
+      : ceilingsExact
+        ? {
+            srText: `${label} achievable max: ${cap}`,
+            tickLabel: "Max",
+            tickAria: `Set ${label} to its max (${cap})`,
+          }
+        : {
+            srText: `${label} achievable: at least ${cap}`,
+            tickLabel: `${cap}+`,
+            tickAria: `Set ${label} to its highest proven value (${cap})`,
+          };
+  return (
+    // Figma 14:5183: 16px icon · Progress-style slider with tick labels
+    // beneath · 40×28 value box + "/ max". Icon and box centre on the track.
+    <div className="flex items-start gap-2.5">
+      <div className="flex min-w-0 flex-1 items-start gap-1">
+        {icon ? (
+          <TooltipLabel label={label}>
+            <Image
+              src={`${BUNGIE_IMAGE_BASE}${icon}`}
+              alt={label}
+              tabIndex={0}
+              width={16}
+              height={16}
+              className="mt-1.5 size-4 shrink-0 opacity-65 invert dark:invert-0"
+              unoptimized
+            />
+          </TooltipLabel>
+        ) : (
+          <span className="mt-1.5 size-4 shrink-0" aria-hidden />
+        )}
+        <div className="min-w-0 flex-1 pt-1">
+          <Slider
+            min={0}
+            max={STAT_SLIDER_MAX}
+            step={1}
+            value={[value]}
+            onValueChange={(v) => onChange(index, Array.isArray(v) ? v[0] : v)}
+            ceiling={ceilingValue}
+            aria-label={`${label} target`}
+            className="cursor-pointer"
+          />
+          <div className="relative mt-0.5 h-4">
+            {STAT_TARGET_TICKS.map((t) => {
+              // Once a ceiling is known, the top tick jumps the target to
+              // that achievable value instead of 200 (labels per capText).
+              const isCeilingTick = t === STAT_SLIDER_MAX && cap !== null;
+              const tickValue = isCeilingTick ? cap : t;
+              const tickLabel = isCeilingTick
+                ? capText!.tickLabel
+                : t === STAT_SLIDER_MAX
+                  ? "Max"
+                  : String(t);
+              const tickAria = isCeilingTick
+                ? capText!.tickAria
+                : `Set ${label} to ${t}`;
+              return (
+                <TooltipLabel label={tickAria} key={t}>
+                  <button
+                    type="button"
+                    onClick={() => onChange(index, tickValue)}
+                    aria-label={tickAria}
+                    style={{
+                      left: sliderValueLeft(t, 0, STAT_SLIDER_MAX),
+                    }}
+                    className={cn(
+                      // Centered under the thumb (sliderValueLeft is the thumb's center).
+                      "absolute top-0 -translate-x-1/2 cursor-pointer text-xs leading-4 tabular-nums transition-colors after:absolute after:-inset-x-2 after:-inset-y-1.5 after:content-[''] focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-hidden",
+                      value === tickValue
+                        ? "text-foreground"
+                        : "text-foreground/75 hover:text-foreground",
+                    )}
+                  >
+                    {tickLabel}
+                  </button>
+                </TooltipLabel>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+      <div className="flex shrink-0 items-center gap-0.5">
+        <Input
+          type="number"
+          min={0}
+          max={STAT_SLIDER_MAX}
+          step={1}
+          value={value}
+          aria-label={`${label} target value`}
+          onFocus={(e) => e.target.select()}
+          onChange={(e) => {
+            const n = Math.round(Number(e.target.value));
+            onChange(
+              index,
+              Number.isFinite(n)
+                ? Math.max(0, Math.min(STAT_SLIDER_MAX, n))
+                : 0,
+            );
+          }}
+          className="h-7 w-10 px-2 text-center text-xs tabular-nums [appearance:textfield] md:text-xs [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+        />
+        {capText && <span className="sr-only">{capText.srText}</span>}
+        <span
+          className="text-muted-foreground w-9 shrink-0 text-xs tabular-nums whitespace-nowrap"
+          aria-hidden
+        >
+          / {cap ?? STAT_SLIDER_MAX}
+        </span>
+      </div>
+    </div>
+  );
+});
+
+const SetRow = memo(function SetRow({
+  set,
+  pinned,
+  req,
+  onTogglePin,
+  onToggleSet,
+}: {
+  set: ArmorSetInfo;
+  pinned: boolean;
+  req: 2 | 4 | undefined;
+  onTogglePin: (setHash: number) => void;
+  onToggleSet: (setHash: number, count: 2 | 4) => void;
+}) {
+  const perk2Info = set.perks.find((p) => p.requiredCount === 2);
+  const perk4Info = set.perks.find((p) => p.requiredCount === 4);
+  return (
+    <div className="group/set-row relative col-span-full grid grid-cols-subgrid items-center before:absolute before:inset-y-0 before:-left-7 before:w-7">
+      {/* Figma 17:5828 ("when row is hovered the pin appears"): the pin floats in
+          the left margin, 24px outside the name column. */}
+      <TooltipLabel label={pinned ? "Unpin set" : "Pin set"}>
+        <button
+          type="button"
+          onClick={() => onTogglePin(set.setHash)}
+          aria-label={pinned ? "Unpin set" : "Pin set"}
+          className={cn(
+            "absolute top-1/2 -left-7 flex size-6 -translate-y-1/2 items-center justify-center rounded-md transition-opacity outline-none focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring/50",
+            pinned
+              ? "text-foreground"
+              : "text-muted-foreground opacity-0 group-hover/set-row:opacity-100 group-focus-within/set-row:opacity-100 hover:text-foreground",
+          )}
+        >
+          <PushPin
+            weight={pinned ? "fill" : "regular"}
+            className="size-4"
+            aria-hidden
+          />
+        </button>
+      </TooltipLabel>
+      <span className="truncate text-sm">
+        {set.name} ({set.ownedCount})
+      </span>
+      <SetPerkCell
+        active={req === 2}
+        disabled={set.ownedCount < 2}
+        perk={perk2Info}
+        onToggle={() => onToggleSet(set.setHash, 2)}
+      />
+      <SetPerkCell
+        active={req === 4}
+        disabled={set.ownedCount < 4}
+        perk={perk4Info}
+        onToggle={() => onToggleSet(set.setHash, 4)}
+      />
+    </div>
+  );
+});
 
 function Section({
   title,

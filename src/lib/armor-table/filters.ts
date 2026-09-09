@@ -4,7 +4,7 @@
 // Runtime imports are relative (not `@/`) — the vitest runner has no `@/` alias,
 // matching the convention in normalize.ts / solve.ts.
 import { STAT_ORDER, type StatKey } from "../armory/stats";
-import { nameMatchesSearch } from "./search";
+import { nameMatchesNormalized, nameMatchesSearch } from "./search";
 
 /** A tuning facet value: a tuned-stat index, or "none" for untunable pieces. */
 export type TuningFilter = number | "none";
@@ -80,6 +80,8 @@ export function pieceMatchesFilters(
   tertiary: number | undefined,
   f: FacetFilters,
   searchTokens: readonly string[],
+  /** Pre-normalized name; when omitted the piece name is normalized here. */
+  normalizedName?: string,
 ): boolean {
   if (f.classes.length > 0 && !f.classes.includes(piece.classType)) return false;
   if (
@@ -104,7 +106,9 @@ export function pieceMatchesFilters(
     (tertiary === undefined || !f.tertiaries.includes(tertiary))
   )
     return false;
-  return nameMatchesSearch(piece.name, searchTokens);
+  return normalizedName !== undefined
+    ? nameMatchesNormalized(normalizedName, searchTokens)
+    : nameMatchesSearch(piece.name, searchTokens);
 }
 
 // --- sorting ---

@@ -57,6 +57,7 @@ import { plugInfoFromManifest } from "@/lib/loadouts/plug-info";
 import { getModCatalog } from "@/lib/loadouts/mod-options";
 import type { Manifest } from "@/lib/manifest/load";
 import { cn } from "@/lib/utils";
+import { useStoreValue, type ValueStore } from "@/lib/value-store";
 import { BUNGIE_IMAGE_BASE } from "@/lib/bungie/constants";
 import {
   equipItemRef,
@@ -69,6 +70,12 @@ import type {
   OptimizerOutput,
   RefinementState,
 } from "@/lib/optimizer/types";
+
+/** Latest slider targets and builder snapshot; rows read this only on user action. */
+export type GetBuilderState = () => {
+  targets: number[];
+  builderSnapshot?: BuilderSnapshot;
+};
 
 const MAX_SHOWN = 50;
 export { MAX_SHOWN };
@@ -142,11 +149,14 @@ export function StatGlyph({
   label,
   className,
   invert = true,
+  plain = false,
 }: {
   src?: string;
   label: string;
   className?: string;
   invert?: boolean;
+  /** Skip the tooltip root — used in collapsed row headers. */
+  plain?: boolean;
 }) {
   if (!src)
     return (
@@ -155,23 +165,27 @@ export function StatGlyph({
         aria-hidden
       />
     );
-  return (
-    <TooltipLabel label={label}>
-      <Image
-        src={`${BUNGIE_IMAGE_BASE}${src}`}
-        alt={label}
-        tabIndex={0}
-        width={16}
-        height={16}
-        className={cn(
-          "inline-block size-4 shrink-0",
-          invert && "invert dark:invert-0",
-          className,
-        )}
-        unoptimized
-      />
-    </TooltipLabel>
+  const img = (
+    // Tiny Bungie glyphs: skip next/image so collapsed rows don't pay optimizer + tooltip cost.
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={`${BUNGIE_IMAGE_BASE}${src}`}
+      alt={label}
+      title={plain ? label : undefined}
+      tabIndex={plain ? undefined : 0}
+      width={16}
+      height={16}
+      loading="lazy"
+      decoding="async"
+      className={cn(
+        "inline-block size-4 shrink-0",
+        invert && "invert dark:invert-0",
+        className,
+      )}
+    />
   );
+  if (plain) return img;
+  return <TooltipLabel label={label}>{img}</TooltipLabel>;
 }
 
 /**
@@ -233,8 +247,8 @@ interface BuildActionProps {
   tuningPlugHashes: Map<string, number> | null;
   artificeModHashes: (number | undefined)[] | null;
   subclass?: DimSubclassInput;
-  /** The builder state behind these results — stored with a saved loadout. */
-  builderSnapshot?: BuilderSnapshot;
+  /** Latest targets + snapshot, read only at click time so slider drags skip the rows. */
+  getBuilderState: GetBuilderState;
   /** For the Save dialog's mod picker (socket options come from the manifest). */
   manifest?: Manifest;
   /** Plugs the player can socket now — picks which copy of a mod the picker shows. */
@@ -254,13 +268,12 @@ const BuildRow = memo(function BuildRow({
   setMap,
   statIcons,
   balancedTuningIcon,
-  targets,
   characters,
   statModHashes,
   tuningPlugHashes,
   artificeModHashes,
   subclass,
-  builderSnapshot,
+  getBuilderState,
   manifest,
   insertablePlugs,
   onEquipped,
@@ -270,7 +283,6 @@ const BuildRow = memo(function BuildRow({
   setMap: Map<number, ArmorSetInfo>;
   statIcons: StatIconMap;
   balancedTuningIcon?: string;
-  targets: number[];
 } & BuildActionProps) {
   const [open, setOpen] = useState(false);
   const pieces = loadout.pieceIds.map((id) => pieceMap.get(id));
@@ -299,17 +311,17 @@ const BuildRow = memo(function BuildRow({
       >
         <div className="flex min-w-0 flex-1 items-center gap-3 2xl:gap-6">
           {exotic?.icon ? (
-            <TooltipLabel label={exotic.name} delay={100}>
-              <Image
-                tabIndex={0}
-                src={`${BUNGIE_IMAGE_BASE}${exotic.icon}`}
-                alt={exotic.name}
-                width={40}
-                height={40}
-                className="size-10 shrink-0 rounded-[2px]"
-                unoptimized
-              />
-            </TooltipLabel>
+            // eslint-disable-next-line @next/next/no-img-element -- collapsed header: no tooltip/optimizer
+            <img
+              src={`${BUNGIE_IMAGE_BASE}${exotic.icon}`}
+              alt={exotic.name}
+              title={exotic.name}
+              width={40}
+              height={40}
+              loading="lazy"
+              decoding="async"
+              className="size-10 shrink-0 rounded-[2px]"
+            />
           ) : (
             <span className="bg-muted size-10 shrink-0 rounded-[2px]" aria-hidden />
           )}
@@ -324,6 +336,7 @@ const BuildRow = memo(function BuildRow({
                   src={statIcons[key]}
                   label={STAT_LABELS[key]}
                   className="size-4 opacity-65 2xl:size-5"
+                  plain
                 />
                 <span>{loadout.stats[i]}</span>
               </span>
@@ -333,11 +346,13 @@ const BuildRow = memo(function BuildRow({
         <div className="flex shrink-0 items-center gap-2 2xl:gap-5">
           <span className="text-sm tabular-nums 2xl:text-base">{loadout.total}</span>
           {setBadges.map((b) => (
-            <TooltipLabel key={b.name} label={b.name} delay={100}>
-              <Badge className="px-1.5 text-[10px] max-lg:hidden 2xl:px-2 2xl:text-xs">
-                {b.count}pc
-              </Badge>
-            </TooltipLabel>
+            <Badge
+              key={b.name}
+              title={b.name}
+              className="px-1.5 text-[10px] max-lg:hidden 2xl:px-2 2xl:text-xs"
+            >
+              {b.count}pc
+            </Badge>
           ))}
         </div>
         <span
@@ -457,13 +472,12 @@ const BuildRow = memo(function BuildRow({
             pieces={pieces}
             exoticName={exotic?.name}
             setBadges={setBadges}
-            targets={targets}
             characters={characters}
             statModHashes={statModHashes}
             tuningPlugHashes={tuningPlugHashes}
             artificeModHashes={artificeModHashes}
             subclass={subclass}
-            builderSnapshot={builderSnapshot}
+            getBuilderState={getBuilderState}
             manifest={manifest}
             insertablePlugs={insertablePlugs}
             onEquipped={onEquipped}
@@ -485,13 +499,12 @@ function BuildActions({
   pieces,
   exoticName,
   setBadges,
-  targets,
   characters,
   statModHashes,
   tuningPlugHashes,
   artificeModHashes,
   subclass,
-  builderSnapshot,
+  getBuilderState,
   manifest,
   insertablePlugs,
   onEquipped,
@@ -500,7 +513,6 @@ function BuildActions({
   pieces: (ArmorPiece | undefined)[];
   exoticName?: string;
   setBadges: { name: string; count: number }[];
-  targets: number[];
 } & BuildActionProps) {
   const queryClient = useQueryClient();
   const [equipping, setEquipping] = useState(false);
@@ -535,8 +547,9 @@ function BuildActions({
   });
 
   /** The dim-api object for this build (shared by Open in DIM and Save). */
-  const makeDimLoadout = (name: string, notes?: string) =>
-    buildDimLoadout({
+  const makeDimLoadout = (name: string, notes?: string) => {
+    const { targets, builderSnapshot } = getBuilderState();
+    return buildDimLoadout({
       loadout,
       pieces: resolved,
       classType: buildClass ?? 3,
@@ -557,6 +570,7 @@ function BuildActions({
       setBonuses: builderSnapshot?.setReqs,
       artifactUnlocks: targetCharacter?.artifactUnlocks,
     });
+  };
 
   const openInDim = () => {
     if (!canActOnItems || !hasModHashes) return;
@@ -602,6 +616,7 @@ function BuildActions({
         ? { hash: item.hash }
         : item,
     );
+    const { builderSnapshot } = getBuilderState();
     createLoadout.mutate(
       withLoadoutSubclass(
         {
@@ -805,14 +820,21 @@ function ImprovedMaximaAlert() {
   );
 }
 
+function RefinementPercent({ store }: { store: ValueStore<number> }) {
+  const progress = useStoreValue(store);
+  return <>{Math.round(progress * 100)}%</>;
+}
+
 function SearchStatus({
   capped,
   refinement,
+  refinementProgress,
   onShowPending,
   onCancel,
 }: {
   capped: boolean;
   refinement: RefinementState;
+  refinementProgress: ValueStore<number>;
   onShowPending: () => void;
   onCancel: () => void;
 }) {
@@ -852,7 +874,7 @@ function SearchStatus({
                 higher stat maximums (
               </>
             )}
-            {Math.round(refinement.progress * 100)}%)
+            <RefinementPercent store={refinementProgress} />)
           </p>
           <Button
             variant="link"
@@ -929,10 +951,10 @@ function SearchStatus({
 export function BuildResults({
   result,
   refinement,
+  refinementProgress,
   onShowPending,
   onCancel,
   pieceMap,
-  targets,
   setMap,
   statIcons,
   balancedTuningIcon,
@@ -941,7 +963,7 @@ export function BuildResults({
   tuningPlugHashes,
   artificeModHashes,
   subclass,
-  builderSnapshot,
+  getBuilderState,
   manifest,
   insertablePlugs,
   onEquipped,
@@ -949,10 +971,10 @@ export function BuildResults({
 }: {
   result: OptimizerOutput;
   refinement: RefinementState;
+  refinementProgress: ValueStore<number>;
   onShowPending: () => void;
   onCancel: () => void;
   pieceMap: Map<string, ArmorPiece>;
-  targets: number[];
   setMap: Map<number, ArmorSetInfo>;
   statIcons: StatIconMap;
   balancedTuningIcon?: string;
@@ -966,6 +988,7 @@ export function BuildResults({
     <SearchStatus
       capped={result.capped}
       refinement={refinement}
+      refinementProgress={refinementProgress}
       onShowPending={onShowPending}
       onCancel={onCancel}
     />
@@ -999,13 +1022,12 @@ export function BuildResults({
             setMap={setMap}
             statIcons={statIcons}
             balancedTuningIcon={balancedTuningIcon}
-            targets={targets}
             characters={characters}
             statModHashes={statModHashes}
             tuningPlugHashes={tuningPlugHashes}
             artificeModHashes={artificeModHashes}
             subclass={subclass}
-            builderSnapshot={builderSnapshot}
+            getBuilderState={getBuilderState}
             manifest={manifest}
             insertablePlugs={insertablePlugs}
             onEquipped={onEquipped}

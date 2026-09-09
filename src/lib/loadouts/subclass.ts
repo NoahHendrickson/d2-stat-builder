@@ -1,4 +1,5 @@
 import type { Manifest } from "../manifest/load";
+import { memoByManifest } from "../manifest/memo";
 import { buildFragmentStats, type Subclass } from "../armory/fragments";
 import type { StatArray } from "../armory/stats";
 import {
@@ -85,7 +86,11 @@ export function superSocketIndex(manifest: SuperSocketLookup, itemHash: number):
 }
 
 /** Use the subclass's actual plug sets, so Prismatic variants stay class-correct. */
-export function subclassOptions(manifest: Manifest, classType: number, subclass: Subclass) {
+function computeSubclassOptions(
+  manifest: Manifest,
+  classType: number,
+  subclass: Subclass,
+) {
   const itemHash = SUBCLASS_ITEM_HASHES[subclass][classType];
   const def = manifest.def("DestinyInventoryItemDefinition", itemHash);
   const group = (start: number, count: number, includeInitial = false): SubclassSocketOptions => {
@@ -126,6 +131,28 @@ export function subclassOptions(manifest: Manifest, classType: number, subclass:
     aspects: group(aspectSocketStart(subclass), ASPECT_SOCKET_COUNT),
     fragments: group(FRAGMENT_SOCKET_START[subclass], FRAGMENT_SOCKET_COUNT),
   };
+}
+
+const subclassOptionsForManifest = memoByManifest((manifest: Manifest) => {
+  const cache = new Map<string, ReturnType<typeof computeSubclassOptions>>();
+  return (classType: number, subclass: Subclass) => {
+    const key = `${classType}:${subclass}`;
+    let value = cache.get(key);
+    if (!value) {
+      value = computeSubclassOptions(manifest, classType, subclass);
+      cache.set(key, value);
+    }
+    return value;
+  };
+});
+
+/** Use the subclass's actual plug sets, so Prismatic variants stay class-correct. */
+export function subclassOptions(
+  manifest: Manifest,
+  classType: number,
+  subclass: Subclass,
+) {
+  return subclassOptionsForManifest(manifest)(classType, subclass);
 }
 
 export type SubclassCatalog = ReturnType<typeof subclassOptions>;

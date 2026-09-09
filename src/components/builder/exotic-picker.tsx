@@ -1,5 +1,6 @@
 "use client";
 
+import { memo } from "react";
 import { TooltipLabel } from "@/components/ui/tooltip";
 import Image from "next/image";
 import { cn } from "@/lib/utils";
@@ -31,7 +32,7 @@ const tileSelected =
  * Thumbnail grid for choosing which exotic to build around. Click a tile to require
  * that exotic, click it again to clear. Nothing selected = the optimizer decides.
  */
-export function ExoticPicker({
+export const ExoticPicker = memo(function ExoticPicker({
   options,
   selected,
   onSelect,
@@ -96,4 +97,4 @@ export function ExoticPicker({
       )}
     </div>
   );
-}
+});

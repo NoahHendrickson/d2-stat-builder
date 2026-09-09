@@ -1,5 +1,6 @@
 "use client";
 
+import { memo } from "react";
 import { Switch } from "@/components/ui/switch";
 
 /**
@@ -8,7 +9,7 @@ import { Switch } from "@/components/ui/switch";
  * the master is off) but the stored preference is preserved and restored when the
  * master comes back on.
  */
-export function TuningControls({
+export const TuningControls = memo(function TuningControls({
   allowTuning,
   onAllowTuningChange,
   useBalancedTuning,
@@ -49,4 +50,4 @@ export function TuningControls({
       </div>
     </div>
   );
-}
+});
