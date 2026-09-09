@@ -1,15 +1,17 @@
 import { NextResponse } from "next/server";
 import { createBungieHttp } from "@/lib/bungie/http";
 import { getValidAccessToken, readUser } from "@/lib/bungie/session";
-import type { EquipItemState } from "@/lib/bungie/equip-plan";
+import type { EquipItemState, SpareItems } from "@/lib/bungie/equip-plan";
 import { stageAndEquip } from "@/lib/bungie/equip-server";
-import { bungieErrorResponse, parseEquipItems } from "@/lib/bungie/equip-route";
+import { bungieErrorResponse, parseEquipItems, parseSpares } from "@/lib/bungie/equip-route";
 
 interface EquipRequestBody {
   characterId: string;
   items: EquipItemState[];
   /** "move" stages the items on the character without equipping. Default "equip". */
   mode?: "move" | "equip";
+  /** Same-slot pieces the server may vault when a character's slot is full. */
+  spares: SpareItems;
 }
 
 function parseBody(body: unknown): EquipRequestBody | null {
@@ -18,7 +20,9 @@ function parseBody(body: unknown): EquipRequestBody | null {
   const items = parseEquipItems(b.items, { min: 1, max: 5 });
   if (!items) return null;
   if (b.mode !== undefined && b.mode !== "move" && b.mode !== "equip") return null;
-  return { characterId: b.characterId, items, mode: b.mode };
+  const spares = parseSpares(b.spares);
+  if (!spares) return null;
+  return { characterId: b.characterId, items, mode: b.mode, spares };
 }
 
 export async function POST(request: Request) {
@@ -44,6 +48,7 @@ export async function POST(request: Request) {
       membershipType: user.destinyMembershipType,
       characterId: body.characterId,
       items: body.items,
+      spares: body.spares,
       mode: body.mode,
     });
     return NextResponse.json({ results });

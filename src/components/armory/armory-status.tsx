@@ -14,6 +14,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { TooltipLabel } from "@/components/ui/tooltip";
 import { ArmoryDiagnosticsGate } from "@/components/armory/armory-diagnostics-gate";
+import { ApplyProgressSection } from "@/components/loadouts/apply-progress-card";
 import { useArmory } from "@/lib/armory/use-armory";
 import { useSession } from "@/lib/auth/use-session";
 import { BUNGIE_IMAGE_BASE } from "@/lib/bungie/constants";
@@ -150,6 +151,7 @@ export function ArmoryStatus() {
       aria-label="Account and game data"
       className="border-border bg-primary/6 flex w-full flex-col overflow-hidden rounded-2xl border"
     >
+      <ApplyProgressSection />
       <div className="flex flex-col gap-2 p-3">
         <div className="flex items-center gap-2">
           <StatusIcon state={armorState} />

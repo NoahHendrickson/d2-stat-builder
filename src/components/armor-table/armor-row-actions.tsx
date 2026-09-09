@@ -8,10 +8,13 @@ import { toast } from "@/lib/toast";
 import type { ArmorPiece } from "@/lib/armory/normalize";
 import type { ArmoryCharacter } from "@/lib/armory/fetch";
 import { CLASS_NAMES } from "@/lib/armory/stats";
+import { useArmory } from "@/lib/armory/use-armory";
+import { planSpares } from "@/lib/bungie/equip-plan";
 import {
   equipItemRef,
   lastPlayedCharacter,
   postEquipRequest,
+  vaultedNote,
 } from "@/lib/bungie/equip-client";
 import { Button } from "@/components/ui/button";
 
@@ -59,6 +62,7 @@ export function ArmorRowActions({
   onDone: () => void;
 }) {
   const queryClient = useQueryClient();
+  const armory = useArmory();
   const [busy, setBusy] = useState<Action | null>(null);
 
   const target = lastPlayedCharacter(characters, piece.classType);
@@ -71,11 +75,13 @@ export function ArmorRowActions({
     if (!target || busy) return;
     setBusy(action);
     try {
+      const items = [equipItemRef(piece)];
       const results = await postEquipRequest(
         {
           characterId: target.id,
           mode: action,
-          items: [equipItemRef(piece)],
+          items,
+          spares: planSpares(armory.data?.pieces ?? [], items, target.id),
         },
         {
           queryClient,
@@ -87,10 +93,13 @@ export function ArmorRowActions({
       const result = results[0];
       const className = CLASS_NAMES[piece.classType] ?? "character";
       if (result?.ok) {
+        const nameOf = (id: string) =>
+          armory.data?.pieces.find((p) => p.instanceId === id)?.name ?? "a piece";
         toast.success(
           action === "move"
             ? `Moved ${piece.name} to your ${className}`
             : `Equipped ${piece.name} on your ${className}`,
+          result.vaulted?.length ? vaultedNote(result.vaulted, nameOf) : undefined,
         );
         onDone();
       } else {

@@ -344,6 +344,7 @@ export const LoadoutRow = memo(function LoadoutRow({
         saved,
         resolved,
         character: targetCharacter,
+        armory: pieceMap.values(),
         manifest,
         queryClient,
       });

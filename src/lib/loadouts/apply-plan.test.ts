@@ -50,6 +50,7 @@ describe("general stat mods", () => {
       plugInfo,
     });
     expect(plan.alreadyApplied).toEqual(["Major A → has-major"]);
+    expect(plan.inPlace.map((p) => [p.plugItemHash, p.itemInstanceId])).toEqual([[101, "has-major"]]);
     expect(plan.plugs.map((p) => [p.plugItemHash, p.itemInstanceId, p.socketIndex])).toEqual([
       [102, "empty", 1],
       [201, "full", 1],
@@ -212,6 +213,7 @@ describe("fragments", () => {
     });
     expect(plan.plugs.map((p) => [p.socketIndex, p.plugItemHash, p.label])).toEqual([[4, 902, "Ability #902 → subclass"]]);
     expect(plan.alreadyApplied).toEqual(["Ability #911 → subclass"]);
+    expect(plan.inPlace.map((p) => [p.socketIndex, p.plugItemHash])).toEqual([[3, 911]]);
   });
 
   test("applies aspects before fragments, retains swaps, and clears removed selections", () => {
@@ -256,6 +258,7 @@ describe("fragments", () => {
       },
     });
     expect(plan.alreadyApplied).toEqual(["Fragment One → subclass"]);
+    expect(plan.inPlace.map((p) => [p.socketIndex, p.plugItemHash])).toEqual([[8, 501]]);
     expect(plan.plugs.map((p) => [p.socketIndex, p.plugItemHash])).toEqual([
       [7, 502],
       [9, 503],

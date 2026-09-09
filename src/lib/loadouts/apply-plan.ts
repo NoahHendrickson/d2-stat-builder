@@ -54,6 +54,8 @@ export interface ApplyPlan {
   plugs: PlugAction[];
   /** Plugs that are already socketed exactly where they'd go. */
   alreadyApplied: string[];
+  /** Same as `alreadyApplied`, as actions — so the progress grid can show them. */
+  inPlace: PlugAction[];
   /** Plugs that couldn't be placed, with the reason. */
   skipped: string[];
   /**
@@ -116,6 +118,7 @@ const GROUP_LABEL: Record<SubclassPlugGroup["kind"], string> = {
 export function planLoadoutPlugs(input: PlanInput): ApplyPlan {
   const { plugInfo } = input;
   const plugs: PlugAction[] = [];
+  const inPlace: PlugAction[] = [];
   const alreadyApplied: string[] = [];
   const skipped: string[] = [];
   const unplaced: number[] = [];
@@ -156,14 +159,16 @@ export function planLoadoutPlugs(input: PlanInput): ApplyPlan {
   const assigned: Record<string, Record<number, number>> = {};
   const place = (st: PieceState, socket: PlanSocket, hash: number, info: PlugInfo) => {
     const label = `${info.name} → ${st.piece.name}`;
+    const action = { itemInstanceId: st.piece.instanceId, socketIndex: socket.index, plugItemHash: hash, label };
     st.taken.add(socket.index);
     (assigned[st.piece.instanceId] ??= {})[socket.index] = hash;
     if (st.plugs.get(socket.index) === hash) {
       alreadyApplied.push(label);
+      inPlace.push(action);
       return;
     }
     st.plugs.set(socket.index, hash);
-    plugs.push({ itemInstanceId: st.piece.instanceId, socketIndex: socket.index, plugItemHash: hash, label });
+    plugs.push(action);
   };
 
   // Mods still to place (multiset, in loadout order).
@@ -276,8 +281,13 @@ export function planLoadoutPlugs(input: PlanInput): ApplyPlan {
       });
       for (const hash of desired) {
         const name = plugInfo(hash)?.name ?? `${GROUP_LABEL[group.kind]} #${hash}`;
+        const label = `${name} → subclass`;
         if (present.has(hash)) {
-          alreadyApplied.push(`${name} → subclass`);
+          alreadyApplied.push(label);
+          const socketIndex = indices.find((i) => group.current[i] === hash);
+          if (socketIndex !== undefined) {
+            inPlace.push({ itemInstanceId: sc.instanceId, socketIndex, plugItemHash: hash, label });
+          }
           continue;
         }
         const socket = free.shift();
@@ -311,5 +321,5 @@ export function planLoadoutPlugs(input: PlanInput): ApplyPlan {
     placement[st.piece.instanceId] = row;
   }
 
-  return { plugs, alreadyApplied, skipped, unplaced, placement, assigned };
+  return { plugs, alreadyApplied, inPlace, skipped, unplaced, placement, assigned };
 }

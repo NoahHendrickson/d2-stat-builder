@@ -63,7 +63,9 @@ import {
   equipItemRef,
   lastPlayedCharacter,
   postEquipRequest,
+  vaultedNote,
 } from "@/lib/bungie/equip-client";
+import { planSpares } from "@/lib/bungie/equip-plan";
 import type {
   AppliedTuning,
   OptimizerLoadout,
@@ -253,6 +255,8 @@ interface BuildActionProps {
   /** Plugs the player can socket now — picks which copy of a mod the picker shows. */
   insertablePlugs?: ReadonlySet<number>;
   onEquipped?: () => void;
+  /** Every owned piece — same-slot spares to vault if the character's slot is full. */
+  pieceMap: ReadonlyMap<string, ArmorPiece>;
 }
 
 /**
@@ -480,6 +484,7 @@ const BuildRow = memo(function BuildRow({
             manifest={manifest}
             insertablePlugs={insertablePlugs}
             onEquipped={onEquipped}
+            pieceMap={pieceMap}
           />
         </div>
       )}
@@ -507,6 +512,7 @@ function BuildActions({
   manifest,
   insertablePlugs,
   onEquipped,
+  pieceMap,
 }: {
   loadout: OptimizerLoadout;
   pieces: (ArmorPiece | undefined)[];
@@ -662,19 +668,25 @@ function BuildActions({
     if (!canActOnItems || !targetCharacter || equipping) return;
     setEquipping(true);
     try {
+      const items = resolved.map(equipItemRef);
       const results = await postEquipRequest(
         {
           characterId: targetCharacter.id,
-          items: resolved.map(equipItemRef),
+          items,
+          spares: planSpares(pieceMap.values(), items, targetCharacter.id),
         },
         { queryClient, failureMessage: "Equip failed" },
       );
       if (!results) return;
 
       const failed = results.filter((r) => !r.ok);
+      const vaultedIds = results.flatMap((r) => r.vaulted ?? []);
       if (failed.length === 0) {
         toast.success(
           `Equipped on your ${CLASS_NAMES[buildClass ?? -1] ?? "character"}`,
+          vaultedIds.length
+            ? vaultedNote(vaultedIds, (id) => pieceMap.get(id)?.name ?? "a piece")
+            : undefined,
         );
         onEquipped?.();
       } else {

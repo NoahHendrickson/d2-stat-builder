@@ -5,7 +5,7 @@
 import { NextResponse } from "next/server";
 import { BungieHttpError } from "./http";
 import { clearSession } from "./session";
-import type { EquipItemState } from "./equip-plan";
+import { MAX_SPARES_PER_ITEM, type EquipItemState, type SpareItems } from "./equip-plan";
 
 /** Validate a client-supplied item list; null if malformed or outside `min`–`max` items. */
 export function parseEquipItems(
@@ -18,11 +18,28 @@ export function parseEquipItems(
       typeof i?.itemInstanceId !== "string" ||
       !i.itemInstanceId ||
       typeof i.itemHash !== "number" ||
-      (i.characterId !== undefined && typeof i.characterId !== "string")
+      (i.characterId !== undefined && typeof i.characterId !== "string") ||
+      (i.isExotic !== undefined && typeof i.isExotic !== "boolean")
     )
       return null;
   }
   return v as EquipItemState[];
+}
+
+/**
+ * Validate the optional make-room map (staged item id → same-slot spares the server may
+ * vault). Absent means "don't make room"; malformed or oversized lists are rejected.
+ */
+export function parseSpares(v: unknown): SpareItems | null {
+  if (v === undefined) return {};
+  if (!v || typeof v !== "object" || Array.isArray(v)) return null;
+  const out: SpareItems = {};
+  for (const [id, list] of Object.entries(v as Record<string, unknown>)) {
+    const items = parseEquipItems(list, { min: 0, max: MAX_SPARES_PER_ITEM });
+    if (!items) return null;
+    if (items.length > 0) out[id] = items;
+  }
+  return out;
 }
 
 /**

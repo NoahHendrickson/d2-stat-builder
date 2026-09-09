@@ -448,7 +448,7 @@ const PiecePanel = memo(function PiecePanel({
   return (
     <section
       aria-label={piece.name}
-      className="bg-sidebar flex min-h-0 min-w-0 flex-col gap-3 rounded-md px-3 py-2.5"
+      className="flex min-h-0 min-w-0 flex-col gap-3 px-7 py-2.5"
     >
       <div className="flex min-w-0 shrink-0 items-center gap-2.5">
         <PieceThumb piece={piece} />
@@ -469,7 +469,7 @@ const PiecePanel = memo(function PiecePanel({
           </span>
         </div>
       </div>
-      {/* Like the subclass card, the mods scroll inside the panel, not the drawer. */}
+      {/* Mods scroll inside the column, not the drawer. */}
       <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto overscroll-contain">
         {groups.length === 0 ? (
           <p className="text-muted-foreground text-xs">No mod sockets.</p>
@@ -729,7 +729,7 @@ function EditorForm({
 
       {/* Body: subclass + pieces side by side, each column with its options. The body
           itself doesn't scroll at a single row; the grid takes the leftover height and
-          the subclass card scrolls its own options. */}
+          the subclass column scrolls its own options. */}
       <div className="flex min-h-0 flex-1 flex-col px-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
         {description && !mods && (
           <p className="text-muted-foreground mb-3 text-xs">{description}</p>
@@ -738,13 +738,13 @@ function EditorForm({
             Gated so the header can paint before ~550 tooltip roots and images mount. */}
         {showGrids && (
           <div
-            className="grid min-h-0 flex-1 grid-cols-[repeat(auto-fit,minmax(11rem,1fr))] gap-2 lg:grid-cols-[repeat(var(--editor-cols),minmax(0,1fr))]"
+            className="divide-border grid min-h-0 flex-1 grid-cols-[repeat(auto-fit,minmax(11rem,1fr))] divide-x lg:grid-cols-[repeat(var(--editor-cols),minmax(0,1fr))]"
             style={{ "--editor-cols": (mods?.pieces.length ?? 0) + (subclass ? 1 : 0) } as CSSProperties}
           >
             {subclass && (
               <section
                 aria-label="Subclass"
-                className="bg-sidebar flex min-h-0 min-w-0 flex-col gap-3 rounded-md px-3 py-2.5"
+                className="flex min-h-0 min-w-0 flex-col gap-3 px-7 py-2.5"
               >
                 <div className="flex min-w-0 shrink-0 items-center gap-2.5">
                   <ItemIcon icon={subclassDef?.displayProperties?.icon} size={24} />
@@ -753,7 +753,7 @@ function EditorForm({
                     <span className="text-muted-foreground text-xs">Subclass</span>
                   </div>
                 </div>
-                {/* The card scrolls its options; the drawer body stays put. */}
+                {/* The column scrolls its options; the drawer body stays put. */}
                 <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
                   <LoadoutSubclassEditor
                     section={subclass}

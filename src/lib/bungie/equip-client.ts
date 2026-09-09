@@ -6,12 +6,15 @@ import { toast } from "@/lib/toast";
 import type { ArmorPiece } from "../armory/normalize";
 import type { ArmoryCharacter } from "../armory/fetch";
 import { characterForClass } from "../armory/character-for-class";
+import type { SpareItems } from "./equip-plan";
 
 /** Per-item outcome from POST /api/bungie/equip. */
 export interface EquipResult {
   itemInstanceId: string;
   ok: boolean;
   message?: string;
+  /** Instance ids of same-slot pieces vaulted off the character to make room. */
+  vaulted?: string[];
 }
 
 /** The most recently played character of the given class. */
@@ -23,6 +26,11 @@ export function lastPlayedCharacter(
   return characterForClass(characters, classType);
 }
 
+/** "vaulted Helm A to make room" — the note for an item that needed a spare vaulted first. */
+export function vaultedNote(ids: string[], nameOf: (id: string) => string) {
+  return `vaulted ${ids.map(nameOf).join(", ")} to make room`;
+}
+
 /** The request-body item shape the equip route expects. */
 export function equipItemRef(piece: ArmorPiece) {
   return {
@@ -30,6 +38,7 @@ export function equipItemRef(piece: ArmorPiece) {
     itemHash: piece.itemHash,
     location: piece.location,
     characterId: piece.characterId,
+    isExotic: piece.isExotic,
   };
 }
 
@@ -44,6 +53,8 @@ export async function postEquipRequest(
     items: ReturnType<typeof equipItemRef>[];
     /** "move" stages the items on the character without equipping. */
     mode?: "move" | "equip";
+    /** Same-slot pieces the server may vault when the character's slot is full (see planSpares). */
+    spares?: SpareItems;
   },
   opts: { queryClient: QueryClient; failureMessage: string },
 ): Promise<EquipResult[] | null> {
