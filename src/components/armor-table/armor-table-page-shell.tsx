@@ -34,7 +34,7 @@ export function ArmorTablePageShell() {
   // Fills the app shell's main area (which is the viewport height) so the table
   // body becomes the scroll container the row virtualizer needs.
   return (
-    <main className="flex h-full w-full flex-col px-4 py-4 lg:px-6">
+    <main className="flex h-full w-full flex-col px-6 py-6 lg:px-12 lg:py-8">
       <ArmorTable />
     </main>
   );

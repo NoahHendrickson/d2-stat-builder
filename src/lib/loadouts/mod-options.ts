@@ -1,6 +1,12 @@
 import type { Manifest } from "@/lib/manifest/load";
 import type { ArmorPiece, ArmorSocket } from "@/lib/armory/normalize";
-import { BALANCED_TUNING_PLUG_HASH, STAT_LABELS, STAT_ORDER } from "@/lib/armory/stats";
+import {
+  BALANCED_TUNING_PLUG_HASH,
+  STAT_LABELS,
+  STAT_ORDER,
+  plugKindForCategory,
+  type ArmorSocketKind,
+} from "@/lib/armory/stats";
 import { getArtificeModHashes, getTuningPlugHashes } from "@/lib/dim/mod-hashes";
 
 /** One pickable mod for a socket. */
@@ -25,9 +31,16 @@ const ENERGY_COST_STAT_HASH = 3578062600;
 /** Insertion-rule text on mods the game won't take twice on one piece. */
 const NO_STACK_RULE = "Similar mod already applied";
 
+/** Last Wish leftover; deprecated and not useful in the picker. */
+export function isExcludedModName(name: string): boolean {
+  const n = name.toLowerCase();
+  return n.includes("curse of riven") || n.includes("riven's curse");
+}
+
 function optionFor(manifest: Manifest, hash: number): ModOption | undefined {
   const def = manifest.def("DestinyInventoryItemDefinition", hash);
   if (!def || def.redacted || !def.displayProperties?.name || def.plug?.isDummyPlug) return undefined;
+  if (isExcludedModName(def.displayProperties.name)) return undefined;
   // "Locked Armor Mod" / "Empty Mod Socket" placeholders sit in every plug set. They
   // are the only entries that neither grant a perk nor move a stat.
   const doesSomething =
@@ -163,6 +176,13 @@ export class ModOptionCatalog {
   /** Display info for a plug hash (any kind), or undefined if unknown. */
   option(hash: number): ModOption | undefined {
     return optionFor(this.manifest, hash);
+  }
+
+  /** Socket kind this plug belongs to, or undefined if it isn't an armor mod. */
+  kind(hash: number): ArmorSocketKind | undefined {
+    const cat = this.manifest.def("DestinyInventoryItemDefinition", hash)?.plug
+      ?.plugCategoryIdentifier;
+    return cat ? plugKindForCategory(cat) : undefined;
   }
 }
 

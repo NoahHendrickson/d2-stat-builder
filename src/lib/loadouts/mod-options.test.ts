@@ -1,5 +1,5 @@
 import { test, expect } from "vitest";
-import { dedupeModOptions, type ModOption } from "./mod-options";
+import { dedupeModOptions, isExcludedModName, type ModOption } from "./mod-options";
 
 const opt = (hash: number, name: string, cost: number, artifactOnly = false): ModOption => ({
   hash,
@@ -27,4 +27,10 @@ test("dedupeModOptions prefers the copy the player can insert", () => {
 
 test("dedupeModOptions drops exact hash repeats", () => {
   expect(dedupeModOptions([dynamo, dynamo])).toHaveLength(1);
+});
+
+test("isExcludedModName hides Curse of Riven leftovers", () => {
+  expect(isExcludedModName("Curse of Riven")).toBe(true);
+  expect(isExcludedModName("Riven's Curse")).toBe(true);
+  expect(isExcludedModName("Arc Siphon")).toBe(false);
 });

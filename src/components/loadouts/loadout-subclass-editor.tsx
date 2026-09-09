@@ -1,9 +1,17 @@
 "use client";
 
 import { TooltipLabel } from "@/components/ui/tooltip";
-import { useId, useMemo, type ReactNode } from "react";
+import { useEffect, useId, useMemo, useState, type CSSProperties } from "react";
 import Image from "next/image";
+import { CaretDown } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { BUNGIE_IMAGE_BASE } from "@/lib/bungie/constants";
 import { SUBCLASSES, type Subclass } from "@/lib/armory/fragments";
@@ -20,11 +28,36 @@ import {
   type SubclassPlugOption,
   type SubclassSocketOptions,
 } from "@/lib/loadouts/subclass";
+import { cachedLightTint, sampleLightTint } from "@/lib/light-tint";
 
 export interface SubclassSection {
   manifest: Manifest;
   classType: number;
   initial: DimLoadoutItem | null;
+}
+
+function useIconLightTint(icon: string | undefined) {
+  const src = icon ? `${BUNGIE_IMAGE_BASE}${icon}` : undefined;
+  const [tint, setTint] = useState(() => (src ? cachedLightTint(src) : undefined));
+  useEffect(() => {
+    if (!src) {
+      setTint(undefined);
+      return;
+    }
+    const hit = cachedLightTint(src);
+    if (hit !== undefined) {
+      setTint(hit);
+      return;
+    }
+    let live = true;
+    sampleLightTint(src).then((color) => {
+      if (live) setTint(color);
+    });
+    return () => {
+      live = false;
+    };
+  }, [src]);
+  return tint;
 }
 
 function PlugOptionButton({
@@ -33,15 +66,70 @@ function PlugOptionButton({
   disabled,
   onClick,
   detail,
+  compact,
+  flush,
+  backed,
 }: {
   option: SubclassPlugOption;
   checked: boolean;
   disabled?: boolean;
   onClick: () => void;
-  detail?: ReactNode;
+  detail?: string;
+  /** Icon-only 56px cell (matches the drawer's mod cells); the name is the tooltip. */
+  compact?: boolean;
+  /** Image fills the cell so the border sits on the artwork (non-super abilities). */
+  flush?: boolean;
+  /** Opaque tint behind a flush icon (Prismatic fragments are translucent). */
+  backed?: boolean;
 }) {
+  const tint = useIconLightTint(compact && (!flush || backed) ? option.icon : undefined);
+  if (compact) {
+    const name = option.name || "Unknown";
+    return (
+      <TooltipLabel label={name}>
+        <button
+          type="button"
+          aria-pressed={checked}
+          aria-label={name}
+          aria-disabled={disabled || undefined}
+          onClick={() => {
+            if (!disabled) onClick();
+          }}
+          style={tint ? ({ "--icon-tint": tint } as CSSProperties) : undefined}
+          className={cn(
+            "focus-visible:ring-ring flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-none border transition-[opacity,border-color,background-color] outline-none focus-visible:ring-2",
+            flush ? "p-0" : "p-1",
+            tint && "bg-[hsl(var(--icon-tint)_72%)] dark:bg-[hsl(var(--icon-tint)_26%)]",
+            checked
+              ? "border-emphatic cursor-pointer"
+              : disabled
+                ? "cursor-not-allowed border-input opacity-40"
+                : "cursor-pointer border-input",
+            checked && !tint && "bg-emphatic/6",
+            !checked && !disabled && !tint && "hover:bg-foreground/6 focus-visible:bg-foreground/6",
+          )}
+        >
+          {option.icon ? (
+            <Image
+              src={`${BUNGIE_IMAGE_BASE}${option.icon}`}
+              alt=""
+              width={flush ? 56 : 48}
+              height={flush ? 56 : 48}
+              className={cn("shrink-0 rounded-none", flush ? "size-full" : "size-12")}
+              unoptimized
+            />
+          ) : (
+            <span
+              className={cn("bg-muted shrink-0 rounded-none", flush ? "size-full" : "size-12")}
+              aria-hidden
+            />
+          )}
+        </button>
+      </TooltipLabel>
+    );
+  }
   return (
-    <TooltipLabel label={option.description} disabled={disabled}>
+    <TooltipLabel label={option.name || "Unknown"} disabled={disabled}>
       <Button
         type="button"
         variant="outline"
@@ -76,17 +164,25 @@ function PlugOptionButton({
   );
 }
 
+/** Option layout: wrapping icon cells when compact, two wide buttons per row otherwise. */
+const OPTIONS_GRID = "grid gap-1.5 sm:grid-cols-2";
+const OPTIONS_CELLS = "flex flex-wrap gap-0.5";
+
 /** One optional, single-choice socket: Super, class ability, jump, melee, grenade. */
 function AbilityGroup({
   label,
   group,
   value,
   onChange,
+  compact,
+  flush,
 }: {
   label: string;
   group: SubclassSocketOptions;
   value: DimLoadoutItem;
   onChange: (value: DimLoadoutItem) => void;
+  compact: boolean;
+  flush?: boolean;
 }) {
   const selected = selectedSubclassPlugs(value, group)[0];
   if (group.options.length === 0) return null;
@@ -98,7 +194,7 @@ function AbilityGroup({
           {selected !== undefined ? "1/1 selected" : "Keep in-game choice"}
         </span>
       </div>
-      <div className="grid gap-1.5 sm:grid-cols-2 sm:group-data-[compact]/subclass:grid-cols-1">
+      <div className={compact ? OPTIONS_CELLS : OPTIONS_GRID}>
         {group.options.map((option) => {
           const checked = option.hash === selected;
           return (
@@ -106,6 +202,8 @@ function AbilityGroup({
               key={option.hash}
               option={option}
               checked={checked}
+              compact={compact}
+              flush={flush}
               onClick={() =>
                 onChange(withSubclassPlugs(value, group, checked ? [] : [option.hash]))
               }
@@ -171,30 +269,44 @@ export function LoadoutSubclassEditor({
         <label htmlFor={id} className="text-sm font-medium">
           Subclass
         </label>
-        <select
-          id={id}
-          value={active ?? ""}
-          className="border-input bg-background min-w-0 max-w-full rounded-md border px-2 py-1.5 text-sm"
-          onChange={(e) => {
-            const sc = e.target.value as Subclass | "";
-            onChange(sc ? { hash: catalog[sc].itemHash } : null);
-          }}
-        >
-          <option value="">No subclass</option>
-          {SUBCLASSES.map((s) => (
-            <option key={s} value={s}>
-              {s} · {catalog[s].name}
-            </option>
-          ))}
-        </select>
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            id={id}
+            aria-label="Subclass"
+            className="inline-flex h-8 w-full min-w-0 cursor-pointer items-center justify-between gap-1.5 rounded-lg border border-input bg-transparent pr-2 pl-2.5 text-sm whitespace-nowrap transition-colors outline-none select-none hover:bg-muted/60 focus-visible:border-emphatic data-popup-open:border-emphatic dark:bg-input/30 dark:hover:bg-input/50"
+          >
+            <span className="truncate">
+              {active ? `${active} · ${catalog[active].name}` : "No subclass"}
+            </span>
+            <CaretDown className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start">
+            <DropdownMenuRadioGroup
+              value={active ?? "none"}
+              onValueChange={(v) => {
+                if (v === "none") onChange(null);
+                else onChange({ hash: catalog[v as Subclass].itemHash });
+              }}
+            >
+              <DropdownMenuRadioItem value="none">No subclass</DropdownMenuRadioItem>
+              {SUBCLASSES.map((s) => (
+                <DropdownMenuRadioItem key={s} value={s}>
+                  {s} · {catalog[s].name}
+                </DropdownMenuRadioItem>
+              ))}
+            </DropdownMenuRadioGroup>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
       {options && value && (
         <>
-          <p className="text-muted-foreground text-xs">
-            Choose abilities, aspects, and fragments for this loadout. Any ability
-            you leave unset keeps whatever is equipped in game. Changing subclass
-            clears these selections.
-          </p>
+          {!compact && (
+            <p className="text-muted-foreground text-xs">
+              Choose abilities, aspects, and fragments for this loadout. Any ability
+              you leave unset keeps whatever is equipped in game. Changing subclass
+              clears these selections.
+            </p>
+          )}
           {ABILITY_KINDS.map((kind) => (
             <AbilityGroup
               key={kind}
@@ -202,6 +314,8 @@ export function LoadoutSubclassEditor({
               group={options.abilities[kind]}
               value={value}
               onChange={onChange}
+              compact={compact}
+              flush={kind !== "super"}
             />
           ))}
           {(["aspects", "fragments"] as const).map((kind) => {
@@ -222,7 +336,7 @@ export function LoadoutSubclassEditor({
                     unspecified, your in-game aspects are kept.
                   </p>
                 )}
-                <div className="grid gap-1.5 sm:grid-cols-2 sm:group-data-[compact]/subclass:grid-cols-1">
+                <div className={compact ? OPTIONS_CELLS : OPTIONS_GRID}>
                   {group.options.map((option) => {
                     const checked = selected.includes(option.hash);
                     const statText = option.stats
@@ -239,6 +353,9 @@ export function LoadoutSubclassEditor({
                         key={option.hash}
                         option={option}
                         checked={checked}
+                        compact={compact}
+                        flush
+                        backed={kind === "fragments" && active === "Prismatic"}
                         disabled={!checked && selected.length >= limit}
                         detail={
                           kind === "aspects"

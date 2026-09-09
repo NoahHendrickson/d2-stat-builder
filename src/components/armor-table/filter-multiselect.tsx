@@ -9,14 +9,17 @@ import {
   fieldFilterControlShellClasses,
 } from "@/lib/field-surface";
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 /** "Warlock" for one selection, "Gunner +2 more" for several, null when empty. */
 export function selectionSummaryText<V>(
@@ -44,7 +47,7 @@ export function selectionSummary<V>(
 }
 
 export const filterMultiselectActiveBadgeClasses =
-  "h-4 shrink-0 border-transparent bg-brand px-1 text-[10px] text-white tabular-nums";
+  "h-4 shrink-0 border-transparent bg-emphatic px-1 text-[10px] text-emphatic-foreground tabular-nums";
 
 type FilterMultiselectPanelProps<V extends string | number> = {
   allLabel: string;
@@ -83,14 +86,13 @@ export function FilterMultiselectPanel<V extends string | number>({
   const renderOption = (opt: FilterOption<V>) => {
     const isPinned = pinned.includes(opt.value);
     return (
-      <label
+      <DropdownMenuCheckboxItem
         key={String(opt.value)}
-        className="group/option hover:bg-accent flex cursor-pointer items-center gap-2 rounded-md px-1.5 py-1 text-sm"
+        indicator="start"
+        closeOnClick={false}
+        checked={value.includes(opt.value)}
+        onCheckedChange={() => toggle(opt.value)}
       >
-        <Checkbox
-          checked={value.includes(opt.value)}
-          onCheckedChange={() => toggle(opt.value)}
-        />
         <span className="min-w-0 flex-1 truncate">{opt.label}</span>
         {pinnable && onTogglePin && (
           <TooltipLabel
@@ -99,16 +101,17 @@ export function FilterMultiselectPanel<V extends string | number>({
             <button
               type="button"
               aria-label={isPinned ? `Unpin ${opt.label}` : `Pin ${opt.label}`}
+              onPointerDown={(e) => e.stopPropagation()}
               onClick={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
                 onTogglePin(opt.value);
               }}
               className={cn(
-                "relative flex size-7 shrink-0 items-center justify-center rounded-md transition-opacity outline-none focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring/50",
+                "relative flex size-7 shrink-0 items-center justify-center rounded-[4px] transition-opacity outline-none focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring/50",
                 isPinned
                   ? "text-foreground"
-                  : "text-muted-foreground hover:text-foreground opacity-0 group-hover/option:opacity-100",
+                  : "text-muted-foreground hover:text-foreground opacity-0 group-hover/dropdown-menu-checkbox-item:opacity-100",
               )}
             >
               <PushPin
@@ -119,17 +122,20 @@ export function FilterMultiselectPanel<V extends string | number>({
             </button>
           </TooltipLabel>
         )}
-      </label>
+      </DropdownMenuCheckboxItem>
     );
   };
 
   return (
     <>
       {searchable && (
-        <div className="border-border/50 border-b p-2">
+        <div
+          className="p-1"
+          onPointerDown={(e) => e.stopPropagation()}
+        >
           <div className="relative">
             <MagnifyingGlass
-              className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 z-10 size-3.5 -translate-y-1/2"
+              className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 z-10 size-4 -translate-y-1/2"
               aria-hidden
             />
             <Input
@@ -137,54 +143,42 @@ export function FilterMultiselectPanel<V extends string | number>({
               type="search"
               value={query}
               onChange={(e) => onQueryChange(e.target.value)}
+              onKeyDown={(e) => e.stopPropagation()}
               placeholder="Search…"
               aria-label={`Search ${allLabel.toLowerCase()}`}
-              className="pl-6"
+              className="pl-8"
             />
           </div>
         </div>
       )}
-      <div className="max-h-72 overflow-y-auto p-1">
-        {partition.pinned.length > 0 && (
-          <>
-            <div className="text-muted-foreground px-1.5 py-1 text-xs">
-              Pinned
-            </div>
+      {partition.pinned.length > 0 && (
+        <>
+          <DropdownMenuGroup>
+            <DropdownMenuLabel>Pinned</DropdownMenuLabel>
             {partition.pinned.map(renderOption)}
-            <div className="bg-border my-1 h-px" aria-hidden />
-          </>
-        )}
-        {partition.rest.map(renderOption)}
-        {partition.pinned.length === 0 && partition.rest.length === 0 && (
-          <p className="text-muted-foreground px-1.5 py-2 text-center text-xs">
-            No matches.
-          </p>
-        )}
-      </div>
-      <div className="border-border/50 flex items-center justify-between gap-2 border-t p-1.5">
-        <span className="text-muted-foreground px-1 text-xs tabular-nums">
-          {active ? `${value.length} selected` : ""}
-        </span>
-        <Button
-          variant="ghost"
-          size="sm"
-          className="h-6 px-1.5 text-xs"
-          disabled={!active}
-          onClick={() => onChange([])}
-        >
-          Clear
-        </Button>
-      </div>
+          </DropdownMenuGroup>
+          <DropdownMenuSeparator />
+        </>
+      )}
+      {partition.rest.map(renderOption)}
+      {partition.pinned.length === 0 && partition.rest.length === 0 && (
+        <p className="text-muted-foreground px-1.5 py-2 text-center text-xs">
+          No matches.
+        </p>
+      )}
+      {active && (
+        <>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onClick={() => onChange([])}>Clear</DropdownMenuItem>
+        </>
+      )}
     </>
   );
 }
 
 /**
- * Checkbox-multiselect filter dropdown (ported UX from armorset-tracker):
- * popover panel with one checkbox row per option, optional in-panel search,
- * optional pin-to-top per option, and a Clear footer. The trigger mirrors
- * SelectTrigger's 3D field treatment and shows a brand-blue border while any
- * value is selected.
+ * Checkbox-multiselect filter dropdown. Uses the same DropdownMenu chrome and
+ * checkbox items as the sidebar loadout filters.
  */
 export function FilterMultiselect<V extends string | number>({
   label,
@@ -216,21 +210,13 @@ export function FilterMultiselect<V extends string | number>({
 
   return (
     <div className={cn("relative min-w-40 flex-1 overflow-visible", className)}>
-      {/* Uncontrolled open state: Base UI wires trigger association (and with it
-          outside-click/Escape dismissal) itself; we only listen to reset the
-          query on close. Don't cancel() the escape-key close to make Escape
-          clear-then-close — a canceled dismissal wedges Base UI's dismiss state
-          and the panel stops closing at all. */}
-      <Popover
+      <DropdownMenu
         onOpenChange={(next) => {
           if (!next) setQuery("");
         }}
       >
         <div
-          className={cn(
-            fieldFilterControlShellClasses,
-            "peer/filter box-border w-full",
-          )}
+          className={cn(fieldFilterControlShellClasses, "box-border w-full")}
           data-active={active || undefined}
         >
           <TooltipLabel
@@ -240,7 +226,7 @@ export function FilterMultiselect<V extends string | number>({
                 : `${label}: ${allLabel}`
             }
           >
-            <PopoverTrigger
+            <DropdownMenuTrigger
               ref={triggerRef}
               aria-label={
                 active
@@ -253,8 +239,6 @@ export function FilterMultiselect<V extends string | number>({
                 {selectionSummary(value, options, allLabel)}
               </span>
               {active ? (
-                // Placeholder for the caret slot; the clear button overlays it
-                // from outside (it can't live in here — no button-in-button).
                 <span className="size-4 shrink-0" aria-hidden />
               ) : (
                 <CaretDown
@@ -263,7 +247,7 @@ export function FilterMultiselect<V extends string | number>({
                   aria-hidden
                 />
               )}
-            </PopoverTrigger>
+            </DropdownMenuTrigger>
           </TooltipLabel>
         </div>
         {active && (
@@ -275,13 +259,13 @@ export function FilterMultiselect<V extends string | number>({
                 onChange([]);
                 triggerRef.current?.focus();
               }}
-              className="text-muted-foreground hover:text-foreground focus-visible:ring-ring/50 absolute top-1/2 right-1.5 flex size-5 -translate-y-1/2 items-center justify-center rounded-[4px] outline-none focus-visible:ring-3 peer-has-[:active]/filter:translate-y-[calc(-50%+4px)]"
+              className="text-muted-foreground hover:text-foreground focus-visible:ring-ring/50 absolute top-1/2 right-1.5 flex size-5 -translate-y-1/2 items-center justify-center rounded-[4px] outline-none focus-visible:ring-3"
             >
               <X weight="bold" className="size-3.5" aria-hidden />
             </button>
           </TooltipLabel>
         )}
-        <PopoverContent align="start" className="w-64 p-0">
+        <DropdownMenuContent align="start" className="w-64">
           <FilterMultiselectPanel
             allLabel={allLabel}
             options={options}
@@ -294,8 +278,8 @@ export function FilterMultiselect<V extends string | number>({
             pinned={pinned}
             onTogglePin={onTogglePin}
           />
-        </PopoverContent>
-      </Popover>
+        </DropdownMenuContent>
+      </DropdownMenu>
     </div>
   );
 }

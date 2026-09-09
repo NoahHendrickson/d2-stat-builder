@@ -89,7 +89,7 @@ export function CustomOrderList({
             onDrop={(e) => onDrop(e, i)}
             onDragEnd={clearDrag}
             className={cn(
-              "group/row hover:bg-accent flex cursor-grab items-center gap-1 rounded-md py-0.5 pr-0.5 pl-1 text-sm active:cursor-grabbing",
+              "group/row hover:bg-accent flex h-8 cursor-grab items-center gap-1.5 rounded-[4px] pr-0.5 pl-1.5 text-sm active:cursor-grabbing",
               dragFrom === i && "bg-accent opacity-60",
             )}
           >

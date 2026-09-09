@@ -65,6 +65,8 @@ export interface ArmorPiece {
   itemHash: number;
   name: string;
   icon?: string;
+  /** Season / featured badge overlaid on `icon` (Bungie watermark PNG). */
+  watermark?: string;
   slot: ArmorSlot;
   classType: number;
   isExotic: boolean;
@@ -385,6 +387,31 @@ function hasTuningSocket(
   return false;
 }
 
+/** Season or featured icon overlay. Featured wins; else the versioned quality watermark. */
+export function itemWatermark(
+  def:
+    | {
+        isFeaturedItem?: boolean;
+        iconWatermarkFeatured?: string;
+        iconWatermark?: string;
+        quality?: { currentVersion?: number; displayVersionWatermarkIcons?: string[] };
+      }
+    | undefined,
+  versionNumber?: number,
+): string | undefined {
+  if (!def) return undefined;
+  if (def.isFeaturedItem) {
+    const featured = def.iconWatermarkFeatured || undefined;
+    if (featured) return featured;
+  }
+  const icons = def.quality?.displayVersionWatermarkIcons;
+  if (icons?.length) {
+    const i = versionNumber ?? def.quality?.currentVersion ?? 0;
+    return icons[i] || icons[0] || undefined;
+  }
+  return def.iconWatermark || undefined;
+}
+
 function buildPiece(
   item: DestinyItemComponent,
   manifest: Manifest,
@@ -444,6 +471,7 @@ function buildPiece(
 
   const armorSockets = findArmorSockets(item.itemInstanceId, def, profile, manifest);
   const energy = readEnergy(item.itemInstanceId, profile);
+  const watermark = itemWatermark(def, item.versionNumber);
 
   return {
     instanceId: item.itemInstanceId,
@@ -466,6 +494,7 @@ function buildPiece(
     exoticPerkHashes,
     location,
     characterId,
+    ...(watermark ? { watermark } : {}),
     ...(armorSockets ? { armorSockets } : {}),
     ...(energy ? { energy } : {}),
   };

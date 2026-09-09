@@ -134,7 +134,7 @@ function SocketPicker({
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search mods"
               aria-label="Search mods"
-              className="h-7 pl-7 text-xs"
+              className="pl-7"
               autoFocus
             />
           </div>
@@ -312,7 +312,7 @@ export function LoadoutModsEditor({
       </div>
       <p className="text-muted-foreground text-xs">
         Highlighted sockets are part of the loadout; dimmed ones keep whatever
-        is socketed when you apply. Energy counts both.
+        is socketed when you apply. Energy is the loadout's chosen mods.
       </p>
     </div>
   );

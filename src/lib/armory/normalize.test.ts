@@ -1,7 +1,7 @@
 import { test, expect } from "vitest";
 import type { DestinyProfileResponse } from "bungie-api-ts/destiny2";
 import type { Manifest } from "@/lib/manifest/load";
-import { computeBaseStats, normalizeArmory } from "./normalize";
+import { computeBaseStats, itemWatermark, normalizeArmory } from "./normalize";
 import { STAT_HASHES } from "./stats";
 
 const H = STAT_HASHES;
@@ -599,4 +599,26 @@ test("a directional tune (with a −5) is reversed in full on the stats it names
   expect(computeBaseStats("x", mkProfile("x", cur, [DIR]), manifest)).toEqual([
     25, 10, 5, 20, 25, 5,
   ]);
+});
+
+test("itemWatermark prefers featured, then the versioned quality icon", () => {
+  expect(itemWatermark(undefined)).toBeUndefined();
+  expect(
+    itemWatermark({
+      isFeaturedItem: true,
+      iconWatermarkFeatured: "/featured.png",
+      iconWatermark: "/season.png",
+    }),
+  ).toBe("/featured.png");
+  expect(
+    itemWatermark(
+      {
+        iconWatermark: "/season.png",
+        quality: { currentVersion: 0, displayVersionWatermarkIcons: ["", "/v1.png"] },
+      },
+      1,
+    ),
+  ).toBe("/v1.png");
+  expect(itemWatermark({ iconWatermark: "/season.png" })).toBe("/season.png");
+  expect(itemWatermark({ iconWatermark: "" })).toBeUndefined();
 });
