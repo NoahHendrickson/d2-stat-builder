@@ -1,4 +1,8 @@
-import { test, expect, describe } from "vitest";
+import { test, expect, describe, vi, afterEach } from "vitest";
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 import { createOptimizerStore, type WorkerLike } from "./optimizer-store";
 import type { OptimizerInput, OptimizerOutput, OptimizerRequest, OptimizerResponse } from "./types";
 
@@ -127,6 +131,49 @@ describe("progress stays out of the snapshot", () => {
     worker().emit({ seq, kind: "ceilings", ceilings: [30, 0, 0, 0, 0, 0] });
     expect(store.ceilingsView.get().values?.[0]).toBe(30);
     expect(events.length).toBe(n);
+  });
+
+  test("a ceiling update dropped by the throttle is published when the window closes", () => {
+    vi.useFakeTimers();
+    const { store, worker, tick } = setup();
+    store.run(input());
+    const seq = worker().posted[0].seq;
+    worker().emit({ seq, kind: "ceilings", ceilings: [10, 0, 0, 0, 0, 0] });
+    tick(40);
+    worker().emit({ seq, kind: "ceilings", ceilings: [20, 0, 0, 0, 0, 0] });
+    worker().emit({ seq, kind: "ceilings", ceilings: [25, 0, 0, 0, 0, 0] });
+    expect(store.ceilingsView.get().values?.[0]).toBe(10);
+    vi.advanceTimersByTime(60);
+    expect(store.ceilingsView.get().values?.[0]).toBe(25);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  test("a result flushes the throttle, and a new run drops a held update", () => {
+    vi.useFakeTimers();
+    const { store, worker, tick } = setup();
+    store.run(input());
+    let seq = worker().posted[0].seq;
+    worker().emit({ seq, kind: "ceilings", ceilings: [10, 0, 0, 0, 0, 0] });
+    worker().emit({ seq, kind: "ceilings", ceilings: [20, 0, 0, 0, 0, 0] });
+    worker().emit({
+      seq,
+      kind: "result",
+      output: output({ ceilings: [30, 0, 0, 0, 0, 0] }),
+      refining: false,
+      verified: true,
+    });
+    expect(store.ceilingsView.get().values?.[0]).toBe(30);
+    expect(vi.getTimerCount()).toBe(0);
+
+    tick(1000);
+    store.run(input(1));
+    seq = worker().posted.at(-1)!.seq;
+    worker().emit({ seq, kind: "ceilings", ceilings: [40, 0, 0, 0, 0, 0] });
+    worker().emit({ seq, kind: "ceilings", ceilings: [50, 0, 0, 0, 0, 0] });
+    store.run(input(2));
+    vi.advanceTimersByTime(200);
+    // The held [50] belonged to the superseded run and must not land on the new one.
+    expect(store.ceilingsView.get().values?.[0]).toBe(40);
   });
 });
 

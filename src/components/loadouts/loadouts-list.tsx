@@ -1,7 +1,15 @@
 "use client";
 
 import { TooltipLabel } from "@/components/ui/tooltip";
-import { useCallback, useDeferredValue, useMemo, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useDeferredValue,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { ArrowsDownUp, FunnelSimple, MagnifyingGlass, X } from "@phosphor-icons/react";
@@ -144,16 +152,13 @@ export function LoadoutsList({
 }) {
   const router = useRouter();
   const pathname = usePathname();
-  const [path] = useState(() => {
-    let value = pathname;
-    return {
-      set(next: string) {
-        value = next;
-      },
-      get: () => value,
-    };
+  // Read at click time only, via a ref, so a route change doesn't change
+  // optimizeLoadout's identity and re-render every visible row. Written in a layout
+  // effect rather than during render so a discarded render can't leave it stale.
+  const pathnameRef = useRef(pathname);
+  useLayoutEffect(() => {
+    pathnameRef.current = pathname;
   });
-  path.set(pathname);
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const loadouts = useLoadouts();
@@ -420,10 +425,10 @@ export function LoadoutsList({
           ),
         }),
       );
-      if (path.get() !== "/") router.push("/");
+      if (pathnameRef.current !== "/") router.push("/");
       onNavigate?.();
     },
-    [manifest, pieceMap, path, router, onNavigate],
+    [manifest, pieceMap, router, onNavigate],
   );
 
   const editorLoadout = dialog.kind === "edit" ? dialog.loadout : undefined;

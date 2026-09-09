@@ -175,7 +175,6 @@ export function StatGlyph({
       tabIndex={plain ? undefined : 0}
       width={16}
       height={16}
-      loading="lazy"
       decoding="async"
       className={cn(
         "inline-block size-4 shrink-0",

@@ -312,7 +312,7 @@ export function LoadoutModsEditor({
       </div>
       <p className="text-muted-foreground text-xs">
         Highlighted sockets are part of the loadout; dimmed ones keep whatever
-        is socketed when you apply. Energy is the loadout's chosen mods.
+        is socketed when you apply. Energy is the loadout&apos;s chosen mods.
       </p>
     </div>
   );

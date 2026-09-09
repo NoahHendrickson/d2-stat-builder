@@ -5,6 +5,7 @@ import {
   memo,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -700,6 +701,11 @@ export function BuilderPanel({
   );
 
   // Latest targets/snapshot without changing `buildsProps` identity on slider moves.
+  // Rows only need targets/snapshot at click time (DIM export, save), so hand them a
+  // stable getter instead of the values: a slider drag then re-renders one StatTargetRow,
+  // not fifty BuildRows. The holder is written from a layout effect, not during render, so
+  // a discarded concurrent render can never leave it stale. (A plain ref would do the same
+  // job, but react-hooks/refs flags a ref-reading callback passed into useMemo.)
   const [builderState] = useState(() => {
     let value = { targets, builderSnapshot };
     return {
@@ -709,7 +715,9 @@ export function BuilderPanel({
       get: () => value,
     };
   });
-  builderState.set({ targets, builderSnapshot });
+  useLayoutEffect(() => {
+    builderState.set({ targets, builderSnapshot });
+  });
   const getBuilderState = builderState.get;
 
   const buildsProps: BuildsColumnContentProps = useMemo(

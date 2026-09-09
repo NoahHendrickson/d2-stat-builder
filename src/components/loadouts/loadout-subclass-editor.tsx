@@ -38,26 +38,25 @@ export interface SubclassSection {
 
 function useIconLightTint(icon: string | undefined) {
   const src = icon ? `${BUNGIE_IMAGE_BASE}${icon}` : undefined;
-  const [tint, setTint] = useState(() => (src ? cachedLightTint(src) : undefined));
+  // Cache hits are read straight from the cache during render; only a miss goes through
+  // state, and the result is keyed by src so a stale sample never shows for a new icon.
+  const [sampled, setSampled] = useState<{ src: string; tint: string | undefined } | null>(
+    null,
+  );
   useEffect(() => {
-    if (!src) {
-      setTint(undefined);
-      return;
-    }
-    const hit = cachedLightTint(src);
-    if (hit !== undefined) {
-      setTint(hit);
-      return;
-    }
+    if (!src || cachedLightTint(src) !== undefined) return;
     let live = true;
     sampleLightTint(src).then((color) => {
-      if (live) setTint(color);
+      if (live) setSampled({ src, tint: color });
     });
     return () => {
       live = false;
     };
   }, [src]);
-  return tint;
+  if (!src) return undefined;
+  const hit = cachedLightTint(src);
+  if (hit !== undefined) return hit;
+  return sampled?.src === src ? sampled.tint : undefined;
 }
 
 function PlugOptionButton({

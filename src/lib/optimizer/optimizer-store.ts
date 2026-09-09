@@ -107,7 +107,43 @@ export function createOptimizerStore(
   // The most recent (input, output) pair — the source for cross-edit ceiling carryover.
   // Updated on EVERY result message (interim and final). cancel() leaves this intact.
   let last: { input: OptimizerInput; key: string; output: OptimizerOutput } | null = null;
+  // Ceiling updates arrive up to ~50 times during the inline phase and land straight in
+  // ceilingsView, whose only subscribers are the StatTargetRows. They are throttled to one
+  // publish per CEILINGS_INTERVAL_MS; an update that lands inside the window is held and
+  // published when the window closes, so the ticks never sit stale between the last
+  // throttled message and the result.
   let lastCeilingsAt = Number.NEGATIVE_INFINITY;
+  let pendingCeilings: CeilingsView | null = null;
+  let ceilingsTimer: ReturnType<typeof setTimeout> | null = null;
+
+  const dropPendingCeilings = () => {
+    if (ceilingsTimer !== null) {
+      clearTimeout(ceilingsTimer);
+      ceilingsTimer = null;
+    }
+    pendingCeilings = null;
+  };
+  // Immediate publish: results, applyPending, and the trailing edge of the throttle.
+  const publishCeilings = (view: CeilingsView) => {
+    dropPendingCeilings();
+    lastCeilingsAt = now();
+    ceilingsView.set(view);
+  };
+  // Throttled publish for streamed updates.
+  const offerCeilings = (view: CeilingsView) => {
+    const wait = CEILINGS_INTERVAL_MS - (now() - lastCeilingsAt);
+    if (wait <= 0) {
+      publishCeilings(view);
+      return;
+    }
+    pendingCeilings = view;
+    if (ceilingsTimer === null) {
+      ceilingsTimer = setTimeout(() => {
+        ceilingsTimer = null;
+        if (pendingCeilings) publishCeilings(pendingCeilings);
+      }, wait);
+    }
+  };
 
   const getWorker = () => {
     if (worker) return worker;
@@ -125,15 +161,10 @@ export function createOptimizerStore(
           }
           break;
         case "ceilings": {
+          const shown = (pendingCeilings ?? ceilingsView.get()).values;
           const values =
-            ref.phase === "running"
-              ? mergeCeilingsMonotone(ceilingsView.get().values, msg.ceilings)
-              : msg.ceilings;
-          const t = now();
-          if (t - lastCeilingsAt >= CEILINGS_INTERVAL_MS) {
-            lastCeilingsAt = t;
-            ceilingsView.set({ values, exact: snapshot.ceilingsExact });
-          }
+            ref.phase === "running" ? mergeCeilingsMonotone(shown, msg.ceilings) : msg.ceilings;
+          offerCeilings({ values, exact: snapshot.ceilingsExact });
           break;
         }
         case "better":
@@ -148,8 +179,7 @@ export function createOptimizerStore(
             // Time-capped search: its build list is final and shown now (and never
             // replaced); the worker is still refining, so stay "in flight" for cancellation.
             refinementProgress.set(0);
-            lastCeilingsAt = now();
-            ceilingsView.set({
+            publishCeilings({
               values: msg.output.ceilings,
               exact: msg.output.ceilingsExact,
             });
@@ -166,8 +196,7 @@ export function createOptimizerStore(
               ref.phase === "running"
                 ? mergeCeilingsMonotone(snapshot.ceilings, msg.output.ceilings)
                 : msg.output.ceilings;
-            lastCeilingsAt = now();
-            ceilingsView.set({
+            publishCeilings({
               values: ceilings,
               exact: msg.output.ceilingsExact,
             });
@@ -204,6 +233,7 @@ export function createOptimizerStore(
     };
     w.onerror = () => {
       inFlight = false;
+      dropPendingCeilings();
       setState({ running: false, refinement: IDLE });
     };
     worker = w;
@@ -240,6 +270,7 @@ export function createOptimizerStore(
       inFlightKey = key;
       progress.set(0);
       refinementProgress.set(0);
+      dropPendingCeilings();
       ceilingsView.set({ values: ceilingsView.get().values, exact: false });
       setState({ running: true, ceilingsExact: false, refinement: IDLE, runId: s });
       // Carry proven ceiling bounds from the previous query when this edit only changed
@@ -253,6 +284,7 @@ export function createOptimizerStore(
     cancel() {
       seq++;
       inFlight = false;
+      dropPendingCeilings();
       inFlightKey = null;
       worker?.terminate();
       worker = null;
@@ -266,8 +298,7 @@ export function createOptimizerStore(
       if (ref.phase !== "done" || !ref.pending) return;
       const pending = ref.pending;
       const ceilings = mergeCeilingsMonotone(snapshot.ceilings, pending.ceilings);
-      lastCeilingsAt = now();
-      ceilingsView.set({ values: ceilings, exact: pending.ceilingsExact });
+      publishCeilings({ values: ceilings, exact: pending.ceilingsExact });
       setState({
         refinement: IDLE,
         result: pending,
