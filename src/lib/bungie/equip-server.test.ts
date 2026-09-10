@@ -84,6 +84,35 @@ describe("stageAndEquip make-room", () => {
     expect(results).toEqual([{ itemInstanceId: "helm", ok: false, message: "Vault is full — free up vault space" }]);
   });
 
+  test("a spare Bungie won't move is skipped for the next one", async () => {
+    transferItem
+      .mockRejectedValueOnce(noRoom()) // helm → character: full
+      .mockRejectedValueOnce(new BungieHttpError(200, "raw", 1660)) // spare-1: not transferable
+      .mockResolvedValueOnce({}) // spare-2 → vault
+      .mockResolvedValueOnce({}); // helm → character
+    const results = await run({ http, membershipType: 3, characterId: TARGET, items: [helm], spares, mode: "move" });
+    expect(moved()).toEqual([["helm", false], ["spare-1", true], ["spare-2", true], ["helm", false]]);
+    expect(results).toEqual([{ itemInstanceId: "helm", ok: true, vaulted: ["spare-2"] }]);
+  });
+
+  test("spares that were vaulted are reported even when the piece still fails", async () => {
+    transferItem
+      .mockRejectedValueOnce(noRoom())
+      .mockResolvedValueOnce({}) // spare-1 → vault
+      .mockRejectedValueOnce(noRoom())
+      .mockResolvedValueOnce({}) // spare-2 → vault
+      .mockRejectedValueOnce(noRoom()); // still full, spares exhausted
+    const results = await run({ http, membershipType: 3, characterId: TARGET, items: [helm], spares });
+    expect(results).toEqual([
+      {
+        itemInstanceId: "helm",
+        ok: false,
+        message: "No room on that character — free up inventory space",
+        vaulted: ["spare-1", "spare-2"],
+      },
+    ]);
+  });
+
   test("other transfer errors are translated and never trigger a spare", async () => {
     transferItem.mockRejectedValueOnce(new BungieHttpError(200, "raw", 1671));
     const results = await run({ http, membershipType: 3, characterId: TARGET, items: [helm], spares });

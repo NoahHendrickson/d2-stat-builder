@@ -28,10 +28,18 @@ function fromBase64Url(s: string): Uint8Array<ArrayBuffer> | null {
   }
 }
 
+/**
+ * HKDF the HMAC key from `secret` so the cookie never signs with the raw OAuth client
+ * secret: a leaked signature can't be turned back into the secret, and a different
+ * `info` label would give an unrelated key for any future signed value.
+ */
 async function hmacKey(secret: string, usage: "sign" | "verify") {
-  return crypto.subtle.importKey(
-    "raw",
-    enc.encode(secret),
+  const base = await crypto.subtle.importKey("raw", enc.encode(secret), "HKDF", false, [
+    "deriveKey",
+  ]);
+  return crypto.subtle.deriveKey(
+    { name: "HKDF", hash: "SHA-256", salt: new Uint8Array(0), info: enc.encode("d2_user cookie v1") },
+    base,
     { name: "HMAC", hash: "SHA-256" },
     false,
     [usage],

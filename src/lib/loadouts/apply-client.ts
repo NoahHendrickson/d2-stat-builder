@@ -56,11 +56,11 @@ export async function applySavedLoadout({
 }): Promise<ApplyOutcome | null> {
   const pieces = resolved.armor.map((a) => a.piece!);
   const items: EquipItemState[] = pieces.map(equipItemRef);
-  const spares = planSpares(armory, items, character.id);
-  const pieceName = (id: string) => {
-    for (const p of armory) if (p.instanceId === id) return p.name;
-    return "a piece";
-  };
+  // Callers may hand over a one-shot iterator (e.g. `map.values()`); it's walked more
+  // than once below.
+  const owned = Array.isArray(armory) ? (armory as ArmorPiece[]) : [...armory];
+  const spares = planSpares(owned, items, character.id);
+  const pieceName = (id: string) => owned.find((p) => p.instanceId === id)?.name ?? "a piece";
 
   // Subclass: equip the loadout's subclass item if it isn't already, and plan fragments.
   const subclassItem = resolved.subclass
@@ -202,7 +202,7 @@ export async function applySavedLoadout({
     const message = data?.error ?? "Apply failed";
     failCard(message);
     if (!showCard) toast.error(message);
-    if (data?.reauth) void queryClient.invalidateQueries({ queryKey: ["session"] });
+    if (data?.reauth) void signOutForReauth(queryClient);
     return null;
   }
 
@@ -210,21 +210,30 @@ export async function applySavedLoadout({
   let plugsOut: PlugResult[] = [];
   let streamError: string | undefined;
   let gotDone = false;
-  for await (const line of readNdjsonLines(res.body)) {
-    let event = parseApplyStreamEvent(line);
-    if (!event) continue;
-    if (event.type === "item" && event.result.ok && event.result.vaulted?.length) {
-      event = { ...event, result: { ...event.result, message: vaultedNote(event.result.vaulted, pieceName) } };
+  try {
+    for await (const line of readNdjsonLines(res.body)) {
+      let event = parseApplyStreamEvent(line);
+      if (!event) continue;
+      if (event.type === "item" && event.result.vaulted?.length) {
+        const note = vaultedNote(event.result.vaulted, pieceName);
+        const message = event.result.ok ? note : `${event.result.message ?? "Equip failed"} (${note})`;
+        event = { ...event, result: { ...event.result, message } };
+      }
+      if (showCard) patchApplyProgress(session, event);
+      if (event.type === "done") {
+        equip = event.equip;
+        plugsOut = event.plugs;
+        gotDone = true;
+      } else if (event.type === "error") {
+        streamError = event.error;
+        if (event.reauth) void signOutForReauth(queryClient);
+      }
     }
-    if (showCard) patchApplyProgress(session, event);
-    if (event.type === "done") {
-      equip = event.equip;
-      plugsOut = event.plugs;
-      gotDone = true;
-    } else if (event.type === "error") {
-      streamError = event.error;
-      if (event.reauth) void queryClient.invalidateQueries({ queryKey: ["session"] });
-    }
+  } catch {
+    // The connection dropped mid-stream. The server keeps going, so the character may
+    // be partially changed — say so rather than leave the card spinning.
+    streamError = "Connection lost while applying — refresh your gear to see what changed";
+    if (showCard) patchApplyProgress(session, { type: "error", error: streamError });
   }
 
   if (streamError || !gotDone) {
@@ -242,6 +251,16 @@ export async function applySavedLoadout({
   if (showCard) finishApplyProgress(session, finishFromResults(equip, plugsOut));
   else toastOutcome(outcome, pieces, character, pieceName);
   return outcome;
+}
+
+/**
+ * The apply stream can't clear cookies once it has started (see the route), so a
+ * `reauth` error is finished client-side: drop the dead session, then let the session
+ * query flip to signed-out so the sign-in card appears.
+ */
+async function signOutForReauth(queryClient: QueryClient) {
+  await fetch("/api/auth/logout", { method: "POST" }).catch(() => undefined);
+  await queryClient.invalidateQueries({ queryKey: ["session"] });
 }
 
 function finishFromResults(
@@ -262,6 +281,8 @@ function toastOutcome(
   pieceName: (id: string) => string,
 ) {
   const equipFailed = equip.filter((r) => !r.ok);
+  // Every spare that left the character, including ones vaulted for a piece that then
+  // failed anyway — the user needs to know either way.
   const vaultedIds = equip.flatMap((r) => r.vaulted ?? []);
   const plugFailed = plugs.filter((r) => !r.ok);
   const equippedCount = equip.filter((r) => r.ok).length;

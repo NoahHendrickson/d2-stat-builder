@@ -85,13 +85,18 @@ interface SparePiece {
   location: ArmorLocation;
   characterId?: string;
   isExotic: boolean;
+  /** Locked in-game — the player's "keep this"; never vault it on their behalf. */
+  locked?: boolean;
+  /** In the postmaster — reports as inventory but TransferItem can't move it. */
+  postmaster?: boolean;
 }
 
 /**
  * For every staged item that needs a hop onto `targetCharacterId`, list the unequipped
  * same-slot pieces already sitting on that character that aren't part of this equip.
- * Non-exotics go first so a legendary is vaulted before an exotic. Items we can't find
- * in `pieces` (the subclass, unknown ids) get no spares.
+ * Locked pieces and postmaster items are never offered. Non-exotics go first so a
+ * legendary is vaulted before an exotic. Items we can't find in `pieces` (the subclass,
+ * unknown ids) get no spares.
  */
 export function planSpares(
   pieces: Iterable<SparePiece>,
@@ -112,6 +117,8 @@ export function planSpares(
         p.slot === piece.slot &&
         p.location === "inventory" &&
         p.characterId === targetCharacterId &&
+        !p.locked &&
+        !p.postmaster &&
         !staged.has(p.instanceId)
       ) {
         candidates.push(p);

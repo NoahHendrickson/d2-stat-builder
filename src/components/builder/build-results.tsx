@@ -1,7 +1,15 @@
 "use client";
 
 import { TooltipLabel } from "@/components/ui/tooltip";
-import { Fragment, memo, useMemo, useState, type ReactNode } from "react";
+import {
+  Fragment,
+  memo,
+  useMemo,
+  useState,
+  useSyncExternalStore,
+  type ReactNode,
+} from "react";
+import dynamic from "next/dynamic";
 import Image from "next/image";
 import {
   ArrowSquareOut,
@@ -33,31 +41,21 @@ import {
   buildDimLoadout,
   buildDimLoadoutUrl,
   defaultLoadoutName,
+  type DimLoadout,
 } from "@/lib/dim/loadout-link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import {
-  type LoadoutDetailsValues,
-  type ModsSection,
-} from "@/components/loadouts/loadout-details-dialog";
-import { LoadoutEditorDrawer } from "@/components/loadouts/loadout-editor-drawer";
-import {
-  modsFromEditor,
-  modsSectionFromPlan,
-} from "@/lib/loadouts/mod-placement";
+import type { LoadoutDetailsValues } from "@/components/loadouts/loadout-details-dialog";
 import { useLoadoutMutations } from "@/lib/loadouts/use-loadouts";
-import { loadoutSubclass, withLoadoutSubclass } from "@/lib/loadouts/subclass";
+import { withLoadoutSubclass } from "@/lib/loadouts/subclass";
 import {
   LOADOUT_SCHEMA_VERSION,
   type BuilderSnapshot,
 } from "@/lib/loadouts/types";
-import { planLoadoutPlugs } from "@/lib/loadouts/apply-plan";
-import { planPiecesFromArmor } from "@/lib/loadouts/plan-pieces";
-import { plugInfoFromManifest } from "@/lib/loadouts/plug-info";
-import { getModCatalog } from "@/lib/loadouts/mod-options";
 import type { Manifest } from "@/lib/manifest/load";
 import { cn } from "@/lib/utils";
 import { useStoreValue, type ValueStore } from "@/lib/value-store";
+import { liveTargets } from "@/lib/builder/live-targets";
 import { BUNGIE_IMAGE_BASE } from "@/lib/bungie/constants";
 import {
   equipItemRef,
@@ -78,6 +76,19 @@ export type GetBuilderState = () => {
   targets: number[];
   builderSnapshot?: BuilderSnapshot;
 };
+
+/**
+ * The Save drawer and the mod planning behind it, fetched on the first Save click:
+ * nothing else in the results column needs that code, so it stays out of the route's
+ * first-load bundle (client-only — it's never rendered on the server).
+ */
+const SaveLoadoutDrawer = dynamic(
+  () =>
+    import("@/components/builder/save-loadout-drawer").then(
+      (m) => m.SaveLoadoutDrawer,
+    ),
+  { ssr: false },
+);
 
 const MAX_SHOWN = 50;
 export { MAX_SHOWN };
@@ -260,6 +271,25 @@ interface BuildActionProps {
 }
 
 /**
+ * One stat chip value in a build's collapsed header, lit once it meets the slider
+ * target. It subscribes to the live targets itself with a boolean selector, so a slider
+ * drag re-renders only the chips whose met state flips — never the memoized rows.
+ */
+function StatValue({ index, value }: { index: number; value: number }) {
+  const met = useSyncExternalStore(
+    liveTargets.subscribe,
+    () => {
+      const target = liveTargets.get()[index];
+      return target > 0 && value >= target;
+    },
+    () => false,
+  );
+  return (
+    <span className={met ? "text-brand" : "text-foreground"}>{value}</span>
+  );
+}
+
+/**
  * A single build: a collapsed stat header that expands to a per-piece breakdown.
  * Memoized: background-refinement progress ticks re-render the results column ~10×/s
  * while the list itself is frozen — every prop here is identity-stable across those
@@ -341,7 +371,7 @@ const BuildRow = memo(function BuildRow({
                   className="size-4 opacity-65 2xl:size-5"
                   plain
                 />
-                <span>{loadout.stats[i]}</span>
+                <StatValue index={i} value={loadout.stats[i]} />
               </span>
             ))}
           </div>
@@ -521,8 +551,11 @@ function BuildActions({
 } & BuildActionProps) {
   const queryClient = useQueryClient();
   const [equipping, setEquipping] = useState(false);
-  // The Save dialog's mod picker, built when the dialog opens (null = closed).
-  const [saveMods, setSaveMods] = useState<ModsSection | null>(null);
+  // The Save drawer: 0 until the first click (its chunk isn't fetched before then); each
+  // click bumps the session so the drawer rebuilds its mod picker from the inputs as
+  // they are right then. It stays mounted after the first click so it can animate closed.
+  const [saveSession, setSaveSession] = useState(0);
+  const [saveOpen, setSaveOpen] = useState(false);
   const { create: createLoadout } = useLoadoutMutations();
 
   const resolved = pieces.filter((p): p is ArmorPiece => p !== undefined);
@@ -587,35 +620,18 @@ function BuildActions({
   // like a DIM loadout item you don't own yet, and shows as missing until you have one.
   const canSave = complete && hasModHashes;
 
-  // Mod picker for the Save dialog: the optimizer's stat mods / tuning / artifice are
-  // pre-placed exactly as Apply would place them; the user adds other mods on top.
-  // Built at click time from the inputs as they are right then (no memo to go stale).
-  // Mods the planner can't place on the live pieces — e.g. the class item's stat mod
-  // when the build uses a theoretical (socket-less) exotic class item — are kept in
-  // the saved loadout, not dropped.
   const openSave = () => {
     if (!canSave || !manifest) return;
-    const dim = makeDimLoadout(defaultName);
-    const plan = planLoadoutPlugs({
-      pieces: planPiecesFromArmor(resolved, manifest),
-      modHashes: dim.parameters.mods,
-      plugInfo: plugInfoFromManifest(manifest),
-    });
-    setSaveMods(
-      modsSectionFromPlan(resolved, getModCatalog(manifest), plan, insertablePlugs),
-    );
+    setSaveSession((s) => s + 1);
+    setSaveOpen(true);
   };
 
-  const saveLoadout = ({
-    name,
-    notes,
-    placement,
-    subclass: subclassItem,
-  }: LoadoutDetailsValues) => {
+  /** `dim` already carries the picker's mods (SaveLoadoutDrawer applies them). */
+  const saveLoadout = (
+    dim: DimLoadout,
+    { placement, subclass: subclassItem }: LoadoutDetailsValues,
+  ) => {
     if (!canSave || !manifest) return;
-    const dim = makeDimLoadout(name, notes || undefined);
-    if (placement && saveMods)
-      dim.parameters.mods = modsFromEditor(saveMods, placement);
     dim.equipped = dim.equipped.map((item) =>
       item.id !== undefined && isSyntheticClassItemId(item.id)
         ? { hash: item.hash }
@@ -639,7 +655,7 @@ function BuildActions({
       ),
       {
         onSuccess: () => {
-          setSaveMods(null);
+          setSaveOpen(false);
           toast.success("Loadout saved", "Find it under the Loadouts tab");
         },
         onError: (err) => {
@@ -758,30 +774,24 @@ function BuildActions({
           Save as loadout
         </Button>
       </TooltipLabel>
-      <LoadoutEditorDrawer
-        open={saveMods !== null}
-        onOpenChange={(open) => {
-          if (!open) setSaveMods(null);
-        }}
-        title="Save loadout"
-        description="Save your armor and builder targets, and customize your subclass, aspects, fragments, and mods below."
-        submitLabel="Save"
-        initialName={defaultName}
-        mods={saveMods ?? undefined}
-        subclass={
-          saveMods && manifest && buildClass !== undefined && buildClass < 3
-            ? {
-                manifest,
-                classType: buildClass,
-                initial:
-                  loadoutSubclass(makeDimLoadout(defaultName)) ??
-                  (subclass?.itemHash ? { hash: subclass.itemHash } : null),
-              }
-            : undefined
-        }
-        busy={createLoadout.isPending}
-        onSubmit={saveLoadout}
-      />
+      {saveSession > 0 && manifest && (
+        <SaveLoadoutDrawer
+          open={saveOpen}
+          onOpenChange={(open) => {
+            if (!open) setSaveOpen(false);
+          }}
+          session={saveSession}
+          pieces={resolved}
+          manifest={manifest}
+          insertablePlugs={insertablePlugs}
+          buildClass={buildClass}
+          defaultName={defaultName}
+          subclassItemHash={subclass?.itemHash}
+          makeDimLoadout={makeDimLoadout}
+          busy={createLoadout.isPending}
+          onSubmit={saveLoadout}
+        />
+      )}
     </div>
   );
 }

@@ -9,10 +9,18 @@ import {
   type PlugRequest,
   type PlugResult,
 } from "@/lib/bungie/equip-server";
-import { clearSession, getValidAccessToken, readUser } from "@/lib/bungie/session";
+import { getValidAccessToken, readUser } from "@/lib/bungie/session";
 import { FRAGMENT_SOCKET_COUNT } from "@/lib/armory/equipped-subclass";
 import { MAX_MODS } from "@/lib/loadouts/types";
 import { ABILITY_SOCKET_COUNT, ASPECT_SOCKET_COUNT } from "@/lib/dim/subclasses";
+
+/**
+ * A full apply is long: up to 6 items × (2 vault hops + 3 spares vaulted) transfers at
+ * 150 ms spacing, then every plug at 600 ms spacing — 30 s+ of deliberate pacing before
+ * Bungie's own latency. The default serverless limit (10 s) would cut the stream
+ * mid-flight and leave the character half-applied.
+ */
+export const maxDuration = 60;
 
 /** 5 armor + 1 subclass. */
 const MAX_ITEMS = 6;
@@ -101,10 +109,22 @@ export async function POST(request: Request) {
   const { characterId, items, plugs: requestedPlugs, spares } = body;
   const encoder = new TextEncoder();
 
+  // Once the client goes away (tab closed, connection dropped) the controller rejects
+  // every enqueue; keep applying — Bungie is mid-way through the character — but stop
+  // writing so the stream doesn't throw its way out of the handler.
+  let closed = false;
   const stream = new ReadableStream<Uint8Array>({
+    cancel() {
+      closed = true;
+    },
     async start(controller) {
       const send = (event: ApplyStreamEvent) => {
-        controller.enqueue(encoder.encode(`${JSON.stringify(event)}\n`));
+        if (closed) return;
+        try {
+          controller.enqueue(encoder.encode(`${JSON.stringify(event)}\n`));
+        } catch {
+          closed = true;
+        }
       };
       try {
         const equip =
@@ -152,11 +172,18 @@ export async function POST(request: Request) {
         });
         send({ type: "done", equip, plugs: [...plugResults, ...skippedPlugs] });
       } catch (err) {
-        const event = streamError(err);
-        if (event.reauth) await clearSession();
-        send(event);
+        // Cookies can't change once the stream has started, so unlike the equip route
+        // the dead session isn't cleared here: the client signs out on `reauth`.
+        send(streamError(err));
       } finally {
-        controller.close();
+        if (!closed) {
+          closed = true;
+          try {
+            controller.close();
+          } catch {
+            // Already closed by a failed enqueue.
+          }
+        }
       }
     },
   });

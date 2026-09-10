@@ -199,6 +199,34 @@ export function placeStatMods(
   return { placement: next, unplaced };
 }
 
+/**
+ * Slot one copy of a stat mod by hand: the empty general socket on the piece with the
+ * most energy to spare, or null when no piece has an empty one with `cost` free. Unlike
+ * `placeStatMods`, nothing already chosen is cleared or moved.
+ */
+export function slotStatMod(
+  pieces: ArmorPiece[],
+  placement: ModPlacement,
+  hash: number,
+  costOf: (hash: number) => number,
+): ModPlacement | null {
+  const cost = costOf(hash);
+  let pick: { instanceId: string; index: number; free: number } | undefined;
+  for (const p of pieces) {
+    const g = generalSocket(p);
+    if (!g || placement[p.instanceId]?.[g.index] !== undefined) continue;
+    const cap = p.energy?.capacity ?? Number.POSITIVE_INFINITY;
+    const free = cap - pieceEnergyUsed(p, placement[p.instanceId], costOf);
+    if (free < cost) continue;
+    if (!pick || free > pick.free) pick = { instanceId: p.instanceId, index: g.index, free };
+  }
+  if (!pick) return null;
+  return {
+    ...placement,
+    [pick.instanceId]: { ...(placement[pick.instanceId] ?? {}), [pick.index]: hash },
+  };
+}
+
 /** Re-place `section.desiredStatMods` onto leftover energy in `placement`. */
 export function placementWithStatMods(
   section: ModsSection,

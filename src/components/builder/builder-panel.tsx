@@ -20,6 +20,7 @@ import { useOptimizer } from "@/lib/optimizer/use-optimizer";
 import type { CeilingsView } from "@/lib/optimizer/optimizer-store";
 import { useSmoothedProgress } from "@/lib/use-smoothed-progress";
 import { useStoreValue, type ValueStore } from "@/lib/value-store";
+import { liveTargets } from "@/lib/builder/live-targets";
 import {
   availableSets,
   type ArmorSetInfo,
@@ -719,6 +720,11 @@ export function BuilderPanel({
     builderState.set({ targets, builderSnapshot });
   });
   const getBuilderState = builderState.get;
+  // The rows' stat chips light up on met targets; they subscribe to this store per chip
+  // (selector → boolean), so a drag re-renders only the chips whose state flips.
+  useLayoutEffect(() => {
+    liveTargets.set(targets);
+  }, [targets]);
 
   const buildsProps: BuildsColumnContentProps = useMemo(
     () => ({

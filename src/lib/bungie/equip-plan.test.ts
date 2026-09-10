@@ -91,6 +91,8 @@ describe("planSpares", () => {
       piece({ instanceId: "exotic", isExotic: true }),
       piece({ instanceId: "leg-1" }),
       piece({ instanceId: "worn", location: "equipped" }), // equipped: never a spare
+      piece({ instanceId: "kept", locked: true }), // locked: the player's "keep this"
+      piece({ instanceId: "mail", postmaster: true }), // postmaster: can't be transferred
       piece({ instanceId: "arms", slot: "arms" }), // wrong slot
       piece({ instanceId: "other-char", characterId: "char-B" }),
       piece({ instanceId: "leg-2" }),

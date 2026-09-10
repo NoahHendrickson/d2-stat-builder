@@ -47,7 +47,7 @@ function baseCookie(refreshExpiresAt: number) {
   };
 }
 
-/** Signing key for the identity cookie — the confidential OAuth secret, already server-only. */
+/** Source secret for the identity cookie's signing key (HKDF-derived in signed-cookie.ts). */
 function cookieSecret(): string {
   const secret = process.env.BUNGIE_CLIENT_SECRET;
   if (!secret) throw new Error("Missing required env var BUNGIE_CLIENT_SECRET. See .env.example.");
@@ -111,6 +111,25 @@ export async function readUser(): Promise<SessionUser | null> {
   }
   if (!user || typeof user.membershipId !== "string" || !user.membershipId) return null;
   return user;
+}
+
+/**
+ * The identity from a pre-signing session: `d2_user` as the plain JSON main wrote.
+ * Only /api/auth/session may act on this, and only after confirming the identity with
+ * Bungie — a plain cookie is exactly the forgeable value signing exists to reject.
+ * Null once the cookie is signed (or absent / not JSON).
+ */
+export async function readLegacyUser(): Promise<SessionUser | null> {
+  const jar = await cookies();
+  const raw = jar.get(USER_COOKIE)?.value;
+  if (!raw || !raw.startsWith("{")) return null;
+  try {
+    const user = JSON.parse(raw) as SessionUser;
+    if (typeof user?.membershipId !== "string" || !user.membershipId) return null;
+    return user;
+  } catch {
+    return null;
+  }
 }
 
 export async function clearSession() {

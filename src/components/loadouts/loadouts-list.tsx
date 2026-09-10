@@ -88,6 +88,10 @@ import { getModCatalog } from "@/lib/loadouts/mod-options";
 import { LoadoutRow } from "@/components/loadouts/loadout-row";
 import { LoadoutEditorDrawer } from "@/components/loadouts/loadout-editor-drawer";
 
+// Survives the list remounting (the sidebar moves between the desktop column and the
+// mobile drawer at the breakpoint) so a dismissed share-link import stays dismissed.
+let dismissedImportParam: string | null = null;
+
 type DialogState =
   | { kind: "none" }
   | { kind: "edit"; loadout: SavedLoadout; mods?: ModsSection }
@@ -187,13 +191,16 @@ export function LoadoutsList({
   // A share link lands here with ?import=<json>; offer to save a copy.
   const importParam = searchParams.get(SHARE_PARAM);
   const importData = useMemo(() => parseShareParam(importParam), [importParam]);
-  const [importDismissed, setImportDismissed] = useState<string | null>(null);
+  const [importDismissed, setImportDismissed] = useState<string | null>(
+    () => dismissedImportParam,
+  );
   const importOpen =
     importData !== null &&
     importDismissed !== importParam &&
     dialog.kind === "none";
 
   const clearImportParam = () => {
+    dismissedImportParam = importParam;
     setImportDismissed(importParam);
     router.replace(pathname);
   };
@@ -701,6 +708,7 @@ export function LoadoutsList({
       <LoadoutEditorDrawer
         open={dialog.kind === "edit"}
         onOpenChange={(open) => !open && setDialog({ kind: "none" })}
+        formKey={dialog.kind === "edit" ? dialog.loadout.id : undefined}
         title="Edit loadout"
         description={
           dialog.kind === "edit" && !dialog.mods

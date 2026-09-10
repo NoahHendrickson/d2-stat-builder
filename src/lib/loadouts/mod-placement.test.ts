@@ -9,6 +9,7 @@ import {
   pieceEnergyUsed,
   placeStatMods,
   placementToMods,
+  slotStatMod,
   statModSlotted,
   type ModsSection,
 } from "./mod-placement";
@@ -174,6 +175,27 @@ test("placeStatMods leaves a major unplaced when no piece has 3 energy left", ()
   );
   expect(placement.arms[1]).toBeUndefined();
   expect(unplaced).toEqual([MAJOR]);
+});
+
+test("slotStatMod fills the emptiest piece's general socket and moves nothing else", () => {
+  const helm = mixed("helm", [{ index: 1, kind: "general" }, { index: 2, kind: "other" }]);
+  const arms = mixed("arms", [{ index: 1, kind: "general" }]);
+  const before = { helm: { 2: ARMOR } };
+  expect(slotStatMod([helm, arms], before, MAJOR, statCost)).toEqual({
+    helm: { 2: ARMOR },
+    arms: { 1: MAJOR },
+  });
+  expect(before).toEqual({ helm: { 2: ARMOR } });
+});
+
+test("slotStatMod is null when every general socket is taken or short on energy", () => {
+  const helm = mixed("helm", [{ index: 1, kind: "general" }]);
+  const arms = mixed("arms", [{ index: 1, kind: "general" }, { index: 2, kind: "other" }, { index: 3, kind: "other" }, { index: 4, kind: "other" }]);
+  expect(slotStatMod([helm], { helm: { 1: MINOR } }, MAJOR, statCost)).toBeNull();
+  expect(slotStatMod([arms], { arms: { 2: ARMOR, 3: ARMOR, 4: ARMOR } }, MAJOR, statCost)).toBeNull();
+  expect(slotStatMod([arms], { arms: { 2: ARMOR, 3: ARMOR, 4: ARMOR } }, MINOR, statCost)).toEqual({
+    arms: { 1: MINOR, 2: ARMOR, 3: ARMOR, 4: ARMOR },
+  });
 });
 
 test("statModSlotted checks off each desired copy against general sockets", () => {

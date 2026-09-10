@@ -186,12 +186,19 @@ export async function stageAndEquip({
     });
   const isNoRoom = (err: unknown) => err instanceof BungieHttpError && err.code === NO_ROOM;
 
+  /** Attach the spares vaulted for this item — on failures too, so nothing moves unreported. */
+  const withVaulted = (result: ItemResult): ItemResult => {
+    const ids = vaulted.get(result.itemInstanceId);
+    return ids ? { ...result, vaulted: ids } : result;
+  };
+
   for (const action of actions) {
     if (failed.has(action.itemId)) continue; // earlier hop failed
     start(action.itemId);
     // A hop onto the target can hit a full bucket (9 unequipped per slot). Vault one of
-    // the client's same-slot spares and retry, until the spares run out. A full vault
-    // (or any other error) ends the attempt.
+    // the client's same-slot spares and retry, until the spares run out. A spare Bungie
+    // won't move (e.g. it turned out to be untransferable) is skipped for the next one;
+    // a full vault (or any other error on the piece itself) ends the attempt.
     const pool = action.transferToVault ? [] : [...(spares?.[action.itemId] ?? [])];
     let message: string | undefined;
     for (;;) {
@@ -204,35 +211,39 @@ export async function stageAndEquip({
         message = transferMessage(err, action.transferToVault);
         if (!isNoRoom(err)) break;
       }
-      const spare = pool.shift();
-      if (!spare) break;
-      await sleep(ACTION_SPACING_MS);
-      try {
-        await transfer({
-          itemId: spare.itemInstanceId,
-          itemReferenceHash: spare.itemHash,
-          transferToVault: true,
-          characterId: action.characterId,
-        });
-      } catch (err) {
-        if (err instanceof BungieHttpError && err.status === 401) throw err;
-        message = isNoRoom(err) ? VAULT_FULL_MESSAGE : `Couldn't make room: ${transferMessage(err, true)}`;
-        break;
+      let madeRoom = false;
+      while (!madeRoom) {
+        const spare = pool.shift();
+        if (!spare) break;
+        await sleep(ACTION_SPACING_MS);
+        try {
+          await transfer({
+            itemId: spare.itemInstanceId,
+            itemReferenceHash: spare.itemHash,
+            transferToVault: true,
+            characterId: action.characterId,
+          });
+          madeRoom = true;
+          vaulted.set(action.itemId, [...(vaulted.get(action.itemId) ?? []), spare.itemInstanceId]);
+        } catch (err) {
+          if (err instanceof BungieHttpError && err.status === 401) throw err;
+          if (isNoRoom(err)) {
+            message = VAULT_FULL_MESSAGE;
+            pool.length = 0; // nothing else will fit either
+          } else {
+            message = `Couldn't make room: ${transferMessage(err, true)}`;
+          }
+        }
       }
-      vaulted.set(action.itemId, [...(vaulted.get(action.itemId) ?? []), spare.itemInstanceId]);
+      if (!madeRoom) break;
       await sleep(ACTION_SPACING_MS);
     }
     if (message !== undefined) {
       failed.set(action.itemId, message);
-      emitResult({ itemInstanceId: action.itemId, ok: false, message });
+      emitResult(withVaulted({ itemInstanceId: action.itemId, ok: false, message }));
     }
     await sleep(ACTION_SPACING_MS);
   }
-
-  const withVaulted = (result: ItemResult): ItemResult => {
-    const ids = vaulted.get(result.itemInstanceId);
-    return ids ? { ...result, vaulted: ids } : result;
-  };
 
   const stagedIds = items.map((i) => i.itemInstanceId).filter((id) => !failed.has(id));
   const results: ItemResult[] = [];
@@ -269,7 +280,7 @@ export async function stageAndEquip({
     await collect(second);
   }
   for (const [itemInstanceId, message] of failed) {
-    const result = { itemInstanceId, ok: false, message };
+    const result = withVaulted({ itemInstanceId, ok: false, message });
     results.push(result);
     emitResult(result);
   }

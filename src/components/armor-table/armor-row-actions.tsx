@@ -8,7 +8,6 @@ import { toast } from "@/lib/toast";
 import type { ArmorPiece } from "@/lib/armory/normalize";
 import type { ArmoryCharacter } from "@/lib/armory/fetch";
 import { CLASS_NAMES } from "@/lib/armory/stats";
-import { useArmory } from "@/lib/armory/use-armory";
 import { planSpares } from "@/lib/bungie/equip-plan";
 import {
   equipItemRef,
@@ -62,8 +61,13 @@ export function ArmorRowActions({
   onDone: () => void;
 }) {
   const queryClient = useQueryClient();
-  const armory = useArmory();
   const [busy, setBusy] = useState<Action | null>(null);
+  // Every owned piece, read at click time. Subscribing via useArmory() here would give
+  // each virtualized row its own set of query observers just to plan spares.
+  const ownedPieces = (): ArmorPiece[] =>
+    queryClient
+      .getQueriesData<{ pieces: ArmorPiece[] }>({ queryKey: ["armory"] })
+      .find(([, data]) => data)?.[1]?.pieces ?? [];
 
   const target = lastPlayedCharacter(characters, piece.classType);
   const reasons: Record<Action, string | null> = {
@@ -76,12 +80,13 @@ export function ArmorRowActions({
     setBusy(action);
     try {
       const items = [equipItemRef(piece)];
+      const owned = ownedPieces();
       const results = await postEquipRequest(
         {
           characterId: target.id,
           mode: action,
           items,
-          spares: planSpares(armory.data?.pieces ?? [], items, target.id),
+          spares: planSpares(owned, items, target.id),
         },
         {
           queryClient,
@@ -94,7 +99,7 @@ export function ArmorRowActions({
       const className = CLASS_NAMES[piece.classType] ?? "character";
       if (result?.ok) {
         const nameOf = (id: string) =>
-          armory.data?.pieces.find((p) => p.instanceId === id)?.name ?? "a piece";
+          owned.find((p) => p.instanceId === id)?.name ?? "a piece";
         toast.success(
           action === "move"
             ? `Moved ${piece.name} to your ${className}`
@@ -118,7 +123,7 @@ export function ArmorRowActions({
         <TooltipLabel
           label={reasons[action] ?? undefined}
           key={action}
-          disabled={Boolean(reasons[action]) || busy !== null}
+          disabled={Boolean(reasons[action])}
         >
           <Button
             size="sm"

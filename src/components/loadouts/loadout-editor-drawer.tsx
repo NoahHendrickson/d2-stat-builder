@@ -25,6 +25,7 @@ import {
   toggleExclusiveMod,
   pieceEnergyUsed,
   placementWithStatMods,
+  slotStatMod,
   statModSlotted,
   type ModsSection,
 } from "@/lib/loadouts/mod-placement";
@@ -129,22 +130,46 @@ function ItemIcon({
   );
 }
 
-/** Optimizer stat-mod chip in the editor header: checked when a copy is on a piece. */
+/**
+ * Optimizer stat-mod chip in the editor header: checked when a copy is on a piece.
+ * An unslotted one is a button that slots it (onto the piece with the most energy to
+ * spare) when any piece can take it; otherwise the tooltip says what's in the way.
+ */
 function StatModChip({
   option,
   slotted,
+  blocked,
+  onSlot,
 }: {
   option: ModOption | undefined;
   slotted: boolean;
+  /** Why it can't be slotted right now (unslotted chips only). */
+  blocked?: string;
+  onSlot: () => void;
 }) {
   const name = option?.name ?? "Stat mod";
-  const label = slotted ? `${name} · slotted` : `${name} · not slotted`;
+  const label = slotted
+    ? `${name} · slotted`
+    : blocked
+      ? `${name} · not slotted — ${blocked}`
+      : `${name} · not slotted — click to slot it`;
+  const disabled = slotted || blocked !== undefined;
   return (
-    <TooltipLabel label={label} disabled>
-      <span
-        role="listitem"
+    <TooltipLabel label={label} disabled={disabled}>
+      <button
+        type="button"
         aria-label={label}
-        className="relative flex size-9 shrink-0 items-center justify-center border border-input"
+        disabled={disabled}
+        onClick={onSlot}
+        className={cn(
+          "relative flex size-9 shrink-0 items-center justify-center border border-input",
+          "focus-visible:ring-ring/50 outline-none focus-visible:ring-[3px]",
+          slotted
+            ? "disabled:cursor-default"
+            : blocked
+              ? "disabled:cursor-not-allowed"
+              : "hover:border-emphatic hover:bg-emphatic/6",
+        )}
       >
         <ItemIcon icon={option?.icon} size={32} className="rounded-none" />
         <span
@@ -162,7 +187,7 @@ function StatModChip({
             <X weight="bold" className="size-2.5" />
           )}
         </span>
-      </span>
+      </button>
     </TooltipLabel>
   );
 }
@@ -625,6 +650,32 @@ function EditorForm({
     (hash: number) => catalog?.option(hash)?.cost ?? 0,
     [catalog],
   );
+
+  // Per unslotted header chip: what stops a click from slotting it, if anything.
+  const statModBlocked = useMemo(() => {
+    if (!mods) return [];
+    const pieces = mods.pieces;
+    const generalSockets = pieces
+      .map((p) => ({ p, g: p.armorSockets?.find((s) => s.kind === "general") }))
+      .filter((x) => x.g !== undefined);
+    const anyEmptySocket = generalSockets.some(
+      ({ p, g }) => placement[p.instanceId]?.[g!.index] === undefined,
+    );
+    return desiredStatMods.map((hash, i): string | undefined => {
+      if (slotted[i]) return undefined;
+      if (slotStatMod(pieces, placement, hash, costOf)) return undefined;
+      if (generalSockets.length === 0) return "these pieces have no stat-mod socket";
+      if (!anyEmptySocket) return "every stat-mod socket is taken";
+      return `needs ${costOf(hash)} energy and no piece has that free`;
+    });
+  }, [mods, desiredStatMods, slotted, placement, costOf]);
+  const slotDesiredStatMod = useCallback(
+    (hash: number) => {
+      if (!mods) return;
+      setPlacement((prev) => slotStatMod(mods.pieces, prev, hash, costOf) ?? prev);
+    },
+    [mods, costOf],
+  );
   const updatePieceChosen = useCallback(
     (instanceId: string, update: PieceChosenUpdate) => {
       setPlacement((prev) => {
@@ -698,7 +749,7 @@ function EditorForm({
         />
         {mods && desiredStatMods.length > 0 && (
           <div
-            role="list"
+            role="group"
             aria-label="Stat mods"
             className="flex flex-wrap items-center gap-0.5"
           >
@@ -707,6 +758,8 @@ function EditorForm({
                 key={`${hash}-${i}`}
                 option={mods.catalog.option(hash)}
                 slotted={slotted[i] ?? false}
+                blocked={statModBlocked[i]}
+                onSlot={() => slotDesiredStatMod(hash)}
               />
             ))}
           </div>
@@ -794,10 +847,17 @@ function EditorForm({
 export function LoadoutEditorDrawer({
   open,
   onOpenChange,
+  formKey,
   ...form
 }: Omit<EditorProps, "onCancel" | "showGrids"> & {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /**
+   * Identity of what is being edited. The form seeds its name, notes, and mod
+   * placement from props once, on mount — so when the drawer is already open and the
+   * caller switches to a different loadout, a new key remounts it with the new values.
+   */
+  formKey?: string | number;
 }) {
   // Stay on the mounted parent: EditorForm only exists while `open`, so a deferred
   // value inside it would start true and never delay the grids.
@@ -821,6 +881,7 @@ export function LoadoutEditorDrawer({
       >
         {open && (
           <EditorForm
+            key={formKey}
             {...form}
             showGrids={showGrids}
             onCancel={() => onOpenChange(false)}

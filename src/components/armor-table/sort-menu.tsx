@@ -132,6 +132,7 @@ export const SortMenu = memo(function SortMenu({
       }
     >
       <DropdownMenu
+        modal={false}
         onOpenChange={(open) => {
           if (open) setNest(false);
         }}
@@ -198,17 +199,21 @@ export const SortMenu = memo(function SortMenu({
           >
             {numeric ? (
               <>
-                <DropdownMenuRadioItem value="desc">
+                <DropdownMenuRadioItem value="desc" closeOnClick={false}>
                   High→Low
                 </DropdownMenuRadioItem>
-                <DropdownMenuRadioItem value="asc">
+                <DropdownMenuRadioItem value="asc" closeOnClick={false}>
                   Low→High
                 </DropdownMenuRadioItem>
               </>
             ) : (
               <>
-                <DropdownMenuRadioItem value="asc">A→Z</DropdownMenuRadioItem>
-                <DropdownMenuRadioItem value="desc">Z→A</DropdownMenuRadioItem>
+                <DropdownMenuRadioItem value="asc" closeOnClick={false}>
+                  A→Z
+                </DropdownMenuRadioItem>
+                <DropdownMenuRadioItem value="desc" closeOnClick={false}>
+                  Z→A
+                </DropdownMenuRadioItem>
               </>
             )}
             {canCustom && (
@@ -226,6 +231,7 @@ export const SortMenu = memo(function SortMenu({
                 }
               />
               <DropdownMenuItem
+                closeOnClick={false}
                 disabled={!customized}
                 onClick={() => onApplyMode(sortKey, "asc", nest && canNest)}
               >

@@ -94,6 +94,10 @@ export interface ArmorPiece {
   exoticPerkHashes?: [number, number];
   location: ArmorLocation;
   characterId?: string;
+  /** Locked in-game (ItemState.Locked) — never vaulted automatically to make room. */
+  locked?: boolean;
+  /** Sitting in the character's postmaster: listed under `inventory`, but not transferable. */
+  postmaster?: boolean;
   /** Every writable mod socket (for the mod picker + applying loadouts). */
   armorSockets?: ArmorSocket[];
   /** Armor energy (component 300) — capacity and what current plugs use. */
@@ -102,6 +106,10 @@ export interface ArmorPiece {
 
 const ITEM_TYPE_ARMOR = 2;
 const TIER_TYPE_EXOTIC = 6;
+/** ItemState.Locked */
+const ITEM_STATE_LOCKED = 1;
+/** The postmaster bucket (Lost Items) — items here live in the character inventory list. */
+const POSTMASTER_BUCKET = 215593132;
 
 /**
  * Base roll = the instance's current stats (component 304) minus the stat
@@ -494,6 +502,8 @@ function buildPiece(
     exoticPerkHashes,
     location,
     characterId,
+    ...((item.state ?? 0) & ITEM_STATE_LOCKED ? { locked: true } : {}),
+    ...(item.bucketHash === POSTMASTER_BUCKET ? { postmaster: true } : {}),
     ...(watermark ? { watermark } : {}),
     ...(armorSockets ? { armorSockets } : {}),
     ...(energy ? { energy } : {}),

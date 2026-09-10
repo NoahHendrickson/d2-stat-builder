@@ -17,6 +17,9 @@ export class BungieHttpError extends Error {
     message: string,
     /** Bungie PlatformErrorCodes value from the body, when present. */
     public readonly code?: number,
+    /** Bungie's own `ErrorStatus` / `Message` from the body, when present. */
+    public readonly errorStatus?: string,
+    public readonly bungieMessage?: string,
   ) {
     super(message);
     this.name = "BungieHttpError";
@@ -81,6 +84,8 @@ export function createBungieHttp(accessToken?: string): HttpClient {
         res.status,
         `Bungie ${config.method} ${url.pathname}: ${detail}`,
         json?.ErrorCode,
+        json?.ErrorStatus,
+        json?.Message,
       );
       if (res.status < 500) break; // 4xx (and in-body errors on a 200) won't fix themselves
       await new Promise((r) => setTimeout(r, 600));

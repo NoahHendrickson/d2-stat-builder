@@ -169,7 +169,9 @@ export function FilterMultiselectPanel<V extends string | number>({
       {active && (
         <>
           <DropdownMenuSeparator />
-          <DropdownMenuItem onClick={() => onChange([])}>Clear</DropdownMenuItem>
+          <DropdownMenuItem closeOnClick={false} onClick={() => onChange([])}>
+            Clear
+          </DropdownMenuItem>
         </>
       )}
     </>
@@ -211,6 +213,7 @@ export function FilterMultiselect<V extends string | number>({
   return (
     <div className={cn("relative min-w-40 flex-1 overflow-visible", className)}>
       <DropdownMenu
+        modal={false}
         onOpenChange={(next) => {
           if (!next) setQuery("");
         }}
