@@ -18,8 +18,9 @@ export function ThemeToggle() {
     return (
       <TooltipLabel label="Toggle color theme">
         <Button
-          variant="outline"
-          size="icon-sm"
+          variant="ghost"
+          size="icon"
+          className="relative"
           aria-label="Toggle color theme"
           disabled
         >
@@ -36,8 +37,9 @@ export function ThemeToggle() {
       label={isDark ? "Switch to light mode" : "Switch to dark mode"}
     >
       <Button
-        variant="outline"
-        size="icon-sm"
+        variant="ghost"
+        size="icon"
+        className="relative"
         aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
         onClick={() => setTheme(isDark ? "light" : "dark")}
       >

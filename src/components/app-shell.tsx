@@ -4,27 +4,29 @@ import { TooltipLabel } from "@/components/ui/tooltip";
 import {
   useCallback,
   useEffect,
-  useRef,
   useState,
+  useSyncExternalStore,
   type KeyboardEvent,
   type PointerEvent,
   type ReactNode,
 } from "react";
-import { List } from "@phosphor-icons/react";
-import { AppSidebar } from "@/components/app-sidebar";
+import { List, XIcon } from "@phosphor-icons/react";
+import { AppSidebar, SidebarChrome } from "@/components/app-sidebar";
 import { ViewTabs } from "@/components/view-tabs";
 import { Button } from "@/components/ui/button";
-import { Drawer, DrawerContent } from "@/components/ui/drawer";
+import { Drawer, DrawerClose, DrawerContent } from "@/components/ui/drawer";
+import { SHARE_PARAM } from "@/lib/loadouts/share";
 import { useMinWidth } from "@/lib/use-min-width";
 import { cn } from "@/lib/utils";
 
 /** Tailwind `lg` — below it the sidebar collapses into a drawer. */
-const SIDEBAR_BREAKPOINT_PX = 1024;
+export const SIDEBAR_BREAKPOINT_PX = 1024;
 /** Figma 1:2 sidebar width — also the reset target. */
 const SIDEBAR_DEFAULT_PX = 340;
 const SIDEBAR_MIN_PX = 260;
 const SIDEBAR_MAX_PX = 560;
 const SIDEBAR_WIDTH_KEY = "stat-builder:sidebar-width";
+const SIDEBAR_COLLAPSED_KEY = "stat-builder:sidebar-collapsed";
 
 function clampSidebarWidth(px: number): number {
   return Math.round(Math.min(SIDEBAR_MAX_PX, Math.max(SIDEBAR_MIN_PX, px)));
@@ -49,35 +51,142 @@ function saveSidebarWidth(px: number): void {
   }
 }
 
+// The sidebar width lives in a module store read through useSyncExternalStore: the
+// server (and the hydrating render) see the default, so the inline width can't mismatch,
+// and the stored width is read lazily on the client's first snapshot — no restore effect,
+// no ref mirror. Drag moves write here without saving; saves happen on release / commit.
+let sidebarWidthValue: number | null = null;
+const sidebarWidthListeners = new Set<() => void>();
+
+function getSidebarWidth(): number {
+  sidebarWidthValue ??= loadSidebarWidth();
+  return sidebarWidthValue;
+}
+
+function subscribeSidebarWidth(listener: () => void): () => void {
+  sidebarWidthListeners.add(listener);
+  return () => {
+    sidebarWidthListeners.delete(listener);
+  };
+}
+
+function setSidebarWidth(px: number): void {
+  if (px === sidebarWidthValue) return;
+  sidebarWidthValue = px;
+  for (const listener of sidebarWidthListeners) listener();
+}
+
+let sidebarCollapsedValue: boolean | null = null;
+const sidebarCollapsedListeners = new Set<() => void>();
+
+function loadSidebarCollapsed(): boolean {
+  try {
+    return localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function getSidebarCollapsed(): boolean {
+  sidebarCollapsedValue ??= loadSidebarCollapsed();
+  return sidebarCollapsedValue;
+}
+
+function subscribeSidebarCollapsed(listener: () => void): () => void {
+  sidebarCollapsedListeners.add(listener);
+  return () => {
+    sidebarCollapsedListeners.delete(listener);
+  };
+}
+
+function setSidebarCollapsed(collapsed: boolean): void {
+  if (collapsed === sidebarCollapsedValue) return;
+  sidebarCollapsedValue = collapsed;
+  try {
+    localStorage.setItem(SIDEBAR_COLLAPSED_KEY, collapsed ? "1" : "0");
+  } catch {
+    // Persistence is best-effort — quota / privacy modes are ignored.
+  }
+  for (const listener of sidebarCollapsedListeners) listener();
+}
+
+/**
+ * Whether the desktop sidebar column is on screen (not the narrow-viewport drawer,
+ * and not collapsed). Pages use this to avoid duplicating the armory card that's
+ * pinned at the bottom of the sidebar.
+ */
+export function useSidebarVisible(): boolean {
+  const desktop = useMinWidth(SIDEBAR_BREAKPOINT_PX);
+  const collapsed = useSyncExternalStore(
+    subscribeSidebarCollapsed,
+    getSidebarCollapsed,
+    () => false,
+  );
+  return desktop && !collapsed;
+}
+
 /**
  * App frame (Figma 1:2): a resizable sidebar — title, view switch, saved loadouts,
  * armor summary — beside the active view, which scrolls on its own. On narrow
  * viewports the sidebar becomes a left drawer behind a top bar.
  *
- * The sidebar's content is mounted only where it's visible so the loadouts list (and
- * its share-link import dialog) never exists twice at once.
+ * The desktop column and the narrow-viewport drawer never both mount the loadouts
+ * list, so its share-link import dialog can't exist twice at once.
  */
 export function AppShell({ children }: { children: ReactNode }) {
   const desktop = useMinWidth(SIDEBAR_BREAKPOINT_PX);
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_DEFAULT_PX);
+  const sidebarWidth = useSyncExternalStore(
+    subscribeSidebarWidth,
+    getSidebarWidth,
+    () => SIDEBAR_DEFAULT_PX,
+  );
+  const collapsed = useSyncExternalStore(
+    subscribeSidebarCollapsed,
+    getSidebarCollapsed,
+    () => false,
+  );
   const [resizing, setResizing] = useState(false);
-  const sidebarWidthRef = useRef(sidebarWidth);
-  sidebarWidthRef.current = sidebarWidth;
-
+  // Transitions stay off until after the stored collapsed/width snapshot has painted,
+  // so a refresh doesn't replay the slide. Resize drags stay un-tweened.
+  const [slideEnabled, setSlideEnabled] = useState(false);
   useEffect(() => {
-    setSidebarWidth(loadSidebarWidth());
+    setSlideEnabled(true);
+  }, []);
+  const desktopSidebarOpen = desktop && !collapsed;
+  const slideTransition =
+    slideEnabled && !resizing
+      ? "duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none"
+      : null;
+
+  // A share link (?import=) is handled by the loadouts list, which on narrow viewports
+  // only exists inside the drawer — open it so the import dialog can appear. Deferred
+  // a frame so the closed drawer paints first and its open transition can run. On
+  // desktop a collapsed sidebar is the same situation: expand it so the list mounts.
+  useEffect(() => {
+    if (!new URLSearchParams(window.location.search).has(SHARE_PARAM)) {
+      return;
+    }
+    if (window.matchMedia(`(min-width: ${SIDEBAR_BREAKPOINT_PX}px)`).matches) {
+      setSidebarCollapsed(false);
+      return;
+    }
+    const frame = requestAnimationFrame(() => setDrawerOpen(true));
+    return () => cancelAnimationFrame(frame);
   }, []);
 
   // Portaled surfaces (the loadout editor drawer) sit beside the sidebar, not over
   // it: publish its live width where anything under <html> can read it.
   useEffect(() => {
     const root = document.documentElement;
-    root.style.setProperty("--app-sidebar-width", `${desktop ? sidebarWidth : 0}px`);
+    root.style.setProperty(
+      "--app-sidebar-width",
+      `${desktopSidebarOpen ? sidebarWidth : 0}px`,
+    );
     return () => {
       root.style.removeProperty("--app-sidebar-width");
     };
-  }, [desktop, sidebarWidth]);
+  }, [desktopSidebarOpen, sidebarWidth]);
 
   useEffect(() => {
     if (!resizing) return;
@@ -91,34 +200,28 @@ export function AppShell({ children }: { children: ReactNode }) {
   }, [resizing]);
 
   const commitWidth = useCallback((px: number | ((current: number) => number)) => {
-    setSidebarWidth((current) => {
-      const next = clampSidebarWidth(
-        typeof px === "function" ? px(current) : px,
-      );
-      saveSidebarWidth(next);
-      return next;
-    });
+    const next = clampSidebarWidth(
+      typeof px === "function" ? px(getSidebarWidth()) : px,
+    );
+    setSidebarWidth(next);
+    saveSidebarWidth(next);
   }, []);
 
   const onResizePointerDown = (e: PointerEvent<HTMLDivElement>) => {
     if (e.button !== 0) return;
     e.preventDefault();
     setResizing(true);
-    const next = clampSidebarWidth(e.clientX);
-    sidebarWidthRef.current = next;
-    setSidebarWidth(next);
+    setSidebarWidth(clampSidebarWidth(e.clientX));
 
     const onMove = (ev: globalThis.PointerEvent) => {
-      const live = clampSidebarWidth(ev.clientX);
-      sidebarWidthRef.current = live;
-      setSidebarWidth(live);
+      setSidebarWidth(clampSidebarWidth(ev.clientX));
     };
     const onUp = () => {
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", onUp);
       window.removeEventListener("pointercancel", onUp);
       setResizing(false);
-      saveSidebarWidth(sidebarWidthRef.current);
+      saveSidebarWidth(getSidebarWidth());
     };
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", onUp);
@@ -143,31 +246,62 @@ export function AppShell({ children }: { children: ReactNode }) {
   };
 
   return (
-    <div className="flex h-full w-full">
+    <div className="relative flex h-full w-full">
       <aside
-        className="bg-sidebar border-border relative hidden shrink-0 flex-col border-r lg:flex"
-        style={{ width: sidebarWidth }}
+        className={cn(
+          "relative hidden h-full min-w-0 shrink-0 overflow-hidden lg:block",
+          slideTransition && `transition-[width] ${slideTransition}`,
+          collapsed && "pointer-events-none",
+        )}
+        style={{ width: collapsed ? 0 : sidebarWidth }}
+        aria-hidden={collapsed}
+        inert={collapsed}
       >
-        {desktop && <AppSidebar />}
         <div
-          role="separator"
-          aria-orientation="vertical"
-          aria-label="Resize sidebar"
-          aria-valuemin={SIDEBAR_MIN_PX}
-          aria-valuemax={SIDEBAR_MAX_PX}
-          aria-valuenow={sidebarWidth}
-          tabIndex={0}
-          onPointerDown={onResizePointerDown}
-          onDoubleClick={() => commitWidth(SIDEBAR_DEFAULT_PX)}
-          onKeyDown={onResizeKeyDown}
           className={cn(
-            "absolute inset-y-0 -right-1 z-10 w-2 cursor-col-resize touch-none outline-none",
-            "after:absolute after:inset-y-0 after:left-1/2 after:w-0.5 after:-translate-x-1/2 after:rounded-full after:transition-colors",
-            "after:bg-transparent hover:after:bg-foreground/40 focus-visible:after:bg-foreground",
-            resizing && "after:bg-foreground",
+            "bg-sidebar border-border relative flex h-full min-h-0 flex-col border-r",
+            slideTransition && `transition-transform ${slideTransition}`,
           )}
-        />
+          style={{
+            width: sidebarWidth,
+            transform: collapsed ? "translateX(-100%)" : "translateX(0)",
+          }}
+        >
+          {desktop && <AppSidebar chrome={false} />}
+          <div
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Resize sidebar"
+            aria-valuemin={SIDEBAR_MIN_PX}
+            aria-valuemax={SIDEBAR_MAX_PX}
+            aria-valuenow={sidebarWidth}
+            tabIndex={collapsed ? -1 : 0}
+            onPointerDown={onResizePointerDown}
+            onDoubleClick={() => commitWidth(SIDEBAR_DEFAULT_PX)}
+            onKeyDown={onResizeKeyDown}
+            className={cn(
+              "absolute inset-y-0 -right-1 z-10 w-2 cursor-col-resize touch-none outline-none",
+              "after:absolute after:inset-y-0 after:left-1/2 after:w-0.5 after:-translate-x-1/2 after:rounded-full after:transition-colors",
+              "after:bg-transparent hover:after:bg-foreground/40 focus-visible:after:bg-foreground",
+              resizing && "after:bg-foreground",
+            )}
+          />
+        </div>
       </aside>
+
+      {/* Stays put while the panel slides away: same icon, same title, same spot. */}
+      <div
+        className={cn(
+          "absolute top-0 left-0 z-20 hidden lg:block",
+          collapsed && "bg-background",
+        )}
+        style={{ width: collapsed ? undefined : sidebarWidth }}
+      >
+        <SidebarChrome
+          collapsed={collapsed}
+          onToggle={() => setSidebarCollapsed(!collapsed)}
+        />
+      </div>
 
       {!desktop && (
         <Drawer
@@ -176,6 +310,16 @@ export function AppShell({ children }: { children: ReactNode }) {
           swipeDirection="left"
         >
           <DrawerContent aria-label="Loadouts" className="bg-sidebar">
+            <div className="flex shrink-0 justify-end px-2 pt-2">
+              <TooltipLabel label="Close loadouts">
+                <DrawerClose
+                  aria-label="Close loadouts"
+                  render={<Button variant="ghost" size="icon-sm" />}
+                >
+                  <XIcon />
+                </DrawerClose>
+              </TooltipLabel>
+            </div>
             <AppSidebar onNavigate={() => setDrawerOpen(false)} />
           </DrawerContent>
         </Drawer>

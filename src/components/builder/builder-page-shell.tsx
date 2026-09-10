@@ -3,10 +3,12 @@
 import { SignInCard } from "@/components/auth/sign-in-card";
 import { useSession } from "@/lib/auth/use-session";
 import { BuilderPanel } from "@/components/builder/builder-panel";
+import { useSidebarVisible } from "@/components/app-shell";
 
 export function BuilderPageShell() {
   const session = useSession();
   const authed = session.data?.authenticated ?? false;
+  const sidebarVisible = useSidebarVisible();
 
   if (!authed) {
     return (
@@ -16,12 +18,13 @@ export function BuilderPageShell() {
     );
   }
 
-  // The armory summary lives in the app sidebar, so the panel never shows it inline.
+  // The armory summary lives in the app sidebar; the panel only shows it inline while
+  // the sidebar isn't on screen (narrow drawer, or the user collapsed it).
   // Figma 14:5181: the view is a 1640px frame beside the sidebar, content inset ~100px
   // on the left and ~77px on top at that size; smaller screens tighten the insets.
   return (
     <main className="mx-auto max-w-[102.5rem] px-6 py-6 pb-24 lg:px-12 lg:py-16 2xl:px-24">
-      <BuilderPanel showInlineStatusCards={false} />
+      <BuilderPanel showInlineStatusCards={!sidebarVisible} />
     </main>
   );
 }

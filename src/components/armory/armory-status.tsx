@@ -20,6 +20,7 @@ import { useSession } from "@/lib/auth/use-session";
 import { BUNGIE_IMAGE_BASE } from "@/lib/bungie/constants";
 import { useManifest } from "@/lib/manifest/use-manifest";
 import { toast } from "@/lib/toast";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 const REFRESH_SUCCESS_MS = 2500;
 
@@ -204,16 +205,19 @@ export function ArmoryStatus() {
           <AccountAvatar iconPath={session.data.user?.iconPath} />
           <p className="truncate text-sm font-medium">{displayName}</p>
         </div>
-        <TooltipLabel label="Sign out">
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label="Sign out"
-            onClick={() => void handleSignOut()}
-          >
-            <SignOut className="size-4" aria-hidden />
-          </Button>
-        </TooltipLabel>
+        <div className="flex shrink-0 items-center">
+          <ThemeToggle />
+          <TooltipLabel label="Sign out">
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="Sign out"
+              onClick={() => void handleSignOut()}
+            >
+              <SignOut className="size-4" aria-hidden />
+            </Button>
+          </TooltipLabel>
+        </div>
       </div>
     </section>
   );
