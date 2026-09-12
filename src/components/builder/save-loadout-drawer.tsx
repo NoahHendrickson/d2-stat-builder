@@ -8,15 +8,8 @@ import {
 } from "@/components/loadouts/loadout-editor-drawer";
 import type { SubclassSection } from "@/components/loadouts/loadout-subclass-editor";
 import type { DimLoadout } from "@/lib/dim/loadout-link";
-import { planLoadoutPlugs } from "@/lib/loadouts/apply-plan";
-import {
-  modsFromEditor,
-  modsSectionFromPlan,
-  type ModsSection,
-} from "@/lib/loadouts/mod-placement";
-import { getModCatalog } from "@/lib/loadouts/mod-options";
-import { planPiecesFromArmor } from "@/lib/loadouts/plan-pieces";
-import { plugInfoFromManifest } from "@/lib/loadouts/plug-info";
+import { modsSectionForPieces } from "@/lib/loadouts/commit";
+import { modsFromEditor, type ModsSection } from "@/lib/loadouts/mod-placement";
 import { loadoutSubclass } from "@/lib/loadouts/subclass";
 import type { Manifest } from "@/lib/manifest/load";
 
@@ -41,7 +34,6 @@ export interface SaveLoadoutDrawerProps {
 }
 
 interface Picker {
-  session: number;
   mods: ModsSection;
   subclass?: SubclassSection;
 }
@@ -55,7 +47,13 @@ interface Picker {
  * on the live pieces — e.g. the class item's stat mod when the build uses a theoretical
  * (socket-less) exotic class item — are kept in the saved loadout, not dropped.
  */
-export function SaveLoadoutDrawer({
+export function SaveLoadoutDrawer(props: SaveLoadoutDrawerProps) {
+  // Keying remounts the picker for each Save click so it is built from the inputs as
+  // they are then — no setState-during-render when `session` changes.
+  return <SaveLoadoutDrawerSession key={props.session} {...props} />;
+}
+
+function SaveLoadoutDrawerSession({
   open,
   onOpenChange,
   session,
@@ -69,16 +67,15 @@ export function SaveLoadoutDrawer({
   busy,
   onSubmit,
 }: SaveLoadoutDrawerProps) {
-  const buildPicker = (): Picker => {
+  const [picker] = useState((): Picker => {
     const dim = makeDimLoadout(defaultName);
-    const plan = planLoadoutPlugs({
-      pieces: planPiecesFromArmor(pieces, manifest),
-      modHashes: dim.parameters.mods,
-      plugInfo: plugInfoFromManifest(manifest),
-    });
     return {
-      session,
-      mods: modsSectionFromPlan(pieces, getModCatalog(manifest), plan, insertablePlugs),
+      mods: modsSectionForPieces(
+        pieces,
+        dim.parameters.mods,
+        manifest,
+        insertablePlugs,
+      ),
       subclass:
         buildClass !== undefined && buildClass < 3
           ? {
@@ -90,17 +87,7 @@ export function SaveLoadoutDrawer({
             }
           : undefined,
     };
-  };
-
-  // Built once per Save click (session), from the inputs as they are right then — not
-  // memoized on the inputs, so an armory refetch mid-edit can't swap the picker out from
-  // under the form.
-  const [current, setCurrent] = useState(buildPicker);
-  let picker = current;
-  if (picker.session !== session) {
-    picker = buildPicker();
-    setCurrent(picker);
-  }
+  });
 
   return (
     <LoadoutEditorDrawer

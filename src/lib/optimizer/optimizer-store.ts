@@ -28,9 +28,6 @@ export type CeilingsView = {
 
 export interface OptimizerSnapshot {
   result: OptimizerOutput | null;
-  ceilings: StatArray | null;
-  /** Are the displayed ceilings PROVEN maxima? (solve.ts contract — see use-optimizer). */
-  ceilingsExact: boolean;
   running: boolean;
   /** Identity of the latest run — lets the UI restart progress animation per search. */
   runId: number;
@@ -75,8 +72,6 @@ export function createOptimizerStore(
 ): OptimizerStore {
   let snapshot: OptimizerSnapshot = {
     result: null,
-    ceilings: null,
-    ceilingsExact: false,
     running: false,
     runId: 0,
     refinement: IDLE,
@@ -164,7 +159,7 @@ export function createOptimizerStore(
           const shown = (pendingCeilings ?? ceilingsView.get()).values;
           const values =
             ref.phase === "running" ? mergeCeilingsMonotone(shown, msg.ceilings) : msg.ceilings;
-          offerCeilings({ values, exact: snapshot.ceilingsExact });
+          offerCeilings({ values, exact: ceilingsView.get().exact });
           break;
         }
         case "better":
@@ -185,8 +180,6 @@ export function createOptimizerStore(
             });
             setState({
               result: msg.output,
-              ceilings: msg.output.ceilings,
-              ceilingsExact: msg.output.ceilingsExact,
               running: false,
               refinement: { phase: "running", progress: 0, interim: msg.output, pending: null },
             });
@@ -194,7 +187,7 @@ export function createOptimizerStore(
             inFlight = false;
             const ceilings =
               ref.phase === "running"
-                ? mergeCeilingsMonotone(snapshot.ceilings, msg.output.ceilings)
+                ? mergeCeilingsMonotone(ceilingsView.get().values, msg.output.ceilings)
                 : msg.output.ceilings;
             publishCeilings({
               values: ceilings,
@@ -202,8 +195,6 @@ export function createOptimizerStore(
             });
             const patch: Partial<OptimizerSnapshot> = {
               result: msg.output,
-              ceilingsExact: msg.output.ceilingsExact,
-              ceilings,
               running: false,
             };
             if (ref.phase === "running") {
@@ -272,7 +263,7 @@ export function createOptimizerStore(
       refinementProgress.set(0);
       dropPendingCeilings();
       ceilingsView.set({ values: ceilingsView.get().values, exact: false });
-      setState({ running: true, ceilingsExact: false, refinement: IDLE, runId: s });
+      setState({ running: true, refinement: IDLE, runId: s });
       // Carry proven ceiling bounds from the previous query when this edit only changed
       // the minimums — lets the worker skip re-proving what the last query established.
       const carry = last ? computeCeilingCarry(last.input, last.output, input) : undefined;
@@ -297,13 +288,11 @@ export function createOptimizerStore(
       const ref = snapshot.refinement;
       if (ref.phase !== "done" || !ref.pending) return;
       const pending = ref.pending;
-      const ceilings = mergeCeilingsMonotone(snapshot.ceilings, pending.ceilings);
+      const ceilings = mergeCeilingsMonotone(ceilingsView.get().values, pending.ceilings);
       publishCeilings({ values: ceilings, exact: pending.ceilingsExact });
       setState({
         refinement: IDLE,
         result: pending,
-        ceilings,
-        ceilingsExact: pending.ceilingsExact,
       });
     },
   };

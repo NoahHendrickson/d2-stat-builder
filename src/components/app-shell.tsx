@@ -148,11 +148,13 @@ export function AppShell({ children }: { children: ReactNode }) {
   );
   const [resizing, setResizing] = useState(false);
   // Transitions stay off until after the stored collapsed/width snapshot has painted,
-  // so a refresh doesn't replay the slide. Resize drags stay un-tweened.
-  const [slideEnabled, setSlideEnabled] = useState(false);
-  useEffect(() => {
-    setSlideEnabled(true);
-  }, []);
+  // so a refresh doesn't replay the slide. Resize drags stay un-tweened. Client snapshot
+  // is true; the hydrating render matches the server (false), then React re-renders.
+  const slideEnabled = useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false,
+  );
   const desktopSidebarOpen = desktop && !collapsed;
   const slideTransition =
     slideEnabled && !resizing

@@ -71,17 +71,9 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ConfirmDialog } from "@/components/loadouts/confirm-dialog";
-import {
-  modsFromEditor,
-  modsSectionFromPlan,
-  type ModsSection,
-} from "@/lib/loadouts/mod-placement";
-import { withEditorTotals } from "@/lib/loadouts/editor-stats";
+import { type ModsSection } from "@/lib/loadouts/mod-placement";
+import { commitLoadout, modsSectionForPieces } from "@/lib/loadouts/commit";
 import { resolveLoadout } from "@/lib/loadouts/resolve";
-import { planLoadoutPlugs } from "@/lib/loadouts/apply-plan";
-import { planPiecesFromArmor } from "@/lib/loadouts/plan-pieces";
-import { plugInfoFromManifest } from "@/lib/loadouts/plug-info";
-import { getModCatalog } from "@/lib/loadouts/mod-options";
 import { LoadoutRow } from "@/components/loadouts/loadout-row";
 import {
   LoadoutEditorDrawer,
@@ -285,17 +277,12 @@ export function LoadoutsList({
       let mods: ModsSection | undefined;
       if (resolved.armor.length > 0 && !resolved.missing) {
         const pieces = resolved.armor.map((a) => a.piece!);
-        const plan = planLoadoutPlugs({
-          pieces: planPiecesFromArmor(pieces, manifest),
-          modHashes: saved.loadout.parameters.mods,
-          plugInfo: plugInfoFromManifest(manifest),
-          placements: saved.modPlacement,
-        });
-        mods = modsSectionFromPlan(
+        mods = modsSectionForPieces(
           pieces,
-          getModCatalog(manifest),
-          plan,
+          saved.loadout.parameters.mods,
+          manifest,
           armory.insertablePlugs,
+          saved.modPlacement,
         );
       }
       setDialog({ kind: "edit", loadout: saved, mods });
@@ -307,31 +294,38 @@ export function LoadoutsList({
     [],
   );
 
-  const editLoadout = ({ name, notes, placement, subclass, stats }: LoadoutDetailsValues) => {
+  const editLoadout = ({
+    name,
+    notes,
+    placement,
+    subclass,
+    stats,
+  }: LoadoutDetailsValues) => {
     if (dialog.kind !== "edit") return;
     const { id, loadout, optimizer, builder, modPlacement } = dialog.loadout;
-    // Mods the planner couldn't place on the current armor are kept, not dropped.
-    const mods =
-      placement && dialog.mods
-        ? modsFromEditor(dialog.mods, placement)
-        : loadout.parameters.mods;
-    const nextPlacement = placement ?? modPlacement;
     const next: SavedLoadoutData = {
       version: LOADOUT_SCHEMA_VERSION,
       loadout: {
         ...loadout,
         name,
         ...(notes ? { notes } : { notes: undefined }),
-        parameters: { ...loadout.parameters, mods },
       },
       ...(optimizer ? { optimizer } : {}),
       ...(builder ? { builder } : {}),
-      ...(nextPlacement && Object.keys(nextPlacement).length > 0
-        ? { modPlacement: nextPlacement }
+      ...(modPlacement && Object.keys(modPlacement).length > 0
+        ? { modPlacement }
         : {}),
     };
     update.mutate(
-      { id, data: withEditorTotals(withLoadoutSubclass(next, subclass, manifest), stats) },
+      {
+        id,
+        data: commitLoadout(
+          next,
+          manifest,
+          { placement, subclass, stats },
+          dialog.mods,
+        ),
+      },
       {
         onSuccess: () => {
           setDialog({ kind: "none" });

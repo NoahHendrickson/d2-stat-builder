@@ -1,8 +1,6 @@
 "use client";
 
-import { TooltipLabel } from "@/components/ui/tooltip";
 import {
-  memo,
   useCallback,
   useEffect,
   useLayoutEffect,
@@ -11,21 +9,15 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import Image from "next/image";
-import { MagnifyingGlass, PushPin } from "@phosphor-icons/react";
+import { MagnifyingGlass } from "@phosphor-icons/react";
 import { useSession } from "@/lib/auth/use-session";
 import { useArmory } from "@/lib/armory/use-armory";
 import { useManifest } from "@/lib/manifest/use-manifest";
 import { useOptimizer } from "@/lib/optimizer/use-optimizer";
-import type { CeilingsView } from "@/lib/optimizer/optimizer-store";
 import { useSmoothedProgress } from "@/lib/use-smoothed-progress";
-import { useStoreValue, type ValueStore } from "@/lib/value-store";
+import { createValueStore } from "@/lib/value-store";
 import { liveTargets } from "@/lib/builder/live-targets";
-import {
-  availableSets,
-  type ArmorSetInfo,
-  type SetPerkInfo,
-} from "@/lib/armory/sets";
+import { availableSets } from "@/lib/armory/sets";
 import {
   DEFAULT_SET_FILTERS,
   hasCustomSetFilters,
@@ -62,24 +54,17 @@ import {
   CLASS_NAMES,
   STAT_DISPLAY_ORDER,
   STAT_HASHES,
-  STAT_LABELS,
   STAT_ORDER,
   offArchetypeIndices,
   type StatIconMap,
 } from "@/lib/armory/stats";
 import type { ArmorPiece } from "@/lib/armory/normalize";
-import { Slider, sliderValueLeft } from "@/components/ui/slider";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import { BUNGIE_IMAGE_BASE } from "@/lib/bungie/constants";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { StatTargetRow } from "@/components/builder/stat-target-row";
+import { SetRow } from "@/components/builder/set-row";
 import { SignInCard } from "@/components/auth/sign-in-card";
 import { ArmoryStatus } from "@/components/armory/armory-status";
 import { ManifestStatus } from "@/components/manifest/manifest-status";
@@ -115,10 +100,6 @@ import { useApplyCurrentFragments } from "@/lib/armory/use-apply-current-fragmen
 import type { BuilderSnapshot } from "@/lib/loadouts/types";
 
 const MAX_MODS = 5;
-/** Clickable preset markers under each stat slider. */
-const STAT_TARGET_TICKS = [0, 50, 100, 150, 200] as const;
-const STAT_SLIDER_MAX = STAT_TARGET_TICKS[STAT_TARGET_TICKS.length - 1];
-/** Skeleton rows shown while a search is in flight. */
 
 export function BuilderPanel({
   showInlineStatusCards = true,
@@ -809,15 +790,9 @@ export function BuilderPanel({
   // not fifty BuildRows. The holder is written from a layout effect, not during render, so
   // a discarded concurrent render can never leave it stale. (A plain ref would do the same
   // job, but react-hooks/refs flags a ref-reading callback passed into useMemo.)
-  const [builderState] = useState(() => {
-    let value = { targets, builderSnapshot };
-    return {
-      set(next: typeof value) {
-        value = next;
-      },
-      get: () => value,
-    };
-  });
+  const [builderState] = useState(() =>
+    createValueStore({ targets, builderSnapshot }),
+  );
   useLayoutEffect(() => {
     builderState.set({ targets, builderSnapshot });
   });
@@ -1105,206 +1080,6 @@ export function BuilderPanel({
   );
 }
 
-const StatTargetRow = memo(function StatTargetRow({
-  statKey,
-  index,
-  icon,
-  value,
-  ceilingsView,
-  onChange,
-}: {
-  statKey: (typeof STAT_DISPLAY_ORDER)[number];
-  index: number;
-  icon?: string;
-  value: number;
-  ceilingsView: ValueStore<CeilingsView>;
-  onChange: (index: number, value: number) => void;
-}) {
-  const { values: ceilings, exact: ceilingsExact } = useStoreValue(ceilingsView);
-  const cap = ceilings ? ceilings[index] : null;
-  const label = STAT_LABELS[statKey];
-  // Achievable ceiling for this stat given the others. Overlay it as a
-  // lighter fill up to that max (full-width at 200); omit only while
-  // unknown (before the first search). Every wording derived from the
-  // proven/unproven distinction lives in this ONE object so the visible
-  // text, tick label, and accessible names can't drift apart: an exact
-  // ceiling is a hard "/ max"; an unproven one is a lower bound ("81+"
-  // — achievable, but possibly more out there, e.g. while a refinement
-  // is still probing or its budget expired). Both render "/ n" inline;
-  // only the tick label and accessible wording mark the difference.
-  const ceilingValue = cap ?? undefined;
-  const capText =
-    cap === null
-      ? null
-      : ceilingsExact
-        ? {
-            srText: `${label} achievable max: ${cap}`,
-            tickLabel: "Max",
-            tickAria: `Set ${label} to its max (${cap})`,
-          }
-        : {
-            srText: `${label} achievable: at least ${cap}`,
-            tickLabel: `${cap}+`,
-            tickAria: `Set ${label} to its highest proven value (${cap})`,
-          };
-  return (
-    // Figma 14:5183: 16px icon · Progress-style slider with tick labels
-    // beneath · 40×28 value box + "/ max". Icon and box centre on the track.
-    <div className="flex items-start gap-2.5">
-      <div className="flex min-w-0 flex-1 items-start gap-1">
-        {icon ? (
-          <TooltipLabel label={label}>
-            <Image
-              src={`${BUNGIE_IMAGE_BASE}${icon}`}
-              alt={label}
-              tabIndex={0}
-              width={16}
-              height={16}
-              className="mt-1.5 size-4 shrink-0 opacity-65 invert dark:invert-0"
-              unoptimized
-            />
-          </TooltipLabel>
-        ) : (
-          <span className="mt-1.5 size-4 shrink-0" aria-hidden />
-        )}
-        <div className="min-w-0 flex-1 pt-1">
-          <Slider
-            min={0}
-            max={STAT_SLIDER_MAX}
-            step={1}
-            value={[value]}
-            onValueChange={(v) => onChange(index, Array.isArray(v) ? v[0] : v)}
-            ceiling={ceilingValue}
-            aria-label={`${label} target`}
-            className="cursor-pointer"
-          />
-          <div className="relative mt-0.5 h-4">
-            {STAT_TARGET_TICKS.map((t) => {
-              // Once a ceiling is known, the top tick jumps the target to
-              // that achievable value instead of 200 (labels per capText).
-              const isCeilingTick = t === STAT_SLIDER_MAX && cap !== null;
-              const tickValue = isCeilingTick ? cap : t;
-              const tickLabel = isCeilingTick
-                ? capText!.tickLabel
-                : t === STAT_SLIDER_MAX
-                  ? "Max"
-                  : String(t);
-              const tickAria = isCeilingTick
-                ? capText!.tickAria
-                : `Set ${label} to ${t}`;
-              return (
-                <TooltipLabel label={tickAria} key={t}>
-                  <button
-                    type="button"
-                    onClick={() => onChange(index, tickValue)}
-                    aria-label={tickAria}
-                    style={{
-                      left: sliderValueLeft(t, 0, STAT_SLIDER_MAX),
-                    }}
-                    className={cn(
-                      // Centered under the thumb (sliderValueLeft is the thumb's center).
-                      "absolute top-0 -translate-x-1/2 cursor-pointer text-xs leading-4 tabular-nums transition-colors after:absolute after:-inset-x-2 after:-inset-y-1.5 after:content-[''] focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-hidden",
-                      value === tickValue
-                        ? "text-foreground"
-                        : "text-foreground/75 hover:text-foreground",
-                    )}
-                  >
-                    {tickLabel}
-                  </button>
-                </TooltipLabel>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-      <div className="flex shrink-0 items-center gap-0.5">
-        <Input
-          type="number"
-          min={0}
-          max={STAT_SLIDER_MAX}
-          step={1}
-          value={value}
-          aria-label={`${label} target value`}
-          onFocus={(e) => e.target.select()}
-          onChange={(e) => {
-            const n = Math.round(Number(e.target.value));
-            onChange(
-              index,
-              Number.isFinite(n)
-                ? Math.max(0, Math.min(STAT_SLIDER_MAX, n))
-                : 0,
-            );
-          }}
-          className="h-7 w-10 px-2 text-center text-xs tabular-nums [appearance:textfield] md:text-xs [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-        />
-        {capText && <span className="sr-only">{capText.srText}</span>}
-        <span
-          className="text-muted-foreground w-9 shrink-0 text-xs tabular-nums whitespace-nowrap"
-          aria-hidden
-        >
-          / {cap ?? STAT_SLIDER_MAX}
-        </span>
-      </div>
-    </div>
-  );
-});
-
-const SetRow = memo(function SetRow({
-  set,
-  pinned,
-  req,
-  onTogglePin,
-  onToggleSet,
-}: {
-  set: ArmorSetInfo;
-  pinned: boolean;
-  req: 2 | 4 | undefined;
-  onTogglePin: (setHash: number) => void;
-  onToggleSet: (setHash: number, count: 2 | 4) => void;
-}) {
-  const perk2Info = set.perks.find((p) => p.requiredCount === 2);
-  const perk4Info = set.perks.find((p) => p.requiredCount === 4);
-  return (
-    <div className="group/set-row relative col-span-full grid grid-cols-subgrid items-center before:absolute before:inset-y-0 before:-left-7 before:w-7">
-      {/* Figma 17:5828 ("when row is hovered the pin appears"): the pin floats in
-          the left margin, 24px outside the name column. */}
-      <TooltipLabel label={pinned ? "Unpin set" : "Pin set"}>
-        <button
-          type="button"
-          onClick={() => onTogglePin(set.setHash)}
-          aria-label={pinned ? "Unpin set" : "Pin set"}
-          className={cn(
-            "absolute top-1/2 -left-7 flex size-6 -translate-y-1/2 items-center justify-center rounded-md transition-opacity outline-none focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring/50",
-            pinned
-              ? "text-foreground"
-              : "text-muted-foreground opacity-0 group-hover/set-row:opacity-100 group-focus-within/set-row:opacity-100 hover:text-foreground",
-          )}
-        >
-          <PushPin
-            weight={pinned ? "fill" : "regular"}
-            className="size-4"
-            aria-hidden
-          />
-        </button>
-      </TooltipLabel>
-      <span className="truncate text-sm">
-        {set.name} ({set.ownedCount})
-      </span>
-      <SetPerkCell
-        active={req === 2}
-        disabled={set.ownedCount < 2}
-        perk={perk2Info}
-        onToggle={() => onToggleSet(set.setHash, 2)}
-      />
-      <SetPerkCell
-        active={req === 4}
-        disabled={set.ownedCount < 4}
-        perk={perk4Info}
-        onToggle={() => onToggleSet(set.setHash, 4)}
-      />
-    </div>
-  );
-});
 
 function Section({
   title,
@@ -1320,67 +1095,5 @@ function Section({
       {title ? <h3 className="text-sm font-medium">{title}</h3> : null}
       {children}
     </section>
-  );
-}
-
-function perkTooltipContent(perk: SetPerkInfo | undefined): string | null {
-  if (!perk) return null;
-  return perk.description?.trim() || perk.name;
-}
-
-/**
- * One set-bonus cell (Figma 17:5704): a 16px checkbox and the perk name, both
- * toggling the requirement. The name carries the perk description as a tooltip.
- */
-function SetPerkCell({
-  active,
-  disabled,
-  perk,
-  onToggle,
-}: {
-  active: boolean;
-  disabled: boolean;
-  perk: SetPerkInfo | undefined;
-  onToggle: () => void;
-}) {
-  const tooltipContent = perkTooltipContent(perk);
-  const label = (
-    <button
-      type="button"
-      disabled={disabled}
-      onClick={onToggle}
-      aria-label={perk?.name}
-      className={cn(
-        "min-w-0 max-w-full truncate text-left text-sm disabled:cursor-not-allowed disabled:opacity-50",
-        !disabled && "cursor-pointer",
-      )}
-    >
-      {perk?.name}
-    </button>
-  );
-  return (
-    <div className="flex min-w-0 items-center gap-2">
-      <Checkbox
-        checked={active}
-        disabled={disabled}
-        onCheckedChange={onToggle}
-        aria-label={perk ? `Require ${perk.name}` : "Toggle set bonus"}
-        className={cn(!disabled && "cursor-pointer")}
-      />
-      {tooltipContent ? (
-        <Tooltip disableHoverablePopup>
-          <TooltipTrigger delay={0} closeDelay={0} render={label} />
-          <TooltipContent
-            side="top"
-            align="start"
-            className="pointer-events-none max-w-sm px-4 py-3 text-sm leading-relaxed data-open:animate-none data-closed:animate-none"
-          >
-            {tooltipContent}
-          </TooltipContent>
-        </Tooltip>
-      ) : (
-        label
-      )}
-    </div>
   );
 }
