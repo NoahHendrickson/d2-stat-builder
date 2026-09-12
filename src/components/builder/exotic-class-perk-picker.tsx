@@ -1,5 +1,6 @@
 "use client";
 
+import { TooltipLabel } from "@/components/ui/tooltip";
 import type { ReactNode } from "react";
 import Image from "next/image";
 import {
@@ -10,11 +11,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { BUNGIE_IMAGE_BASE } from "@/lib/bungie/constants";
-import {
-  STAT_LABELS,
-  STAT_ORDER,
-  type StatIconMap,
-} from "@/lib/armory/stats";
+import { STAT_LABELS, STAT_ORDER, type StatIconMap } from "@/lib/armory/stats";
 import type { SpiritPerkInfo } from "@/lib/armory/exotic-class-perks";
 
 const ANY_VALUE = "any";
@@ -149,15 +146,17 @@ function SpiritLabel({
 function ArchetypeAffordance({ perk }: { perk: SpiritPerkInfo }) {
   if (!perk.archetypeIcon) return null;
   return (
-    <Image
-      src={`${BUNGIE_IMAGE_BASE}${perk.archetypeIcon}`}
-      alt={perk.archetypeName ?? "Archetype"}
-      title={perk.archetypeName}
-      width={16}
-      height={16}
-      className="size-4 shrink-0"
-      unoptimized
-    />
+    <TooltipLabel label={perk.archetypeName}>
+      <Image
+        src={`${BUNGIE_IMAGE_BASE}${perk.archetypeIcon}`}
+        alt={perk.archetypeName ?? "Archetype"}
+        tabIndex={0}
+        width={16}
+        height={16}
+        className="size-4 shrink-0"
+        unoptimized
+      />
+    </TooltipLabel>
   );
 }
 
@@ -175,14 +174,16 @@ function TertiaryAffordance({
   if (!icon) return null;
   const label = STAT_LABELS[key];
   return (
-    <Image
-      src={`${BUNGIE_IMAGE_BASE}${icon}`}
-      alt={label}
-      title={`${label} tertiary`}
-      width={16}
-      height={16}
-      className="size-4 shrink-0 invert dark:invert-0"
-      unoptimized
-    />
+    <TooltipLabel label={`${label} tertiary`}>
+      <Image
+        src={`${BUNGIE_IMAGE_BASE}${icon}`}
+        alt={label}
+        tabIndex={0}
+        width={16}
+        height={16}
+        className="size-4 shrink-0 invert dark:invert-0"
+        unoptimized
+      />
+    </TooltipLabel>
   );
 }

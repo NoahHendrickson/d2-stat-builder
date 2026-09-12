@@ -1,5 +1,7 @@
 "use client";
 
+import { memo } from "react";
+import { TooltipLabel } from "@/components/ui/tooltip";
 import Image from "next/image";
 import { cn } from "@/lib/utils";
 import { BUNGIE_IMAGE_BASE } from "@/lib/bungie/constants";
@@ -14,20 +16,23 @@ export interface ExoticOption {
 }
 
 /**
- * Figma 127:9 — outer frame carries border + lip fill (pb-1); inner span is the face.
- * Selected ring/glow wraps the full frame including the lip band.
+ * Figma 17:5655 — 40px tiles in a 16px grid. Unselected tiles sit at 65% opacity
+ * and come up on hover; the selected one is full-strength with a background-coloured
+ * inset border and an emphatic ring + glow (0 0 0 2px + 0 0 8px 1px).
  */
 const tileBase =
-  "group/tile relative w-9 shrink-0 rounded-[5px] border border-[var(--exotic-line)] bg-[var(--exotic-lip)] pb-0.5 outline-none transition-all active:translate-y-0.5 active:pb-px focus-visible:ring-3 focus-visible:ring-ring/50";
+  "group/tile relative size-10 shrink-0 overflow-hidden rounded-[2px] border-2 border-transparent outline-none transition-[opacity,box-shadow,border-color] focus-visible:ring-3 focus-visible:ring-ring/50";
+
+const tileInactive = "opacity-65 hover:opacity-100";
 
 const tileSelected =
-  "shadow-[0_0_0_1px_var(--exotic-ring-outer),0_0_12px_3px_var(--exotic-ring-glow)]";
+  "border-background opacity-100 shadow-[0_0_0_2px_var(--emphatic),0_0_8px_1px_var(--emphatic)]";
 
 /**
  * Thumbnail grid for choosing which exotic to build around. Click a tile to require
  * that exotic, click it again to clear. Nothing selected = the optimizer decides.
  */
-export function ExoticPicker({
+export const ExoticPicker = memo(function ExoticPicker({
   options,
   selected,
   onSelect,
@@ -45,28 +50,25 @@ export function ExoticPicker({
   }
 
   return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap gap-x-2.5 gap-y-3 p-0.5">
+    <div className="space-y-4">
+      <div className="flex flex-wrap gap-4 p-0.5">
         {options.map((exotic, index) => {
           const active = selected === index;
           return (
-            <button
-              key={exotic.name}
-              type="button"
-              title={exotic.name}
-              aria-label={exotic.name}
-              aria-pressed={active}
-              onClick={() => onSelect(active ? null : index)}
-              className={cn(tileBase, active && tileSelected)}
-            >
-              {/* -mx/-mt-px overlaps the face border onto the frame border so they read as one line */}
-              <span className="relative -mx-px -mt-px block aspect-square overflow-hidden rounded-[5px] border border-[var(--exotic-line)]">
+            <TooltipLabel label={exotic.name} key={exotic.name}>
+              <button
+                type="button"
+                aria-label={exotic.name}
+                aria-pressed={active}
+                onClick={() => onSelect(active ? null : index)}
+                className={cn(tileBase, active ? tileSelected : tileInactive)}
+              >
                 {exotic.icon ? (
                   <Image
                     src={`${BUNGIE_IMAGE_BASE}${exotic.icon}`}
                     alt={exotic.name}
                     fill
-                    sizes="36px"
+                    sizes="40px"
                     className="object-cover"
                     unoptimized
                   />
@@ -75,8 +77,8 @@ export function ExoticPicker({
                     {exotic.name.slice(0, 2)}
                   </span>
                 )}
-              </span>
-            </button>
+              </button>
+            </TooltipLabel>
           );
         })}
       </div>
@@ -95,4 +97,4 @@ export function ExoticPicker({
       )}
     </div>
   );
-}
+});

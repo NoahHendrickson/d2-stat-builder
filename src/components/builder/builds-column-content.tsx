@@ -6,6 +6,7 @@ import {
   BuildResults,
   MAX_SHOWN,
   type DimSubclassInput,
+  type GetBuilderState,
 } from "@/components/builder/build-results";
 import { LoadoutSortControls } from "@/components/builder/loadout-sort-controls";
 import type { ArmorPiece } from "@/lib/armory/normalize";
@@ -17,7 +18,9 @@ import {
   type LoadoutSortState,
 } from "@/lib/builder/sort-loadouts";
 import type { StatModHashes } from "@/lib/dim/mod-hashes";
+import type { Manifest } from "@/lib/manifest/load";
 import type { OptimizerOutput, RefinementState } from "@/lib/optimizer/types";
+import { useStoreValue, type ValueStore } from "@/lib/value-store";
 
 const LOADING_ROWS = 5;
 
@@ -77,14 +80,16 @@ export interface BuildsColumnContentProps {
   showLoading: boolean;
   running: boolean;
   result: OptimizerOutput | null;
-  displayedProgress: number;
+  /** Eased 0–1 progress; only the progress bar subscribes to it. */
+  displayedProgress: ValueStore<number>;
   /** Background-refinement lifecycle (idle / running / done, with any pending list). */
   refinement: RefinementState;
+  /** Live 0–1 refinement %; only SearchStatus subscribes. */
+  refinementProgress: ValueStore<number>;
   /** Apply the waiting better list (the explicit user action that changes the list). */
   onShowPending: () => void;
   onCancel: () => void;
   pieceMap: Map<string, ArmorPiece>;
-  targets: number[];
   setMap: Map<number, ArmorSetInfo>;
   statIcons: StatIconMap;
   balancedTuningIcon?: string;
@@ -93,6 +98,9 @@ export interface BuildsColumnContentProps {
   tuningPlugHashes: Map<string, number> | null;
   artificeModHashes: (number | undefined)[] | null;
   subclass?: DimSubclassInput;
+  getBuilderState: GetBuilderState;
+  manifest?: Manifest;
+  insertablePlugs?: ReadonlySet<number>;
   onEquipped: () => void;
 }
 
@@ -103,10 +111,10 @@ export function BuildsColumnContent({
   result,
   displayedProgress,
   refinement,
+  refinementProgress,
   onShowPending,
   onCancel,
   pieceMap,
-  targets,
   setMap,
   statIcons,
   balancedTuningIcon,
@@ -115,6 +123,9 @@ export function BuildsColumnContent({
   tuningPlugHashes,
   artificeModHashes,
   subclass,
+  getBuilderState,
+  manifest,
+  insertablePlugs,
   onEquipped,
 }: BuildsColumnContentProps) {
   const [sort, setSort] = useState<LoadoutSortState>(DEFAULT_LOADOUT_SORT);
@@ -123,9 +134,9 @@ export function BuildsColumnContent({
   const showSort = viewState === "results";
 
   return (
-    <div className="space-y-3">
-      <div className="flex items-center gap-3">
-        <h2 className="text-lg font-medium">Builds</h2>
+    <div className="space-y-5">
+      <div className="flex min-h-8 items-center gap-3">
+        <h2 className="pl-1 text-xl leading-none font-normal">Builds</h2>
         <div className="ml-auto flex min-w-0 items-center gap-3">
           {/* Initial search only — `running` is false once refinement starts
               (see use-optimizer); refinement Cancel lives in the status alert. */}
@@ -151,68 +162,92 @@ export function BuildsColumnContent({
         <p className="text-muted-foreground text-sm">
           Sign in and load your gear to generate builds.
         </p>
-      ) : showLoading ? (
-        <BuildsLoading progress={displayedProgress} />
-      ) : result ? (
-        <BuildResults
-          result={result}
-          refinement={refinement}
-          onShowPending={onShowPending}
-          onCancel={onCancel}
-          pieceMap={pieceMap}
-          targets={targets}
-          setMap={setMap}
-          statIcons={statIcons}
-          balancedTuningIcon={balancedTuningIcon}
-          characters={characters}
-          statModHashes={statModHashes}
-          tuningPlugHashes={tuningPlugHashes}
-          artificeModHashes={artificeModHashes}
-          subclass={subclass}
-          onEquipped={onEquipped}
-          sort={sort}
-        />
       ) : (
-        <p className="text-muted-foreground text-sm">
-          Pick an exotic, set bonuses, and stat targets — builds update as you go.
-        </p>
+        <>
+          {showLoading &&
+            (result ? (
+              <BuildsProgressBar progress={displayedProgress} />
+            ) : (
+              <BuildsLoading progress={displayedProgress} />
+            ))}
+          {result ? (
+            <BuildResults
+              result={result}
+              refinement={refinement}
+              refinementProgress={refinementProgress}
+              onShowPending={onShowPending}
+              onCancel={onCancel}
+              pieceMap={pieceMap}
+              setMap={setMap}
+              statIcons={statIcons}
+              balancedTuningIcon={balancedTuningIcon}
+              characters={characters}
+              statModHashes={statModHashes}
+              tuningPlugHashes={tuningPlugHashes}
+              artificeModHashes={artificeModHashes}
+              subclass={subclass}
+              getBuilderState={getBuilderState}
+              manifest={manifest}
+              insertablePlugs={insertablePlugs}
+              onEquipped={onEquipped}
+              sort={sort}
+            />
+          ) : !showLoading ? (
+            <p className="text-muted-foreground text-sm">
+              Pick an exotic, set bonuses, and stat targets — builds update as
+              you go.
+            </p>
+          ) : null}
+        </>
       )}
     </div>
   );
 }
 
+function BuildsProgressBar({
+  progress: store,
+}: {
+  progress: ValueStore<number>;
+}) {
+  const progress = useStoreValue(store);
+  return (
+    <div
+      role="progressbar"
+      aria-label="Search progress"
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={Math.round(progress * 100)}
+      className="bg-muted h-1 w-full overflow-hidden rounded-full"
+    >
+      <div
+        className="bg-primary h-full rounded-full"
+        style={{ width: `${progress * 100}%` }}
+      />
+    </div>
+  );
+}
+
 /** In-place loading state for the results column: a progress bar over pulsing skeleton rows. */
-export function BuildsLoading({ progress }: { progress: number }) {
+export function BuildsLoading({ progress: store }: { progress: ValueStore<number> }) {
   return (
     <div className="space-y-3">
-      <div
-        role="progressbar"
-        aria-label="Search progress"
-        aria-valuemin={0}
-        aria-valuemax={100}
-        aria-valuenow={Math.round(progress * 100)}
-        className="bg-muted h-1 w-full overflow-hidden rounded-full"
-      >
-        <div
-          className="bg-primary h-full rounded-full"
-          style={{ width: `${progress * 100}%` }}
-        />
-      </div>
-      <div className="space-y-1.5">
+      <BuildsProgressBar progress={store} />
+      <div className="space-y-2">
         {Array.from({ length: LOADING_ROWS }, (_, i) => (
           <div
             key={i}
-            className="border-border/60 flex animate-pulse items-center gap-3 rounded-lg border p-2.5"
+            className="bg-foreground/6 flex animate-pulse items-center gap-6 rounded-[8px] p-2"
             style={{ animationDelay: `${i * 120}ms` }}
             aria-hidden
           >
-            <span className="bg-muted size-7 shrink-0 rounded" />
-            <div className="flex flex-1 items-center gap-3">
+            <span className="bg-muted size-10 shrink-0 rounded-[2px]" />
+            <div className="flex max-w-[28.5rem] flex-1 items-center justify-between gap-3">
               {Array.from({ length: 6 }, (_, j) => (
-                <span key={j} className="bg-muted h-3.5 w-10 rounded" />
+                <span key={j} className="bg-muted h-4 w-11 rounded" />
               ))}
             </div>
-            <span className="bg-muted h-3.5 w-8 shrink-0 rounded" />
+            <span className="bg-muted ml-auto h-4 w-10 shrink-0 rounded" />
+            <span className="size-8 shrink-0" />
           </div>
         ))}
       </div>

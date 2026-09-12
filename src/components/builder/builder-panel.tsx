@@ -3,25 +3,32 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
   type ReactNode,
 } from "react";
-import Image from "next/image";
-import { MagnifyingGlass, PushPin, SlidersHorizontal } from "@phosphor-icons/react";
+import { MagnifyingGlass } from "@phosphor-icons/react";
 import { useSession } from "@/lib/auth/use-session";
 import { useArmory } from "@/lib/armory/use-armory";
 import { useManifest } from "@/lib/manifest/use-manifest";
 import { useOptimizer } from "@/lib/optimizer/use-optimizer";
 import { useSmoothedProgress } from "@/lib/use-smoothed-progress";
-import { availableSets, type SetPerkInfo } from "@/lib/armory/sets";
+import { createValueStore } from "@/lib/value-store";
+import { liveTargets } from "@/lib/builder/live-targets";
+import { availableSets } from "@/lib/armory/sets";
 import {
   DEFAULT_SET_FILTERS,
   hasCustomSetFilters,
   passesSetFilters,
   type SetFilters,
 } from "@/lib/armory/set-filters";
+import {
+  DEFAULT_SET_SORT,
+  sortSets,
+  type SetSortKey,
+} from "@/lib/armory/set-sort";
 import {
   availableFragments,
   SUBCLASSES,
@@ -34,40 +41,37 @@ import {
   isExoticClassItemHash,
 } from "@/lib/armory/exotic-class-perks";
 import {
+  dreamersBondPiece,
+  dreamersClassItemName,
+} from "@/lib/armory/dreamers-bond";
+import {
+  hashesIncludeHelmet,
+  isFestivalMask,
+} from "@/lib/armory/festival-masks";
+import {
   ARMOR_SLOTS,
   BALANCED_TUNING_PLUG_HASH,
   CLASS_NAMES,
   STAT_DISPLAY_ORDER,
   STAT_HASHES,
-  STAT_LABELS,
   STAT_ORDER,
   offArchetypeIndices,
   type StatIconMap,
 } from "@/lib/armory/stats";
 import type { ArmorPiece } from "@/lib/armory/normalize";
-import { Slider, sliderEdgeAlignedLeft } from "@/components/ui/slider";
 import { Input } from "@/components/ui/input";
-import {
-  field3dFocusVisibleClasses,
-  field3dSurfaceClasses,
-} from "@/lib/field-surface";
 import { cn } from "@/lib/utils";
-import { BUNGIE_IMAGE_BASE } from "@/lib/bungie/constants";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+import { StatTargetRow } from "@/components/builder/stat-target-row";
+import { SetRow } from "@/components/builder/set-row";
 import { SignInCard } from "@/components/auth/sign-in-card";
 import { ArmoryStatus } from "@/components/armory/armory-status";
 import { ManifestStatus } from "@/components/manifest/manifest-status";
 import { ExoticPicker } from "@/components/builder/exotic-picker";
 import { ExoticClassPerkPicker } from "@/components/builder/exotic-class-perk-picker";
 import { FragmentPicker } from "@/components/builder/fragment-picker";
+import { SetListControls } from "@/components/builder/set-list-controls";
 import { ClassEmblemTabs } from "@/components/builder/class-emblem-tabs";
 import { TuningControls } from "@/components/builder/tuning-controls";
 import { BuildsSurface } from "@/components/builder/builds-surface";
@@ -80,6 +84,8 @@ import {
   fragSelFromArrays,
   resolveExoticIndex,
   SCHEMA_VERSION,
+  SELECTIONS_REPLACED_EVENT,
+  selectionsGeneration,
 } from "@/lib/builder/selection-storage";
 import {
   getArtificeModHashes,
@@ -91,12 +97,9 @@ import {
   SUBCLASS_ITEM_HASHES,
 } from "@/lib/dim/subclasses";
 import { useApplyCurrentFragments } from "@/lib/armory/use-apply-current-fragments";
+import type { BuilderSnapshot } from "@/lib/loadouts/types";
 
 const MAX_MODS = 5;
-/** Clickable preset markers under each stat slider. */
-const STAT_TARGET_TICKS = [0, 50, 100, 150, 200] as const;
-const STAT_SLIDER_MAX = STAT_TARGET_TICKS[STAT_TARGET_TICKS.length - 1];
-/** Skeleton rows shown while a search is in flight. */
 
 export function BuilderPanel({
   showInlineStatusCards = true,
@@ -110,14 +113,16 @@ export function BuilderPanel({
     run,
     cancel,
     result,
-    ceilings,
-    ceilingsExact,
+    ceilingsView,
     running,
     progress,
+    refinementProgress,
     runId,
     refinement,
     applyPending,
   } = useOptimizer();
+  // `progress` is a value store: the smoother reads it per frame and writes the eased
+  // value to another store; neither touches this component's render.
   const { displayedProgress, showLoading } = useSmoothedProgress(
     progress,
     running,
@@ -128,66 +133,73 @@ export function BuilderPanel({
   const manifest =
     manifestStatus.state === "ready" ? manifestStatus.manifest : undefined;
 
-  // One localStorage read on mount — shared by the class initializer and restore effect.
-  const initialSaved = useRef(loadSelections());
+  // Last session's selections, read once per mount (absent/stale/corrupt → null). Every
+  // inventory-independent field initializes from it directly, so the first render is
+  // already the restored builder — no restore effect, no second render of the panel.
+  // Nothing rendered before `ready` depends on these, so the SSR/hydration output
+  // (where storage is unavailable) can't mismatch.
+  const [initialSaved] = useState(loadSelections);
 
   const [classType, setClassType] = useState<number | null>(
-    () => initialSaved.current?.classType ?? null,
+    initialSaved?.classType ?? null,
   );
-  const [targets, setTargets] = useState<number[]>(() => [0, 0, 0, 0, 0, 0]);
-  const [major, setMajor] = useState(0);
-  const [setReqs, setSetReqs] = useState<Record<number, 2 | 4>>({});
-  const [pinnedSets, setPinnedSets] = useState<number[]>([]);
-  const [hoveredSetHash, setHoveredSetHash] = useState<number | null>(null);
-  const setRowRefs = useRef(new Map<number, HTMLDivElement>());
+  const [targets, setTargets] = useState<number[]>(
+    () => initialSaved?.targets ?? [0, 0, 0, 0, 0, 0],
+  );
+  const [major, setMajor] = useState(initialSaved?.major ?? 0);
+  const [setReqs, setSetReqs] = useState<Record<number, 2 | 4>>(
+    () => initialSaved?.setReqs ?? {},
+  );
+  const [pinnedSets, setPinnedSets] = useState<number[]>(
+    () => initialSaved?.pinnedSets ?? [],
+  );
   const [setQuery, setSetQuery] = useState("");
-  const [setFilters, setSetFilters] = useState<SetFilters>(DEFAULT_SET_FILTERS);
+  const [setFilters, setSetFilters] = useState<SetFilters>(
+    () => initialSaved?.setFilters ?? DEFAULT_SET_FILTERS,
+  );
+  /** Set-list ordering — a view preference, so it's per-session rather than persisted. */
+  const [setSort, setSetSort] = useState<SetSortKey>(DEFAULT_SET_SORT);
   const [selectedExotic, setSelectedExotic] = useState<number | null>(null);
   /** Exotic class item Spirit pair; null = Any. Cleared when exotic/class changes. */
-  const [exoticPerks, setExoticPerks] = useState<[number | null, number | null]>([
-    null,
-    null,
-  ]);
-  const [allowTuning, setAllowTuning] = useState(true);
-  const [useBalancedTuning, setUseBalancedTuning] = useState(true);
-  const [activeSubclass, setActiveSubclass] = useState<Subclass>("Prismatic");
-  const [fragSel, setFragSel] = useState<Record<Subclass, Set<number>>>(
-    () =>
-      Object.fromEntries(
-        SUBCLASSES.map((s) => [s, new Set<number>()]),
-      ) as Record<Subclass, Set<number>>,
+  const [exoticPerks, setExoticPerks] = useState<
+    [number | null, number | null]
+  >(() => initialSaved?.exoticPerks ?? [null, null]);
+  const [allowTuning, setAllowTuning] = useState(
+    initialSaved?.allowTuning ?? true,
+  );
+  const [useBalancedTuning, setUseBalancedTuning] = useState(
+    initialSaved?.balancedTuning ?? true,
+  );
+  const [activeSubclass, setActiveSubclass] = useState<Subclass>(
+    initialSaved?.activeSubclass ?? "Prismatic",
+  );
+  const [fragSel, setFragSel] = useState<Record<Subclass, Set<number>>>(() =>
+    initialSaved
+      ? fragSelFromArrays(initialSaved.fragSel)
+      : (Object.fromEntries(
+          SUBCLASSES.map((s) => [s, new Set<number>()]),
+        ) as Record<Subclass, Set<number>>),
   );
   // Legacy EXOTICS are supported (the solver spends their artifice +3); legacy
   // legendaries are not yet — that toggle stays disabled.
-  const [useLegacyExotics, setUseLegacyExotics] = useState(true);
+  const [useLegacyExotics, setUseLegacyExotics] = useState(
+    initialSaved?.legacyExotics ?? true,
+  );
+  const [useDreamersBond, setUseDreamersBond] = useState(
+    initialSaved?.dreamersBond ?? false,
+  );
+  const [useFestivalMasks, setUseFestivalMasks] = useState(
+    initialSaved?.festivalMasks ?? false,
+  );
 
-  // Persistence guards: `restored` stops the save effect from writing defaults over stored
-  // data before the restore runs; `pendingExoticName` hands the restored exotic (persisted by
-  // name) to the effect that can resolve it once the live exotics list exists.
-  const restored = useRef(false);
-  const pendingExoticName = useRef<string | null | undefined>(undefined);
-
-  // Restore last session's selections on mount. Inventory-independent fields apply now; the
-  // exotic is stashed for resolution once its list is built. Absent/stale/corrupt → defaults.
-  // classType is initialized synchronously from initialSaved above.
-  useEffect(() => {
-    const saved = initialSaved.current;
-    if (saved) {
-      setTargets(saved.targets);
-      setMajor(saved.major);
-      setSetReqs(saved.setReqs);
-      setPinnedSets(saved.pinnedSets);
-      setSetFilters(saved.setFilters);
-      setAllowTuning(saved.allowTuning);
-      setUseBalancedTuning(saved.balancedTuning);
-      setUseLegacyExotics(saved.legacyExotics);
-      setActiveSubclass(saved.activeSubclass);
-      setFragSel(fragSelFromArrays(saved.fragSel));
-      setExoticPerks(saved.exoticPerks);
-      pendingExoticName.current = saved.exoticName;
-    }
-    restored.current = true;
-  }, []);
+  // The exotic is persisted by name and resolved to an index once the live exotics list
+  // exists; while it's pending (not `undefined`), the save effect holds off so a
+  // still-unresolved exotic can't be written back as "none".
+  const pendingExoticName = useRef<string | null | undefined>(
+    initialSaved?.exoticName,
+  );
+  // Which `replaceSelections` this panel has adopted — see the adopt effect below.
+  const adoptedGeneration = useRef(selectionsGeneration());
 
   const classes = useMemo(() => {
     if (!armory) return [];
@@ -199,7 +211,8 @@ export function BuilderPanel({
   // Default the class to the player's first — and correct a restored class they no longer have.
   useEffect(() => {
     if (!classes.length) return;
-    if (classType === null || !classes.includes(classType)) setClassType(classes[0]);
+    if (classType === null || !classes.includes(classType))
+      setClassType(classes[0]);
   }, [classes, classType]);
 
   const classPieces = useMemo(
@@ -225,79 +238,44 @@ export function BuilderPanel({
     () => (manifest ? availableSets(pool, manifest) : []),
     [pool, manifest],
   );
-  const setMap = useMemo(() => new Map(sets.map((s) => [s.setHash, s])), [sets]);
+  const setMap = useMemo(
+    () => new Map(sets.map((s) => [s.setHash, s])),
+    [sets],
+  );
 
-  // Pinned sets float to the top; within each group the ownedCount order is kept.
+  // Pinned sets float to the top; within each group the chosen sort order is kept.
   // Pins for sets outside the current list (e.g. another class) simply don't show.
   // Both groups are narrowed by the search query (case-insensitive substring).
   const { pinnedList, unpinnedList } = useMemo(() => {
     const q = setQuery.trim().toLowerCase();
-    const shown = sets.filter((s) => {
-      if (q && !s.name.toLowerCase().includes(q)) return false;
-      return passesSetFilters(s.ownedCount, setFilters);
-    });
+    const shown = sortSets(
+      sets.filter((s) => {
+        if (q && !s.name.toLowerCase().includes(q)) return false;
+        return passesSetFilters(s.ownedCount, setFilters);
+      }),
+      setSort,
+    );
     const pinned = new Set(pinnedSets);
     return {
       pinnedList: shown.filter((s) => pinned.has(s.setHash)),
       unpinnedList: shown.filter((s) => !pinned.has(s.setHash)),
     };
-  }, [sets, pinnedSets, setQuery, setFilters]);
+  }, [sets, pinnedSets, setQuery, setFilters, setSort]);
 
   const customSetFilters = hasCustomSetFilters(setFilters);
 
-  const visibleSetRows =
-    sets.length > 0 && (pinnedList.length > 0 || unpinnedList.length > 0);
-
-  const registerSetRowRef = useCallback(
-    (setHash: number, el: HTMLDivElement | null) => {
-      if (el) setRowRefs.current.set(setHash, el);
-      else setRowRefs.current.delete(setHash);
-    },
-    [],
-  );
-
-  // Reveal the pin when the pointer is vertically aligned with a row, even far to its left
-  // (e.g. over the status sidebar or panel padding while moving toward the set list).
-  useEffect(() => {
-    if (!visibleSetRows) {
-      setHoveredSetHash(null);
-      return;
-    }
-
-    const updateHover = (clientY: number, clientX: number) => {
-      for (const [hash, el] of setRowRefs.current) {
-        const { top, bottom, right } = el.getBoundingClientRect();
-        if (clientY >= top && clientY <= bottom && clientX <= right) {
-          setHoveredSetHash((prev) => (prev === hash ? prev : hash));
-          return;
-        }
-      }
-      setHoveredSetHash((prev) => (prev === null ? prev : null));
-    };
-
-    const onMouseMove = (e: MouseEvent) => updateHover(e.clientY, e.clientX);
-    const onMouseLeave = () => setHoveredSetHash(null);
-
-    window.addEventListener("mousemove", onMouseMove);
-    document.documentElement.addEventListener("mouseleave", onMouseLeave);
-    return () => {
-      window.removeEventListener("mousemove", onMouseMove);
-      document.documentElement.removeEventListener("mouseleave", onMouseLeave);
-    };
-  }, [visibleSetRows]);
-
-  // After a restore (or a class correction), drop set requirements for sets the player no
-  // longer owns — an unowned requirement would make every build infeasible.
-  useEffect(() => {
-    if (!restored.current || !sets.length) return;
-    setSetReqs((prev) => {
-      const valid = new Set(sets.map((s) => s.setHash));
-      const kept = Object.entries(prev).filter(([h]) => valid.has(Number(h)));
-      return kept.length === Object.keys(prev).length
-        ? prev
-        : (Object.fromEntries(kept) as Record<number, 2 | 4>);
-    });
-  }, [sets]);
+  // Set requirements narrowed to sets the player owns for this class: a restored (or
+  // class-corrected) requirement for a set they no longer own would make every build
+  // infeasible. Everything downstream — the optimizer, persistence, loadout snapshots —
+  // reads this; the toggles only ever list owned sets, so the raw state needs no pruning.
+  // Left untouched until the set list exists so stored requirements survive the load.
+  const ownedSetReqs = useMemo(() => {
+    if (!setMap.size) return setReqs;
+    const kept = Object.entries(setReqs).filter(([h]) => setMap.has(Number(h)));
+    return kept.length === Object.keys(setReqs).length
+      ? setReqs
+      : (Object.fromEntries(kept) as Record<number, 2 | 4>);
+  }, [setReqs, setMap]);
 
   const fragments = useMemo(
     () =>
@@ -338,10 +316,8 @@ export function BuilderPanel({
     const out = {} as StatIconMap;
     if (manifest) {
       for (const key of STAT_ORDER) {
-        out[key] = manifest.def(
-          "DestinyStatDefinition",
-          STAT_HASHES[key],
-        )?.displayProperties?.icon;
+        out[key] = manifest.def("DestinyStatDefinition", STAT_HASHES[key])
+          ?.displayProperties?.icon;
       }
     }
     return out;
@@ -349,10 +325,8 @@ export function BuilderPanel({
 
   const balancedTuningIcon = useMemo(
     () =>
-      manifest?.def(
-        "DestinyInventoryItemDefinition",
-        BALANCED_TUNING_PLUG_HASH,
-      )?.displayProperties?.icon,
+      manifest?.def("DestinyInventoryItemDefinition", BALANCED_TUNING_PLUG_HASH)
+        ?.displayProperties?.icon,
     [manifest],
   );
 
@@ -366,13 +340,16 @@ export function BuilderPanel({
     return v;
   }, [fragments, fragSel, activeSubclass]);
 
-  const toggleFragment = (hash: number) =>
-    setFragSel((prev) => {
-      const next = new Set(prev[activeSubclass]);
-      if (next.has(hash)) next.delete(hash);
-      else next.add(hash);
-      return { ...prev, [activeSubclass]: next };
-    });
+  const toggleFragment = useCallback(
+    (hash: number) =>
+      setFragSel((prev) => {
+        const next = new Set(prev[activeSubclass]);
+        if (next.has(hash)) next.delete(hash);
+        else next.add(hash);
+        return { ...prev, [activeSubclass]: next };
+      }),
+    [activeSubclass],
+  );
 
   const {
     applying: applyingFragments,
@@ -380,7 +357,7 @@ export function BuilderPanel({
     canApply: canApplyCurrentFragments,
   } = useApplyCurrentFragments({ armoryQuery, classType, fragments });
 
-  const onApplyCurrentFragments = async () => {
+  const onApplyCurrentFragments = useCallback(async () => {
     const result = await applyCurrentFragments();
     if (!result) return;
     setActiveSubclass(result.subclass);
@@ -388,15 +365,15 @@ export function BuilderPanel({
       ...prev,
       [result.subclass]: result.fragmentHashes,
     }));
-  };
+  }, [applyCurrentFragments]);
 
   const setRequirements = useMemo(
     () =>
-      Object.entries(setReqs).map(([setHash, count]) => ({
+      Object.entries(ownedSetReqs).map(([setHash, count]) => ({
         setHash: Number(setHash),
         count,
       })),
-    [setReqs],
+    [ownedSetReqs],
   );
 
   // Dedupe by name — the same exotic can exist in multiple versions (Armor 2.0 vs 3.0)
@@ -438,9 +415,18 @@ export function BuilderPanel({
   );
 
   // Class-item pool with Spirit filter + optional synthetic T5 roll (owned matches win).
+  // Dreamer's Bond replaces the whole slot with a hardcoded 0-stat collections item.
   const classItemPieces = useMemo(() => {
+    if (useDreamersBond && classType !== null) {
+      const pinned = dreamersBondPiece(classType, manifest);
+      return pinned ? [pinned] : [];
+    }
     const pieces = pool.filter((p) => p.slot === "classItem");
-    if (!manifest || classType === null || selectedClassItemHash === undefined) {
+    if (
+      !manifest ||
+      classType === null ||
+      selectedClassItemHash === undefined
+    ) {
       return pieces;
     }
     return applySpiritSelectionToClassItems(pieces, manifest, {
@@ -457,7 +443,24 @@ export function BuilderPanel({
     selectedClassItemHash,
     selectedExoticOption,
     exoticPerks,
+    useDreamersBond,
   ]);
+
+  // Owned FotL masks for this class (vault / inventory / equipped), including
+  // legacy rolls the normal T5 pool excludes. Scan the full armory so classType 3
+  // (any-class) defs still appear for the selected character.
+  const festivalMaskHelmets = useMemo(() => {
+    if (!useFestivalMasks || classType === null || !armory) return null;
+    return armory.pieces.filter(
+      (p) =>
+        p.slot === "helmet" &&
+        (p.classType === classType || p.classType === 3) &&
+        isFestivalMask(
+          p.itemHash,
+          manifest?.def("DestinyInventoryItemDefinition", p.itemHash),
+        ),
+    );
+  }, [useFestivalMasks, armory, classType, manifest]);
 
   const pieceMap = useMemo(() => {
     const map = new Map(classPieces.map((p) => [p.instanceId, p]));
@@ -468,44 +471,111 @@ export function BuilderPanel({
     return map;
   }, [classPieces, classItemPieces]);
 
+  // A stored exotic in a pinned slot (Dreamer's Bond → class item, Festival masks →
+  // helmet) loses to the pin on restore. From then on the exotic picker and the toggle
+  // handlers keep the two exclusive, so no effect has to referee them.
+  const resolveRestoredExotic = useCallback(
+    (
+      name: string | null,
+      pins: { dreamersBond: boolean; festivalMasks: boolean },
+    ): number | null => {
+      const index = resolveExoticIndex(name, exotics);
+      if (index === null) return null;
+      const hashes = exotics[index].hashes;
+      if (pins.dreamersBond && hashes.some(isExoticClassItemHash)) return null;
+      if (pins.festivalMasks && hashesIncludeHelmet(hashes, classPieces)) return null;
+      return index;
+    },
+    [exotics, classPieces],
+  );
+
   // Resolve the restored exotic (persisted by name) to an index once the live list exists.
   // Consumed once so a later class switch can't re-apply it; not-owned-now → cleared.
   useEffect(() => {
     if (pendingExoticName.current === undefined || !exotics.length) return;
     const name = pendingExoticName.current;
     pendingExoticName.current = undefined;
-    setSelectedExotic(resolveExoticIndex(name, exotics));
-  }, [exotics]);
+    setSelectedExotic(
+      resolveRestoredExotic(name, {
+        dreamersBond: useDreamersBond,
+        festivalMasks: useFestivalMasks,
+      }),
+    );
+  }, [exotics, resolveRestoredExotic, useDreamersBond, useFestivalMasks]);
 
-  // Persist selections (debounced) on any change. The `restored` guard prevents the first
-  // render from clobbering stored data before the restore runs; the exotic is saved by name.
+  // "Optimize" in the sidebar replaces the stored selections while this panel may already
+  // be mounted: adopt them the way the mount-time restore does. The exotic resolves right
+  // away when the class is unchanged (its list is live); otherwise it waits for the new
+  // class's list exactly like a fresh restore. The router keeps this view mounted but
+  // hidden while the armor table is showing (effects torn down, so the event is missed);
+  // the generation check catches up on such a replacement when the view comes back.
   useEffect(() => {
-    if (!restored.current) return;
-    const t = window.setTimeout(() => {
+    const adopt = () => {
+      adoptedGeneration.current = selectionsGeneration();
+      const saved = loadSelections();
+      if (!saved) return;
+      setClassType(saved.classType);
+      setTargets(saved.targets);
+      setMajor(saved.major);
+      setSetReqs(saved.setReqs);
+      setPinnedSets(saved.pinnedSets);
+      setSetFilters(saved.setFilters);
+      setAllowTuning(saved.allowTuning);
+      setUseBalancedTuning(saved.balancedTuning);
+      setUseLegacyExotics(saved.legacyExotics);
+      setUseDreamersBond(saved.dreamersBond);
+      setUseFestivalMasks(saved.festivalMasks);
+      setActiveSubclass(saved.activeSubclass);
+      setFragSel(fragSelFromArrays(saved.fragSel));
+      setExoticPerks(saved.exoticPerks);
+      if (saved.classType === classType && exotics.length) {
+        setSelectedExotic(resolveRestoredExotic(saved.exoticName, saved));
+      } else {
+        pendingExoticName.current = saved.exoticName;
+      }
+    };
+    if (adoptedGeneration.current !== selectionsGeneration()) adopt();
+    window.addEventListener(SELECTIONS_REPLACED_EVENT, adopt);
+    return () => window.removeEventListener(SELECTIONS_REPLACED_EVENT, adopt);
+  }, [classType, exotics, resolveRestoredExotic]);
+
+  // Persist selections (debounced) on any change; the exotic is saved by name. Held off
+  // while a restored exotic is still unresolved (see pendingExoticName).
+  const pendingSave = useRef<{ timer: number; save: () => void } | null>(null);
+  useEffect(() => {
+    if (pendingExoticName.current !== undefined) return;
+    const save = () => {
+      pendingSave.current = null;
       saveSelections({
         version: SCHEMA_VERSION,
         classType,
         targets,
         major,
-        setReqs,
+        setReqs: ownedSetReqs,
         pinnedSets,
         setFilters,
         exoticName:
-          selectedExotic === null ? null : (exotics[selectedExotic]?.name ?? null),
+          selectedExotic === null
+            ? null
+            : (exotics[selectedExotic]?.name ?? null),
         exoticPerks,
         allowTuning,
         balancedTuning: useBalancedTuning,
         legacyExotics: useLegacyExotics,
+        dreamersBond: useDreamersBond,
+        festivalMasks: useFestivalMasks,
         activeSubclass,
         fragSel: fragSelToArrays(fragSel),
       });
-    }, 300);
-    return () => window.clearTimeout(t);
+    };
+    const timer = window.setTimeout(save, 300);
+    pendingSave.current = { timer, save };
+    return () => window.clearTimeout(timer);
   }, [
     classType,
     targets,
     major,
-    setReqs,
+    ownedSetReqs,
     pinnedSets,
     setFilters,
     selectedExotic,
@@ -514,9 +584,22 @@ export function BuilderPanel({
     allowTuning,
     useBalancedTuning,
     useLegacyExotics,
+    useDreamersBond,
+    useFestivalMasks,
     activeSubclass,
     fragSel,
   ]);
+  // Hidden (tab switch) or unmounted mid-debounce: write the pending selections now
+  // instead of dropping them.
+  useEffect(
+    () => () => {
+      const pending = pendingSave.current;
+      if (!pending) return;
+      window.clearTimeout(pending.timer);
+      pending.save();
+    },
+    [],
+  );
 
   const runOptimizer = useCallback(() => {
     if (classType === null) return;
@@ -540,7 +623,9 @@ export function BuilderPanel({
       const pieces =
         slot === "classItem"
           ? classItemPieces
-          : pool.filter((p) => p.slot === slot);
+          : slot === "helmet" && festivalMaskHelmets
+            ? festivalMaskHelmets
+            : pool.filter((p) => p.slot === slot);
       return pieces.map(toOpt);
     });
 
@@ -562,6 +647,7 @@ export function BuilderPanel({
   }, [
     pool,
     classItemPieces,
+    festivalMaskHelmets,
     classType,
     targets,
     major,
@@ -586,99 +672,136 @@ export function BuilderPanel({
     return () => window.clearTimeout(t);
   }, [ready, classType, runOptimizer]);
 
-  const setTarget = (i: number, value: number) =>
-    setTargets((prev) => prev.map((v, idx) => (idx === i ? value : v)));
+  const setTarget = useCallback(
+    (i: number, value: number) =>
+      setTargets((prev) => prev.map((v, idx) => (idx === i ? value : v))),
+    [],
+  );
 
-  const onClassChange = (next: number) => {
+  const onClassChange = useCallback((next: number) => {
     setClassType(next);
     setSetReqs({});
     setSelectedExotic(null);
     setExoticPerks([null, null]);
-  };
+  }, []);
 
-  const onExoticSelect = (index: number | null) => {
+  const onExoticSelect = useCallback((index: number | null) => {
     setSelectedExotic(index);
     setExoticPerks([null, null]);
-  };
+    if (index === null) return;
+    const hashes = exotics[index]?.hashes ?? [];
+    if (hashes.some(isExoticClassItemHash)) setUseDreamersBond(false);
+    if (hashesIncludeHelmet(hashes, classPieces)) setUseFestivalMasks(false);
+  }, [exotics, classPieces]);
 
-  const setSetFilter = (key: keyof SetFilters, value: boolean) =>
-    setSetFilters((prev) => ({ ...prev, [key]: value }));
+  const onDreamersBondChange = useCallback(
+    (checked: boolean) => {
+      setUseDreamersBond(checked);
+      if (checked && selectedClassItemHash !== undefined) {
+        setSelectedExotic(null);
+        setExoticPerks([null, null]);
+      }
+    },
+    [selectedClassItemHash],
+  );
 
-  const toggleSet = (setHash: number, count: 2 | 4) =>
+  const onFestivalMasksChange = useCallback(
+    (checked: boolean) => {
+      setUseFestivalMasks(checked);
+      if (
+        checked &&
+        selectedExoticOption &&
+        hashesIncludeHelmet(selectedExoticOption.hashes, classPieces)
+      ) {
+        setSelectedExotic(null);
+        setExoticPerks([null, null]);
+      }
+    },
+    [selectedExoticOption, classPieces],
+  );
+
+  const setSetFilter = useCallback(
+    (key: keyof SetFilters, value: boolean) =>
+      setSetFilters((prev) => ({ ...prev, [key]: value })),
+    [],
+  );
+
+  const toggleSet = useCallback((setHash: number, count: 2 | 4) => {
     setSetReqs((prev) => {
       const next = { ...prev };
       if (next[setHash] === count) delete next[setHash];
       else next[setHash] = count;
       return next;
     });
+  }, []);
 
-  const togglePin = (setHash: number) =>
+  const togglePin = useCallback((setHash: number) => {
     setPinnedSets((prev) =>
       prev.includes(setHash)
         ? prev.filter((h) => h !== setHash)
         : [...prev, setHash],
     );
+  }, []);
 
-  const renderSetRow = (s: (typeof sets)[number]) => {
-    const pinned = pinnedSets.includes(s.setHash);
-    const pinVisible = pinned || hoveredSetHash === s.setHash;
-    const perk2Info = s.perks.find((p) => p.requiredCount === 2);
-    const perk4Info = s.perks.find((p) => p.requiredCount === 4);
-    return (
-      <div
-        key={s.setHash}
-        ref={(el) => registerSetRowRef(s.setHash, el)}
-        className="col-span-full grid grid-cols-subgrid items-center"
-      >
-        <span className="flex min-w-0 items-center gap-1.5 text-sm">
-          <button
-            type="button"
-            onClick={() => togglePin(s.setHash)}
-            aria-label={pinned ? "Unpin set" : "Pin set"}
-            className={cn(
-              "relative -ml-1 flex size-7 shrink-0 items-center justify-center rounded-md transition-opacity outline-none focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring/50",
-              pinned
-                ? "text-foreground"
-                : cn(
-                    "text-muted-foreground hover:text-foreground",
-                    pinVisible ? "opacity-100" : "opacity-0",
-                  ),
-            )}
-          >
-            <PushPin
-              weight={pinned ? "fill" : "duotone"}
-              className="size-3.5"
-              aria-hidden
-            />
-          </button>
-          <span className="truncate">
-            {s.name}{" "}
-            <span className="text-muted-foreground">({s.ownedCount})</span>
-          </span>
-        </span>
-        <SetToggle
-          active={setReqs[s.setHash] === 2}
-          disabled={s.ownedCount < 2}
-          onToggle={() => toggleSet(s.setHash, 2)}
-        />
-        <SetPerkLabel
-          perk={perk2Info}
-          disabled={s.ownedCount < 2}
-          onClick={() => toggleSet(s.setHash, 2)}
-        />
-        <SetToggle
-          active={setReqs[s.setHash] === 4}
-          disabled={s.ownedCount < 4}
-          onToggle={() => toggleSet(s.setHash, 4)}
-        />
-        <SetPerkLabel
-          perk={perk4Info}
-          disabled={s.ownedCount < 4}
-          onClick={() => toggleSet(s.setHash, 4)}
-        />
-      </div>
-    );
-  };
+  const refetchArmory = armoryQuery.refetch;
+  const onEquipped = useCallback(() => {
+    void refetchArmory();
+  }, [refetchArmory]);
+
+  // What a saved loadout remembers about this session, so "Load in builder" restores it.
+  const builderSnapshot = useMemo<BuilderSnapshot>(
+    () => ({
+      targets,
+      major,
+      setReqs: ownedSetReqs,
+      exoticName:
+        selectedExotic === null
+          ? null
+          : (exotics[selectedExotic]?.name ?? null),
+      exoticPerks,
+      allowTuning,
+      balancedTuning: useBalancedTuning,
+      legacyExotics: useLegacyExotics,
+      dreamersBond: useDreamersBond,
+      festivalMasks: useFestivalMasks,
+      activeSubclass,
+      fragmentHashes: [...fragSel[activeSubclass]],
+    }),
+    [
+      targets,
+      major,
+      ownedSetReqs,
+      selectedExotic,
+      exotics,
+      exoticPerks,
+      allowTuning,
+      useBalancedTuning,
+      useLegacyExotics,
+      useDreamersBond,
+      useFestivalMasks,
+      activeSubclass,
+      fragSel,
+    ],
+  );
+
+  // Latest targets/snapshot without changing `buildsProps` identity on slider moves.
+  // Rows only need targets/snapshot at click time (DIM export, save), so hand them a
+  // stable getter instead of the values: a slider drag then re-renders one StatTargetRow,
+  // not fifty BuildRows. The holder is written from a layout effect, not during render, so
+  // a discarded concurrent render can never leave it stale. (A plain ref would do the same
+  // job, but react-hooks/refs flags a ref-reading callback passed into useMemo.)
+  const [builderState] = useState(() =>
+    createValueStore({ targets, builderSnapshot }),
+  );
+  useLayoutEffect(() => {
+    builderState.set({ targets, builderSnapshot });
+  });
+  const getBuilderState = builderState.get;
+  // The rows' stat chips light up on met targets; they subscribe to this store per chip
+  // (selector → boolean), so a drag re-renders only the chips whose state flips.
+  useLayoutEffect(() => {
+    liveTargets.set(targets);
+  }, [targets]);
 
   const buildsProps: BuildsColumnContentProps = useMemo(
     () => ({
@@ -688,10 +811,10 @@ export function BuilderPanel({
       result,
       displayedProgress,
       refinement,
+      refinementProgress,
       onShowPending: applyPending,
       onCancel: cancel,
       pieceMap,
-      targets,
       setMap,
       statIcons,
       balancedTuningIcon,
@@ -700,7 +823,10 @@ export function BuilderPanel({
       tuningPlugHashes,
       artificeModHashes,
       subclass: dimSubclass,
-      onEquipped: () => void armoryQuery.refetch(),
+      getBuilderState,
+      manifest,
+      insertablePlugs: armory?.insertablePlugs,
+      onEquipped,
     }),
     [
       ready,
@@ -709,10 +835,10 @@ export function BuilderPanel({
       result,
       displayedProgress,
       refinement,
+      refinementProgress,
       applyPending,
       cancel,
       pieceMap,
-      targets,
       setMap,
       statIcons,
       balancedTuningIcon,
@@ -721,18 +847,24 @@ export function BuilderPanel({
       tuningPlugHashes,
       artificeModHashes,
       dimSubclass,
-      armoryQuery,
+      getBuilderState,
+      manifest,
+      armory?.insertablePlugs,
+      onEquipped,
     ],
   );
 
   return (
-    <div className="grid grid-cols-1 gap-8 lg:grid-cols-2 lg:items-start lg:gap-12">
-      {/* Left — configure the build */}
-      <div className="divide-border/60 divide-y">
+    // 24px between columns until 1920px — 2xl's 96px Figma gap squeezes the
+    // build cards while the sidebar is still on screen.
+    <div className="grid grid-cols-1 gap-10 lg:grid-cols-[minmax(18rem,30.5rem)_minmax(29rem,1fr)] lg:items-start lg:gap-x-6 min-[120rem]:gap-x-24">
+      {/* Left — configure the build. Figma 17:5852: a 488px column of sections
+          separated by 1px dividers with 32px above and below each. */}
+      <div className="divide-border divide-y">
         {ready && (
           <>
             {classes.length > 1 && classType !== null && (
-              <div className="pb-4">
+              <div className="pb-8">
                 <ClassEmblemTabs
                   characters={armory?.characters ?? []}
                   value={classType}
@@ -742,154 +874,37 @@ export function BuilderPanel({
             )}
 
             <Section>
-              <div className="space-y-3">
+              <div className="space-y-8">
                 {STAT_DISPLAY_ORDER.map((key) => {
                   const i = STAT_ORDER.indexOf(key);
-                  const icon = statIcons[key];
-                  // Achievable ceiling for this stat given the others. Overlay it as a
-                  // lighter fill up to that max (full-width at 200); omit only while
-                  // unknown (before the first search). Every wording derived from the
-                  // proven/unproven distinction lives in this ONE object so the visible
-                  // text, tick label, and accessible names can't drift apart: an exact
-                  // ceiling is a hard "/ max"; an unproven one is a lower bound ("81+"
-                  // — achievable, but possibly more out there, e.g. while a refinement
-                  // is still probing or its budget expired). Both render "/ n" inline;
-                  // only the tick label and accessible wording mark the difference.
-                  const cap = ceilings ? ceilings[i] : null;
-                  const ceilingValue = cap ?? undefined;
-                  const capText =
-                    cap === null
-                      ? null
-                      : ceilingsExact
-                        ? {
-                            separator: "/",
-                            srText: `${STAT_LABELS[key]} achievable max: ${cap}`,
-                            tickLabel: "max",
-                            tickAria: `Set ${STAT_LABELS[key]} to its max (${cap})`,
-                          }
-                        : {
-                            separator: "/",
-                            srText: `${STAT_LABELS[key]} achievable: at least ${cap}`,
-                            tickLabel: `${cap}+`,
-                            tickAria: `Set ${STAT_LABELS[key]} to its highest proven value (${cap})`,
-                          };
                   return (
-                    <div
+                    <StatTargetRow
                       key={key}
-                      className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 max-lg:gap-x-2"
-                    >
-                      {icon ? (
-                        <Image
-                          src={`${BUNGIE_IMAGE_BASE}${icon}`}
-                          alt={STAT_LABELS[key]}
-                          title={STAT_LABELS[key]}
-                          width={24}
-                          height={24}
-                          className="size-6 shrink-0 invert dark:invert-0"
-                          unoptimized
-                        />
-                      ) : (
-                        <span className="size-6 shrink-0" aria-hidden />
-                      )}
-                      <Slider
-                        min={0}
-                        max={STAT_SLIDER_MAX}
-                        step={1}
-                        value={[targets[i]]}
-                        onValueChange={(v) => setTarget(i, Array.isArray(v) ? v[0] : v)}
-                        ceiling={ceilingValue}
-                        aria-label={`${STAT_LABELS[key]} target`}
-                        className="cursor-pointer py-1.5"
-                      />
-                      <div className="flex shrink-0 items-center gap-1">
-                        <Input
-                          type="number"
-                          min={0}
-                          max={STAT_SLIDER_MAX}
-                          step={1}
-                          value={targets[i]}
-                          aria-label={`${STAT_LABELS[key]} target value`}
-                          onFocus={(e) => e.target.select()}
-                          onChange={(e) => {
-                            const n = Math.round(Number(e.target.value));
-                            setTarget(
-                              i,
-                              Number.isFinite(n)
-                                ? Math.max(0, Math.min(STAT_SLIDER_MAX, n))
-                                : 0,
-                            );
-                          }}
-                          className="w-12 tabular-nums"
-                          style={{ textAlign: "center" }}
-                        />
-                        {capText && (
-                          <>
-                            <span className="sr-only">{capText.srText}</span>
-                            <span
-                              className="text-muted-foreground inline-flex shrink-0 items-baseline text-xs tabular-nums"
-                              aria-hidden
-                            >
-                              {capText.separator}
-                              <span className="inline-block w-7 text-right">
-                                {cap}
-                              </span>
-                            </span>
-                          </>
-                        )}
-                      </div>
-                      <div className="col-start-2 relative h-5">
-                        {STAT_TARGET_TICKS.map((t) => {
-                          // Once a ceiling is known, the top tick jumps the target to
-                          // that achievable value instead of 200 (labels per capText).
-                          const isCeilingTick = t === STAT_SLIDER_MAX && cap !== null;
-                          const tickValue = isCeilingTick ? cap : t;
-                          const tickLabel = isCeilingTick
-                            ? capText!.tickLabel
-                            : String(t);
-                          return (
-                            <button
-                              key={t}
-                              type="button"
-                              onClick={() => setTarget(i, tickValue)}
-                              aria-label={
-                                isCeilingTick
-                                  ? capText!.tickAria
-                                  : `Set ${STAT_LABELS[key]} to ${t}`
-                              }
-                              style={{
-                                left: sliderEdgeAlignedLeft(t, 0, STAT_SLIDER_MAX),
-                              }}
-                              className={cn(
-                                "absolute top-0 -translate-x-1/2 cursor-pointer text-[10px] tabular-nums transition-colors after:absolute after:-inset-x-2 after:-inset-y-1.5 after:content-[''] focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-hidden",
-                                targets[i] === tickValue
-                                  ? "text-foreground"
-                                  : "text-muted-foreground hover:text-foreground",
-                              )}
-                            >
-                              {tickLabel}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
+                      statKey={key}
+                      index={i}
+                      icon={statIcons[key]}
+                      value={targets[i]}
+                      ceilingsView={ceilingsView}
+                      onChange={setTarget}
+                    />
                   );
                 })}
               </div>
-              <div className="border-border/60 space-y-2 border-t pt-3">
-                <h3 className="text-sm font-medium">Major Mods</h3>
-                <Tabs
-                  value={String(major)}
-                  onValueChange={(v) => setMajor(Number(v))}
-                >
-                  <TabsList>
-                    {[0, 1, 2, 3, 4, 5].map((n) => (
-                      <TabsTrigger key={n} value={String(n)}>
-                        {n}
-                      </TabsTrigger>
-                    ))}
-                  </TabsList>
-                </Tabs>
-              </div>
+            </Section>
+
+            <Section title="Major mods" className="space-y-2">
+              <Tabs
+                value={String(major)}
+                onValueChange={(v) => setMajor(Number(v))}
+              >
+                <TabsList>
+                  {[0, 1, 2, 3, 4, 5].map((n) => (
+                    <TabsTrigger key={n} value={String(n)}>
+                      {n}
+                    </TabsTrigger>
+                  ))}
+                </TabsList>
+              </Tabs>
             </Section>
 
             <Section>
@@ -898,8 +913,8 @@ export function BuilderPanel({
                 selected={selectedExotic}
                 onSelect={onExoticSelect}
               />
-              {spiritPerks && (
-                <div className="mt-3">
+              {spiritPerks && !useDreamersBond && (
+                <div className="mt-4">
                   <ExoticClassPerkPicker
                     left={spiritPerks.left}
                     right={spiritPerks.right}
@@ -911,61 +926,37 @@ export function BuilderPanel({
               )}
             </Section>
 
-            <Section>
-              <div className="flex items-center gap-2">
-                <div className="relative min-w-0 flex-1">
+            <Section className="space-y-0">
+              {/* Figma 17:5659: full-width search, then the count line with sort + settings */}
+              <div className="space-y-2">
+                <div className="relative">
                   <MagnifyingGlass
-                    className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 z-10 size-3.5 -translate-y-1/2"
+                    className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 z-10 size-4 -translate-y-1/2"
                     aria-hidden
                   />
                   <Input
                     type="search"
                     value={setQuery}
                     onChange={(e) => setSetQuery(e.target.value)}
-                    placeholder="Find armor sets"
-                    aria-label="Find armor sets"
-                    className="pl-6"
+                    placeholder="Search set bonuses"
+                    aria-label="Search set bonuses"
+                    className="pl-8"
                   />
                 </div>
-                <div className="shrink-0">
-                  <Popover>
-                    <PopoverTrigger
-                      aria-label="Armor set list settings"
-                      className={cn(
-                        "inline-flex size-8 shrink-0 items-center justify-center rounded-[6px] border border-transparent text-muted-foreground transition-colors hover:text-foreground",
-                        field3dSurfaceClasses,
-                        field3dFocusVisibleClasses,
-                      )}
-                    >
-                      <SlidersHorizontal className="size-4" aria-hidden />
-                    </PopoverTrigger>
-                    <PopoverContent align="end" className="space-y-0.5">
-                      <SetListSettingRow
-                        checked={setFilters.hideZero}
-                        onCheckedChange={(checked) =>
-                          setSetFilter("hideZero", checked)
-                        }
-                      >
-                        Hide sets I have 0 pieces for
-                      </SetListSettingRow>
-                      <SetListSettingRow
-                        checked={setFilters.hideLessThan2}
-                        onCheckedChange={(checked) =>
-                          setSetFilter("hideLessThan2", checked)
-                        }
-                      >
-                        Hide sets I have less than 2 pieces for
-                      </SetListSettingRow>
-                    </PopoverContent>
-                  </Popover>
-                </div>
+                <SetListControls
+                  count={pinnedList.length + unpinnedList.length}
+                  sort={setSort}
+                  onSortChange={setSetSort}
+                  filters={setFilters}
+                  onFilterChange={setSetFilter}
+                />
               </div>
               {sets.length === 0 ? (
-                <p className="text-muted-foreground text-xs">
+                <p className="text-muted-foreground pt-4 text-xs">
                   No set-bonus armor found for this class.
                 </p>
               ) : pinnedList.length === 0 && unpinnedList.length === 0 ? (
-                <p className="text-muted-foreground text-xs">
+                <p className="text-muted-foreground pt-4 text-xs">
                   {setQuery.trim() && customSetFilters
                     ? `No sets match "${setQuery.trim()}" with the current settings.`
                     : setQuery.trim()
@@ -975,29 +966,42 @@ export function BuilderPanel({
                         : "No sets to show."}
                 </p>
               ) : (
-                <div className="max-lg:overflow-x-auto">
-                <div className="grid grid-cols-[minmax(0,1.4fr)_auto_minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-x-3 gap-y-1.5 max-lg:min-w-[36rem]">
+                // Figma 17:5731: name · 2pc · 4pc columns (≈191 / 102 / 140 of 488), 16px row gap
+                <div className="grid grid-cols-[minmax(0,1.4fr)_minmax(0,0.75fr)_minmax(0,1fr)] items-center gap-x-4 gap-y-4 pt-8">
                   <span aria-hidden />
-                  <span className="text-muted-foreground col-span-2 text-sm">
-                    2pc
-                  </span>
-                  <span className="text-muted-foreground col-span-2 text-sm">
-                    4pc
-                  </span>
-                  {pinnedList.map(renderSetRow)}
+                  <span className="text-sm">2pc</span>
+                  <span className="text-sm">4pc</span>
+                  {pinnedList.map((s) => (
+                    <SetRow
+                      key={s.setHash}
+                      set={s}
+                      pinned
+                      req={setReqs[s.setHash]}
+                      onTogglePin={togglePin}
+                      onToggleSet={toggleSet}
+                    />
+                  ))}
                   {pinnedList.length > 0 && unpinnedList.length > 0 && (
                     <div
-                      className="border-border/60 col-span-full my-0.5 border-t"
+                      className="border-border col-span-full border-t"
                       aria-hidden
                     />
                   )}
-                  {unpinnedList.map(renderSetRow)}
-                </div>
+                  {unpinnedList.map((s) => (
+                    <SetRow
+                      key={s.setHash}
+                      set={s}
+                      pinned={false}
+                      req={setReqs[s.setHash]}
+                      onTogglePin={togglePin}
+                      onToggleSet={toggleSet}
+                    />
+                  ))}
                 </div>
               )}
             </Section>
 
-            <Section title="Fragments">
+            <Section>
               {fragments && (
                 <FragmentPicker
                   fragments={fragments}
@@ -1006,7 +1010,7 @@ export function BuilderPanel({
                   selected={fragSel[activeSubclass]}
                   onToggle={toggleFragment}
                   statIcons={statIcons}
-                  onApplyCurrent={() => void onApplyCurrentFragments()}
+                  onApplyCurrent={onApplyCurrentFragments}
                   applyDisabled={!canApplyCurrentFragments}
                   applyLoading={applyingFragments}
                 />
@@ -1019,6 +1023,11 @@ export function BuilderPanel({
                 onAllowTuningChange={setAllowTuning}
                 useBalancedTuning={useBalancedTuning}
                 onUseBalancedTuningChange={setUseBalancedTuning}
+                useDreamersBond={useDreamersBond}
+                onUseDreamersBondChange={onDreamersBondChange}
+                dreamersItemName={dreamersClassItemName(classType ?? 2)}
+                useFestivalMasks={useFestivalMasks}
+                onUseFestivalMasksChange={onFestivalMasksChange}
               />
             </Section>
 
@@ -1056,112 +1065,35 @@ export function BuilderPanel({
           </>
         )}
 
-        <div className="space-y-4 py-4 opacity-80">
+        <div className="space-y-4 py-8 opacity-80">
           <SignInCard />
           {showInlineStatusCards && <ArmoryStatus />}
           <ManifestStatus />
         </div>
       </div>
 
-      <BuildsSurface {...buildsProps} />
+      {/* Right — builds. Figma 17:6136: the header sits ~28px below the top of the config column. */}
+      <div className="min-w-0 lg:pt-7">
+        <BuildsSurface {...buildsProps} />
+      </div>
     </div>
   );
 }
 
-function SetListSettingRow({
-  checked,
-  onCheckedChange,
+
+function Section({
+  title,
+  className,
   children,
 }: {
-  checked: boolean;
-  onCheckedChange: (checked: boolean) => void;
+  title?: string;
+  className?: string;
   children: ReactNode;
 }) {
-  const label = typeof children === "string" ? children : undefined;
   return (
-    <div className="flex items-center justify-between gap-3 rounded-md px-2 py-1.5">
-      <span className="text-sm leading-snug">{children}</span>
-      <Switch
-        checked={checked}
-        onCheckedChange={onCheckedChange}
-        aria-label={label}
-      />
-    </div>
-  );
-}
-
-function Section({ title, children }: { title?: string; children: ReactNode }) {
-  return (
-    <section className="space-y-3 py-4">
+    <section className={cn("space-y-3 py-8 first:pt-0", className)}>
       {title ? <h3 className="text-sm font-medium">{title}</h3> : null}
       {children}
     </section>
-  );
-}
-
-function perkTooltipContent(perk: SetPerkInfo | undefined): string | null {
-  if (!perk) return null;
-  return perk.description?.trim() || perk.name;
-}
-
-function SetPerkLabel({
-  perk,
-  disabled,
-  onClick,
-}: {
-  perk: SetPerkInfo | undefined;
-  disabled: boolean;
-  onClick: () => void;
-}) {
-  const tooltipContent = perkTooltipContent(perk);
-  const button = (
-    <button
-      type="button"
-      disabled={disabled}
-      onClick={onClick}
-      aria-label={perk?.name}
-      className={cn(
-        "text-muted-foreground min-w-0 max-w-full truncate text-left text-sm disabled:cursor-not-allowed disabled:opacity-50",
-        !disabled && "cursor-pointer hover:text-foreground",
-      )}
-    >
-      {perk?.name}
-    </button>
-  );
-
-  if (!tooltipContent) return button;
-
-  return (
-    <Tooltip>
-      <TooltipTrigger
-        render={<span className="w-fit max-w-full min-w-0" />}
-      >
-        {button}
-      </TooltipTrigger>
-      <TooltipContent side="top" align="start">
-        {tooltipContent}
-      </TooltipContent>
-    </Tooltip>
-  );
-}
-
-function SetToggle({
-  active,
-  disabled,
-  onToggle,
-}: {
-  active: boolean;
-  disabled?: boolean;
-  onToggle: () => void;
-}) {
-  return (
-    <Checkbox
-      size="lg"
-      checked={active}
-      disabled={disabled}
-      onCheckedChange={onToggle}
-      aria-label="Toggle set bonus"
-      className={cn("justify-self-center", !disabled && "cursor-pointer")}
-    />
   );
 }

@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { refreshTokens, type BungieTokens } from "./oauth";
+import { decodeSigned, encodeSigned } from "./signed-cookie";
 
 /**
  * Session storage via cookies.
@@ -7,9 +8,12 @@ import { refreshTokens, type BungieTokens } from "./oauth";
  *  - `d2_access`  (httpOnly): the short-lived access token. Never leaves the server —
  *                 server routes use it for Bungie calls; /api/auth/session returns only
  *                 `{authenticated, user}`.
- *  - `d2_user`    (httpOnly): identity for server routes. Server code trusts its
- *                 destinyMembershipId/Type, so it must not be client-writable;
- *                 the client gets identity from /api/auth/session instead.
+ *  - `d2_user`    (httpOnly, HMAC-signed): identity for server routes. Server code
+ *                 trusts its membership ids — for Bungie calls (where Bungie re-checks
+ *                 ownership against the token) AND as the owner key of rows in our own
+ *                 database (where nothing else would) — so it is signed with a key
+ *                 derived from the client secret; an unsigned or tampered cookie reads
+ *                 as "no user". The client gets identity from /api/auth/session.
  */
 
 const REFRESH_COOKIE = "d2_refresh";
@@ -24,6 +28,8 @@ export interface SessionUser {
   destinyMembershipId?: string;
   destinyMembershipType?: number;
   displayName?: string;
+  /** Relative Bungie.net profile avatar path (e.g. `/img/profile/avatars/cc13.jpg`). */
+  iconPath?: string;
 }
 
 interface StoredToken {
@@ -41,11 +47,24 @@ function baseCookie(refreshExpiresAt: number) {
   };
 }
 
+/** Source secret for the identity cookie's signing key (HKDF-derived in signed-cookie.ts). */
+function cookieSecret(): string {
+  const secret = process.env.BUNGIE_CLIENT_SECRET;
+  if (!secret) throw new Error("Missing required env var BUNGIE_CLIENT_SECRET. See .env.example.");
+  return secret;
+}
+
 export async function writeSession(tokens: BungieTokens, user: SessionUser) {
   await updateTokens(tokens);
+  await writeUser(user, tokens.refreshExpiresAt);
+}
+
+/** Rewrite the identity cookie (e.g. after backfilling fields on an existing session). */
+export async function writeUser(user: SessionUser, refreshExpiresAt?: number) {
+  const expiresAt = refreshExpiresAt ?? (await readRefresh())?.expiresAt;
+  if (expiresAt == null) return;
   const jar = await cookies();
-  const opts = baseCookie(tokens.refreshExpiresAt);
-  jar.set(USER_COOKIE, JSON.stringify(user), opts);
+  jar.set(USER_COOKIE, await encodeSigned(user, cookieSecret()), baseCookie(expiresAt));
 }
 
 /** Replace the access + (rotated) refresh tokens after a refresh. */
@@ -82,8 +101,32 @@ export async function readUser(): Promise<SessionUser | null> {
   const jar = await cookies();
   const raw = jar.get(USER_COOKIE)?.value;
   if (!raw) return null;
+  // A cookie we can't verify — unsigned (pre-signing sessions), tampered, or a deploy
+  // missing the secret — reads as anonymous rather than throwing out of every route.
+  let user: SessionUser | null;
   try {
-    return JSON.parse(raw) as SessionUser;
+    user = await decodeSigned<SessionUser>(raw, cookieSecret());
+  } catch {
+    return null;
+  }
+  if (!user || typeof user.membershipId !== "string" || !user.membershipId) return null;
+  return user;
+}
+
+/**
+ * The identity from a pre-signing session: `d2_user` as the plain JSON main wrote.
+ * Only /api/auth/session may act on this, and only after confirming the identity with
+ * Bungie — a plain cookie is exactly the forgeable value signing exists to reject.
+ * Null once the cookie is signed (or absent / not JSON).
+ */
+export async function readLegacyUser(): Promise<SessionUser | null> {
+  const jar = await cookies();
+  const raw = jar.get(USER_COOKIE)?.value;
+  if (!raw || !raw.startsWith("{")) return null;
+  try {
+    const user = JSON.parse(raw) as SessionUser;
+    if (typeof user?.membershipId !== "string" || !user.membershipId) return null;
+    return user;
   } catch {
     return null;
   }

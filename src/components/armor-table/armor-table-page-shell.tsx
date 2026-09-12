@@ -6,11 +6,15 @@ import { useArmory } from "@/lib/armory/use-armory";
 import { ArmoryStatus } from "@/components/armory/armory-status";
 import { ManifestStatus } from "@/components/manifest/manifest-status";
 import { ArmorTable } from "@/components/armor-table/armor-table";
+import { useSidebarVisible } from "@/components/app-shell";
+import { cn } from "@/lib/utils";
 
 export function ArmorTablePageShell() {
   const session = useSession();
   const armory = useArmory();
   const authed = session.data?.authenticated ?? false;
+  // The sidebar already shows the account card once it is on screen.
+  const sidebarVisible = useSidebarVisible();
 
   if (!authed) {
     return (
@@ -24,17 +28,28 @@ export function ArmorTablePageShell() {
   // the builder uses instead of an empty table.
   if (!armory.data) {
     return (
-      <main className="mx-auto max-w-md space-y-4 px-6 py-6">
+      <main
+        className={cn(
+          "mx-auto max-w-md space-y-4 px-6 py-6",
+          !sidebarVisible && "lg:pt-20",
+        )}
+      >
         <ManifestStatus />
-        <ArmoryStatus />
+        {!sidebarVisible && <ArmoryStatus />}
       </main>
     );
   }
 
-  // Bounded height (viewport minus the 58px sticky header) so the table body
-  // becomes the scroll container the row virtualizer needs.
+  // Fills the app shell's main area (which is the viewport height) so the table
+  // body becomes the scroll container the row virtualizer needs. Extra top inset
+  // when the sidebar is collapsed so the pinned chrome doesn't cover the toolbar.
   return (
-    <main className="mx-auto flex h-[calc(100dvh-58px)] w-full max-w-7xl flex-col px-4 py-6 lg:px-6 2xl:max-w-[calc(80rem+22rem+2rem)]">
+    <main
+      className={cn(
+        "flex h-full w-full flex-col px-4 py-6 lg:pb-8",
+        sidebarVisible ? "lg:pt-8" : "lg:pt-20",
+      )}
+    >
       <ArmorTable />
     </main>
   );

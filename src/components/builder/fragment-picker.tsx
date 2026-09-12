@@ -1,5 +1,7 @@
 "use client";
 
+import { memo } from "react";
+import { TooltipLabel } from "@/components/ui/tooltip";
 import Image from "next/image";
 import { CircleNotch } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
@@ -15,11 +17,13 @@ import {
 } from "@/lib/armory/fragments";
 
 /**
- * Subclass tabs + a grid of the active subclass's stat-affecting fragments (Name +
- * six stat columns). Toggle a fragment to fold its stats into the build. Only the
- * active subclass's selection applies (you run one subclass at a time).
+ * Figma 17:5835 — "Fragments" label over the subclass tabs, with the emphatic
+ * "Apply current" button bottom-aligned on the right. Below (not in the design,
+ * kept from before): a grid of the active subclass's stat-affecting fragments
+ * (Name + six stat columns). Toggle a fragment to fold its stats into the build.
+ * Only the active subclass's selection applies (you run one subclass at a time).
  */
-export function FragmentPicker({
+export const FragmentPicker = memo(function FragmentPicker({
   fragments,
   activeSubclass,
   onSubclassChange,
@@ -43,33 +47,40 @@ export function FragmentPicker({
   const rows = fragments[activeSubclass];
 
   return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <Tabs
-          value={activeSubclass}
-          onValueChange={(v) => onSubclassChange(v as Subclass)}
-        >
-          <TabsList>
-            {SUBCLASSES.map((s) => (
-              <TabsTrigger key={s} value={s} className="text-xs">
-                {s}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-        </Tabs>
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-3">
+        <div className="space-y-2">
+          <h3 className="text-sm font-medium">Fragments</h3>
+          <Tabs
+            value={activeSubclass}
+            onValueChange={(v) => onSubclassChange(v as Subclass)}
+          >
+            <TabsList>
+              {SUBCLASSES.map((s) => (
+                <TabsTrigger key={s} value={s}>
+                  {s}
+                </TabsTrigger>
+              ))}
+            </TabsList>
+          </Tabs>
+        </div>
 
-        <Button
-          type="button"
-          variant="outlineSubtle"
-          size="xs"
-          disabled={applyDisabled || applyLoading}
-          onClick={onApplyCurrent}
+        <TooltipLabel
+          label="Match your equipped subclass and fragments"
+          disabled={applyDisabled}
         >
-          {applyLoading ? (
-            <CircleNotch className="animate-spin" aria-hidden />
-          ) : null}
-          Apply Current
-        </Button>
+          <Button
+            type="button"
+            variant="emphatic"
+            disabled={applyDisabled || applyLoading}
+            onClick={onApplyCurrent}
+          >
+            {applyLoading ? (
+              <CircleNotch className="animate-spin" aria-hidden />
+            ) : null}
+            Apply current
+          </Button>
+        </TooltipLabel>
       </div>
 
       {rows.length === 0 ? (
@@ -78,21 +89,23 @@ export function FragmentPicker({
         </p>
       ) : (
         <div className="overflow-x-auto">
-          <div className="divide-border/60 min-w-max divide-y">
+          <div className="divide-border min-w-max divide-y">
             <div className="grid grid-cols-[1fr_repeat(6,2rem)] items-center gap-x-2 py-1.5">
               <span aria-hidden />
               {STAT_ORDER.map((key) => (
                 <span key={key} className="flex justify-center">
                   {statIcons[key] ? (
-                    <Image
-                      src={`${BUNGIE_IMAGE_BASE}${statIcons[key]}`}
-                      alt={STAT_LABELS[key]}
-                      title={STAT_LABELS[key]}
-                      width={16}
-                      height={16}
-                      className="size-4 shrink-0 invert dark:invert-0"
-                      unoptimized
-                    />
+                    <TooltipLabel label={STAT_LABELS[key]}>
+                      <Image
+                        src={`${BUNGIE_IMAGE_BASE}${statIcons[key]}`}
+                        alt={STAT_LABELS[key]}
+                        tabIndex={0}
+                        width={16}
+                        height={16}
+                        className="size-4 shrink-0 opacity-65 invert dark:invert-0"
+                        unoptimized
+                      />
+                    </TooltipLabel>
                   ) : (
                     <span className="size-4 shrink-0" aria-hidden />
                   )}
@@ -116,10 +129,9 @@ export function FragmentPicker({
                     )}
                   >
                     <Checkbox
-                      size="lg"
                       checked={on}
                       onCheckedChange={() => onToggle(f.hash)}
-                      className="group-hover:border-primary/60"
+                      className="group-hover:border-emphatic/60"
                     />
                     {f.icon && (
                       <Image
@@ -155,4 +167,4 @@ export function FragmentPicker({
       )}
     </div>
   );
-}
+});

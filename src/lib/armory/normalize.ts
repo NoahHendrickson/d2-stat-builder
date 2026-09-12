@@ -10,9 +10,11 @@ import {
   archetypeNameFromSpirit,
   isExoticClassItemHash,
 } from "./exotic-class-perks";
+import { isFestivalMask } from "./festival-masks";
 import {
   ARMOR_ARCHETYPE_PLUG_CATEGORY,
   ARMOR_BUCKETS,
+  ARTIFICE_MOD_CATEGORY,
   ARTIFICE_PERK_HASH,
   MASTERWORK_OFF_STAT_BONUS,
   STAT_HASHES,
@@ -20,9 +22,13 @@ import {
   STAT_ORDER,
   TUNING_PLUG_CATEGORY,
   offArchetypeIndices,
+  plugKindForCategory,
   type ArmorSlot,
+  type ArmorSocketKind,
   type StatArray,
 } from "./stats";
+
+export type { ArmorSocketKind } from "./stats";
 
 // Plug categories whose stat contributions are stripped to recover the base roll.
 // NOTE: masterwork is deliberately NOT here — on Armor 3.0 its manifest bonus (+5 to all
@@ -38,22 +44,30 @@ const LEGACY_PLUG_PATTERNS = [...CHANGEABLE_PLUG_PATTERNS, "masterworks"];
  * v460.plugs.armor.masterworks.stat plugs list exactly this). */
 const LEGACY_MASTERWORK_BONUS = 2;
 
-/**
- * Usable artifice mod-socket category (`Empty Mod Socket` / Forged +3 mods).
- * Deliberately excludes `enhancements.artifice.exotic` — that is the unpaid
- * "Locked Artifice Socket" / "Upgrade to Artifice Armor" payment slot. Exotic
- * class items still ship that locked socket in the def even though Edge of Fate
- * removed their artifice capability in favor of Tier-5 tuning.
- */
-const ARTIFICE_SOCKET_CATEGORY = "enhancements.artifice";
-
 export type ArmorLocation = "equipped" | "inventory" | "vault";
+
+/** One writable mod socket on a piece, from its live sockets + definition. */
+export interface ArmorSocket {
+  index: number;
+  /** general = stat mod; other = slot-specific / activity; tuning; artifice. */
+  kind: ArmorSocketKind;
+  /** The current plug's category identifier (what this socket is for). */
+  category: string;
+  /** Currently socketed plug. */
+  plugHash?: number;
+  /** DestinyPlugSetDefinition listing the mods that fit here, from the item definition. */
+  plugSetHash?: number;
+  /** The socket's "Empty … Socket" plug (its definition's initial item) — not a pickable mod. */
+  emptyPlugHash?: number;
+}
 
 export interface ArmorPiece {
   instanceId: string;
   itemHash: number;
   name: string;
   icon?: string;
+  /** Season / featured badge overlaid on `icon` (Bungie watermark PNG). */
+  watermark?: string;
   slot: ArmorSlot;
   classType: number;
   isExotic: boolean;
@@ -81,10 +95,22 @@ export interface ArmorPiece {
   exoticPerkHashes?: [number, number];
   location: ArmorLocation;
   characterId?: string;
+  /** Locked in-game (ItemState.Locked) — never vaulted automatically to make room. */
+  locked?: boolean;
+  /** Sitting in the character's postmaster: listed under `inventory`, but not transferable. */
+  postmaster?: boolean;
+  /** Every writable mod socket (for the mod picker + applying loadouts). */
+  armorSockets?: ArmorSocket[];
+  /** Armor energy (component 300) — capacity and what current plugs use. */
+  energy?: { capacity: number; used: number };
 }
 
 const ITEM_TYPE_ARMOR = 2;
 const TIER_TYPE_EXOTIC = 6;
+/** ItemState.Locked */
+const ITEM_STATE_LOCKED = 1;
+/** The postmaster bucket (Lost Items) — items here live in the character inventory list. */
+const POSTMASTER_BUCKET = 215593132;
 
 /**
  * Base roll = the instance's current stats (component 304) minus the stat
@@ -293,9 +319,64 @@ function isArtificePiece(
     if (socket.plugHash === ARTIFICE_PERK_HASH) return true;
     const cat = manifest.def("DestinyInventoryItemDefinition", socket.plugHash)?.plug
       ?.plugCategoryIdentifier;
-    if (cat === ARTIFICE_SOCKET_CATEGORY) return true;
+    if (cat === ARTIFICE_MOD_CATEGORY) return true;
   }
   return false;
+}
+
+/**
+ * Every writable mod socket, classified from the live sockets' current plugs (an empty
+ * socket still holds an "Empty … Socket" plug of the right category): general stat
+ * mod, tuning, artifice, and "other" (slot-specific / activity). Locked exotic
+ * payment sockets (`enhancements.artifice.exotic`, `enhancements.exotic…`) are skipped.
+ * The item definition supplies each socket's plug set (the mods that fit).
+ */
+function findArmorSockets(
+  instanceId: string,
+  def: {
+    sockets?: {
+      socketEntries?: {
+        reusablePlugSetHash?: number;
+        randomizedPlugSetHash?: number;
+        singleInitialItemHash?: number;
+      }[];
+    };
+  },
+  profile: DestinyProfileResponse,
+  manifest: Manifest,
+): ArmorSocket[] | undefined {
+  const sockets = profile.itemComponents?.sockets?.data?.[instanceId]?.sockets;
+  if (!sockets) return undefined;
+  const out: ArmorSocket[] = [];
+  sockets.forEach((socket, i) => {
+    if (!socket.plugHash) return;
+    const cat = manifest.def("DestinyInventoryItemDefinition", socket.plugHash)?.plug
+      ?.plugCategoryIdentifier;
+    if (!cat) return;
+    const kind = plugKindForCategory(cat);
+    if (!kind) return;
+    const entry = def.sockets?.socketEntries?.[i];
+    const plugSetHash = entry?.reusablePlugSetHash || entry?.randomizedPlugSetHash || undefined;
+    const emptyPlugHash = entry?.singleInitialItemHash || undefined;
+    out.push({
+      index: i,
+      kind,
+      category: cat,
+      plugHash: socket.plugHash,
+      ...(plugSetHash ? { plugSetHash } : {}),
+      ...(emptyPlugHash ? { emptyPlugHash } : {}),
+    });
+  });
+  return out;
+}
+
+function readEnergy(
+  instanceId: string,
+  profile: DestinyProfileResponse,
+): { capacity: number; used: number } | undefined {
+  const energy = profile.itemComponents?.instances?.data?.[instanceId]?.energy;
+  if (!energy) return undefined;
+  return { capacity: energy.energyCapacity, used: energy.energyUsed };
 }
 
 /** True when a tuning-category plug is currently in any socket (empty or slotted). */
@@ -315,6 +396,31 @@ function hasTuningSocket(
   return false;
 }
 
+/** Season or featured icon overlay. Featured wins; else the versioned quality watermark. */
+export function itemWatermark(
+  def:
+    | {
+        isFeaturedItem?: boolean;
+        iconWatermarkFeatured?: string;
+        iconWatermark?: string;
+        quality?: { currentVersion?: number; displayVersionWatermarkIcons?: string[] };
+      }
+    | undefined,
+  versionNumber?: number,
+): string | undefined {
+  if (!def) return undefined;
+  if (def.isFeaturedItem) {
+    const featured = def.iconWatermarkFeatured || undefined;
+    if (featured) return featured;
+  }
+  const icons = def.quality?.displayVersionWatermarkIcons;
+  if (icons?.length) {
+    const i = versionNumber ?? def.quality?.currentVersion ?? 0;
+    return icons[i] || icons[0] || undefined;
+  }
+  return def.iconWatermark || undefined;
+}
+
 function buildPiece(
   item: DestinyItemComponent,
   manifest: Manifest,
@@ -325,11 +431,16 @@ function buildPiece(
   if (!item.itemInstanceId) return null;
 
   const def = manifest.def("DestinyInventoryItemDefinition", item.itemHash);
-  if (!def || def.itemType !== ITEM_TYPE_ARMOR) return null;
+  if (!def) return null;
+
+  // FotL masks are helmet-slot items that are not itemType Armor.
+  const festivalMask = isFestivalMask(item.itemHash, def);
+  if (def.itemType !== ITEM_TYPE_ARMOR && !festivalMask) return null;
 
   // Slot comes from the definition's bucket, not the live one (vault items report the vault bucket).
   const slot =
-    ARMOR_BUCKETS[def.inventory?.bucketTypeHash as keyof typeof ARMOR_BUCKETS];
+    ARMOR_BUCKETS[def.inventory?.bucketTypeHash as keyof typeof ARMOR_BUCKETS] ??
+    (festivalMask ? "helmet" : undefined);
   if (!slot) return null;
 
   const isExotic = def.inventory?.tierType === TIER_TYPE_EXOTIC;
@@ -372,6 +483,10 @@ function buildPiece(
     for (let i = 0; i < stats.length; i++) stats[i] += bonus[i];
   }
 
+  const armorSockets = findArmorSockets(item.itemInstanceId, def, profile, manifest);
+  const energy = readEnergy(item.itemInstanceId, profile);
+  const watermark = itemWatermark(def, item.versionNumber);
+
   return {
     instanceId: item.itemInstanceId,
     itemHash: item.itemHash,
@@ -393,6 +508,11 @@ function buildPiece(
     exoticPerkHashes,
     location,
     characterId,
+    ...((item.state ?? 0) & ITEM_STATE_LOCKED ? { locked: true } : {}),
+    ...(item.bucketHash === POSTMASTER_BUCKET ? { postmaster: true } : {}),
+    ...(watermark ? { watermark } : {}),
+    ...(armorSockets ? { armorSockets } : {}),
+    ...(energy ? { energy } : {}),
   };
 }
 

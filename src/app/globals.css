@@ -7,38 +7,38 @@
 @custom-variant fine-pointer (@media (hover: hover) and (pointer: fine));
 
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: #1e5fc8;
-  --primary-foreground: #ffffff;
+  --background: oklch(0.989 0.009 106.567);
+  --foreground: oklch(0.226 0 0);
+  --card: oklch(0.989 0.009 106.567);
+  --card-foreground: oklch(0.226 0 0);
+  --popover: oklch(0.989 0.009 106.567);
+  --popover-foreground: oklch(0.226 0 0);
+  --primary: oklch(0.226 0 0);
+  --primary-foreground: oklch(0.989 0.009 106.567);
   --secondary: #e9f1ff;
   --secondary-foreground: #0f2444;
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: #e9f1ff;
-  --accent-foreground: #0f2444;
+  --muted: oklch(0.970 0.006 56.102);
+  --muted-foreground: oklch(0.556 0.006 56.102);
+  --accent: oklch(0 0 0 / 6%);
+  --accent-foreground: oklch(0.205 0.006 56.102);
   --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: #438eff;
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --radius: 0.5rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --border: oklch(0.922 0.006 56.102);
+  --input: oklch(0.922 0.006 56.102);
+  --ring: oklch(0.708 0.006 56.102);
+  --chart-1: oklch(0.870 0.006 56.102);
+  --chart-2: oklch(0.556 0.006 56.102);
+  --chart-3: oklch(0.439 0.006 56.102);
+  --chart-4: oklch(0.371 0.006 56.102);
+  --chart-5: oklch(0.269 0.006 56.102);
+  --radius: 0.625rem;
+  --sidebar: oklch(0.989 0.009 106.567);
+  --sidebar-foreground: oklch(0.226 0 0);
+  --sidebar-primary: oklch(0.205 0.006 56.102);
+  --sidebar-primary-foreground: oklch(0.989 0.009 106.567);
+  --sidebar-accent: oklch(0 0 0 / 10%);
+  --sidebar-accent-foreground: oklch(0.226 0 0);
+  --sidebar-border: oklch(0.922 0.006 56.102);
+  --sidebar-ring: oklch(0.708 0.006 56.102);
   --brand: #438eff;
   --brand-shadow: #75bcff;
   --neutral-line: #a1a1aa;
@@ -52,6 +52,16 @@
   --exotic-ring-inner: #3f3f3f;
   --exotic-ring-outer: #ffffff;
   --exotic-ring-glow: rgb(255 255 255 / 0.45);
+  --text-primary: oklch(0.226 0 0);
+  --text-secondary: oklch(0.439 0.006 56.102);
+  --text-muted: oklch(0.556 0.006 56.102);
+  --primary-border: oklch(0.226 0 0 / 50%);
+  --primary-muted: oklch(0.922 0.006 56.102);
+  /* Figma Button/Emphatic (6:667): #4580E5 fill, #FCFCF5 label in both modes. */
+  --emphatic: #4580e5;
+  --emphatic-foreground: #fcfcf5;
+  --emphatic-dark: oklch(0.471 0.130 260.407);
+  --emphatic-light: oklch(0.760 0.110 260.407);
 }
 
 @theme inline {
@@ -121,48 +131,73 @@
       transform: translateY(11px) rotate(3deg);
     }
   }
+  --color-emphatic: var(--emphatic);
+  --color-emphatic-foreground: var(--emphatic-foreground);
+  --color-emphatic-dark: var(--emphatic-dark);
+  --color-emphatic-light: var(--emphatic-light);
+  --color-primary-border: var(--primary-border);
+  --color-primary-muted: var(--primary-muted);
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-muted: var(--text-muted);
+  --shadow-raised: 2px 0 8px rgb(0 0 0 / 0.08),
+    3px 0 12px rgb(0 0 0 / 0.12);
 }
 
 .dark {
-  --background: oklch(0.21 0 0);
-  --foreground: oklch(0.93 0 0);
-  --card: oklch(0.25 0 0);
-  --card-foreground: oklch(0.93 0 0);
-  --popover: oklch(0.21 0 0);
-  --popover-foreground: oklch(0.93 0 0);
-  --primary: #438eff;
-  --primary-foreground: #ffffff;
-  --secondary: oklch(0.28 0 0);
+  /* One warm-stone ramp (hue 56.102, chroma 0.006) anchored on the popover tone
+     (0.264): two darker steps below it for page + card, lighter steps above it for
+     muted / hover surfaces. Every dark surface now shares a hue; the old background
+     was a pure neutral (chroma 0) that made menus and cards read as a different color. */
+  --background: oklch(0.215 0.006 56.102);
+  --foreground: oklch(0.989 0.009 106.567);
+  --card: oklch(0.242 0.006 56.102);
+  --card-foreground: oklch(0.989 0.009 106.567);
+  --popover: oklch(0.286 0.006 56.102);
+  --popover-foreground: oklch(0.989 0.009 106.567);
+  --primary: oklch(0.989 0.009 106.567);
+  --primary-foreground: oklch(0.215 0.006 56.102);
+  --secondary: oklch(0.29 0.006 56.102);
   --secondary-foreground: oklch(0.90 0 0);
-  --muted: oklch(0.28 0 0);
-  --muted-foreground: oklch(0.65 0 0);
-  --accent: oklch(0.32 0 0);
-  --accent-foreground: oklch(0.93 0 0);
+  --muted: oklch(0.31 0.006 56.102);
+  --muted-foreground: oklch(0.708 0.006 56.102);
+  --accent: oklch(0.345 0.006 56.102);
+  --accent-foreground: oklch(0.989 0.009 106.567);
   --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(0.35 0 0);
+  --border: oklch(0.989 0.009 106.567 / 6%);
   /* Translucent white (upstream shadcn dark) instead of opaque 0.28: checkbox
      and switch outlines need to stay visible on bg/popover (0.21) AND on
      card/muted (0.25/0.28) surfaces — an opaque near-0.28 gray vanishes on
      all of them. */
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.62 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.25 0 0);
-  --sidebar-foreground: oklch(0.93 0 0);
-  --sidebar-primary: oklch(0.55 0 0);
-  --sidebar-primary-foreground: oklch(0.93 0 0);
-  --sidebar-accent: oklch(0.28 0 0);
-  --sidebar-accent-foreground: oklch(0.93 0 0);
-  --sidebar-border: oklch(1 0 0 / 12%);
-  --sidebar-ring: oklch(0.55 0 0);
+  --input: oklch(0.989 0.009 106.567 / 15%);
+  --ring: oklch(0.556 0.006 56.102);
+  --chart-1: oklch(0.870 0.006 56.102);
+  --chart-2: oklch(0.556 0.006 56.102);
+  --chart-3: oklch(0.439 0.006 56.102);
+  --chart-4: oklch(0.371 0.006 56.102);
+  --chart-5: oklch(0.269 0.006 56.102);
+  --sidebar: oklch(0.236 0.006 56.102);
+  --sidebar-foreground: oklch(0.989 0.009 106.567);
+  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary-foreground: oklch(0.989 0.009 106.567);
+  --sidebar-accent: oklch(1 0 0 / 12%);
+  --sidebar-accent-foreground: oklch(0.989 0.009 106.567);
+  --sidebar-border: oklch(0.989 0.009 106.567 / 6%);
+  --sidebar-ring: oklch(0.556 0.006 56.102);
   --brand: #438eff;
   --brand-shadow: #2a5a9e;
   --neutral-line: #71717a;
   --neutral-shadow: #52525b;
+  --text-primary: oklch(0.989 0.009 106.567);
+  --text-secondary: oklch(0.870 0.006 56.102);
+  --text-muted: oklch(0.708 0.006 56.102);
+  --primary-border: oklch(0.989 0.009 106.567 / 50%);
+  --primary-muted: oklch(0.989 0.009 106.567 / 10%);
+  /* Figma Button/Emphatic (6:667): same #4580E5 / #FCFCF5 pair as :root. */
+  --emphatic: #4580e5;
+  --emphatic-foreground: #fcfcf5;
+  --emphatic-dark: oklch(0.471 0.130 260.407);
+  --emphatic-light: oklch(0.760 0.110 260.407);
 }
 
 @layer base {
@@ -217,4 +252,8 @@ input[type="number"] {
   .loading-tile-bob {
     animation-play-state: paused;
   }
+}
+
+@utility corner-smooth {
+    corner-shape: superellipse(1.2);
 }

@@ -50,3 +50,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# claude code — per-session git worktrees (registered via `git worktree`, never content)
+.claude/worktrees/

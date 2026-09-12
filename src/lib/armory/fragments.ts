@@ -1,5 +1,6 @@
 import type { Manifest } from "@/lib/manifest/load";
-import { STAT_HASH_TO_INDEX, type StatArray } from "./stats";
+import { memoByManifest } from "@/lib/manifest/memo";
+import { STAT_HASH_TO_INDEX, STAT_LABELS, STAT_ORDER, type StatArray } from "./stats";
 
 export type Subclass = "Arc" | "Solar" | "Void" | "Stasis" | "Strand" | "Prismatic";
 
@@ -77,6 +78,15 @@ export function buildFragmentStats(
   return { stats, touches };
 }
 
+/** Human-readable fragment bonuses, e.g. "+10 Health · −10 Class". Empty when none. */
+export function formatFragmentStats(stats: StatArray): string {
+  return stats
+    .flatMap((v, i) =>
+      v ? [`${v > 0 ? "+" : "−"}${Math.abs(v)} ${STAT_LABELS[STAT_ORDER[i]]}`] : [],
+    )
+    .join(" · ");
+}
+
 export interface FragmentInfo {
   hash: number;
   name: string;
@@ -93,6 +103,24 @@ export interface FragmentInfo {
  * builds), matching D2ArmorPicker.
  */
 export function availableFragments(
+  manifest: Manifest,
+  classType: number,
+): Record<Subclass, FragmentInfo[]> {
+  const byClass = fragmentsByClass(manifest);
+  let out = byClass.get(classType);
+  if (!out) {
+    out = scanFragments(manifest, classType);
+    byClass.set(classType, out);
+  }
+  return out;
+}
+
+// One scan per (manifest, class) for the session — the table is immutable.
+const fragmentsByClass = memoByManifest(
+  () => new Map<number, Record<Subclass, FragmentInfo[]>>(),
+);
+
+function scanFragments(
   manifest: Manifest,
   classType: number,
 ): Record<Subclass, FragmentInfo[]> {

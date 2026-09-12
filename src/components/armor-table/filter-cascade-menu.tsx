@@ -1,26 +1,51 @@
 "use client";
 
+import { TooltipLabel } from "@/components/ui/tooltip";
 import { useState } from "react";
-import { CaretDown, CaretRight } from "@phosphor-icons/react";
+import { CaretDown } from "@phosphor-icons/react";
 import type { FilterOption } from "@/lib/armor-table/pinned";
 import type {
   ArmorVersion,
   FacetFilters,
   TuningFilter,
 } from "@/lib/armor-table/filters";
+import {
+  STAT_DISPLAY_ORDER,
+  STAT_LABELS,
+  STAT_ORDER,
+} from "@/lib/armory/stats";
 import { cn } from "@/lib/utils";
 import {
   fieldControlInnerTriggerClasses,
   fieldFilterControlShellClasses,
 } from "@/lib/field-surface";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Menu } from "@/components/ui/menu";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   FilterMultiselectPanel,
   filterMultiselectActiveBadgeClasses,
-  selectionSummary,
+  selectionSummaryText,
 } from "@/components/armor-table/filter-multiselect";
+
+export const STAT_FILTER_OPTIONS: FilterOption<number>[] =
+  STAT_DISPLAY_ORDER.map((key) => ({
+    value: STAT_ORDER.indexOf(key),
+    label: STAT_LABELS[key],
+  }));
+
+export const TUNING_FILTER_OPTIONS: FilterOption<TuningFilter>[] = [
+  ...STAT_FILTER_OPTIONS,
+  { value: "none", label: "Not tunable" },
+];
 
 const ALL_FACET_KEYS = [
   "classes",
@@ -65,51 +90,34 @@ function CascadeFacetSubmenu<V extends string | number>({
   const active = value.length > 0;
 
   return (
-    <Menu.SubmenuRoot
+    <DropdownMenuSub
       onOpenChange={(open) => {
         if (!open) setQuery("");
       }}
     >
-      <Menu.SubmenuTrigger
-        openOnHover={!toggleOnClick}
-        className="justify-between gap-3"
-      >
-        <span className="shrink-0 font-medium">{label}</span>
-        <span className="flex min-w-0 items-center gap-1.5">
-          <span className="min-w-0 truncate text-right text-xs">
-            {selectionSummary(value, options, allLabel)}
+      <DropdownMenuSubTrigger openOnHover={!toggleOnClick}>
+        <span className="min-w-0 flex-1 truncate">{label}</span>
+        {active ? (
+          <span className="text-muted-foreground max-w-24 truncate text-xs">
+            {selectionSummaryText(value, options)}
           </span>
-          {active && (
-            <Badge className={filterMultiselectActiveBadgeClasses}>
-              {value.length}
-            </Badge>
-          )}
-          <CaretRight
-            weight="duotone"
-            className="text-muted-foreground size-4 shrink-0"
-            aria-hidden
-          />
-        </span>
-      </Menu.SubmenuTrigger>
-      <Menu.Portal>
-        <Menu.Positioner side="inline-end" align="start">
-          <Menu.Popup className="w-64 p-0">
-            <FilterMultiselectPanel
-              allLabel={allLabel}
-              options={options}
-              value={value}
-              onChange={onChange}
-              query={query}
-              onQueryChange={setQuery}
-              searchable={searchable}
-              pinnable={pinnable}
-              pinned={pinned}
-              onTogglePin={onTogglePin}
-            />
-          </Menu.Popup>
-        </Menu.Positioner>
-      </Menu.Portal>
-    </Menu.SubmenuRoot>
+        ) : null}
+      </DropdownMenuSubTrigger>
+      <DropdownMenuSubContent side="inline-end" align="start" className="w-64">
+        <FilterMultiselectPanel
+          allLabel={allLabel}
+          options={options}
+          value={value}
+          onChange={onChange}
+          query={query}
+          onQueryChange={setQuery}
+          searchable={searchable}
+          pinnable={pinnable}
+          pinned={pinned}
+          onTogglePin={onTogglePin}
+        />
+      </DropdownMenuSubContent>
+    </DropdownMenuSub>
   );
 }
 
@@ -161,131 +169,126 @@ export function FilterCascadeMenu({
 
   const includes = (key: keyof FacetFilters) => includedFacets.includes(key);
 
-  const tuningOptions: FilterOption<TuningFilter>[] = [
-    ...statOptions,
-    { value: "none" as const, label: "Not tunable" },
-  ];
+  const tuningOptions = TUNING_FILTER_OPTIONS;
 
   return (
-    <Menu.Root>
+    <DropdownMenu>
       <div
         className={cn(
           fieldFilterControlShellClasses,
-          "h-full min-w-28 shrink-0",
+          "min-w-28 shrink-0",
         )}
         data-active={active || undefined}
       >
-        <Menu.Trigger
-          aria-label={
+        <TooltipLabel
+          label={
             active
               ? `${triggerLabel} — ${totalSelected} selected`
               : triggerLabel
           }
-          className={fieldControlInnerTriggerClasses}
         >
-          <span className="min-w-0 flex-1 truncate text-left">{triggerLabel}</span>
-          {active && (
-            <Badge className={filterMultiselectActiveBadgeClasses}>
-              {totalSelected}
-            </Badge>
-          )}
-          <CaretDown
-            weight="duotone"
-            className="text-muted-foreground pointer-events-none size-4 shrink-0"
-            aria-hidden
-          />
-        </Menu.Trigger>
+          <DropdownMenuTrigger
+            aria-label={
+              active
+                ? `${triggerLabel} — ${totalSelected} selected`
+                : triggerLabel
+            }
+            className={fieldControlInnerTriggerClasses}
+          >
+            <span className="min-w-0 flex-1 truncate text-left">
+              {triggerLabel}
+            </span>
+            {active && (
+              <Badge className={filterMultiselectActiveBadgeClasses}>
+                {totalSelected}
+              </Badge>
+            )}
+            <CaretDown
+              weight="duotone"
+              className="text-muted-foreground pointer-events-none size-4 shrink-0"
+              aria-hidden
+            />
+          </DropdownMenuTrigger>
+        </TooltipLabel>
       </div>
-      <Menu.Portal>
-        <Menu.Positioner side="bottom" align="start">
-          <Menu.Popup className="w-56 p-1">
-            {includes("classes") && (
-              <CascadeFacetSubmenu
-                label="Class"
-                allLabel="All classes"
-                options={classOptions}
-                value={facets.classes}
-                onChange={(v) => onFacetChange("classes", v)}
-                toggleOnClick={toggleSubmenusOnClick}
-              />
-            )}
-            {includes("armorVersions") && (
-              <CascadeFacetSubmenu
-                label="Armor"
-                allLabel="All armor"
-                options={armorVersionOptions}
-                value={facets.armorVersions}
-                onChange={(v) => onFacetChange("armorVersions", v)}
-                toggleOnClick={toggleSubmenusOnClick}
-              />
-            )}
-            {includes("setHashes") && (
-              <CascadeFacetSubmenu
-                label="Set"
-                allLabel="All sets"
-                options={setOptions}
-                value={facets.setHashes}
-                onChange={(v) => onFacetChange("setHashes", v)}
-                searchable
-                pinnable
-                pinned={pinnedSets}
-                onTogglePin={onTogglePinnedSet}
-                toggleOnClick={toggleSubmenusOnClick}
-              />
-            )}
-            {includes("archetypes") && (
-              <CascadeFacetSubmenu
-                label="Archetype"
-                allLabel="All archetypes"
-                options={archetypeOptions}
-                value={facets.archetypes}
-                onChange={(v) => onFacetChange("archetypes", v)}
-                searchable
-                pinnable
-                pinned={pinnedArchetypes}
-                onTogglePin={onTogglePinnedArchetype}
-                toggleOnClick={toggleSubmenusOnClick}
-              />
-            )}
-            {includes("tunings") && (
-              <CascadeFacetSubmenu<TuningFilter>
-                label="Tuning"
-                allLabel="Any tuning"
-                options={tuningOptions}
-                value={facets.tunings}
-                onChange={(v) => onFacetChange("tunings", v)}
-                toggleOnClick={toggleSubmenusOnClick}
-              />
-            )}
-            {includes("tertiaries") && (
-              <CascadeFacetSubmenu
-                label="Tertiary"
-                allLabel="Any tertiary"
-                options={statOptions}
-                value={facets.tertiaries}
-                onChange={(v) => onFacetChange("tertiaries", v)}
-                toggleOnClick={toggleSubmenusOnClick}
-              />
-            )}
-            {showClearAll && (
-              <>
-                <Menu.Separator className="bg-border my-1 h-px" />
-                <div className="flex justify-end p-1">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-6 px-1.5 text-xs"
-                    disabled={!filtersActive}
-                    onClick={onClearFilters}
-                  >
-                    Clear all
-                  </Button>
-                </div>
-              </>
-            )}
-          </Menu.Popup>
-        </Menu.Positioner>
-      </Menu.Portal>
-    </Menu.Root>
+      <DropdownMenuContent side="bottom" align="start" className="w-56 p-1">
+        {includes("classes") && (
+          <CascadeFacetSubmenu
+            label="Class"
+            allLabel="All classes"
+            options={classOptions}
+            value={facets.classes}
+            onChange={(v) => onFacetChange("classes", v)}
+            toggleOnClick={toggleSubmenusOnClick}
+          />
+        )}
+        {includes("armorVersions") && (
+          <CascadeFacetSubmenu
+            label="Armor"
+            allLabel="All armor"
+            options={armorVersionOptions}
+            value={facets.armorVersions}
+            onChange={(v) => onFacetChange("armorVersions", v)}
+            toggleOnClick={toggleSubmenusOnClick}
+          />
+        )}
+        {includes("setHashes") && (
+          <CascadeFacetSubmenu
+            label="Set"
+            allLabel="All sets"
+            options={setOptions}
+            value={facets.setHashes}
+            onChange={(v) => onFacetChange("setHashes", v)}
+            searchable
+            pinnable
+            pinned={pinnedSets}
+            onTogglePin={onTogglePinnedSet}
+            toggleOnClick={toggleSubmenusOnClick}
+          />
+        )}
+        {includes("archetypes") && (
+          <CascadeFacetSubmenu
+            label="Archetype"
+            allLabel="All archetypes"
+            options={archetypeOptions}
+            value={facets.archetypes}
+            onChange={(v) => onFacetChange("archetypes", v)}
+            searchable
+            pinnable
+            pinned={pinnedArchetypes}
+            onTogglePin={onTogglePinnedArchetype}
+            toggleOnClick={toggleSubmenusOnClick}
+          />
+        )}
+        {includes("tunings") && (
+          <CascadeFacetSubmenu<TuningFilter>
+            label="Tuning"
+            allLabel="Any tuning"
+            options={tuningOptions}
+            value={facets.tunings}
+            onChange={(v) => onFacetChange("tunings", v)}
+            toggleOnClick={toggleSubmenusOnClick}
+          />
+        )}
+        {includes("tertiaries") && (
+          <CascadeFacetSubmenu
+            label="Tertiary"
+            allLabel="Any tertiary"
+            options={statOptions}
+            value={facets.tertiaries}
+            onChange={(v) => onFacetChange("tertiaries", v)}
+            toggleOnClick={toggleSubmenusOnClick}
+          />
+        )}
+        {showClearAll && filtersActive && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={onClearFilters}>
+              Clear filters
+            </DropdownMenuItem>
+          </>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
