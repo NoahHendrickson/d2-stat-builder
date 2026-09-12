@@ -10,7 +10,7 @@ import { isSyntheticClassItemId } from "../armory/exotic-class-perks";
 import { ARMOR_BUCKETS, ARMOR_SLOTS, type ArmorSlot } from "../armory/stats";
 import type { DimLoadout, DimLoadoutItem } from "../dim/loadout-link";
 import { ABILITY_KINDS, ASPECT_SOCKET_COUNT, FRAGMENT_SOCKET_COUNT, FRAGMENT_SOCKET_START, SUPER_SOCKET_COUNT, aspectSocketStart, subclassFromItemHash, type AbilityKind } from "../dim/subclasses";
-import { abilitySocketIndex } from "./subclass";
+import { abilitySocketIndex, selectedSubclassPlugs } from "./subclass";
 
 /** The manifest access this module needs (keeps tests free of a full Manifest). */
 export interface DefLookup {
@@ -81,17 +81,14 @@ export function resolveLoadout(
       // fragment socket onward.
       const start = sc ? FRAGMENT_SOCKET_START[sc] : 0;
       const sockets = manifest.def("DestinyInventoryItemDefinition", ref.hash)?.sockets?.socketEntries;
-      const hashesIn = (start: number, count: number) => Object.entries(ref.socketOverrides ?? {})
-        .map(([i, h]) => [Number(i), h] as const)
-        .filter(([i, h]) => i >= start && i < start + count && h !== sockets?.[i]?.singleInitialItemHash)
-        .sort((a, b) => a[0] - b[0])
-        .map(([, h]) => h);
-      const fragmentHashes = hashesIn(start, FRAGMENT_SOCKET_COUNT);
-      const aspectHashes = sc ? hashesIn(aspectSocketStart(sc), ASPECT_SOCKET_COUNT) : [];
+      // Sockets in a group share one empty plug — the group's first socket's initial plug.
+      const group = (start: number, count: number) => ({ start, count, emptyHash: sockets?.[start]?.singleInitialItemHash });
+      const fragmentHashes = selectedSubclassPlugs(ref, group(start, FRAGMENT_SOCKET_COUNT));
+      const aspectHashes = sc ? selectedSubclassPlugs(ref, group(aspectSocketStart(sc), ASPECT_SOCKET_COUNT)) : [];
       const abilityHashes: Partial<Record<AbilityKind, number>> = {};
       for (const kind of ABILITY_KINDS) {
         const start = abilitySocketIndex(manifest, ref.hash, kind);
-        const hash = start !== undefined ? hashesIn(start, SUPER_SOCKET_COUNT)[0] : undefined;
+        const hash = start !== undefined ? selectedSubclassPlugs(ref, group(start, SUPER_SOCKET_COUNT))[0] : undefined;
         if (hash !== undefined) abilityHashes[kind] = hash;
       }
       subclass = { itemHash: ref.hash, subclass: sc, fragmentHashes, aspectHashes, superHash: abilityHashes.super, abilityHashes, socketOverrides: ref.socketOverrides ?? {} };

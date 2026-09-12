@@ -56,29 +56,29 @@ export interface ApplyPlan {
   alreadyApplied: string[];
   /** Same as `alreadyApplied`, as actions — so the progress grid can show them. */
   inPlace: PlugAction[];
-  /** Plugs that couldn't be placed, with the reason. */
+  /** Everything that couldn't be placed (armor mods and subclass plugs), as "Name: reason" lines. */
   skipped: string[];
   /**
-   * The `modHashes` entries behind `skipped` (multiset, loadout order). Editors that
-   * rebuild `parameters.mods` from `assigned` must append these so a mod that merely
-   * doesn't fit the player's CURRENT armor isn't silently dropped from the loadout.
+   * The `modHashes` entries that couldn't be placed (multiset, loadout order), each with
+   * its reason. Editors that rebuild `parameters.mods` from `assigned` must append these
+   * so a mod that merely doesn't fit the player's CURRENT armor isn't silently dropped.
    */
-  unplaced: number[];
+  unplaced: UnplacedMod[];
   /** Final plug per (piece, socket) the plan arrives at — for previews. */
   placement: Record<string, Record<number, number>>;
   /** Only the sockets this plan assigned a loadout mod to (new or already correct). */
   assigned: Record<string, Record<number, number>>;
 }
 
+export interface UnplacedMod {
+  hash: number;
+  reason: string;
+}
+
 export interface SubclassPlan {
   instanceId: string;
-  /** Current plug hash per fragment socket index. */
-  fragmentSockets: Record<number, number>;
-  socketStart: number;
-  socketCount: number;
-  desiredFragments: number[];
-  /** Abilities (Super first), then aspects, then fragments. Absent for legacy fragment-only callers. */
-  groups?: SubclassPlugGroup[];
+  /** Abilities (Super first), then aspects, then fragments. */
+  groups: SubclassPlugGroup[];
 }
 
 export interface SubclassPlugGroup {
@@ -121,7 +121,7 @@ export function planLoadoutPlugs(input: PlanInput): ApplyPlan {
   const inPlace: PlugAction[] = [];
   const alreadyApplied: string[] = [];
   const skipped: string[] = [];
-  const unplaced: number[] = [];
+  const unplaced: UnplacedMod[] = [];
   const cost = (h: number | undefined) => (h === undefined ? 0 : (plugInfo(h)?.cost ?? 0));
 
   const states = new Map<string, PieceState>();
@@ -177,7 +177,7 @@ export function planLoadoutPlugs(input: PlanInput): ApplyPlan {
     const info = plugInfo(hash);
     if (!info) {
       skipped.push(`Unknown mod #${hash}`);
-      unplaced.push(hash);
+      unplaced.push({ hash, reason: "unknown mod" });
     } else remaining.push({ hash, info });
   }
   const takeRemaining = (hash: number) => {
@@ -255,8 +255,9 @@ export function planLoadoutPlugs(input: PlanInput): ApplyPlan {
     const { entry, candidates } = ranked[0];
     takeRemaining(entry.hash);
     if (candidates.length === 0) {
-      skipped.push(`${entry.info.name}: ${skipReason(entry.info)}`);
-      unplaced.push(entry.hash);
+      const reason = skipReason(entry.info);
+      skipped.push(`${entry.info.name}: ${reason}`);
+      unplaced.push({ hash: entry.hash, reason });
       continue;
     }
     // Tuning: keep flexible exotics for last so a directional lands on its exact roll.
@@ -270,8 +271,7 @@ export function planLoadoutPlugs(input: PlanInput): ApplyPlan {
   // fragments the loadout doesn't want (or nothing), lowest index first.
   if (input.subclass) {
     const sc = input.subclass;
-    const groups = sc.groups ?? [{ kind: "fragment" as const, start: sc.socketStart, count: sc.socketCount, current: sc.fragmentSockets, desired: sc.desiredFragments }];
-    for (const group of groups) {
+    for (const group of sc.groups) {
       const desired = [...new Set(group.desired)];
       const indices = Array.from({ length: group.count }, (_, i) => group.start + i);
       const present = new Set(indices.map((i) => group.current[i]).filter(Boolean));

@@ -37,6 +37,15 @@ export interface PersistedSelections {
   balancedTuning: boolean;
   /** Include legacy (Armor 2.0 / non-tunable) exotics in the optimizer pool. */
   legacyExotics: boolean;
+  /**
+   * Pin the collections 21-power class item (Dreamer's Bond / Cloak / Mark) — 0
+   * stats — so the other four pieces have to hit the targets.
+   */
+  dreamersBond: boolean;
+  /**
+   * Helmet slot is only owned Festival of the Lost masks (Masquerader's).
+   */
+  festivalMasks: boolean;
   activeSubclass: Subclass;
   fragSel: Record<Subclass, number[]>;
 }
@@ -149,6 +158,12 @@ function parse(raw: string | null): PersistedSelections | null {
   // Optional (added after v1 shipped) — older stored blobs won't have it. Default ON.
   const legacyExotics =
     typeof o.legacyExotics === "boolean" ? o.legacyExotics : true;
+  // Optional (added after v1 shipped) — older stored blobs won't have it. Default OFF.
+  const dreamersBond =
+    typeof o.dreamersBond === "boolean" ? o.dreamersBond : false;
+  // Optional (added after v1 shipped) — older stored blobs won't have it. Default OFF.
+  const festivalMasks =
+    typeof o.festivalMasks === "boolean" ? o.festivalMasks : false;
   // Optional — exotic class item Spirit pair; default Any/Any.
   const exoticPerks = parseExoticPerks(o.exoticPerks);
   if (typeof o.activeSubclass !== "string" || !SUBCLASS_SET.has(o.activeSubclass))
@@ -179,6 +194,8 @@ function parse(raw: string | null): PersistedSelections | null {
     allowTuning: o.allowTuning as boolean,
     balancedTuning,
     legacyExotics,
+    dreamersBond,
+    festivalMasks,
     activeSubclass: o.activeSubclass as Subclass,
     fragSel,
   };

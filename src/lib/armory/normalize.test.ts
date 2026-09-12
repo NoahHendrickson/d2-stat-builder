@@ -601,6 +601,96 @@ test("a directional tune (with a −5) is reversed in full on the stats it names
   ]);
 });
 
+test("Festival of the Lost masks enter the armory as helmets even when not itemType Armor", () => {
+  const HOOD = 2213504923;
+  const defs: Record<number, object> = {
+    [HOOD]: {
+      // Live FotL defs use the helmet bucket but are not DestinyItemType.Armor.
+      itemType: 0,
+      classType: 2,
+      itemTypeDisplayName: "Festival Mask",
+      displayProperties: { name: "Masquerader's Hood" },
+      inventory: { bucketTypeHash: 3448274439, tierType: 5 },
+    },
+  };
+  const manifest = {
+    def: (_table: string, hash: number | null | undefined) =>
+      hash == null ? undefined : defs[hash],
+  } as unknown as Manifest;
+  const profile = {
+    profileInventory: {
+      data: { items: [{ itemInstanceId: "hood1", itemHash: HOOD }] },
+    },
+    itemComponents: {
+      stats: { data: { hood1: { stats: {} } } },
+      sockets: { data: { hood1: { sockets: [] } } },
+    },
+  } as unknown as DestinyProfileResponse;
+
+  const pieces = normalizeArmory(profile, manifest);
+  expect(pieces).toHaveLength(1);
+  expect(pieces[0].slot).toBe("helmet");
+  expect(pieces[0].name).toBe("Masquerader's Hood");
+  expect(pieces[0].location).toBe("vault");
+});
+
+test("a new-hash Masquerader's Hood is a helmet even without a helmet bucket", () => {
+  const HOOD = 42424242;
+  const defs: Record<number, object> = {
+    [HOOD]: {
+      itemType: 0,
+      classType: 2,
+      displayProperties: { name: "Masquerader's Hood" },
+      inventory: { bucketTypeHash: 215593132, tierType: 5 },
+    },
+  };
+  const manifest = {
+    def: (_table: string, hash: number | null | undefined) =>
+      hash == null ? undefined : defs[hash],
+  } as unknown as Manifest;
+  const profile = {
+    profileInventory: {
+      data: { items: [{ itemInstanceId: "hood2", itemHash: HOOD }] },
+    },
+    itemComponents: {
+      stats: { data: { hood2: { stats: {} } } },
+      sockets: { data: { hood2: { sockets: [] } } },
+    },
+  } as unknown as DestinyProfileResponse;
+
+  const pieces = normalizeArmory(profile, manifest);
+  expect(pieces).toHaveLength(1);
+  expect(pieces[0].slot).toBe("helmet");
+});
+
+test("non-armor helmet-bucket items that are not FotL masks are still dropped", () => {
+  const ORNAMENT = 7;
+  const defs: Record<number, object> = {
+    [ORNAMENT]: {
+      itemType: 0,
+      classType: 2,
+      itemTypeDisplayName: "Helmet Ornament",
+      displayProperties: { name: "Master Rahool Mask" },
+      inventory: { bucketTypeHash: 3448274439, tierType: 5 },
+    },
+  };
+  const manifest = {
+    def: (_table: string, hash: number | null | undefined) =>
+      hash == null ? undefined : defs[hash],
+  } as unknown as Manifest;
+  const profile = {
+    profileInventory: {
+      data: { items: [{ itemInstanceId: "orn1", itemHash: ORNAMENT }] },
+    },
+    itemComponents: {
+      stats: { data: { orn1: { stats: {} } } },
+      sockets: { data: { orn1: { sockets: [] } } },
+    },
+  } as unknown as DestinyProfileResponse;
+
+  expect(normalizeArmory(profile, manifest)).toHaveLength(0);
+});
+
 test("itemWatermark prefers featured, then the versioned quality icon", () => {
   expect(itemWatermark(undefined)).toBeUndefined();
   expect(

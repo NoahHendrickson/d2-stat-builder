@@ -47,6 +47,8 @@ export function selectionsForLoadout(
     allowTuning: true,
     balancedTuning: true,
     legacyExotics: true,
+    dreamersBond: false,
+    festivalMasks: false,
     activeSubclass: opts.subclass?.subclass ?? existing?.activeSubclass ?? "Prismatic",
     fragSel: opts.subclass?.subclass
       ? { ...(existing?.fragSel ?? emptyFragSel()), [opts.subclass.subclass]: opts.subclass.fragmentHashes }
@@ -54,17 +56,13 @@ export function selectionsForLoadout(
   };
 
   if (builder) {
+    const { fragmentHashes, ...snapshot } = builder;
     return {
       ...base,
-      targets: builder.targets,
-      setReqs: builder.setReqs,
-      exoticName: builder.exoticName,
-      exoticPerks: builder.exoticPerks,
-      allowTuning: builder.allowTuning,
-      balancedTuning: builder.balancedTuning,
-      legacyExotics: builder.legacyExotics,
+      ...snapshot,
+      major,
       activeSubclass: opts.subclass?.subclass ?? builder.activeSubclass,
-      fragSel: opts.subclass?.subclass ? base.fragSel : { ...base.fragSel, [builder.activeSubclass]: builder.fragmentHashes },
+      fragSel: opts.subclass?.subclass ? base.fragSel : { ...base.fragSel, [builder.activeSubclass]: fragmentHashes },
     };
   }
 

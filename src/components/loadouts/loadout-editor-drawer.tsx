@@ -16,7 +16,15 @@ import { Tooltip as BaseTooltip } from "@base-ui/react/tooltip";
 import Image from "next/image";
 import { CircleNotch, Check, X } from "@phosphor-icons/react";
 import type { ArmorPiece, ArmorSocket } from "@/lib/armory/normalize";
-import { SLOT_LABELS } from "@/lib/armory/stats";
+import {
+  SLOT_LABELS,
+  STAT_DISPLAY_ORDER,
+  STAT_LABELS,
+  STAT_ORDER,
+} from "@/lib/armory/stats";
+import { StatGlyph } from "@/components/stat-glyph";
+import { statIconsFromManifest } from "@/lib/manifest/stat-icons";
+import { sumEditorStats } from "@/lib/loadouts/editor-stats";
 import { BUNGIE_IMAGE_BASE } from "@/lib/bungie/constants";
 import type { ModOption, ModOptionCatalog } from "@/lib/loadouts/mod-options";
 import {
@@ -29,7 +37,11 @@ import {
   statModSlotted,
   type ModsSection,
 } from "@/lib/loadouts/mod-placement";
-import { subclassSelectionValid } from "@/lib/loadouts/subclass";
+import {
+  selectedSubclassPlugs,
+  subclassOptions,
+  subclassSelectionValid,
+} from "@/lib/loadouts/subclass";
 import { subclassFromItemHash } from "@/lib/dim/subclasses";
 import {
   MAX_NAME_LENGTH,
@@ -49,15 +61,40 @@ import {
   TooltipLabel,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { KIND_LABEL } from "@/components/loadouts/loadout-mods-editor";
 import {
   LoadoutSubclassEditor,
   type SubclassSection,
 } from "@/components/loadouts/loadout-subclass-editor";
-import type { LoadoutDetailsValues } from "@/components/loadouts/loadout-details-dialog";
+import type { DimLoadoutItem } from "@/lib/dim/loadout-link";
+import type { EditorTotals } from "@/lib/loadouts/editor-stats";
 import { cn } from "@/lib/utils";
 
+export interface LoadoutDetailsValues {
+  name: string;
+  notes: string;
+  /** Present only when a `mods` section was shown. */
+  placement?: ModPlacement;
+  subclass?: DimLoadoutItem | null;
+  /**
+   * Armor + placed mods + fragments as the header showed them. Present only when every
+   * piece was known (a `mods` section), so the total is complete.
+   */
+  stats?: EditorTotals;
+}
+
+const KIND_LABEL: Record<ArmorSocket["kind"], string> = {
+  general: "Stat mod",
+  other: "Armor mod",
+  tuning: "Tuning",
+  artifice: "Artifice",
+};
+
 const EMPTY_STAT_MODS: number[] = [];
+const NO_FRAGMENTS: number[] = [];
+const STAT_COLS = STAT_DISPLAY_ORDER.map((key) => ({
+  key,
+  i: STAT_ORDER.indexOf(key),
+}));
 
 interface EditorProps {
   title: string;
@@ -437,7 +474,7 @@ type PieceChosenUpdate = (
   chosen: Record<number, number> | undefined,
 ) => Record<number, number>;
 
-/** One armor piece: compact header (icon, name, slot, energy) and a group per socket kind. */
+/** One armor piece: compact header (icon, name, energy used/capacity) and a group per socket kind. */
 const PiecePanel = memo(function PiecePanel({
   piece,
   catalog,
@@ -472,26 +509,23 @@ const PiecePanel = memo(function PiecePanel({
 
   return (
     <section
-      aria-label={piece.name}
+      aria-label={`${piece.name}, ${SLOT_LABELS[piece.slot]}`}
       className="flex min-h-0 min-w-0 flex-col gap-3 px-7 py-2.5"
     >
       <div className="flex min-w-0 shrink-0 items-center gap-2.5">
         <PieceThumb piece={piece} />
         <div className="flex min-w-0 flex-1 flex-col">
           <span className="truncate text-sm font-medium">{piece.name}</span>
-          <span className="text-muted-foreground text-xs">
-            {SLOT_LABELS[piece.slot]}
-            {capacity !== undefined && (
-              <>
-                {" · "}
-                <span
-                  className={cn("tabular-nums", over && "text-destructive font-medium")}
-                >
-                  {used}/{capacity} energy
-                </span>
-              </>
-            )}
-          </span>
+          {capacity !== undefined && (
+            <span
+              className={cn(
+                "text-muted-foreground text-xs tabular-nums",
+                over && "text-destructive font-medium",
+              )}
+            >
+              Energy {used}/{capacity}
+            </span>
+          )}
         </div>
       </div>
       {/* Mods scroll inside the column, not the drawer. */}
@@ -526,6 +560,44 @@ const PiecePanel = memo(function PiecePanel({
 function nameIsValid(name: string) {
   const trimmed = name.trim();
   return trimmed.length > 0 && trimmed.length <= MAX_NAME_LENGTH;
+}
+
+function EditorStatsRow({
+  total,
+  stats,
+  statIcons,
+}: {
+  total: number;
+  stats: number[];
+  statIcons: ReturnType<typeof statIconsFromManifest>;
+}) {
+  return (
+    <div
+      className="flex shrink-0 items-center gap-3 px-7 pb-2 text-xs leading-4 tabular-nums"
+      aria-label="Loadout stats"
+    >
+      <TooltipLabel label="Total stats">
+        <span tabIndex={0} className="font-medium">
+          {total}
+        </span>
+      </TooltipLabel>
+      {STAT_COLS.map(({ key, i }) => {
+        const value = stats[i];
+        return (
+          <span key={key} className="flex items-center gap-0.5">
+            <StatGlyph
+              src={statIcons[key]}
+              label={STAT_LABELS[key]}
+              className="opacity-65"
+            />
+            <span className={cn(value === 0 && "text-muted-foreground")}>
+              {value}
+            </span>
+          </span>
+        );
+      })}
+    </div>
+  );
 }
 
 /** Owns Name/Notes so keystrokes never re-render the piece grids. */
@@ -621,27 +693,21 @@ function EditorForm({
     [mods, desiredStatMods, placement],
   );
 
-  // Loadout mods the planner couldn't place for lack of armor energy, with the reason
-  // peeled off the planner's "Name: reason" line. Tuning / artifice cost nothing and
-  // picking a different one is fine, so they aren't flagged. Stat mods the loadout
-  // wants are shown in the header (checked when slotted), not as piece-grid badges.
-  // Keyed by hash and by name (a grid shows one variant per name, so the hash may
-  // differ). Editor plans carry no subclass, so `skipped` and `unplaced` pair up.
+  // Loadout mods the planner couldn't place, with its reason. Tuning / artifice cost
+  // nothing and picking a different one is fine, so they aren't flagged. Stat mods the
+  // loadout wants are shown in the header (checked when slotted), not as piece-grid
+  // badges. Keyed by hash and by name (a grid shows one variant per name, so the hash
+  // may differ).
   const problems = useMemo(() => {
     const out = new Map<number | string, string>();
     const wanted = new Set(desiredStatMods);
-    mods?.unplaced.forEach((hash, i) => {
-      if (wanted.has(hash)) return;
-      const option = mods.catalog.option(hash);
-      if (!option || option.cost === 0) return;
-      const message = mods.skipped[i] ?? "";
-      const prefix = `${option.name}: `;
-      const reason = message.startsWith(prefix)
-        ? message.slice(prefix.length)
-        : "not enough armor energy";
+    for (const { hash, reason } of mods?.unplaced ?? []) {
+      if (wanted.has(hash)) continue;
+      const option = mods?.catalog.option(hash);
+      if (!option || option.cost === 0) continue;
       out.set(hash, reason);
       out.set(option.name, reason);
-    });
+    }
     return out;
   }, [mods, desiredStatMods]);
 
@@ -709,6 +775,30 @@ function EditorForm({
   );
   const canSubmit = nameValid && !busy && !overEnergy && subclassValid;
 
+  const fragmentHashes = useMemo(() => {
+    if (!subclass || !subclassItem) return NO_FRAGMENTS;
+    const sc = subclassFromItemHash(subclassItem.hash);
+    if (!sc) return NO_FRAGMENTS;
+    return selectedSubclassPlugs(
+      subclassItem,
+      subclassOptions(subclass.manifest, subclass.classType, sc).fragments,
+    );
+  }, [subclass, subclassItem]);
+  const totals = useMemo(() => {
+    const pieces = mods?.pieces;
+    if (!pieces?.length && fragmentHashes.length === 0 && !subclass) return null;
+    return sumEditorStats(
+      pieces ?? [],
+      placement,
+      fragmentHashes,
+      subclass?.classType ?? pieces?.[0]?.classType ?? 0,
+      (hash) =>
+        mods?.catalog.investmentStats(hash) ??
+        subclass?.manifest.def("DestinyInventoryItemDefinition", hash)
+          ?.investmentStats,
+    );
+  }, [mods, placement, fragmentHashes, subclass]);
+
   const submit = (e: FormEvent) => {
     e.preventDefault();
     const trimmed = identityRef.current.name.trim();
@@ -718,8 +808,14 @@ function EditorForm({
       notes: identityRef.current.notes.trim(),
       ...(mods ? { placement } : {}),
       ...(subclass ? { subclass: subclassItem } : {}),
+      ...(mods && totals ? { stats: totals } : {}),
     });
   };
+
+  const statIcons = useMemo(
+    () => statIconsFromManifest(subclass?.manifest),
+    [subclass],
+  );
 
   const subclassDef = subclass?.manifest.def(
     "DestinyInventoryItemDefinition",
@@ -786,6 +882,13 @@ function EditorForm({
       <div className="flex min-h-0 flex-1 flex-col px-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
         {description && !mods && (
           <p className="text-muted-foreground mb-3 text-xs">{description}</p>
+        )}
+        {totals && (
+          <EditorStatsRow
+            total={totals.total}
+            stats={totals.stats}
+            statIcons={statIcons}
+          />
         )}
         {/* Subclass first, then the five pieces; at `lg` every column shares the width.
             Gated so the header can paint before ~550 tooltip roots and images mount. */}

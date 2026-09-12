@@ -184,6 +184,11 @@ export class ModOptionCatalog {
       ?.plugCategoryIdentifier;
     return cat ? plugKindForCategory(cat) : undefined;
   }
+
+  /** Plug investment stats (energy cost is present; callers keep armor hashes only). */
+  investmentStats(hash: number) {
+    return this.manifest.def("DestinyInventoryItemDefinition", hash)?.investmentStats;
+  }
 }
 
 const catalogs = new WeakMap<Manifest, ModOptionCatalog>();

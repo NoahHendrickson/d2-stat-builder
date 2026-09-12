@@ -46,7 +46,7 @@ export function ArmorTablePageShell() {
   return (
     <main
       className={cn(
-        "flex h-full w-full flex-col px-6 py-6 lg:px-12 lg:pb-8",
+        "flex h-full w-full flex-col px-4 py-6 lg:pb-8",
         sidebarVisible ? "lg:pt-8" : "lg:pt-20",
       )}
     >

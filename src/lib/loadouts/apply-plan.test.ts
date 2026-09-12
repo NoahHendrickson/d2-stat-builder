@@ -172,7 +172,10 @@ describe("tuning + artifice", () => {
       "Balanced Tuning: no tunable piece left",
     ]);
     // …and the same mods by hash, so an editor rebuilding the mod list can keep them.
-    expect(plan.unplaced).toEqual([401, 300]);
+    expect(plan.unplaced).toEqual([
+      { hash: 401, reason: "no artifice piece left" },
+      { hash: 300, reason: "no tunable piece left" },
+    ]);
   });
 
   test("a directional with no matching piece falls back to a flexible exotic", () => {
@@ -190,7 +193,7 @@ describe("fragments", () => {
     const plan = planLoadoutPlugs({
       pieces: [], modHashes: [], plugInfo,
       subclass: {
-        instanceId: "sub", socketStart: 9, socketCount: 6, fragmentSockets: {}, desiredFragments: [],
+        instanceId: "sub",
         groups: [
           { kind: "super", start: 0, count: 1, current: { 0: 801 }, desired: [802] },
         ],
@@ -204,7 +207,7 @@ describe("fragments", () => {
     const plan = planLoadoutPlugs({
       pieces: [], modHashes: [], plugInfo,
       subclass: {
-        instanceId: "sub", socketStart: 9, socketCount: 6, fragmentSockets: {}, desiredFragments: [],
+        instanceId: "sub",
         groups: [
           { kind: "ability", start: 4, count: 1, current: { 0: 801, 4: 901 }, desired: [902] },
           { kind: "ability", start: 3, count: 1, current: { 0: 801, 3: 911 }, desired: [911] },
@@ -220,7 +223,7 @@ describe("fragments", () => {
     const plan = planLoadoutPlugs({
       pieces: [], modHashes: [], plugInfo,
       subclass: {
-        instanceId: "sub", socketStart: 9, socketCount: 6, fragmentSockets: {}, desiredFragments: [],
+        instanceId: "sub",
         groups: [
           { kind: "aspect", start: 7, count: 2, current: { 7: 701, 8: 702 }, desired: [703, 701], emptyHash: 700, clearUnused: true },
           { kind: "fragment", start: 9, count: 6, current: { 9: 501, 10: 502, 11: 503 }, desired: [504, 501], emptyHash: 500, clearUnused: true },
@@ -237,7 +240,7 @@ describe("fragments", () => {
     const plan = planLoadoutPlugs({
       pieces: [], modHashes: [], plugInfo,
       subclass: {
-        instanceId: "sub", socketStart: 7, socketCount: 6, fragmentSockets: {}, desiredFragments: [],
+        instanceId: "sub",
         groups: [{ kind: "fragment", start: 7, count: 6, current: { 7: 501, 8: 500 }, desired: [], emptyHash: 500, clearUnused: true }],
       },
     });
@@ -251,10 +254,7 @@ describe("fragments", () => {
       plugInfo,
       subclass: {
         instanceId: "sub",
-        socketStart: 7,
-        socketCount: 4,
-        fragmentSockets: { 7: 999, 8: 501, 9: 0 },
-        desiredFragments: [501, 502, 503],
+        groups: [{ kind: "fragment", start: 7, count: 4, current: { 7: 999, 8: 501, 9: 0 }, desired: [501, 502, 503] }],
       },
     });
     expect(plan.alreadyApplied).toEqual(["Fragment One → subclass"]);
@@ -272,10 +272,7 @@ describe("fragments", () => {
       plugInfo,
       subclass: {
         instanceId: "sub",
-        socketStart: 7,
-        socketCount: 1,
-        fragmentSockets: {},
-        desiredFragments: [501, 502],
+        groups: [{ kind: "fragment", start: 7, count: 1, current: {}, desired: [501, 502] }],
       },
     });
     expect(plan.plugs).toHaveLength(1);
@@ -291,13 +288,13 @@ test("a mod no socket accepts is reported, not applied", () => {
   });
   expect(plan.plugs).toEqual([]);
   expect(plan.skipped).toEqual(["Shader: no socket on this armor takes it (or not enough energy)"]);
-  expect(plan.unplaced).toEqual([999]);
+  expect(plan.unplaced).toEqual([{ hash: 999, reason: "no socket on this armor takes it (or not enough energy)" }]);
 });
 
 test("an unknown mod hash is reported and kept as unplaced", () => {
   const plan = planLoadoutPlugs({ pieces: [piece({ instanceId: "p" })], modHashes: [7777, 201], plugInfo });
   expect(plan.skipped).toEqual(["Unknown mod #7777"]);
-  expect(plan.unplaced).toEqual([7777]);
+  expect(plan.unplaced).toEqual([{ hash: 7777, reason: "unknown mod" }]);
   expect(plan.plugs.map((p) => p.plugItemHash)).toEqual([201]);
 });
 

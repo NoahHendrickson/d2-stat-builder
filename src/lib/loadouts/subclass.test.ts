@@ -208,14 +208,13 @@ test("super is a single socket that can be cleared", () => {
   expect(selectedSubclassPlugs(carrier, options.abilities.super)).toEqual([]);
 });
 
-test("fragment changes rebuild capped stats and keep the builder snapshot in sync", () => {
+test("fragment changes keep the builder snapshot in sync and leave the optimizer breakdown alone", () => {
   const data = base();
   const zero = [0, 0, 0, 0, 0, 0];
-  data.builder = { targets: zero, major: 0, setReqs: {}, exoticName: null, exoticPerks: [null, null], allowTuning: true, balancedTuning: true, legacyExotics: true, activeSubclass: "Arc", fragmentHashes: [201] };
+  data.builder = { targets: zero, major: 0, setReqs: {}, exoticName: null, exoticPerks: [null, null], allowTuning: true, balancedTuning: true, legacyExotics: true, dreamersBond: false, festivalMasks: false, activeSubclass: "Arc", fragmentHashes: [201] };
   data.optimizer = { pieceIds: [], baseStats: [0, 195, 0, 0, 0, 0], stats: [0, 200, 0, 0, 0, 0], tuningBonus: zero, tuning: [], modBonus: zero, modsUsed: { major: 0, minor: 0 }, artificeBonus: zero, artifice: [], total: 200, exotic: false };
   const result = withLoadoutSubclass(data, withSubclassPlugs({ hash: subclassHash }, options.fragments, [203]), manifest);
-  expect(result.optimizer?.stats[1]).toBe(185);
-  expect(result.optimizer?.total).toBe(185);
+  expect(result.optimizer).toBe(data.optimizer);
   expect(result.builder?.activeSubclass).toBe("Prismatic");
   expect(result.builder?.fragmentHashes).toEqual([203]);
   expect(withLoadoutSubclass(result, null, manifest).builder?.fragmentHashes).toEqual([]);

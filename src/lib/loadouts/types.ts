@@ -5,6 +5,7 @@
 // Runtime imports are relative (not `@/`) so the module also runs under vitest.
 import type { DimLoadout, DimLoadoutItem } from "../dim/loadout-link";
 import type { AppliedTuning, OptimizerLoadout } from "../optimizer/types";
+import type { PersistedSelections } from "../builder/selection-storage";
 import { SUBCLASSES, type Subclass } from "../armory/fragments";
 
 export const LOADOUT_SCHEMA_VERSION = 1;
@@ -24,22 +25,19 @@ const MAX_SET_BONUSES = 8;
 
 /**
  * The builder state a loadout was generated from — the parts DIM's `parameters` can't
- * express. Lets "Load in builder" restore the optimizer UI exactly. Mirrors
- * `PersistedSelections` minus list-display state (pins, set filters).
+ * express. Lets "Load in builder" restore the optimizer UI exactly. It IS the builder's
+ * `PersistedSelections` minus what isn't the loadout's business: the storage version,
+ * the class (the DIM loadout carries it), list-display state (pins, set filters), and
+ * other subclasses' fragments. A new builder flag added to `PersistedSelections` must be
+ * added to `parseBuilderSnapshot` too — the type makes the compiler say so.
  */
-export interface BuilderSnapshot {
-  targets: number[];
-  major: number;
-  setReqs: Record<number, 2 | 4>;
-  exoticName: string | null;
-  exoticPerks: [number | null, number | null];
-  allowTuning: boolean;
-  balancedTuning: boolean;
-  legacyExotics: boolean;
-  activeSubclass: Subclass;
+export type BuilderSnapshot = Omit<
+  PersistedSelections,
+  "version" | "classType" | "pinnedSets" | "setFilters" | "fragSel"
+> & {
   /** Selected fragment hashes for `activeSubclass` only. */
   fragmentHashes: number[];
-}
+};
 
 /** What the client sends to create/update; the server adds id + timestamps. */
 /** itemInstanceId → socketIndex → plug hash: where the user put each armor mod. */
@@ -281,6 +279,9 @@ export function parseBuilderSnapshot(v: unknown): BuilderSnapshot | null {
     allowTuning: v.allowTuning,
     balancedTuning: v.balancedTuning,
     legacyExotics: v.legacyExotics,
+    // Added after the first snapshots shipped: default off when absent.
+    dreamersBond: typeof v.dreamersBond === "boolean" ? v.dreamersBond : false,
+    festivalMasks: typeof v.festivalMasks === "boolean" ? v.festivalMasks : false,
     activeSubclass: v.activeSubclass as Subclass,
     fragmentHashes,
   };

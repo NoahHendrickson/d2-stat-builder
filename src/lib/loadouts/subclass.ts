@@ -17,6 +17,7 @@ export interface SubclassPlugOption {
   description: string;
   fragmentSlots: number;
   stats: StatArray;
+  plugCategory?: string;
 }
 
 export interface SubclassSocketOptions {
@@ -111,6 +112,7 @@ function computeSubclassOptions(
         description,
         fragmentSlots: plug.investmentStats?.find((s) => s.statTypeHash === 2223994109)?.value ?? 0,
         stats: buildFragmentStats(plug.investmentStats, classType).stats,
+        plugCategory: plug.plug?.plugCategoryIdentifier,
       }];
     }).sort((a, b) => a.name.localeCompare(b.name));
     return {
@@ -161,7 +163,11 @@ export function loadoutSubclass(loadout: DimLoadout): DimLoadoutItem | null {
   return loadout.equipped.find((item) => subclassFromItemHash(item.hash)) ?? null;
 }
 
-export function selectedSubclassPlugs(item: DimLoadoutItem | null, group: SubclassSocketOptions): number[] {
+/** The plugs `item` pins in a socket group (in socket order), ignoring the group's empty plug. */
+export function selectedSubclassPlugs(
+  item: DimLoadoutItem | null,
+  group: Pick<SubclassSocketOptions, "start" | "count" | "emptyHash">,
+): number[] {
   return Object.entries(item?.socketOverrides ?? {})
     .filter(([i, hash]) => Number(i) >= group.start && Number(i) < group.start + group.count && hash !== group.emptyHash)
     .sort(([a], [b]) => Number(a) - Number(b))
@@ -202,28 +208,16 @@ export function withSubclassPlugs(item: DimLoadoutItem, group: SubclassSocketOpt
   return { ...item, socketOverrides };
 }
 
-/** Keep the DIM carrier, builder snapshot, and displayed fragment stats in sync. */
-export function withLoadoutSubclass(data: SavedLoadoutData, item: DimLoadoutItem | null | undefined, manifest: Manifest, armorStats?: number[]): SavedLoadoutData {
+/**
+ * Keep the DIM carrier and the builder snapshot in sync. Displayed stat totals are the
+ * editor's job (`withEditorTotals`), not derived here.
+ */
+export function withLoadoutSubclass(data: SavedLoadoutData, item: DimLoadoutItem | null | undefined, manifest: Manifest): SavedLoadoutData {
   if (item === undefined) return data;
-  const old = loadoutSubclass(data.loadout);
   const subclass = item ? subclassFromItemHash(item.hash) : undefined;
-  const fragmentsFor = (carrier: DimLoadoutItem | null): number[] => {
-    const sc = carrier ? subclassFromItemHash(carrier.hash) : undefined;
-    return sc ? selectedSubclassPlugs(carrier, subclassOptions(manifest, data.loadout.classType, sc).fragments) : [];
-  };
-  const fragmentHashes = fragmentsFor(item);
-  const oldFragments = old ? fragmentsFor(old) : data.builder?.fragmentHashes ?? [];
-  const bonus = (hashes: number[]) => hashes.reduce<StatArray>((sum, hash) => {
-    const stats = buildFragmentStats(manifest.def("DestinyInventoryItemDefinition", hash)?.investmentStats, data.loadout.classType).stats;
-    return sum.map((v, i) => v + stats[i]) as StatArray;
-  }, [0, 0, 0, 0, 0, 0]);
-  const before = bonus(oldFragments);
-  const after = bonus(fragmentHashes);
-  const optimizer = data.optimizer;
-  // Rebuild before clamping: subtracting from an already capped total loses overflow.
-  const stats = optimizer?.stats.map((v, i) => before[i] === after[i] ? v : Math.max(0, Math.min(200,
-    (armorStats ?? optimizer.baseStats)[i] + optimizer.tuningBonus[i] + optimizer.modBonus[i] + optimizer.artificeBonus[i] + after[i],
-  )));
+  const fragmentHashes = subclass && item
+    ? selectedSubclassPlugs(item, subclassOptions(manifest, data.loadout.classType, subclass).fragments)
+    : [];
   return {
     ...data,
     loadout: { ...data.loadout, equipped: [
@@ -232,9 +226,6 @@ export function withLoadoutSubclass(data: SavedLoadoutData, item: DimLoadoutItem
     ] },
     ...(data.builder ? { builder: {
       ...data.builder, activeSubclass: subclass ?? data.builder.activeSubclass, fragmentHashes,
-    } } : {}),
-    ...(data.optimizer && stats ? { optimizer: {
-      ...data.optimizer, stats, total: stats.reduce((sum, v) => sum + v, 0),
     } } : {}),
   };
 }

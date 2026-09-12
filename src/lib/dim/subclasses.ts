@@ -77,6 +77,18 @@ export const ABILITY_LABELS: Record<AbilityKind, string> = {
 export const ABILITY_SOCKET_COUNT = ABILITY_KINDS.length;
 
 /**
+ * Strand class abilities and jumps reuse Stasis icon files (`iconHash` points at
+ * the Stasis plug). The game tints them; UI applies Strand green via mix-blend.
+ */
+export function isStrandSharedAbilityIcon(plugCategory: string | undefined): boolean {
+  return (
+    !!plugCategory &&
+    (plugCategory.endsWith(".strand.class_abilities") ||
+      plugCategory.endsWith(".strand.movement"))
+  );
+}
+
+/**
  * First fragment socket index on a subclass item, used for the DIM handoff's
  * socketOverrides. Verified against the live manifest's socketEntries: every
  * non-Prismatic subclass has fragments at sockets 7–12; Prismatic puts

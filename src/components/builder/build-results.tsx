@@ -25,6 +25,7 @@ import type { ArmorPiece } from "@/lib/armory/normalize";
 import type { ArmorSetInfo } from "@/lib/armory/sets";
 import type { ArmoryCharacter } from "@/lib/armory/fetch";
 import { isSyntheticClassItemId } from "@/lib/armory/exotic-class-perks";
+import { isDreamersBondId } from "@/lib/armory/dreamers-bond";
 import {
   CLASS_NAMES,
   STAT_DISPLAY_ORDER,
@@ -45,8 +46,10 @@ import {
 } from "@/lib/dim/loadout-link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import type { LoadoutDetailsValues } from "@/components/loadouts/loadout-details-dialog";
+import { StatGlyph } from "@/components/stat-glyph";
+import type { LoadoutDetailsValues } from "@/components/loadouts/loadout-editor-drawer";
 import { useLoadoutMutations } from "@/lib/loadouts/use-loadouts";
+import { withEditorTotals } from "@/lib/loadouts/editor-stats";
 import { withLoadoutSubclass } from "@/lib/loadouts/subclass";
 import {
   LOADOUT_SCHEMA_VERSION,
@@ -155,49 +158,6 @@ function ArtificeCell({
       +3
     </span>
   );
-}
-
-export function StatGlyph({
-  src,
-  label,
-  className,
-  invert = true,
-  plain = false,
-}: {
-  src?: string;
-  label: string;
-  className?: string;
-  invert?: boolean;
-  /** Skip the tooltip root — used in collapsed row headers. */
-  plain?: boolean;
-}) {
-  if (!src)
-    return (
-      <span
-        className={cn("inline-block size-4 shrink-0", className)}
-        aria-hidden
-      />
-    );
-  const img = (
-    // Tiny Bungie glyphs: skip next/image so collapsed rows don't pay optimizer + tooltip cost.
-    // eslint-disable-next-line @next/next/no-img-element
-    <img
-      src={`${BUNGIE_IMAGE_BASE}${src}`}
-      alt={label}
-      title={plain ? label : undefined}
-      tabIndex={plain ? undefined : 0}
-      width={16}
-      height={16}
-      decoding="async"
-      className={cn(
-        "inline-block size-4 shrink-0",
-        invert && "invert dark:invert-0",
-        className,
-      )}
-    />
-  );
-  if (plain) return img;
-  return <TooltipLabel label={label}>{img}</TooltipLabel>;
 }
 
 /**
@@ -560,19 +520,23 @@ function BuildActions({
 
   const resolved = pieces.filter((p): p is ArmorPiece => p !== undefined);
   const complete = resolved.length === loadout.pieceIds.length;
-  const hasSynthetic = resolved.some((p) =>
-    isSyntheticClassItemId(p.instanceId),
+  // Dreamer's Bond is omitted from saved/DIM/equip lists (empty class-item slot).
+  // A theoretical exotic class item still needs a real instance.
+  const livePieces = resolved.filter((p) => !isDreamersBondId(p.instanceId));
+  const hasBlockingSynthetic = resolved.some(
+    (p) =>
+      isSyntheticClassItemId(p.instanceId) && !isDreamersBondId(p.instanceId),
   );
   const buildClass = resolved[0]?.classType;
   const targetCharacter = lastPlayedCharacter(characters, buildClass);
 
   const missingTitle = !complete
     ? "Refresh your gear — a piece in this build is missing"
-    : hasSynthetic
-      ? "Theoretical exotic class item roll — equip / DIM need a real instance"
+    : hasBlockingSynthetic
+      ? "Theoretical class item — equip / DIM need a real instance"
       : undefined;
 
-  const canActOnItems = complete && !hasSynthetic;
+  const canActOnItems = complete && !hasBlockingSynthetic;
   const hasModHashes = Boolean(
     statModHashes && tuningPlugHashes && artificeModHashes,
   );
@@ -589,7 +553,7 @@ function BuildActions({
     const { targets, builderSnapshot } = getBuilderState();
     return buildDimLoadout({
       loadout,
-      pieces: resolved,
+      pieces: livePieces,
       classType: buildClass ?? 3,
       targets,
       statModHashes: statModHashes!,
@@ -616,8 +580,8 @@ function BuildActions({
     window.open(url, "_blank", "noopener,noreferrer");
   };
 
-  // Saving allows a theoretical class-item roll: it's stored hash-only (no instance id),
-  // like a DIM loadout item you don't own yet, and shows as missing until you have one.
+  // Saving allows a theoretical exotic class-item roll: it's stored hash-only (no
+  // instance id). Dreamer's Bond is omitted entirely (empty class-item slot).
   const canSave = complete && hasModHashes;
 
   const openSave = () => {
@@ -629,7 +593,7 @@ function BuildActions({
   /** `dim` already carries the picker's mods (SaveLoadoutDrawer applies them). */
   const saveLoadout = (
     dim: DimLoadout,
-    { placement, subclass: subclassItem }: LoadoutDetailsValues,
+    { placement, subclass: subclassItem, stats }: LoadoutDetailsValues,
   ) => {
     if (!canSave || !manifest) return;
     dim.equipped = dim.equipped.map((item) =>
@@ -639,19 +603,21 @@ function BuildActions({
     );
     const { builderSnapshot } = getBuilderState();
     createLoadout.mutate(
-      withLoadoutSubclass(
-        {
-          version: LOADOUT_SCHEMA_VERSION,
-          loadout: dim,
-          optimizer: loadout,
-          ...(builderSnapshot ? { builder: builderSnapshot } : {}),
-          ...(placement && Object.keys(placement).length > 0
-            ? { modPlacement: placement }
-            : {}),
-        },
-        subclassItem,
-        manifest,
-        resolved[0]?.stats.map((_, i) => resolved.reduce((sum, piece) => sum + piece.stats[i], 0)),
+      withEditorTotals(
+        withLoadoutSubclass(
+          {
+            version: LOADOUT_SCHEMA_VERSION,
+            loadout: dim,
+            optimizer: loadout,
+            ...(builderSnapshot ? { builder: builderSnapshot } : {}),
+            ...(placement && Object.keys(placement).length > 0
+              ? { modPlacement: placement }
+              : {}),
+          },
+          subclassItem,
+          manifest,
+        ),
+        stats,
       ),
       {
         onSuccess: () => {
@@ -671,7 +637,7 @@ function BuildActions({
 
   const copyItemIds = async () => {
     if (!canActOnItems) return;
-    const query = resolved.map((p) => `id:'${p.instanceId}'`).join(" OR ");
+    const query = livePieces.map((p) => `id:'${p.instanceId}'`).join(" OR ");
     try {
       await navigator.clipboard.writeText(query);
       toast.success("Item IDs copied — paste into DIM search");
@@ -684,7 +650,7 @@ function BuildActions({
     if (!canActOnItems || !targetCharacter || equipping) return;
     setEquipping(true);
     try {
-      const items = resolved.map(equipItemRef);
+      const items = livePieces.map(equipItemRef);
       const results = await postEquipRequest(
         {
           characterId: targetCharacter.id,
@@ -781,7 +747,7 @@ function BuildActions({
             if (!open) setSaveOpen(false);
           }}
           session={saveSession}
-          pieces={resolved}
+          pieces={livePieces}
           manifest={manifest}
           insertablePlugs={insertablePlugs}
           buildClass={buildClass}

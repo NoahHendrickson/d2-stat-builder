@@ -1,6 +1,7 @@
 import type { ArmorPiece } from "@/lib/armory/normalize";
 import type { OptimizerLoadout } from "@/lib/optimizer/types";
 import type { StatModHashes } from "./mod-hashes";
+import { isDreamersBondId } from "../armory/dreamers-bond";
 import {
   BALANCED_TUNING_PLUG_HASH,
   STAT_HASHES,
@@ -115,10 +116,14 @@ export function buildDimLoadout(input: DimLoadoutInput): DimLoadout {
     artifactUnlocks,
   } = input;
 
-  const equipped: DimLoadoutItem[] = pieces.map((p) => ({
-    id: p.instanceId,
-    hash: p.itemHash,
-  }));
+  // Dreamer's Bond is a builder constraint, not an item to equip — leave the
+  // class-item slot empty so apply / DIM keep whatever is already on.
+  const equipped: DimLoadoutItem[] = pieces
+    .filter((p) => !isDreamersBondId(p.instanceId))
+    .map((p) => ({
+      id: p.instanceId,
+      hash: p.itemHash,
+    }));
 
   if (subclass && subclass.fragmentHashes.length > 0) {
     const socketOverrides: Record<number, number> = {};

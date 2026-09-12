@@ -14,9 +14,13 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { BUNGIE_IMAGE_BASE } from "@/lib/bungie/constants";
-import { SUBCLASSES, type Subclass } from "@/lib/armory/fragments";
-import { STAT_LABELS, STAT_ORDER } from "@/lib/armory/stats";
-import { ABILITY_KINDS, ABILITY_LABELS, subclassFromItemHash } from "@/lib/dim/subclasses";
+import { formatFragmentStats, SUBCLASSES, type Subclass } from "@/lib/armory/fragments";
+import {
+  ABILITY_KINDS,
+  ABILITY_LABELS,
+  isStrandSharedAbilityIcon,
+  subclassFromItemHash,
+} from "@/lib/dim/subclasses";
 import type { DimLoadoutItem } from "@/lib/dim/loadout-link";
 import type { Manifest } from "@/lib/manifest/load";
 import {
@@ -29,6 +33,10 @@ import {
   type SubclassSocketOptions,
 } from "@/lib/loadouts/subclass";
 import { cachedLightTint, sampleLightTint } from "@/lib/light-tint";
+import {
+  STRAND_ABILITY_PLATE_FILTER,
+  StrandAbilityRecolor,
+} from "@/components/loadouts/strand-ability-recolor";
 
 export interface SubclassSection {
   manifest: Manifest;
@@ -74,7 +82,7 @@ function PlugOptionButton({
   disabled?: boolean;
   onClick: () => void;
   detail?: string;
-  /** Icon-only 56px cell (matches the drawer's mod cells); the name is the tooltip. */
+  /** Icon-only 56px cell (matches the drawer's mod cells); name + detail (stats, slots) are the tooltip. */
   compact?: boolean;
   /** Image fills the cell so the border sits on the artwork (non-super abilities). */
   flush?: boolean;
@@ -82,21 +90,24 @@ function PlugOptionButton({
   backed?: boolean;
 }) {
   const tint = useIconLightTint(compact && (!flush || backed) ? option.icon : undefined);
+  const recolor = isStrandSharedAbilityIcon(option.plugCategory);
   if (compact) {
     const name = option.name || "Unknown";
+    const label = detail ? `${name}\n${detail}` : name;
     return (
-      <TooltipLabel label={name}>
+      <TooltipLabel label={label}>
         <button
           type="button"
           aria-pressed={checked}
-          aria-label={name}
+          aria-label={detail ? `${name}, ${detail}` : name}
           aria-disabled={disabled || undefined}
           onClick={() => {
             if (!disabled) onClick();
           }}
           style={tint ? ({ "--icon-tint": tint } as CSSProperties) : undefined}
           className={cn(
-            "focus-visible:ring-ring flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-none border transition-[opacity,border-color,background-color] outline-none focus-visible:ring-2",
+            "focus-visible:ring-ring relative flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-none border transition-[opacity,border-color,background-color] outline-none focus-visible:ring-2",
+            recolor && "isolate",
             flush ? "p-0" : "p-1",
             tint && "bg-[hsl(var(--icon-tint)_72%)] dark:bg-[hsl(var(--icon-tint)_26%)]",
             checked
@@ -115,6 +126,7 @@ function PlugOptionButton({
               width={flush ? 56 : 48}
               height={flush ? 56 : 48}
               className={cn("shrink-0 rounded-none", flush ? "size-full" : "size-12")}
+              style={recolor ? { filter: STRAND_ABILITY_PLATE_FILTER } : undefined}
               unoptimized
             />
           ) : (
@@ -123,6 +135,7 @@ function PlugOptionButton({
               aria-hidden
             />
           )}
+          <StrandAbilityRecolor on={recolor} />
         </button>
       </TooltipLabel>
     );
@@ -141,14 +154,18 @@ function PlugOptionButton({
         onClick={onClick}
       >
         {option.icon && (
-          <Image
-            src={`${BUNGIE_IMAGE_BASE}${option.icon}`}
-            alt=""
-            width={28}
-            height={28}
-            className="size-7 shrink-0 rounded-sm"
-            unoptimized
-          />
+          <span className="relative isolate inline-flex size-7 shrink-0">
+            <Image
+              src={`${BUNGIE_IMAGE_BASE}${option.icon}`}
+              alt=""
+              width={28}
+              height={28}
+              className="size-7 rounded-sm"
+              style={recolor ? { filter: STRAND_ABILITY_PLATE_FILTER } : undefined}
+              unoptimized
+            />
+            <StrandAbilityRecolor on={recolor} />
+          </span>
         )}
         <span className="min-w-0 whitespace-normal">
           <span className="block text-xs">{option.name}</span>
@@ -338,15 +355,7 @@ export function LoadoutSubclassEditor({
                 <div className={compact ? OPTIONS_CELLS : OPTIONS_GRID}>
                   {group.options.map((option) => {
                     const checked = selected.includes(option.hash);
-                    const statText = option.stats
-                      .flatMap((v, i) =>
-                        v
-                          ? [
-                              `${v > 0 ? "+" : ""}${v} ${STAT_LABELS[STAT_ORDER[i]]}`,
-                            ]
-                          : [],
-                      )
-                      .join(" · ");
+                    const statText = formatFragmentStats(option.stats);
                     return (
                       <PlugOptionButton
                         key={option.hash}

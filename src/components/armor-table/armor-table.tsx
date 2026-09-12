@@ -55,7 +55,6 @@ import {
 } from "@/components/armor-table/armor-table-row";
 import { SortMenu } from "@/components/armor-table/sort-menu";
 import { useArmorTableSort } from "@/components/armor-table/use-armor-table-sort";
-import { NewDropsFeed } from "@/components/armor-table/new-drops-feed";
 
 /** Approximate single-row height; the virtualizer remeasures real rows on mount. */
 const ESTIMATED_ROW_HEIGHT_PX = 48;
@@ -427,12 +426,11 @@ export function ArmorTable() {
   const refresh = useCallback(() => void refetch(), [refetch]);
 
   return (
-    <div className="flex min-h-0 flex-1 gap-6">
-      {/* The table frame: toolbar + column headers share one tinted header
-          band. The toolbar sits outside the scroller so it survives
-          horizontal scroll; thead stays sticky inside it. */}
-      <div className="border-border/50 flex min-w-0 flex-1 flex-col overflow-hidden rounded-lg border">
-        <div className={cn("border-border/50 shrink-0 border-b", TABLE_HEADER_BG)}>
+    <div className="border-border/50 flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-lg border">
+      {/* Toolbar + column headers share one tinted header band. The toolbar
+          sits outside the scroller so it survives horizontal scroll; thead
+          stays sticky inside it. */}
+      <div className={cn("border-border/50 shrink-0 border-b", TABLE_HEADER_BG)}>
           <ArmorTableToolbar
             search={search}
             onSearchChange={setSearch}
@@ -450,8 +448,8 @@ export function ArmorTable() {
             filtersActive={filtersActive}
             onClearFilters={clearFilters}
           />
-        </div>
-        <div ref={setScrollerEl} className="min-h-0 flex-1 overflow-auto">
+      </div>
+      <div ref={setScrollerEl} className="min-h-0 flex-1 overflow-auto">
           <table
             ref={setTableEl}
             className="w-full min-w-[66rem] table-fixed text-sm"
@@ -501,9 +499,7 @@ export function ArmorTable() {
                 : "No armor matches your filters."}
             </p>
           )}
-        </div>
       </div>
-      <NewDropsFeed rows={rows} />
     </div>
   );
 }

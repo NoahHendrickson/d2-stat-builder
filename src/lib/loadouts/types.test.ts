@@ -52,6 +52,8 @@ const builder = () => ({
   allowTuning: true,
   balancedTuning: true,
   legacyExotics: false,
+  dreamersBond: true,
+  festivalMasks: true,
   activeSubclass: "Prismatic",
   fragmentHashes: [1, 2],
 });
@@ -110,6 +112,18 @@ describe("parseBuilderSnapshot", () => {
     expect(out.setReqs).toEqual({ 555: 2 });
     expect(out.exoticPerks).toEqual([null, 42]);
     expect(out.activeSubclass).toBe("Prismatic");
+    expect(out.dreamersBond).toBe(true);
+    expect(out.festivalMasks).toBe(true);
+  });
+  test("defaults dreamersBond to false when the field is missing", () => {
+    const old = builder() as { dreamersBond?: boolean };
+    delete old.dreamersBond;
+    expect(parseBuilderSnapshot(old)?.dreamersBond).toBe(false);
+  });
+  test("defaults festivalMasks to false when the field is missing", () => {
+    const old = builder() as { festivalMasks?: boolean };
+    delete old.festivalMasks;
+    expect(parseBuilderSnapshot(old)?.festivalMasks).toBe(false);
   });
   test("rejects an unknown subclass", () => {
     expect(parseBuilderSnapshot({ ...builder(), activeSubclass: "Kinetic" })).toBeNull();

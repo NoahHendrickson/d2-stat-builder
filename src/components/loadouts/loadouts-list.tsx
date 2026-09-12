@@ -72,21 +72,21 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { ConfirmDialog } from "@/components/loadouts/confirm-dialog";
 import {
-  LoadoutDetailsDialog,
-  type LoadoutDetailsValues,
-  type ModsSection,
-} from "@/components/loadouts/loadout-details-dialog";
-import {
   modsFromEditor,
   modsSectionFromPlan,
+  type ModsSection,
 } from "@/lib/loadouts/mod-placement";
+import { withEditorTotals } from "@/lib/loadouts/editor-stats";
 import { resolveLoadout } from "@/lib/loadouts/resolve";
 import { planLoadoutPlugs } from "@/lib/loadouts/apply-plan";
 import { planPiecesFromArmor } from "@/lib/loadouts/plan-pieces";
 import { plugInfoFromManifest } from "@/lib/loadouts/plug-info";
 import { getModCatalog } from "@/lib/loadouts/mod-options";
 import { LoadoutRow } from "@/components/loadouts/loadout-row";
-import { LoadoutEditorDrawer } from "@/components/loadouts/loadout-editor-drawer";
+import {
+  LoadoutEditorDrawer,
+  type LoadoutDetailsValues,
+} from "@/components/loadouts/loadout-editor-drawer";
 
 // Survives the list remounting (the sidebar moves between the desktop column and the
 // mobile drawer at the breakpoint) so a dismissed share-link import stays dismissed.
@@ -307,7 +307,7 @@ export function LoadoutsList({
     [],
   );
 
-  const editLoadout = ({ name, notes, placement, subclass }: LoadoutDetailsValues) => {
+  const editLoadout = ({ name, notes, placement, subclass, stats }: LoadoutDetailsValues) => {
     if (dialog.kind !== "edit") return;
     const { id, loadout, optimizer, builder, modPlacement } = dialog.loadout;
     // Mods the planner couldn't place on the current armor are kept, not dropped.
@@ -331,9 +331,7 @@ export function LoadoutsList({
         : {}),
     };
     update.mutate(
-      { id, data: withLoadoutSubclass(next, subclass, manifest,
-        dialog.mods?.pieces[0]?.stats.map((_, i) => dialog.mods!.pieces.reduce((sum, piece) => sum + piece.stats[i], 0)),
-      ) },
+      { id, data: withEditorTotals(withLoadoutSubclass(next, subclass, manifest), stats) },
       {
         onSuccess: () => {
           setDialog({ kind: "none" });
@@ -448,6 +446,14 @@ export function LoadoutsList({
       initial: loadoutSubclass(editorLoadout.loadout),
     };
   }, [editorLoadout, manifest]);
+  const importSubclass = useMemo(() => {
+    if (!importData || importData.loadout.classType >= 3) return undefined;
+    return {
+      manifest,
+      classType: importData.loadout.classType,
+      initial: loadoutSubclass(importData.loadout),
+    };
+  }, [importData, manifest]);
 
   const sortLabel =
     LOADOUT_LIST_SORT_OPTIONS.find((o) => o.key === sortKey)?.label ?? "Sort";
@@ -738,18 +744,16 @@ export function LoadoutsList({
         busy={remove.isPending}
         onConfirm={deleteLoadout}
       />
-      <LoadoutDetailsDialog
+      <LoadoutEditorDrawer
         open={importOpen}
         onOpenChange={(open) => !open && clearImportParam()}
+        formKey={importParam ?? undefined}
         title="Import shared loadout"
         description="Save a copy of this loadout to your account. Items you don't own will show as missing."
         submitLabel="Import"
         initialName={importData?.loadout.name ?? ""}
         initialNotes={importData?.loadout.notes ?? ""}
-        subclass={importData && importData.loadout.classType < 3 ? {
-          manifest, classType: importData.loadout.classType,
-          initial: loadoutSubclass(importData.loadout),
-        } : undefined}
+        subclass={importSubclass}
         busy={create.isPending}
         onSubmit={importLoadout}
       />

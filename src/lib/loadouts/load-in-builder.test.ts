@@ -17,6 +17,8 @@ const existing: PersistedSelections = {
   allowTuning: false,
   balancedTuning: false,
   legacyExotics: false,
+  dreamersBond: false,
+  festivalMasks: false,
   activeSubclass: "Arc",
   fragSel: { Arc: [5], Solar: [], Void: [], Stasis: [], Strand: [], Prismatic: [7] },
 };
@@ -56,6 +58,8 @@ test("with a builder snapshot: restores it, keeps pins/filters, merges fragSel",
         allowTuning: true,
         balancedTuning: true,
         legacyExotics: true,
+        dreamersBond: true,
+        festivalMasks: true,
         activeSubclass: "Prismatic",
         fragmentHashes: [8, 9],
       },
@@ -71,6 +75,8 @@ test("with a builder snapshot: restores it, keeps pins/filters, merges fragSel",
   expect(out.activeSubclass).toBe("Prismatic");
   expect(out.fragSel.Prismatic).toEqual([8, 9]);
   expect(out.fragSel.Arc).toEqual([5]);
+  expect(out.dreamersBond).toBe(true);
+  expect(out.festivalMasks).toBe(true);
 });
 
 test("without a snapshot: derives targets/sets from parameters, exotic by name", () => {
@@ -82,6 +88,8 @@ test("without a snapshot: derives targets/sets from parameters, exotic by name",
   expect(out.setReqs).toEqual({ 42: 4 });
   expect(out.exoticName).toBe("Cenotaph Mask");
   expect(out.pinnedSets).toEqual([]);
+  expect(out.dreamersBond).toBe(false);
+  expect(out.festivalMasks).toBe(false);
 });
 
 test("any-class loadout keeps the current class", () => {
@@ -111,6 +119,8 @@ test("opts.major overrides a stale builder snapshot (Optimize from edited mods)"
         allowTuning: true,
         balancedTuning: true,
         legacyExotics: true,
+        dreamersBond: false,
+        festivalMasks: false,
         activeSubclass: "Prismatic",
         fragmentHashes: [],
       },

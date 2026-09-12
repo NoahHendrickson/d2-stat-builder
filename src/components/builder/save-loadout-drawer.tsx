@@ -2,8 +2,10 @@
 
 import { useState } from "react";
 import type { ArmorPiece } from "@/lib/armory/normalize";
-import type { LoadoutDetailsValues } from "@/components/loadouts/loadout-details-dialog";
-import { LoadoutEditorDrawer } from "@/components/loadouts/loadout-editor-drawer";
+import {
+  LoadoutEditorDrawer,
+  type LoadoutDetailsValues,
+} from "@/components/loadouts/loadout-editor-drawer";
 import type { SubclassSection } from "@/components/loadouts/loadout-subclass-editor";
 import type { DimLoadout } from "@/lib/dim/loadout-link";
 import { planLoadoutPlugs } from "@/lib/loadouts/apply-plan";

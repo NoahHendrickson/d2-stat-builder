@@ -2,6 +2,7 @@
 
 import { Suspense, useCallback } from "react";
 import dynamic from "next/dynamic";
+import Image from "next/image";
 import { SidebarSimple } from "@phosphor-icons/react";
 import { useSession } from "@/lib/auth/use-session";
 import { useArmory } from "@/lib/armory/use-armory";
@@ -39,7 +40,7 @@ const LoadoutsList = dynamic(
   { ssr: false, loading: () => <LoadoutsListPlaceholder /> },
 );
 
-/** Collapse control, title, and view switch — the sidebar's top row. */
+/** Collapse control, title, and view switch — the sidebar's top row (Figma 14:4965). */
 export function SidebarChrome({
   onNavigate,
   onToggle,
@@ -54,11 +55,25 @@ export function SidebarChrome({
   return (
     <div className="flex h-16 w-full items-center justify-between gap-2 p-4">
       <div className="flex min-w-0 items-center gap-2">
+        <Image
+          src="/sidebar-logo.svg"
+          alt=""
+          width={27}
+          height={27}
+          className="size-[27px] shrink-0"
+          unoptimized
+          aria-hidden
+        />
+        <span className="min-w-0 truncate text-sm font-medium">
+          D2 stat builder
+        </span>
+      </div>
+      <div className="flex shrink-0 items-center gap-1">
         {onToggle && (
           <TooltipLabel label={toggleLabel}>
             <Button
               variant="ghost"
-              size="icon-sm"
+              size="icon"
               aria-label={toggleLabel}
               onClick={onToggle}
             >
@@ -66,11 +81,8 @@ export function SidebarChrome({
             </Button>
           </TooltipLabel>
         )}
-        <span className="min-w-0 truncate text-sm font-medium">
-          D2 stat builder
-        </span>
+        <ViewTabs onNavigate={onNavigate} />
       </div>
-      <ViewTabs onNavigate={onNavigate} />
     </div>
   );
 }

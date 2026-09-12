@@ -1,6 +1,6 @@
 import type { Manifest } from "@/lib/manifest/load";
 import { memoByManifest } from "@/lib/manifest/memo";
-import { STAT_HASH_TO_INDEX, type StatArray } from "./stats";
+import { STAT_HASH_TO_INDEX, STAT_LABELS, STAT_ORDER, type StatArray } from "./stats";
 
 export type Subclass = "Arc" | "Solar" | "Void" | "Stasis" | "Strand" | "Prismatic";
 
@@ -76,6 +76,15 @@ export function buildFragmentStats(
   }
 
   return { stats, touches };
+}
+
+/** Human-readable fragment bonuses, e.g. "+10 Health · −10 Class". Empty when none. */
+export function formatFragmentStats(stats: StatArray): string {
+  return stats
+    .flatMap((v, i) =>
+      v ? [`${v > 0 ? "+" : "−"}${Math.abs(v)} ${STAT_LABELS[STAT_ORDER[i]]}`] : [],
+    )
+    .join(" · ");
 }
 
 export interface FragmentInfo {

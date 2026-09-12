@@ -21,9 +21,10 @@ export function BuilderPageShell() {
   // The armory summary lives in the app sidebar; the panel only shows it inline while
   // the sidebar isn't on screen (narrow drawer, or the user collapsed it).
   // Figma 14:5181: the view is a 1640px frame beside the sidebar, content inset ~100px
-  // on the left and ~77px on top at that size; smaller screens tighten the insets.
+  // on the left and ~77px on top at that size. 2xl (1536px) is still short of that
+  // once the sidebar is on screen, so the Figma insets wait until 1920px.
   return (
-    <main className="mx-auto max-w-[102.5rem] px-6 py-6 pb-24 lg:px-12 lg:py-16 2xl:px-24">
+    <main className="mx-auto max-w-[102.5rem] px-6 py-6 pb-24 lg:px-12 lg:py-16 min-[120rem]:px-24">
       <BuilderPanel showInlineStatusCards={!sidebarVisible} />
     </main>
   );

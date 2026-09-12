@@ -24,8 +24,12 @@ import {
 import { toast } from "@/lib/toast";
 import type { ArmorPiece } from "@/lib/armory/normalize";
 import type { ArmoryCharacter } from "@/lib/armory/fetch";
-import type { Subclass } from "@/lib/armory/fragments";
-import { ABILITY_KINDS, ABILITY_LABELS } from "@/lib/dim/subclasses";
+import { buildFragmentStats, formatFragmentStats } from "@/lib/armory/fragments";
+import { ABILITY_KINDS, ABILITY_LABELS, isStrandSharedAbilityIcon } from "@/lib/dim/subclasses";
+import {
+  STRAND_ABILITY_PLATE_FILTER,
+  StrandAbilityRecolor,
+} from "@/components/loadouts/strand-ability-recolor";
 import type { Manifest } from "@/lib/manifest/load";
 import {
   CLASS_NAMES,
@@ -43,7 +47,7 @@ import { formatRelativeTime } from "@/lib/armor-table/relative-time";
 import { superSocketIndex } from "@/lib/loadouts/subclass";
 import { resolveLoadout } from "@/lib/loadouts/resolve";
 import { loadoutHashtags, type SavedLoadout } from "@/lib/loadouts/types";
-import { StatGlyph } from "@/components/builder/build-results";
+import { StatGlyph } from "@/components/stat-glyph";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -62,16 +66,6 @@ const STAT_COLS = STAT_DISPLAY_ORDER.map((key) => ({
 /** Name column takes the slack; the six stat columns and Tuned stay fixed so names keep room in the 307px card. */
 const DETAIL_COLS = "minmax(0,1fr) repeat(6, 1.75rem) 2.5rem";
 
-/** Chip tint per subclass element (Figma 3:1982 is the Solar one at 8%). */
-const SUBCLASS_TINT: Record<Subclass, string> = {
-  Solar: "bg-[rgb(239_100_31/0.08)]",
-  Arc: "bg-[rgb(123_199_255/0.08)]",
-  Void: "bg-[rgb(177_132_197/0.08)]",
-  Stasis: "bg-[rgb(77_136_255/0.08)]",
-  Strand: "bg-[rgb(53_227_102/0.08)]",
-  Prismatic: "bg-[rgb(255_107_214/0.08)]",
-};
-
 /** Icon + name for a plug/mod hash, from the manifest; falls back to the hash. */
 function PlugIcon({
   hash,
@@ -80,6 +74,7 @@ function PlugIcon({
   suffix,
   size = 24,
   className,
+  classType,
 }: {
   hash: number;
   manifest: Manifest;
@@ -87,28 +82,48 @@ function PlugIcon({
   suffix?: string;
   size?: 16 | 20 | 24;
   className?: string;
+  /** When set, append armor-stat bonuses (fragments' +10 / −10). */
+  classType?: number;
 }) {
   const def = manifest.def("DestinyInventoryItemDefinition", hash);
   const name = def?.displayProperties?.name ?? `#${hash}`;
-  const label = suffix ? `${name} — ${suffix}` : name;
+  const stats =
+    classType === undefined
+      ? ""
+      : formatFragmentStats(
+          buildFragmentStats(def?.investmentStats, classType).stats,
+        );
+  const title = suffix ? `${name} — ${suffix}` : name;
+  const label = stats ? `${title}\n${stats}` : title;
   const icon = def?.displayProperties?.icon;
+  const recolor = isStrandSharedAbilityIcon(def?.plug?.plugCategoryIdentifier);
   const sizeClass = size === 16 ? "size-4" : size === 20 ? "size-5" : "size-6";
   return icon ? (
     <TooltipLabel label={label}>
-      <Image
-        src={`${BUNGIE_IMAGE_BASE}${icon}`}
-        alt={label}
-        tabIndex={0}
-        width={size}
-        height={size}
+      <span
         className={cn(
           sizeClass,
-          "shrink-0 rounded-sm",
-          dim && "opacity-40 grayscale",
-          className,
+          "relative inline-flex shrink-0",
+          recolor && "isolate",
         )}
-        unoptimized
-      />
+        tabIndex={0}
+      >
+        <Image
+          src={`${BUNGIE_IMAGE_BASE}${icon}`}
+          alt={label}
+          width={size}
+          height={size}
+          className={cn(
+            sizeClass,
+            "rounded-sm",
+            dim && "opacity-40 grayscale",
+            className,
+          )}
+          style={recolor ? { filter: STRAND_ABILITY_PLATE_FILTER } : undefined}
+          unoptimized
+        />
+        <StrandAbilityRecolor on={recolor} />
+      </span>
     </TooltipLabel>
   ) : (
     <TooltipLabel label={label}>
@@ -518,12 +533,7 @@ export const LoadoutRow = memo(function LoadoutRow({
             {subclass && (
               <span
                 aria-label={superLabel}
-                className={cn(
-                  "flex min-w-0 items-center gap-1 rounded-[4px] p-1",
-                  subclass.subclass
-                    ? SUBCLASS_TINT[subclass.subclass]
-                    : "bg-foreground/4",
-                )}
+                className="flex min-w-0 items-center gap-1"
               >
                 <ManifestIcon
                   icon={superIcon}
@@ -556,6 +566,7 @@ export const LoadoutRow = memo(function LoadoutRow({
                     manifest={manifest}
                     size={24}
                     className="rounded-none"
+                    classType={loadout.classType}
                   />
                 ))}
               </span>

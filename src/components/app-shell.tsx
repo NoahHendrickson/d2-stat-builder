@@ -289,13 +289,15 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
       </aside>
 
-      {/* Stays put while the panel slides away: same icon, same title, same spot. */}
+      {/* Stays put while the panel slides away: same logo, title, collapse, and tabs. */}
       <div
         className={cn(
           "absolute top-0 left-0 z-20 hidden lg:block",
-          collapsed && "bg-background",
+          collapsed
+            ? "bg-background [--icon-tab-surface:var(--background)]"
+            : "border-border bg-sidebar border-r [--icon-tab-surface:var(--sidebar)]",
         )}
-        style={{ width: collapsed ? undefined : sidebarWidth }}
+        style={{ width: sidebarWidth }}
       >
         <SidebarChrome
           collapsed={collapsed}

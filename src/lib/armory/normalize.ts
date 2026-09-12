@@ -10,6 +10,7 @@ import {
   archetypeNameFromSpirit,
   isExoticClassItemHash,
 } from "./exotic-class-perks";
+import { isFestivalMask } from "./festival-masks";
 import {
   ARMOR_ARCHETYPE_PLUG_CATEGORY,
   ARMOR_BUCKETS,
@@ -430,11 +431,16 @@ function buildPiece(
   if (!item.itemInstanceId) return null;
 
   const def = manifest.def("DestinyInventoryItemDefinition", item.itemHash);
-  if (!def || def.itemType !== ITEM_TYPE_ARMOR) return null;
+  if (!def) return null;
+
+  // FotL masks are helmet-slot items that are not itemType Armor.
+  const festivalMask = isFestivalMask(item.itemHash, def);
+  if (def.itemType !== ITEM_TYPE_ARMOR && !festivalMask) return null;
 
   // Slot comes from the definition's bucket, not the live one (vault items report the vault bucket).
   const slot =
-    ARMOR_BUCKETS[def.inventory?.bucketTypeHash as keyof typeof ARMOR_BUCKETS];
+    ARMOR_BUCKETS[def.inventory?.bucketTypeHash as keyof typeof ARMOR_BUCKETS] ??
+    (festivalMask ? "helmet" : undefined);
   if (!slot) return null;
 
   const isExotic = def.inventory?.tierType === TIER_TYPE_EXOTIC;

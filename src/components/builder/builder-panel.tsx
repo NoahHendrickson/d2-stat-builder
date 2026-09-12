@@ -49,6 +49,14 @@ import {
   isExoticClassItemHash,
 } from "@/lib/armory/exotic-class-perks";
 import {
+  dreamersBondPiece,
+  dreamersClassItemName,
+} from "@/lib/armory/dreamers-bond";
+import {
+  hashesIncludeHelmet,
+  isFestivalMask,
+} from "@/lib/armory/festival-masks";
+import {
   ARMOR_SLOTS,
   BALANCED_TUNING_PLUG_HASH,
   CLASS_NAMES,
@@ -195,6 +203,12 @@ export function BuilderPanel({
   // legendaries are not yet — that toggle stays disabled.
   const [useLegacyExotics, setUseLegacyExotics] = useState(
     initialSaved?.legacyExotics ?? true,
+  );
+  const [useDreamersBond, setUseDreamersBond] = useState(
+    initialSaved?.dreamersBond ?? false,
+  );
+  const [useFestivalMasks, setUseFestivalMasks] = useState(
+    initialSaved?.festivalMasks ?? false,
   );
 
   // The exotic is persisted by name and resolved to an index once the live exotics list
@@ -420,7 +434,12 @@ export function BuilderPanel({
   );
 
   // Class-item pool with Spirit filter + optional synthetic T5 roll (owned matches win).
+  // Dreamer's Bond replaces the whole slot with a hardcoded 0-stat collections item.
   const classItemPieces = useMemo(() => {
+    if (useDreamersBond && classType !== null) {
+      const pinned = dreamersBondPiece(classType, manifest);
+      return pinned ? [pinned] : [];
+    }
     const pieces = pool.filter((p) => p.slot === "classItem");
     if (
       !manifest ||
@@ -443,7 +462,24 @@ export function BuilderPanel({
     selectedClassItemHash,
     selectedExoticOption,
     exoticPerks,
+    useDreamersBond,
   ]);
+
+  // Owned FotL masks for this class (vault / inventory / equipped), including
+  // legacy rolls the normal T5 pool excludes. Scan the full armory so classType 3
+  // (any-class) defs still appear for the selected character.
+  const festivalMaskHelmets = useMemo(() => {
+    if (!useFestivalMasks || classType === null || !armory) return null;
+    return armory.pieces.filter(
+      (p) =>
+        p.slot === "helmet" &&
+        (p.classType === classType || p.classType === 3) &&
+        isFestivalMask(
+          p.itemHash,
+          manifest?.def("DestinyInventoryItemDefinition", p.itemHash),
+        ),
+    );
+  }, [useFestivalMasks, armory, classType, manifest]);
 
   const pieceMap = useMemo(() => {
     const map = new Map(classPieces.map((p) => [p.instanceId, p]));
@@ -454,14 +490,37 @@ export function BuilderPanel({
     return map;
   }, [classPieces, classItemPieces]);
 
+  // A stored exotic in a pinned slot (Dreamer's Bond → class item, Festival masks →
+  // helmet) loses to the pin on restore. From then on the exotic picker and the toggle
+  // handlers keep the two exclusive, so no effect has to referee them.
+  const resolveRestoredExotic = useCallback(
+    (
+      name: string | null,
+      pins: { dreamersBond: boolean; festivalMasks: boolean },
+    ): number | null => {
+      const index = resolveExoticIndex(name, exotics);
+      if (index === null) return null;
+      const hashes = exotics[index].hashes;
+      if (pins.dreamersBond && hashes.some(isExoticClassItemHash)) return null;
+      if (pins.festivalMasks && hashesIncludeHelmet(hashes, classPieces)) return null;
+      return index;
+    },
+    [exotics, classPieces],
+  );
+
   // Resolve the restored exotic (persisted by name) to an index once the live list exists.
   // Consumed once so a later class switch can't re-apply it; not-owned-now → cleared.
   useEffect(() => {
     if (pendingExoticName.current === undefined || !exotics.length) return;
     const name = pendingExoticName.current;
     pendingExoticName.current = undefined;
-    setSelectedExotic(resolveExoticIndex(name, exotics));
-  }, [exotics]);
+    setSelectedExotic(
+      resolveRestoredExotic(name, {
+        dreamersBond: useDreamersBond,
+        festivalMasks: useFestivalMasks,
+      }),
+    );
+  }, [exotics, resolveRestoredExotic, useDreamersBond, useFestivalMasks]);
 
   // "Optimize" in the sidebar replaces the stored selections while this panel may already
   // be mounted: adopt them the way the mount-time restore does. The exotic resolves right
@@ -483,11 +542,13 @@ export function BuilderPanel({
       setAllowTuning(saved.allowTuning);
       setUseBalancedTuning(saved.balancedTuning);
       setUseLegacyExotics(saved.legacyExotics);
+      setUseDreamersBond(saved.dreamersBond);
+      setUseFestivalMasks(saved.festivalMasks);
       setActiveSubclass(saved.activeSubclass);
       setFragSel(fragSelFromArrays(saved.fragSel));
       setExoticPerks(saved.exoticPerks);
       if (saved.classType === classType && exotics.length) {
-        setSelectedExotic(resolveExoticIndex(saved.exoticName, exotics));
+        setSelectedExotic(resolveRestoredExotic(saved.exoticName, saved));
       } else {
         pendingExoticName.current = saved.exoticName;
       }
@@ -495,7 +556,7 @@ export function BuilderPanel({
     if (adoptedGeneration.current !== selectionsGeneration()) adopt();
     window.addEventListener(SELECTIONS_REPLACED_EVENT, adopt);
     return () => window.removeEventListener(SELECTIONS_REPLACED_EVENT, adopt);
-  }, [classType, exotics]);
+  }, [classType, exotics, resolveRestoredExotic]);
 
   // Persist selections (debounced) on any change; the exotic is saved by name. Held off
   // while a restored exotic is still unresolved (see pendingExoticName).
@@ -520,6 +581,8 @@ export function BuilderPanel({
         allowTuning,
         balancedTuning: useBalancedTuning,
         legacyExotics: useLegacyExotics,
+        dreamersBond: useDreamersBond,
+        festivalMasks: useFestivalMasks,
         activeSubclass,
         fragSel: fragSelToArrays(fragSel),
       });
@@ -540,6 +603,8 @@ export function BuilderPanel({
     allowTuning,
     useBalancedTuning,
     useLegacyExotics,
+    useDreamersBond,
+    useFestivalMasks,
     activeSubclass,
     fragSel,
   ]);
@@ -577,7 +642,9 @@ export function BuilderPanel({
       const pieces =
         slot === "classItem"
           ? classItemPieces
-          : pool.filter((p) => p.slot === slot);
+          : slot === "helmet" && festivalMaskHelmets
+            ? festivalMaskHelmets
+            : pool.filter((p) => p.slot === slot);
       return pieces.map(toOpt);
     });
 
@@ -599,6 +666,7 @@ export function BuilderPanel({
   }, [
     pool,
     classItemPieces,
+    festivalMaskHelmets,
     classType,
     targets,
     major,
@@ -639,7 +707,37 @@ export function BuilderPanel({
   const onExoticSelect = useCallback((index: number | null) => {
     setSelectedExotic(index);
     setExoticPerks([null, null]);
-  }, []);
+    if (index === null) return;
+    const hashes = exotics[index]?.hashes ?? [];
+    if (hashes.some(isExoticClassItemHash)) setUseDreamersBond(false);
+    if (hashesIncludeHelmet(hashes, classPieces)) setUseFestivalMasks(false);
+  }, [exotics, classPieces]);
+
+  const onDreamersBondChange = useCallback(
+    (checked: boolean) => {
+      setUseDreamersBond(checked);
+      if (checked && selectedClassItemHash !== undefined) {
+        setSelectedExotic(null);
+        setExoticPerks([null, null]);
+      }
+    },
+    [selectedClassItemHash],
+  );
+
+  const onFestivalMasksChange = useCallback(
+    (checked: boolean) => {
+      setUseFestivalMasks(checked);
+      if (
+        checked &&
+        selectedExoticOption &&
+        hashesIncludeHelmet(selectedExoticOption.hashes, classPieces)
+      ) {
+        setSelectedExotic(null);
+        setExoticPerks([null, null]);
+      }
+    },
+    [selectedExoticOption, classPieces],
+  );
 
   const setSetFilter = useCallback(
     (key: keyof SetFilters, value: boolean) =>
@@ -683,6 +781,8 @@ export function BuilderPanel({
       allowTuning,
       balancedTuning: useBalancedTuning,
       legacyExotics: useLegacyExotics,
+      dreamersBond: useDreamersBond,
+      festivalMasks: useFestivalMasks,
       activeSubclass,
       fragmentHashes: [...fragSel[activeSubclass]],
     }),
@@ -696,6 +796,8 @@ export function BuilderPanel({
       allowTuning,
       useBalancedTuning,
       useLegacyExotics,
+      useDreamersBond,
+      useFestivalMasks,
       activeSubclass,
       fragSel,
     ],
@@ -778,7 +880,9 @@ export function BuilderPanel({
   );
 
   return (
-    <div className="grid grid-cols-1 gap-10 lg:grid-cols-[minmax(18rem,30.5rem)_minmax(29rem,1fr)] lg:items-start lg:gap-x-10 2xl:gap-x-24">
+    // 24px between columns until 1920px — 2xl's 96px Figma gap squeezes the
+    // build cards while the sidebar is still on screen.
+    <div className="grid grid-cols-1 gap-10 lg:grid-cols-[minmax(18rem,30.5rem)_minmax(29rem,1fr)] lg:items-start lg:gap-x-6 min-[120rem]:gap-x-24">
       {/* Left — configure the build. Figma 17:5852: a 488px column of sections
           separated by 1px dividers with 32px above and below each. */}
       <div className="divide-border divide-y">
@@ -834,7 +938,7 @@ export function BuilderPanel({
                 selected={selectedExotic}
                 onSelect={onExoticSelect}
               />
-              {spiritPerks && (
+              {spiritPerks && !useDreamersBond && (
                 <div className="mt-4">
                   <ExoticClassPerkPicker
                     left={spiritPerks.left}
@@ -944,6 +1048,11 @@ export function BuilderPanel({
                 onAllowTuningChange={setAllowTuning}
                 useBalancedTuning={useBalancedTuning}
                 onUseBalancedTuningChange={setUseBalancedTuning}
+                useDreamersBond={useDreamersBond}
+                onUseDreamersBondChange={onDreamersBondChange}
+                dreamersItemName={dreamersClassItemName(classType ?? 2)}
+                useFestivalMasks={useFestivalMasks}
+                onUseFestivalMasksChange={onFestivalMasksChange}
               />
             </Section>
 

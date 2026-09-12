@@ -5,8 +5,7 @@ import { toast } from "@/lib/toast";
 import type { ArmoryCharacter } from "@/lib/armory/fetch";
 import type { ArmorPiece } from "@/lib/armory/normalize";
 import type { Manifest } from "@/lib/manifest/load";
-import { FRAGMENT_SOCKET_COUNT } from "@/lib/armory/equipped-subclass";
-import { ABILITY_KINDS, FRAGMENT_SOCKET_START } from "@/lib/dim/subclasses";
+import { ABILITY_KINDS } from "@/lib/dim/subclasses";
 import { equipItemRef, vaultedNote } from "@/lib/bungie/equip-client";
 import { planSpares, type EquipItemState } from "@/lib/bungie/equip-plan";
 import type { ItemResult, PlugRequest, PlugResult } from "@/lib/bungie/equip-server";
@@ -111,14 +110,7 @@ export async function applySavedLoadout({
     placements: saved.modPlacement,
     subclass:
       subclassItem && resolved.subclass?.subclass
-        ? {
-            instanceId: subclassItem.instanceId,
-            fragmentSockets: subclassItem.fragmentSockets,
-            socketStart: FRAGMENT_SOCKET_START[resolved.subclass.subclass],
-            socketCount: FRAGMENT_SOCKET_COUNT,
-            desiredFragments: resolved.subclass.fragmentHashes,
-            groups,
-          }
+        ? { instanceId: subclassItem.instanceId, groups }
         : undefined,
   });
   if (resolved.subclass && !subclassItem) plan.skipped.push("Subclass is not available on this character");

@@ -53,9 +53,9 @@ const tabsIndicatorVariants = cva(
         // into the track, bordered with the track colour — not a lighter raise.
         default:
           "rounded-[10px] corner-smooth border border-foreground/12 bg-background dark:border-[#313131]",
-        // Figma "IconTab" active (1:229): the sidebar fill recessed into the track, edged
-        // with the track colour — it lives in the sidebar, so it must match that surface.
-        icon: "rounded-[10px] corner-smooth border border-foreground/6 bg-sidebar",
+        // Recessed into the track with the header surface (sidebar when open,
+        // page background when collapsed) so the pill doesn't flash a second color.
+        icon: "rounded-[10px] corner-smooth border border-foreground/6 bg-[var(--icon-tab-surface,var(--sidebar))]",
         line: "bg-primary group-data-horizontal/tabs:top-[calc(var(--active-tab-top)+var(--active-tab-height)+3px)] group-data-horizontal/tabs:h-0.5 group-data-horizontal/tabs:translate-y-0 group-data-vertical/tabs:left-[calc(var(--active-tab-left)+var(--active-tab-width)+2px)] group-data-vertical/tabs:w-0.5 group-data-vertical/tabs:translate-x-0",
       },
     },

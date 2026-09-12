@@ -4,7 +4,7 @@
 import type { ArmorPiece, ArmorSocket } from "../armory/normalize";
 import type { ModOptionCatalog } from "./mod-options";
 import type { ModPlacement } from "./types";
-import type { ApplyPlan } from "./apply-plan";
+import type { ApplyPlan, UnplacedMod } from "./apply-plan";
 
 /** When present, a details dialog also shows the socket-by-socket mod picker. */
 export interface ModsSection {
@@ -15,11 +15,10 @@ export interface ModsSection {
   initial: ModPlacement;
   /**
    * Loadout mods the planner could NOT place on these pieces right now (energy, roll,
-   * missing socket…). They stay in the loadout when it is saved — see `modsFromEditor`.
+   * missing socket…), each with why. They stay in the loadout when it is saved — see
+   * `modsFromEditor`.
    */
-  unplaced: number[];
-  /** Human-readable reasons for `unplaced`, shown in the dialog. */
-  skipped: string[];
+  unplaced: UnplacedMod[];
   /** Plugs the player can socket right now (`Armory.insertablePlugs`), if known. */
   insertable?: ReadonlySet<number>;
   /**
@@ -43,7 +42,6 @@ export function modsSectionFromPlan(
     catalog,
     initial: plan.assigned,
     unplaced: plan.unplaced,
-    skipped: plan.skipped,
     ...(desiredStatMods.length > 0 ? { desiredStatMods } : {}),
     ...(insertable ? { insertable } : {}),
   };
@@ -63,7 +61,7 @@ function collectDesiredStatMods(
       if (hash !== undefined) out.push(hash);
     }
   }
-  for (const hash of plan.unplaced) {
+  for (const { hash } of plan.unplaced) {
     if (catalog.kind(hash) === "general") out.push(hash);
   }
   return out;
@@ -283,7 +281,7 @@ export function placementToMods(placement: ModPlacement, pieces: ArmorPiece[]): 
  */
 export function modsFromEditor(section: ModsSection, placement: ModPlacement): number[] {
   const placed = placementToMods(placement, section.pieces);
-  const leftover = [...section.unplaced];
+  const leftover = section.unplaced.map((u) => u.hash);
   const before = placementToMods(section.initial, section.pieces);
   for (const hash of placed) {
     const i = before.indexOf(hash);

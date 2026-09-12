@@ -22,12 +22,13 @@ const piece = (instanceId: string, sockets: { index: number; plugHash?: number }
     energy: { capacity: 10, used },
   }) as unknown as ArmorPiece;
 
+const unplaced = (hash: number) => ({ hash, reason: "test" });
+
 const section = (over: Partial<ModsSection>): ModsSection => ({
   pieces: [piece("a", [{ index: 1 }, { index: 2 }]), piece("b", [{ index: 1 }])],
   catalog: {} as ModOptionCatalog,
   initial: {},
   unplaced: [],
-  skipped: [],
   ...over,
 });
 
@@ -37,22 +38,22 @@ test("placementToMods walks pieces then sockets in order", () => {
 });
 
 test("modsFromEditor keeps mods the planner could not place", () => {
-  const s = section({ initial: { a: { 1: 10 } }, unplaced: [99, 98] });
+  const s = section({ initial: { a: { 1: 10 } }, unplaced: [unplaced(99), unplaced(98)] });
   expect(modsFromEditor(s, { a: { 1: 10 } })).toEqual([10, 99, 98]);
 });
 
 test("modsFromEditor: hand-placing an unplaced mod moves it instead of duplicating it", () => {
-  const s = section({ initial: { a: { 1: 10 } }, unplaced: [99] });
+  const s = section({ initial: { a: { 1: 10 } }, unplaced: [unplaced(99)] });
   expect(modsFromEditor(s, { a: { 1: 10 }, b: { 1: 99 } })).toEqual([10, 99]);
 });
 
 test("modsFromEditor: clearing a pre-chosen socket drops that mod; unplaced ones remain", () => {
-  const s = section({ initial: { a: { 1: 10 } }, unplaced: [99] });
+  const s = section({ initial: { a: { 1: 10 } }, unplaced: [unplaced(99)] });
   expect(modsFromEditor(s, {})).toEqual([99]);
 });
 
 test("modsFromEditor: extra copies of a mod use up the unplaced copy before adding more", () => {
-  const s = section({ initial: { a: { 1: 10 } }, unplaced: [10] });
+  const s = section({ initial: { a: { 1: 10 } }, unplaced: [unplaced(10)] });
   // Two copies pre-existing (one placed, one unplaced); user places two more by hand →
   // one is the unplaced copy finding a home, the other is genuinely new.
   expect(modsFromEditor(s, { a: { 1: 10, 2: 10 }, b: { 1: 10 } })).toEqual([10, 10, 10]);
