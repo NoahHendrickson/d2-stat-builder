@@ -73,6 +73,11 @@ export interface ArmorPiece {
   isExotic: boolean;
   /** Artifice armor — has a free +3 stat mod slot (common on Armor 2.0 pieces + exotics). */
   isArtifice: boolean;
+  /**
+   * Festival of the Lost mask (Masquerader's). In the optimizer only when the
+   * FotL helmet pin is on — never mixed into the default T5/legacy-exotic pool.
+   */
+  isFestivalMask?: boolean;
   setHash?: number;
   /** Archetype plug name (e.g. "Gunner") — Armor 3.0 only; undefined on legacy pieces. */
   archetype?: string;
@@ -500,6 +505,7 @@ function buildPiece(
     isArtifice: exoticClassItem
       ? false
       : isArtificePiece(item.itemInstanceId, profile, manifest),
+    ...(festivalMask ? { isFestivalMask: true } : {}),
     setHash: def.equippingBlock?.equipableItemSetHash || undefined,
     archetype,
     baseStats,

@@ -45,6 +45,11 @@ export type { DimSubclassInput, GetBuilderState } from "@/components/builder/bui
 
 const MAX_SHOWN = 50;
 export { MAX_SHOWN };
+
+/** Figma 54:6099 — fading 1px edge, inset highlight, 0 1px 2px drop shadow. */
+export const BUILD_CARD_LIFT_CLASS =
+  "build-card-edge relative rounded-[8px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.24)] after:pointer-events-none after:absolute after:inset-0 after:rounded-[8px] after:shadow-[inset_0px_1px_2px_0px_rgb(255_255_255/0.06)] after:content-['']";
+
 /** Display stat columns paired with their STAT_ORDER index (used by the build breakdown). */
 const STAT_COLS = STAT_DISPLAY_ORDER.map((key) => ({
   key,
@@ -220,13 +225,17 @@ const BuildRow = memo(function BuildRow({
   }
 
   return (
-    <div className="bg-foreground/6 overflow-hidden rounded-[8px]">
+    <div className={BUILD_CARD_LIFT_CLASS}>
+      <div className="overflow-hidden rounded-[8px]">
       {/* Figma 17:6044 — exotic tile, six stat chips spread over ~456px, total + set badge, caret */}
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
-        className="hover:bg-foreground/4 flex w-full items-center gap-3 p-2 text-left transition-colors 2xl:gap-4"
+        className={cn(
+          "bg-white/6 flex w-full items-center gap-3 p-2 text-left transition-colors 2xl:gap-4",
+          !open && "hover:bg-white/10",
+        )}
       >
         <div className="flex min-w-0 flex-1 items-center gap-3 2xl:gap-6">
           {exotic?.icon ? (
@@ -242,7 +251,7 @@ const BuildRow = memo(function BuildRow({
               className="size-10 shrink-0 rounded-[2px]"
             />
           ) : (
-            <span className="bg-muted size-10 shrink-0 rounded-[2px]" aria-hidden />
+            <span className="bg-white/12 size-10 shrink-0 rounded-[2px]" aria-hidden />
           )}
           {/* Six evenly spaced stat chips; type and glyphs step up at 2xl where the column is Figma-wide */}
           <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-0.5 text-sm xl:grid xl:grid-cols-6 xl:gap-x-0.5 lg:max-w-[28.5rem] 2xl:gap-x-2 2xl:text-base">
@@ -288,7 +297,7 @@ const BuildRow = memo(function BuildRow({
       </button>
 
       {open && (
-        <div className="bg-popover border-border border-t">
+        <div className="border-border bg-white/6 border-t">
           {/* Armor table — Figma 18:6899 */}
           <div className={cn(BREAKDOWN_GRID, "border-border gap-y-4 border-b p-4")}>
             <div className="text-text-secondary text-sm font-medium">Armor</div>
@@ -404,6 +413,7 @@ const BuildRow = memo(function BuildRow({
           />
         </div>
       )}
+      </div>
     </div>
   );
 });

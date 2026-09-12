@@ -973,10 +973,14 @@ export function LoadoutEditorDrawer({
     >
       <DrawerContent
         aria-label={form.title}
-        className="rounded-none bg-[color-mix(in_oklab,var(--color-sidebar),var(--color-foreground)_6%)] shadow-[0_-8px_32px_rgba(0,0,0,0.13)] data-[swipe-direction=down]:rounded-none data-[swipe-axis=y]:[--drawer-content-max-height:min(80dvh,60rem)] [--drawer-bleed-background:color-mix(in_oklab,var(--color-sidebar),var(--color-foreground)_6%)]"
-        // Sits over the content column only — `--app-sidebar-width` is the live
-        // sidebar width (0 below `lg`, where the sidebar is itself a drawer).
-        style={{ left: "var(--app-sidebar-width, 0px)" }}
+        className="rounded-none bg-sidebar shadow-[0_-8px_32px_rgba(0,0,0,0.13)] lg:rounded-b-xl data-[swipe-direction=down]:rounded-none lg:data-[swipe-direction=down]:rounded-b-xl data-[swipe-axis=y]:[--drawer-content-max-height:min(80dvh,60rem)] [--bleed:0px] [--drawer-bleed-background:var(--color-sidebar)]"
+        // Over the stage card only: past the sidebar, the `lg:p-3` chrome, and
+        // the 1px stage border. `--app-sidebar-width` is 0 below `lg`.
+        style={{
+          left: "calc(var(--app-sidebar-width, 0px) + var(--app-stage-inset, 0px))",
+          right: "var(--app-stage-inset, 0px)",
+          bottom: "var(--app-stage-inset, 0px)",
+        }}
       >
         {open && (
           <EditorForm

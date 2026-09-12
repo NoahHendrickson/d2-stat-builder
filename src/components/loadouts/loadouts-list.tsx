@@ -139,12 +139,15 @@ export function LoadoutsList({
   manifest,
   onArmoryChanged,
   onNavigate,
+  headerAction,
 }: {
   armory: Armory;
   manifest: Manifest;
   onArmoryChanged: () => void;
   /** Called after an action that switches views (the mobile drawer closes itself). */
   onNavigate?: () => void;
+  /** Desktop collapse control — sits beside the search field (Figma 46:2958). */
+  headerAction?: ReactNode;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -466,29 +469,32 @@ export function LoadoutsList({
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
       <div className="flex flex-col gap-1 px-4">
-        <div className="relative">
-          <MagnifyingGlass
-            className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 z-10 size-4 -translate-y-1/2"
-            aria-hidden
-          />
-          <Input
-            type="search"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search your loadouts"
-            aria-label="Search loadouts (names, notes, set bonuses, or #hashtags)"
-            className="pl-8 pr-8 [&::-webkit-search-cancel-button]:hidden"
-          />
-          {query.length > 0 && (
-            <button
-              type="button"
-              aria-label="Clear search"
-              onClick={() => setQuery("")}
-              className="text-muted-foreground hover:text-foreground focus-visible:ring-ring/50 absolute top-1/2 right-1.5 flex size-5 -translate-y-1/2 cursor-pointer items-center justify-center rounded-[4px] outline-none focus-visible:ring-3"
-            >
-              <X weight="bold" className="size-3.5" aria-hidden />
-            </button>
-          )}
+        <div className="flex items-center gap-1">
+          <div className="relative min-w-0 flex-1">
+            <MagnifyingGlass
+              className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 z-10 size-4 -translate-y-1/2"
+              aria-hidden
+            />
+            <Input
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search your loadouts"
+              aria-label="Search loadouts (names, notes, set bonuses, or #hashtags)"
+              className="pl-8 pr-8 [&::-webkit-search-cancel-button]:hidden"
+            />
+            {query.length > 0 && (
+              <button
+                type="button"
+                aria-label="Clear search"
+                onClick={() => setQuery("")}
+                className="text-muted-foreground hover:text-foreground focus-visible:ring-ring/50 absolute top-1/2 right-1.5 flex size-5 -translate-y-1/2 cursor-pointer items-center justify-center rounded-[4px] outline-none focus-visible:ring-3"
+              >
+                <X weight="bold" className="size-3.5" aria-hidden />
+              </button>
+            )}
+          </div>
+          {headerAction}
         </div>
 
         <div className="flex items-center justify-between pl-1">

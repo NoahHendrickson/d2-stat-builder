@@ -46,7 +46,7 @@ import {
 } from "@/lib/armory/dreamers-bond";
 import {
   hashesIncludeHelmet,
-  isFestivalMask,
+  inDefaultOptimizerPool,
 } from "@/lib/armory/festival-masks";
 import {
   ARMOR_SLOTS,
@@ -65,15 +65,16 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { StatTargetRow } from "@/components/builder/stat-target-row";
 import { SetRow } from "@/components/builder/set-row";
-import { SignInCard } from "@/components/auth/sign-in-card";
 import { ArmoryStatus } from "@/components/armory/armory-status";
-import { ManifestStatus } from "@/components/manifest/manifest-status";
 import { ExoticPicker } from "@/components/builder/exotic-picker";
 import { ExoticClassPerkPicker } from "@/components/builder/exotic-class-perk-picker";
 import { FragmentPicker } from "@/components/builder/fragment-picker";
 import { SetListControls } from "@/components/builder/set-list-controls";
 import { ClassEmblemTabs } from "@/components/builder/class-emblem-tabs";
-import { TuningControls } from "@/components/builder/tuning-controls";
+import {
+  NerdControls,
+  TuningControls,
+} from "@/components/builder/tuning-controls";
 import { BuildsSurface } from "@/components/builder/builds-surface";
 import type { BuildsColumnContentProps } from "@/components/builder/builds-column-content";
 import type { ExoticConstraint, OptimizerPiece } from "@/lib/optimizer/types";
@@ -225,12 +226,11 @@ export function BuilderPanel({
 
   // Candidate pool for the optimizer: Tier-5 pieces (exactly those with a tuning
   // socket) plus — when enabled — legacy/non-tunable exotics, whose artifice +3 the
-  // solver spends. Legacy legendaries stay excluded until supported.
+  // solver spends. Legacy legendaries stay excluded until supported. FotL masks
+  // are never in this pool; they replace the helmet slot when that toggle is on.
   const pool = useMemo(
     () =>
-      classPieces.filter(
-        (p) => p.tunedStat !== undefined || (useLegacyExotics && p.isExotic),
-      ),
+      classPieces.filter((p) => inDefaultOptimizerPool(p, useLegacyExotics)),
     [classPieces, useLegacyExotics],
   );
 
@@ -453,14 +453,10 @@ export function BuilderPanel({
     if (!useFestivalMasks || classType === null || !armory) return null;
     return armory.pieces.filter(
       (p) =>
-        p.slot === "helmet" &&
-        (p.classType === classType || p.classType === 3) &&
-        isFestivalMask(
-          p.itemHash,
-          manifest?.def("DestinyInventoryItemDefinition", p.itemHash),
-        ),
+        p.isFestivalMask &&
+        (p.classType === classType || p.classType === 3),
     );
-  }, [useFestivalMasks, armory, classType, manifest]);
+  }, [useFestivalMasks, armory, classType]);
 
   const pieceMap = useMemo(() => {
     const map = new Map(classPieces.map((p) => [p.instanceId, p]));
@@ -855,11 +851,9 @@ export function BuilderPanel({
   );
 
   return (
-    // 24px between columns until 1920px — 2xl's 96px Figma gap squeezes the
-    // build cards while the sidebar is still on screen.
-    <div className="grid grid-cols-1 gap-10 lg:grid-cols-[minmax(18rem,30.5rem)_minmax(29rem,1fr)] lg:items-start lg:gap-x-6 min-[120rem]:gap-x-24">
-      {/* Left — configure the build. Figma 17:5852: a 488px column of sections
-          separated by 1px dividers with 32px above and below each. */}
+    <div className="mx-auto grid w-full max-w-7xl grid-cols-1 gap-10 lg:grid-cols-[minmax(18rem,33.55rem)_minmax(29rem,1fr)] lg:items-start lg:gap-x-12">
+      {/* Left — configure the build. 33.55rem column of sections separated by
+          1px dividers with 32px above and below each. */}
       <div className="divide-border divide-y">
         {ready && (
           <>
@@ -1023,6 +1017,11 @@ export function BuilderPanel({
                 onAllowTuningChange={setAllowTuning}
                 useBalancedTuning={useBalancedTuning}
                 onUseBalancedTuningChange={setUseBalancedTuning}
+              />
+            </Section>
+
+            <Section title="-60 nerds">
+              <NerdControls
                 useDreamersBond={useDreamersBond}
                 onUseDreamersBondChange={onDreamersBondChange}
                 dreamersItemName={dreamersClassItemName(classType ?? 2)}
@@ -1065,15 +1064,15 @@ export function BuilderPanel({
           </>
         )}
 
-        <div className="space-y-4 py-8 opacity-80">
-          <SignInCard />
-          {showInlineStatusCards && <ArmoryStatus />}
-          <ManifestStatus />
-        </div>
+        {showInlineStatusCards && (
+          <div className="py-8 opacity-80">
+            <ArmoryStatus />
+          </div>
+        )}
       </div>
 
-      {/* Right — builds. Figma 17:6136: the header sits ~28px below the top of the config column. */}
-      <div className="min-w-0 lg:pt-7">
+      {/* Right — builds. */}
+      <div className="min-w-0">
         <BuildsSurface {...buildsProps} />
       </div>
     </div>

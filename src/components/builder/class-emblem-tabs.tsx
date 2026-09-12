@@ -9,18 +9,15 @@ import { CLASS_NAMES } from "@/lib/armory/stats";
 import type { ArmoryCharacter } from "@/lib/armory/fetch";
 import { characterForClass } from "@/lib/armory/character-for-class";
 
-/** Figma 127:9 frame+face recipe — outer tab carries border + lip; inner span is the face. */
-const tabFrameBase =
-  "relative flex-1 shrink-0 cursor-pointer rounded-md border pb-0.5 text-left outline-none transition-all active:translate-y-0.5 active:pb-px focus-visible:ring-3 focus-visible:ring-ring/50";
+/** Inner radius 6px. Rest: 1px gray (outer 7). Selected: 3px gap (outer 9) + emphatic ring. */
+const tabBase =
+  "relative flex-1 shrink-0 cursor-pointer text-left outline-none transition-[opacity,box-shadow,border-color] focus-visible:ring-3 focus-visible:ring-ring/50";
 
-const tabFrameInactive =
-  "border-[var(--neutral-line)] bg-[var(--neutral-shadow)] opacity-80 hover:opacity-100";
+const tabInactive =
+  "rounded-[7px] border border-[var(--neutral-line)] opacity-80 hover:opacity-100";
 
-const tabFrameActive =
-  "border-brand bg-[var(--brand-shadow)] opacity-100 shadow-[0_0_0_1px_var(--brand),0_0_12px_3px_rgb(67_142_255/0.35)]";
-
-const tabFaceBase =
-  "relative -mx-px -mt-px block h-14 overflow-hidden rounded-md border";
+const tabSelected =
+  "rounded-[9px] border-[3px] border-background opacity-100 shadow-[0_0_0_2px_var(--emphatic),0_0_8px_1px_var(--emphatic)]";
 
 interface ClassEmblemTabsProps {
   /** All of the player's characters; grouped into one tab per class internally. */
@@ -62,19 +59,9 @@ function EmblemTab({
     <TabsPrimitive.Tab
       value={String(character.classType)}
       aria-label={`${name}, Power ${character.light}`}
-      className={cn(
-        tabFrameBase,
-        active ? tabFrameActive : tabFrameInactive,
-      )}
+      className={cn(tabBase, active ? tabSelected : tabInactive)}
     >
-      <span
-        className={cn(
-          tabFaceBase,
-          active
-            ? "border-brand"
-            : "border-[var(--neutral-line)]",
-        )}
-      >
+      <span className="relative block h-14 overflow-hidden rounded-[6px]">
         {showImage ? (
           <Image
             src={`${BUNGIE_IMAGE_BASE}${character.emblemBackgroundPath}`}
@@ -128,7 +115,7 @@ export function ClassEmblemTabs({
       value={String(value)}
       onValueChange={(v) => onChange(Number(v))}
     >
-      <TabsPrimitive.List className="flex gap-2 p-0.5">
+      <TabsPrimitive.List className="flex gap-2 p-1.5">
         {tabs.map((character) => (
           <EmblemTab
             key={character.classType}

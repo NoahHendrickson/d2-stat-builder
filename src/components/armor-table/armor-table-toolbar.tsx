@@ -5,6 +5,7 @@ import { MagnifyingGlass } from "@phosphor-icons/react";
 import type { FilterOption } from "@/lib/armor-table/pinned";
 import type { ArmorVersion, FacetFilters } from "@/lib/armor-table/filters";
 import { CLASS_NAMES } from "@/lib/armory/stats";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
   FilterCascadeMenu,
@@ -108,7 +109,7 @@ export const ArmorTableToolbar = memo(function ArmorTableToolbar({
           className="pl-8"
         />
       </div>
-      <div className="hidden flex-1 shrink-0 items-center gap-2.5 @[58rem]/toolbar:flex">
+      <div className="hidden min-w-0 items-center gap-2.5 @[58rem]/toolbar:flex">
         <FilterMultiselect
           label="Class"
           allLabel="All classes"
@@ -135,7 +136,7 @@ export const ArmorTableToolbar = memo(function ArmorTableToolbar({
           onTogglePin={onTogglePinnedSet}
         />
       </div>
-      <div className="hidden flex-1 shrink-0 items-center gap-2.5 @[82.5rem]/toolbar:flex">
+      <div className="hidden min-w-0 items-center gap-2.5 @[82.5rem]/toolbar:flex">
         <FilterMultiselect
           label="Archetype"
           allLabel="All archetypes"
@@ -172,6 +173,17 @@ export const ArmorTableToolbar = memo(function ArmorTableToolbar({
       <div className="h-9 shrink-0 self-stretch @[58rem]/toolbar:hidden">
         <FilterCascadeMenu {...cascadeMenuProps} toggleSubmenusOnClick />
       </div>
+      {filtersActive && (
+        <Button
+          type="button"
+          variant="ghost"
+          size="lg"
+          className="ml-auto shrink-0"
+          onClick={onClearFilters}
+        >
+          Clear all filters
+        </Button>
+      )}
     </div>
   );
 });

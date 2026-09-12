@@ -131,7 +131,7 @@ export const FragmentPicker = memo(function FragmentPicker({
                     <Checkbox
                       checked={on}
                       onCheckedChange={() => onToggle(f.hash)}
-                      className="group-hover:border-emphatic/60"
+                      className="group-hover:not-data-checked:border-emphatic/60"
                     />
                     {f.icon && (
                       <Image

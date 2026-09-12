@@ -14,7 +14,6 @@ import {
 import { Button } from "@/components/ui/button";
 import { TooltipLabel } from "@/components/ui/tooltip";
 import { ArmoryDiagnosticsGate } from "@/components/armory/armory-diagnostics-gate";
-import { ApplyProgressSection } from "@/components/loadouts/apply-progress-card";
 import { useArmory } from "@/lib/armory/use-armory";
 import { useSession } from "@/lib/auth/use-session";
 import { BUNGIE_IMAGE_BASE } from "@/lib/bungie/constants";
@@ -95,11 +94,7 @@ function manifestCopy(status: ReturnType<typeof useManifest>): string {
   return "Waiting to load the Destiny manifest…";
 }
 
-/**
- * Figma 18:6505 — Your armor, game data, and the signed-in account, pinned
- * at the bottom of the sidebar.
- */
-export function ArmoryStatus() {
+function useArmoryAccount() {
   const session = useSession();
   const queryClient = useQueryClient();
   const { data, isLoading, isError, error, isFetching, refetch } = useArmory();
@@ -140,19 +135,185 @@ export function ArmoryStatus() {
     window.location.assign("/");
   };
 
-  if (!session.data?.authenticated) return null;
-
   const pieces = data?.pieces ?? [];
-  const exotics = pieces.filter((p) => p.isExotic).length;
-  const armorState = isLoading ? "loading" : isError ? "error" : data ? "ready" : "idle";
-  const displayName = session.data.user?.displayName ?? "Bungie account";
+  const refreshLabel = isFetching
+    ? "Refreshing…"
+    : refreshSucceeded
+      ? "Refreshed"
+      : "Refresh gear";
+
+  return {
+    authed: session.data?.authenticated ?? false,
+    data,
+    isLoading,
+    isError,
+    error,
+    isFetching,
+    manifestStatus,
+    refreshSucceeded,
+    handleRefresh,
+    handleSignOut,
+    pieces,
+    exotics: pieces.filter((p) => p.isExotic).length,
+    armorState: (isLoading
+      ? "loading"
+      : isError
+        ? "error"
+        : data
+          ? "ready"
+          : "idle") as "ready" | "loading" | "error" | "idle",
+    displayName: session.data?.user?.displayName ?? "Bungie account",
+    iconPath: session.data?.user?.iconPath,
+    refreshLabel,
+  };
+}
+
+function ToolbarDivider() {
+  return (
+    <div className="bg-foreground/8 hidden h-7 w-px shrink-0 xl:block" aria-hidden />
+  );
+}
+
+/**
+ * Figma 46:2947 — compact header cluster: armor, game data, account, theme.
+ * Hides the game-data column before `xl` so the bar still fits beside a
+ * 340px sidebar at the `lg` breakpoint.
+ */
+export function ArmoryStatusToolbar() {
+  const {
+    authed,
+    data,
+    isLoading,
+    isError,
+    error,
+    isFetching,
+    manifestStatus,
+    refreshSucceeded,
+    handleRefresh,
+    handleSignOut,
+    pieces,
+    exotics,
+    armorState,
+    displayName,
+    iconPath,
+    refreshLabel,
+  } = useArmoryAccount();
+
+  return (
+    <div className="flex min-w-0 items-center gap-4">
+      {authed && (
+        <>
+          <div className="flex min-w-0 flex-col sm:w-[204px] sm:shrink-0">
+            <div className="flex h-6 items-center gap-2">
+              <div className="flex min-w-0 flex-1 items-center gap-2">
+                <StatusIcon state={armorState} />
+                <h2 className="truncate text-sm font-medium">Your armor</h2>
+              </div>
+              <TooltipLabel label={refreshLabel}>
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
+                  disabled={isFetching || refreshSucceeded}
+                  aria-label={refreshLabel}
+                  onClick={() => void handleRefresh()}
+                >
+                  {isFetching ? (
+                    <CircleNotch weight="duotone" className="animate-spin" aria-hidden />
+                  ) : refreshSucceeded ? (
+                    <CheckCircle weight="duotone" className="text-emerald-500" aria-hidden />
+                  ) : (
+                    <ArrowsCounterClockwise weight="duotone" aria-hidden />
+                  )}
+                </Button>
+              </TooltipLabel>
+            </div>
+            <p className="text-muted-foreground flex h-5 items-center gap-4 text-sm tabular-nums">
+              {isLoading && "Loading…"}
+              {isError &&
+                ((error as Error)?.message ?? "Couldn't load inventory")}
+              {data && (
+                <>
+                  <span className="truncate">{pieces.length} armor pieces</span>
+                  <span className="hidden shrink-0 sm:inline">
+                    {exotics} exotics
+                  </span>
+                </>
+              )}
+            </p>
+          </div>
+
+          <ToolbarDivider />
+
+          <div className="hidden min-w-0 flex-col xl:flex xl:w-[232px] xl:shrink-0">
+            <div className="flex h-5 items-center gap-2">
+              <StatusIcon state={manifestStatus.state} />
+              <h2 className="text-sm font-medium">Game data</h2>
+            </div>
+            <p className="text-muted-foreground h-5 truncate text-sm">
+              {manifestCopy(manifestStatus)}
+            </p>
+          </div>
+
+          <ToolbarDivider />
+
+          <div className="flex shrink-0 items-center gap-4">
+            <div className="flex min-w-0 items-center gap-2">
+              <AccountAvatar iconPath={iconPath} />
+              <p className="hidden truncate text-sm font-medium md:block">
+                {displayName}
+              </p>
+            </div>
+            <TooltipLabel label="Sign out">
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="Sign out"
+                onClick={() => void handleSignOut()}
+              >
+                <SignOut className="size-4" aria-hidden />
+              </Button>
+            </TooltipLabel>
+          </div>
+
+          <ToolbarDivider />
+        </>
+      )}
+      <ThemeToggle />
+    </div>
+  );
+}
+
+/**
+ * Figma 18:6505 — stacked account card used in the mobile loadouts drawer
+ * (and inline on pages while that drawer isn't the status surface).
+ */
+export function ArmoryStatus() {
+  const {
+    authed,
+    data,
+    isLoading,
+    isError,
+    error,
+    isFetching,
+    manifestStatus,
+    refreshSucceeded,
+    handleRefresh,
+    handleSignOut,
+    pieces,
+    exotics,
+    armorState,
+    displayName,
+    iconPath,
+    refreshLabel,
+  } = useArmoryAccount();
+
+  if (!authed) return null;
 
   return (
     <section
       aria-label="Account and game data"
       className="border-border bg-primary/6 flex w-full flex-col overflow-hidden rounded-2xl border"
     >
-      <ApplyProgressSection />
       <div className="flex flex-col gap-2 p-3">
         <div className="flex items-center gap-2">
           <StatusIcon state={armorState} />
@@ -169,7 +330,7 @@ export function ArmoryStatus() {
             ) : (
               <ArrowsCounterClockwise weight="duotone" aria-hidden />
             )}
-            {isFetching ? "Refreshing…" : refreshSucceeded ? "Refreshed" : "Refresh gear"}
+            {refreshLabel}
           </Button>
         </div>
         <p className="text-muted-foreground flex flex-wrap gap-x-4 text-sm tabular-nums">
@@ -202,11 +363,10 @@ export function ArmoryStatus() {
 
       <div className="flex h-[76px] items-center justify-between overflow-hidden p-3">
         <div className="flex min-w-0 items-center gap-2">
-          <AccountAvatar iconPath={session.data.user?.iconPath} />
+          <AccountAvatar iconPath={iconPath} />
           <p className="truncate text-sm font-medium">{displayName}</p>
         </div>
         <div className="flex shrink-0 items-center">
-          <ThemeToggle />
           <TooltipLabel label="Sign out">
             <Button
               variant="ghost"

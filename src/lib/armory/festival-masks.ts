@@ -53,3 +53,19 @@ export function hashesIncludeHelmet(
   const set = new Set(hashes);
   return pieces.some((p) => p.slot === "helmet" && set.has(p.itemHash));
 }
+
+/**
+ * Default optimizer pool: T5 (or legacy exotic) pieces, excluding FotL masks.
+ * Masks enter the helmet slot only when the builder toggle is on.
+ */
+export function inDefaultOptimizerPool(
+  piece: {
+    isFestivalMask?: boolean;
+    tunedStat?: number;
+    isExotic: boolean;
+  },
+  useLegacyExotics: boolean,
+): boolean {
+  if (piece.isFestivalMask) return false;
+  return piece.tunedStat !== undefined || (useLegacyExotics && piece.isExotic);
+}

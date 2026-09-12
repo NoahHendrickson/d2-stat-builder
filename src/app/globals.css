@@ -145,55 +145,48 @@
 }
 
 .dark {
-  /* One warm-stone ramp (hue 56.102, chroma 0.006) anchored on the popover tone
-     (0.264): two darker steps below it for page + card, lighter steps above it for
-     muted / hover surfaces. Every dark surface now shares a hue; the old background
-     was a pure neutral (chroma 0) that made menus and cards read as a different color. */
-  --background: oklch(0.215 0.006 56.102);
-  --foreground: oklch(0.989 0.009 106.567);
-  --card: oklch(0.242 0.006 56.102);
-  --card-foreground: oklch(0.989 0.009 106.567);
-  --popover: oklch(0.286 0.006 56.102);
-  --popover-foreground: oklch(0.989 0.009 106.567);
-  --primary: oklch(0.989 0.009 106.567);
-  --primary-foreground: oklch(0.215 0.006 56.102);
-  --secondary: oklch(0.29 0.006 56.102);
-  --secondary-foreground: oklch(0.90 0 0);
-  --muted: oklch(0.31 0.006 56.102);
-  --muted-foreground: oklch(0.708 0.006 56.102);
-  --accent: oklch(0.345 0.006 56.102);
-  --accent-foreground: oklch(0.989 0.009 106.567);
+  /* Sidebar + app chrome #212222; stage (card) #242529. Type #fcfcf5.
+     Alpha tokens are cream-on-dark (border 6%, input 12%, hover 6%). */
+  --background: #212222;
+  --foreground: #fcfcf5;
+  --card: #242529;
+  --card-foreground: #fcfcf5;
+  --popover: #242529;
+  --popover-foreground: #fcfcf5;
+  --primary: #fcfcf5;
+  --primary-foreground: #212222;
+  --secondary: #2b2d2d;
+  --secondary-foreground: #fcfcf5;
+  --muted: #303030;
+  --muted-foreground: #a3a09e;
+  --accent: #fcfcf50f;
+  --accent-foreground: #fcfcf5;
   --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(0.989 0.009 106.567 / 6%);
-  /* Translucent white (upstream shadcn dark) instead of opaque 0.28: checkbox
-     and switch outlines need to stay visible on bg/popover (0.21) AND on
-     card/muted (0.25/0.28) surfaces — an opaque near-0.28 gray vanishes on
-     all of them. */
-  --input: oklch(0.989 0.009 106.567 / 15%);
-  --ring: oklch(0.556 0.006 56.102);
-  --chart-1: oklch(0.870 0.006 56.102);
-  --chart-2: oklch(0.556 0.006 56.102);
-  --chart-3: oklch(0.439 0.006 56.102);
-  --chart-4: oklch(0.371 0.006 56.102);
-  --chart-5: oklch(0.269 0.006 56.102);
-  --sidebar: oklch(0.236 0.006 56.102);
-  --sidebar-foreground: oklch(0.989 0.009 106.567);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.989 0.009 106.567);
-  --sidebar-accent: oklch(1 0 0 / 12%);
-  --sidebar-accent-foreground: oklch(0.989 0.009 106.567);
-  --sidebar-border: oklch(0.989 0.009 106.567 / 6%);
-  --sidebar-ring: oklch(0.556 0.006 56.102);
+  --border: #fcfcf50f;
+  --input: #fcfcf51f;
+  --ring: #a3a09e;
+  --chart-1: #d4d0cc;
+  --chart-2: #a3a09e;
+  --chart-3: #757370;
+  --chart-4: #5c5a57;
+  --chart-5: #434140;
+  --sidebar: #212222;
+  --sidebar-foreground: #fcfcf5;
+  --sidebar-primary: #4580e5;
+  --sidebar-primary-foreground: #fcfcf5;
+  --sidebar-accent: #fcfcf51f;
+  --sidebar-accent-foreground: #fcfcf5;
+  --sidebar-border: #fcfcf50f;
+  --sidebar-ring: #a3a09e;
   --brand: #438eff;
   --brand-shadow: #2a5a9e;
   --neutral-line: #71717a;
   --neutral-shadow: #52525b;
-  --text-primary: oklch(0.989 0.009 106.567);
-  --text-secondary: oklch(0.870 0.006 56.102);
-  --text-muted: oklch(0.708 0.006 56.102);
-  --primary-border: oklch(0.989 0.009 106.567 / 50%);
-  --primary-muted: oklch(0.989 0.009 106.567 / 10%);
-  /* Figma Button/Emphatic (6:667): same #4580E5 / #FCFCF5 pair as :root. */
+  --text-primary: #fcfcf5;
+  --text-secondary: #fcfcf580;
+  --text-muted: #a3a09e;
+  --primary-border: #fcfcf580;
+  --primary-muted: #fcfcf51a;
   --emphatic: #4580e5;
   --emphatic-foreground: #fcfcf5;
   --emphatic-dark: oklch(0.471 0.130 260.407);
@@ -256,4 +249,59 @@ input[type="number"] {
 
 @utility corner-smooth {
     corner-shape: superellipse(1.2);
+}
+
+/* Figma 54:6099 — same 1px inset stroke as before, faded top→bottom.
+   Single-layer mask so the face stays empty and corners stay round. */
+@utility build-card-edge {
+  &::before {
+    content: "";
+    pointer-events: none;
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    border-radius: inherit;
+    box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.06);
+    -webkit-mask-image: linear-gradient(to bottom, #000, #0000);
+    mask-image: linear-gradient(to bottom, #000, #0000);
+  }
+}
+
+/* Figma Equip 54:5420 — 1px inside white→dark-blue stroke at 24%,
+   plus a centered 4px shadow. Keep the fill responsive to hover. */
+[data-slot="button"].equip-button {
+  --equip-fill: var(--emphatic);
+  background:
+    linear-gradient(var(--equip-fill), var(--equip-fill)) padding-box,
+    linear-gradient(to bottom, rgb(255 255 255 / 0.24), rgb(6 31 75 / 0.24))
+      border-box;
+  background-color: var(--equip-fill);
+  box-shadow:
+    var(--tw-ring-offset-shadow, 0 0 #0000),
+    var(--tw-ring-shadow, 0 0 #0000),
+    0 0 4px rgb(0 0 0 / 0.4);
+}
+
+@media (hover: hover) {
+  [data-slot="button"].equip-button:hover {
+    --equip-fill: var(--emphatic-dark);
+  }
+}
+
+/* Figma Checkbox 54:6032 — 1px inside white→transparent top highlight
+   over the blue fill, with a 0 1px 2px 0.5px drop shadow. */
+[data-slot="checkbox"][data-checked],
+[data-slot="checkbox"][data-checked]:focus-visible,
+[data-slot="dropdown-menu-checkbox-item"][data-indicator="start"][data-checked]
+  [data-slot="dropdown-menu-checkbox-item-indicator"] {
+  border-color: transparent;
+  background:
+    linear-gradient(var(--emphatic), var(--emphatic)) padding-box,
+    linear-gradient(to bottom, rgb(255 255 255 / 0.24), rgb(255 255 255 / 0))
+      border-box;
+  background-color: var(--emphatic);
+  box-shadow:
+    var(--tw-ring-offset-shadow, 0 0 #0000),
+    var(--tw-ring-shadow, 0 0 #0000),
+    0 1px 2px 0.5px rgb(19 20 20 / 0.35);
 }

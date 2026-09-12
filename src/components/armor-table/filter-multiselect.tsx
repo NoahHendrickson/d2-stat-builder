@@ -1,7 +1,7 @@
 "use client";
 
 import { TooltipLabel } from "@/components/ui/tooltip";
-import { useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { CaretDown, MagnifyingGlass, PushPin, X } from "@phosphor-icons/react";
 import { partitionByPin, type FilterOption } from "@/lib/armor-table/pinned";
 import {
@@ -21,28 +21,88 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-/** "Warlock" for one selection, "Gunner +2 more" for several, null when empty. */
+/** Selected option labels in selection order. */
+export function selectedLabels<V>(
+  selected: readonly V[],
+  options: readonly FilterOption<V>[],
+): string[] {
+  return selected.map(
+    (v) => options.find((o) => Object.is(o.value, v))?.label ?? String(v),
+  );
+}
+
+/** All selected labels joined with ", ", or null when empty. */
 export function selectionSummaryText<V>(
   selected: readonly V[],
   options: readonly FilterOption<V>[],
 ): string | null {
-  if (selected.length === 0) return null;
-  const first =
-    options.find((o) => Object.is(o.value, selected[0]))?.label ??
-    String(selected[0]);
-  return selected.length > 1 ? `${first} +${selected.length - 1} more` : first;
+  const labels = selectedLabels(selected, options);
+  return labels.length === 0 ? null : labels.join(", ");
 }
 
-/** Trigger text: muted `allLabel` when nothing is selected, else the summary. */
-export function selectionSummary<V>(
-  selected: readonly V[],
-  options: readonly FilterOption<V>[],
-  allLabel: string,
-) {
+/**
+ * Comma-separated labels that hug their text, then collapse trailing values
+ * into "+N more" only when the trigger is actually narrower than the list.
+ */
+function OverflowSelection({ labels }: { labels: string[] }) {
+  const ref = useRef<HTMLSpanElement>(null);
+  const labelsKey = labels.join("\0");
+
+  useLayoutEffect(() => {
+    const root = ref.current;
+    if (!root) return;
+
+    const fit = () => {
+      const items = [
+        ...root.querySelectorAll<HTMLElement>(":scope > [data-item]"),
+      ];
+      const more = root.querySelector<HTMLElement>(":scope > [data-more]");
+      if (items.length === 0 || root.clientWidth <= 0) return;
+
+      const apply = (count: number) => {
+        for (let i = 0; i < items.length; i++) {
+          items[i].hidden = i >= count;
+        }
+        const rest = items.length - count;
+        if (more) {
+          more.hidden = rest <= 0;
+          if (rest > 0) more.textContent = ` +${rest} more`;
+        }
+        const squeezeFirst = count === 1;
+        items[0].classList.toggle("min-w-0", squeezeFirst);
+        items[0].classList.toggle("flex-1", squeezeFirst);
+        items[0].classList.toggle("truncate", squeezeFirst);
+        items[0].classList.toggle("shrink-0", !squeezeFirst);
+      };
+
+      apply(items.length);
+      if (root.scrollWidth <= root.clientWidth + 1) return;
+
+      for (let count = items.length - 1; count >= 1; count--) {
+        apply(count);
+        if (root.scrollWidth <= root.clientWidth + 1) return;
+      }
+      apply(1);
+    };
+
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(root);
+    return () => ro.disconnect();
+  }, [labelsKey]);
+
   return (
-    selectionSummaryText(selected, options) ?? (
-      <span className="text-muted-foreground">{allLabel}</span>
-    )
+    <span
+      ref={ref}
+      className="flex min-w-0 grow overflow-hidden text-left"
+    >
+      {labels.map((label, i) => (
+        <span key={`${i}:${label}`} data-item className="shrink-0">
+          {i > 0 ? `, ${label}` : label}
+        </span>
+      ))}
+      <span data-more className="shrink-0" hidden />
+    </span>
   );
 }
 
@@ -208,10 +268,17 @@ export function FilterMultiselect<V extends string | number>({
   const [query, setQuery] = useState("");
   const triggerRef = useRef<HTMLButtonElement>(null);
   const active = value.length > 0;
+  const labels = selectedLabels(value, options);
   const summaryText = selectionSummaryText(value, options);
 
   return (
-    <div className={cn("relative min-w-40 flex-1 overflow-visible", className)}>
+    <div
+      className={cn(
+        "relative w-max max-w-full overflow-visible",
+        active ? "min-w-0" : "shrink-0",
+        className,
+      )}
+    >
       <DropdownMenu
         modal={false}
         onOpenChange={(next) => {
@@ -238,9 +305,13 @@ export function FilterMultiselect<V extends string | number>({
               }
               className={fieldControlInnerTriggerClasses}
             >
-              <span className="min-w-0 flex-1 truncate text-left">
-                {selectionSummary(value, options, allLabel)}
-              </span>
+              {active ? (
+                <OverflowSelection labels={labels} />
+              ) : (
+                <span className="min-w-0 truncate text-left text-muted-foreground">
+                  {allLabel}
+                </span>
+              )}
               {active ? (
                 <span className="size-4 shrink-0" aria-hidden />
               ) : (

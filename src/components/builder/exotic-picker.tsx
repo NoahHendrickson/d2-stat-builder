@@ -16,9 +16,10 @@ export interface ExoticOption {
 }
 
 /**
- * Figma 17:5655 — 40px tiles in a 16px grid. Unselected tiles sit at 65% opacity
- * and come up on hover; the selected one is full-strength with a background-coloured
- * inset border and an emphatic ring + glow (0 0 0 2px + 0 0 8px 1px).
+ * Figma 17:5655 — 40px tiles in a tight 8px grid. Unselected tiles sit at 65%
+ * opacity and come up on hover; the selected one is full-strength with a
+ * background-coloured inset border and an emphatic ring + glow
+ * (0 0 0 2px + 0 0 8px 1px).
  */
 const tileBase =
   "group/tile relative size-10 shrink-0 overflow-hidden rounded-[2px] border-2 border-transparent outline-none transition-[opacity,box-shadow,border-color] focus-visible:ring-3 focus-visible:ring-ring/50";
@@ -51,7 +52,7 @@ export const ExoticPicker = memo(function ExoticPicker({
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap gap-4 p-0.5">
+      <div className="flex flex-wrap gap-2 p-0.5">
         {options.map((exotic, index) => {
           const active = selected === index;
           return (

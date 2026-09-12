@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
+  BUILD_CARD_LIFT_CLASS,
   BuildResults,
   MAX_SHOWN,
   type DimSubclassInput,
@@ -236,11 +237,11 @@ export function BuildsLoading({ progress: store }: { progress: ValueStore<number
         {Array.from({ length: LOADING_ROWS }, (_, i) => (
           <div
             key={i}
-            className="bg-foreground/6 flex animate-pulse items-center gap-6 rounded-[8px] p-2"
+            className={`${BUILD_CARD_LIFT_CLASS} flex animate-pulse items-center gap-6 bg-white/6 p-2`}
             style={{ animationDelay: `${i * 120}ms` }}
             aria-hidden
           >
-            <span className="bg-muted size-10 shrink-0 rounded-[2px]" />
+            <span className="bg-white/12 size-10 shrink-0 rounded-[2px]" />
             <div className="flex max-w-[28.5rem] flex-1 items-center justify-between gap-3">
               {Array.from({ length: 6 }, (_, j) => (
                 <span key={j} className="bg-muted h-4 w-11 rounded" />

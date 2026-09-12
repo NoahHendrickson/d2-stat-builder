@@ -33,8 +33,13 @@ import {
 } from "@/lib/armor-table/sort";
 import { CustomOrderList } from "@/components/armor-table/custom-order-list";
 
+/** Opaque stand-in for white at 6% over the stage — `bg-white/6` shows rows through sticky headers. */
+export const TABLE_HEADER_BG =
+  "bg-[color-mix(in_srgb,white_6%,var(--card))]";
+
 const TABLE_HEAD_CELL =
-  "border-border/50 bg-[color-mix(in_oklch,var(--muted)_55%,var(--background))] border-b py-2.5 pr-3 text-sm font-medium whitespace-nowrap first:pl-3";
+  "border-border/50 border-b py-2.5 pr-3 text-sm font-medium whitespace-nowrap first:pl-3 " +
+  TABLE_HEADER_BG;
 
 /**
  * Sortable column header: owns the `<th>` chrome and a dropdown for

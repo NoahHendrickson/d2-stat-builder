@@ -173,8 +173,7 @@ export const LoadoutRow = memo(function LoadoutRow({
           <div className="flex shrink-0 items-center gap-0.5">
             <Button
               variant="emphatic"
-              size="xs"
-              className="h-8 gap-1.5"
+              className="equip-button"
               onClick={applyLoadout}
               disabled={!canApply}
             >

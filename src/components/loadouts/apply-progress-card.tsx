@@ -90,7 +90,7 @@ function titleFor(name: string, finished: "ok" | "partial" | "fail" | undefined)
   return `Applying ${name}`;
 }
 
-/** Progress grid for the sidebar account card — hidden when nothing is applying. */
+/** Apply-loadout progress card for the sidebar footer — hidden when idle. */
 export function ApplyProgressSection() {
   const state = useSyncExternalStore(subscribeApplyProgress, getApplyProgress, () => null);
 
@@ -106,35 +106,37 @@ export function ApplyProgressSection() {
   const title = titleFor(state.name, state.finished);
 
   return (
-    <>
-      <div role="status" aria-live="polite" aria-label={title} className="flex flex-col gap-2 p-3">
-        <div className="flex items-start justify-between gap-2">
-          <div className="min-w-0">
-            <h2 className="truncate text-sm font-medium">{title}</h2>
-            <p className="text-muted-foreground text-xs tabular-nums">
-              {done}/{state.steps.length}
-            </p>
-          </div>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-xs"
-            aria-label="Dismiss"
-            onClick={dismissApplyProgress}
-          >
-            <X aria-hidden />
-          </Button>
+    <div
+      role="status"
+      aria-live="polite"
+      aria-label={title}
+      className="mx-2 mb-2 flex shrink-0 flex-col gap-2 rounded-2xl border bg-popover p-3 text-popover-foreground shadow-lg"
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <h2 className="truncate text-sm font-medium">{title}</h2>
+          <p className="text-muted-foreground text-xs tabular-nums">
+            {done}/{state.steps.length}
+          </p>
         </div>
-        <div role="list" className="grid grid-cols-[repeat(auto-fill,minmax(2rem,1fr))] gap-1.5">
-          {state.steps.map((step) => (
-            <Cell key={step.id} step={step} />
-          ))}
-        </div>
-        {state.finished && state.skipped.length > 0 && (
-          <p className="text-muted-foreground text-xs">{state.skipped.join(" · ")}</p>
-        )}
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-xs"
+          aria-label="Dismiss"
+          onClick={dismissApplyProgress}
+        >
+          <X aria-hidden />
+        </Button>
       </div>
-      <div className="bg-border h-px" />
-    </>
+      <div role="list" className="grid grid-cols-[repeat(auto-fill,minmax(2rem,1fr))] gap-1.5">
+        {state.steps.map((step) => (
+          <Cell key={step.id} step={step} />
+        ))}
+      </div>
+      {state.finished && state.skipped.length > 0 && (
+        <p className="text-muted-foreground text-xs">{state.skipped.join(" · ")}</p>
+      )}
+    </div>
   );
 }
