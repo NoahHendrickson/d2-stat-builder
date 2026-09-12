@@ -236,6 +236,54 @@ export function placementWithStatMods(
   return placeStatMods(section.pieces, placement, desired, costOf).placement;
 }
 
+export interface ModEditorState {
+  placement: ModPlacement;
+  desiredStatMods: number[];
+}
+
+/** Explicit stat edits change the wishlist; automatic energy rebalancing does not. */
+export function updateEditorPiece(
+  section: ModsSection,
+  state: ModEditorState,
+  instanceId: string,
+  chosen: Record<number, number>,
+): ModEditorState {
+  const before = state.placement[instanceId];
+  const placement = { ...state.placement };
+  if (Object.keys(chosen).length === 0) delete placement[instanceId];
+  else placement[instanceId] = chosen;
+  const general = (section.pieces.find((p) => p.instanceId === instanceId)?.armorSockets ?? [])
+    .filter((s) => s.kind === "general");
+  const changed = general.filter((s) => before?.[s.index] !== chosen[s.index]);
+  if (changed.length === 0) {
+    return {
+      ...state,
+      placement: placementWithStatMods({ ...section, desiredStatMods: state.desiredStatMods }, placement),
+    };
+  }
+
+  const desiredStatMods = [...state.desiredStatMods];
+  for (const socket of changed) {
+    const old = before?.[socket.index];
+    const i = old === undefined ? -1 : desiredStatMods.indexOf(old);
+    if (i >= 0) desiredStatMods.splice(i, 1);
+  }
+  // A new selection may fill an existing unplaced copy. Only add copies beyond
+  // those already wanted, including when the same hash occupies several pieces.
+  const remaining = [...desiredStatMods];
+  for (const p of section.pieces) {
+    for (const socket of p.armorSockets ?? []) {
+      if (socket.kind !== "general") continue;
+      const hash = placement[p.instanceId]?.[socket.index];
+      if (hash === undefined) continue;
+      const i = remaining.indexOf(hash);
+      if (i >= 0) remaining.splice(i, 1);
+      else desiredStatMods.push(hash);
+    }
+  }
+  return { placement, desiredStatMods };
+}
+
 /** Per desired hash: whether a copy is currently in a general socket (multiset). */
 export function statModSlotted(
   desired: readonly number[],
@@ -279,9 +327,17 @@ export function placementToMods(placement: ModPlacement, pieces: ArmorPiece[]): 
  * placed one of those unplaced mods, it moves from the unplaced list into a socket
  * rather than being counted twice.
  */
-export function modsFromEditor(section: ModsSection, placement: ModPlacement): number[] {
+export function modsFromEditor(
+  section: ModsSection,
+  placement: ModPlacement,
+  desiredStatMods = section.desiredStatMods,
+): number[] {
   const placed = placementToMods(placement, section.pieces);
-  const leftover = section.unplaced.map((u) => u.hash);
+  // Stat copies are accounted for by the current wishlist, including explicit
+  // replacements/removals after an initially unplaced mod was manually slotted.
+  const leftover = section.unplaced
+    .filter((u) => !section.desiredStatMods?.includes(u.hash))
+    .map((u) => u.hash);
   const before = placementToMods(section.initial, section.pieces);
   for (const hash of placed) {
     const i = before.indexOf(hash);
@@ -293,7 +349,7 @@ export function modsFromEditor(section: ModsSection, placement: ModPlacement): n
     if (j >= 0) leftover.splice(j, 1);
   }
   const result = [...placed, ...leftover];
-  const stillWanted = [...(section.desiredStatMods ?? [])];
+  const stillWanted = [...(desiredStatMods ?? [])];
   for (const hash of result) {
     const i = stillWanted.indexOf(hash);
     if (i >= 0) stillWanted.splice(i, 1);

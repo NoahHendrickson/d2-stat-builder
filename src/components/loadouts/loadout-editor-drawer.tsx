@@ -35,6 +35,8 @@ import {
   placementWithStatMods,
   slotStatMod,
   statModSlotted,
+  updateEditorPiece,
+  type ModEditorState,
   type ModsSection,
 } from "@/lib/loadouts/mod-placement";
 import {
@@ -74,6 +76,8 @@ export interface LoadoutDetailsValues {
   notes: string;
   /** Present only when a `mods` section was shown. */
   placement?: ModPlacement;
+  /** Current wishlist after explicit stat-mod replacements/removals. */
+  desiredStatMods?: number[];
   subclass?: DimLoadoutItem | null;
   /**
    * Armor + placed mods + fragments as the header showed them. Present only when every
@@ -89,7 +93,6 @@ const KIND_LABEL: Record<ArmorSocket["kind"], string> = {
   artifice: "Artifice",
 };
 
-const EMPTY_STAT_MODS: number[] = [];
 const NO_FRAGMENTS: number[] = [];
 const STAT_COLS = STAT_DISPLAY_ORDER.map((key) => ({
   key,
@@ -680,14 +683,15 @@ function EditorForm({
 }: EditorProps) {
   const identityRef = useRef({ name: initialName, notes: initialNotes });
   const [nameValid, setNameValid] = useState(() => nameIsValid(initialName));
-  const [placement, setPlacement] = useState<ModPlacement>(() =>
-    mods ? placementWithStatMods(mods, mods.initial) : {},
-  );
+  const [modEditor, setModEditor] = useState<ModEditorState>(() => ({
+    placement: mods ? placementWithStatMods(mods, mods.initial) : {},
+    desiredStatMods: mods?.desiredStatMods ?? [],
+  }));
+  const { placement, desiredStatMods } = modEditor;
   const [subclassItem, setSubclassItem] = useState(subclass?.initial ?? null);
   const nameId = useId();
   const notesId = useId();
 
-  const desiredStatMods = mods?.desiredStatMods ?? EMPTY_STAT_MODS;
   const slotted = useMemo(
     () => (mods ? statModSlotted(desiredStatMods, placement, mods.pieces) : []),
     [mods, desiredStatMods, placement],
@@ -700,16 +704,16 @@ function EditorForm({
   // may differ).
   const problems = useMemo(() => {
     const out = new Map<number | string, string>();
-    const wanted = new Set(desiredStatMods);
+    const statMods = new Set(mods?.desiredStatMods);
     for (const { hash, reason } of mods?.unplaced ?? []) {
-      if (wanted.has(hash)) continue;
+      if (statMods.has(hash)) continue;
       const option = mods?.catalog.option(hash);
       if (!option || option.cost === 0) continue;
       out.set(hash, reason);
       out.set(option.name, reason);
     }
     return out;
-  }, [mods, desiredStatMods]);
+  }, [mods]);
 
   const catalog = mods?.catalog;
   const costOf = useCallback(
@@ -738,29 +742,21 @@ function EditorForm({
   const slotDesiredStatMod = useCallback(
     (hash: number) => {
       if (!mods) return;
-      setPlacement((prev) => slotStatMod(mods.pieces, prev, hash, costOf) ?? prev);
+      setModEditor((prev) => ({
+        ...prev,
+        placement: slotStatMod(mods.pieces, prev.placement, hash, costOf) ?? prev.placement,
+      }));
     },
     [mods, costOf],
   );
   const updatePieceChosen = useCallback(
     (instanceId: string, update: PieceChosenUpdate) => {
-      setPlacement((prev) => {
-        const before = prev[instanceId];
-        const chosen = update(before);
-        const next: ModPlacement = { ...prev };
-        if (Object.keys(chosen).length === 0) delete next[instanceId];
-        else next[instanceId] = chosen;
-        if (!mods || desiredStatMods.length === 0) return next;
-        const general = new Set(
-          (mods.pieces.find((p) => p.instanceId === instanceId)?.armorSockets ?? [])
-            .filter((s) => s.kind === "general")
-            .map((s) => s.index),
-        );
-        const generalUnchanged = [...general].every((i) => before?.[i] === chosen[i]);
-        return generalUnchanged ? placementWithStatMods(mods, next) : next;
-      });
+      if (!mods) return;
+      setModEditor((prev) =>
+        updateEditorPiece(mods, prev, instanceId, update(prev.placement[instanceId])),
+      );
     },
-    [desiredStatMods, mods],
+    [mods],
   );
 
   const overEnergy =
@@ -806,7 +802,7 @@ function EditorForm({
     onSubmit({
       name: trimmed,
       notes: identityRef.current.notes.trim(),
-      ...(mods ? { placement } : {}),
+      ...(mods ? { placement, desiredStatMods } : {}),
       ...(subclass ? { subclass: subclassItem } : {}),
       ...(mods && totals ? { stats: totals } : {}),
     });

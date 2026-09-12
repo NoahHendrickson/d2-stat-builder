@@ -298,6 +298,7 @@ export function LoadoutsList({
     name,
     notes,
     placement,
+    desiredStatMods,
     subclass,
     stats,
   }: LoadoutDetailsValues) => {
@@ -322,7 +323,7 @@ export function LoadoutsList({
         data: commitLoadout(
           next,
           manifest,
-          { placement, subclass, stats },
+          { placement, desiredStatMods, subclass, stats },
           dialog.mods,
         ),
       },

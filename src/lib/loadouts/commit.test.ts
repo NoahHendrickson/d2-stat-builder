@@ -1,10 +1,11 @@
 import { expect, test } from "vitest";
 import { commitLoadout } from "./commit";
-import { modsFromEditor, type ModsSection } from "./mod-placement";
+import { modsFromEditor, toggleExclusiveMod, updateEditorPiece, type ModsSection } from "./mod-placement";
 import type { ModOptionCatalog } from "./mod-options";
 import type { SavedLoadoutData } from "./types";
 import type { Manifest } from "../manifest/load";
 import type { ArmorPiece } from "../armory/normalize";
+import { planLoadoutPlugs } from "./apply-plan";
 
 const piece = (instanceId: string): ArmorPiece =>
   ({
@@ -64,4 +65,46 @@ test("commitLoadout without a picker keeps the existing mods list", () => {
   });
   expect(out.loadout.parameters.mods).toEqual([10]);
   expect(out.modPlacement).toEqual({ a: { 1: 20 } });
+});
+
+test.each([
+  { path: "save", replacement: 20 },
+  { path: "edit", replacement: 20 },
+  { path: "save", replacement: null },
+  { path: "edit", replacement: null },
+])("$path: stat-mod replacement/removal ($replacement) survives saving and apply", ({ path, replacement }) => {
+  const mods: ModsSection = {
+    pieces: [piece("a"), piece("b")],
+    catalog: {} as ModOptionCatalog,
+    initial: { a: { 1: 10 } },
+    unplaced: [],
+    desiredStatMods: [10],
+  };
+  const state = updateEditorPiece(
+    mods,
+    { placement: mods.initial, desiredStatMods: [10] },
+    "a",
+    toggleExclusiveMod(mods.initial.a, mods.pieces[0].armorSockets!, replacement ?? 10),
+  );
+  const payload = { ...data(), modPlacement: mods.initial };
+  // Save builds the DIM payload in its drawer; Edit passes the picker to commit.
+  if (path === "save") {
+    payload.loadout.parameters.mods = modsFromEditor(mods, state.placement, state.desiredStatMods);
+  }
+  const saved = commitLoadout(payload, {} as Manifest, state, path === "edit" ? mods : undefined);
+  expect(saved.loadout.parameters.mods).toEqual(replacement ? [replacement] : []);
+  expect(saved.modPlacement).toEqual(replacement ? { a: { 1: replacement } } : undefined);
+  const plan = planLoadoutPlugs({
+    pieces: mods.pieces.map((p) => ({
+      instanceId: p.instanceId,
+      name: p.name,
+      sockets: [{ index: 1, kind: "general" }],
+      energy: { capacity: 10, used: 0 },
+    })),
+    modHashes: saved.loadout.parameters.mods,
+    placements: saved.modPlacement,
+    plugInfo: () => ({ kind: "general", name: "Stat mod", cost: 3 }),
+  });
+  expect(plan.assigned).toEqual(replacement ? { a: { 1: replacement } } : {});
+  expect(plan.skipped).toEqual([]);
 });

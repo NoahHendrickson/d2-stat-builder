@@ -41,6 +41,7 @@ export function commitLoadout(
   manifest: Manifest,
   values: {
     placement?: ModPlacement;
+    desiredStatMods?: number[];
     subclass?: DimLoadoutItem | null;
     stats?: EditorTotals;
   },
@@ -55,13 +56,11 @@ export function commitLoadout(
         parameters: {
           ...data.loadout.parameters,
           mods: mods
-            ? modsFromEditor(mods, values.placement)
+            ? modsFromEditor(mods, values.placement, values.desiredStatMods)
             : data.loadout.parameters.mods,
         },
       },
-      ...(Object.keys(values.placement).length > 0
-        ? { modPlacement: values.placement }
-        : {}),
+      modPlacement: Object.keys(values.placement).length > 0 ? values.placement : undefined,
     };
   }
   return withEditorTotals(
