@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   BUILD_CARD_LIFT_CLASS,
+  BUILD_LIST_WELL_CLASS,
   BuildResults,
   MAX_SHOWN,
   type DimSubclassInput,
@@ -233,7 +234,7 @@ export function BuildsLoading({ progress: store }: { progress: ValueStore<number
   return (
     <div className="space-y-3">
       <BuildsProgressBar progress={store} />
-      <div className="space-y-2">
+      <div className={BUILD_LIST_WELL_CLASS}>
         {Array.from({ length: LOADING_ROWS }, (_, i) => (
           <div
             key={i}

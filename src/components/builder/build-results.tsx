@@ -50,6 +50,10 @@ export { MAX_SHOWN };
 export const BUILD_CARD_LIFT_CLASS =
   "build-card-edge relative rounded-[8px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.24)] after:pointer-events-none after:absolute after:inset-0 after:rounded-[8px] after:shadow-[inset_0px_1px_2px_0px_rgb(255_255_255/0.06)] after:content-['']";
 
+/** Figma 54:6446 — 8px padded, 12px rounded well the build cards sit in. */
+export const BUILD_LIST_WELL_CLASS =
+  "flex flex-col gap-2 rounded-[12px] bg-foreground/5 p-2 dark:bg-background";
+
 /** Display stat columns paired with their STAT_ORDER index (used by the build breakdown). */
 const STAT_COLS = STAT_DISPLAY_ORDER.map((key) => ({
   key,
@@ -647,7 +651,7 @@ export function BuildResults({
   return (
     <div className="space-y-3">
       {status}
-      <div className="space-y-2">
+      <div className={BUILD_LIST_WELL_CLASS}>
         {sortedLoadouts.slice(0, MAX_SHOWN).map((loadout) => (
           <BuildRow
             key={loadout.pieceIds.join("|")}

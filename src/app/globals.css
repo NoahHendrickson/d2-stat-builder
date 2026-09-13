@@ -145,11 +145,11 @@
 }
 
 .dark {
-  /* Sidebar + app chrome #212222; stage (card) #242529. Type #fcfcf5.
+  /* Sidebar + app chrome #212222; stage (card) #2E3030. Type #fcfcf5.
      Alpha tokens are cream-on-dark (border 6%, input 12%, hover 6%). */
   --background: #212222;
   --foreground: #fcfcf5;
-  --card: #242529;
+  --card: #2e3030;
   --card-foreground: #fcfcf5;
   --popover: #242529;
   --popover-foreground: #fcfcf5;

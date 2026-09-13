@@ -851,8 +851,8 @@ export function BuilderPanel({
   );
 
   return (
-    <div className="mx-auto grid w-full max-w-7xl grid-cols-1 gap-10 lg:grid-cols-[minmax(18rem,33.55rem)_minmax(29rem,1fr)] lg:items-start lg:gap-x-12">
-      {/* Left — configure the build. 33.55rem column of sections separated by
+    <div className="mx-auto grid w-full max-w-7xl grid-cols-1 gap-10 lg:grid-cols-[minmax(18rem,38.58rem)_minmax(29rem,1fr)] lg:items-start lg:gap-x-20">
+      {/* Left — configure the build. 38.58rem column of sections separated by
           1px dividers with 32px above and below each. */}
       <div className="divide-border divide-y">
         {ready && (
@@ -960,11 +960,8 @@ export function BuilderPanel({
                         : "No sets to show."}
                 </p>
               ) : (
-                // Figma 17:5731: name · 2pc · 4pc columns (≈191 / 102 / 140 of 488), 16px row gap
-                <div className="grid grid-cols-[minmax(0,1.4fr)_minmax(0,0.75fr)_minmax(0,1fr)] items-center gap-x-4 gap-y-4 pt-8">
-                  <span aria-hidden />
-                  <span className="text-sm">2pc</span>
-                  <span className="text-sm">4pc</span>
+                // Figma 17:5731: name · 2pc perk · 4pc perk columns, 16px row gap
+                <div className="grid grid-cols-[minmax(0,1.4fr)_minmax(0,0.75fr)_minmax(0,1fr)] items-center gap-x-4 gap-y-4 pt-4">
                   {pinnedList.map((s) => (
                     <SetRow
                       key={s.setHash}

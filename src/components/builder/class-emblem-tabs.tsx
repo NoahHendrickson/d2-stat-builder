@@ -17,7 +17,7 @@ const tabInactive =
   "rounded-[7px] border border-[var(--neutral-line)] opacity-80 hover:opacity-100";
 
 const tabSelected =
-  "rounded-[9px] border-[3px] border-background opacity-100 shadow-[0_0_0_2px_var(--emphatic),0_0_8px_1px_var(--emphatic)]";
+  "rounded-[9px] border-[3px] border-background opacity-100 shadow-[0_0_0_2px_var(--emphatic)]";
 
 interface ClassEmblemTabsProps {
   /** All of the player's characters; grouped into one tab per class internally. */
