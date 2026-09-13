@@ -53,14 +53,14 @@ import {
   TABLE_COLGROUP,
   type Row,
 } from "@/components/armor-table/armor-table-row";
-import { SortMenu } from "@/components/armor-table/sort-menu";
+import {
+  SortMenu,
+  TABLE_HEADER_BG,
+} from "@/components/armor-table/sort-menu";
 import { useArmorTableSort } from "@/components/armor-table/use-armor-table-sort";
 
 /** Approximate single-row height; the virtualizer remeasures real rows on mount. */
 const ESTIMATED_ROW_HEIGHT_PX = 48;
-
-const TABLE_HEADER_BG =
-  "bg-[color-mix(in_oklch,var(--muted)_55%,var(--background))]";
 
 const TABLE_HEAD_CELL =
   "border-border/50 border-b py-2.5 pr-3 text-sm font-medium whitespace-nowrap first:pl-3 " +

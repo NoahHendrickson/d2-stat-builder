@@ -104,7 +104,7 @@ function SaveLoadoutDrawerSession({
       onSubmit={(values) => {
         const dim = makeDimLoadout(values.name, values.notes || undefined);
         if (values.placement)
-          dim.parameters.mods = modsFromEditor(picker.mods, values.placement);
+          dim.parameters.mods = modsFromEditor(picker.mods, values.placement, values.desiredStatMods);
         onSubmit(dim, values);
       }}
     />

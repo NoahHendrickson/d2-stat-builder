@@ -3,12 +3,12 @@
 import { SignInCard } from "@/components/auth/sign-in-card";
 import { useSession } from "@/lib/auth/use-session";
 import { BuilderPanel } from "@/components/builder/builder-panel";
-import { useSidebarVisible } from "@/components/app-shell";
+import { useDesktopLayout } from "@/components/app-shell";
 
 export function BuilderPageShell() {
   const session = useSession();
   const authed = session.data?.authenticated ?? false;
-  const sidebarVisible = useSidebarVisible();
+  const desktop = useDesktopLayout();
 
   if (!authed) {
     return (
@@ -18,14 +18,12 @@ export function BuilderPageShell() {
     );
   }
 
-  // The armory summary lives in the app sidebar; the panel only shows it inline while
-  // the sidebar isn't on screen (narrow drawer, or the user collapsed it).
-  // Figma 14:5181: the view is a 1640px frame beside the sidebar, content inset ~100px
-  // on the left and ~77px on top at that size. 2xl (1536px) is still short of that
-  // once the sidebar is on screen, so the Figma insets wait until 1920px.
+  // Desktop shows armor/account in the main-column header. Inline cards are
+  // only for the narrow-viewport drawer. Bottom padding is for the mobile
+  // builds bar; the shell card already insets the view on desktop.
   return (
-    <main className="mx-auto max-w-[102.5rem] px-6 py-6 pb-24 lg:px-12 lg:py-16 min-[120rem]:px-24">
-      <BuilderPanel showInlineStatusCards={!sidebarVisible} />
+    <main className="px-6 py-6 pb-24 lg:pb-6">
+      <BuilderPanel showInlineStatusCards={!desktop} />
     </main>
   );
 }

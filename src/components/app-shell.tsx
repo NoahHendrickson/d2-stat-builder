@@ -11,10 +11,14 @@ import {
   type ReactNode,
 } from "react";
 import { List, XIcon } from "@phosphor-icons/react";
-import { AppSidebar, SidebarChrome } from "@/components/app-sidebar";
+import { AppSidebar } from "@/components/app-sidebar";
+import { AppHeader } from "@/components/app-header";
+import { ArmoryDiagnosticsGate } from "@/components/armory/armory-diagnostics-gate";
+import { ApplyProgressSection } from "@/components/loadouts/apply-progress-card";
 import { ViewTabs } from "@/components/view-tabs";
 import { Button } from "@/components/ui/button";
 import { Drawer, DrawerClose, DrawerContent } from "@/components/ui/drawer";
+import { ThemeToggle } from "@/components/theme-toggle";
 import { SHARE_PARAM } from "@/lib/loadouts/share";
 import { useMinWidth } from "@/lib/use-min-width";
 import { cn } from "@/lib/utils";
@@ -25,6 +29,9 @@ export const SIDEBAR_BREAKPOINT_PX = 1024;
 const SIDEBAR_DEFAULT_PX = 340;
 const SIDEBAR_MIN_PX = 260;
 const SIDEBAR_MAX_PX = 560;
+/** Hit-area width (`w-4`). Offset centers it on the column edge (`after:left-1`). */
+const SIDEBAR_RESIZE_HIT_PX = 16;
+const SIDEBAR_RESIZE_OFFSET_PX = 4;
 const SIDEBAR_WIDTH_KEY = "stat-builder:sidebar-width";
 const SIDEBAR_COLLAPSED_KEY = "stat-builder:sidebar-collapsed";
 
@@ -111,24 +118,18 @@ function setSidebarCollapsed(collapsed: boolean): void {
 }
 
 /**
- * Whether the desktop sidebar column is on screen (not the narrow-viewport drawer,
- * and not collapsed). Pages use this to avoid duplicating the armory card that's
- * pinned at the bottom of the sidebar.
+ * Whether the viewport is at the desktop sidebar breakpoint. Pages use this to
+ * skip inline status cards — the header toolbar already shows them on desktop.
  */
-export function useSidebarVisible(): boolean {
-  const desktop = useMinWidth(SIDEBAR_BREAKPOINT_PX);
-  const collapsed = useSyncExternalStore(
-    subscribeSidebarCollapsed,
-    getSidebarCollapsed,
-    () => false,
-  );
-  return desktop && !collapsed;
+export function useDesktopLayout(): boolean {
+  return useMinWidth(SIDEBAR_BREAKPOINT_PX);
 }
 
 /**
- * App frame (Figma 1:2): a resizable sidebar — title, view switch, saved loadouts,
- * armor summary — beside the active view, which scrolls on its own. On narrow
- * viewports the sidebar becomes a left drawer behind a top bar.
+ * App frame (Figma 46:1657): a resizable loadouts sidebar beside the active
+ * view. Logo, view tabs, and account/status live in the main-column header;
+ * the page sits in a rounded card under it. On narrow viewports the sidebar
+ * becomes a left drawer behind a top bar.
  *
  * The desktop column and the narrow-viewport drawer never both mount the loadouts
  * list, so its share-link import dialog can't exist twice at once.
@@ -177,18 +178,26 @@ export function AppShell({ children }: { children: ReactNode }) {
     return () => cancelAnimationFrame(frame);
   }, []);
 
-  // Portaled surfaces (the loadout editor drawer) sit beside the sidebar, not over
-  // it: publish its live width where anything under <html> can read it.
+  // Portaled surfaces (the loadout editor drawer) sit over the stage, not the
+  // sidebar or the `lg:p-3` chrome around it. Publish both so anything under
+  // <html> can inset itself.
   useEffect(() => {
     const root = document.documentElement;
     root.style.setProperty(
       "--app-sidebar-width",
       `${desktopSidebarOpen ? sidebarWidth : 0}px`,
     );
+    // Mirrors `lg:p-3` (0.75rem) plus the stage's 1px border. `desktop` is
+    // SIDEBAR_BREAKPOINT_PX, which is Tailwind `lg` (1024) — keep them in lockstep.
+    root.style.setProperty(
+      "--app-stage-inset",
+      desktop ? "calc(0.75rem + 1px)" : "0px",
+    );
     return () => {
       root.style.removeProperty("--app-sidebar-width");
+      root.style.removeProperty("--app-stage-inset");
     };
-  }, [desktopSidebarOpen, sidebarWidth]);
+  }, [desktopSidebarOpen, sidebarWidth, desktop]);
 
   useEffect(() => {
     if (!resizing) return;
@@ -261,7 +270,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       >
         <div
           className={cn(
-            "bg-sidebar border-border relative flex h-full min-h-0 flex-col border-r",
+            "bg-sidebar relative flex h-full min-h-0 flex-col",
             slideTransition && `transition-transform ${slideTransition}`,
           )}
           style={{
@@ -269,42 +278,77 @@ export function AppShell({ children }: { children: ReactNode }) {
             transform: collapsed ? "translateX(-100%)" : "translateX(0)",
           }}
         >
-          {desktop && <AppSidebar chrome={false} />}
-          <div
-            role="separator"
-            aria-orientation="vertical"
-            aria-label="Resize sidebar"
-            aria-valuemin={SIDEBAR_MIN_PX}
-            aria-valuemax={SIDEBAR_MAX_PX}
-            aria-valuenow={sidebarWidth}
-            tabIndex={collapsed ? -1 : 0}
-            onPointerDown={onResizePointerDown}
-            onDoubleClick={() => commitWidth(SIDEBAR_DEFAULT_PX)}
-            onKeyDown={onResizeKeyDown}
-            className={cn(
-              "absolute inset-y-0 -right-1 z-10 w-2 cursor-col-resize touch-none outline-none",
-              "after:absolute after:inset-y-0 after:left-1/2 after:w-0.5 after:-translate-x-1/2 after:rounded-full after:transition-colors",
-              "after:bg-transparent hover:after:bg-foreground/40 focus-visible:after:bg-foreground",
-              resizing && "after:bg-foreground",
-            )}
-          />
+          {desktop && (
+            <AppSidebar
+              onToggle={() => setSidebarCollapsed(true)}
+            />
+          )}
         </div>
       </aside>
 
-      {/* Stays put while the panel slides away: same logo, title, collapse, and tabs. */}
-      <div
-        className={cn(
-          "absolute top-0 left-0 z-20 hidden lg:block",
-          collapsed
-            ? "bg-background [--icon-tab-surface:var(--background)]"
-            : "border-border bg-sidebar border-r [--icon-tab-surface:var(--sidebar)]",
-        )}
-        style={{ width: sidebarWidth }}
-      >
-        <SidebarChrome
-          collapsed={collapsed}
-          onToggle={() => setSidebarCollapsed(!collapsed)}
+      {/* Lives outside the clipped sidebar column so the full hit area straddles the
+          edge and spans the gutter beside the page card; the column's overflow-hidden
+          would otherwise cut it down to a few pixels. */}
+      {desktopSidebarOpen && (
+        <div
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize sidebar"
+          aria-valuemin={SIDEBAR_MIN_PX}
+          aria-valuemax={SIDEBAR_MAX_PX}
+          aria-valuenow={sidebarWidth}
+          tabIndex={0}
+          onPointerDown={onResizePointerDown}
+          onDoubleClick={() => commitWidth(SIDEBAR_DEFAULT_PX)}
+          onKeyDown={onResizeKeyDown}
+          style={{
+            left: sidebarWidth - SIDEBAR_RESIZE_OFFSET_PX,
+            width: SIDEBAR_RESIZE_HIT_PX,
+          }}
+          className={cn(
+            "absolute inset-y-0 z-10 cursor-col-resize touch-none outline-none",
+            "after:absolute after:inset-y-3 after:left-1 after:w-0.5 after:-translate-x-1/2 after:rounded-full after:transition-colors",
+            "after:bg-transparent hover:after:bg-foreground/40 focus-visible:after:bg-foreground",
+            resizing && "after:bg-foreground",
+          )}
         />
+      )}
+
+      <div className="bg-sidebar flex min-w-0 flex-1 flex-col">
+        <header className="border-border bg-sidebar flex h-14 shrink-0 items-center gap-3 border-b px-3 lg:hidden">
+          <TooltipLabel label="Open loadouts">
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label="Open loadouts"
+              onClick={() => setDrawerOpen(true)}
+            >
+              <List weight="bold" aria-hidden />
+            </Button>
+          </TooltipLabel>
+          <span className="flex-1 text-sm font-medium">D2 stat builder</span>
+          <ViewTabs />
+          <ThemeToggle />
+        </header>
+        {desktop && (
+          <AppHeader
+            collapsed={collapsed}
+            onExpand={() => setSidebarCollapsed(false)}
+          />
+        )}
+        <div className="flex min-h-0 flex-1 flex-col lg:p-3">
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:rounded-xl lg:border lg:border-border lg:bg-card lg:shadow-[-2px_2px_8px_0px_rgba(0,0,0,0.3),0_0_12px_0px_rgba(0,0,0,0.25)]">
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              {desktop && (
+                <div className="px-6 pt-6 empty:hidden">
+                  <ArmoryDiagnosticsGate />
+                </div>
+              )}
+              {children}
+            </div>
+            <ApplyProgressSection />
+          </div>
+        </div>
       </div>
 
       {!desktop && (
@@ -324,28 +368,13 @@ export function AppShell({ children }: { children: ReactNode }) {
                 </DrawerClose>
               </TooltipLabel>
             </div>
-            <AppSidebar onNavigate={() => setDrawerOpen(false)} />
+            <AppSidebar
+              onNavigate={() => setDrawerOpen(false)}
+              showAccount
+            />
           </DrawerContent>
         </Drawer>
       )}
-
-      <div className="flex min-w-0 flex-1 flex-col">
-        <header className="border-border bg-sidebar flex h-14 shrink-0 items-center gap-3 border-b px-3 lg:hidden">
-          <TooltipLabel label="Open loadouts">
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label="Open loadouts"
-              onClick={() => setDrawerOpen(true)}
-            >
-              <List weight="bold" aria-hidden />
-            </Button>
-          </TooltipLabel>
-          <span className="flex-1 text-sm font-medium">D2 stat builder</span>
-          <ViewTabs />
-        </header>
-        <div className="min-h-0 flex-1 overflow-y-auto">{children}</div>
-      </div>
     </div>
   );
 }

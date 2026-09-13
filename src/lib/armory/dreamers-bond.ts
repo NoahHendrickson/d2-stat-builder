@@ -51,6 +51,7 @@ export function dreamersBondPiece(
     classType,
     isExotic: false,
     isArtifice: false,
+    isFestivalMask: false,
     baseStats: [...ZERO],
     stats: [...ZERO],
     location: "vault",

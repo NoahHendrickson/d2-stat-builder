@@ -23,6 +23,7 @@ function makePiece(i: number, over: Partial<ArmorPiece> = {}): ArmorPiece {
     classType: 1,
     isExotic: false,
     isArtifice: false,
+    isFestivalMask: false,
     baseStats: [...ZERO] as StatArray,
     stats: [...ZERO] as StatArray,
     location: "vault",

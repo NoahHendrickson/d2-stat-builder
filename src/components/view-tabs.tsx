@@ -29,7 +29,6 @@ export function ViewTabs({ onNavigate }: { onNavigate?: () => void }) {
               value={href}
               nativeButton={false}
               aria-label={label}
-
               render={(props) => (
                 <Link {...props} href={href} onClick={onNavigate} />
               )}

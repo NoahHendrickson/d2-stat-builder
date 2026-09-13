@@ -632,6 +632,7 @@ test("Festival of the Lost masks enter the armory as helmets even when not itemT
   expect(pieces[0].slot).toBe("helmet");
   expect(pieces[0].name).toBe("Masquerader's Hood");
   expect(pieces[0].location).toBe("vault");
+  expect(pieces[0].isFestivalMask).toBe(true);
 });
 
 test("a new-hash Masquerader's Hood is a helmet even without a helmet bucket", () => {
@@ -661,6 +662,36 @@ test("a new-hash Masquerader's Hood is a helmet even without a helmet bucket", (
   const pieces = normalizeArmory(profile, manifest);
   expect(pieces).toHaveLength(1);
   expect(pieces[0].slot).toBe("helmet");
+  expect(pieces[0].isFestivalMask).toBe(true);
+});
+
+test("itemType Armor Masquerader helmets are tagged as Festival of the Lost masks", () => {
+  const HELM = 2390807586;
+  const defs: Record<number, object> = {
+    [HELM]: {
+      itemType: 2,
+      classType: 0,
+      displayProperties: { name: "Masquerader's Helm" },
+      inventory: { bucketTypeHash: 3448274439, tierType: 5 },
+    },
+  };
+  const manifest = {
+    def: (_table: string, hash: number | null | undefined) =>
+      hash == null ? undefined : defs[hash],
+  } as unknown as Manifest;
+  const profile = {
+    profileInventory: {
+      data: { items: [{ itemInstanceId: "helm1", itemHash: HELM }] },
+    },
+    itemComponents: {
+      stats: { data: { helm1: { stats: {} } } },
+      sockets: { data: { helm1: { sockets: [] } } },
+    },
+  } as unknown as DestinyProfileResponse;
+
+  const pieces = normalizeArmory(profile, manifest);
+  expect(pieces).toHaveLength(1);
+  expect(pieces[0].isFestivalMask).toBe(true);
 });
 
 test("non-armor helmet-bucket items that are not FotL masks are still dropped", () => {

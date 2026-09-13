@@ -21,29 +21,23 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
-/** "Warlock" for one selection, "Gunner +2 more" for several, null when empty. */
+/** Selected option labels in selection order. */
+export function selectedLabels<V>(
+  selected: readonly V[],
+  options: readonly FilterOption<V>[],
+): string[] {
+  return selected.map(
+    (v) => options.find((o) => Object.is(o.value, v))?.label ?? String(v),
+  );
+}
+
+/** All selected labels joined with ", ", or null when empty. */
 export function selectionSummaryText<V>(
   selected: readonly V[],
   options: readonly FilterOption<V>[],
 ): string | null {
-  if (selected.length === 0) return null;
-  const first =
-    options.find((o) => Object.is(o.value, selected[0]))?.label ??
-    String(selected[0]);
-  return selected.length > 1 ? `${first} +${selected.length - 1} more` : first;
-}
-
-/** Trigger text: muted `allLabel` when nothing is selected, else the summary. */
-export function selectionSummary<V>(
-  selected: readonly V[],
-  options: readonly FilterOption<V>[],
-  allLabel: string,
-) {
-  return (
-    selectionSummaryText(selected, options) ?? (
-      <span className="text-muted-foreground">{allLabel}</span>
-    )
-  );
+  const labels = selectedLabels(selected, options);
+  return labels.length === 0 ? null : labels.join(", ");
 }
 
 export const filterMultiselectActiveBadgeClasses =
@@ -208,10 +202,17 @@ export function FilterMultiselect<V extends string | number>({
   const [query, setQuery] = useState("");
   const triggerRef = useRef<HTMLButtonElement>(null);
   const active = value.length > 0;
-  const summaryText = selectionSummaryText(value, options);
+  const labels = selectedLabels(value, options);
+  const summaryText = labels.length === 0 ? null : labels.join(", ");
 
   return (
-    <div className={cn("relative min-w-40 flex-1 overflow-visible", className)}>
+    <div
+      className={cn(
+        "relative min-w-0 max-w-full overflow-visible",
+        active ? "flex-1" : "w-max",
+        className,
+      )}
+    >
       <DropdownMenu
         modal={false}
         onOpenChange={(next) => {
@@ -238,9 +239,15 @@ export function FilterMultiselect<V extends string | number>({
               }
               className={fieldControlInnerTriggerClasses}
             >
-              <span className="min-w-0 flex-1 truncate text-left">
-                {selectionSummary(value, options, allLabel)}
-              </span>
+              {active ? (
+                <span className="min-w-0 grow truncate text-left">
+                  {summaryText}
+                </span>
+              ) : (
+                <span className="min-w-0 truncate text-left text-muted-foreground">
+                  {allLabel}
+                </span>
+              )}
               {active ? (
                 <span className="size-4 shrink-0" aria-hidden />
               ) : (

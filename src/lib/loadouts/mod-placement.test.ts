@@ -11,6 +11,7 @@ import {
   placementToMods,
   slotStatMod,
   statModSlotted,
+  updateEditorPiece,
   type ModsSection,
 } from "./mod-placement";
 
@@ -39,30 +40,30 @@ test("placementToMods walks pieces then sockets in order", () => {
 
 test("modsFromEditor keeps mods the planner could not place", () => {
   const s = section({ initial: { a: { 1: 10 } }, unplaced: [unplaced(99), unplaced(98)] });
-  expect(modsFromEditor(s, { a: { 1: 10 } })).toEqual([10, 99, 98]);
+  expect(modsFromEditor(s, { a: { 1: 10 } }, undefined)).toEqual([10, 99, 98]);
 });
 
 test("modsFromEditor: hand-placing an unplaced mod moves it instead of duplicating it", () => {
   const s = section({ initial: { a: { 1: 10 } }, unplaced: [unplaced(99)] });
-  expect(modsFromEditor(s, { a: { 1: 10 }, b: { 1: 99 } })).toEqual([10, 99]);
+  expect(modsFromEditor(s, { a: { 1: 10 }, b: { 1: 99 } }, undefined)).toEqual([10, 99]);
 });
 
 test("modsFromEditor: clearing a pre-chosen socket drops that mod; unplaced ones remain", () => {
   const s = section({ initial: { a: { 1: 10 } }, unplaced: [unplaced(99)] });
-  expect(modsFromEditor(s, {})).toEqual([99]);
+  expect(modsFromEditor(s, {}, undefined)).toEqual([99]);
 });
 
 test("modsFromEditor: extra copies of a mod use up the unplaced copy before adding more", () => {
   const s = section({ initial: { a: { 1: 10 } }, unplaced: [unplaced(10)] });
   // Two copies pre-existing (one placed, one unplaced); user places two more by hand →
   // one is the unplaced copy finding a home, the other is genuinely new.
-  expect(modsFromEditor(s, { a: { 1: 10, 2: 10 }, b: { 1: 10 } })).toEqual([10, 10, 10]);
+  expect(modsFromEditor(s, { a: { 1: 10, 2: 10 }, b: { 1: 10 } }, undefined)).toEqual([10, 10, 10]);
 });
 
 test("modsFromEditor keeps a desired stat mod that energy rebalancing couldn't place", () => {
   const s = section({ initial: { a: { 1: 10 } }, desiredStatMods: [10] });
-  expect(modsFromEditor(s, {})).toEqual([10]);
-  expect(modsFromEditor(s, { a: { 1: 10 } })).toEqual([10]);
+  expect(modsFromEditor(s, {}, s.desiredStatMods)).toEqual([10]);
+  expect(modsFromEditor(s, { a: { 1: 10 } }, s.desiredStatMods)).toEqual([10]);
 });
 
 test("pieceEnergyUsed counts only the loadout's chosen mods, not vault plugs", () => {
@@ -210,4 +211,68 @@ test("statModSlotted checks off each desired copy against general sockets", () =
     true,
     true,
   ]);
+});
+
+test("explicit replacement changes one desired copy and survives later armor edits", () => {
+  const helm = mixed("helm", [{ index: 1, kind: "general" }, { index: 2, kind: "other" }]);
+  const arms = mixed("arms", [{ index: 1, kind: "general" }]);
+  const s = section({
+    pieces: [helm, arms],
+    catalog: { option: (h: number) => ({ cost: statCost(h) }) } as ModOptionCatalog,
+    initial: { helm: { 1: MAJOR }, arms: { 1: MAJOR } },
+    desiredStatMods: [MAJOR, MAJOR],
+  });
+  const before = { placement: s.initial, desiredStatMods: s.desiredStatMods! };
+  const edited = updateEditorPiece(s, before, "helm", { 1: MINOR });
+  const rebalanced = updateEditorPiece(s, edited, "helm", { 1: MINOR, 2: ARMOR });
+  expect(edited.desiredStatMods).toEqual([MAJOR, MINOR]);
+  expect(modsFromEditor(s, rebalanced.placement, rebalanced.desiredStatMods).sort()).toEqual([MAJOR, MINOR, ARMOR]);
+  expect(before).toEqual({ placement: s.initial, desiredStatMods: [MAJOR, MAJOR] });
+  expect(s.initial.helm).toEqual({ 1: MAJOR });
+});
+
+test("a manually placed unplaced stat mod is not duplicated or resurrected after removal", () => {
+  const helm = mixed("helm", [{ index: 1, kind: "general" }]);
+  const s = section({
+    pieces: [helm],
+    initial: { helm: { 1: MAJOR } },
+    desiredStatMods: [MAJOR, MINOR],
+    unplaced: [unplaced(MINOR), unplaced(99)],
+  });
+  const replaced = updateEditorPiece(s, { placement: s.initial, desiredStatMods: s.desiredStatMods! }, "helm", { 1: MINOR });
+  expect(replaced.desiredStatMods).toEqual([MINOR]);
+  expect(modsFromEditor(s, replaced.placement, replaced.desiredStatMods)).toEqual([MINOR, 99]);
+  const cleared = updateEditorPiece(s, replaced, "helm", {});
+  expect(cleared.desiredStatMods).toEqual([]);
+  expect(modsFromEditor(s, cleared.placement, cleared.desiredStatMods)).toEqual([99]);
+});
+
+test("energy displacement preserves a desired stat mod and restores it when energy returns", () => {
+  const helm = mixed("helm", [{ index: 1, kind: "general" }, { index: 2, kind: "other" }]);
+  const s = section({
+    pieces: [helm],
+    catalog: { option: (h: number) => ({ cost: h === ARMOR ? 8 : statCost(h) }) } as ModOptionCatalog,
+    initial: { helm: { 1: MAJOR } },
+    desiredStatMods: [MAJOR],
+  });
+  const displaced = updateEditorPiece(s, { placement: s.initial, desiredStatMods: [MAJOR] }, "helm", { 1: MAJOR, 2: ARMOR });
+  expect(displaced.placement).toEqual({ helm: { 2: ARMOR } });
+  expect(displaced.desiredStatMods).toEqual([MAJOR]);
+  expect(modsFromEditor(s, displaced.placement, displaced.desiredStatMods)).toEqual([ARMOR, MAJOR]);
+  const restored = updateEditorPiece(s, displaced, "helm", {});
+  expect(restored.placement).toEqual({ helm: { 1: MAJOR } });
+});
+
+test("filling the last general socket drops a displaced stat that can no longer slot", () => {
+  const helm = mixed("helm", [{ index: 1, kind: "general" }, { index: 2, kind: "other" }]);
+  const s = section({
+    pieces: [helm],
+    catalog: { option: (h: number) => ({ cost: h === ARMOR ? 8 : statCost(h) }) } as ModOptionCatalog,
+    initial: { helm: { 1: MAJOR } },
+    desiredStatMods: [MAJOR],
+  });
+  const displaced = updateEditorPiece(s, { placement: s.initial, desiredStatMods: [MAJOR] }, "helm", { 1: MAJOR, 2: ARMOR });
+  const filled = updateEditorPiece(s, displaced, "helm", { 1: MINOR, 2: ARMOR });
+  expect(filled.desiredStatMods).toEqual([MINOR]);
+  expect(modsFromEditor(s, filled.placement, filled.desiredStatMods)).toEqual([MINOR, ARMOR]);
 });

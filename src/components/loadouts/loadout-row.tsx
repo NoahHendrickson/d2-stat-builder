@@ -174,7 +174,7 @@ export const LoadoutRow = memo(function LoadoutRow({
             <Button
               variant="emphatic"
               size="xs"
-              className="h-8 gap-1.5"
+              className="equip-button h-8 gap-1.5"
               onClick={applyLoadout}
               disabled={!canApply}
             >
