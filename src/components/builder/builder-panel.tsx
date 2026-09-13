@@ -17,7 +17,6 @@ import { useOptimizer } from "@/lib/optimizer/use-optimizer";
 import { useSmoothedProgress } from "@/lib/use-smoothed-progress";
 import { createValueStore } from "@/lib/value-store";
 import { liveTargets } from "@/lib/builder/live-targets";
-import { armorPowerSpan, seedPowerRange } from "@/lib/builder/power-span";
 import { availableSets } from "@/lib/armory/sets";
 import {
   DEFAULT_SET_FILTERS,
@@ -83,7 +82,6 @@ import type { BuildsColumnContentProps } from "@/components/builder/builds-colum
 import type { ExoticConstraint, OptimizerPiece } from "@/lib/optimizer/types";
 import {
   DEFAULT_POWER_RANGE,
-  enteredWeaponPowers,
   loadSelections,
   saveSelections,
   fragSelToArrays,
@@ -92,6 +90,7 @@ import {
   SCHEMA_VERSION,
   SELECTIONS_REPLACED_EVENT,
   selectionsGeneration,
+  toOptimizerPowerRange,
   type PowerRangeSelection,
 } from "@/lib/builder/selection-storage";
 import {
@@ -479,7 +478,7 @@ export function BuilderPanel({
   // The optimizer's candidates per slot, in ARMOR_SLOTS order: the class-item pool
   // (Spirit-filtered / Dreamer's-pinned), FotL masks in the helmet slot when pinned, the
   // T5 pool otherwise. runOptimizer maps these to OptimizerPieces; the power range
-  // controls read their power spread.
+  // controls read their power.
   const slotPieces = useMemo(
     () =>
       ARMOR_SLOTS.map((slot) =>
@@ -491,11 +490,6 @@ export function BuilderPanel({
       ),
     [pool, classItemPieces, festivalMaskHelmets],
   );
-
-  // Per-slot power extremes of the candidate armor — what gear power a build can reach
-  // (the power range's default, slider span, and out-of-reach warning). Null until some
-  // candidate has a known power.
-  const armorSpan = useMemo(() => armorPowerSpan(slotPieces), [slotPieces]);
 
   // A stored exotic in a pinned slot (Dreamer's Bond → class item, Festival masks →
   // helmet) loses to the pin on restore. From then on the exotic picker and the toggle
@@ -664,13 +658,7 @@ export function BuilderPanel({
       allowTuning,
       allowBalancedTuning: useBalancedTuning,
       fragmentBonus,
-      powerRange: powerRange.enabled
-        ? {
-            min: powerRange.min,
-            max: powerRange.max,
-            weapons: enteredWeaponPowers(powerRange),
-          }
-        : undefined,
+      powerRange: toOptimizerPowerRange(powerRange),
       maxResults: 200,
     });
   }, [
@@ -746,18 +734,6 @@ export function BuilderPanel({
       }
     },
     [selectedExoticOption, classPieces],
-  );
-
-  // A first-time enable (bounds never set) seeds the range with the top five gear-power
-  // levels a build can actually reach, so the toggle lands on a range with builds in it.
-  const onPowerRangeChange = useCallback(
-    (next: PowerRangeSelection) => {
-      if (next.enabled && next.min === 0 && next.max === 0 && armorSpan) {
-        next = { ...next, ...seedPowerRange(armorSpan, enteredWeaponPowers(next)) };
-      }
-      setPowerRange(next);
-    },
-    [armorSpan],
   );
 
   const setSetFilter = useCallback(
@@ -1076,8 +1052,8 @@ export function BuilderPanel({
             <Section title="Power">
               <PowerRangeControls
                 value={powerRange}
-                onChange={onPowerRangeChange}
-                armorSpan={armorSpan}
+                onChange={setPowerRange}
+                slotPieces={slotPieces}
               />
             </Section>
 

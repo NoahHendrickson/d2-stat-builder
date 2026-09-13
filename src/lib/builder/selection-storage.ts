@@ -7,21 +7,27 @@
 // the convention in normalize.ts / solve.ts.
 import { SUBCLASSES, type Subclass } from "../armory/fragments";
 import { DEFAULT_SET_FILTERS, type SetFilters } from "../armory/set-filters";
+import type { PowerRange } from "../optimizer/types";
 
 export const SELECTIONS_KEY = "stat-builder:selections";
 export const SCHEMA_VERSION = 1;
 
+/** Inclusive gear-power bounds. */
+export interface PowerBounds {
+  min: number;
+  max: number;
+}
+
 /**
  * The power range toggle: when `enabled`, builds must land their gear power — the floor
  * of the mean power over the five armor pieces and the weapons entered below — inside
- * [min, max]. `min`/`max` are kept while the toggle is off so switching it back on
- * restores them; both 0 means "never set" and the builder seeds them from the current
- * pool on first enable.
+ * `bounds`. `bounds` is null until the user (or the controls' first-enable seed) sets
+ * it, and is kept while the toggle is off so switching it back on restores it. Enabled
+ * with null bounds constrains nothing.
  */
 export interface PowerRangeSelection {
   enabled: boolean;
-  min: number;
-  max: number;
+  bounds: PowerBounds | null;
   /**
    * Power of the kinetic / energy / heavy weapons the build will be equipped with,
    * entered by hand. `null` = not entered, which leaves that slot out of the average.
@@ -31,14 +37,23 @@ export interface PowerRangeSelection {
 
 export const DEFAULT_POWER_RANGE: PowerRangeSelection = {
   enabled: false,
-  min: 0,
-  max: 0,
+  bounds: null,
   weapons: [null, null, null],
 };
 
 /** The weapon powers that were actually entered, in slot order — what the solver averages in. */
 export function enteredWeaponPowers(range: PowerRangeSelection): number[] {
   return range.weapons.filter((w): w is number => w !== null);
+}
+
+/** The solver's view of the selection: undefined unless enabled with bounds set. */
+export function toOptimizerPowerRange(range: PowerRangeSelection): PowerRange | undefined {
+  if (!range.enabled || range.bounds === null) return undefined;
+  return {
+    min: range.bounds.min,
+    max: range.bounds.max,
+    weapons: enteredWeaponPowers(range),
+  };
 }
 
 /**
@@ -238,23 +253,30 @@ function parse(raw: string | null): PersistedSelections | null {
 
 /**
  * Validate a stored power range. Malformed / absent → the default (off, unset). Bounds
- * must be non-negative integers, else the whole value is dropped (a half-valid range
- * would enable a constraint the user never chose); an inverted pair is put in order
- * rather than dropped, since the inputs commit on blur and a debounced save can catch
- * a min typed above the max.
+ * are null (unset) or a pair of non-negative integers, else the whole value is dropped
+ * (a half-valid range would enable a constraint the user never chose); an inverted
+ * pair is put in order rather than dropped, since the inputs commit on blur and a
+ * debounced save can catch a min typed above the max.
  */
 export function parsePowerRange(v: unknown): PowerRangeSelection {
   if (typeof v !== "object" || v === null) return DEFAULT_POWER_RANGE;
   const raw = v as Record<string, unknown>;
-  const { enabled, min, max } = raw;
-  if (typeof enabled !== "boolean") return DEFAULT_POWER_RANGE;
-  if (!Number.isInteger(min) || !Number.isInteger(max)) return DEFAULT_POWER_RANGE;
-  if ((min as number) < 0 || (max as number) < 0) return DEFAULT_POWER_RANGE;
+  if (typeof raw.enabled !== "boolean") return DEFAULT_POWER_RANGE;
+  const bounds = parsePowerBounds(raw.bounds);
+  if (bounds === undefined) return DEFAULT_POWER_RANGE;
+  return { enabled: raw.enabled, bounds, weapons: parseWeaponPowers(raw.weapons) };
+}
+
+/** null / absent → null (unset); a valid pair → ordered; anything else → undefined. */
+function parsePowerBounds(v: unknown): PowerBounds | null | undefined {
+  if (v === null || v === undefined) return null;
+  if (typeof v !== "object") return undefined;
+  const { min, max } = v as Record<string, unknown>;
+  if (!Number.isInteger(min) || !Number.isInteger(max)) return undefined;
+  if ((min as number) < 0 || (max as number) < 0) return undefined;
   return {
-    enabled,
     min: Math.min(min as number, max as number),
     max: Math.max(min as number, max as number),
-    weapons: parseWeaponPowers(raw.weapons),
   };
 }
 

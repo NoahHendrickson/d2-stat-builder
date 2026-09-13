@@ -1,6 +1,6 @@
 "use client";
 
-import { memo } from "react";
+import { memo, useMemo } from "react";
 import { Input } from "@/components/ui/input";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
@@ -8,7 +8,11 @@ import {
   enteredWeaponPowers,
   type PowerRangeSelection,
 } from "@/lib/builder/selection-storage";
-import { reachableGearPower, type ArmorPowerSpan } from "@/lib/builder/power-span";
+import {
+  armorPowerSpan,
+  reachableGearPower,
+  seedPowerRange,
+} from "@/lib/builder/power-span";
 import { cn } from "@/lib/utils";
 
 const WEAPON_SLOTS = ["Kinetic", "Energy", "Heavy"] as const;
@@ -25,34 +29,47 @@ function parsePower(raw: string): number | null {
 
 /**
  * The "Power matters" toggle: constrain builds to a gear-power range, with the weapon
- * powers the build will be equipped alongside typed in by hand. The min / max inputs
- * commit on blur or Enter (not per keystroke, so typing a new maximum can't momentarily
- * drag the minimum with it); the slider commits live.
+ * powers the build will be equipped alongside typed in by hand. Owns the first-enable
+ * policy: turning the switch on with no bounds yet seeds the top five gear-power levels
+ * the candidate armor can reach. The min / max inputs commit on blur or Enter (not per
+ * keystroke, so typing a new maximum can't momentarily drag the minimum with it); the
+ * slider commits live.
  */
 export const PowerRangeControls = memo(function PowerRangeControls({
   value,
   onChange,
-  armorSpan,
+  slotPieces,
 }: {
   value: PowerRangeSelection;
   onChange: (next: PowerRangeSelection) => void;
-  /** Per-slot power extremes of the armor being searched; null while unknown. */
-  armorSpan: ArmorPowerSpan | null;
+  /** The optimizer's candidate pieces per slot — only their power is read. */
+  slotPieces: readonly (readonly { power?: number }[])[];
 }) {
-  const { enabled, min, max, weapons } = value;
+  const { enabled, bounds, weapons } = value;
+  const armorSpan = useMemo(() => armorPowerSpan(slotPieces), [slotPieces]);
   // The gear power a build can land on with the weapons entered so far.
   const reach = armorSpan
     ? reachableGearPower(armorSpan, enteredWeaponPowers(value))
     : null;
-  const outOfReach = reach !== null && (min > reach.max || max < reach.min);
+  const outOfReach =
+    reach !== null &&
+    bounds !== null &&
+    (bounds.min > reach.max || bounds.max < reach.min);
 
+  const onToggle = (checked: boolean) => {
+    let next: PowerRangeSelection = { ...value, enabled: checked };
+    if (checked && next.bounds === null && armorSpan) {
+      next = { ...next, bounds: seedPowerRange(armorSpan, enteredWeaponPowers(next)) };
+    }
+    onChange(next);
+  };
   const commitMin = (n: number | null) => {
     if (n === null) return;
-    onChange({ ...value, min: n, max: Math.max(n, max) });
+    onChange({ ...value, bounds: { min: n, max: Math.max(n, bounds?.max ?? n) } });
   };
   const commitMax = (n: number | null) => {
     if (n === null) return;
-    onChange({ ...value, min: Math.min(n, min), max: n });
+    onChange({ ...value, bounds: { min: Math.min(n, bounds?.min ?? n), max: n } });
   };
   const commitWeapon = (slot: number, n: number | null) => {
     const next = [...weapons] as PowerRangeSelection["weapons"];
@@ -62,8 +79,8 @@ export const PowerRangeControls = memo(function PowerRangeControls({
 
   // Slider spans the reachable gear power, widened to keep both thumbs visible when the
   // stored range sits outside it (e.g. carried over from another class).
-  const sliderMin = reach ? Math.min(reach.min, min) : min;
-  const sliderMax = reach ? Math.max(reach.max, max) : max;
+  const sliderMin = reach && bounds ? Math.min(reach.min, bounds.min) : 0;
+  const sliderMax = reach && bounds ? Math.max(reach.max, bounds.max) : 0;
 
   return (
     <div className="space-y-4">
@@ -78,7 +95,7 @@ export const PowerRangeControls = memo(function PowerRangeControls({
         </div>
         <Switch
           checked={enabled}
-          onCheckedChange={(checked) => onChange({ ...value, enabled: checked })}
+          onCheckedChange={onToggle}
           aria-label="Power matters"
         />
       </div>
@@ -89,13 +106,13 @@ export const PowerRangeControls = memo(function PowerRangeControls({
             <div className="flex items-center gap-2">
               <PowerInput
                 label="Minimum power"
-                value={min}
+                value={bounds?.min ?? null}
                 onCommit={commitMin}
               />
               <span className="text-muted-foreground text-xs">to</span>
               <PowerInput
                 label="Maximum power"
-                value={max}
+                value={bounds?.max ?? null}
                 onCommit={commitMax}
               />
               {reach && (
@@ -104,15 +121,15 @@ export const PowerRangeControls = memo(function PowerRangeControls({
                 </span>
               )}
             </div>
-            {reach && sliderMax > sliderMin && (
+            {reach && bounds && sliderMax > sliderMin && (
               <Slider
                 min={sliderMin}
                 max={sliderMax}
                 step={1}
-                value={[min, max]}
+                value={[bounds.min, bounds.max]}
                 onValueChange={(v) => {
                   if (!Array.isArray(v) || v.length !== 2) return;
-                  onChange({ ...value, min: v[0], max: v[1] });
+                  onChange({ ...value, bounds: { min: v[0], max: v[1] } });
                 }}
                 aria-label="Power range"
                 className="cursor-pointer"

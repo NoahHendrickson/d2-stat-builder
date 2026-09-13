@@ -7,6 +7,7 @@ import {
   SCHEMA_VERSION,
   enteredWeaponPowers,
   parsePowerRange,
+  toOptimizerPowerRange,
   type PersistedSelections,
   fragSelToArrays,
   fragSelFromArrays,
@@ -69,7 +70,7 @@ function sampleSelections(): PersistedSelections {
     legacyExotics: false,
     dreamersBond: true,
     festivalMasks: false,
-    powerRange: { enabled: true, min: 287, max: 292, weapons: [290, null, 288] },
+    powerRange: { enabled: true, bounds: { min: 287, max: 292 }, weapons: [290, null, 288] },
     activeSubclass: "Void",
     fragSel: fragSelToArrays(frag),
   };
@@ -146,24 +147,38 @@ test("load defaults powerRange to off for data stored before the field existed",
 });
 
 test("parsePowerRange orders an inverted range, drops a non-integer one and bad weapon slots", () => {
-  expect(parsePowerRange({ enabled: true, min: 292, max: 287, weapons: [null, null, null] })).toEqual({
+  expect(
+    parsePowerRange({ enabled: true, bounds: { min: 292, max: 287 }, weapons: [null, null, null] }),
+  ).toEqual({ enabled: true, bounds: { min: 287, max: 292 }, weapons: [null, null, null] });
+  expect(parsePowerRange({ enabled: true, bounds: { min: -1, max: 287 } })).toEqual(
+    DEFAULT_POWER_RANGE,
+  );
+  expect(parsePowerRange({ enabled: true, bounds: { min: 287.5, max: 292 } })).toEqual(
+    DEFAULT_POWER_RANGE,
+  );
+  expect(parsePowerRange({ enabled: true, bounds: 5 })).toEqual(DEFAULT_POWER_RANGE);
+  expect(parsePowerRange({ enabled: "yes", bounds: { min: 287, max: 292 } })).toEqual(
+    DEFAULT_POWER_RANGE,
+  );
+  // Unset bounds are legal in either toggle state.
+  expect(parsePowerRange({ enabled: true })).toEqual({ ...DEFAULT_POWER_RANGE, enabled: true });
+  expect(
+    parsePowerRange({ enabled: false, bounds: { min: 287, max: 292 }, weapons: [290, -1, 2.5] }),
+  ).toEqual({ enabled: false, bounds: { min: 287, max: 292 }, weapons: [290, null, null] });
+  expect(
+    enteredWeaponPowers({ enabled: true, bounds: null, weapons: [290, null, 288] }),
+  ).toEqual([290, 288]);
+});
+
+test("toOptimizerPowerRange is undefined unless enabled with bounds set", () => {
+  const on: PersistedSelections["powerRange"] = {
     enabled: true,
-    min: 287,
-    max: 292,
-    weapons: [null, null, null],
-  });
-  expect(parsePowerRange({ enabled: true, min: -1, max: 287 })).toEqual(DEFAULT_POWER_RANGE);
-  expect(parsePowerRange({ enabled: true, min: 287.5, max: 292 })).toEqual(DEFAULT_POWER_RANGE);
-  expect(parsePowerRange({ enabled: "yes", min: 287, max: 292 })).toEqual(DEFAULT_POWER_RANGE);
-  expect(parsePowerRange({ enabled: false, min: 287, max: 292, weapons: [290, -1, 2.5] })).toEqual({
-    enabled: false,
-    min: 287,
-    max: 292,
-    weapons: [290, null, null],
-  });
-  expect(enteredWeaponPowers({ enabled: true, min: 0, max: 0, weapons: [290, null, 288] })).toEqual([
-    290, 288,
-  ]);
+    bounds: { min: 287, max: 292 },
+    weapons: [290, null, 288],
+  };
+  expect(toOptimizerPowerRange(on)).toEqual({ min: 287, max: 292, weapons: [290, 288] });
+  expect(toOptimizerPowerRange({ ...on, enabled: false })).toBeUndefined();
+  expect(toOptimizerPowerRange({ ...on, bounds: null })).toBeUndefined();
 });
 
 test("load defaults setFilters for data stored before the field existed", () => {
