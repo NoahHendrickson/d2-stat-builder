@@ -54,6 +54,7 @@ function loadout(stats: number[], modsUsed = { major: 0, minor: 0 }): OptimizerL
     artifice: [null, null, null, null, null],
     total: stats.reduce((a, b) => a + b, 0),
     exotic: false,
+    power: null,
   };
 }
 
@@ -282,6 +283,41 @@ describe("sameQueryExceptMinimums", () => {
     const b = baseInput();
     b.slots[0] = [piece("h", sharedStats)];
     expect(sameQueryExceptMinimums(a, b)).toBe(true);
+  });
+
+  test("powerRange: absent ≡ absent; any bound or weapon change → not same", () => {
+    const range = { min: 287, max: 292, weapons: [290, 291] };
+    expect(sameQueryExceptMinimums(baseInput(), baseInput())).toBe(true);
+    expect(
+      sameQueryExceptMinimums(baseInput({ powerRange: range }), baseInput({ powerRange: { ...range } })),
+    ).toBe(true);
+    expect(sameQueryExceptMinimums(baseInput(), baseInput({ powerRange: range }))).toBe(false);
+    expect(
+      sameQueryExceptMinimums(
+        baseInput({ powerRange: range }),
+        baseInput({ powerRange: { ...range, max: 293 } }),
+      ),
+    ).toBe(false);
+    expect(
+      sameQueryExceptMinimums(
+        baseInput({ powerRange: range }),
+        baseInput({ powerRange: { ...range, weapons: [290] } }),
+      ),
+    ).toBe(false);
+    // weapons undefined ≡ [] (the solver's default).
+    expect(
+      sameQueryExceptMinimums(
+        baseInput({ powerRange: { min: 1, max: 2 } }),
+        baseInput({ powerRange: { min: 1, max: 2, weapons: [] } }),
+      ),
+    ).toBe(true);
+  });
+
+  test("per-piece field changed (power) → not same", () => {
+    const a = baseInput();
+    const b = baseInput();
+    b.slots[0] = [piece("h", [30, 0, 0, 0, 0, 0], { power: 290 })];
+    expect(sameQueryExceptMinimums(a, b)).toBe(false);
   });
 });
 

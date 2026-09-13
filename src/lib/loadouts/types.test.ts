@@ -54,6 +54,7 @@ const builder = () => ({
   legacyExotics: false,
   dreamersBond: true,
   festivalMasks: true,
+  powerRange: { enabled: true, min: 287, max: 292, weapons: [290, null, 295] },
   activeSubclass: "Prismatic",
   fragmentHashes: [1, 2],
 });
@@ -95,7 +96,10 @@ describe("parseDimLoadout", () => {
 
 describe("parseOptimizerLoadout", () => {
   test("round-trips", () => {
-    expect(parseOptimizerLoadout(optimizer())).toEqual(optimizer());
+    // `power` was added later: absent reads as unknown (null), so older rows still parse.
+    expect(parseOptimizerLoadout(optimizer())).toEqual({ ...optimizer(), power: null });
+    expect(parseOptimizerLoadout({ ...optimizer(), power: 291 })?.power).toBe(291);
+    expect(parseOptimizerLoadout({ ...optimizer(), power: "291" })?.power).toBeNull();
   });
   test("rejects wrong lengths and malformed tuning", () => {
     expect(parseOptimizerLoadout({ ...optimizer(), stats: [1, 2, 3] })).toBeNull();
@@ -124,6 +128,33 @@ describe("parseBuilderSnapshot", () => {
     const old = builder() as { festivalMasks?: boolean };
     delete old.festivalMasks;
     expect(parseBuilderSnapshot(old)?.festivalMasks).toBe(false);
+  });
+  test("round-trips the power range and defaults it off when missing or malformed", () => {
+    const off = { enabled: false, min: 0, max: 0, weapons: [null, null, null] };
+    expect(parseBuilderSnapshot(builder())?.powerRange).toEqual({
+      enabled: true,
+      min: 287,
+      max: 292,
+      weapons: [290, null, 295],
+    });
+    const old = builder() as { powerRange?: unknown };
+    delete old.powerRange;
+    expect(parseBuilderSnapshot(old)?.powerRange).toEqual(off);
+    expect(
+      parseBuilderSnapshot({ ...builder(), powerRange: { enabled: true, min: 300, max: 290 } })
+        ?.powerRange,
+    ).toEqual({ enabled: true, min: 290, max: 300, weapons: [null, null, null] });
+    expect(
+      parseBuilderSnapshot({ ...builder(), powerRange: { enabled: true, min: "a", max: 290 } })
+        ?.powerRange,
+    ).toEqual(off);
+    // Malformed weapons drop to "nothing entered" without losing the range itself.
+    expect(
+      parseBuilderSnapshot({
+        ...builder(),
+        powerRange: { enabled: true, min: 287, max: 292, weapons: [290, "x"] },
+      })?.powerRange,
+    ).toEqual({ enabled: true, min: 287, max: 292, weapons: [null, null, null] });
   });
   test("rejects an unknown subclass", () => {
     expect(parseBuilderSnapshot({ ...builder(), activeSubclass: "Kinetic" })).toBeNull();

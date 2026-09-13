@@ -6,6 +6,7 @@ import {
   type TuningOutcome,
 } from "./tuning";
 import { buildSlots, computeSuffixBounds, makeJointMinCheck } from "./bounds";
+import { createPowerTracker } from "./power";
 
 /**
  * Wall-clock budget for refining the per-stat ceilings past their seed values. Exact
@@ -152,6 +153,8 @@ export function runCeilings(
   // Per-leaf tuning feasibility probe — the same search the top-N uses, in feasible
   // (first-hit) mode, so the two can never drift apart again.
   const tuner = createTuningSearcher(frag, mods);
+  // Armor power range — the same tracker the top-N walk uses (null when none is set).
+  const power = createPowerTracker(slots, input.powerRange);
 
   const canReachSets = (k: number): boolean => {
     for (let r = 0; r < reqs.length; r++) {
@@ -207,6 +210,7 @@ export function runCeilings(
       for (let r = 0; r < reqs.length; r++) {
         if (setCounts[r] < reqs[r].count) return;
       }
+      if (power && !power.feasible(NUM_SLOTS)) return;
       const w = tuner(chosen, sum, probeMins, "feasible");
       if (w) {
         found = true;
@@ -217,6 +221,7 @@ export function runCeilings(
     if (!canReachMin(k)) return;
     if (!canReachSets(k)) return;
     if (needExotic && exoticCount + exoticSuffix[k] < 1) return;
+    if (power && !power.feasible(k)) return;
     for (const p of slots[k]) {
       if (found || aborted) return;
       // Exotic-ineligible pieces were pre-filtered from the pool (solve() built `slots`).
@@ -230,8 +235,10 @@ export function runCeilings(
       for (let r = 0; r < reqs.length; r++) {
         if (p.setHash === reqs[r].setHash) setCounts[r]++;
       }
+      power?.push(p);
       chosen[k] = p;
       search(k + 1, nextExotic);
+      power?.pop(p);
       for (let r = 0; r < reqs.length; r++) {
         if (p.setHash === reqs[r].setHash) setCounts[r]--;
       }

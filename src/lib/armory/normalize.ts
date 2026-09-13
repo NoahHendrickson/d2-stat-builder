@@ -108,6 +108,11 @@ export interface ArmorPiece {
   armorSockets?: ArmorSocket[];
   /** Armor energy (component 300) — capacity and what current plugs use. */
   energy?: { capacity: number; used: number };
+  /**
+   * Power level — the instance's primary stat (component 300). Undefined when the
+   * component is missing, and on synthetic pieces with no live instance.
+   */
+  power?: number;
 }
 
 const ITEM_TYPE_ARMOR = 2;
@@ -384,6 +389,15 @@ function readEnergy(
   return { capacity: energy.energyCapacity, used: energy.energyUsed };
 }
 
+/** Item power from the instance's primary stat (component 300). */
+function readPower(
+  instanceId: string,
+  profile: DestinyProfileResponse,
+): number | undefined {
+  const value = profile.itemComponents?.instances?.data?.[instanceId]?.primaryStat?.value;
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
 /** True when a tuning-category plug is currently in any socket (empty or slotted). */
 function hasTuningSocket(
   instanceId: string,
@@ -490,6 +504,7 @@ function buildPiece(
 
   const armorSockets = findArmorSockets(item.itemInstanceId, def, profile, manifest);
   const energy = readEnergy(item.itemInstanceId, profile);
+  const power = readPower(item.itemInstanceId, profile);
   const watermark = itemWatermark(def, item.versionNumber);
 
   return {
@@ -519,6 +534,7 @@ function buildPiece(
     ...(watermark ? { watermark } : {}),
     ...(armorSockets ? { armorSockets } : {}),
     ...(energy ? { energy } : {}),
+    ...(power !== undefined ? { power } : {}),
   };
 }
 

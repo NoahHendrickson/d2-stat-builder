@@ -36,6 +36,7 @@ const data = (): SavedLoadoutData => ({
     artifice: [null],
     total: 10,
     exotic: false,
+    power: null,
   },
 });
 

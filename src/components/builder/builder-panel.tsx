@@ -17,6 +17,7 @@ import { useOptimizer } from "@/lib/optimizer/use-optimizer";
 import { useSmoothedProgress } from "@/lib/use-smoothed-progress";
 import { createValueStore } from "@/lib/value-store";
 import { liveTargets } from "@/lib/builder/live-targets";
+import { armorPowerSpan, seedPowerRange } from "@/lib/builder/power-span";
 import { availableSets } from "@/lib/armory/sets";
 import {
   DEFAULT_SET_FILTERS,
@@ -76,10 +77,13 @@ import {
   NerdControls,
   TuningControls,
 } from "@/components/builder/tuning-controls";
+import { PowerRangeControls } from "@/components/builder/power-range-controls";
 import { BuildsSurface } from "@/components/builder/builds-surface";
 import type { BuildsColumnContentProps } from "@/components/builder/builds-column-content";
 import type { ExoticConstraint, OptimizerPiece } from "@/lib/optimizer/types";
 import {
+  DEFAULT_POWER_RANGE,
+  enteredWeaponPowers,
   loadSelections,
   saveSelections,
   fragSelToArrays,
@@ -88,6 +92,7 @@ import {
   SCHEMA_VERSION,
   SELECTIONS_REPLACED_EVENT,
   selectionsGeneration,
+  type PowerRangeSelection,
 } from "@/lib/builder/selection-storage";
 import {
   getArtificeModHashes,
@@ -192,6 +197,9 @@ export function BuilderPanel({
   );
   const [useFestivalMasks, setUseFestivalMasks] = useState(
     initialSaved?.festivalMasks ?? false,
+  );
+  const [powerRange, setPowerRange] = useState<PowerRangeSelection>(
+    () => initialSaved?.powerRange ?? DEFAULT_POWER_RANGE,
   );
 
   // The exotic is persisted by name and resolved to an index once the live exotics list
@@ -468,6 +476,27 @@ export function BuilderPanel({
     return map;
   }, [classPieces, classItemPieces]);
 
+  // The optimizer's candidates per slot, in ARMOR_SLOTS order: the class-item pool
+  // (Spirit-filtered / Dreamer's-pinned), FotL masks in the helmet slot when pinned, the
+  // T5 pool otherwise. runOptimizer maps these to OptimizerPieces; the power range
+  // controls read their power spread.
+  const slotPieces = useMemo(
+    () =>
+      ARMOR_SLOTS.map((slot) =>
+        slot === "classItem"
+          ? classItemPieces
+          : slot === "helmet" && festivalMaskHelmets
+            ? festivalMaskHelmets
+            : pool.filter((p) => p.slot === slot),
+      ),
+    [pool, classItemPieces, festivalMaskHelmets],
+  );
+
+  // Per-slot power extremes of the candidate armor — what gear power a build can reach
+  // (the power range's default, slider span, and out-of-reach warning). Null until some
+  // candidate has a known power.
+  const armorSpan = useMemo(() => armorPowerSpan(slotPieces), [slotPieces]);
+
   // A stored exotic in a pinned slot (Dreamer's Bond → class item, Festival masks →
   // helmet) loses to the pin on restore. From then on the exotic picker and the toggle
   // handlers keep the two exclusive, so no effect has to referee them.
@@ -522,6 +551,7 @@ export function BuilderPanel({
       setUseLegacyExotics(saved.legacyExotics);
       setUseDreamersBond(saved.dreamersBond);
       setUseFestivalMasks(saved.festivalMasks);
+      setPowerRange(saved.powerRange);
       setActiveSubclass(saved.activeSubclass);
       setFragSel(fragSelFromArrays(saved.fragSel));
       setExoticPerks(saved.exoticPerks);
@@ -561,6 +591,7 @@ export function BuilderPanel({
         legacyExotics: useLegacyExotics,
         dreamersBond: useDreamersBond,
         festivalMasks: useFestivalMasks,
+        powerRange,
         activeSubclass,
         fragSel: fragSelToArrays(fragSel),
       });
@@ -583,6 +614,7 @@ export function BuilderPanel({
     useLegacyExotics,
     useDreamersBond,
     useFestivalMasks,
+    powerRange,
     activeSubclass,
     fragSel,
   ]);
@@ -607,6 +639,7 @@ export function BuilderPanel({
       exotic: p.isExotic,
       hash: p.itemHash,
       setHash: p.setHash,
+      power: p.power,
       // Artifice is legacy-only, tuning Tier-5-only; enforce the exclusivity here
       // (the solver stays general, the results UI shares one column for both).
       artifice: p.isArtifice && p.tunedStat === undefined,
@@ -616,15 +649,7 @@ export function BuilderPanel({
           : undefined,
     });
 
-    const slots = ARMOR_SLOTS.map((slot) => {
-      const pieces =
-        slot === "classItem"
-          ? classItemPieces
-          : slot === "helmet" && festivalMaskHelmets
-            ? festivalMaskHelmets
-            : pool.filter((p) => p.slot === slot);
-      return pieces.map(toOpt);
-    });
+    const slots = slotPieces.map((pieces) => pieces.map(toOpt));
 
     const exotic: ExoticConstraint =
       selectedExotic === null
@@ -639,12 +664,17 @@ export function BuilderPanel({
       allowTuning,
       allowBalancedTuning: useBalancedTuning,
       fragmentBonus,
+      powerRange: powerRange.enabled
+        ? {
+            min: powerRange.min,
+            max: powerRange.max,
+            weapons: enteredWeaponPowers(powerRange),
+          }
+        : undefined,
       maxResults: 200,
     });
   }, [
-    pool,
-    classItemPieces,
-    festivalMaskHelmets,
+    slotPieces,
     classType,
     targets,
     major,
@@ -654,6 +684,7 @@ export function BuilderPanel({
     allowTuning,
     useBalancedTuning,
     fragmentBonus,
+    powerRange,
     run,
   ]);
 
@@ -717,6 +748,18 @@ export function BuilderPanel({
     [selectedExoticOption, classPieces],
   );
 
+  // A first-time enable (bounds never set) seeds the range with the top five gear-power
+  // levels a build can actually reach, so the toggle lands on a range with builds in it.
+  const onPowerRangeChange = useCallback(
+    (next: PowerRangeSelection) => {
+      if (next.enabled && next.min === 0 && next.max === 0 && armorSpan) {
+        next = { ...next, ...seedPowerRange(armorSpan, enteredWeaponPowers(next)) };
+      }
+      setPowerRange(next);
+    },
+    [armorSpan],
+  );
+
   const setSetFilter = useCallback(
     (key: keyof SetFilters, value: boolean) =>
       setSetFilters((prev) => ({ ...prev, [key]: value })),
@@ -761,6 +804,7 @@ export function BuilderPanel({
       legacyExotics: useLegacyExotics,
       dreamersBond: useDreamersBond,
       festivalMasks: useFestivalMasks,
+      powerRange,
       activeSubclass,
       fragmentHashes: [...fragSel[activeSubclass]],
     }),
@@ -776,6 +820,7 @@ export function BuilderPanel({
       useLegacyExotics,
       useDreamersBond,
       useFestivalMasks,
+      powerRange,
       activeSubclass,
       fragSel,
     ],
@@ -1025,6 +1070,14 @@ export function BuilderPanel({
                 dreamersItemName={dreamersClassItemName(classType ?? 2)}
                 useFestivalMasks={useFestivalMasks}
                 onUseFestivalMasksChange={onFestivalMasksChange}
+              />
+            </Section>
+
+            <Section title="Power">
+              <PowerRangeControls
+                value={powerRange}
+                onChange={onPowerRangeChange}
+                armorSpan={armorSpan}
               />
             </Section>
 

@@ -34,6 +34,7 @@ test("builds a 0-stat synthetic class item per class", () => {
     isArtifice: false,
     baseStats: [0, 0, 0, 0, 0, 0],
     stats: [0, 0, 0, 0, 0, 0],
+    power: 21,
   });
   expect(warlock?.instanceId.startsWith(DREAMERS_BOND_ID_PREFIX)).toBe(true);
   expect(isDreamersBondId(warlock!.instanceId)).toBe(true);

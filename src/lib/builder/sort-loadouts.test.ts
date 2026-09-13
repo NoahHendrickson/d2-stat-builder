@@ -26,6 +26,7 @@ function loadout(
     artifice: partial.artifice ?? [null, null, null, null, null],
     total: partial.total,
     exotic: partial.exotic ?? false,
+    power: partial.power ?? null,
   };
 }
 

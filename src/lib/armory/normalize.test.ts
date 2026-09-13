@@ -743,3 +743,37 @@ test("itemWatermark prefers featured, then the versioned quality icon", () => {
   expect(itemWatermark({ iconWatermark: "/season.png" })).toBe("/season.png");
   expect(itemWatermark({ iconWatermark: "" })).toBeUndefined();
 });
+
+test("power comes from the instance's primary stat; absent component → undefined", () => {
+  const ITEM = 4242;
+  const manifest = {
+    def: (_table: string, hash: number | null | undefined) =>
+      hash === ITEM
+        ? {
+            itemType: 2,
+            classType: 2,
+            displayProperties: { name: "Helm" },
+            inventory: { bucketTypeHash: 3448274439, tierType: 5 }, // helmet, legendary
+          }
+        : undefined,
+  } as unknown as Manifest;
+  const profile = {
+    itemComponents: {
+      instances: {
+        data: { withPower: { primaryStat: { statHash: 1935470627, value: 291 } } },
+      },
+    },
+    profileInventory: {
+      data: {
+        items: [
+          { itemInstanceId: "withPower", itemHash: ITEM },
+          { itemInstanceId: "noInstance", itemHash: ITEM },
+        ],
+      },
+    },
+  } as unknown as DestinyProfileResponse;
+  const [withPower, noInstance] = normalizeArmory(profile, manifest);
+  expect(withPower.power).toBe(291);
+  expect(noInstance.power).toBeUndefined();
+  expect("power" in noInstance).toBe(false);
+});

@@ -9,6 +9,7 @@ import type {
   OptimizerPiece,
   OptimizerOutput,
   PieceTuning,
+  PowerRange,
   SetRequirement,
 } from "./types";
 
@@ -31,6 +32,7 @@ const HANDLED_PIECE_KEYS = {
   setHash: true,
   tuning: true,
   artifice: true,
+  power: true,
 } satisfies Record<keyof OptimizerPiece, true>;
 void HANDLED_PIECE_KEYS;
 
@@ -57,6 +59,25 @@ const HANDLED_MOD_BUDGET_KEYS = {
   minor: true,
 } satisfies Record<keyof ModBudget, true>;
 void HANDLED_MOD_BUDGET_KEYS;
+
+const HANDLED_POWER_RANGE_KEYS = {
+  min: true,
+  max: true,
+  weapons: true,
+} satisfies Record<keyof PowerRange, true>;
+void HANDLED_POWER_RANGE_KEYS;
+
+/**
+ * No range on either side ≡ same; otherwise both present with equal bounds and weapons
+ * (`weapons` undefined ≡ [], the solver's default; order matters only as much as the
+ * sum does, but the UI emits a stable slot order so a positional compare is enough).
+ */
+function powerRangeEqual(a: PowerRange | undefined, b: PowerRange | undefined): boolean {
+  if (a === undefined || b === undefined) return a === b;
+  return (
+    a.min === b.min && a.max === b.max && numArrayEqual(a.weapons ?? [], b.weapons ?? [])
+  );
+}
 
 /** Default the solver applies to `mods` (see solve.ts). */
 function normMods(mods: ModBudget | undefined): ModBudget {
@@ -116,6 +137,9 @@ function pieceEqual(a: OptimizerPiece, b: OptimizerPiece): boolean {
   // `artifice` is an optional boolean; undefined and false both mean "no artifice" to the
   // solver, so compare their booleanized forms.
   if (Boolean(a.artifice) !== Boolean(b.artifice)) return false;
+  // Power feeds the range constraint and the dedupe key; unknown (undefined) is its own
+  // distinct value.
+  if (a.power !== b.power) return false;
   const at = a.tuning;
   const bt = b.tuning;
   if ((at === undefined) !== (bt === undefined)) return false;
@@ -158,6 +182,7 @@ const HANDLED_INPUT_KEYS = {
   allowTuning: true,
   allowBalancedTuning: true,
   fragmentBonus: true,
+  powerRange: true,
   maxResults: true,
 } satisfies Record<keyof OptimizerInput, true>;
 void HANDLED_INPUT_KEYS;
@@ -185,6 +210,7 @@ export function sameQueryExceptMinimums(a: OptimizerInput, b: OptimizerInput): b
     allowTuning: aTuning,
     allowBalancedTuning: aBalanced,
     fragmentBonus: aFrag,
+    powerRange: aPower,
     maxResults: aMax,
   } = a;
   const {
@@ -196,6 +222,7 @@ export function sameQueryExceptMinimums(a: OptimizerInput, b: OptimizerInput): b
     allowTuning: bTuning,
     allowBalancedTuning: bBalanced,
     fragmentBonus: bFrag,
+    powerRange: bPower,
     maxResults: bMax,
   } = b;
   void _aMin;
@@ -220,6 +247,7 @@ export function sameQueryExceptMinimums(a: OptimizerInput, b: OptimizerInput): b
   if (ea.mode !== eb.mode || !numArrayEqual(ea.hashes, eb.hashes)) return false;
 
   if (!fragEqual(aFrag, bFrag)) return false;
+  if (!powerRangeEqual(aPower, bPower)) return false;
   if (!setReqsEqual(aReqs, bReqs)) return false;
   if (!slotsEqual(aSlots, bSlots)) return false;
 

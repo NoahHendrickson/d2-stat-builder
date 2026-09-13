@@ -103,6 +103,7 @@ test("withEditorTotals replaces headline totals and the breakdown when present",
       artifice: [null],
       total: 200,
       exotic: false,
+      power: null,
     },
   };
   const next = withEditorTotals(data, {

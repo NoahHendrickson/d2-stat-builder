@@ -281,6 +281,14 @@ const BuildRow = memo(function BuildRow({
         </div>
         <div className="flex shrink-0 items-center gap-2 2xl:gap-5">
           <span className="text-sm tabular-nums 2xl:text-base">{loadout.total}</span>
+          {loadout.power !== null && (
+            <span
+              className="text-muted-foreground text-xs tabular-nums max-lg:hidden 2xl:text-sm"
+              title="Gear power — the game's average over these pieces (and your weapons, if entered)"
+            >
+              ✦ {loadout.power}
+            </span>
+          )}
           {setBadges.map((b) => (
             <Badge
               key={b.name}
@@ -354,6 +362,14 @@ const BuildRow = memo(function BuildRow({
                       <span className="truncate text-sm @[44rem]/build:text-base">
                         {piece.name}
                       </span>
+                      {piece.power !== undefined && (
+                        <span
+                          className="text-muted-foreground shrink-0 text-xs tabular-nums"
+                          title="Power"
+                        >
+                          ✦ {piece.power}
+                        </span>
+                      )}
                     </div>
                     {STAT_COLS.map(({ key, i }) => (
                       <div

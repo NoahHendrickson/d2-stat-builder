@@ -44,6 +44,7 @@ function makeLoadout(over: Partial<OptimizerLoadout> = {}): OptimizerLoadout {
     artifice: [null, null, null, null, null],
     total: 300,
     exotic: false,
+    power: null,
     ...over,
   };
 }
