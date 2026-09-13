@@ -9,7 +9,6 @@ import {
   useSyncExternalStore,
   type ReactNode,
 } from "react";
-import Image from "next/image";
 import { CaretDown, CheckCircle, CircleNotch, X } from "@phosphor-icons/react";
 import type { ArmorPiece } from "@/lib/armory/normalize";
 import type { ArmorSetInfo } from "@/lib/armory/sets";
@@ -121,12 +120,13 @@ function ArtificeCell({
 }
 
 /**
- * Figma 18:6865 breakdown grid: name column takes the slack, six stat columns and a
- * Tuning column are fixed so the Armor table and the totals block line up. Compact
- * below 2xl (icon headers, text-sm); Figma-sized at 2xl (text headers, text-base).
+ * Figma 18:6865 breakdown grid: name column hugs the longest piece name, six stat
+ * columns share the leftover so they don't sit in a cluster on the right. Compact
+ * (icon headers) by default; text headers only when *this card* is wide enough
+ * (viewport 2xl still leaves a narrow builds column beside the sidebar + config).
  */
 const BREAKDOWN_GRID =
-  "grid grid-cols-[minmax(0,1fr)_repeat(6,2.25rem)_1.5rem] items-center gap-x-2 2xl:grid-cols-[minmax(0,1fr)_repeat(6,3.75rem)_2.75rem] 2xl:gap-x-4";
+  "grid grid-cols-[minmax(7rem,max-content)_repeat(6,minmax(2.25rem,1fr))_auto] items-center gap-x-2 @[44rem]/build:grid-cols-[minmax(8rem,max-content)_repeat(6,minmax(2.5rem,1fr))_auto] @[44rem]/build:gap-x-4";
 
 /** Figma 18:6865 delta colours: +n green, -n destructive, 0 secondary. */
 const POSITIVE_CLASS = "text-[#1be364]";
@@ -230,7 +230,7 @@ const BuildRow = memo(function BuildRow({
   }
 
   return (
-    <div className={BUILD_CARD_LIFT_CLASS}>
+    <div className={cn(BUILD_CARD_LIFT_CLASS, "@container/build")}>
       <div className="overflow-hidden rounded-[8px]">
       {/* Figma 17:6044 — exotic tile, six stat chips spread over ~456px, total + set badge, caret */}
       <button
@@ -253,10 +253,13 @@ const BuildRow = memo(function BuildRow({
               height={40}
               loading="lazy"
               decoding="async"
-              className="size-10 shrink-0 rounded-[2px]"
+              className="size-10 max-w-none shrink-0 rounded-[2px]"
             />
           ) : (
-            <span className="bg-muted size-10 shrink-0 rounded-[2px]" aria-hidden />
+            <span
+              className="size-10 shrink-0 rounded-[2px] border border-dashed border-foreground/35 bg-foreground/12"
+              aria-hidden
+            />
           )}
           {/* Six evenly spaced stat chips; type and glyphs step up at 2xl where the column is Figma-wide */}
           <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-0.5 text-sm xl:grid xl:grid-cols-6 xl:gap-x-0.5 lg:max-w-[28.5rem] 2xl:gap-x-2 2xl:text-base">
@@ -311,15 +314,15 @@ const BuildRow = memo(function BuildRow({
                 key={key}
                 className="text-text-secondary text-sm font-medium"
               >
-                <span className="2xl:hidden">
+                <span className="@[44rem]/build:hidden">
                   <StatGlyph src={statIcons[key]} label={STAT_LABELS[key]} />
                 </span>
-                <span className="hidden 2xl:inline">{STAT_LABELS[key]}</span>
+                <span className="hidden @[44rem]/build:inline">{STAT_LABELS[key]}</span>
               </div>
             ))}
             <div className="text-text-secondary text-sm font-medium">
-              <span className="2xl:hidden" aria-hidden />
-              <span className="hidden 2xl:inline">Tuning</span>
+              <span className="@[44rem]/build:hidden" aria-hidden />
+              <span className="hidden @[44rem]/build:inline">Tuning</span>
             </div>
 
             {loadout.pieceIds.map((id, pi) => {
@@ -329,13 +332,15 @@ const BuildRow = memo(function BuildRow({
                 <Fragment key={id}>
                   <div className="flex min-w-0 items-center gap-2">
                     {piece.icon ? (
-                      <Image
+                      // eslint-disable-next-line @next/next/no-img-element -- expand mount: skip next/image
+                      <img
                         src={`${BUNGIE_IMAGE_BASE}${piece.icon}`}
                         alt=""
                         width={32}
                         height={32}
-                        className="size-8 shrink-0 rounded-[2px]"
-                        unoptimized
+                        loading="lazy"
+                        decoding="async"
+                        className="size-8 max-w-none shrink-0 rounded-[2px]"
                       />
                     ) : (
                       <span
@@ -343,14 +348,14 @@ const BuildRow = memo(function BuildRow({
                         aria-hidden
                       />
                     )}
-                    <span className="truncate text-sm 2xl:text-base">
+                    <span className="truncate text-sm @[44rem]/build:text-base">
                       {piece.name}
                     </span>
                   </div>
                   {STAT_COLS.map(({ key, i }) => (
                     <div
                       key={key}
-                      className="text-sm tabular-nums 2xl:text-base"
+                      className="text-sm tabular-nums @[44rem]/build:text-base"
                     >
                       {piece.stats[i] || ""}
                     </div>

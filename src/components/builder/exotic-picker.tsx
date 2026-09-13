@@ -74,7 +74,7 @@ export const ExoticPicker = memo(function ExoticPicker({
                     unoptimized
                   />
                 ) : (
-                  <span className="bg-card text-muted-foreground flex size-full items-center justify-center text-xs">
+                  <span className="flex size-full items-center justify-center bg-foreground/12 text-xs text-muted-foreground">
                     {exotic.name.slice(0, 2)}
                   </span>
                 )}

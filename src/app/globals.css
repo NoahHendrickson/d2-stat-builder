@@ -39,6 +39,7 @@
   --sidebar-accent-foreground: oklch(0.226 0 0);
   --sidebar-border: oklch(0.922 0.006 56.102);
   --sidebar-ring: oklch(0.708 0.006 56.102);
+  --dropdown: color-mix(in srgb, var(--sidebar) 50%, var(--card));
   --brand: #438eff;
   --brand-shadow: #75bcff;
   --neutral-line: #a1a1aa;
@@ -75,6 +76,7 @@
   --color-sidebar-primary: var(--sidebar-primary);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar: var(--sidebar);
+  --color-dropdown: var(--dropdown);
   --color-chart-5: var(--chart-5);
   --color-chart-4: var(--chart-4);
   --color-chart-3: var(--chart-3);
@@ -145,7 +147,8 @@
 }
 
 .dark {
-  /* Sidebar + app chrome #212222; stage (card) #2E3030. Type #fcfcf5.
+  /* Sidebar + app chrome #212222; stage (card) #2E3030; dropdown midpoint
+     #282929. Type #fcfcf5.
      Cream-on-dark alphas: border/accent 6% (#fcfcf50f), input 15% (checkbox
      and switch outlines need to stay visible on bg/popover AND on card/muted),
      hover 6%. */

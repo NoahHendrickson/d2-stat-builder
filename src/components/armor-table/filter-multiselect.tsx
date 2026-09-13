@@ -2,10 +2,11 @@
 
 import { TooltipLabel } from "@/components/ui/tooltip";
 import { useRef, useState } from "react";
-import { CaretDown, MagnifyingGlass, PushPin, X } from "@phosphor-icons/react";
+import { CaretUpDown, MagnifyingGlass, PushPin, X } from "@phosphor-icons/react";
 import { partitionByPin, type FilterOption } from "@/lib/armor-table/pinned";
 import {
   fieldControlInnerTriggerClasses,
+  fieldFilterActiveEdgeClasses,
   fieldFilterControlShellClasses,
 } from "@/lib/field-surface";
 import { cn } from "@/lib/utils";
@@ -39,9 +40,6 @@ export function selectionSummaryText<V>(
   const labels = selectedLabels(selected, options);
   return labels.length === 0 ? null : labels.join(", ");
 }
-
-export const filterMultiselectActiveBadgeClasses =
-  "h-4 shrink-0 border-transparent bg-emphatic px-1 text-[10px] text-emphatic-foreground tabular-nums";
 
 type FilterMultiselectPanelProps<V extends string | number> = {
   allLabel: string;
@@ -220,7 +218,11 @@ export function FilterMultiselect<V extends string | number>({
         }}
       >
         <div
-          className={cn(fieldFilterControlShellClasses, "box-border w-full")}
+          className={cn(
+            fieldFilterControlShellClasses,
+            "box-border w-full",
+            active && fieldFilterActiveEdgeClasses,
+          )}
           data-active={active || undefined}
         >
           <TooltipLabel
@@ -240,23 +242,24 @@ export function FilterMultiselect<V extends string | number>({
               className={fieldControlInnerTriggerClasses}
             >
               {active ? (
-                <span className="min-w-0 grow truncate text-left">
-                  {summaryText}
-                </span>
+                <>
+                  <span className="min-w-0 grow truncate text-left">
+                    {summaryText}
+                  </span>
+                  <span className="size-4 shrink-0" aria-hidden />
+                </>
               ) : (
-                <span className="min-w-0 truncate text-left text-muted-foreground">
+                <span className="min-w-0 truncate text-left text-foreground/70">
                   {allLabel}
                 </span>
               )}
-              {active ? (
-                <span className="size-4 shrink-0" aria-hidden />
-              ) : (
-                <CaretDown
-                  weight="duotone"
-                  className="text-muted-foreground pointer-events-none size-4 shrink-0"
-                  aria-hidden
-                />
-              )}
+              <CaretUpDown
+                className={cn(
+                  "pointer-events-none size-4 shrink-0",
+                  active ? "text-emphatic-foreground" : "text-foreground/70",
+                )}
+                aria-hidden
+              />
             </DropdownMenuTrigger>
           </TooltipLabel>
         </div>
@@ -269,9 +272,9 @@ export function FilterMultiselect<V extends string | number>({
                 onChange([]);
                 triggerRef.current?.focus();
               }}
-              className="text-muted-foreground hover:text-foreground focus-visible:ring-ring/50 absolute top-1/2 right-1.5 flex size-5 -translate-y-1/2 items-center justify-center rounded-[4px] outline-none focus-visible:ring-3"
+              className="text-emphatic-foreground focus-visible:ring-ring/50 absolute top-1/2 right-8 flex size-4 -translate-y-1/2 items-center justify-center rounded-[4px] outline-none focus-visible:ring-3"
             >
-              <X weight="bold" className="size-3.5" aria-hidden />
+              <X className="size-4" aria-hidden />
             </button>
           </TooltipLabel>
         )}

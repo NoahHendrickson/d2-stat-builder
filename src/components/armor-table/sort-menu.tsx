@@ -33,9 +33,9 @@ import {
 } from "@/lib/armor-table/sort";
 import { CustomOrderList } from "@/components/armor-table/custom-order-list";
 
-/** Opaque stand-in for white over the stage — `bg-white/N` shows rows through sticky headers. */
+/** Opaque stand-in for Figma's 16% black overlay — translucent fills show rows through sticky headers. */
 export const TABLE_HEADER_BG =
-  "bg-[color-mix(in_srgb,white_6%,var(--card))] dark:bg-[color-mix(in_srgb,white_3%,var(--card))]";
+  "bg-[color-mix(in_srgb,black_16%,var(--card))]";
 
 const TABLE_HEAD_CELL =
   "border-border/50 border-b py-2.5 pr-3 text-sm font-medium whitespace-nowrap first:pl-3 " +

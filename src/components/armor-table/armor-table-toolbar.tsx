@@ -1,7 +1,7 @@
 "use client";
 
 import { memo, type RefObject } from "react";
-import { MagnifyingGlass } from "@phosphor-icons/react";
+import { MagnifyingGlass, X } from "@phosphor-icons/react";
 import type { FilterOption } from "@/lib/armor-table/pinned";
 import type { ArmorVersion, FacetFilters } from "@/lib/armor-table/filters";
 import { CLASS_NAMES } from "@/lib/armory/stats";
@@ -82,14 +82,14 @@ export const ArmorTableToolbar = memo(function ArmorTableToolbar({
   };
 
   return (
-    <div className="@container/toolbar flex items-stretch gap-2 px-3 py-3">
+    <div className="@container/toolbar flex items-center gap-2 px-4 py-5">
       <span
-        className="shrink-0 self-center text-sm tabular-nums"
+        className="shrink-0 text-sm font-medium tabular-nums"
         aria-label={`${filteredCount} results`}
       >
         {filteredCount} {filteredCount === 1 ? "piece" : "pieces"}
       </span>
-      <div className="relative h-9 min-w-0 flex-1 self-stretch @[58rem]/toolbar:max-w-56">
+      <div className="relative h-8 min-w-0 flex-1 @[58rem]/toolbar:w-[272px] @[58rem]/toolbar:flex-none">
         <MagnifyingGlass
           className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 z-10 size-4 -translate-y-1/2"
           aria-hidden
@@ -106,10 +106,10 @@ export const ArmorTableToolbar = memo(function ArmorTableToolbar({
           }}
           placeholder="Press F to search"
           aria-label="Search armor by name"
-          className="pl-8"
+          className="h-8 bg-foreground/6 pl-8 dark:bg-foreground/6"
         />
       </div>
-      <div className="hidden min-w-0 items-center gap-2.5 @[58rem]/toolbar:flex">
+      <div className="hidden min-w-0 items-center gap-2 @[58rem]/toolbar:flex">
         <FilterMultiselect
           label="Class"
           allLabel="All classes"
@@ -136,7 +136,7 @@ export const ArmorTableToolbar = memo(function ArmorTableToolbar({
           onTogglePin={onTogglePinnedSet}
         />
       </div>
-      <div className="hidden min-w-0 items-center gap-2.5 @[82.5rem]/toolbar:flex">
+      <div className="hidden min-w-0 items-center gap-2 @[82.5rem]/toolbar:flex">
         <FilterMultiselect
           label="Archetype"
           allLabel="All archetypes"
@@ -170,18 +170,18 @@ export const ArmorTableToolbar = memo(function ArmorTableToolbar({
           triggerLabel="More filters"
         />
       </div>
-      <div className="h-9 shrink-0 self-stretch @[58rem]/toolbar:hidden">
+      <div className="h-8 shrink-0 @[58rem]/toolbar:hidden">
         <FilterCascadeMenu {...cascadeMenuProps} toggleSubmenusOnClick />
       </div>
       {filtersActive && (
         <Button
           type="button"
           variant="ghost"
-          size="lg"
-          className="ml-auto shrink-0"
+          className="ml-auto h-8 shrink-0 gap-1.5 rounded-lg border border-input bg-foreground/6 px-2.5 pr-3 font-normal text-foreground/70 hover:bg-foreground/8"
           onClick={onClearFilters}
         >
-          Clear all filters
+          <X className="size-4" aria-hidden />
+          Clear all
         </Button>
       )}
     </div>

@@ -430,7 +430,7 @@ export function ArmorTable() {
       {/* Toolbar + column headers share one tinted header band. The toolbar
           sits outside the scroller so it survives horizontal scroll; thead
           stays sticky inside it. */}
-      <div className={cn("border-border/50 shrink-0 border-b", TABLE_HEADER_BG)}>
+      <div className={cn("border-foreground/12 shrink-0 border-b", TABLE_HEADER_BG)}>
           <ArmorTableToolbar
             search={search}
             onSearchChange={setSearch}

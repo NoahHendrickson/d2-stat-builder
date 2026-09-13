@@ -852,9 +852,9 @@ export function BuilderPanel({
   );
 
   return (
-    <div className="mx-auto grid w-full max-w-7xl grid-cols-1 gap-10 lg:grid-cols-[minmax(18rem,38.58rem)_minmax(29rem,1fr)] lg:items-start lg:gap-x-20">
-      {/* Left — configure the build. 38.58rem column of sections separated by
-          1px dividers with 32px above and below each. */}
+    <div className="mx-auto grid w-full max-w-7xl grid-cols-1 gap-10 lg:grid-cols-[minmax(18rem,33.12rem)_minmax(29rem,1fr)] lg:items-start lg:gap-x-20">
+      {/* Left — configure the build. 33.12rem cap so the builds column is 15%
+          wider at max-w-7xl. Sections: 1px dividers, 32px above and below. */}
       <div className="divide-border divide-y">
         {ready && (
           <>

@@ -2,7 +2,7 @@
 
 import { TooltipLabel } from "@/components/ui/tooltip";
 import { useState } from "react";
-import { CaretDown } from "@phosphor-icons/react";
+import { CaretUpDown } from "@phosphor-icons/react";
 import type { FilterOption } from "@/lib/armor-table/pinned";
 import type {
   ArmorVersion,
@@ -17,6 +17,7 @@ import {
 import { cn } from "@/lib/utils";
 import {
   fieldControlInnerTriggerClasses,
+  fieldFilterActiveEdgeClasses,
   fieldFilterControlShellClasses,
 } from "@/lib/field-surface";
 import { Badge } from "@/components/ui/badge";
@@ -32,7 +33,6 @@ import {
 } from "@/components/ui/dropdown-menu";
 import {
   FilterMultiselectPanel,
-  filterMultiselectActiveBadgeClasses,
   selectionSummaryText,
 } from "@/components/armor-table/filter-multiselect";
 
@@ -177,6 +177,7 @@ export function FilterCascadeMenu({
         className={cn(
           fieldFilterControlShellClasses,
           "min-w-28 shrink-0",
+          active && fieldFilterActiveEdgeClasses,
         )}
         data-active={active || undefined}
       >
@@ -195,17 +196,24 @@ export function FilterCascadeMenu({
             }
             className={fieldControlInnerTriggerClasses}
           >
-            <span className="min-w-0 flex-1 truncate text-left">
+            <span
+              className={cn(
+                "min-w-0 flex-1 truncate text-left",
+                !active && "text-foreground/70",
+              )}
+            >
               {triggerLabel}
             </span>
             {active && (
-              <Badge className={filterMultiselectActiveBadgeClasses}>
+              <Badge className="h-4 shrink-0 border-transparent bg-white/20 px-1 text-[10px] text-emphatic-foreground tabular-nums">
                 {totalSelected}
               </Badge>
             )}
-            <CaretDown
-              weight="duotone"
-              className="text-muted-foreground pointer-events-none size-4 shrink-0"
+            <CaretUpDown
+              className={cn(
+                "pointer-events-none size-4 shrink-0",
+                active ? "text-emphatic-foreground" : "text-foreground/70",
+              )}
               aria-hidden
             />
           </DropdownMenuTrigger>
