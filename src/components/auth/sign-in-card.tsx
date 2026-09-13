@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import { useQueryClient } from "@tanstack/react-query";
 import { useSession } from "@/lib/auth/use-session";
 import { Button } from "@/components/ui/button";
@@ -62,7 +62,12 @@ export function SignInCard() {
             Sign out
           </Button>
         ) : (
-          <Button render={<a href="/api/auth/login" />} size="lg" className="w-full">
+          <Button
+            render={<a href="/api/auth/login" />}
+            nativeButton={false}
+            size="lg"
+            className="w-full"
+          >
             {isLoading ? "Loading…" : "Sign in with Bungie"}
           </Button>
         )}

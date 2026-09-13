@@ -23,6 +23,7 @@ function makePiece(i: number, over: Partial<ArmorPiece> = {}): ArmorPiece {
     classType: 1,
     isExotic: false,
     isArtifice: false,
+    isFestivalMask: false,
     baseStats: [...ZERO] as StatArray,
     stats: [...ZERO] as StatArray,
     location: "vault",
@@ -139,6 +140,29 @@ test("equipped carries the 5 pieces with string instance ids", () => {
   expect(dim.equipped[0]).toEqual({ id: "1000", hash: 2000 });
   expect(dim.unequipped).toEqual([]);
   expect(dim.classType).toBe(1);
+});
+
+test("Dreamer's Bond is omitted so the class-item slot stays empty", () => {
+  const dreamers = makePiece(4, {
+    instanceId: "synthetic-class-item:dreamers:320310251",
+    itemHash: 320310251,
+    name: "Dreamer's Bond",
+    slot: "classItem",
+    classType: 2,
+  });
+  const dim = buildDimLoadout(
+    makeInput({
+      pieces: [
+        makePiece(0),
+        makePiece(1),
+        makePiece(2),
+        makePiece(3),
+        dreamers,
+      ],
+    }),
+  );
+  expect(dim.equipped).toHaveLength(4);
+  expect(dim.equipped.map((i) => i.hash)).toEqual([2000, 2001, 2002, 2003]);
 });
 
 test("fragments become a synthetic subclass entry with sequential socketOverrides", () => {

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { availableFragments, buildFragmentStats } from "./fragments";
+import { availableFragments, buildFragmentStats, formatFragmentStats } from "./fragments";
 import type { Manifest } from "@/lib/manifest/load";
 import { STAT_HASHES } from "./stats";
 
@@ -81,5 +81,14 @@ describe("availableFragments", () => {
 
     const warlock = availableFragments(manifest, 2).Void[0];
     expect(warlock.stats).toEqual([0, 0, -10, 0, 0, 0]);
+  });
+});
+
+describe("formatFragmentStats", () => {
+  test("lists signed bonuses and skips zeros", () => {
+    expect(formatFragmentStats([10, 0, -10, 0, 0, 0])).toBe(
+      "+10 Weapons · −10 Class",
+    );
+    expect(formatFragmentStats([0, 0, 0, 0, 0, 0])).toBe("");
   });
 });

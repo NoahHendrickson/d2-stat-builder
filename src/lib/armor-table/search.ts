@@ -26,18 +26,29 @@ export function normalizeSearchText(text: string): string {
  * (typo-tolerant partial typing, e.g. "frpot" → "Ferropotent"). `token` must
  * already be normalized (tokenizeSearchQuery output).
  */
-export function looseNameMatch(token: string, name: string): boolean {
-  const t = token;
-  const n = normalizeSearchText(name);
-  if (t.length === 0) return true;
-  if (n.length === 0) return false;
-  if (n.includes(t)) return true;
+function looseNormalizedMatch(token: string, normalizedName: string): boolean {
+  if (token.length === 0) return true;
+  if (normalizedName.length === 0) return false;
+  if (normalizedName.includes(token)) return true;
 
   let ti = 0;
-  for (let ni = 0; ni < n.length && ti < t.length; ni++) {
-    if (n[ni] === t[ti]) ti++;
+  for (let ni = 0; ni < normalizedName.length && ti < token.length; ni++) {
+    if (normalizedName[ni] === token[ti]) ti++;
   }
-  return ti === t.length;
+  return ti === token.length;
+}
+
+export function looseNameMatch(token: string, name: string): boolean {
+  return looseNormalizedMatch(token, normalizeSearchText(name));
+}
+
+/** OR across tokens against an already-normalized name (skips per-row toLowerCase). */
+export function nameMatchesNormalized(
+  normalizedName: string,
+  tokens: readonly string[],
+): boolean {
+  if (tokens.length === 0) return true;
+  return tokens.some((token) => looseNormalizedMatch(token, normalizedName));
 }
 
 /** OR across tokens: the name matches when any token loosely matches it. */
@@ -45,6 +56,5 @@ export function nameMatchesSearch(
   name: string,
   tokens: readonly string[],
 ): boolean {
-  if (tokens.length === 0) return true;
-  return tokens.some((token) => looseNameMatch(token, name));
+  return nameMatchesNormalized(normalizeSearchText(name), tokens);
 }

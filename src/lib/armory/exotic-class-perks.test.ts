@@ -70,6 +70,7 @@ function piece(over: Partial<ArmorPiece> = {}): ArmorPiece {
     classType: 2,
     isExotic: true,
     isArtifice: false,
+    isFestivalMask: false,
     baseStats: [0, 0, 0, 20, 30, 25] as StatArray,
     stats,
     exoticPerkHashes: [INMOST, CYRTARACHNE],

@@ -1,12 +1,16 @@
 "use client";
 
-import type { RefObject } from "react";
-import { MagnifyingGlass } from "@phosphor-icons/react";
+import { memo, type RefObject } from "react";
+import { MagnifyingGlass, X } from "@phosphor-icons/react";
 import type { FilterOption } from "@/lib/armor-table/pinned";
-import type { ArmorVersion, FacetFilters, TuningFilter } from "@/lib/armor-table/filters";
+import type { ArmorVersion, FacetFilters } from "@/lib/armor-table/filters";
 import { CLASS_NAMES } from "@/lib/armory/stats";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { FilterCascadeMenu } from "@/components/armor-table/filter-cascade-menu";
+import {
+  FilterCascadeMenu,
+  TUNING_FILTER_OPTIONS,
+} from "@/components/armor-table/filter-cascade-menu";
 import { FilterMultiselect } from "@/components/armor-table/filter-multiselect";
 
 const CLASS_OPTIONS: FilterOption<number>[] = [0, 1, 2].map((c) => ({
@@ -22,11 +26,10 @@ const ARMOR_VERSION_OPTIONS: FilterOption<ArmorVersion>[] = [
 const OVERFLOW_FACETS = ["archetypes", "tunings", "tertiaries"] as const;
 
 /**
- * The table's filter bar: search, the six multiselect filters, and the
- * result count. Lives in the table frame's header row, above the
- * sticky column headers.
+ * The table's filter bar: result count, search, and the six multiselect
+ * filters. Sits above the sticky column headers.
  */
-export function ArmorTableToolbar({
+export const ArmorTableToolbar = memo(function ArmorTableToolbar({
   search,
   onSearchChange,
   searchRef,
@@ -79,17 +82,16 @@ export function ArmorTableToolbar({
   };
 
   return (
-    <div className="@container/toolbar flex items-stretch gap-2 px-3 py-4">
+    <div className="@container/toolbar flex items-center gap-2 px-4 py-5">
       <span
-        className="text-muted-foreground shrink-0 self-center text-xs tabular-nums"
+        className="shrink-0 text-sm font-medium tabular-nums"
         aria-label={`${filteredCount} results`}
       >
-        {filteredCount}
+        {filteredCount} {filteredCount === 1 ? "piece" : "pieces"}
       </span>
-      <div className="bg-border h-4 w-px shrink-0 self-center" aria-hidden />
-      <div className="relative h-8 min-w-0 flex-1 self-stretch @[58rem]/toolbar:max-w-56">
+      <div className="relative h-8 min-w-0 flex-1 @[58rem]/toolbar:w-[272px] @[58rem]/toolbar:flex-none">
         <MagnifyingGlass
-          className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 z-10 size-3.5 -translate-y-1/2"
+          className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 z-10 size-4 -translate-y-1/2"
           aria-hidden
         />
         <Input
@@ -104,10 +106,10 @@ export function ArmorTableToolbar({
           }}
           placeholder="Press F to search"
           aria-label="Search armor by name"
-          className="pl-6"
+          className="h-8 bg-foreground/6 pl-8 dark:bg-foreground/6"
         />
       </div>
-      <div className="hidden flex-1 shrink-0 items-center gap-2.5 @[58rem]/toolbar:flex">
+      <div className="hidden min-w-0 items-center gap-2 @[58rem]/toolbar:flex">
         <FilterMultiselect
           label="Class"
           allLabel="All classes"
@@ -134,7 +136,7 @@ export function ArmorTableToolbar({
           onTogglePin={onTogglePinnedSet}
         />
       </div>
-      <div className="hidden flex-1 shrink-0 items-center gap-2.5 @[82.5rem]/toolbar:flex">
+      <div className="hidden min-w-0 items-center gap-2 @[82.5rem]/toolbar:flex">
         <FilterMultiselect
           label="Archetype"
           allLabel="All archetypes"
@@ -146,15 +148,12 @@ export function ArmorTableToolbar({
           pinned={pinnedArchetypes}
           onTogglePin={onTogglePinnedArchetype}
         />
-        <FilterMultiselect<TuningFilter>
+        <FilterMultiselect
           label="Tuning"
           allLabel="Any tuning"
           value={facets.tunings}
           onChange={(v) => onFacetChange("tunings", v)}
-          options={[
-            ...statOptions,
-            { value: "none" as const, label: "Not tunable" },
-          ]}
+          options={TUNING_FILTER_OPTIONS}
         />
         <FilterMultiselect
           label="Tertiary"
@@ -171,9 +170,20 @@ export function ArmorTableToolbar({
           triggerLabel="More filters"
         />
       </div>
-      <div className="h-8 shrink-0 self-stretch @[58rem]/toolbar:hidden">
+      <div className="h-8 shrink-0 @[58rem]/toolbar:hidden">
         <FilterCascadeMenu {...cascadeMenuProps} toggleSubmenusOnClick />
       </div>
+      {filtersActive && (
+        <Button
+          type="button"
+          variant="ghost"
+          className="ml-auto h-8 shrink-0 gap-1.5 rounded-lg border border-input bg-foreground/6 px-2.5 pr-3 font-normal text-foreground/70 hover:bg-foreground/8"
+          onClick={onClearFilters}
+        >
+          <X className="size-4" aria-hidden />
+          Clear all
+        </Button>
+      )}
     </div>
   );
-}
+});

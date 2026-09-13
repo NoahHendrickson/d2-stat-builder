@@ -8,6 +8,7 @@ import type {
   DestinySocketTypeDefinition,
   DestinyClassDefinition,
   DestinyDamageTypeDefinition,
+  DestinySeasonDefinition,
 } from "bungie-api-ts/destiny2";
 
 /** The manifest definition tables this app needs for armor optimization. */
@@ -21,6 +22,8 @@ export const MANIFEST_TABLES = [
   "DestinySocketTypeDefinition",
   "DestinyClassDefinition",
   "DestinyDamageTypeDefinition",
+  // Tiny; maps the profile's currentSeasonHash → seasonNumber for saved artifact perks.
+  "DestinySeasonDefinition",
 ] as const;
 
 export type ManifestTableName = (typeof MANIFEST_TABLES)[number];
@@ -38,4 +41,5 @@ export interface ManifestTables {
   DestinySocketTypeDefinition: DefinitionTable<DestinySocketTypeDefinition>;
   DestinyClassDefinition: DefinitionTable<DestinyClassDefinition>;
   DestinyDamageTypeDefinition: DefinitionTable<DestinyDamageTypeDefinition>;
+  DestinySeasonDefinition: DefinitionTable<DestinySeasonDefinition>;
 }

@@ -2,6 +2,7 @@ import {
   getDestinyManifest,
   type DestinyInventoryItemDefinition,
 } from "bungie-api-ts/destiny2";
+import { isFestivalMask } from "@/lib/armory/festival-masks";
 import { createBungieHttp } from "@/lib/bungie/http";
 import {
   MANIFEST_TABLES,
@@ -21,6 +22,9 @@ const BUNGIE_ROOT = "https://www.bungie.net";
 // DestinyItemType values we keep from the (huge) item table.
 const ITEM_TYPE_ARMOR = 2;
 const ITEM_TYPE_MOD = 19;
+const ITEM_TYPE_SUBCLASS = 16;
+// Bump when the item-table filter changes so IndexedDB isn't stuck without new defs.
+const CACHE_REVISION = "festival-masks-v1";
 
 export interface Manifest {
   version: string;
@@ -55,17 +59,21 @@ function makeManifest(version: string, tables: ManifestTables): Manifest {
   };
 }
 
-/** Keep only armor pieces + plugs/mods from the full item table (it's ~190MB otherwise). */
+/** Keep armor, subclasses, plugs/mods, and Festival of the Lost masks. */
 function filterInventoryItems(
   all: Record<number, DestinyInventoryItemDefinition>,
 ): Record<number, DestinyInventoryItemDefinition> {
   const out: Record<number, DestinyInventoryItemDefinition> = {};
   for (const key in all) {
     const def = all[key];
+    // FotL masks use the helmet bucket but are not itemType Armor — without this
+    // they vanish from the cached item table and never enter the armory.
     if (
       def.itemType === ITEM_TYPE_ARMOR ||
       def.itemType === ITEM_TYPE_MOD ||
-      def.plug
+      def.itemType === ITEM_TYPE_SUBCLASS ||
+      def.plug ||
+      isFestivalMask(Number(key), def)
     ) {
       out[key as unknown as number] = def;
     }
@@ -94,10 +102,11 @@ export async function loadManifest(
   const res = await getDestinyManifest(http);
   const info = res.Response;
   const version = info.version;
+  const cacheVersion = `${version}:${CACHE_REVISION}`;
   const paths = info.jsonWorldComponentContentPaths.en;
 
   // Cache hit: load every needed table from IndexedDB (in parallel).
-  if ((await getCachedVersion()) === version) {
+  if ((await getCachedVersion()) === cacheVersion) {
     const tables = {} as ManifestTables;
     const cached = await Promise.all(
       MANIFEST_TABLES.map((table) => getCachedTable(table)),
@@ -136,7 +145,7 @@ export async function loadManifest(
       );
     }),
   );
-  await setCachedVersion(version);
+  await setCachedVersion(cacheVersion);
   onProgress?.("Manifest ready", 1);
   return makeManifest(version, tables);
 }

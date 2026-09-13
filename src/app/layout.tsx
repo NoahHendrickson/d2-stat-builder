@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
-import { AppHeader } from "@/components/app-header";
+import { AppShell } from "@/components/app-shell";
 import { LoadingScreen } from "@/components/loading/loading-screen";
 import { Providers } from "@/components/providers";
 import { Analytics } from "@vercel/analytics/next";
@@ -33,10 +33,9 @@ export default function RootLayout({
       suppressHydrationWarning
       className={`${geistSans.variable} ${geistMono.variable}`}
     >
-      <body className="min-h-screen antialiased">
+      <body className="h-dvh antialiased">
         <Providers>
-          <AppHeader />
-          {children}
+          <AppShell>{children}</AppShell>
           <LoadingScreen />
         </Providers>
         <Analytics />

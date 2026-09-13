@@ -3,9 +3,8 @@ import type { Subclass } from "../armory/fragments";
 /**
  * Subclass ITEM hashes per (subclass, classType 0 Titan | 1 Hunter | 2 Warlock).
  *
- * Hardcoded because the cached manifest deliberately drops subclass defs
- * (itemType 16 — see filterInventoryItems in src/lib/manifest/load.ts); keeping
- * them would force a full manifest re-download for a static 18-row table.
+ * Kept here for synchronous identification of saved subclass items, including
+ * share links and builder restoration before the manifest has loaded.
  * Subclass item hashes have been stable since their 3.0 reworks.
  * All 18 verified against manifest 244164.26.06.16.2053-2-bnet.65465
  * (itemType 16 + matching classType).
@@ -44,6 +43,52 @@ export const SUBCLASS_ITEM_HASHES: Record<Subclass, Record<number, number>> = {
 };
 
 /**
+ * DestinySocketCategory for the Super ability socket (DIM `SocketCategoryHashes.Super`).
+ * Index is not fixed — socket 0 is the class ability — so look this up per item.
+ */
+export const SUPER_SOCKET_CATEGORY_HASH = 457473665;
+export const SUPER_SOCKET_COUNT = 1;
+
+/**
+ * The ability sockets a loadout can pin, one plug each. Every subclass item lays them
+ * out as 0 class ability, 1 movement, 2 Super, 3 melee, 4 grenade (verified against the
+ * live manifest for all 18), but the index is looked up per item from the socket type's
+ * plug whitelist — its category identifier ends in the suffix below (e.g.
+ * `hunter.arc.class_abilities`, `shared.solar.grenades`). Prismatic's transcendence
+ * sockets (5–6) have no plug set and stay untouched.
+ */
+export const ABILITY_KINDS = ["super", "classAbility", "movement", "melee", "grenade"] as const;
+export type AbilityKind = (typeof ABILITY_KINDS)[number];
+export const ABILITY_PLUG_CATEGORY_SUFFIX: Record<AbilityKind, string> = {
+  super: "supers",
+  classAbility: "class_abilities",
+  movement: "movement",
+  melee: "melee",
+  grenade: "grenades",
+};
+export const ABILITY_LABELS: Record<AbilityKind, string> = {
+  super: "Super",
+  classAbility: "Class ability",
+  movement: "Jump",
+  melee: "Melee",
+  grenade: "Grenade",
+};
+/** Super + class ability + movement + melee + grenade. */
+export const ABILITY_SOCKET_COUNT = ABILITY_KINDS.length;
+
+/**
+ * Strand class abilities and jumps reuse Stasis icon files (`iconHash` points at
+ * the Stasis plug). The game tints them; UI applies Strand green via mix-blend.
+ */
+export function isStrandSharedAbilityIcon(plugCategory: string | undefined): boolean {
+  return (
+    !!plugCategory &&
+    (plugCategory.endsWith(".strand.class_abilities") ||
+      plugCategory.endsWith(".strand.movement"))
+  );
+}
+
+/**
  * First fragment socket index on a subclass item, used for the DIM handoff's
  * socketOverrides. Verified against the live manifest's socketEntries: every
  * non-Prismatic subclass has fragments at sockets 7–12; Prismatic puts
@@ -58,6 +103,13 @@ export const FRAGMENT_SOCKET_START: Record<Subclass, number> = {
   Strand: 7,
   Prismatic: 9,
 };
+
+export const ASPECT_SOCKET_COUNT = 2;
+export const FRAGMENT_SOCKET_COUNT = 6;
+
+export function aspectSocketStart(subclass: Subclass): number {
+  return FRAGMENT_SOCKET_START[subclass] - ASPECT_SOCKET_COUNT;
+}
 
 /** Reverse lookup: subclass item hash → Subclass. Built once from SUBCLASS_ITEM_HASHES. */
 const ITEM_HASH_TO_SUBCLASS: Map<number, Subclass> = (() => {

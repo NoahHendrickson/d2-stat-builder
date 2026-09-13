@@ -64,6 +64,8 @@ function sampleSelections(): PersistedSelections {
     allowTuning: true,
     balancedTuning: false,
     legacyExotics: false,
+    dreamersBond: true,
+    festivalMasks: false,
     activeSubclass: "Void",
     fragSel: fragSelToArrays(frag),
   };
@@ -116,6 +118,20 @@ test("load defaults legacyExotics to true for data stored before the field exist
   delete old.legacyExotics;
   localStorage.setItem(SELECTIONS_KEY, JSON.stringify(old));
   expect(loadSelections()).toEqual({ ...old, legacyExotics: true });
+});
+
+test("load defaults dreamersBond to false for data stored before the field existed", () => {
+  const old: Partial<PersistedSelections> = sampleSelections();
+  delete old.dreamersBond;
+  localStorage.setItem(SELECTIONS_KEY, JSON.stringify(old));
+  expect(loadSelections()).toEqual({ ...old, dreamersBond: false });
+});
+
+test("load defaults festivalMasks to false for data stored before the field existed", () => {
+  const old: Partial<PersistedSelections> = sampleSelections();
+  delete old.festivalMasks;
+  localStorage.setItem(SELECTIONS_KEY, JSON.stringify(old));
+  expect(loadSelections()).toEqual({ ...old, festivalMasks: false });
 });
 
 test("load defaults setFilters for data stored before the field existed", () => {

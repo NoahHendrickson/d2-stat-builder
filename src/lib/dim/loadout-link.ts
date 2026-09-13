@@ -1,6 +1,7 @@
 import type { ArmorPiece } from "@/lib/armory/normalize";
 import type { OptimizerLoadout } from "@/lib/optimizer/types";
 import type { StatModHashes } from "./mod-hashes";
+import { isDreamersBondId } from "../armory/dreamers-bond";
 import {
   BALANCED_TUNING_PLUG_HASH,
   STAT_HASHES,
@@ -27,9 +28,20 @@ export interface DimLoadoutItem {
   socketOverrides?: Record<number, number>;
 }
 
+/** dim-api `LoadoutParameters.artifactUnlocks` — the seasonal artifact perks a build assumes. */
+export interface DimArtifactUnlocks {
+  unlockedItemHashes: number[];
+  seasonNumber: number;
+}
+
+/**
+ * dim-api `Loadout` (the subset this app produces). Everything here is understood by
+ * DIM's `/loadouts?loadout=` import and is the source of truth for saved loadouts.
+ */
 export interface DimLoadout {
   id: string;
   name: string;
+  notes?: string;
   classType: number;
   equipped: DimLoadoutItem[];
   unequipped: DimLoadoutItem[];
@@ -38,6 +50,9 @@ export interface DimLoadout {
     exoticArmorHash?: number;
     assumeArmorMasterwork: number;
     statConstraints?: { statHash: number; minStat: number }[];
+    /** Required set-bonus piece counts (set hash → 2 | 4). */
+    setBonuses?: Record<number, number>;
+    artifactUnlocks?: DimArtifactUnlocks;
   };
 }
 
@@ -57,6 +72,10 @@ export interface DimLoadoutInput {
   /** Fragments carrier; omitted entirely when no fragments are selected. */
   subclass?: { itemHash: number; fragmentHashes: number[]; socketStart: number };
   name: string;
+  notes?: string;
+  /** Required set-bonus counts (set hash → 2 | 4); omitted when empty. */
+  setBonuses?: Record<number, number>;
+  artifactUnlocks?: DimArtifactUnlocks;
 }
 
 /**
@@ -92,12 +111,19 @@ export function buildDimLoadout(input: DimLoadoutInput): DimLoadout {
     artificeModHashes,
     subclass,
     name,
+    notes,
+    setBonuses,
+    artifactUnlocks,
   } = input;
 
-  const equipped: DimLoadoutItem[] = pieces.map((p) => ({
-    id: p.instanceId,
-    hash: p.itemHash,
-  }));
+  // Dreamer's Bond is a builder constraint, not an item to equip — leave the
+  // class-item slot empty so apply / DIM keep whatever is already on.
+  const equipped: DimLoadoutItem[] = pieces
+    .filter((p) => !isDreamersBondId(p.instanceId))
+    .map((p) => ({
+      id: p.instanceId,
+      hash: p.itemHash,
+    }));
 
   if (subclass && subclass.fragmentHashes.length > 0) {
     const socketOverrides: Record<number, number> = {};
@@ -152,9 +178,11 @@ export function buildDimLoadout(input: DimLoadoutInput): DimLoadout {
       : [],
   );
 
+  const hasSetBonuses = setBonuses && Object.keys(setBonuses).length > 0;
   return {
     id: "stat-builder", // required by DIM's type; replaced with a UUID on import
     name,
+    ...(notes ? { notes } : {}),
     classType,
     equipped,
     unequipped: [],
@@ -165,6 +193,8 @@ export function buildDimLoadout(input: DimLoadoutInput): DimLoadout {
         : undefined,
       assumeArmorMasterwork: ASSUME_MASTERWORK_ALL,
       ...(statConstraints.length > 0 ? { statConstraints } : {}),
+      ...(hasSetBonuses ? { setBonuses } : {}),
+      ...(artifactUnlocks ? { artifactUnlocks } : {}),
     },
   };
 }

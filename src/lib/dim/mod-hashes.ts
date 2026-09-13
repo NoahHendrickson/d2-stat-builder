@@ -1,11 +1,10 @@
-import type { Manifest } from "@/lib/manifest/load";
-import { STAT_HASH_TO_INDEX, TUNING_PLUG_CATEGORY } from "../armory/stats";
-
-/**
- * General armor stat-mod plug category — the socketable +10 ("major") and +5
- * ("minor") stat mods. Same category DIM/D2ArmorPicker key on.
- */
-const GENERAL_MOD_CATEGORY = "enhancements.v2_general";
+import { memoByManifest } from "@/lib/manifest/memo";
+import {
+  ARTIFICE_MOD_CATEGORY,
+  GENERAL_MOD_CATEGORY,
+  STAT_HASH_TO_INDEX,
+  TUNING_PLUG_CATEGORY,
+} from "../armory/stats";
 
 const MAJOR_MOD_BONUS = 10;
 const MINOR_MOD_BONUS = 5;
@@ -22,7 +21,7 @@ export interface StatModHashes {
  * armor stat worth 10 or 5. Redacted defs are skipped so a deprecated duplicate
  * can't shadow the live mod.
  */
-export function getStatModHashes(manifest: Manifest): StatModHashes[] {
+export const getStatModHashes = memoByManifest((manifest): StatModHashes[] => {
   const out: StatModHashes[] = Array.from({ length: 6 }, () => ({}));
   const table = manifest.all("DestinyInventoryItemDefinition");
   for (const key in table) {
@@ -40,6 +39,38 @@ export function getStatModHashes(manifest: Manifest): StatModHashes[] {
     else if (inv[0].value === MINOR_MOD_BONUS) out[idx].minor ??= Number(key);
   }
   return out;
+});
+
+/** Builder major-mod selector range is 0–5 (the remaining slots are minors). */
+const BUILDER_MAJOR_MOD_CAP = 5;
+
+type PlugDef = {
+  plug?: { plugCategoryIdentifier?: string };
+  investmentStats?: { statTypeHash: number; value: number }[];
+};
+
+/** True for a general-armor +10 stat mod (the builder's "major"). */
+export function isMajorStatMod(def: PlugDef | undefined): boolean {
+  if (!def || def.plug?.plugCategoryIdentifier !== GENERAL_MOD_CATEGORY) return false;
+  const inv = (def.investmentStats ?? []).filter(
+    (s) => STAT_HASH_TO_INDEX[s.statTypeHash] !== undefined,
+  );
+  return inv.length === 1 && inv[0].value === MAJOR_MOD_BONUS;
+}
+
+/**
+ * How many general +10 stat mods are in `mods`. Caps at the builder selector max
+ * so Optimize can set the budget from what's actually on the loadout.
+ */
+export function countMajorStatMods(
+  mods: readonly number[],
+  isMajor: (hash: number) => boolean,
+): number {
+  let n = 0;
+  for (const h of mods) {
+    if (isMajor(h)) n++;
+  }
+  return Math.min(BUILDER_MAJOR_MOD_CAP, n);
 }
 
 /**
@@ -48,7 +79,7 @@ export function getStatModHashes(manifest: Manifest): StatModHashes[] {
  * stat and −5 in another; the plugs are shared items across pieces, so one
  * global map serves every loadout. Balanced Tuning (all-positive) never matches.
  */
-export function getTuningPlugHashes(manifest: Manifest): Map<string, number> {
+export const getTuningPlugHashes = memoByManifest((manifest): Map<string, number> => {
   const out = new Map<string, number>();
   const table = manifest.all("DestinyInventoryItemDefinition");
   for (const key in table) {
@@ -70,10 +101,9 @@ export function getTuningPlugHashes(manifest: Manifest): Map<string, number> {
     if (!out.has(mapKey)) out.set(mapKey, Number(key));
   }
   return out;
-}
+});
 
 /** Artifice armor's socket-specific +3 stat mods (DIM keys on the same category). */
-const ARTIFICE_MOD_CATEGORY = "enhancements.artifice";
 const ARTIFICE_BONUS = 3;
 
 /**
@@ -81,7 +111,7 @@ const ARTIFICE_BONUS = 3;
  * from the manifest like the general mods: artifice-category plugs whose investment
  * is a single armor stat worth 3.
  */
-export function getArtificeModHashes(manifest: Manifest): (number | undefined)[] {
+export const getArtificeModHashes = memoByManifest((manifest): (number | undefined)[] => {
   const out: (number | undefined)[] = new Array(6).fill(undefined);
   const table = manifest.all("DestinyInventoryItemDefinition");
   for (const key in table) {
@@ -98,4 +128,4 @@ export function getArtificeModHashes(manifest: Manifest): (number | undefined)[]
     out[idx] ??= Number(key);
   }
   return out;
-}
+});

@@ -8,7 +8,6 @@ import {
   CLASS_NAMES,
   STAT_LABELS,
   STAT_ORDER,
-  type StatKey,
 } from "../armory/stats";
 import {
   isCustomOrderColumn,
@@ -19,6 +18,16 @@ import {
   type SortLevel,
   type SortState,
 } from "./filters";
+
+/**
+ * One collator for every text comparison. `localeCompare` resolves locale data per
+ * call; a sort over a full vault runs tens of thousands of comparisons per keystroke.
+ */
+const collator = new Intl.Collator();
+/** STAT_ORDER index per `stat-<key>` sort key, so the comparator doesn't scan per call. */
+const STAT_SORT_INDEX = new Map<SortKey, number>(
+  STAT_ORDER.map((key, i) => [`stat-${key}` as const, i]),
+);
 
 /** Stat columns default to descending (high rolls first); text columns to ascending. */
 export const DESC_FIRST: ReadonlySet<SortKey> = new Set<SortKey>(
@@ -181,10 +190,8 @@ export function sortValue(
   row: SortableRow,
   key: SortKey,
 ): string | number | undefined {
-  if (key.startsWith("stat-")) {
-    const statKey = key.slice("stat-".length) as StatKey;
-    return row.piece.stats[STAT_ORDER.indexOf(statKey)];
-  }
+  const statIndex = STAT_SORT_INDEX.get(key);
+  if (statIndex !== undefined) return row.piece.stats[statIndex];
   switch (key as ColumnKey) {
     case "name":
       return row.piece.name;
@@ -216,7 +223,7 @@ export function applyCustomOrder(
   order: string[] | undefined,
 ): string[] {
   return [...values].sort((a, b) =>
-    order ? compareWithCustomOrder(a, b, order) : a.localeCompare(b),
+    order ? compareWithCustomOrder(a, b, order) : collator.compare(a, b),
   );
 }
 
@@ -230,7 +237,7 @@ function compareWithCustomOrder(a: string, b: string, order: string[]): number {
   if (ia !== -1 && ib !== -1) return ia - ib;
   if (ia !== -1) return -1;
   if (ib !== -1) return 1;
-  return a.localeCompare(b);
+  return collator.compare(a, b);
 }
 
 function compareOneLevel(
@@ -249,7 +256,7 @@ function compareOneLevel(
     ? compareWithCustomOrder(String(va), String(vb), order)
     : typeof va === "number" && typeof vb === "number"
       ? va - vb
-      : String(va).localeCompare(String(vb));
+      : collator.compare(String(va), String(vb));
   return sortLevelAsc(level) ? cmp : -cmp;
 }
 

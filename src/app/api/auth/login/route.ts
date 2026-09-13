@@ -2,8 +2,6 @@ import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { buildAuthorizeUrl } from "@/lib/bungie/oauth";
 
-export const dynamic = "force-dynamic";
-
 /** Start the OAuth flow: set a CSRF `state` cookie and redirect to Bungie. */
 export async function GET() {
   const state = crypto.randomUUID();

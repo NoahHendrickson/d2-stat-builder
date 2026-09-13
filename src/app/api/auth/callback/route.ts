@@ -6,8 +6,6 @@ import { writeSession, type SessionUser } from "@/lib/bungie/session";
 import { createBungieHttp } from "@/lib/bungie/http";
 import { APP_URL } from "@/lib/bungie/constants";
 
-export const dynamic = "force-dynamic";
-
 /** Bungie redirects here with `code` + `state`. Exchange tokens server-side. */
 export async function GET(req: NextRequest) {
   const params = new URL(req.url).searchParams;
@@ -45,6 +43,7 @@ export async function GET(req: NextRequest) {
         (primary
           ? `${primary.bungieGlobalDisplayName}#${primary.bungieGlobalDisplayNameCode}`
           : undefined),
+      iconPath: data?.bungieNetUser?.profilePicturePath || undefined,
     };
 
     await writeSession(tokens, user);

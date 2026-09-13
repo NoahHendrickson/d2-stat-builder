@@ -7,6 +7,7 @@ import {
   getBuildsViewState,
 } from "@/components/builder/builds-column-content";
 import type { OptimizerOutput } from "@/lib/optimizer/types";
+import { useStoreValue, type ValueStore } from "@/lib/value-store";
 import { cn } from "@/lib/utils";
 
 export interface BuildsMobileBarProps {
@@ -14,7 +15,7 @@ export interface BuildsMobileBarProps {
   showLoading: boolean;
   running: boolean;
   result: OptimizerOutput | null;
-  displayedProgress: number;
+  displayedProgress: ValueStore<number>;
   open: boolean;
   onOpen: () => void;
 }
@@ -24,10 +25,11 @@ export function BuildsMobileBar({
   showLoading,
   running,
   result,
-  displayedProgress,
+  displayedProgress: progressStore,
   open,
   onOpen,
 }: BuildsMobileBarProps) {
+  const displayedProgress = useStoreValue(progressStore);
   if (!ready) return null;
 
   const state = getBuildsViewState({ ready, showLoading, result });

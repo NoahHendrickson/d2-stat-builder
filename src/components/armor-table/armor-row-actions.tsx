@@ -1,16 +1,19 @@
 "use client";
 
+import { TooltipLabel } from "@/components/ui/tooltip";
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { CircleNotch } from "@phosphor-icons/react";
-import { toast } from "sonner";
+import { toast } from "@/lib/toast";
 import type { ArmorPiece } from "@/lib/armory/normalize";
 import type { ArmoryCharacter } from "@/lib/armory/fetch";
 import { CLASS_NAMES } from "@/lib/armory/stats";
+import { planSpares } from "@/lib/bungie/equip-plan";
 import {
   equipItemRef,
   lastPlayedCharacter,
   postEquipRequest,
+  vaultedNote,
 } from "@/lib/bungie/equip-client";
 import { Button } from "@/components/ui/button";
 
@@ -20,7 +23,8 @@ function moveDisabledReason(
   piece: ArmorPiece,
   target: ArmoryCharacter | undefined,
 ): string | null {
-  if (!target) return `No ${CLASS_NAMES[piece.classType] ?? "matching"} character`;
+  if (!target)
+    return `No ${CLASS_NAMES[piece.classType] ?? "matching"} character`;
   if (piece.location === "equipped")
     return "Equipped items can't be moved — equip something else first";
   if (piece.location === "inventory" && piece.characterId === target.id)
@@ -32,7 +36,8 @@ function equipDisabledReason(
   piece: ArmorPiece,
   target: ArmoryCharacter | undefined,
 ): string | null {
-  if (!target) return `No ${CLASS_NAMES[piece.classType] ?? "matching"} character`;
+  if (!target)
+    return `No ${CLASS_NAMES[piece.classType] ?? "matching"} character`;
   if (piece.location === "equipped") {
     return piece.characterId === target.id
       ? "Already equipped"
@@ -57,6 +62,12 @@ export function ArmorRowActions({
 }) {
   const queryClient = useQueryClient();
   const [busy, setBusy] = useState<Action | null>(null);
+  // Every owned piece, read at click time. Subscribing via useArmory() here would give
+  // each virtualized row its own set of query observers just to plan spares.
+  const ownedPieces = (): ArmorPiece[] =>
+    queryClient
+      .getQueriesData<{ pieces: ArmorPiece[] }>({ queryKey: ["armory"] })
+      .find(([, data]) => data)?.[1]?.pieces ?? [];
 
   const target = lastPlayedCharacter(characters, piece.classType);
   const reasons: Record<Action, string | null> = {
@@ -68,11 +79,14 @@ export function ArmorRowActions({
     if (!target || busy) return;
     setBusy(action);
     try {
+      const items = [equipItemRef(piece)];
+      const owned = ownedPieces();
       const results = await postEquipRequest(
         {
           characterId: target.id,
           mode: action,
-          items: [equipItemRef(piece)],
+          items,
+          spares: planSpares(owned, items, target.id),
         },
         {
           queryClient,
@@ -84,10 +98,13 @@ export function ArmorRowActions({
       const result = results[0];
       const className = CLASS_NAMES[piece.classType] ?? "character";
       if (result?.ok) {
+        const nameOf = (id: string) =>
+          owned.find((p) => p.instanceId === id)?.name ?? "a piece";
         toast.success(
           action === "move"
             ? `Moved ${piece.name} to your ${className}`
             : `Equipped ${piece.name} on your ${className}`,
+          result.vaulted?.length ? vaultedNote(result.vaulted, nameOf) : undefined,
         );
         onDone();
       } else {
@@ -103,20 +120,25 @@ export function ArmorRowActions({
   return (
     <div className="flex items-center gap-1">
       {(["move", "equip"] as const).map((action) => (
-        <Button
+        <TooltipLabel
+          label={reasons[action] ?? undefined}
           key={action}
-          size="sm"
-          variant="outline"
-          className="h-6 px-2 text-xs"
-          disabled={Boolean(reasons[action]) || busy !== null}
-          title={reasons[action] ?? undefined}
-          onClick={() => void run(action)}
+          disabled={Boolean(reasons[action])}
         >
-          {busy === action && (
-            <CircleNotch className="animate-spin" aria-hidden />
-          )}
-          {action === "move" ? "Move" : "Equip"}
-        </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-6 px-2 text-xs"
+            disabled={Boolean(reasons[action]) || busy !== null}
+
+            onClick={() => void run(action)}
+          >
+            {busy === action && (
+              <CircleNotch className="animate-spin" aria-hidden />
+            )}
+            {action === "move" ? "Move" : "Equip"}
+          </Button>
+        </TooltipLabel>
       ))}
     </div>
   );

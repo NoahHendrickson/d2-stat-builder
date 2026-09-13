@@ -1,5 +1,5 @@
-// Relative timestamps for the "New drops" feed ("just now", "5 minutes ago",
-// "yesterday"). Intl.RelativeTimeFormat keeps this dependency-free.
+// Relative timestamps ("just now", "5 minutes ago", "yesterday").
+// Intl.RelativeTimeFormat keeps this dependency-free.
 
 const MINUTE_MS = 60_000;
 const HOUR_MS = 60 * MINUTE_MS;

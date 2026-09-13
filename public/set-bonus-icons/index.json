@@ -1,0 +1,1122 @@
+[
+  {
+    "setHash": 50540439,
+    "name": "Triumphal Anthem",
+    "perks": [
+      {
+        "requiredCount": 2,
+        "sandboxPerkHash": 4261390988,
+        "name": "Scoot to Loot",
+        "bungieIcon": "/common/destiny2_content/icons/cac950e06b8de21fafa8aca1ba217a4c.png",
+        "file": "triumphal-anthem-2pc-scoot-to-loot.png"
+      },
+      {
+        "requiredCount": 4,
+        "sandboxPerkHash": 4261390989,
+        "name": "Shoot to Scoot",
+        "bungieIcon": "/common/destiny2_content/icons/69c0437e7a2926aeb72b0395f4b88beb.png",
+        "file": "triumphal-anthem-4pc-shoot-to-scoot.png"
+      }
+    ]
+  },
+  {
+    "setHash": 222121557,
+    "name": "Seventh Seraph",
+    "perks": [
+      {
+        "requiredCount": 2,
+        "sandboxPerkHash": 4287944422,
+        "name": "Rasputin's Wrath",
+        "bungieIcon": "/common/destiny2_content/icons/18b5bd384a62c9f960e1f46907987f48.png",
+        "file": "seventh-seraph-2pc-rasputin-s-wrath.png"
+      },
+      {
+        "requiredCount": 4,
+        "sandboxPerkHash": 4287944423,
+        "name": "Rasputin's Reprisal",
+        "bungieIcon": "/common/destiny2_content/icons/991a1596482cd22ca393a748c2aa412c.png",
+        "file": "seventh-seraph-4pc-rasputin-s-reprisal.png"
+      }
+    ]
+  },
+  {
+    "setHash": 239346083,
+    "name": "Techsec",
+    "perks": [
+      {
+        "requiredCount": 2,
+        "sandboxPerkHash": 1130213040,
+        "name": "Wrecker",
+        "bungieIcon": "/common/destiny2_content/icons/bd2c44c6cb6a7f2a168a90be278aa8c4.png",
+        "file": "techsec-2pc-wrecker.png"
+      },
+      {
+        "requiredCount": 4,
+        "sandboxPerkHash": 1130213041,
+        "name": "Concussive Rounds",
+        "bungieIcon": "/common/destiny2_content/icons/56a10b99ed0b4b28d33696ec828b29b5.png",
+        "file": "techsec-4pc-concussive-rounds.png"
+      }
+    ]
+  },
+  {
+    "setHash": 305091568,
+    "name": "Oryx's Memory",
+    "perks": [
+      {
+        "requiredCount": 2,
+        "sandboxPerkHash": 846599599,
+        "name": "Iron Sharpens Iron",
+        "bungieIcon": "/common/destiny2_content/icons/c4d21817ea6e205ff95639019a38e7e2.png",
+        "file": "oryx-s-memory-2pc-iron-sharpens-iron.png"
+      },
+      {
+        "requiredCount": 4,
+        "sandboxPerkHash": 846599598,
+        "name": "Ascendant Escape",
+        "bungieIcon": "/common/destiny2_content/icons/e1e76d3824a761cf038e1f9d9be7c84f.png",
+        "file": "oryx-s-memory-4pc-ascendant-escape.png"
+      }
+    ]
+  },
+  {
+    "setHash": 305966751,
+    "name": "Iron Panoply Set",
+    "perks": [
+      {
+        "requiredCount": 2,
+        "sandboxPerkHash": 3157066724,
+        "name": "Vigilant Watch",
+        "bungieIcon": "/common/destiny2_content/icons/141304b7b66d2b8fad5b72c4ad29c40f.png",
+        "file": "iron-panoply-set-2pc-vigilant-watch.png"
+      },
+      {
+        "requiredCount": 4,
+        "sandboxPerkHash": 3157066725,
+        "name": "Iron Conviction",
+        "bungieIcon": "/common/destiny2_content/icons/729f24f6efeca3f59162885c8eddbaf3.png",
+        "file": "iron-panoply-set-4pc-iron-conviction.png"
+      }
+    ]
+  },
+  {
+    "setHash": 338646742,
+    "name": "Resonant Fury",
+    "perks": [
+      {
+        "requiredCount": 2,
+        "sandboxPerkHash": 1010623577,
+        "name": "Resonant Plating",
+        "bungieIcon": "/common/destiny2_content/icons/f7405da4c3f5e18e0a29f4ceca3aa8b0.png",
+        "file": "resonant-fury-2pc-resonant-plating.png"
+      },
+      {
+        "requiredCount": 4,
+        "sandboxPerkHash": 1010623576,
+        "name": "Siphoning Touch",
+        "bungieIcon": "/common/destiny2_content/icons/4678088483fa5ea38f509a02e24faf21.png",
+        "file": "resonant-fury-4pc-siphoning-touch.png"
+      }
+    ]
+  },
+  {
+    "setHash": 428813981,
+    "name": "Reverie Dawn",
+    "perks": [
+      {
+        "requiredCount": 2,
+        "sandboxPerkHash": 1246205950,
+        "name": "A Wish for Protection",
+        "bungieIcon": "/common/destiny2_content/icons/f61c57bf97db2da78a537c7933e45b94.png",
+        "file": "reverie-dawn-2pc-a-wish-for-protection.png"
+      },
+      {
+        "requiredCount": 4,
+        "sandboxPerkHash": 1246205951,
+        "name": "A Wish Fulfilled",
+        "bungieIcon": "/common/destiny2_content/icons/6882c7bf6dbcd564e9ef00a41818c9fd.png",
+        "file": "reverie-dawn-4pc-a-wish-fulfilled.png"
+      }
+    ]
+  },
+  {
+    "setHash": 499993704,
+    "name": "Luminopotent",
+    "perks": [
+      {
+        "requiredCount": 2,
+        "sandboxPerkHash": 2769443639,
+        "name": "Ionic Overclock",
+        "bungieIcon": "/common/destiny2_content/icons/6999410ff04b4144a07c39fbca5ea831.png",
+        "file": "luminopotent-2pc-ionic-overclock.png"
+      },
+      {
+        "requiredCount": 4,
+        "sandboxPerkHash": 2769443638,
+        "name": "Shock and Clear",
+        "bungieIcon": "/common/destiny2_content/icons/bdd6424d0b5dbee52505d969653c69e0.png",
+        "file": "luminopotent-4pc-shock-and-clear.png"
+      }
+    ]
+  },
+  {
+    "setHash": 640349758,
+    "name": "Kentarch 3",
+    "perks": [
+      {
+        "requiredCount": 2,
+        "sandboxPerkHash": 4110483281,
+        "name": "Network Admin",
+        "bungieIcon": "/common/destiny2_content/icons/aae858b35a0768b44be303cf9ae15d52.png",
+        "file": "kentarch-3-2pc-network-admin.png"
+      },
+      {
+        "requiredCount": 4,
+        "sandboxPerkHash": 4110483280,
+        "name": "Network Upload",
+        "bungieIcon": "/common/destiny2_content/icons/67080f11f3487aa8e442609becfdae93.png",
+        "file": "kentarch-3-4pc-network-upload.png"
+      }
+    ]
+  },
+  {
+    "setHash": 673904900,
+    "name": "Great Hunt",
+    "perks": [
+      {
+        "requiredCount": 2,
+        "sandboxPerkHash": 3657900811,
+        "name": "Taken Barrier",
+        "bungieIcon": "/common/destiny2_content/icons/28dc5b70823b878a972034c6eb05e666.png",
+        "file": "great-hunt-2pc-taken-barrier.png"
+      },
+      {
+        "requiredCount": 4,
+        "sandboxPerkHash": 3657900810,
+        "name": "Taken Armaments",
+        "bungieIcon": "/common/destiny2_content/icons/738273f563c6cc73bfde01357418adde.png",
+        "file": "great-hunt-4pc-taken-armaments.png"
+      }
+    ]
+  },
+  {
+    "setHash": 741162535,
+    "name": "Atheon's Memory",
+    "perks": [
+      {
+        "requiredCount": 2,
+        "sandboxPerkHash": 17188252,
+        "name": "Radiolaria Breach",
+        "bungieIcon": "/common/destiny2_content/icons/0a0c002d2eb7c7687fe93c02143d9c23.png",
+        "file": "atheon-s-memory-2pc-radiolaria-breach.png"
+      },
+      {
+        "requiredCount": 4,
+        "sandboxPerkHash": 17188253,
+        "name": "Collective Power",
+        "bungieIcon": "/common/destiny2_content/icons/19fd2268026b9e381de699a3dc941741.png",
+        "file": "atheon-s-memory-4pc-collective-power.png"
+      }
+    ]
+  },
+  {
+    "setHash": 742845781,
+    "name": "Cruel Electrum",
+    "perks": [
+      {
+        "requiredCount": 2,
+        "sandboxPerkHash": 2562518502,
+        "name": "Primary Survivor",
+        "bungieIcon": "/common/destiny2_content/icons/c1f98cc31a51f865ca062a684442964a.png",
+        "file": "cruel-electrum-2pc-primary-survivor.png"
+      },
+      {
+        "requiredCount": 4,
+        "sandboxPerkHash": 2562518503,
+        "name": "Primary Phantom",
+        "bungieIcon": "/common/destiny2_content/icons/72b47646330904d1a46cf54a779be28a.png",
+        "file": "cruel-electrum-4pc-primary-phantom.png"
+      }
+    ]
+  },
+  {
+    "setHash": 774717709,
+    "name": "Legacy's Oath",
+    "perks": [
+      {
+        "requiredCount": 2,
+        "sandboxPerkHash": 2270091246,
+        "name": "Augmented Servos",
+        "bungieIcon": "/common/destiny2_content/icons/dc92ca1a287bff0693fe128baff9df35.png",
+        "file": "legacy-s-oath-2pc-augmented-servos.png"
+      },
+      {
+        "requiredCount": 4,
+        "sandboxPerkHash": 2270091247,
+        "name": "God-like Judgment",
+        "bungieIcon": "/common/destiny2_content/icons/a33ab7d65a4aa836142ee869b0423c66.png",
+        "file": "legacy-s-oath-4pc-god-like-judgment.png"
+      }
+    ]
+  },
+  {
+    "setHash": 894715166,
+    "name": "AION Adapter",
+    "perks": [
+      {
+        "requiredCount": 2,
+        "sandboxPerkHash": 2840280305,
+        "name": "Force Absorption",
+        "bungieIcon": "/common/destiny2_content/icons/93c69df9a8c648602b10844524e8a0e6.png",
+        "file": "aion-adapter-2pc-force-absorption.png"
+      },
+      {
+        "requiredCount": 4,
+        "sandboxPerkHash": 2840280304,
+        "name": "Reactive Shock",
+        "bungieIcon": "/common/destiny2_content/icons/96a637543fc3a60cf55d6b333ad87661.png",
+        "file": "aion-adapter-4pc-reactive-shock.png"
+      }
+    ]
+  },
+  {
+    "setHash": 1007956300,
+    "name": "Collective Psyche",
+    "perks": [
+      {
+        "requiredCount": 2,
+        "sandboxPerkHash": 1901305283,
+        "name": "Accretion",
+        "bungieIcon": "/common/destiny2_content/icons/e8dc7995d41ec6eb0e68e6b811643a3b.png",
+        "file": "collective-psyche-2pc-accretion.png"
+      },
+      {
+        "requiredCount": 4,
+        "sandboxPerkHash": 1901305282,
+        "name": "Doppler Effect",
+        "bungieIcon": "/common/destiny2_content/icons/a96cbdea0b06d28d2780e100ac0ae51f.png",
+        "file": "collective-psyche-4pc-doppler-effect.png"
+      }
+    ]
+  },
+  {
+    "setHash": 1083114430,
+    "name": "Bushido",
+    "perks": [
+      {
+        "requiredCount": 2,
+        "sandboxPerkHash": 1964062929,
+        "name": "Iaido",
+        "bungieIcon": "/common/destiny2_content/icons/40abb2a18a499cc24222f052fca2a694.png",
+        "file": "bushido-2pc-iaido.png"
+      },
+      {
+        "requiredCount": 4,
+        "sandboxPerkHash": 1964062928,
+        "name": "Unfaltering Focus",
+        "bungieIcon": "/common/destiny2_content/icons/533277959c64b90c06bdea0a6dbaa723.png",
+        "file": "bushido-4pc-unfaltering-focus.png"
+      }
+    ]
+  },
+  {
+    "setHash": 1223381128,
+    "name": "AION Renewal",
+    "perks": [
+      {
+        "requiredCount": 2,
+        "sandboxPerkHash": 2140508055,
+        "name": "Force Converter",
+        "bungieIcon": "/common/destiny2_content/icons/005db44d00a46515888db51ffd60f1bd.png",
+        "file": "aion-renewal-2pc-force-converter.png"
+      },
+      {
+        "requiredCount": 4,
+        "sandboxPerkHash": 2140508054,
+        "name": "Reactive Booster",
+        "bungieIcon": "/common/destiny2_content/icons/609405930d800a057c5e6eef3edac14e.png",
+        "file": "aion-renewal-4pc-reactive-booster.png"
+      }
+    ]
+  },
+  {
+    "setHash": 1339137760,
+    "name": "Techeun's Regalia",
+    "perks": [
+      {
+        "requiredCount": 2,
+        "sandboxPerkHash": 2458353887,
+        "name": "Queensfoil Rush",
+        "bungieIcon": "/common/destiny2_content/icons/a57b51a297cda79eacb02322ada388ea.png",
+        "file": "techeun-s-regalia-2pc-queensfoil-rush.png"
+      },
+      {
+        "requiredCount": 4,
+        "sandboxPerkHash": 2458353886,
+        "name": "Truth to Power",
+        "bungieIcon": "/common/destiny2_content/icons/4449e9beedbec136551849b5a8802b35.png",
+        "file": "techeun-s-regalia-4pc-truth-to-power.png"
+      }
+    ]
+  },
+  {
+    "setHash": 1439803506,
+    "name": "Apostate's Blade",
+    "perks": [
+      {
+        "requiredCount": 2,
+        "sandboxPerkHash": 696050397,
+        "name": "Regenerative Threshold",
+        "bungieIcon": "/common/destiny2_content/icons/37ff5b490115feacf7606fa7c7d62105.png",
+        "file": "apostate-s-blade-2pc-regenerative-threshold.png"
+      },
+      {
+        "requiredCount": 4,
+        "sandboxPerkHash": 696050396,
+        "name": "Melee Conduction",
+        "bungieIcon": "/common/destiny2_content/icons/a4ce3890548fa343ab97556f6ef1bac7.png",
+        "file": "apostate-s-blade-4pc-melee-conduction.png"
+      }
+    ]
+  },
+  {
+    "setHash": 1490136267,
+    "name": "CODA",
+    "perks": [
+      {
+        "requiredCount": 2,
+        "sandboxPerkHash": 1814176200,
+        "name": "Between Poles",
+        "bungieIcon": "/common/destiny2_content/icons/a0241a2cdaf39e14af7605dd460756d0.png",
+        "file": "coda-2pc-between-poles.png"
+      },
+      {
+        "requiredCount": 4,
+        "sandboxPerkHash": 1814176201,
+        "name": "So Very Thin",
+        "bungieIcon": "/common/destiny2_content/icons/e9dc45fc2e1f56748d5ddb414ebdf99d.png",
+        "file": "coda-4pc-so-very-thin.png"
+      }
+    ]
+  },
+  {
+    "setHash": 1507061013,
+    "name": "Yearning Echo",
+    "perks": [
+      {
+        "requiredCount": 2,
+        "sandboxPerkHash": 2162040230,
+        "name": "Untold Greed",
+        "bungieIcon": "/common/destiny2_content/icons/e5e74b200fa0ca8c0a9edc63e62a4559.png",
+        "file": "yearning-echo-2pc-untold-greed.png"
+      },
+      {
+        "requiredCount": 4,
+        "sandboxPerkHash": 2162040231,
+        "name": "Overflowing Coffers",
+        "bungieIcon": "/common/destiny2_content/icons/9589b92d6863ebf09f776aad4dfbc2e3.png",
+        "file": "yearning-echo-4pc-overflowing-coffers.png"
+      }
+    ]
+  },
+  {
+    "setHash": 1523985791,
+    "name": "TM Custom",
+    "perks": [
+      {
+        "requiredCount": 2,
+        "sandboxPerkHash": 446332292,
+        "name": "Old Martian Diplomacy",
+        "bungieIcon": "/common/destiny2_content/icons/07bba1454e20ee9358ed61c4f20b7c34.png",
+        "file": "tm-custom-2pc-old-martian-diplomacy.png"
+      },
+      {
+        "requiredCount": 4,
+        "sandboxPerkHash": 446332293,
+        "name": "High Noon",
+        "bungieIcon": "/common/destiny2_content/icons/14b1ff03aa7eab854f220fdd32adf0ec.png",
+        "file": "tm-custom-4pc-high-noon.png"
+      }
+    ]
+  },
+  {
+    "setHash": 1557540933,
+    "name": "Deep Explorer",
+    "perks": [
+      {
+        "requiredCount": 2,
+        "sandboxPerkHash": 1875006806,
+        "name": "Built Bitter",
+        "bungieIcon": "/common/destiny2_content/icons/3384d936001688833ae09fa92cb280f5.png",
+        "file": "deep-explorer-2pc-built-bitter.png"
+      },
+      {
+        "requiredCount": 4,
+        "sandboxPerkHash": 1875006807,
+        "name": "Bittersweet",
+        "bungieIcon": "/common/destiny2_content/icons/2160d0b4551f285830bdf344f47a8a9d.png",
+        "file": "deep-explorer-4pc-bittersweet.png"
+      }
+    ]
+  },
+  {
+    "setHash": 1624798568,
+    "name": "Taken King",
+    "perks": [
+      {
+        "requiredCount": 2,
+        "sandboxPerkHash": 1836665911,
+        "name": "The Ceremony",
+        "bungieIcon": "/common/destiny2_content/icons/3e8ebec7f43a113e821dc29827165316.png",
+        "file": "taken-king-2pc-the-ceremony.png"
+      },
+      {
+        "requiredCount": 4,
+        "sandboxPerkHash": 1836665910,
+        "name": "Lucent Swarm",
+        "bungieIcon": "/common/destiny2_content/icons/a0480d71e1dea57fbea74496dd31e13a.png",
+        "file": "taken-king-4pc-lucent-swarm.png"
+      }
+    ]
+  },
+  {
+    "setHash": 1625535837,
+    "name": "First Ascent",
+    "perks": [
+      {
+        "requiredCount": 2,
+        "sandboxPerkHash": 3004427454,
+        "name": "Stack 'Em Up",
+        "bungieIcon": "/common/destiny2_content/icons/0d086c527eb8a84290ceea3d2069bf69.png",
+        "file": "first-ascent-2pc-stack-em-up.png"
+      },
+      {
+        "requiredCount": 4,
+        "sandboxPerkHash": 3004427455,
+        "name": "Burn 'Em Down",
+        "bungieIcon": "/common/destiny2_content/icons/65a58789810d5617352736c279d51edb.png",
+        "file": "first-ascent-4pc-burn-em-down.png"
+      }
+    ]
+  },
+  {
+    "setHash": 1658353742,
+    "name": "Dark Age",
+    "perks": [
+      {
+        "requiredCount": 2,
+        "sandboxPerkHash": 3599123169,
+        "name": "Taking Initiative",
+        "bungieIcon": "/common/destiny2_content/icons/5be6f5f0e14a37f1efe37644f37faa15.png",
+        "file": "dark-age-2pc-taking-initiative.png"
+      },
+      {
+        "requiredCount": 4,
+        "sandboxPerkHash": 3599123168,
+        "name": "Healing Initiative",
+        "bungieIcon": "/common/destiny2_content/icons/0273d18ef76b07eadc49e9ca2d131e73.png",
+        "file": "dark-age-4pc-healing-initiative.png"
+      }
+    ]
+  },
+  {
+    "setHash": 1777208707,
+    "name": "Iron Battalion Set",
+    "perks": [
+      {
+        "requiredCount": 2,
+        "sandboxPerkHash": 3575602896,
+        "name": "Primary Honing",
+        "bungieIcon": "/common/destiny2_content/icons/c3cc01210cee6c18152563202b5ac57d.png",
+        "file": "iron-battalion-set-2pc-primary-honing.png"
+      },
+      {
+        "requiredCount": 4,
+        "sandboxPerkHash": 3575602897,
+        "name": "Supercyclical",
+        "bungieIcon": "/common/destiny2_content/icons/d8a71c6aa15a6a1d14ab7fc8e13e203c.png",
+        "file": "iron-battalion-set-4pc-supercyclical.png"
+      }
+    ]
+  },
+  {
+    "setHash": 1790308978,
+    "name": "Cyberserpent Null",
+    "perks": [
+      {
+        "requiredCount": 2,
+        "sandboxPerkHash": 3432283357,
+        "name": "Adrenal Rush",
+        "bungieIcon": "/common/destiny2_content/icons/3b8036591bab64740db750efb05aab31.png",
+        "file": "cyberserpent-null-2pc-adrenal-rush.png"
+      },
+      {
+        "requiredCount": 4,
+        "sandboxPerkHash": 3432283356,
+        "name": "Bountiful Munitions",
+        "bungieIcon": "/common/destiny2_content/icons/c23f5d490b3084d0f051395dc16bdb42.png",
+        "file": "cyberserpent-null-4pc-bountiful-munitions.png"
+      }
+    ]
+  },
+  {
+    "setHash": 2032049849,
+    "name": "Circuit",
+    "perks": [
+      {
+        "requiredCount": 2,
+        "sandboxPerkHash": 2657416818,
+        "name": "Revving Up",
+        "bungieIcon": "/common/destiny2_content/icons/2bd8232d3bda3c410729c244956b2934.png",
+        "file": "circuit-2pc-revving-up.png"
+      },
+      {
+        "requiredCount": 4,
+        "sandboxPerkHash": 2657416819,
+        "name": "Dielectric Drift",
+        "bungieIcon": "/common/destiny2_content/icons/014d2db087e06c17703e3f48f1135e5d.png",
+        "file": "circuit-4pc-dielectric-drift.png"
+      }
+    ]
+  },
+  {
+    "setHash": 2132906400,
+    "name": "New Demotic",
+    "perks": [
+      {
+        "requiredCount": 2,
+        "sandboxPerkHash": 3160370591,
+        "name": "Paroli",
+        "bungieIcon": "/common/destiny2_content/icons/d4ce701db7e340f651fc7683fa615599.png",
+        "file": "new-demotic-2pc-paroli.png"
+      },
+      {
+        "requiredCount": 4,
+        "sandboxPerkHash": 3160370590,
+        "name": "Martingale",
+        "bungieIcon": "/common/destiny2_content/icons/8702ce0687c6933b63075a7456620954.png",
+        "file": "new-demotic-4pc-martingale.png"
+      }
+    ]
+  },
+  {
+    "setHash": 2151917545,
+    "name": "Thriving Survivor",
+    "perks": [
+      {
+        "requiredCount": 2,
+        "sandboxPerkHash": 681117218,
+        "name": "Opening Act",
+        "bungieIcon": "/common/destiny2_content/icons/9763eb72bc446b9d9f1b2c2b5efca82d.png",
+        "file": "thriving-survivor-2pc-opening-act.png"
+      },
+      {
+        "requiredCount": 4,
+        "sandboxPerkHash": 681117219,
+        "name": "Room Clearing",
+        "bungieIcon": "/common/destiny2_content/icons/319e1b357fb1e2b7108f489f792c31ed.png",
+        "file": "thriving-survivor-4pc-room-clearing.png"
+      }
+    ]
+  },
+  {
+    "setHash": 2250480800,
+    "name": "Dreambane",
+    "perks": [
+      {
+        "requiredCount": 2,
+        "sandboxPerkHash": 3449901215,
+        "name": "Nightmarish Power",
+        "bungieIcon": "/common/destiny2_content/icons/589460862ff8d80364db3a9b6205e071.png",
+        "file": "dreambane-2pc-nightmarish-power.png"
+      },
+      {
+        "requiredCount": 4,
+        "sandboxPerkHash": 3449901214,
+        "name": "Nightmarish Resilience",
+        "bungieIcon": "/common/destiny2_content/icons/8d927506b9d4310414df97a1da85210e.png",
+        "file": "dreambane-4pc-nightmarish-resilience.png"
+      }
+    ]
+  },
+  {
+    "setHash": 2258577662,
+    "name": "Wild Anthem",
+    "perks": [
+      {
+        "requiredCount": 2,
+        "sandboxPerkHash": 3390457361,
+        "name": "Fanfare",
+        "bungieIcon": "/common/destiny2_content/icons/403810a27b0b33248f7a876904e1977b.png",
+        "file": "wild-anthem-2pc-fanfare.png"
+      },
+      {
+        "requiredCount": 4,
+        "sandboxPerkHash": 3390457360,
+        "name": "Suros Harmony",
+        "bungieIcon": "/common/destiny2_content/icons/d3959132415be3779f6e2a46dbb531f6.png",
+        "file": "wild-anthem-4pc-suros-harmony.png"
+      }
+    ]
+  },
+  {
+    "setHash": 2386215115,
+    "name": "Pantheos Resplendent",
+    "perks": [
+      {
+        "requiredCount": 2,
+        "sandboxPerkHash": 2318783944,
+        "name": "Well Prepared",
+        "bungieIcon": "/common/destiny2_content/icons/51c4b62173e6e870551d99d256d25d86.png",
+        "file": "pantheos-resplendent-2pc-well-prepared.png"
+      },
+      {
+        "requiredCount": 4,
+        "sandboxPerkHash": 2318783945,
+        "name": "Down the Line",
+        "bungieIcon": "/common/destiny2_content/icons/f0a2eb584d440e878d7fe9e9c7884e3b.png",
+        "file": "pantheos-resplendent-4pc-down-the-line.png"
+      }
+    ]
+  },
+  {
+    "setHash": 2391762223,
+    "name": "Swordmaster",
+    "perks": [
+      {
+        "requiredCount": 2,
+        "sandboxPerkHash": 3916960436,
+        "name": "Balestra",
+        "bungieIcon": "/common/destiny2_content/icons/a29d645f714faf4f59a2a2f5e0cf6f70.png",
+        "file": "swordmaster-2pc-balestra.png"
+      },
+      {
+        "requiredCount": 4,
+        "sandboxPerkHash": 3916960437,
+        "name": "Stesso Tempo",
+        "bungieIcon": "/common/destiny2_content/icons/837bdc2b437d0ed6da5d665b59af7ebc.png",
+        "file": "swordmaster-4pc-stesso-tempo.png"
+      }
+    ]
+  },
+  {
+    "setHash": 2450108908,
+    "name": "Wayward Psyche Set",
+    "perks": [
+      {
+        "requiredCount": 2,
+        "sandboxPerkHash": 3376007203,
+        "name": "Special Relativity",
+        "bungieIcon": "/common/destiny2_content/icons/daf157f0334a83d1870ef0f325b1c25a.png",
+        "file": "wayward-psyche-set-2pc-special-relativity.png"
+      },
+      {
+        "requiredCount": 4,
+        "sandboxPerkHash": 3376007202,
+        "name": "Superluminal Motion",
+        "bungieIcon": "/common/destiny2_content/icons/bfaac852d350fb7cabb9a7a06deef4a6.png",
+        "file": "wayward-psyche-set-4pc-superluminal-motion.png"
+      }
+    ]
+  },
+  {
+    "setHash": 2461275960,
+    "name": "Eutechnology",
+    "perks": [
+      {
+        "requiredCount": 2,
+        "sandboxPerkHash": 4083289735,
+        "name": "Gift of the Ley Lines",
+        "bungieIcon": "/common/destiny2_content/icons/a304f92290458d486ab19fcd1ef6f6ff.png",
+        "file": "eutechnology-2pc-gift-of-the-ley-lines.png"
+      },
+      {
+        "requiredCount": 4,
+        "sandboxPerkHash": 4083289734,
+        "name": "Techeun's Foresight",
+        "bungieIcon": "/common/destiny2_content/icons/7a80a0a2d1abacd0ce64e71bafff34f3.png",
+        "file": "eutechnology-4pc-techeun-s-foresight.png"
+      }
+    ]
+  },
+  {
+    "setHash": 2481896422,
+    "name": "Veritas",
+    "perks": [
+      {
+        "requiredCount": 2,
+        "sandboxPerkHash": 1302582377,
+        "name": "Lucent Transmutation",
+        "bungieIcon": "/common/destiny2_content/icons/94133689fdafe43c92af39875e4b35cf.png",
+        "file": "veritas-2pc-lucent-transmutation.png"
+      },
+      {
+        "requiredCount": 4,
+        "sandboxPerkHash": 1302582376,
+        "name": "Lucent Tithes",
+        "bungieIcon": "/common/destiny2_content/icons/9ca2d24cfb79d72ec09ddd3c78a19e75.png",
+        "file": "veritas-4pc-lucent-tithes.png"
+      }
+    ]
+  },
+  {
+    "setHash": 2554324129,
+    "name": "Wildwood",
+    "perks": [
+      {
+        "requiredCount": 2,
+        "sandboxPerkHash": 4160419914,
+        "name": "Watchtower",
+        "bungieIcon": "/common/destiny2_content/icons/4e2aece7b23761d572a716fa737c5d2d.png",
+        "file": "wildwood-2pc-watchtower.png"
+      },
+      {
+        "requiredCount": 4,
+        "sandboxPerkHash": 4160419915,
+        "name": "Field Expertise",
+        "bungieIcon": "/common/destiny2_content/icons/5311ea5b6731e151e9778deac078710c.png",
+        "file": "wildwood-4pc-field-expertise.png"
+      }
+    ]
+  },
+  {
+    "setHash": 2586994783,
+    "name": "Nezarec's Nightmare",
+    "perks": [
+      {
+        "requiredCount": 2,
+        "sandboxPerkHash": 1567556260,
+        "name": "Bad Dreams",
+        "bungieIcon": "/common/destiny2_content/icons/353f44c5dc35f53b9cbdc5e7275e79f5.png",
+        "file": "nezarec-s-nightmare-2pc-bad-dreams.png"
+      },
+      {
+        "requiredCount": 4,
+        "sandboxPerkHash": 1567556261,
+        "name": "Dream-Devourer",
+        "bungieIcon": "/common/destiny2_content/icons/7c6a982de9632a3a04dbe1c9a51fc150.png",
+        "file": "nezarec-s-nightmare-4pc-dream-devourer.png"
+      }
+    ]
+  },
+  {
+    "setHash": 2618364783,
+    "name": "Per Audacia",
+    "perks": [
+      {
+        "requiredCount": 2,
+        "sandboxPerkHash": 3091068916,
+        "name": "Primary Chain",
+        "bungieIcon": "/common/destiny2_content/icons/495764dd5f65e2232fb197614a6242bc.png",
+        "file": "per-audacia-2pc-primary-chain.png"
+      },
+      {
+        "requiredCount": 4,
+        "sandboxPerkHash": 3091068917,
+        "name": "Sublime Transit",
+        "bungieIcon": "/common/destiny2_content/icons/6c68d32bd7dd8a61b059c44ac1218272.png",
+        "file": "per-audacia-4pc-sublime-transit.png"
+      }
+    ]
+  },
+  {
+    "setHash": 2620550053,
+    "name": "Crota's Memory",
+    "perks": [
+      {
+        "requiredCount": 2,
+        "sandboxPerkHash": 3872620150,
+        "name": "Cursed Fist",
+        "bungieIcon": "/common/destiny2_content/icons/161a3720af72721392e459e6a66f087d.png",
+        "file": "crota-s-memory-2pc-cursed-fist.png"
+      },
+      {
+        "requiredCount": 4,
+        "sandboxPerkHash": 3872620151,
+        "name": "Power of the Son",
+        "bungieIcon": "/common/destiny2_content/icons/63000cbeef61981c3efe32992739789b.png",
+        "file": "crota-s-memory-4pc-power-of-the-son.png"
+      }
+    ]
+  },
+  {
+    "setHash": 2687807560,
+    "name": "Promised",
+    "perks": [
+      {
+        "requiredCount": 2,
+        "sandboxPerkHash": 705026903,
+        "name": "Stable Resonance",
+        "bungieIcon": "/common/destiny2_content/icons/f49ca4f83e2c2f9bc8b8fb331ccf58d7.png",
+        "file": "promised-2pc-stable-resonance.png"
+      },
+      {
+        "requiredCount": 4,
+        "sandboxPerkHash": 705026902,
+        "name": "Resonance Redirection",
+        "bungieIcon": "/common/destiny2_content/icons/e4510ff158987fee7ac3953391f6435e.png",
+        "file": "promised-4pc-resonance-redirection.png"
+      }
+    ]
+  },
+  {
+    "setHash": 2751989785,
+    "name": "Smoke Jumper Set",
+    "perks": [
+      {
+        "requiredCount": 2,
+        "sandboxPerkHash": 3078673682,
+        "name": "Ride Together, Die Together",
+        "bungieIcon": "/common/destiny2_content/icons/e752466e7923c7137927722f38f18550.png",
+        "file": "smoke-jumper-set-2pc-ride-together-die-together.png"
+      },
+      {
+        "requiredCount": 4,
+        "sandboxPerkHash": 3078673683,
+        "name": "Too Old for This",
+        "bungieIcon": "/common/destiny2_content/icons/a76d27306334a934577ef92a037f2ce0.png",
+        "file": "smoke-jumper-set-4pc-too-old-for-this.png"
+      }
+    ]
+  },
+  {
+    "setHash": 2839368623,
+    "name": "Shrewd Survivor",
+    "perks": [
+      {
+        "requiredCount": 2,
+        "sandboxPerkHash": 219133236,
+        "name": "Reflex Action",
+        "bungieIcon": "/common/destiny2_content/icons/7f09f6e0067a733d41e745781bc402a9.png",
+        "file": "shrewd-survivor-2pc-reflex-action.png"
+      },
+      {
+        "requiredCount": 4,
+        "sandboxPerkHash": 219133237,
+        "name": "Hotshot",
+        "bungieIcon": "/common/destiny2_content/icons/04b973a7cfccbd68319667558dcbe82c.png",
+        "file": "shrewd-survivor-4pc-hotshot.png"
+      }
+    ]
+  },
+  {
+    "setHash": 2947197258,
+    "name": "Disaster Corps Set",
+    "perks": [
+      {
+        "requiredCount": 2,
+        "sandboxPerkHash": 2513809221,
+        "name": "Pleas Heard",
+        "bungieIcon": "/common/destiny2_content/icons/ff4d0d19141fee88ce61994a3aea8bbc.png",
+        "file": "disaster-corps-set-2pc-pleas-heard.png"
+      },
+      {
+        "requiredCount": 4,
+        "sandboxPerkHash": 2513809220,
+        "name": "Magnificent Duty",
+        "bungieIcon": "/common/destiny2_content/icons/5dee6c3209d00db6558954aec7fa7219.png",
+        "file": "disaster-corps-set-4pc-magnificent-duty.png"
+      }
+    ]
+  },
+  {
+    "setHash": 3090557911,
+    "name": "Crystocrene",
+    "perks": [
+      {
+        "requiredCount": 2,
+        "sandboxPerkHash": 793561548,
+        "name": "Resupply",
+        "bungieIcon": "/common/destiny2_content/icons/bd176b87f172c0affdec5a8e10e5ae8c.png",
+        "file": "crystocrene-2pc-resupply.png"
+      },
+      {
+        "requiredCount": 4,
+        "sandboxPerkHash": 793561549,
+        "name": "From the Storm",
+        "bungieIcon": "/common/destiny2_content/icons/046a5d59d06ab9cfb7488faacdc4b6eb.png",
+        "file": "crystocrene-4pc-from-the-storm.png"
+      }
+    ]
+  },
+  {
+    "setHash": 3120219904,
+    "name": "Exodus Down",
+    "perks": [
+      {
+        "requiredCount": 2,
+        "sandboxPerkHash": 1076851135,
+        "name": "Emergency Electromagnet",
+        "bungieIcon": "/common/destiny2_content/icons/8b11633d8026079a0841ca92c211a713.png",
+        "file": "exodus-down-2pc-emergency-electromagnet.png"
+      },
+      {
+        "requiredCount": 4,
+        "sandboxPerkHash": 1076851134,
+        "name": "Repurposed Charge",
+        "bungieIcon": "/common/destiny2_content/icons/98a8854b4477cb8a722024a7015dcf89.png",
+        "file": "exodus-down-4pc-repurposed-charge.png"
+      }
+    ]
+  },
+  {
+    "setHash": 3252452908,
+    "name": "Last Discipline",
+    "perks": [
+      {
+        "requiredCount": 2,
+        "sandboxPerkHash": 2433863523,
+        "name": "Terminal Velocity",
+        "bungieIcon": "/common/destiny2_content/icons/6d90a805ee5c1a2a3eafe5b64b29f1ec.png",
+        "file": "last-discipline-2pc-terminal-velocity.png"
+      },
+      {
+        "requiredCount": 4,
+        "sandboxPerkHash": 2433863522,
+        "name": "Power Loader",
+        "bungieIcon": "/common/destiny2_content/icons/c918b80d815f1a54755a0b9b8fcbf7ed.png",
+        "file": "last-discipline-4pc-power-loader.png"
+      }
+    ]
+  },
+  {
+    "setHash": 3259216565,
+    "name": "Twofold Crown",
+    "perks": [
+      {
+        "requiredCount": 2,
+        "sandboxPerkHash": 1025384966,
+        "name": "Crook and Flail",
+        "bungieIcon": "/common/destiny2_content/icons/b80634df8d4c10ccd0b3d77f6c03094d.png",
+        "file": "twofold-crown-2pc-crook-and-flail.png"
+      },
+      {
+        "requiredCount": 4,
+        "sandboxPerkHash": 1025384967,
+        "name": "Gift of Sight",
+        "bungieIcon": "/common/destiny2_content/icons/d45b0c7e60cb34ef703d20c85e3737a5.png",
+        "file": "twofold-crown-4pc-gift-of-sight.png"
+      }
+    ]
+  },
+  {
+    "setHash": 3283637820,
+    "name": "Thunderhead",
+    "perks": [
+      {
+        "requiredCount": 2,
+        "sandboxPerkHash": 4275454259,
+        "name": "License to Thrill",
+        "bungieIcon": "/common/destiny2_content/icons/41f83623b1974e71b4e008b6baeb6269.png",
+        "file": "thunderhead-2pc-license-to-thrill.png"
+      },
+      {
+        "requiredCount": 4,
+        "sandboxPerkHash": 4275454258,
+        "name": "Lethal Weave",
+        "bungieIcon": "/common/destiny2_content/icons/39749db8864643f96bb20296732d4e8d.png",
+        "file": "thunderhead-4pc-lethal-weave.png"
+      }
+    ]
+  },
+  {
+    "setHash": 3639539903,
+    "name": "Spacewalk",
+    "perks": [
+      {
+        "requiredCount": 2,
+        "sandboxPerkHash": 627214276,
+        "name": "Augmented Armaments",
+        "bungieIcon": "/common/destiny2_content/icons/c69c2f408beb711a0529712a53abe120.png",
+        "file": "spacewalk-2pc-augmented-armaments.png"
+      },
+      {
+        "requiredCount": 4,
+        "sandboxPerkHash": 627214277,
+        "name": "Augmented Explosives",
+        "bungieIcon": "/common/destiny2_content/icons/fe4bf02ec75185ba071c0a30b53f8037.png",
+        "file": "spacewalk-4pc-augmented-explosives.png"
+      }
+    ]
+  },
+  {
+    "setHash": 3656317458,
+    "name": "Flain",
+    "perks": [
+      {
+        "requiredCount": 2,
+        "sandboxPerkHash": 754620349,
+        "name": "Sinew Stitching",
+        "bungieIcon": "/common/destiny2_content/icons/c1e6c0367ad681dada7bb3f4f2affd04.png",
+        "file": "flain-2pc-sinew-stitching.png"
+      },
+      {
+        "requiredCount": 4,
+        "sandboxPerkHash": 754620348,
+        "name": "Knit Together",
+        "bungieIcon": "/common/destiny2_content/icons/4b3cbd3ca5f5ffa0b6d484f139d1c006.png",
+        "file": "flain-4pc-knit-together.png"
+      }
+    ]
+  },
+  {
+    "setHash": 3734029045,
+    "name": "Ferropotent",
+    "perks": [
+      {
+        "requiredCount": 2,
+        "sandboxPerkHash": 3458982982,
+        "name": "Rapid Repair",
+        "bungieIcon": "/common/destiny2_content/icons/a3ce83264ba9520c563cf6d621c66565.png",
+        "file": "ferropotent-2pc-rapid-repair.png"
+      },
+      {
+        "requiredCount": 4,
+        "sandboxPerkHash": 3458982983,
+        "name": "Built from Scratch",
+        "bungieIcon": "/common/destiny2_content/icons/354d07625ba9f6806c4062e2711c5f0f.png",
+        "file": "ferropotent-4pc-built-from-scratch.png"
+      }
+    ]
+  },
+  {
+    "setHash": 3737690559,
+    "name": "Lustrous",
+    "perks": [
+      {
+        "requiredCount": 2,
+        "sandboxPerkHash": 4048287940,
+        "name": "Photogalvanic",
+        "bungieIcon": "/common/destiny2_content/icons/3c9918529fb85eb95b151c2461b63b9c.png",
+        "file": "lustrous-2pc-photogalvanic.png"
+      },
+      {
+        "requiredCount": 4,
+        "sandboxPerkHash": 4048287941,
+        "name": "Cauterize",
+        "bungieIcon": "/common/destiny2_content/icons/fb229a054586415903e6539ea363f63a.png",
+        "file": "lustrous-4pc-cauterize.png"
+      }
+    ]
+  },
+  {
+    "setHash": 4222859846,
+    "name": "Sage Protector",
+    "perks": [
+      {
+        "requiredCount": 2,
+        "sandboxPerkHash": 109046537,
+        "name": "Combat Meditation",
+        "bungieIcon": "/common/destiny2_content/icons/899fc042368ce701ca12f69df23dcc38.png",
+        "file": "sage-protector-2pc-combat-meditation.png"
+      },
+      {
+        "requiredCount": 4,
+        "sandboxPerkHash": 109046536,
+        "name": "Blade Focus",
+        "bungieIcon": "/common/destiny2_content/icons/a19540f5e54c76044c91fbac06f697ed.png",
+        "file": "sage-protector-4pc-blade-focus.png"
+      }
+    ]
+  }
+]

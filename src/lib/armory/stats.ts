@@ -70,6 +70,41 @@ export const ARTIFICE_MOD_BONUS = 3;
  */
 export const TUNING_PLUG_CATEGORY = "tuning";
 
+/**
+ * General armor stat-mod plug category — the socketable +10 ("major") and +5
+ * ("minor") stat mods. Same category DIM/D2ArmorPicker key on.
+ */
+export const GENERAL_MOD_CATEGORY = "enhancements.v2_general";
+
+/**
+ * Usable artifice mod-socket category (`Empty Mod Socket` / Forged +3 mods).
+ * Deliberately excludes `enhancements.artifice.exotic` — that is the unpaid
+ * "Locked Artifice Socket" / "Upgrade to Artifice Armor" payment slot. Exotic
+ * class items still ship that locked socket in the def even though Edge of Fate
+ * removed their artifice capability in favor of Tier-5 tuning.
+ */
+export const ARTIFICE_MOD_CATEGORY = "enhancements.artifice";
+
+/** Every armor mod plug category starts with this (slot-specific, activity, general…). */
+export const MOD_CATEGORY_PREFIX = "enhancements.";
+
+/** general = stat mod; other = slot-specific / activity; tuning; artifice. */
+export type ArmorSocketKind = "general" | "other" | "tuning" | "artifice";
+
+/**
+ * Which kind of armor mod socket a plug category belongs to — the single classifier
+ * shared by socket discovery (normalize.ts) and mod lookup (plug-info.ts), so the
+ * planner's `socket.kind === plug.kind` check can never drift between the two.
+ * Undefined for anything that isn't an armor mod (shaders, perks, exotic payment plugs).
+ */
+export function plugKindForCategory(cat: string): ArmorSocketKind | undefined {
+  if (cat === GENERAL_MOD_CATEGORY) return "general";
+  if (cat === ARTIFICE_MOD_CATEGORY) return "artifice";
+  if (cat.includes(TUNING_PLUG_CATEGORY)) return "tuning";
+  if (cat.startsWith(MOD_CATEGORY_PREFIX) && !cat.includes(".exotic")) return "other";
+  return undefined;
+}
+
 /** Directional tuning: +5 to the piece's tuned stat, −5 to a chosen other stat, 0 energy. */
 export const DIRECTIONAL_TUNING_BONUS = 5;
 
