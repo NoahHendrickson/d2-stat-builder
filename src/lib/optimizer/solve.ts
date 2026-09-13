@@ -12,6 +12,7 @@ import {
 } from "./tuning";
 import { buildSlots, computeSuffixBounds, makeJointMinCheck } from "./bounds";
 import { CEILING_BUDGET_MS, runCeilings } from "./ceilings";
+import { createPowerTracker, loadoutPower } from "./power";
 
 const DEFAULT_MAX_RESULTS = 200;
 /**
@@ -188,6 +189,8 @@ export function solve(
 
   // Per-leaf tuning + mod search (scratch lives inside the searcher, allocated once).
   const tuner = createTuningSearcher(frag, mods);
+  // Armor power range (null when none is set, so the walk skips the calls).
+  const power = createPowerTracker(slots, input.powerRange);
 
   // Progress: the max of two monotone fractions — the position in the top two slot
   // loops (share of the combo space covered; pruned subtrees count as covered) and
@@ -242,6 +245,7 @@ export function solve(
       for (let r = 0; r < reqs.length; r++) {
         if (setCounts[r] < reqs[r].count) return;
       }
+      if (power && !power.feasible(NUM_SLOTS)) return;
       // Leaf gate: a final joint-minimum check before the costly tuning search.
       if (!canReachMin(NUM_SLOTS)) return;
 
@@ -264,6 +268,7 @@ export function solve(
           artifice: best.artifice,
           total: best.total,
           exotic: exoticCount > 0,
+          power: loadoutPower(chosen, input.powerRange?.weapons),
         });
       }
       return;
@@ -271,6 +276,7 @@ export function solve(
     if (!canReachMin(k)) return;
     if (!canReachSets(k)) return;
     if (needExotic && exoticCount + exoticSuffix[k] < 1) return;
+    if (power && !power.feasible(k)) return;
     if (
       heap.full() &&
       runningTotal +
@@ -305,8 +311,10 @@ export function solve(
       for (let r = 0; r < reqs.length; r++) {
         if (p.setHash === reqs[r].setHash) setCounts[r]++;
       }
+      power?.push(p);
       chosen[k] = p;
       recurse(k + 1, nextExotic);
+      power?.pop(p);
       for (let r = 0; r < reqs.length; r++) {
         if (p.setHash === reqs[r].setHash) setCounts[r]--;
       }

@@ -281,6 +281,14 @@ const BuildRow = memo(function BuildRow({
         </div>
         <div className="flex shrink-0 items-center gap-2 2xl:gap-5">
           <span className="text-sm tabular-nums 2xl:text-base">{loadout.total}</span>
+          {loadout.power !== null && (
+            <span
+              className="text-muted-foreground text-xs tabular-nums max-lg:hidden 2xl:text-sm"
+              title="Gear power — the game's average over these pieces (and your weapons, if entered)"
+            >
+              ✦ {loadout.power}
+            </span>
+          )}
           {setBadges.map((b) => (
             <Badge
               key={b.name}
@@ -306,103 +314,117 @@ const BuildRow = memo(function BuildRow({
 
       {open && (
         <div className="border-border bg-foreground/6 border-t">
-          {/* Armor table — Figma 18:6899 */}
-          <div className={cn(BREAKDOWN_GRID, "border-border gap-y-4 border-b p-4")}>
-            <div className="text-text-secondary text-sm font-medium">Armor</div>
-            {STAT_COLS.map(({ key }) => (
-              <div
-                key={key}
-                className="text-text-secondary text-sm font-medium"
-              >
-                <span className="@[44rem]/build:hidden">
-                  <StatGlyph src={statIcons[key]} label={STAT_LABELS[key]} />
-                </span>
-                <span className="hidden @[44rem]/build:inline">{STAT_LABELS[key]}</span>
+          {/* Shared column tracks so totals line up with per-piece stats
+              (name column is max-content of the longest piece name). */}
+          <div className={cn(BREAKDOWN_GRID, "border-border border-b px-4")}>
+            {/* Armor table — Figma 18:6899 */}
+            <div className="col-span-full grid grid-cols-subgrid items-center gap-y-4 py-4">
+              <div className="text-text-secondary text-sm font-medium">Armor</div>
+              {STAT_COLS.map(({ key }) => (
+                <div
+                  key={key}
+                  className="text-text-secondary text-sm font-medium"
+                >
+                  <span className="@[44rem]/build:hidden">
+                    <StatGlyph src={statIcons[key]} label={STAT_LABELS[key]} />
+                  </span>
+                  <span className="hidden @[44rem]/build:inline">{STAT_LABELS[key]}</span>
+                </div>
+              ))}
+              <div className="text-text-secondary text-sm font-medium">
+                <span className="@[44rem]/build:hidden" aria-hidden />
+                <span className="hidden @[44rem]/build:inline">Tuning</span>
               </div>
-            ))}
-            <div className="text-text-secondary text-sm font-medium">
-              <span className="@[44rem]/build:hidden" aria-hidden />
-              <span className="hidden @[44rem]/build:inline">Tuning</span>
+
+              {loadout.pieceIds.map((id, pi) => {
+                const piece = pieceMap.get(id);
+                if (!piece) return null;
+                return (
+                  <Fragment key={id}>
+                    <div className="flex min-w-0 items-center gap-2">
+                      {piece.icon ? (
+                        // eslint-disable-next-line @next/next/no-img-element -- expand mount: skip next/image
+                        <img
+                          src={`${BUNGIE_IMAGE_BASE}${piece.icon}`}
+                          alt=""
+                          width={32}
+                          height={32}
+                          loading="lazy"
+                          decoding="async"
+                          className="size-8 max-w-none shrink-0 rounded-[2px]"
+                        />
+                      ) : (
+                        <span
+                          className="bg-muted size-8 shrink-0 rounded-[2px]"
+                          aria-hidden
+                        />
+                      )}
+                      <span className="truncate text-sm @[44rem]/build:text-base">
+                        {piece.name}
+                      </span>
+                      {piece.power !== undefined && (
+                        <span
+                          className="text-muted-foreground shrink-0 text-xs tabular-nums"
+                          title="Power"
+                        >
+                          ✦ {piece.power}
+                        </span>
+                      )}
+                    </div>
+                    {STAT_COLS.map(({ key, i }) => (
+                      <div
+                        key={key}
+                        className="text-sm tabular-nums @[44rem]/build:text-base"
+                      >
+                        {piece.stats[i] || ""}
+                      </div>
+                    ))}
+                    <div className="flex h-8 items-center">
+                      {loadout.tuning[pi] ? (
+                        <TunedCell
+                          tune={loadout.tuning[pi]}
+                          statIcons={statIcons}
+                          balancedTuningIcon={balancedTuningIcon}
+                        />
+                      ) : (
+                        <ArtificeCell
+                          pick={loadout.artifice[pi]}
+                          statIcons={statIcons}
+                        />
+                      )}
+                    </div>
+                  </Fragment>
+                );
+              })}
             </div>
 
-            {loadout.pieceIds.map((id, pi) => {
-              const piece = pieceMap.get(id);
-              if (!piece) return null;
-              return (
-                <Fragment key={id}>
-                  <div className="flex min-w-0 items-center gap-2">
-                    {piece.icon ? (
-                      // eslint-disable-next-line @next/next/no-img-element -- expand mount: skip next/image
-                      <img
-                        src={`${BUNGIE_IMAGE_BASE}${piece.icon}`}
-                        alt=""
-                        width={32}
-                        height={32}
-                        loading="lazy"
-                        decoding="async"
-                        className="size-8 max-w-none shrink-0 rounded-[2px]"
-                      />
-                    ) : (
-                      <span
-                        className="bg-muted size-8 shrink-0 rounded-[2px]"
-                        aria-hidden
-                      />
-                    )}
-                    <span className="truncate text-sm @[44rem]/build:text-base">
-                      {piece.name}
-                    </span>
-                  </div>
-                  {STAT_COLS.map(({ key, i }) => (
-                    <div
-                      key={key}
-                      className="text-sm tabular-nums @[44rem]/build:text-base"
-                    >
-                      {piece.stats[i] || ""}
-                    </div>
-                  ))}
-                  <div className="flex h-8 items-center">
-                    {loadout.tuning[pi] ? (
-                      <TunedCell
-                        tune={loadout.tuning[pi]}
-                        statIcons={statIcons}
-                        balancedTuningIcon={balancedTuningIcon}
-                      />
-                    ) : (
-                      <ArtificeCell
-                        pick={loadout.artifice[pi]}
-                        statIcons={statIcons}
-                      />
-                    )}
-                  </div>
-                </Fragment>
-              );
-            })}
-          </div>
+            <div className="border-border col-span-full -mx-4 border-t" />
 
-          {/* Totals — Figma 18:6970 */}
-          <div className={cn(BREAKDOWN_GRID, "border-border gap-y-6 border-b p-4")}>
-            <TotalsRow
-              label="Armor totals"
-              render={(i) => loadout.baseStats[i]}
-            />
-            <TotalsRow
-              label="Mods"
-              labelClass="text-text-secondary"
-              render={(i) => <Delta value={loadout.modBonus[i]} />}
-            />
-            {loadout.artificeBonus.some((v) => v > 0) && (
+            {/* Totals — Figma 18:6970 */}
+            <div className="col-span-full grid grid-cols-subgrid items-center gap-y-6 py-4">
               <TotalsRow
-                label="Artifice"
-                labelClass="text-text-secondary"
-                render={(i) => <Delta value={loadout.artificeBonus[i]} />}
+                label="Armor totals"
+                render={(i) => loadout.baseStats[i]}
               />
-            )}
-            <TotalsRow
-              label="Tuning"
-              labelClass="text-text-secondary"
-              render={(i) => <Delta value={loadout.tuningBonus[i]} />}
-            />
-            <TotalsRow label="Total" render={(i) => loadout.stats[i]} />
+              <TotalsRow
+                label="Mods"
+                labelClass="text-text-secondary"
+                render={(i) => <Delta value={loadout.modBonus[i]} />}
+              />
+              {loadout.artificeBonus.some((v) => v > 0) && (
+                <TotalsRow
+                  label="Artifice"
+                  labelClass="text-text-secondary"
+                  render={(i) => <Delta value={loadout.artificeBonus[i]} />}
+                />
+              )}
+              <TotalsRow
+                label="Tuning"
+                labelClass="text-text-secondary"
+                render={(i) => <Delta value={loadout.tuningBonus[i]} />}
+              />
+              <TotalsRow label="Total" render={(i) => loadout.stats[i]} />
+            </div>
           </div>
 
           <BuildActions

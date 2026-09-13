@@ -29,6 +29,7 @@ const NUM_MASKS = 1 << NUM_STATS;
 function dedupe(
   pieces: OptimizerPiece[],
   keyIncludesSet: boolean,
+  keyIncludesPower: boolean,
   allowTuning: boolean,
   allowBalanced: boolean,
   mins: number[],
@@ -44,10 +45,13 @@ function dedupe(
         ? (p.exotic ? "X" : `${p.tuning.tuned}`) +
           (allowBalanced ? `:${p.tuning.offStats.join(".")}` : "")
         : "-";
+    // Power only tells pieces apart while a power range is being enforced — without one
+    // the solver never reads it, so two same-stat pieces at different power stay one.
     const key =
       (p.exotic ? `E${p.hash ?? 0}` : "L") +
       (p.artifice ? "A" : "") +
       (keyIncludesSet ? `|${p.setHash ?? 0}|` : "|") +
+      (keyIncludesPower ? `P${p.power ?? "?"}|` : "") +
       `T${tuneKey}|` +
       p.stats.join(",");
     if (!map.has(key)) {
@@ -266,8 +270,13 @@ export function buildSlots(input: OptimizerInput): InternalPiece[][] {
       : exoticMode !== "specific" ||
         (p.hash !== undefined && !!exoticHashes?.includes(p.hash)));
   return input.slots.map((s) =>
-    dedupe(s.filter(eligible), reqs.length > 0, allowTuning, allowBalanced, input.minimums).sort(
-      (a, b) => b.total - a.total,
-    ),
+    dedupe(
+      s.filter(eligible),
+      reqs.length > 0,
+      input.powerRange !== undefined,
+      allowTuning,
+      allowBalanced,
+      input.minimums,
+    ).sort((a, b) => b.total - a.total),
   );
 }

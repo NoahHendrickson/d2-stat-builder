@@ -5,7 +5,7 @@
 // Runtime imports are relative (not `@/`) so the module also runs under vitest.
 import type { DimLoadout, DimLoadoutItem } from "../dim/loadout-link";
 import type { AppliedTuning, OptimizerLoadout } from "../optimizer/types";
-import type { PersistedSelections } from "../builder/selection-storage";
+import { parsePowerRange, type PersistedSelections } from "../builder/selection-storage";
 import { SUBCLASSES, type Subclass } from "../armory/fragments";
 
 export const LOADOUT_SCHEMA_VERSION = 1;
@@ -234,6 +234,8 @@ export function parseOptimizerLoadout(v: unknown): OptimizerLoadout | null {
   if (!isObj(v.modsUsed) || !isInt(v.modsUsed.major) || !isInt(v.modsUsed.minor))
     return null;
   if (!isFiniteNum(v.total) || typeof v.exotic !== "boolean") return null;
+  // Added after the first loadouts shipped: absent (or malformed) reads as unknown.
+  const power = isInt(v.power) ? v.power : null;
   return {
     pieceIds: v.pieceIds as string[],
     baseStats,
@@ -246,6 +248,7 @@ export function parseOptimizerLoadout(v: unknown): OptimizerLoadout | null {
     artifice: v.artifice as (number | null)[],
     total: v.total,
     exotic: v.exotic,
+    power,
   };
 }
 
@@ -282,6 +285,7 @@ export function parseBuilderSnapshot(v: unknown): BuilderSnapshot | null {
     // Added after the first snapshots shipped: default off when absent.
     dreamersBond: typeof v.dreamersBond === "boolean" ? v.dreamersBond : false,
     festivalMasks: typeof v.festivalMasks === "boolean" ? v.festivalMasks : false,
+    powerRange: parsePowerRange(v.powerRange),
     activeSubclass: v.activeSubclass as Subclass,
     fragmentHashes,
   };

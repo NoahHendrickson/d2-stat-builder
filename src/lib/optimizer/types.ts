@@ -27,6 +27,28 @@ export interface OptimizerPiece {
    * `tuning` in practice (artifice is legacy-only, tuning is Tier-5-only).
    */
   artifice?: boolean;
+  /**
+   * Power level (the item's primary stat). Undefined for theoretical pieces with no live
+   * instance (a synthetic exotic class item roll) — such pieces are left out of a
+   * loadout's armor power average instead of dragging it down (see power.ts).
+   */
+  power?: number;
+}
+
+/**
+ * Inclusive bounds on a loadout's gear power — the floor of the mean power over its
+ * pieces with a known `power` plus the `weapons` (see OptimizerLoadout.power).
+ */
+export interface PowerRange {
+  min: number;
+  max: number;
+  /**
+   * Power of the weapons the build will be equipped with (whichever of kinetic / energy /
+   * heavy the user filled in). They join the armor in the average, so the range is
+   * checked against the character's gear power the way the game averages every
+   * equipped item. Omitted / empty = armor only.
+   */
+  weapons?: number[];
 }
 
 /** Require at least `count` equipped pieces from a given armor set (2 = 2pc bonus, 4 = 4pc). */
@@ -73,6 +95,8 @@ export interface OptimizerInput {
   allowBalancedTuning?: boolean;
   /** Build-wide stat constant from selected subclass fragments (may be negative). */
   fragmentBonus?: StatArray;
+  /** Only return loadouts whose armor power (see OptimizerLoadout.power) is inside this range. */
+  powerRange?: PowerRange;
   /** Max loadouts to return (default 200). */
   maxResults?: number;
 }
@@ -103,6 +127,12 @@ export interface OptimizerLoadout {
   artifice: (number | null)[];
   total: number;
   exotic: boolean;
+  /**
+   * Gear power: floor of the mean power over the pieces with a known power plus the
+   * query's `powerRange.weapons`, the way the game averages equipped gear. Null when
+   * nothing has a known power.
+   */
+  power: number | null;
 }
 
 export interface OptimizerOutput {

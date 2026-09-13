@@ -4,7 +4,11 @@
 // module runs under vitest.
 import { SUBCLASSES, type Subclass } from "../armory/fragments";
 import { DEFAULT_SET_FILTERS } from "../armory/set-filters";
-import { SCHEMA_VERSION, type PersistedSelections } from "../builder/selection-storage";
+import {
+  DEFAULT_POWER_RANGE,
+  SCHEMA_VERSION,
+  type PersistedSelections,
+} from "../builder/selection-storage";
 import type { SavedLoadout } from "./types";
 
 const emptyFragSel = (): Record<Subclass, number[]> =>
@@ -49,6 +53,7 @@ export function selectionsForLoadout(
     legacyExotics: true,
     dreamersBond: false,
     festivalMasks: false,
+    powerRange: DEFAULT_POWER_RANGE,
     activeSubclass: opts.subclass?.subclass ?? existing?.activeSubclass ?? "Prismatic",
     fragSel: opts.subclass?.subclass
       ? { ...(existing?.fragSel ?? emptyFragSel()), [opts.subclass.subclass]: opts.subclass.fragmentHashes }

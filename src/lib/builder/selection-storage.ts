@@ -7,9 +7,54 @@
 // the convention in normalize.ts / solve.ts.
 import { SUBCLASSES, type Subclass } from "../armory/fragments";
 import { DEFAULT_SET_FILTERS, type SetFilters } from "../armory/set-filters";
+import type { PowerRange } from "../optimizer/types";
 
 export const SELECTIONS_KEY = "stat-builder:selections";
 export const SCHEMA_VERSION = 1;
+
+/** Inclusive gear-power bounds. */
+export interface PowerBounds {
+  min: number;
+  max: number;
+}
+
+/**
+ * The power range toggle: when `enabled`, builds must land their gear power — the floor
+ * of the mean power over the five armor pieces and the weapons entered below — inside
+ * `bounds`. `bounds` is null until the user (or the controls' first-enable seed) sets
+ * it, and is kept while the toggle is off so switching it back on restores it. Enabled
+ * with null bounds constrains nothing.
+ */
+export interface PowerRangeSelection {
+  enabled: boolean;
+  bounds: PowerBounds | null;
+  /**
+   * Power of the kinetic / energy / heavy weapons the build will be equipped with,
+   * entered by hand. `null` = not entered, which leaves that slot out of the average.
+   */
+  weapons: [number | null, number | null, number | null];
+}
+
+export const DEFAULT_POWER_RANGE: PowerRangeSelection = {
+  enabled: false,
+  bounds: null,
+  weapons: [null, null, null],
+};
+
+/** The weapon powers that were actually entered, in slot order — what the solver averages in. */
+export function enteredWeaponPowers(range: PowerRangeSelection): number[] {
+  return range.weapons.filter((w): w is number => w !== null);
+}
+
+/** The solver's view of the selection: undefined unless enabled with bounds set. */
+export function toOptimizerPowerRange(range: PowerRangeSelection): PowerRange | undefined {
+  if (!range.enabled || range.bounds === null) return undefined;
+  return {
+    min: range.bounds.min,
+    max: range.bounds.max,
+    weapons: enteredWeaponPowers(range),
+  };
+}
 
 /**
  * The stored blob. Mirrors the builder's selection `useState`s, with two transforms:
@@ -46,6 +91,8 @@ export interface PersistedSelections {
    * Helmet slot is only owned Festival of the Lost masks (Masquerader's).
    */
   festivalMasks: boolean;
+  /** Armor power range constraint (see PowerRangeSelection). */
+  powerRange: PowerRangeSelection;
   activeSubclass: Subclass;
   fragSel: Record<Subclass, number[]>;
 }
@@ -166,6 +213,8 @@ function parse(raw: string | null): PersistedSelections | null {
     typeof o.festivalMasks === "boolean" ? o.festivalMasks : false;
   // Optional — exotic class item Spirit pair; default Any/Any.
   const exoticPerks = parseExoticPerks(o.exoticPerks);
+  // Optional (added after v1 shipped) — older stored blobs won't have it. Default OFF.
+  const powerRange = parsePowerRange(o.powerRange);
   if (typeof o.activeSubclass !== "string" || !SUBCLASS_SET.has(o.activeSubclass))
     return null;
   if (typeof o.fragSel !== "object" || o.fragSel === null) return null;
@@ -196,9 +245,47 @@ function parse(raw: string | null): PersistedSelections | null {
     legacyExotics,
     dreamersBond,
     festivalMasks,
+    powerRange,
     activeSubclass: o.activeSubclass as Subclass,
     fragSel,
   };
+}
+
+/**
+ * Validate a stored power range. Malformed / absent → the default (off, unset). Bounds
+ * are null (unset) or a pair of non-negative integers, else the whole value is dropped
+ * (a half-valid range would enable a constraint the user never chose); an inverted
+ * pair is put in order rather than dropped, since the inputs commit on blur and a
+ * debounced save can catch a min typed above the max.
+ */
+export function parsePowerRange(v: unknown): PowerRangeSelection {
+  if (typeof v !== "object" || v === null) return DEFAULT_POWER_RANGE;
+  const raw = v as Record<string, unknown>;
+  if (typeof raw.enabled !== "boolean") return DEFAULT_POWER_RANGE;
+  const bounds = parsePowerBounds(raw.bounds);
+  if (bounds === undefined) return DEFAULT_POWER_RANGE;
+  return { enabled: raw.enabled, bounds, weapons: parseWeaponPowers(raw.weapons) };
+}
+
+/** null / absent → null (unset); a valid pair → ordered; anything else → undefined. */
+function parsePowerBounds(v: unknown): PowerBounds | null | undefined {
+  if (v === null || v === undefined) return null;
+  if (typeof v !== "object") return undefined;
+  const { min, max } = v as Record<string, unknown>;
+  if (!Number.isInteger(min) || !Number.isInteger(max)) return undefined;
+  if ((min as number) < 0 || (max as number) < 0) return undefined;
+  return {
+    min: Math.min(min as number, max as number),
+    max: Math.max(min as number, max as number),
+  };
+}
+
+/** Three optional non-negative integers; anything else → nothing entered. */
+function parseWeaponPowers(v: unknown): PowerRangeSelection["weapons"] {
+  if (!Array.isArray(v) || v.length !== 3) return [null, null, null];
+  const slot = (x: unknown): number | null =>
+    Number.isInteger(x) && (x as number) >= 0 ? (x as number) : null;
+  return [slot(v[0]), slot(v[1]), slot(v[2])];
 }
 
 /** `[left, right]` Spirit hashes; `null` = Any. Malformed / absent → Any/Any. */

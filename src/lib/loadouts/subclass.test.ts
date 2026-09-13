@@ -211,8 +211,8 @@ test("super is a single socket that can be cleared", () => {
 test("fragment changes keep the builder snapshot in sync and leave the optimizer breakdown alone", () => {
   const data = base();
   const zero = [0, 0, 0, 0, 0, 0];
-  data.builder = { targets: zero, major: 0, setReqs: {}, exoticName: null, exoticPerks: [null, null], allowTuning: true, balancedTuning: true, legacyExotics: true, dreamersBond: false, festivalMasks: false, activeSubclass: "Arc", fragmentHashes: [201] };
-  data.optimizer = { pieceIds: [], baseStats: [0, 195, 0, 0, 0, 0], stats: [0, 200, 0, 0, 0, 0], tuningBonus: zero, tuning: [], modBonus: zero, modsUsed: { major: 0, minor: 0 }, artificeBonus: zero, artifice: [], total: 200, exotic: false };
+  data.builder = { targets: zero, major: 0, setReqs: {}, exoticName: null, exoticPerks: [null, null], allowTuning: true, balancedTuning: true, legacyExotics: true, dreamersBond: false, festivalMasks: false, powerRange: { enabled: false, bounds: null, weapons: [null, null, null] }, activeSubclass: "Arc", fragmentHashes: [201] };
+  data.optimizer = { pieceIds: [], baseStats: [0, 195, 0, 0, 0, 0], stats: [0, 200, 0, 0, 0, 0], tuningBonus: zero, tuning: [], modBonus: zero, modsUsed: { major: 0, minor: 0 }, artificeBonus: zero, artifice: [], total: 200, exotic: false, power: null };
   const result = withLoadoutSubclass(data, withSubclassPlugs({ hash: subclassHash }, options.fragments, [203]), manifest);
   expect(result.optimizer).toBe(data.optimizer);
   expect(result.builder?.activeSubclass).toBe("Prismatic");

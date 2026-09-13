@@ -2,8 +2,12 @@ import { beforeEach, test, expect } from "vitest";
 import { SUBCLASSES, type Subclass } from "../armory/fragments";
 import { DEFAULT_SET_FILTERS } from "../armory/set-filters";
 import {
+  DEFAULT_POWER_RANGE,
   SELECTIONS_KEY,
   SCHEMA_VERSION,
+  enteredWeaponPowers,
+  parsePowerRange,
+  toOptimizerPowerRange,
   type PersistedSelections,
   fragSelToArrays,
   fragSelFromArrays,
@@ -66,6 +70,7 @@ function sampleSelections(): PersistedSelections {
     legacyExotics: false,
     dreamersBond: true,
     festivalMasks: false,
+    powerRange: { enabled: true, bounds: { min: 287, max: 292 }, weapons: [290, null, 288] },
     activeSubclass: "Void",
     fragSel: fragSelToArrays(frag),
   };
@@ -132,6 +137,48 @@ test("load defaults festivalMasks to false for data stored before the field exis
   delete old.festivalMasks;
   localStorage.setItem(SELECTIONS_KEY, JSON.stringify(old));
   expect(loadSelections()).toEqual({ ...old, festivalMasks: false });
+});
+
+test("load defaults powerRange to off for data stored before the field existed", () => {
+  const old: Partial<PersistedSelections> = sampleSelections();
+  delete old.powerRange;
+  localStorage.setItem(SELECTIONS_KEY, JSON.stringify(old));
+  expect(loadSelections()).toEqual({ ...old, powerRange: DEFAULT_POWER_RANGE });
+});
+
+test("parsePowerRange orders an inverted range, drops a non-integer one and bad weapon slots", () => {
+  expect(
+    parsePowerRange({ enabled: true, bounds: { min: 292, max: 287 }, weapons: [null, null, null] }),
+  ).toEqual({ enabled: true, bounds: { min: 287, max: 292 }, weapons: [null, null, null] });
+  expect(parsePowerRange({ enabled: true, bounds: { min: -1, max: 287 } })).toEqual(
+    DEFAULT_POWER_RANGE,
+  );
+  expect(parsePowerRange({ enabled: true, bounds: { min: 287.5, max: 292 } })).toEqual(
+    DEFAULT_POWER_RANGE,
+  );
+  expect(parsePowerRange({ enabled: true, bounds: 5 })).toEqual(DEFAULT_POWER_RANGE);
+  expect(parsePowerRange({ enabled: "yes", bounds: { min: 287, max: 292 } })).toEqual(
+    DEFAULT_POWER_RANGE,
+  );
+  // Unset bounds are legal in either toggle state.
+  expect(parsePowerRange({ enabled: true })).toEqual({ ...DEFAULT_POWER_RANGE, enabled: true });
+  expect(
+    parsePowerRange({ enabled: false, bounds: { min: 287, max: 292 }, weapons: [290, -1, 2.5] }),
+  ).toEqual({ enabled: false, bounds: { min: 287, max: 292 }, weapons: [290, null, null] });
+  expect(
+    enteredWeaponPowers({ enabled: true, bounds: null, weapons: [290, null, 288] }),
+  ).toEqual([290, 288]);
+});
+
+test("toOptimizerPowerRange is undefined unless enabled with bounds set", () => {
+  const on: PersistedSelections["powerRange"] = {
+    enabled: true,
+    bounds: { min: 287, max: 292 },
+    weapons: [290, null, 288],
+  };
+  expect(toOptimizerPowerRange(on)).toEqual({ min: 287, max: 292, weapons: [290, 288] });
+  expect(toOptimizerPowerRange({ ...on, enabled: false })).toBeUndefined();
+  expect(toOptimizerPowerRange({ ...on, bounds: null })).toBeUndefined();
 });
 
 test("load defaults setFilters for data stored before the field existed", () => {

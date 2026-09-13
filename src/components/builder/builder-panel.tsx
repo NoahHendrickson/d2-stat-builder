@@ -76,10 +76,12 @@ import {
   NerdControls,
   TuningControls,
 } from "@/components/builder/tuning-controls";
+import { PowerRangeControls } from "@/components/builder/power-range-controls";
 import { BuildsSurface } from "@/components/builder/builds-surface";
 import type { BuildsColumnContentProps } from "@/components/builder/builds-column-content";
 import type { ExoticConstraint, OptimizerPiece } from "@/lib/optimizer/types";
 import {
+  DEFAULT_POWER_RANGE,
   loadSelections,
   saveSelections,
   fragSelToArrays,
@@ -88,6 +90,8 @@ import {
   SCHEMA_VERSION,
   SELECTIONS_REPLACED_EVENT,
   selectionsGeneration,
+  toOptimizerPowerRange,
+  type PowerRangeSelection,
 } from "@/lib/builder/selection-storage";
 import {
   getArtificeModHashes,
@@ -192,6 +196,9 @@ export function BuilderPanel({
   );
   const [useFestivalMasks, setUseFestivalMasks] = useState(
     initialSaved?.festivalMasks ?? false,
+  );
+  const [powerRange, setPowerRange] = useState<PowerRangeSelection>(
+    () => initialSaved?.powerRange ?? DEFAULT_POWER_RANGE,
   );
 
   // The exotic is persisted by name and resolved to an index once the live exotics list
@@ -468,6 +475,22 @@ export function BuilderPanel({
     return map;
   }, [classPieces, classItemPieces]);
 
+  // The optimizer's candidates per slot, in ARMOR_SLOTS order: the class-item pool
+  // (Spirit-filtered / Dreamer's-pinned), FotL masks in the helmet slot when pinned, the
+  // T5 pool otherwise. runOptimizer maps these to OptimizerPieces; the power range
+  // controls read their power.
+  const slotPieces = useMemo(
+    () =>
+      ARMOR_SLOTS.map((slot) =>
+        slot === "classItem"
+          ? classItemPieces
+          : slot === "helmet" && festivalMaskHelmets
+            ? festivalMaskHelmets
+            : pool.filter((p) => p.slot === slot),
+      ),
+    [pool, classItemPieces, festivalMaskHelmets],
+  );
+
   // A stored exotic in a pinned slot (Dreamer's Bond → class item, Festival masks →
   // helmet) loses to the pin on restore. From then on the exotic picker and the toggle
   // handlers keep the two exclusive, so no effect has to referee them.
@@ -522,6 +545,7 @@ export function BuilderPanel({
       setUseLegacyExotics(saved.legacyExotics);
       setUseDreamersBond(saved.dreamersBond);
       setUseFestivalMasks(saved.festivalMasks);
+      setPowerRange(saved.powerRange);
       setActiveSubclass(saved.activeSubclass);
       setFragSel(fragSelFromArrays(saved.fragSel));
       setExoticPerks(saved.exoticPerks);
@@ -561,6 +585,7 @@ export function BuilderPanel({
         legacyExotics: useLegacyExotics,
         dreamersBond: useDreamersBond,
         festivalMasks: useFestivalMasks,
+        powerRange,
         activeSubclass,
         fragSel: fragSelToArrays(fragSel),
       });
@@ -583,6 +608,7 @@ export function BuilderPanel({
     useLegacyExotics,
     useDreamersBond,
     useFestivalMasks,
+    powerRange,
     activeSubclass,
     fragSel,
   ]);
@@ -607,6 +633,7 @@ export function BuilderPanel({
       exotic: p.isExotic,
       hash: p.itemHash,
       setHash: p.setHash,
+      power: p.power,
       // Artifice is legacy-only, tuning Tier-5-only; enforce the exclusivity here
       // (the solver stays general, the results UI shares one column for both).
       artifice: p.isArtifice && p.tunedStat === undefined,
@@ -616,15 +643,7 @@ export function BuilderPanel({
           : undefined,
     });
 
-    const slots = ARMOR_SLOTS.map((slot) => {
-      const pieces =
-        slot === "classItem"
-          ? classItemPieces
-          : slot === "helmet" && festivalMaskHelmets
-            ? festivalMaskHelmets
-            : pool.filter((p) => p.slot === slot);
-      return pieces.map(toOpt);
-    });
+    const slots = slotPieces.map((pieces) => pieces.map(toOpt));
 
     const exotic: ExoticConstraint =
       selectedExotic === null
@@ -639,12 +658,11 @@ export function BuilderPanel({
       allowTuning,
       allowBalancedTuning: useBalancedTuning,
       fragmentBonus,
+      powerRange: toOptimizerPowerRange(powerRange),
       maxResults: 200,
     });
   }, [
-    pool,
-    classItemPieces,
-    festivalMaskHelmets,
+    slotPieces,
     classType,
     targets,
     major,
@@ -654,6 +672,7 @@ export function BuilderPanel({
     allowTuning,
     useBalancedTuning,
     fragmentBonus,
+    powerRange,
     run,
   ]);
 
@@ -761,6 +780,7 @@ export function BuilderPanel({
       legacyExotics: useLegacyExotics,
       dreamersBond: useDreamersBond,
       festivalMasks: useFestivalMasks,
+      powerRange,
       activeSubclass,
       fragmentHashes: [...fragSel[activeSubclass]],
     }),
@@ -776,6 +796,7 @@ export function BuilderPanel({
       useLegacyExotics,
       useDreamersBond,
       useFestivalMasks,
+      powerRange,
       activeSubclass,
       fragSel,
     ],
@@ -1025,6 +1046,14 @@ export function BuilderPanel({
                 dreamersItemName={dreamersClassItemName(classType ?? 2)}
                 useFestivalMasks={useFestivalMasks}
                 onUseFestivalMasksChange={onFestivalMasksChange}
+              />
+            </Section>
+
+            <Section title="Power">
+              <PowerRangeControls
+                value={powerRange}
+                onChange={setPowerRange}
+                slotPieces={slotPieces}
               />
             </Section>
 

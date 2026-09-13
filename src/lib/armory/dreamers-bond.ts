@@ -55,5 +55,6 @@ export function dreamersBondPiece(
     baseStats: [...ZERO],
     stats: [...ZERO],
     location: "vault",
+    power: DREAMERS_BOND_POWER,
   };
 }

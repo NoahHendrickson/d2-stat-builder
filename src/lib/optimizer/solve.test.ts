@@ -945,3 +945,156 @@ test("legacy Verity's Brow reaches weapon 147+ at grenade 170 (D2AP parity)", ()
   );
   expect(ceil.ceilings[0]).toBeGreaterThanOrEqual(147);
 });
+
+describe("power range", () => {
+  /** A tuning-free piece with (optionally) a known power. */
+  const pp = (id: string, stats: number[], power?: number): OptimizerPiece => ({
+    id,
+    stats,
+    exotic: false,
+    power,
+  });
+  const flat = [10, 10, 10, 10, 10, 10];
+  /** Arms / chest / legs / class item, one piece each, all at `power`. */
+  const rest = (power?: number): OptimizerPiece[][] => [
+    [pp("a", flat, power)],
+    [pp("c", flat, power)],
+    [pp("l", flat, power)],
+    [pp("k", flat, power)],
+  ];
+
+  test("a loadout's power is the floored mean of its pieces' power", () => {
+    // 290 + 4·291 = 1454 → 290.8 → 290.
+    const slots = [[pp("h", flat, 290)], ...rest(291)];
+    expect(solve(input(slots)).loadouts[0].power).toBe(290);
+    expect(
+      solve(input(slots, { powerRange: { min: 290, max: 290 } })).loadouts,
+    ).toHaveLength(1);
+    expect(
+      solve(input(slots, { powerRange: { min: 291, max: 300 } })).loadouts,
+    ).toHaveLength(0);
+  });
+
+  test("builds outside the range are excluded; both ends are inclusive", () => {
+    // Means: (300 + 4·290)/5 = 292 and (280 + 4·290)/5 = 288.
+    const slots = [[pp("h300", flat, 300), pp("h280", flat, 280)], ...rest(290)];
+    const both = solve(input(slots, { powerRange: { min: 288, max: 292 } }));
+    expect(both.loadouts.map((l) => l.power).sort()).toEqual([288, 292]);
+    const hi = solve(input(slots, { powerRange: { min: 290, max: 292 } }));
+    expect(hi.loadouts.map((l) => l.pieceIds[0])).toEqual(["h300"]);
+    const lo = solve(input(slots, { powerRange: { min: 288, max: 289 } }));
+    expect(lo.loadouts.map((l) => l.pieceIds[0])).toEqual(["h280"]);
+    expect(
+      solve(input(slots, { powerRange: { min: 289, max: 291 } })).loadouts,
+    ).toHaveLength(0);
+  });
+
+  test("same-stat pieces at different power collapse only while no range is set", () => {
+    const slots = [[pp("h300", flat, 300), pp("h280", flat, 280)], ...rest(290)];
+    expect(solve(input(slots)).loadouts).toHaveLength(1);
+    expect(
+      solve(input(slots, { powerRange: { min: 0, max: 1000 } })).loadouts,
+    ).toHaveLength(2);
+  });
+
+  test("weapon powers join the average", () => {
+    // Armor 5·290 = 1450; weapons 300 + 300 + 300 → 2350 / 8 = 293.75 → 293.
+    const slots = [[pp("h", flat, 290)], ...rest(290)];
+    const out = solve(
+      input(slots, { powerRange: { min: 293, max: 293, weapons: [300, 300, 300] } }),
+    );
+    expect(out.loadouts).toHaveLength(1);
+    expect(out.loadouts[0].power).toBe(293);
+    expect(
+      solve(input(slots, { powerRange: { min: 290, max: 292, weapons: [300, 300, 300] } }))
+        .loadouts,
+    ).toHaveLength(0);
+    // A single weapon: (1450 + 250) / 6 = 283.3 → 283.
+    expect(
+      solve(input(slots, { powerRange: { min: 283, max: 283, weapons: [250] } })).loadouts[0]
+        .power,
+    ).toBe(283);
+  });
+
+  test("pieces with no known power are left out of the mean", () => {
+    const one = solve(
+      input([[pp("h", flat)], ...rest(290)], { powerRange: { min: 290, max: 290 } }),
+    );
+    expect(one.loadouts).toHaveLength(1);
+    expect(one.loadouts[0].power).toBe(290);
+    // Nothing with a known power: null power, passes any range…
+    const none = solve(
+      input([[pp("h", flat)], ...rest()], { powerRange: { min: 500, max: 600 } }),
+    );
+    expect(none.loadouts).toHaveLength(1);
+    expect(none.loadouts[0].power).toBeNull();
+    // …unless weapons are given, which are then the whole average.
+    const weaponsOnly = solve(
+      input([[pp("h", flat)], ...rest()], {
+        powerRange: { min: 500, max: 600, weapons: [300] },
+      }),
+    );
+    expect(weaponsOnly.loadouts).toHaveLength(0);
+  });
+
+  test("ceilings respect the range: a stat only reachable out of range is not offered", () => {
+    const slots = [
+      [pp("x", [100, 0, 0, 0, 0, 0], 200), pp("y", [0, 50, 50, 50, 0, 0], 290)],
+      ...rest(290),
+    ];
+    expect(solve(input(slots)).ceilings[0]).toBe(140);
+    const ranged = solve(input(slots, { powerRange: { min: 290, max: 290 } }));
+    expect(ranged.loadouts.map((l) => l.pieceIds[0])).toEqual(["y"]);
+    expect(ranged.ceilings[0]).toBe(40);
+    expect(ranged.ceilingsExact).toBe(true);
+  });
+
+  test("pruning never drops a valid build (matches brute force on random pools)", () => {
+    let seed = 12345;
+    const rnd = (n: number): number => {
+      seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+      return seed % n;
+    };
+    for (let trial = 0; trial < 60; trial++) {
+      // Stat 5 = the piece's index in its slot, so no two pieces in a slot ever share a
+      // stat vector (dedupe would otherwise merge them and the sets wouldn't compare).
+      const slots = Array.from({ length: 5 }, (_, s) =>
+        Array.from({ length: 1 + rnd(3) }, (_, i) =>
+          pp(
+            `${s}-${i}`,
+            [rnd(30), rnd(30), rnd(30), rnd(30), rnd(30), i],
+            rnd(4) === 0 ? undefined : 280 + rnd(20),
+          ),
+        ),
+      );
+      const weapons = Array.from({ length: rnd(4) }, () => 280 + rnd(20));
+      const min = 280 + rnd(15);
+      const max = min + rnd(8);
+      const out = solve(
+        input(slots, { powerRange: { min, max, weapons }, maxResults: 1000 }),
+      );
+
+      const expected = new Map<string, number | null>();
+      const walk = (k: number, chosen: OptimizerPiece[]): void => {
+        if (k === 5) {
+          const known = [
+            ...weapons,
+            ...chosen.flatMap((p) => (p.power === undefined ? [] : [p.power])),
+          ];
+          const power = known.length
+            ? Math.floor(known.reduce((a, b) => a + b, 0) / known.length)
+            : null;
+          if (power === null || (power >= min && power <= max)) {
+            expected.set(chosen.map((p) => p.id).join("|"), power);
+          }
+          return;
+        }
+        for (const p of slots[k]) walk(k + 1, [...chosen, p]);
+      };
+      walk(0, []);
+
+      const got = new Map(out.loadouts.map((l) => [l.pieceIds.join("|"), l.power]));
+      expect(got).toEqual(expected);
+    }
+  });
+});

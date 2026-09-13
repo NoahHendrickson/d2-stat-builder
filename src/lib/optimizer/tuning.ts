@@ -33,6 +33,8 @@ export interface InternalPiece {
   setHash?: number;
   /** Artifice piece — contributes a free +3 any-stat mod to the loadout's budget. */
   artifice: boolean;
+  /** Power level; undefined for theoretical pieces (see OptimizerPiece.power). */
+  power?: number;
   total: number;
   /** Index of the rolled tuned stat (the +5 target), or -1 if the piece can't be tuned. */
   tuned: number;
@@ -187,6 +189,7 @@ export function makeInternalPiece(
     hash: p.hash,
     setHash: p.setHash,
     artifice: p.artifice ?? false,
+    power: p.power,
     total: statTotal(p.stats),
     tuned: allowTuning && p.tuning ? p.tuning.tuned : -1,
     tuneOpts,
