@@ -51,8 +51,8 @@ test("hashesIncludeHelmet matches an owned helmet, not other slots", () => {
 
 test("T5 Festival of the Lost masks stay out of the default optimizer pool", () => {
   const mask = { isFestivalMask: true, tunedStat: 0, isExotic: false };
-  const t5Helmet = { tunedStat: 2, isExotic: false };
-  const legacyExotic = { isExotic: true };
+  const t5Helmet = { isFestivalMask: false, tunedStat: 2, isExotic: false };
+  const legacyExotic = { isFestivalMask: false, isExotic: true };
   expect(inDefaultOptimizerPool(mask, true)).toBe(false);
   expect(inDefaultOptimizerPool(mask, false)).toBe(false);
   expect(inDefaultOptimizerPool(t5Helmet, false)).toBe(true);

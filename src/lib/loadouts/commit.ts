@@ -60,8 +60,12 @@ export function commitLoadout(
             : data.loadout.parameters.mods,
         },
       },
-      modPlacement: Object.keys(values.placement).length > 0 ? values.placement : undefined,
     };
+    if (Object.keys(values.placement).length > 0) {
+      next.modPlacement = values.placement;
+    } else {
+      delete next.modPlacement;
+    }
   }
   return withEditorTotals(
     withLoadoutSubclass(next, values.subclass, manifest),

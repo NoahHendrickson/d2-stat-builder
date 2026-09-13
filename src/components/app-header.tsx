@@ -3,7 +3,7 @@
 import Image from "next/image";
 import { SidebarSimple } from "@phosphor-icons/react";
 import { ViewTabs } from "@/components/view-tabs";
-import { ArmoryStatusToolbar } from "@/components/armory/armory-status";
+import { ArmoryStatus } from "@/components/armory/armory-status";
 import { Button } from "@/components/ui/button";
 import { TooltipLabel } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
@@ -52,7 +52,7 @@ export function AppHeader({
         />
         <ViewTabs />
       </div>
-      <ArmoryStatusToolbar />
+      <ArmoryStatus variant="toolbar" />
     </header>
   );
 }

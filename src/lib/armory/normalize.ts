@@ -77,7 +77,7 @@ export interface ArmorPiece {
    * Festival of the Lost mask (Masquerader's). In the optimizer only when the
    * FotL helmet pin is on — never mixed into the default T5/legacy-exotic pool.
    */
-  isFestivalMask?: boolean;
+  isFestivalMask: boolean;
   setHash?: number;
   /** Archetype plug name (e.g. "Gunner") — Armor 3.0 only; undefined on legacy pieces. */
   archetype?: string;
@@ -505,7 +505,7 @@ function buildPiece(
     isArtifice: exoticClassItem
       ? false
       : isArtificePiece(item.itemInstanceId, profile, manifest),
-    ...(festivalMask ? { isFestivalMask: true } : {}),
+    isFestivalMask: festivalMask,
     setHash: def.equippingBlock?.equipableItemSetHash || undefined,
     archetype,
     baseStats,

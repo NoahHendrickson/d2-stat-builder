@@ -1,7 +1,7 @@
 "use client";
 
 import { TooltipLabel } from "@/components/ui/tooltip";
-import { useLayoutEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { CaretDown, MagnifyingGlass, PushPin, X } from "@phosphor-icons/react";
 import { partitionByPin, type FilterOption } from "@/lib/armor-table/pinned";
 import {
@@ -38,72 +38,6 @@ export function selectionSummaryText<V>(
 ): string | null {
   const labels = selectedLabels(selected, options);
   return labels.length === 0 ? null : labels.join(", ");
-}
-
-/**
- * Comma-separated labels that hug their text, then collapse trailing values
- * into "+N more" only when the trigger is actually narrower than the list.
- */
-function OverflowSelection({ labels }: { labels: string[] }) {
-  const ref = useRef<HTMLSpanElement>(null);
-  const labelsKey = labels.join("\0");
-
-  useLayoutEffect(() => {
-    const root = ref.current;
-    if (!root) return;
-
-    const fit = () => {
-      const items = [
-        ...root.querySelectorAll<HTMLElement>(":scope > [data-item]"),
-      ];
-      const more = root.querySelector<HTMLElement>(":scope > [data-more]");
-      if (items.length === 0 || root.clientWidth <= 0) return;
-
-      const apply = (count: number) => {
-        for (let i = 0; i < items.length; i++) {
-          items[i].hidden = i >= count;
-        }
-        const rest = items.length - count;
-        if (more) {
-          more.hidden = rest <= 0;
-          if (rest > 0) more.textContent = ` +${rest} more`;
-        }
-        const squeezeFirst = count === 1;
-        items[0].classList.toggle("min-w-0", squeezeFirst);
-        items[0].classList.toggle("flex-1", squeezeFirst);
-        items[0].classList.toggle("truncate", squeezeFirst);
-        items[0].classList.toggle("shrink-0", !squeezeFirst);
-      };
-
-      apply(items.length);
-      if (root.scrollWidth <= root.clientWidth + 1) return;
-
-      for (let count = items.length - 1; count >= 1; count--) {
-        apply(count);
-        if (root.scrollWidth <= root.clientWidth + 1) return;
-      }
-      apply(1);
-    };
-
-    fit();
-    const ro = new ResizeObserver(fit);
-    ro.observe(root);
-    return () => ro.disconnect();
-  }, [labelsKey]);
-
-  return (
-    <span
-      ref={ref}
-      className="flex min-w-0 grow overflow-hidden text-left"
-    >
-      {labels.map((label, i) => (
-        <span key={`${i}:${label}`} data-item className="shrink-0">
-          {i > 0 ? `, ${label}` : label}
-        </span>
-      ))}
-      <span data-more className="shrink-0" hidden />
-    </span>
-  );
 }
 
 export const filterMultiselectActiveBadgeClasses =
@@ -269,13 +203,13 @@ export function FilterMultiselect<V extends string | number>({
   const triggerRef = useRef<HTMLButtonElement>(null);
   const active = value.length > 0;
   const labels = selectedLabels(value, options);
-  const summaryText = selectionSummaryText(value, options);
+  const summaryText = labels.length === 0 ? null : labels.join(", ");
 
   return (
     <div
       className={cn(
-        "relative w-max max-w-full overflow-visible",
-        active ? "min-w-0" : "shrink-0",
+        "relative min-w-0 max-w-full overflow-visible",
+        active ? "flex-1" : "w-max",
         className,
       )}
     >
@@ -306,7 +240,9 @@ export function FilterMultiselect<V extends string | number>({
               className={fieldControlInnerTriggerClasses}
             >
               {active ? (
-                <OverflowSelection labels={labels} />
+                <span className="min-w-0 grow truncate text-left">
+                  {summaryText}
+                </span>
               ) : (
                 <span className="min-w-0 truncate text-left text-muted-foreground">
                   {allLabel}

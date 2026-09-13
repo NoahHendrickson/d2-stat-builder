@@ -386,6 +386,7 @@ export function buildSyntheticClassItem(
     classType,
     isExotic: true,
     isArtifice: false,
+    isFestivalMask: false,
     baseStats,
     stats,
     // Flexible exotic tuning — any +5 direction (same as owned T5 exotics).

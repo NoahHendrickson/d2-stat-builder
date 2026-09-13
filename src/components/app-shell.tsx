@@ -13,6 +13,8 @@ import {
 import { List, XIcon } from "@phosphor-icons/react";
 import { AppSidebar } from "@/components/app-sidebar";
 import { AppHeader } from "@/components/app-header";
+import { ArmoryDiagnosticsGate } from "@/components/armory/armory-diagnostics-gate";
+import { ApplyProgressSection } from "@/components/loadouts/apply-progress-card";
 import { ViewTabs } from "@/components/view-tabs";
 import { Button } from "@/components/ui/button";
 import { Drawer, DrawerClose, DrawerContent } from "@/components/ui/drawer";
@@ -27,6 +29,9 @@ export const SIDEBAR_BREAKPOINT_PX = 1024;
 const SIDEBAR_DEFAULT_PX = 340;
 const SIDEBAR_MIN_PX = 260;
 const SIDEBAR_MAX_PX = 560;
+/** Hit-area width (`w-4`). Offset centers it on the column edge (`after:left-1`). */
+const SIDEBAR_RESIZE_HIT_PX = 16;
+const SIDEBAR_RESIZE_OFFSET_PX = 4;
 const SIDEBAR_WIDTH_KEY = "stat-builder:sidebar-width";
 const SIDEBAR_COLLAPSED_KEY = "stat-builder:sidebar-collapsed";
 
@@ -182,8 +187,8 @@ export function AppShell({ children }: { children: ReactNode }) {
       "--app-sidebar-width",
       `${desktopSidebarOpen ? sidebarWidth : 0}px`,
     );
-    // `lg:p-3` chrome plus the stage's 1px border, so portaled surfaces sit
-    // inside the frame instead of covering it.
+    // Mirrors `lg:p-3` (0.75rem) plus the stage's 1px border. `desktop` is
+    // SIDEBAR_BREAKPOINT_PX, which is Tailwind `lg` (1024) — keep them in lockstep.
     root.style.setProperty(
       "--app-stage-inset",
       desktop ? "calc(0.75rem + 1px)" : "0px",
@@ -296,9 +301,12 @@ export function AppShell({ children }: { children: ReactNode }) {
           onPointerDown={onResizePointerDown}
           onDoubleClick={() => commitWidth(SIDEBAR_DEFAULT_PX)}
           onKeyDown={onResizeKeyDown}
-          style={{ left: sidebarWidth - 4 }}
+          style={{
+            left: sidebarWidth - SIDEBAR_RESIZE_OFFSET_PX,
+            width: SIDEBAR_RESIZE_HIT_PX,
+          }}
           className={cn(
-            "absolute inset-y-0 z-10 w-4 cursor-col-resize touch-none outline-none",
+            "absolute inset-y-0 z-10 cursor-col-resize touch-none outline-none",
             "after:absolute after:inset-y-3 after:left-1 after:w-0.5 after:-translate-x-1/2 after:rounded-full after:transition-colors",
             "after:bg-transparent hover:after:bg-foreground/40 focus-visible:after:bg-foreground",
             resizing && "after:bg-foreground",
@@ -322,14 +330,23 @@ export function AppShell({ children }: { children: ReactNode }) {
           <ViewTabs />
           <ThemeToggle />
         </header>
-        <AppHeader
-          className="hidden lg:flex"
-          collapsed={collapsed}
-          onExpand={() => setSidebarCollapsed(false)}
-        />
+        {desktop && (
+          <AppHeader
+            collapsed={collapsed}
+            onExpand={() => setSidebarCollapsed(false)}
+          />
+        )}
         <div className="flex min-h-0 flex-1 flex-col lg:p-3">
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:rounded-xl lg:border lg:border-foreground/12 lg:bg-card lg:shadow-[-2px_2px_8px_0px_rgba(0,0,0,0.3),0_0_12px_0px_rgba(0,0,0,0.25)]">
-            <div className="min-h-0 flex-1 overflow-y-auto">{children}</div>
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:rounded-xl lg:border lg:border-border lg:bg-card lg:shadow-[-2px_2px_8px_0px_rgba(0,0,0,0.3),0_0_12px_0px_rgba(0,0,0,0.25)]">
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              {desktop && (
+                <div className="px-6 pt-6 empty:hidden">
+                  <ArmoryDiagnosticsGate />
+                </div>
+              )}
+              {children}
+            </div>
+            <ApplyProgressSection />
           </div>
         </div>
       </div>

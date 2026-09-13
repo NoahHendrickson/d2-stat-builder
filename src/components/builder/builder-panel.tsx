@@ -66,6 +66,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { StatTargetRow } from "@/components/builder/stat-target-row";
 import { SetRow } from "@/components/builder/set-row";
 import { ArmoryStatus } from "@/components/armory/armory-status";
+import { ManifestStatus } from "@/components/manifest/manifest-status";
 import { ExoticPicker } from "@/components/builder/exotic-picker";
 import { ExoticClassPerkPicker } from "@/components/builder/exotic-class-perk-picker";
 import { FragmentPicker } from "@/components/builder/fragment-picker";
@@ -1017,7 +1018,7 @@ export function BuilderPanel({
               />
             </Section>
 
-            <Section title="-60 nerds">
+            <Section title="Slot pins">
               <NerdControls
                 useDreamersBond={useDreamersBond}
                 onUseDreamersBondChange={onDreamersBondChange}
@@ -1059,6 +1060,12 @@ export function BuilderPanel({
               </div>
             </Section>
           </>
+        )}
+
+        {!ready && !showInlineStatusCards && (
+          <div className="space-y-4 py-8 opacity-80">
+            <ManifestStatus />
+          </div>
         )}
 
         {showInlineStatusCards && (

@@ -9,15 +9,16 @@ import { CLASS_NAMES } from "@/lib/armory/stats";
 import type { ArmoryCharacter } from "@/lib/armory/fetch";
 import { characterForClass } from "@/lib/armory/character-for-class";
 
-/** Inner radius 6px. Rest: 1px gray (outer 7). Selected: 3px gap (outer 9) + emphatic ring. */
+/** Inner radius 6px. 1px border on both states so selecting a tab doesn't
+ *  grow the row. Selected ring is an outside box-shadow (layout-neutral). */
 const tabBase =
-  "relative flex-1 shrink-0 cursor-pointer text-left outline-none transition-[opacity,box-shadow,border-color] focus-visible:ring-3 focus-visible:ring-ring/50";
+  "relative flex-1 shrink-0 cursor-pointer rounded-[7px] border text-left outline-none transition-[opacity,box-shadow,border-color] focus-visible:ring-3 focus-visible:ring-ring/50";
 
 const tabInactive =
-  "rounded-[7px] border border-[var(--neutral-line)] opacity-80 hover:opacity-100";
+  "border-[var(--neutral-line)] opacity-80 hover:opacity-100";
 
 const tabSelected =
-  "rounded-[9px] border-[3px] border-background opacity-100 shadow-[0_0_0_2px_var(--emphatic)]";
+  "border-background opacity-100 shadow-[0_0_0_2px_var(--background),0_0_0_4px_var(--emphatic)]";
 
 interface ClassEmblemTabsProps {
   /** All of the player's characters; grouped into one tab per class internally. */

@@ -31,10 +31,10 @@ const tabsListVariants = cva(
         // Figma "Tabs List" (54:386 light / 54:393 dark): flush track,
         // #E8E4E1 on light, white 8% over the stage on dark, radius matches Button (10px).
         default:
-          "h-8 overflow-clip rounded-[10px] corner-smooth bg-[#E8E4E1] dark:bg-white/8",
+          "group-data-horizontal/tabs:h-8 overflow-clip rounded-[10px] corner-smooth bg-[#E8E4E1] dark:bg-foreground/8",
         // Same 36px row as the loadouts search / icon buttons so the header strip lines up.
         icon: "h-9 overflow-clip rounded-[10px] corner-smooth bg-foreground/6",
-        line: "h-8 gap-1 rounded-none bg-transparent p-[3px]",
+        line: "group-data-horizontal/tabs:h-8 gap-1 rounded-none bg-transparent p-[3px]",
       },
     },
     defaultVariants: {
@@ -51,7 +51,7 @@ const tabsIndicatorVariants = cva(
         // Figma (54:393 dark): the active pill is the stage surface recessed
         // into the track, bordered with the track colour — not a lighter raise.
         default:
-          "rounded-[10px] corner-smooth border border-foreground/12 bg-card dark:border-white/8",
+          "rounded-[10px] corner-smooth border border-foreground/12 bg-card dark:border-foreground/8",
         // Recessed into the track with the header surface (sidebar when open,
         // page background when collapsed) so the pill doesn't flash a second color.
         icon: "rounded-[10px] corner-smooth border border-foreground/6 bg-[var(--icon-tab-surface,var(--sidebar))]",

@@ -60,7 +60,7 @@ export function hashesIncludeHelmet(
  */
 export function inDefaultOptimizerPool(
   piece: {
-    isFestivalMask?: boolean;
+    isFestivalMask: boolean;
     tunedStat?: number;
     isExotic: boolean;
   },

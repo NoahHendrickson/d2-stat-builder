@@ -53,7 +53,7 @@ test("commitLoadout writes picker mods and placement onto the payload", () => {
     { placement, stats: { stats: [20, 0, 0, 0, 0, 0], total: 20 } },
     mods,
   );
-  expect(out.loadout.parameters.mods).toEqual(modsFromEditor(mods, placement));
+  expect(out.loadout.parameters.mods).toEqual(modsFromEditor(mods, placement, undefined));
   expect(out.modPlacement).toEqual(placement);
   expect(out.optimizer?.stats).toEqual([20, 0, 0, 0, 0, 0]);
   expect(out.optimizer?.total).toBe(20);
@@ -107,4 +107,17 @@ test.each([
   });
   expect(plan.assigned).toEqual(replacement ? { a: { 1: replacement } } : {});
   expect(plan.skipped).toEqual([]);
+});
+
+test("commitLoadout clearing placement wipes a saved one", () => {
+  const mods: ModsSection = {
+    pieces: [piece("a")],
+    catalog: {} as ModOptionCatalog,
+    initial: { a: { 1: 10 } },
+    unplaced: [],
+  };
+  const payload = { ...data(), modPlacement: mods.initial };
+  const saved = commitLoadout(payload, {} as Manifest, { placement: {} }, mods);
+  expect(saved).not.toHaveProperty("modPlacement");
+  expect(saved.loadout.parameters.mods).toEqual([]);
 });

@@ -125,7 +125,7 @@ function Slider({
           // (vertical) on the Indicator, so the track's declared size must be its
           // inner size — a border-box 8px track would leave the 8px indicator
           // clipped on one side by overflow-hidden. 6px + 1px border = 8px total.
-          className="relative box-content grow overflow-hidden rounded-[4px] border border-border bg-muted select-none data-horizontal:h-1.5 data-horizontal:w-full data-vertical:h-full data-vertical:w-1.5 dark:bg-white/12"
+          className="relative box-content grow overflow-hidden rounded-[4px] border border-border bg-muted select-none data-horizontal:h-1.5 data-horizontal:w-full data-vertical:h-full data-vertical:w-1.5 dark:bg-foreground/12"
         >
           {ceiling != null && (
             <div

@@ -146,7 +146,9 @@
 
 .dark {
   /* Sidebar + app chrome #212222; stage (card) #2E3030. Type #fcfcf5.
-     Alpha tokens are cream-on-dark (border 6%, input 12%, hover 6%). */
+     Cream-on-dark alphas: border/accent 6% (#fcfcf50f), input 15% (checkbox
+     and switch outlines need to stay visible on bg/popover AND on card/muted),
+     hover 6%. */
   --background: #212222;
   --foreground: #fcfcf5;
   --card: #2e3030;
@@ -163,7 +165,7 @@
   --accent-foreground: #fcfcf5;
   --destructive: oklch(0.704 0.191 22.216);
   --border: #fcfcf50f;
-  --input: #fcfcf51f;
+  --input: #fcfcf526;
   --ring: #a3a09e;
   --chart-1: #d4d0cc;
   --chart-2: #a3a09e;
@@ -183,7 +185,8 @@
   --neutral-line: #71717a;
   --neutral-shadow: #52525b;
   --text-primary: #fcfcf5;
-  --text-secondary: #fcfcf580;
+  /* Opaque so labels clear WCAG AA on --card / --muted (~4.7:1). */
+  --text-secondary: #b8b5b2;
   --text-muted: #a3a09e;
   --primary-border: #fcfcf580;
   --primary-muted: #fcfcf51a;
@@ -261,7 +264,7 @@ input[type="number"] {
     inset: 0;
     z-index: 1;
     border-radius: inherit;
-    box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.06);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--foreground) 6%, transparent);
     -webkit-mask-image: linear-gradient(to bottom, #000, #0000);
     mask-image: linear-gradient(to bottom, #000, #0000);
   }

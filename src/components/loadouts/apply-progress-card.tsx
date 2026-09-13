@@ -90,7 +90,7 @@ function titleFor(name: string, finished: "ok" | "partial" | "fail" | undefined)
   return `Applying ${name}`;
 }
 
-/** Apply-loadout progress card for the sidebar footer — hidden when idle. */
+/** Apply-loadout progress — lives on the stage so it outlives a collapsed sidebar / closed drawer. */
 export function ApplyProgressSection() {
   const state = useSyncExternalStore(subscribeApplyProgress, getApplyProgress, () => null);
 
@@ -110,7 +110,7 @@ export function ApplyProgressSection() {
       role="status"
       aria-live="polite"
       aria-label={title}
-      className="mx-2 mb-2 flex shrink-0 flex-col gap-2 rounded-2xl border bg-popover p-3 text-popover-foreground shadow-lg"
+      className="m-3 flex shrink-0 flex-col gap-2 rounded-2xl border bg-popover p-3 text-popover-foreground shadow-lg"
     >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">

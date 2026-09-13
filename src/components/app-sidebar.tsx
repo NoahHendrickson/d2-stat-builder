@@ -7,7 +7,6 @@ import { useSession } from "@/lib/auth/use-session";
 import { useArmory } from "@/lib/armory/use-armory";
 import { useManifest } from "@/lib/manifest/use-manifest";
 import { ArmoryStatus } from "@/components/armory/armory-status";
-import { ApplyProgressSection } from "@/components/loadouts/apply-progress-card";
 import { Button } from "@/components/ui/button";
 import { TooltipLabel } from "@/components/ui/tooltip";
 
@@ -53,7 +52,7 @@ function LoadoutsListPlaceholder({ headerAction }: { headerAction?: ReactNode })
  */
 const LoadoutsList = dynamic(
   () => import("@/components/loadouts/loadouts-list").then((m) => m.LoadoutsList),
-  { ssr: false },
+  { ssr: false, loading: () => <LoadoutsListPlaceholder /> },
 );
 
 /** Figma 46:1658: loadouts list, with the account card only in the mobile drawer. */
@@ -122,8 +121,6 @@ export function AppSidebar({
   return (
     <div className="flex h-full min-h-0 flex-col pt-4">
       <div className="flex min-h-0 flex-1 flex-col">{body}</div>
-
-      <ApplyProgressSection />
 
       {showAccount && authed && (
         <div className="shrink-0 p-2">

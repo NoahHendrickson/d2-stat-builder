@@ -271,14 +271,26 @@ export function updateEditorPiece(
   // A new selection may fill an existing unplaced copy. Only add copies beyond
   // those already wanted, including when the same hash occupies several pieces.
   const remaining = [...desiredStatMods];
+  let emptyGeneral = false;
   for (const p of section.pieces) {
     for (const socket of p.armorSockets ?? []) {
       if (socket.kind !== "general") continue;
       const hash = placement[p.instanceId]?.[socket.index];
-      if (hash === undefined) continue;
+      if (hash === undefined) {
+        emptyGeneral = true;
+        continue;
+      }
       const i = remaining.indexOf(hash);
       if (i >= 0) remaining.splice(i, 1);
       else desiredStatMods.push(hash);
+    }
+  }
+  // Every general socket is filled: leftover wishlist copies can't be slotted
+  // (StatModChip has no remove), so drop them rather than leaving a stuck chip.
+  if (!emptyGeneral) {
+    for (const hash of remaining) {
+      const i = desiredStatMods.indexOf(hash);
+      if (i >= 0) desiredStatMods.splice(i, 1);
     }
   }
   return { placement, desiredStatMods };
@@ -330,14 +342,26 @@ export function placementToMods(placement: ModPlacement, pieces: ArmorPiece[]): 
 export function modsFromEditor(
   section: ModsSection,
   placement: ModPlacement,
-  desiredStatMods = section.desiredStatMods,
+  desiredStatMods: readonly number[] | undefined,
 ): number[] {
   const placed = placementToMods(placement, section.pieces);
-  // Stat copies are accounted for by the current wishlist, including explicit
-  // replacements/removals after an initially unplaced mod was manually slotted.
-  const leftover = section.unplaced
-    .filter((u) => !section.desiredStatMods?.includes(u.hash))
-    .map((u) => u.hash);
+  // Unplaced general/stat mods are recovered via the *live* wishlist
+  // (`desiredStatMods`). Leftover is unplaced non-stat mods. Stub catalogs
+  // without `kind` treat initial-wishlist hashes the same way (multiset).
+  const leftover: number[] = [];
+  const initialLeft = [...(section.desiredStatMods ?? [])];
+  for (const u of section.unplaced) {
+    const kind = section.catalog.kind?.(u.hash);
+    if (kind === "general") continue;
+    if (kind === undefined) {
+      const i = initialLeft.indexOf(u.hash);
+      if (i >= 0) {
+        initialLeft.splice(i, 1);
+        continue;
+      }
+    }
+    leftover.push(u.hash);
+  }
   const before = placementToMods(section.initial, section.pieces);
   for (const hash of placed) {
     const i = before.indexOf(hash);
