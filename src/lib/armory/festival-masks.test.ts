@@ -6,6 +6,7 @@ import {
   inDefaultOptimizerPool,
   helmetCandidates,
   isFestivalMask,
+  ownedFestivalMasks,
 } from "./festival-masks";
 
 test("known masquerader hashes are Festival of the Lost masks", () => {
@@ -61,19 +62,30 @@ test("T5 Festival of the Lost masks stay out of the default optimizer pool", () 
   expect(inDefaultOptimizerPool(legacyExotic, false)).toBe(false);
 });
 
-test("helmetCandidates: pinned → masks only; power range → helmets + masks; else helmets", () => {
+test("ownedFestivalMasks: this class's masks plus any-class ones, nothing else", () => {
+  const pieces = [
+    { id: "warlockMask", isFestivalMask: true, classType: 2 },
+    { id: "anyMask", isFestivalMask: true, classType: 3 },
+    { id: "titanMask", isFestivalMask: true, classType: 0 },
+    { id: "warlockHelm", isFestivalMask: false, classType: 2 },
+  ];
+  expect(ownedFestivalMasks(pieces, 2).map((p) => p.id)).toEqual(["warlockMask", "anyMask"]);
+  expect(ownedFestivalMasks(pieces, 1).map((p) => p.id)).toEqual(["anyMask"]);
+});
+
+test("helmetCandidates: pinned → masks only; power constrained → helmets + masks; else helmets", () => {
   const helmets = ["h1", "h2"];
   const masks = ["m1"];
-  expect(helmetCandidates(helmets, masks, { pinned: true, powerMatters: false })).toEqual(masks);
-  expect(helmetCandidates(helmets, masks, { pinned: true, powerMatters: true })).toEqual(masks);
-  expect(helmetCandidates(helmets, null, { pinned: true, powerMatters: true })).toEqual([]);
-  expect(helmetCandidates(helmets, masks, { pinned: false, powerMatters: true })).toEqual([
+  expect(helmetCandidates(helmets, masks, { pinned: true, powerConstrained: false })).toBe(masks);
+  expect(helmetCandidates(helmets, masks, { pinned: true, powerConstrained: true })).toBe(masks);
+  expect(helmetCandidates(helmets, masks, { pinned: false, powerConstrained: true })).toEqual([
     "h1",
     "h2",
     "m1",
   ]);
-  // No masks owned (or none collected): the helmet pool is untouched.
-  expect(helmetCandidates(helmets, [], { pinned: false, powerMatters: true })).toBe(helmets);
-  expect(helmetCandidates(helmets, null, { pinned: false, powerMatters: true })).toBe(helmets);
-  expect(helmetCandidates(helmets, masks, { pinned: false, powerMatters: false })).toBe(helmets);
+  // No masks owned: the helmet pool is untouched.
+  expect(helmetCandidates(helmets, [], { pinned: false, powerConstrained: true })).toBe(helmets);
+  expect(helmetCandidates(helmets, masks, { pinned: false, powerConstrained: false })).toBe(
+    helmets,
+  );
 });
