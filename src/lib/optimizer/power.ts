@@ -7,8 +7,10 @@
  *
  * Pieces with no known power (theoretical rolls with no live instance) are left OUT of
  * the mean rather than dragging it to 0: a loadout made only of such pieces, with no
- * weapons given, has a null power and passes any range. The weapons are fixed items
- * the walk never chooses, so they simply pre-load the running sums.
+ * weapons given, has a null power and passes any range. Powerless LIVE armor (Festival
+ * of the Lost masks) is not unknown — the armory reads it as power 0, because that is
+ * how the game averages it (see readPower in armory/normalize.ts). The weapons are
+ * fixed items the walk never chooses, so they simply pre-load the running sums.
  *
  * Arithmetic, for a loadout whose n known-power items sum to S:
  *   floor(S/n) ≥ min  ⇔  S ≥ min·n          ⇔  Σ (p − min)        ≥ 0

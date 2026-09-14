@@ -109,8 +109,10 @@ export interface ArmorPiece {
   /** Armor energy (component 300) — capacity and what current plugs use. */
   energy?: { capacity: number; used: number };
   /**
-   * Power level — the instance's primary stat (component 300). Undefined when the
-   * component is missing, and on synthetic pieces with no live instance.
+   * Power level — the instance's primary stat (component 300). Undefined only when the
+   * instance itself is missing (synthetic pieces with no live instance, or the component
+   * absent). A live instance with no primary stat — Festival of the Lost masks — is 0:
+   * the game averages such a piece in at zero power, over the full eight slots.
    */
   power?: number;
 }
@@ -389,13 +391,22 @@ function readEnergy(
   return { capacity: energy.energyCapacity, used: energy.energyUsed };
 }
 
-/** Item power from the instance's primary stat (component 300). */
+/**
+ * Item power from the instance's primary stat (component 300). A live instance with no
+ * primary stat at all (Festival of the Lost masks have none) is powerless, and the game
+ * counts it as 0 in the equipped-gear average — NOT as a slot to leave out. Verified
+ * against a character wearing Masquerader's Hood: 3 × 300 weapons + 200 + 200 + 540 +
+ * 485 armor reports 290 in-game = floor(2325 / 8); leaving the mask out would give 332.
+ * Only a missing instance (no component, or a synthetic piece) is truly unknown.
+ */
 function readPower(
   instanceId: string,
   profile: DestinyProfileResponse,
 ): number | undefined {
-  const value = profile.itemComponents?.instances?.data?.[instanceId]?.primaryStat?.value;
-  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+  const instance = profile.itemComponents?.instances?.data?.[instanceId];
+  if (!instance) return undefined;
+  const value = instance.primaryStat?.value;
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
 }
 
 /** True when a tuning-category plug is currently in any socket (empty or slotted). */
