@@ -90,7 +90,8 @@ export const PowerRangeControls = memo(function PowerRangeControls({
           <p className="text-muted-foreground text-xs">
             Only show builds whose gear power lands in a range. Power is the
             game&apos;s average over the five armor pieces and the weapons you
-            enter below.
+            enter below. Festival of the Lost masks count as power 0, so your
+            masks join the helmet candidates while this is on.
           </p>
         </div>
         <Switch

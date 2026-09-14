@@ -46,7 +46,9 @@ import {
 } from "@/lib/armory/dreamers-bond";
 import {
   hashesIncludeHelmet,
+  helmetCandidates,
   inDefaultOptimizerPool,
+  ownedFestivalMasks,
 } from "@/lib/armory/festival-masks";
 import {
   ARMOR_SLOTS,
@@ -235,7 +237,8 @@ export function BuilderPanel({
   // Candidate pool for the optimizer: Tier-5 pieces (exactly those with a tuning
   // socket) plus — when enabled — legacy/non-tunable exotics, whose artifice +3 the
   // solver spends. Legacy legendaries stay excluded until supported. FotL masks
-  // are never in this pool; they replace the helmet slot when that toggle is on.
+  // are never in this pool; they replace the helmet slot when that toggle is on, and
+  // join it as optional power-0 candidates while "Power matters" is on.
   const pool = useMemo(
     () =>
       classPieces.filter((p) => inDefaultOptimizerPool(p, useLegacyExotics)),
@@ -454,41 +457,49 @@ export function BuilderPanel({
     useDreamersBond,
   ]);
 
-  // Owned FotL masks for this class (vault / inventory / equipped), including
-  // legacy rolls the normal T5 pool excludes. Scan the full armory so classType 3
-  // (any-class) defs still appear for the selected character.
-  const festivalMaskHelmets = useMemo(() => {
-    if (!useFestivalMasks || classType === null || !armory) return null;
-    return armory.pieces.filter(
-      (p) =>
-        p.isFestivalMask &&
-        (p.classType === classType || p.classType === 3),
-    );
-  }, [useFestivalMasks, armory, classType]);
+  // Owned FotL masks wearable by this class (vault / inventory / equipped). Cheap, so
+  // always collected; helmetCandidates decides whether they enter the helmet slot.
+  const festivalMaskHelmets = useMemo(
+    () =>
+      classType === null || !armory ? [] : ownedFestivalMasks(armory.pieces, classType),
+    [armory, classType],
+  );
 
   const pieceMap = useMemo(() => {
     const map = new Map(classPieces.map((p) => [p.instanceId, p]));
-    // Theoretical rolls live only in classItemPieces — results resolve through this map.
+    // Theoretical rolls live only in classItemPieces, and any-class (classType 3) masks
+    // aren't in classPieces — results resolve through this map, so merge both.
     for (const p of classItemPieces) {
       if (!map.has(p.instanceId)) map.set(p.instanceId, p);
     }
+    for (const p of festivalMaskHelmets) {
+      if (!map.has(p.instanceId)) map.set(p.instanceId, p);
+    }
     return map;
-  }, [classPieces, classItemPieces]);
+  }, [classPieces, classItemPieces, festivalMaskHelmets]);
+
+  // Masks join the helmet pool only while the solver will actually enforce a range —
+  // the same contract runOptimizer uses (enabled with no bounds constrains nothing).
+  const powerConstrained = toOptimizerPowerRange(powerRange) !== undefined;
 
   // The optimizer's candidates per slot, in ARMOR_SLOTS order: the class-item pool
-  // (Spirit-filtered / Dreamer's-pinned), FotL masks in the helmet slot when pinned, the
-  // T5 pool otherwise. runOptimizer maps these to OptimizerPieces; the power range
-  // controls read their power.
+  // (Spirit-filtered / Dreamer's-pinned), the helmet pool per helmetCandidates (masks
+  // pinned / optional under a power range / absent), the T5 pool otherwise. runOptimizer
+  // maps these to OptimizerPieces; the power range controls read their power.
   const slotPieces = useMemo(
     () =>
       ARMOR_SLOTS.map((slot) =>
         slot === "classItem"
           ? classItemPieces
-          : slot === "helmet" && festivalMaskHelmets
-            ? festivalMaskHelmets
+          : slot === "helmet"
+            ? helmetCandidates(
+                pool.filter((p) => p.slot === "helmet"),
+                festivalMaskHelmets,
+                { pinned: useFestivalMasks, powerConstrained },
+              )
             : pool.filter((p) => p.slot === slot),
       ),
-    [pool, classItemPieces, festivalMaskHelmets],
+    [pool, classItemPieces, festivalMaskHelmets, useFestivalMasks, powerConstrained],
   );
 
   // A stored exotic in a pinned slot (Dreamer's Bond → class item, Festival masks →
