@@ -744,7 +744,7 @@ test("itemWatermark prefers featured, then the versioned quality icon", () => {
   expect(itemWatermark({ iconWatermark: "" })).toBeUndefined();
 });
 
-test("power comes from the instance's primary stat; absent component → undefined", () => {
+test("power comes from the instance's primary stat; no instance → undefined; instance without one → 0", () => {
   const ITEM = 4242;
   const manifest = {
     def: (_table: string, hash: number | null | undefined) =>
@@ -760,7 +760,12 @@ test("power comes from the instance's primary stat; absent component → undefin
   const profile = {
     itemComponents: {
       instances: {
-        data: { withPower: { primaryStat: { statHash: 1935470627, value: 291 } } },
+        data: {
+          withPower: { primaryStat: { statHash: 1935470627, value: 291 } },
+          // A Festival of the Lost mask: instanced, but no primary stat. The game
+          // averages it in at 0 power, so it must be a KNOWN 0, not left out.
+          powerless: { itemLevel: 55, quality: 0 },
+        },
       },
     },
     profileInventory: {
@@ -768,12 +773,14 @@ test("power comes from the instance's primary stat; absent component → undefin
         items: [
           { itemInstanceId: "withPower", itemHash: ITEM },
           { itemInstanceId: "noInstance", itemHash: ITEM },
+          { itemInstanceId: "powerless", itemHash: ITEM },
         ],
       },
     },
   } as unknown as DestinyProfileResponse;
-  const [withPower, noInstance] = normalizeArmory(profile, manifest);
+  const [withPower, noInstance, powerless] = normalizeArmory(profile, manifest);
   expect(withPower.power).toBe(291);
   expect(noInstance.power).toBeUndefined();
   expect("power" in noInstance).toBe(false);
+  expect(powerless.power).toBe(0);
 });
