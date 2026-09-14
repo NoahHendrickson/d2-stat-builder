@@ -4,6 +4,7 @@ import {
   FESTIVAL_MASK_HASHES,
   hashesIncludeHelmet,
   inDefaultOptimizerPool,
+  helmetCandidates,
   isFestivalMask,
 } from "./festival-masks";
 
@@ -58,4 +59,21 @@ test("T5 Festival of the Lost masks stay out of the default optimizer pool", () 
   expect(inDefaultOptimizerPool(t5Helmet, false)).toBe(true);
   expect(inDefaultOptimizerPool(legacyExotic, true)).toBe(true);
   expect(inDefaultOptimizerPool(legacyExotic, false)).toBe(false);
+});
+
+test("helmetCandidates: pinned → masks only; power range → helmets + masks; else helmets", () => {
+  const helmets = ["h1", "h2"];
+  const masks = ["m1"];
+  expect(helmetCandidates(helmets, masks, { pinned: true, powerMatters: false })).toEqual(masks);
+  expect(helmetCandidates(helmets, masks, { pinned: true, powerMatters: true })).toEqual(masks);
+  expect(helmetCandidates(helmets, null, { pinned: true, powerMatters: true })).toEqual([]);
+  expect(helmetCandidates(helmets, masks, { pinned: false, powerMatters: true })).toEqual([
+    "h1",
+    "h2",
+    "m1",
+  ]);
+  // No masks owned (or none collected): the helmet pool is untouched.
+  expect(helmetCandidates(helmets, [], { pinned: false, powerMatters: true })).toBe(helmets);
+  expect(helmetCandidates(helmets, null, { pinned: false, powerMatters: true })).toBe(helmets);
+  expect(helmetCandidates(helmets, masks, { pinned: false, powerMatters: false })).toBe(helmets);
 });

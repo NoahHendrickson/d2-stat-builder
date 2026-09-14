@@ -46,6 +46,7 @@ import {
 } from "@/lib/armory/dreamers-bond";
 import {
   hashesIncludeHelmet,
+  helmetCandidates,
   inDefaultOptimizerPool,
 } from "@/lib/armory/festival-masks";
 import {
@@ -235,7 +236,8 @@ export function BuilderPanel({
   // Candidate pool for the optimizer: Tier-5 pieces (exactly those with a tuning
   // socket) plus — when enabled — legacy/non-tunable exotics, whose artifice +3 the
   // solver spends. Legacy legendaries stay excluded until supported. FotL masks
-  // are never in this pool; they replace the helmet slot when that toggle is on.
+  // are never in this pool; they replace the helmet slot when that toggle is on, and
+  // join it as optional power-0 candidates while "Power matters" is on.
   const pool = useMemo(
     () =>
       classPieces.filter((p) => inDefaultOptimizerPool(p, useLegacyExotics)),
@@ -456,15 +458,18 @@ export function BuilderPanel({
 
   // Owned FotL masks for this class (vault / inventory / equipped), including
   // legacy rolls the normal T5 pool excludes. Scan the full armory so classType 3
-  // (any-class) defs still appear for the selected character.
+  // (any-class) defs still appear for the selected character. Collected when the
+  // mask toggle pins them to the helmet slot, and when a power range is on (a mask
+  // is a power-0 helmet the solver may use to land in a low range).
+  const collectMasks = useFestivalMasks || powerRange.enabled;
   const festivalMaskHelmets = useMemo(() => {
-    if (!useFestivalMasks || classType === null || !armory) return null;
+    if (!collectMasks || classType === null || !armory) return null;
     return armory.pieces.filter(
       (p) =>
         p.isFestivalMask &&
         (p.classType === classType || p.classType === 3),
     );
-  }, [useFestivalMasks, armory, classType]);
+  }, [collectMasks, armory, classType]);
 
   const pieceMap = useMemo(() => {
     const map = new Map(classPieces.map((p) => [p.instanceId, p]));
@@ -476,19 +481,23 @@ export function BuilderPanel({
   }, [classPieces, classItemPieces]);
 
   // The optimizer's candidates per slot, in ARMOR_SLOTS order: the class-item pool
-  // (Spirit-filtered / Dreamer's-pinned), FotL masks in the helmet slot when pinned, the
-  // T5 pool otherwise. runOptimizer maps these to OptimizerPieces; the power range
-  // controls read their power.
+  // (Spirit-filtered / Dreamer's-pinned), the helmet pool per helmetCandidates (masks
+  // pinned / optional under a power range / absent), the T5 pool otherwise. runOptimizer
+  // maps these to OptimizerPieces; the power range controls read their power.
   const slotPieces = useMemo(
     () =>
       ARMOR_SLOTS.map((slot) =>
         slot === "classItem"
           ? classItemPieces
-          : slot === "helmet" && festivalMaskHelmets
-            ? festivalMaskHelmets
+          : slot === "helmet"
+            ? helmetCandidates(
+                pool.filter((p) => p.slot === "helmet"),
+                festivalMaskHelmets,
+                { pinned: useFestivalMasks, powerMatters: powerRange.enabled },
+              )
             : pool.filter((p) => p.slot === slot),
       ),
-    [pool, classItemPieces, festivalMaskHelmets],
+    [pool, classItemPieces, festivalMaskHelmets, useFestivalMasks, powerRange.enabled],
   );
 
   // A stored exotic in a pinned slot (Dreamer's Bond → class item, Festival masks →

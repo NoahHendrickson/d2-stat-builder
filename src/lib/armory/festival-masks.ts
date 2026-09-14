@@ -55,8 +55,29 @@ export function hashesIncludeHelmet(
 }
 
 /**
+ * The optimizer's helmet candidates. `masks` are the owned FotL masks (or null when the
+ * builder isn't collecting them):
+ * - `pinned` (the "Use Festival of the Lost masks" toggle): the slot is ONLY masks.
+ * - otherwise with `powerMatters`: the T5 helmets PLUS the masks — a mask is a power-0
+ *   helmet the game averages in, so it's a legitimate way to land in a low range, but
+ *   nothing forces the solver to pick one.
+ * - otherwise: the T5 helmets alone.
+ */
+export function helmetCandidates<T>(
+  helmets: T[],
+  masks: T[] | null,
+  opts: { pinned: boolean; powerMatters: boolean },
+): T[] {
+  if (opts.pinned) return masks ?? [];
+  if (opts.powerMatters && masks && masks.length > 0)
+    return [...helmets, ...masks];
+  return helmets;
+}
+
+/**
  * Default optimizer pool: T5 (or legacy exotic) pieces, excluding FotL masks.
- * Masks enter the helmet slot only when the builder toggle is on.
+ * Masks enter the helmet slot only when the builder toggle is on, or as optional
+ * candidates while a power range is enforced (see helmetCandidates).
  */
 export function inDefaultOptimizerPool(
   piece: {
