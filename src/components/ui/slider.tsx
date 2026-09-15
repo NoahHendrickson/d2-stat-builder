@@ -18,14 +18,23 @@ function clampNumber(n: number, lo: number, hi: number) {
 /** Thumb diameter in px — keep in sync with the Thumb's `size-*` class. */
 const THUMB_PX = 16
 
+function sliderFraction(value: number, min: number, max: number) {
+  return max <= min ? 0 : (value - min) / (max - min)
+}
+
 /**
  * CSS `left` for the thumb's center at `value`. The thumb is edge-aligned
  * (inset so it never overhangs the track), so its center runs from
  * THUMB_PX/2 to width - THUMB_PX/2 rather than 0% to 100%.
  */
 function sliderValueLeft(value: number, min: number, max: number): string {
-  const fraction = max <= min ? 0 : (value - min) / (max - min)
+  const fraction = sliderFraction(value, min, max)
   return `calc(${fraction * 100}% + ${THUMB_PX / 2 - THUMB_PX * fraction}px)`
+}
+
+/** Track fill width at `value`: 0% at min, 100% at max. */
+function sliderFillWidth(value: number, min: number, max: number): string {
+  return `${sliderFraction(value, min, max) * 100}%`
 }
 
 function Slider({
@@ -133,7 +142,7 @@ function Slider({
               aria-hidden
               className="absolute top-0 left-0 h-full rounded-[3px] bg-foreground/40 shadow-raised transition-[width] duration-300 ease-out"
               style={{
-                width: sliderValueLeft(ceiling, min, max),
+                width: sliderFillWidth(ceiling, min, max),
               }}
             />
           )}
