@@ -8,6 +8,7 @@ import {
   enteredWeaponPowers,
   forcesDreamersBond,
   parsePowerRange,
+  samePowerRangeSelection,
   toOptimizerPowerRange,
   type PersistedSelections,
   fragSelToArrays,
@@ -278,4 +279,21 @@ test("resolveExoticIndex returns null when the exotic is no longer owned", () =>
 
 test("resolveExoticIndex returns null for a null name", () => {
   expect(resolveExoticIndex(null, [{ name: "Assassin's Cowl" }])).toBeNull();
+});
+
+test("samePowerRangeSelection compares by value, bounds and weapons included", () => {
+  const on: PersistedSelections["powerRange"] = {
+    enabled: true,
+    bounds: { min: 287, max: 292 },
+    weapons: [290, null, 288],
+    dreamersBond: false,
+  };
+  expect(samePowerRangeSelection(on, { ...on, bounds: { min: 287, max: 292 } })).toBe(true);
+  expect(samePowerRangeSelection(on, { ...on, weapons: [290, null, 288] })).toBe(true);
+  expect(samePowerRangeSelection(on, { ...on, bounds: { min: 288, max: 292 } })).toBe(false);
+  expect(samePowerRangeSelection(on, { ...on, bounds: null })).toBe(false);
+  expect(samePowerRangeSelection(on, { ...on, weapons: [290, 300, 288] })).toBe(false);
+  expect(samePowerRangeSelection(on, { ...on, enabled: false })).toBe(false);
+  expect(samePowerRangeSelection(on, { ...on, dreamersBond: true })).toBe(false);
+  expect(samePowerRangeSelection({ ...on, bounds: null }, { ...on, bounds: null })).toBe(true);
 });

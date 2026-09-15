@@ -59,6 +59,30 @@ export function enteredWeaponPowers(range: PowerRangeSelection): number[] {
   return range.weapons.filter((w): w is number => w !== null);
 }
 
+/**
+ * Whether two selections mean the same thing — lets a control that re-commits the value
+ * it already holds (a power field blurred untouched) skip the state update, and with it
+ * the re-render, the debounced save, and the optimizer's key comparison.
+ */
+export function samePowerRangeSelection(
+  a: PowerRangeSelection,
+  b: PowerRangeSelection,
+): boolean {
+  if (a === b) return true;
+  const bounds =
+    a.bounds === b.bounds ||
+    (a.bounds !== null &&
+      b.bounds !== null &&
+      a.bounds.min === b.bounds.min &&
+      a.bounds.max === b.bounds.max);
+  return (
+    bounds &&
+    a.enabled === b.enabled &&
+    a.dreamersBond === b.dreamersBond &&
+    a.weapons.every((w, i) => w === b.weapons[i])
+  );
+}
+
 /** The solver's view of the selection: undefined unless enabled with bounds set. */
 export function toOptimizerPowerRange(range: PowerRangeSelection): PowerRange | undefined {
   if (!range.enabled || range.bounds === null) return undefined;

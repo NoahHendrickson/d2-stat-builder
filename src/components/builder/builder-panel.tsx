@@ -418,13 +418,20 @@ export function BuilderPanel({
     [manifest, selectedClassItemHash],
   );
 
+  // The Dreamer's Bond piece whenever its box is checked — even while Power matters is
+  // off and it's inert, so the power controls can seed from the pool the toggle will use.
+  const dreamersPiece = useMemo(
+    () =>
+      powerRange.dreamersBond && classType !== null
+        ? dreamersBondPiece(classType, manifest)
+        : null,
+    [powerRange.dreamersBond, classType, manifest],
+  );
+
   // Class-item pool with Spirit filter + optional synthetic T5 roll (owned matches win).
   // Dreamer's Bond replaces the whole slot with a hardcoded 0-stat collections item.
   const classItemPieces = useMemo(() => {
-    if (useDreamersBond && classType !== null) {
-      const pinned = dreamersBondPiece(classType, manifest);
-      return pinned ? [pinned] : [];
-    }
+    if (useDreamersBond) return dreamersPiece ? [dreamersPiece] : [];
     const pieces = pool.filter((p) => p.slot === "classItem");
     if (
       !manifest ||
@@ -448,6 +455,7 @@ export function BuilderPanel({
     selectedExoticOption,
     exoticPerks,
     useDreamersBond,
+    dreamersPiece,
   ]);
 
   // Owned FotL masks wearable by this class (vault / inventory / equipped). Cheap, so
@@ -494,6 +502,18 @@ export function BuilderPanel({
       ),
     [pool, classItemPieces, festivalMaskHelmets, powerConstrained],
   );
+
+  // The pool as it stands once Power matters is ON — identical while it is; with the
+  // toggle off and Dreamer's Bond checked, the class-item slot the toggle will pin. The
+  // power controls seed the first-enable range from this, so the seed can't be read off
+  // a slot the same click replaces with a 21-power piece.
+  const powerSlotPieces = useMemo(() => {
+    if (useDreamersBond || !powerRange.dreamersBond) return slotPieces;
+    const pinned = dreamersPiece ? [dreamersPiece] : [];
+    return slotPieces.map((pieces, i) =>
+      ARMOR_SLOTS[i] === "classItem" ? pinned : pieces,
+    );
+  }, [slotPieces, useDreamersBond, powerRange.dreamersBond, dreamersPiece]);
 
   // A stored exotic class item loses to a forced Dreamer's Bond on restore. From then on
   // the exotic picker and the power-range handler keep the two exclusive, so no effect
@@ -1021,7 +1041,7 @@ export function BuilderPanel({
               <PowerRangeControls
                 value={powerRange}
                 onChange={onPowerRangeChange}
-                slotPieces={slotPieces}
+                slotPieces={powerSlotPieces}
                 dreamersItemName={dreamersClassItemName(classType ?? 2)}
               />
             </Section>

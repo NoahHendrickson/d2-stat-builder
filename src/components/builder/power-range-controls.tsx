@@ -7,6 +7,7 @@ import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import {
   enteredWeaponPowers,
+  samePowerRangeSelection,
   type PowerRangeSelection,
 } from "@/lib/builder/selection-storage";
 import {
@@ -35,9 +36,10 @@ function parsePower(raw: string): number | null {
  * policy: turning the switch on with no bounds yet seeds the top five gear-power levels
  * the candidate armor can reach. The min / max inputs commit on blur or Enter (not per
  * keystroke, so typing a new maximum can't momentarily drag the minimum with it); the
- * slider commits live. Closes with the "Force Dreamer's Bond" checkbox: the 21-power
- * collections class item is a power-range lever, so it lives here rather than as a
- * standalone pin.
+ * slider commits live. A commit that changes nothing is dropped, so a field blurred
+ * untouched doesn't re-render the builder or re-save. Closes with the "Force Dreamer's
+ * Bond" checkbox: the 21-power collections class item is a power-range lever, so it
+ * lives here rather than as a standalone pin.
  */
 export const PowerRangeControls = memo(function PowerRangeControls({
   value,
@@ -47,8 +49,12 @@ export const PowerRangeControls = memo(function PowerRangeControls({
 }: {
   value: PowerRangeSelection;
   onChange: (next: PowerRangeSelection) => void;
-  /** The optimizer's candidate pieces per slot — only their power is read. */
-  slotPieces: readonly (readonly { power?: number }[])[];
+  /**
+   * The optimizer's candidate pieces per slot AS THEY WILL BE while Power matters is on
+   * (the toggle itself can change the pool — a checked Dreamer's Bond takes over the
+   * class-item slot only once it's enabled). Only power and exotic-ness are read.
+   */
+  slotPieces: readonly (readonly { power?: number; isExotic: boolean }[])[];
   /** Class-specific collections item: Dreamer's Bond / Cloak / Mark. */
   dreamersItemName: string;
 }) {
@@ -64,25 +70,29 @@ export const PowerRangeControls = memo(function PowerRangeControls({
     bounds !== null &&
     (bounds.min > reach.max || bounds.max < reach.min);
 
+  const emit = (next: PowerRangeSelection) => {
+    if (!samePowerRangeSelection(value, next)) onChange(next);
+  };
   const onToggle = (checked: boolean) => {
     let next: PowerRangeSelection = { ...value, enabled: checked };
     if (checked && next.bounds === null && armorSpan) {
-      next = { ...next, bounds: seedPowerRange(armorSpan, enteredWeaponPowers(next)) };
+      const seed = seedPowerRange(armorSpan, enteredWeaponPowers(next));
+      if (seed) next = { ...next, bounds: seed };
     }
-    onChange(next);
+    emit(next);
   };
   const commitMin = (n: number | null) => {
     if (n === null) return;
-    onChange({ ...value, bounds: { min: n, max: Math.max(n, bounds?.max ?? n) } });
+    emit({ ...value, bounds: { min: n, max: Math.max(n, bounds?.max ?? n) } });
   };
   const commitMax = (n: number | null) => {
     if (n === null) return;
-    onChange({ ...value, bounds: { min: Math.min(n, bounds?.min ?? n), max: n } });
+    emit({ ...value, bounds: { min: Math.min(n, bounds?.min ?? n), max: n } });
   };
   const commitWeapon = (slot: number, n: number | null) => {
     const next = [...weapons] as PowerRangeSelection["weapons"];
     next[slot] = n;
-    onChange({ ...value, weapons: next });
+    emit({ ...value, weapons: next });
   };
 
   // Slider spans the reachable gear power, widened to keep both thumbs visible when the
@@ -138,7 +148,7 @@ export const PowerRangeControls = memo(function PowerRangeControls({
                 value={[bounds.min, bounds.max]}
                 onValueChange={(v) => {
                   if (!Array.isArray(v) || v.length !== 2) return;
-                  onChange({ ...value, bounds: { min: v[0], max: v[1] } });
+                  emit({ ...value, bounds: { min: v[0], max: v[1] } });
                 }}
                 aria-label="Power range"
                 className="cursor-pointer"
@@ -187,7 +197,7 @@ export const PowerRangeControls = memo(function PowerRangeControls({
               id={dreamersId}
               checked={dreamersBond}
               onCheckedChange={(checked) =>
-                onChange({ ...value, dreamersBond: checked === true })
+                emit({ ...value, dreamersBond: checked === true })
               }
               className="mt-0.5 cursor-pointer"
             />
