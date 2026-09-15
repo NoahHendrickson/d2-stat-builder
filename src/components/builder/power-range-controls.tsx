@@ -1,6 +1,7 @@
 "use client";
 
-import { memo, useMemo } from "react";
+import { memo, useId, useMemo } from "react";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
@@ -13,6 +14,7 @@ import {
   reachableGearPower,
   seedPowerRange,
 } from "@/lib/builder/power-span";
+import { DREAMERS_BOND_POWER } from "@/lib/armory/dreamers-bond";
 import { cn } from "@/lib/utils";
 
 const WEAPON_SLOTS = ["Kinetic", "Energy", "Heavy"] as const;
@@ -33,19 +35,25 @@ function parsePower(raw: string): number | null {
  * policy: turning the switch on with no bounds yet seeds the top five gear-power levels
  * the candidate armor can reach. The min / max inputs commit on blur or Enter (not per
  * keystroke, so typing a new maximum can't momentarily drag the minimum with it); the
- * slider commits live.
+ * slider commits live. Closes with the "Force Dreamer's Bond" checkbox: the 21-power
+ * collections class item is a power-range lever, so it lives here rather than as a
+ * standalone pin.
  */
 export const PowerRangeControls = memo(function PowerRangeControls({
   value,
   onChange,
   slotPieces,
+  dreamersItemName,
 }: {
   value: PowerRangeSelection;
   onChange: (next: PowerRangeSelection) => void;
   /** The optimizer's candidate pieces per slot — only their power is read. */
   slotPieces: readonly (readonly { power?: number }[])[];
+  /** Class-specific collections item: Dreamer's Bond / Cloak / Mark. */
+  dreamersItemName: string;
 }) {
-  const { enabled, bounds, weapons } = value;
+  const { enabled, bounds, weapons, dreamersBond } = value;
+  const dreamersId = useId();
   const armorSpan = useMemo(() => armorPowerSpan(slotPieces), [slotPieces]);
   // The gear power a build can land on with the weapons entered so far.
   const reach = armorSpan
@@ -172,6 +180,25 @@ export const PowerRangeControls = memo(function PowerRangeControls({
               The power of the weapons you&apos;ll equip with the build, averaged
               in with the armor.
             </p>
+          </div>
+
+          <div className="flex items-start gap-3">
+            <Checkbox
+              id={dreamersId}
+              checked={dreamersBond}
+              onCheckedChange={(checked) =>
+                onChange({ ...value, dreamersBond: checked === true })
+              }
+              className="mt-0.5 cursor-pointer"
+            />
+            <label htmlFor={dreamersId} className="cursor-pointer space-y-0.5">
+              <span className="block text-sm">Force {dreamersItemName}</span>
+              <span className="text-muted-foreground block text-xs">
+                Pins the collections class item at power {DREAMERS_BOND_POWER} with
+                no stats, so it drags the average down and the other four pieces
+                carry the build.
+              </span>
+            </label>
           </div>
         </>
       )}

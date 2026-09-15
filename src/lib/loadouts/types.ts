@@ -283,8 +283,6 @@ export function parseBuilderSnapshot(v: unknown): BuilderSnapshot | null {
     balancedTuning: v.balancedTuning,
     legacyExotics: v.legacyExotics,
     // Added after the first snapshots shipped: default off when absent.
-    dreamersBond: typeof v.dreamersBond === "boolean" ? v.dreamersBond : false,
-    festivalMasks: typeof v.festivalMasks === "boolean" ? v.festivalMasks : false,
     powerRange: parsePowerRange(v.powerRange),
     activeSubclass: v.activeSubclass as Subclass,
     fragmentHashes,

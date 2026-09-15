@@ -6,6 +6,7 @@ import {
   SELECTIONS_KEY,
   SCHEMA_VERSION,
   enteredWeaponPowers,
+  forcesDreamersBond,
   parsePowerRange,
   toOptimizerPowerRange,
   type PersistedSelections,
@@ -68,9 +69,12 @@ function sampleSelections(): PersistedSelections {
     allowTuning: true,
     balancedTuning: false,
     legacyExotics: false,
-    dreamersBond: true,
-    festivalMasks: false,
-    powerRange: { enabled: true, bounds: { min: 287, max: 292 }, weapons: [290, null, 288] },
+    powerRange: {
+      enabled: true,
+      bounds: { min: 287, max: 292 },
+      weapons: [290, null, 288],
+      dreamersBond: true,
+    },
     activeSubclass: "Void",
     fragSel: fragSelToArrays(frag),
   };
@@ -125,18 +129,10 @@ test("load defaults legacyExotics to true for data stored before the field exist
   expect(loadSelections()).toEqual({ ...old, legacyExotics: true });
 });
 
-test("load defaults dreamersBond to false for data stored before the field existed", () => {
-  const old: Partial<PersistedSelections> = sampleSelections();
-  delete old.dreamersBond;
+test("load ignores the retired top-level dreamersBond / festivalMasks pins", () => {
+  const old = { ...sampleSelections(), dreamersBond: true, festivalMasks: true };
   localStorage.setItem(SELECTIONS_KEY, JSON.stringify(old));
-  expect(loadSelections()).toEqual({ ...old, dreamersBond: false });
-});
-
-test("load defaults festivalMasks to false for data stored before the field existed", () => {
-  const old: Partial<PersistedSelections> = sampleSelections();
-  delete old.festivalMasks;
-  localStorage.setItem(SELECTIONS_KEY, JSON.stringify(old));
-  expect(loadSelections()).toEqual({ ...old, festivalMasks: false });
+  expect(loadSelections()).toEqual(sampleSelections());
 });
 
 test("load defaults powerRange to off for data stored before the field existed", () => {
@@ -149,7 +145,12 @@ test("load defaults powerRange to off for data stored before the field existed",
 test("parsePowerRange orders an inverted range, drops a non-integer one and bad weapon slots", () => {
   expect(
     parsePowerRange({ enabled: true, bounds: { min: 292, max: 287 }, weapons: [null, null, null] }),
-  ).toEqual({ enabled: true, bounds: { min: 287, max: 292 }, weapons: [null, null, null] });
+  ).toEqual({
+    enabled: true,
+    bounds: { min: 287, max: 292 },
+    weapons: [null, null, null],
+    dreamersBond: false,
+  });
   expect(parsePowerRange({ enabled: true, bounds: { min: -1, max: 287 } })).toEqual(
     DEFAULT_POWER_RANGE,
   );
@@ -164,10 +165,28 @@ test("parsePowerRange orders an inverted range, drops a non-integer one and bad 
   expect(parsePowerRange({ enabled: true })).toEqual({ ...DEFAULT_POWER_RANGE, enabled: true });
   expect(
     parsePowerRange({ enabled: false, bounds: { min: 287, max: 292 }, weapons: [290, -1, 2.5] }),
-  ).toEqual({ enabled: false, bounds: { min: 287, max: 292 }, weapons: [290, null, null] });
+  ).toEqual({
+    enabled: false,
+    bounds: { min: 287, max: 292 },
+    weapons: [290, null, null],
+    dreamersBond: false,
+  });
   expect(
-    enteredWeaponPowers({ enabled: true, bounds: null, weapons: [290, null, 288] }),
+    enteredWeaponPowers({ ...DEFAULT_POWER_RANGE, enabled: true, weapons: [290, null, 288] }),
   ).toEqual([290, 288]);
+});
+
+test("parsePowerRange reads dreamersBond, defaulting anything but true to off", () => {
+  expect(parsePowerRange({ enabled: true, dreamersBond: true }).dreamersBond).toBe(true);
+  expect(parsePowerRange({ enabled: true, dreamersBond: "yes" }).dreamersBond).toBe(false);
+  expect(parsePowerRange({ enabled: true }).dreamersBond).toBe(false);
+});
+
+test("forcesDreamersBond only while Power matters is on", () => {
+  const checked = { ...DEFAULT_POWER_RANGE, dreamersBond: true };
+  expect(forcesDreamersBond({ ...checked, enabled: true })).toBe(true);
+  expect(forcesDreamersBond({ ...checked, enabled: false })).toBe(false);
+  expect(forcesDreamersBond({ ...DEFAULT_POWER_RANGE, enabled: true })).toBe(false);
 });
 
 test("toOptimizerPowerRange is undefined unless enabled with bounds set", () => {
@@ -175,6 +194,7 @@ test("toOptimizerPowerRange is undefined unless enabled with bounds set", () => 
     enabled: true,
     bounds: { min: 287, max: 292 },
     weapons: [290, null, 288],
+    dreamersBond: false,
   };
   expect(toOptimizerPowerRange(on)).toEqual({ min: 287, max: 292, weapons: [290, 288] });
   expect(toOptimizerPowerRange({ ...on, enabled: false })).toBeUndefined();

@@ -45,7 +45,6 @@ import {
   dreamersClassItemName,
 } from "@/lib/armory/dreamers-bond";
 import {
-  hashesIncludeHelmet,
   helmetCandidates,
   inDefaultOptimizerPool,
   ownedFestivalMasks,
@@ -74,16 +73,14 @@ import { ExoticClassPerkPicker } from "@/components/builder/exotic-class-perk-pi
 import { FragmentPicker } from "@/components/builder/fragment-picker";
 import { SetListControls } from "@/components/builder/set-list-controls";
 import { ClassEmblemTabs } from "@/components/builder/class-emblem-tabs";
-import {
-  NerdControls,
-  TuningControls,
-} from "@/components/builder/tuning-controls";
+import { TuningControls } from "@/components/builder/tuning-controls";
 import { PowerRangeControls } from "@/components/builder/power-range-controls";
 import { BuildsSurface } from "@/components/builder/builds-surface";
 import type { BuildsColumnContentProps } from "@/components/builder/builds-column-content";
 import type { ExoticConstraint, OptimizerPiece } from "@/lib/optimizer/types";
 import {
   DEFAULT_POWER_RANGE,
+  forcesDreamersBond,
   loadSelections,
   saveSelections,
   fragSelToArrays,
@@ -193,15 +190,11 @@ export function BuilderPanel({
   const [useLegacyExotics, setUseLegacyExotics] = useState(
     initialSaved?.legacyExotics ?? true,
   );
-  const [useDreamersBond, setUseDreamersBond] = useState(
-    initialSaved?.dreamersBond ?? false,
-  );
-  const [useFestivalMasks, setUseFestivalMasks] = useState(
-    initialSaved?.festivalMasks ?? false,
-  );
   const [powerRange, setPowerRange] = useState<PowerRangeSelection>(
     () => initialSaved?.powerRange ?? DEFAULT_POWER_RANGE,
   );
+  // Dreamer's Bond is a "Power matters" option: checked but with the toggle off, it's inert.
+  const useDreamersBond = forcesDreamersBond(powerRange);
 
   // The exotic is persisted by name and resolved to an index once the live exotics list
   // exists; while it's pending (not `undefined`), the save effect holds off so a
@@ -484,8 +477,8 @@ export function BuilderPanel({
 
   // The optimizer's candidates per slot, in ARMOR_SLOTS order: the class-item pool
   // (Spirit-filtered / Dreamer's-pinned), the helmet pool per helmetCandidates (masks
-  // pinned / optional under a power range / absent), the T5 pool otherwise. runOptimizer
-  // maps these to OptimizerPieces; the power range controls read their power.
+  // optional under a power range / absent), the T5 pool otherwise. runOptimizer maps
+  // these to OptimizerPieces; the power range controls read their power.
   const slotPieces = useMemo(
     () =>
       ARMOR_SLOTS.map((slot) =>
@@ -495,29 +488,24 @@ export function BuilderPanel({
             ? helmetCandidates(
                 pool.filter((p) => p.slot === "helmet"),
                 festivalMaskHelmets,
-                { pinned: useFestivalMasks, powerConstrained },
+                powerConstrained,
               )
             : pool.filter((p) => p.slot === slot),
       ),
-    [pool, classItemPieces, festivalMaskHelmets, useFestivalMasks, powerConstrained],
+    [pool, classItemPieces, festivalMaskHelmets, powerConstrained],
   );
 
-  // A stored exotic in a pinned slot (Dreamer's Bond → class item, Festival masks →
-  // helmet) loses to the pin on restore. From then on the exotic picker and the toggle
-  // handlers keep the two exclusive, so no effect has to referee them.
+  // A stored exotic class item loses to a forced Dreamer's Bond on restore. From then on
+  // the exotic picker and the power-range handler keep the two exclusive, so no effect
+  // has to referee them.
   const resolveRestoredExotic = useCallback(
-    (
-      name: string | null,
-      pins: { dreamersBond: boolean; festivalMasks: boolean },
-    ): number | null => {
+    (name: string | null, dreamersBond: boolean): number | null => {
       const index = resolveExoticIndex(name, exotics);
       if (index === null) return null;
-      const hashes = exotics[index].hashes;
-      if (pins.dreamersBond && hashes.some(isExoticClassItemHash)) return null;
-      if (pins.festivalMasks && hashesIncludeHelmet(hashes, classPieces)) return null;
+      if (dreamersBond && exotics[index].hashes.some(isExoticClassItemHash)) return null;
       return index;
     },
-    [exotics, classPieces],
+    [exotics],
   );
 
   // Resolve the restored exotic (persisted by name) to an index once the live list exists.
@@ -526,13 +514,8 @@ export function BuilderPanel({
     if (pendingExoticName.current === undefined || !exotics.length) return;
     const name = pendingExoticName.current;
     pendingExoticName.current = undefined;
-    setSelectedExotic(
-      resolveRestoredExotic(name, {
-        dreamersBond: useDreamersBond,
-        festivalMasks: useFestivalMasks,
-      }),
-    );
-  }, [exotics, resolveRestoredExotic, useDreamersBond, useFestivalMasks]);
+    setSelectedExotic(resolveRestoredExotic(name, useDreamersBond));
+  }, [exotics, resolveRestoredExotic, useDreamersBond]);
 
   // "Optimize" in the sidebar replaces the stored selections while this panel may already
   // be mounted: adopt them the way the mount-time restore does. The exotic resolves right
@@ -554,14 +537,14 @@ export function BuilderPanel({
       setAllowTuning(saved.allowTuning);
       setUseBalancedTuning(saved.balancedTuning);
       setUseLegacyExotics(saved.legacyExotics);
-      setUseDreamersBond(saved.dreamersBond);
-      setUseFestivalMasks(saved.festivalMasks);
       setPowerRange(saved.powerRange);
       setActiveSubclass(saved.activeSubclass);
       setFragSel(fragSelFromArrays(saved.fragSel));
       setExoticPerks(saved.exoticPerks);
       if (saved.classType === classType && exotics.length) {
-        setSelectedExotic(resolveRestoredExotic(saved.exoticName, saved));
+        setSelectedExotic(
+          resolveRestoredExotic(saved.exoticName, forcesDreamersBond(saved.powerRange)),
+        );
       } else {
         pendingExoticName.current = saved.exoticName;
       }
@@ -594,8 +577,6 @@ export function BuilderPanel({
         allowTuning,
         balancedTuning: useBalancedTuning,
         legacyExotics: useLegacyExotics,
-        dreamersBond: useDreamersBond,
-        festivalMasks: useFestivalMasks,
         powerRange,
         activeSubclass,
         fragSel: fragSelToArrays(fragSel),
@@ -617,8 +598,6 @@ export function BuilderPanel({
     allowTuning,
     useBalancedTuning,
     useLegacyExotics,
-    useDreamersBond,
-    useFestivalMasks,
     powerRange,
     activeSubclass,
     fragSel,
@@ -717,34 +696,26 @@ export function BuilderPanel({
     setExoticPerks([null, null]);
     if (index === null) return;
     const hashes = exotics[index]?.hashes ?? [];
-    if (hashes.some(isExoticClassItemHash)) setUseDreamersBond(false);
-    if (hashesIncludeHelmet(hashes, classPieces)) setUseFestivalMasks(false);
-  }, [exotics, classPieces]);
+    if (hashes.some(isExoticClassItemHash)) {
+      setPowerRange((r) => (r.dreamersBond ? { ...r, dreamersBond: false } : r));
+    }
+  }, [exotics]);
 
-  const onDreamersBondChange = useCallback(
-    (checked: boolean) => {
-      setUseDreamersBond(checked);
-      if (checked && selectedClassItemHash !== undefined) {
-        setSelectedExotic(null);
-        setExoticPerks([null, null]);
-      }
-    },
-    [selectedClassItemHash],
-  );
-
-  const onFestivalMasksChange = useCallback(
-    (checked: boolean) => {
-      setUseFestivalMasks(checked);
+  // Forcing Dreamer's Bond — by its checkbox, or by turning Power matters on with it
+  // already checked — evicts a selected exotic class item from the pinned slot.
+  const onPowerRangeChange = useCallback(
+    (next: PowerRangeSelection) => {
+      setPowerRange(next);
       if (
-        checked &&
-        selectedExoticOption &&
-        hashesIncludeHelmet(selectedExoticOption.hashes, classPieces)
+        forcesDreamersBond(next) &&
+        !forcesDreamersBond(powerRange) &&
+        selectedClassItemHash !== undefined
       ) {
         setSelectedExotic(null);
         setExoticPerks([null, null]);
       }
     },
-    [selectedExoticOption, classPieces],
+    [powerRange, selectedClassItemHash],
   );
 
   const setSetFilter = useCallback(
@@ -789,8 +760,6 @@ export function BuilderPanel({
       allowTuning,
       balancedTuning: useBalancedTuning,
       legacyExotics: useLegacyExotics,
-      dreamersBond: useDreamersBond,
-      festivalMasks: useFestivalMasks,
       powerRange,
       activeSubclass,
       fragmentHashes: [...fragSel[activeSubclass]],
@@ -805,8 +774,6 @@ export function BuilderPanel({
       allowTuning,
       useBalancedTuning,
       useLegacyExotics,
-      useDreamersBond,
-      useFestivalMasks,
       powerRange,
       activeSubclass,
       fragSel,
@@ -1050,21 +1017,12 @@ export function BuilderPanel({
               />
             </Section>
 
-            <Section title="Slot pins">
-              <NerdControls
-                useDreamersBond={useDreamersBond}
-                onUseDreamersBondChange={onDreamersBondChange}
-                dreamersItemName={dreamersClassItemName(classType ?? 2)}
-                useFestivalMasks={useFestivalMasks}
-                onUseFestivalMasksChange={onFestivalMasksChange}
-              />
-            </Section>
-
             <Section title="Power">
               <PowerRangeControls
                 value={powerRange}
-                onChange={setPowerRange}
+                onChange={onPowerRangeChange}
                 slotPieces={slotPieces}
+                dreamersItemName={dreamersClassItemName(classType ?? 2)}
               />
             </Section>
 

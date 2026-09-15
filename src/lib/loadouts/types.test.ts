@@ -52,9 +52,12 @@ const builder = () => ({
   allowTuning: true,
   balancedTuning: true,
   legacyExotics: false,
-  dreamersBond: true,
-  festivalMasks: true,
-  powerRange: { enabled: true, bounds: { min: 287, max: 292 }, weapons: [290, null, 295] },
+  powerRange: {
+    enabled: true,
+    bounds: { min: 287, max: 292 },
+    weapons: [290, null, 295],
+    dreamersBond: true,
+  },
   activeSubclass: "Prismatic",
   fragmentHashes: [1, 2],
 });
@@ -116,25 +119,21 @@ describe("parseBuilderSnapshot", () => {
     expect(out.setReqs).toEqual({ 555: 2 });
     expect(out.exoticPerks).toEqual([null, 42]);
     expect(out.activeSubclass).toBe("Prismatic");
-    expect(out.dreamersBond).toBe(true);
-    expect(out.festivalMasks).toBe(true);
+    expect(out.powerRange.dreamersBond).toBe(true);
   });
-  test("defaults dreamersBond to false when the field is missing", () => {
-    const old = builder() as { dreamersBond?: boolean };
-    delete old.dreamersBond;
-    expect(parseBuilderSnapshot(old)?.dreamersBond).toBe(false);
-  });
-  test("defaults festivalMasks to false when the field is missing", () => {
-    const old = builder() as { festivalMasks?: boolean };
-    delete old.festivalMasks;
-    expect(parseBuilderSnapshot(old)?.festivalMasks).toBe(false);
+  test("drops the retired top-level dreamersBond / festivalMasks pins from older snapshots", () => {
+    const old = { ...builder(), dreamersBond: true, festivalMasks: true };
+    const out = parseBuilderSnapshot(old)!;
+    expect(out).not.toHaveProperty("dreamersBond");
+    expect(out).not.toHaveProperty("festivalMasks");
   });
   test("round-trips the power range and defaults it off when missing or malformed", () => {
-    const off = { enabled: false, bounds: null, weapons: [null, null, null] };
+    const off = { enabled: false, bounds: null, weapons: [null, null, null], dreamersBond: false };
     expect(parseBuilderSnapshot(builder())?.powerRange).toEqual({
       enabled: true,
       bounds: { min: 287, max: 292 },
       weapons: [290, null, 295],
+      dreamersBond: true,
     });
     const old = builder() as { powerRange?: unknown };
     delete old.powerRange;
@@ -144,7 +143,12 @@ describe("parseBuilderSnapshot", () => {
         ...builder(),
         powerRange: { enabled: true, bounds: { min: 300, max: 290 } },
       })?.powerRange,
-    ).toEqual({ enabled: true, bounds: { min: 290, max: 300 }, weapons: [null, null, null] });
+    ).toEqual({
+      enabled: true,
+      bounds: { min: 290, max: 300 },
+      weapons: [null, null, null],
+      dreamersBond: false,
+    });
     expect(
       parseBuilderSnapshot({
         ...builder(),
@@ -155,14 +159,19 @@ describe("parseBuilderSnapshot", () => {
     expect(
       parseBuilderSnapshot({ ...builder(), powerRange: { enabled: true, bounds: null } })
         ?.powerRange,
-    ).toEqual({ enabled: true, bounds: null, weapons: [null, null, null] });
+    ).toEqual({ enabled: true, bounds: null, weapons: [null, null, null], dreamersBond: false });
     // Malformed weapons drop to "nothing entered" without losing the range itself.
     expect(
       parseBuilderSnapshot({
         ...builder(),
         powerRange: { enabled: true, bounds: { min: 287, max: 292 }, weapons: [290, "x"] },
       })?.powerRange,
-    ).toEqual({ enabled: true, bounds: { min: 287, max: 292 }, weapons: [null, null, null] });
+    ).toEqual({
+      enabled: true,
+      bounds: { min: 287, max: 292 },
+      weapons: [null, null, null],
+      dreamersBond: false,
+    });
   });
   test("rejects an unknown subclass", () => {
     expect(parseBuilderSnapshot({ ...builder(), activeSubclass: "Kinetic" })).toBeNull();

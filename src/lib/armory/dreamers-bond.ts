@@ -1,7 +1,7 @@
 /**
  * Collections 21-power class items (Dreamer's Bond / Cloak / Mark). Year-1 commons
- * with no armor stats — used as a builder constraint so the other four pieces have
- * to hit the targets without a class-item roll.
+ * with no armor stats — a "Power matters" option: the 21 drags the gear-power average
+ * down, and the other four pieces have to hit the targets without a class-item roll.
  */
 import type { Manifest } from "@/lib/manifest/load";
 import { SYNTHETIC_CLASS_ITEM_ID_PREFIX } from "./exotic-class-perks";

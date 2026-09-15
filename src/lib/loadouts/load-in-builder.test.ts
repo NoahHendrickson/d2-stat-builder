@@ -17,9 +17,12 @@ const existing: PersistedSelections = {
   allowTuning: false,
   balancedTuning: false,
   legacyExotics: false,
-  dreamersBond: false,
-  festivalMasks: false,
-  powerRange: { enabled: true, bounds: { min: 280, max: 290 }, weapons: [null, 285, null] },
+  powerRange: {
+    enabled: true,
+    bounds: { min: 280, max: 290 },
+    weapons: [null, 285, null],
+    dreamersBond: false,
+  },
   activeSubclass: "Arc",
   fragSel: { Arc: [5], Solar: [], Void: [], Stasis: [], Strand: [], Prismatic: [7] },
 };
@@ -59,9 +62,12 @@ test("with a builder snapshot: restores it, keeps pins/filters, merges fragSel",
         allowTuning: true,
         balancedTuning: true,
         legacyExotics: true,
-        dreamersBond: true,
-        festivalMasks: true,
-        powerRange: { enabled: true, bounds: { min: 287, max: 292 }, weapons: [290, 291, 292] },
+        powerRange: {
+          enabled: true,
+          bounds: { min: 287, max: 292 },
+          weapons: [290, 291, 292],
+          dreamersBond: true,
+        },
         activeSubclass: "Prismatic",
         fragmentHashes: [8, 9],
       },
@@ -77,12 +83,11 @@ test("with a builder snapshot: restores it, keeps pins/filters, merges fragSel",
   expect(out.activeSubclass).toBe("Prismatic");
   expect(out.fragSel.Prismatic).toEqual([8, 9]);
   expect(out.fragSel.Arc).toEqual([5]);
-  expect(out.dreamersBond).toBe(true);
-  expect(out.festivalMasks).toBe(true);
   expect(out.powerRange).toEqual({
     enabled: true,
     bounds: { min: 287, max: 292 },
     weapons: [290, 291, 292],
+    dreamersBond: true,
   });
 });
 
@@ -95,9 +100,12 @@ test("without a snapshot: derives targets/sets from parameters, exotic by name",
   expect(out.setReqs).toEqual({ 42: 4 });
   expect(out.exoticName).toBe("Cenotaph Mask");
   expect(out.pinnedSets).toEqual([]);
-  expect(out.dreamersBond).toBe(false);
-  expect(out.festivalMasks).toBe(false);
-  expect(out.powerRange).toEqual({ enabled: false, bounds: null, weapons: [null, null, null] });
+  expect(out.powerRange).toEqual({
+    enabled: false,
+    bounds: null,
+    weapons: [null, null, null],
+    dreamersBond: false,
+  });
 });
 
 test("any-class loadout keeps the current class", () => {
@@ -127,9 +135,7 @@ test("opts.major overrides a stale builder snapshot (Optimize from edited mods)"
         allowTuning: true,
         balancedTuning: true,
         legacyExotics: true,
-        dreamersBond: false,
-        festivalMasks: false,
-        powerRange: { enabled: false, bounds: null, weapons: [null, null, null] },
+        powerRange: { enabled: false, bounds: null, weapons: [null, null, null], dreamersBond: false },
         activeSubclass: "Prismatic",
         fragmentHashes: [],
       },

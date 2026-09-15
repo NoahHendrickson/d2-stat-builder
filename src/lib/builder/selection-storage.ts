@@ -19,11 +19,12 @@ export interface PowerBounds {
 }
 
 /**
- * The power range toggle: when `enabled`, builds must land their gear power — the floor
- * of the mean power over the five armor pieces and the weapons entered below — inside
- * `bounds`. `bounds` is null until the user (or the controls' first-enable seed) sets
- * it, and is kept while the toggle is off so switching it back on restores it. Enabled
- * with null bounds constrains nothing.
+ * The "Power matters" toggle: when `enabled`, builds must land their gear power — the
+ * floor of the mean power over the five armor pieces and the weapons entered below —
+ * inside `bounds`. `bounds` is null until the user (or the controls' first-enable seed)
+ * sets it, and is kept while the toggle is off so switching it back on restores it.
+ * Enabled with null bounds constrains nothing. `dreamersBond` and the weapon powers are
+ * likewise kept while off; they only act while `enabled` (see forcesDreamersBond).
  */
 export interface PowerRangeSelection {
   enabled: boolean;
@@ -33,13 +34,25 @@ export interface PowerRangeSelection {
    * entered by hand. `null` = not entered, which leaves that slot out of the average.
    */
   weapons: [number | null, number | null, number | null];
+  /**
+   * Force the collections 21-power class item (Dreamer's Bond / Cloak / Mark) — 0
+   * stats — into the class-item slot, so the other four pieces carry the build. A
+   * power-range option because the 21 is the whole point: it drags the average down.
+   */
+  dreamersBond: boolean;
 }
 
 export const DEFAULT_POWER_RANGE: PowerRangeSelection = {
   enabled: false,
   bounds: null,
   weapons: [null, null, null],
+  dreamersBond: false,
 };
+
+/** Whether the class-item slot is pinned to Dreamer's Bond: only while Power matters is on. */
+export function forcesDreamersBond(range: PowerRangeSelection): boolean {
+  return range.enabled && range.dreamersBond;
+}
 
 /** The weapon powers that were actually entered, in slot order — what the solver averages in. */
 export function enteredWeaponPowers(range: PowerRangeSelection): number[] {
@@ -82,16 +95,7 @@ export interface PersistedSelections {
   balancedTuning: boolean;
   /** Include legacy (Armor 2.0 / non-tunable) exotics in the optimizer pool. */
   legacyExotics: boolean;
-  /**
-   * Pin the collections 21-power class item (Dreamer's Bond / Cloak / Mark) — 0
-   * stats — so the other four pieces have to hit the targets.
-   */
-  dreamersBond: boolean;
-  /**
-   * Helmet slot is only owned Festival of the Lost masks (Masquerader's).
-   */
-  festivalMasks: boolean;
-  /** Armor power range constraint (see PowerRangeSelection). */
+  /** "Power matters": gear-power range, weapon powers, Dreamer's Bond (see PowerRangeSelection). */
   powerRange: PowerRangeSelection;
   activeSubclass: Subclass;
   fragSel: Record<Subclass, number[]>;
@@ -205,12 +209,6 @@ function parse(raw: string | null): PersistedSelections | null {
   // Optional (added after v1 shipped) — older stored blobs won't have it. Default ON.
   const legacyExotics =
     typeof o.legacyExotics === "boolean" ? o.legacyExotics : true;
-  // Optional (added after v1 shipped) — older stored blobs won't have it. Default OFF.
-  const dreamersBond =
-    typeof o.dreamersBond === "boolean" ? o.dreamersBond : false;
-  // Optional (added after v1 shipped) — older stored blobs won't have it. Default OFF.
-  const festivalMasks =
-    typeof o.festivalMasks === "boolean" ? o.festivalMasks : false;
   // Optional — exotic class item Spirit pair; default Any/Any.
   const exoticPerks = parseExoticPerks(o.exoticPerks);
   // Optional (added after v1 shipped) — older stored blobs won't have it. Default OFF.
@@ -243,8 +241,6 @@ function parse(raw: string | null): PersistedSelections | null {
     allowTuning: o.allowTuning as boolean,
     balancedTuning,
     legacyExotics,
-    dreamersBond,
-    festivalMasks,
     powerRange,
     activeSubclass: o.activeSubclass as Subclass,
     fragSel,
@@ -256,7 +252,8 @@ function parse(raw: string | null): PersistedSelections | null {
  * are null (unset) or a pair of non-negative integers, else the whole value is dropped
  * (a half-valid range would enable a constraint the user never chose); an inverted
  * pair is put in order rather than dropped, since the inputs commit on blur and a
- * debounced save can catch a min typed above the max.
+ * debounced save can catch a min typed above the max. `dreamersBond` was added after
+ * the range shipped: absent reads as off.
  */
 export function parsePowerRange(v: unknown): PowerRangeSelection {
   if (typeof v !== "object" || v === null) return DEFAULT_POWER_RANGE;
@@ -264,7 +261,12 @@ export function parsePowerRange(v: unknown): PowerRangeSelection {
   if (typeof raw.enabled !== "boolean") return DEFAULT_POWER_RANGE;
   const bounds = parsePowerBounds(raw.bounds);
   if (bounds === undefined) return DEFAULT_POWER_RANGE;
-  return { enabled: raw.enabled, bounds, weapons: parseWeaponPowers(raw.weapons) };
+  return {
+    enabled: raw.enabled,
+    bounds,
+    weapons: parseWeaponPowers(raw.weapons),
+    dreamersBond: raw.dreamersBond === true,
+  };
 }
 
 /** null / absent → null (unset); a valid pair → ordered; anything else → undefined. */
