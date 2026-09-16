@@ -9,8 +9,9 @@ import { TooltipLabel } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 /**
- * Figma 46:1659 — logo + view switch on the left, compact account/status
- * cluster on the right. Lives on the main column, not the loadouts sidebar.
+ * Figma 69:968 — a 76px strip over the backdrop: 28px logo + icon view switch
+ * on the left, the armor / game-data / account cluster on the right. Lives on
+ * the main column, not the loadouts sidebar.
  */
 export function AppHeader({
   collapsed,
@@ -24,17 +25,17 @@ export function AppHeader({
   return (
     <header
       className={cn(
-        "flex shrink-0 items-start justify-between gap-4 p-4 [--icon-tab-surface:var(--sidebar)]",
+        "flex h-[76px] shrink-0 items-center justify-between gap-4 px-4",
         className,
       )}
     >
       <div className="flex min-w-0 items-center gap-4">
         {collapsed && onExpand && (
-          <TooltipLabel label="Show sidebar">
+          <TooltipLabel label="Show loadouts">
             <Button
               variant="ghost"
-              size="icon-lg"
-              aria-label="Show sidebar"
+              size="icon"
+              aria-label="Show loadouts"
               onClick={onExpand}
             >
               <SidebarSimple weight="bold" aria-hidden />
@@ -44,9 +45,9 @@ export function AppHeader({
         <Image
           src="/sidebar-logo.svg"
           alt=""
-          width={36}
-          height={36}
-          className="size-9 shrink-0 rounded-[6px]"
+          width={28}
+          height={28}
+          className="size-7 shrink-0 rounded-[4px]"
           unoptimized
           aria-hidden
         />

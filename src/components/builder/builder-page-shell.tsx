@@ -20,7 +20,7 @@ export function BuilderPageShell() {
 
   // Desktop shows armor/account in the main-column header. Inline cards are
   // only for the narrow-viewport drawer. Bottom padding is for the mobile
-  // builds bar; the shell card already insets the view on desktop.
+  // builds bar.
   return (
     <main className="px-6 py-6 pb-24 lg:pb-6">
       <BuilderPanel showInlineStatusCards={!desktop} />

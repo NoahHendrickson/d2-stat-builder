@@ -149,7 +149,7 @@ export function LoadingScreenView({
       role="status"
       aria-live="polite"
       className={cn(
-        "bg-background fixed inset-0 z-[60] overflow-hidden transition-opacity duration-500",
+        "bg-background/70 fixed inset-0 z-[60] overflow-hidden transition-opacity duration-500",
         fading && "pointer-events-none opacity-0",
       )}
     >
@@ -192,8 +192,8 @@ export function LoadingScreenView({
       </div>
 
       <div className="relative z-10 flex h-full flex-col items-center justify-center px-6">
-        <div className="bg-background/90 flex w-full max-w-sm flex-col items-center gap-4 rounded-2xl px-8 py-6 backdrop-blur-sm">
-          <h1 className="text-lg font-semibold tracking-tight">
+        <div className="d2-panel flex w-full max-w-sm flex-col items-center gap-4 border border-foreground/12 px-8 py-6 shadow-[-2px_2px_8px_0px_rgba(0,0,0,0.3),0_0_12px_0px_rgba(0,0,0,0.25)]">
+          <h1 className="text-lg font-medium">
             Loading your armor
           </h1>
           <div
@@ -202,10 +202,10 @@ export function LoadingScreenView({
             aria-valuemin={0}
             aria-valuemax={100}
             aria-valuenow={pct}
-            className="bg-muted h-1.5 w-full max-w-xs overflow-hidden rounded-full"
+            className="h-2 w-full max-w-xs overflow-hidden rounded-[3px] border border-input bg-black/35"
           >
             <div
-              className="bg-primary h-full rounded-full"
+              className="bg-foreground h-full"
               style={{ width: `${pct}%` }}
             />
           </div>

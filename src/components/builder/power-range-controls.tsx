@@ -17,6 +17,7 @@ import {
 } from "@/lib/builder/power-span";
 import { DREAMERS_BOND_POWER } from "@/lib/armory/dreamers-bond";
 import { cn } from "@/lib/utils";
+import { PowerValue } from "@/components/power-value";
 
 const WEAPON_SLOTS = ["Kinetic", "Energy", "Heavy"] as const;
 /** Upper bound on what a power input accepts — generous, the game's cap moves. */
@@ -104,7 +105,7 @@ export const PowerRangeControls = memo(function PowerRangeControls({
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-4">
         <div className="space-y-0.5">
-          <span className="text-sm">Power matters</span>
+          <span className="text-sm font-medium">Power matters</span>
           <p className="text-muted-foreground text-xs">
             Only show builds whose gear power lands in a range. Power is the
             game&apos;s average over the five armor pieces and the weapons you
@@ -135,8 +136,9 @@ export const PowerRangeControls = memo(function PowerRangeControls({
                 onCommit={commitMax}
               />
               {reach && (
-                <span className="text-muted-foreground ml-auto text-xs tabular-nums">
-                  Reachable {reach.min}–{reach.max}
+                <span className="ml-auto flex items-baseline gap-1.5 text-xs tabular-nums">
+                  <span className="d2-label text-[10px]">Reach</span>
+                  <PowerValue value={`${reach.min}–${reach.max}`} size="xs" />
                 </span>
               )}
             </div>
@@ -164,7 +166,7 @@ export const PowerRangeControls = memo(function PowerRangeControls({
 
           <div className="space-y-1.5">
             <div className="flex items-baseline justify-between gap-4">
-              <span className="text-sm">Weapons</span>
+              <span className="text-sm font-medium">Weapons</span>
               <span className="text-muted-foreground text-xs">
                 Leave a slot blank to skip it
               </span>
@@ -172,7 +174,7 @@ export const PowerRangeControls = memo(function PowerRangeControls({
             <div className="grid grid-cols-3 gap-2">
               {WEAPON_SLOTS.map((name, i) => (
                 <label key={name} className="space-y-1">
-                  <span className="text-muted-foreground block text-[10px] font-medium tracking-wide uppercase">
+                  <span className="d2-label block text-[10px]">
                     {name}
                   </span>
                   <PowerInput
@@ -202,7 +204,7 @@ export const PowerRangeControls = memo(function PowerRangeControls({
               className="mt-0.5 cursor-pointer"
             />
             <label htmlFor={dreamersId} className="cursor-pointer space-y-0.5">
-              <span className="block text-sm">Force {dreamersItemName}</span>
+              <span className="block text-sm font-medium">Force {dreamersItemName}</span>
               <span className="text-muted-foreground block text-xs">
                 Pins the collections class item at power {DREAMERS_BOND_POWER} with
                 no stats, so it drags the average down and the other four pieces

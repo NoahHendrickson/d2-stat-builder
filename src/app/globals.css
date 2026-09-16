@@ -6,68 +6,96 @@
 @custom-variant dark (&:where(.dark, .dark *));
 @custom-variant fine-pointer (@media (hover: hover) and (pointer: fine));
 
+/*
+ * Destiny 2 flavour, softened (Figma "D2-stat-builder" 69:862).
+ *
+ * The game feel comes from the surfaces: a blurred scene behind everything,
+ * translucent black panels with hairline frames, and a few square, uppercase
+ * accents (the green EQUIP, small Futura-style labels, gold exotic frames).
+ * Everything you type into or click on stays soft: 6px fields and chips,
+ * 10px icon tabs, sentence-case Geist body copy. Light mode is the Character
+ * screen: the same scene under a frosted light-grey wash with dark type.
+ */
 :root {
-  --background: oklch(0.989 0.009 106.567);
-  --foreground: oklch(0.226 0 0);
-  --card: oklch(0.989 0.009 106.567);
-  --card-foreground: oklch(0.226 0 0);
-  --popover: oklch(0.989 0.009 106.567);
-  --popover-foreground: oklch(0.226 0 0);
-  --primary: oklch(0.226 0 0);
-  --primary-foreground: oklch(0.989 0.009 106.567);
-  --secondary: #e9f1ff;
-  --secondary-foreground: #0f2444;
-  --muted: oklch(0.970 0.006 56.102);
-  --muted-foreground: oklch(0.556 0.006 56.102);
-  --accent: oklch(0 0 0 / 6%);
-  --accent-foreground: oklch(0.205 0.006 56.102);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0.006 56.102);
-  --input: oklch(0.922 0.006 56.102);
-  --ring: oklch(0.708 0.006 56.102);
-  --chart-1: oklch(0.870 0.006 56.102);
-  --chart-2: oklch(0.556 0.006 56.102);
-  --chart-3: oklch(0.439 0.006 56.102);
-  --chart-4: oklch(0.371 0.006 56.102);
-  --chart-5: oklch(0.269 0.006 56.102);
-  --radius: 0.625rem;
-  --sidebar: oklch(0.989 0.009 106.567);
-  --sidebar-foreground: oklch(0.226 0 0);
-  --sidebar-primary: oklch(0.205 0.006 56.102);
-  --sidebar-primary-foreground: oklch(0.989 0.009 106.567);
-  --sidebar-accent: oklch(0 0 0 / 10%);
-  --sidebar-accent-foreground: oklch(0.226 0 0);
-  --sidebar-border: oklch(0.922 0.006 56.102);
-  --sidebar-ring: oklch(0.708 0.006 56.102);
-  --dropdown: color-mix(in srgb, var(--sidebar) 50%, var(--card));
-  --brand: #438eff;
-  --brand-shadow: #75bcff;
-  --neutral-line: #a1a1aa;
-  --neutral-shadow: #c9c9ce;
+  --background: #d8d5cf;
+  --foreground: #1f2124;
+  --card: #eceae6;
+  --card-foreground: #1f2124;
+  --popover: #f3f2ef;
+  --popover-foreground: #1f2124;
+  --primary: #1f2124;
+  --primary-foreground: #fcfcf5;
+  --secondary: #e0ddd7;
+  --secondary-foreground: #1f2124;
+  --muted: #e0ddd7;
+  --muted-foreground: #5c5e63;
+  --accent: rgb(0 0 0 / 6%);
+  --accent-foreground: #1f2124;
+  --destructive: #b8362e;
+  --border: rgb(0 0 0 / 10%);
+  --input: rgb(0 0 0 / 18%);
+  --ring: rgb(0 0 0 / 55%);
+  --chart-1: #8a8d93;
+  --chart-2: #6c6f75;
+  --chart-3: #55585e;
+  --chart-4: #3f4247;
+  --chart-5: #2a2d31;
+  --radius: 0.375rem;
+  --sidebar: rgb(236 234 230 / 90%);
+  --sidebar-foreground: #1f2124;
+  --sidebar-primary: #1f2124;
+  --sidebar-primary-foreground: #fcfcf5;
+  --sidebar-accent: rgb(0 0 0 / 8%);
+  --sidebar-accent-foreground: #1f2124;
+  --sidebar-border: rgb(0 0 0 / 12%);
+  --sidebar-ring: rgb(0 0 0 / 55%);
+  --dropdown: #f3f2ef;
+  /* Figma Select Trigger (active): the blue selection fill. */
+  --brand: #4580e5;
+  --brand-shadow: #2a5a9e;
+  --neutral-line: rgb(0 0 0 / 35%);
+  --neutral-shadow: rgb(0 0 0 / 20%);
+  /* Translucent panel surfaces over the backdrop. */
+  --panel: rgb(255 255 255 / 55%);
+  --panel-strong: rgb(236 234 230 / 72%);
+  --lifted: rgb(0 0 0 / 4%);
+  /* Figma "Select Menu": the glass a dropdown floats on. */
+  --glass: rgb(236 234 230 / 82%);
+  /* Rarity plates. */
   --exotic: #ceae33;
-  /* Figma Destiny-exotics 127:9 — border line (both states). */
-  --exotic-line: #ffd400;
-  /* Figma Destiny-exotics 127:9 — lip fill (both states). */
+  --exotic-line: #e2c04b;
   --exotic-lip: #af8b31;
-  /* Figma Destiny-exotics 127:9 — selected outer ring (127:7). */
   --exotic-ring-inner: #3f3f3f;
   --exotic-ring-outer: #ffffff;
   --exotic-ring-glow: rgb(255 255 255 / 0.45);
-  --text-primary: oklch(0.226 0 0);
-  --text-secondary: oklch(0.439 0.006 56.102);
-  --text-muted: oklch(0.556 0.006 56.102);
-  --primary-border: oklch(0.226 0 0 / 50%);
-  --primary-muted: oklch(0.922 0.006 56.102);
-  /* Figma Button/Emphatic (6:667): #4580E5 fill, #FCFCF5 label in both modes. */
-  --emphatic: #4580e5;
+  --legendary: #522f65;
+  --rare: #5076a3;
+  --uncommon: #366f42;
+  --common: #c3bcb4;
+  --text-primary: #1f2124;
+  --text-secondary: #46484d;
+  --text-muted: #5c5e63;
+  --primary-border: rgb(31 33 36 / 50%);
+  --primary-muted: rgb(31 33 36 / 10%);
+  /* Figma EQUIP: #378b3f fill, white/24 line. */
+  --emphatic: #378b3f;
   --emphatic-foreground: #fcfcf5;
-  --emphatic-dark: oklch(0.471 0.130 260.407);
-  --emphatic-light: oklch(0.760 0.110 260.407);
+  --emphatic-dark: #2d7334;
+  --emphatic-light: #4aa354;
+  /* Game accents: Power diamond, stat gains, warning text. */
+  --power: #147f86;
+  --positive: #2f8f47;
+  --warning: #8a6d0a;
+  --label: #4a4c50;
+  /* Selection outline (hover/selected frame). */
+  --outline-strong: rgb(31 33 36 / 80%);
+  --outline-glow: rgb(31 33 36 / 20%);
 }
 
 @theme inline {
   --font-heading: var(--font-sans);
   --font-sans: var(--font-sans);
+  --font-display: var(--font-display);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -100,22 +128,38 @@
   --color-card: var(--card);
   --color-foreground: var(--foreground);
   --color-background: var(--background);
-  --radius-sm: calc(var(--radius) * 0.6);
-  --radius-md: calc(var(--radius) * 0.8);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) * 1.4);
-  --radius-2xl: calc(var(--radius) * 1.8);
-  --radius-3xl: calc(var(--radius) * 2.2);
-  --radius-4xl: calc(var(--radius) * 2.6);
+  /* Figma sidebar 69:863: fields, chips, and cards are square; menu rows and
+     badges 4px; ghost buttons and icon tabs 10px. */
+  --radius-sm: 0.25rem;
+  --radius-md: 0px;
+  --radius-lg: 0px;
+  --radius-xl: 0.625rem;
+  --radius-2xl: 0.75rem;
+  --radius-3xl: 1rem;
+  --radius-4xl: 1.25rem;
   --color-brand: var(--brand);
   --color-brand-shadow: var(--brand-shadow);
   --color-neutral-shadow: var(--neutral-shadow);
   --color-neutral-line: var(--neutral-line);
+  --color-panel: var(--panel);
+  --color-panel-strong: var(--panel-strong);
+  --color-lifted: var(--lifted);
+  --color-glass: var(--glass);
   --color-exotic: var(--exotic);
   --color-exotic-line: var(--exotic-line);
   --color-exotic-lip: var(--exotic-lip);
   --color-exotic-ring-inner: var(--exotic-ring-inner);
   --color-exotic-ring-outer: var(--exotic-ring-outer);
+  --color-legendary: var(--legendary);
+  --color-rare: var(--rare);
+  --color-uncommon: var(--uncommon);
+  --color-common: var(--common);
+  --color-power: var(--power);
+  --color-positive: var(--positive);
+  --color-warning: var(--warning);
+  --color-outline-strong: var(--outline-strong);
+  --color-outline-glow: var(--outline-glow);
+  --color-label: var(--label);
 
   @keyframes loading-drift {
     from {
@@ -142,61 +186,75 @@
   --color-text-primary: var(--text-primary);
   --color-text-secondary: var(--text-secondary);
   --color-text-muted: var(--text-muted);
-  --shadow-raised: 2px 0 8px rgb(0 0 0 / 0.08),
-    3px 0 12px rgb(0 0 0 / 0.12);
+  /* Figma: 0 0 4px black/40 under cards and the EQUIP button. */
+  --shadow-raised: 0 0 4px rgb(0 0 0 / 0.4);
+  /* Letter-spacing for the small uppercase labels and the EQUIP-style CTA. */
+  --tracking-label: 0.1em;
+  --tracking-heading: 0.08em;
 }
 
 .dark {
-  /* Sidebar + app chrome #212222; stage (card) #2E3030; dropdown midpoint
-     #282929. Type #fcfcf5.
-     Cream-on-dark alphas: border/accent 6% (#fcfcf50f), input 15% (checkbox
-     and switch outlines need to stay visible on bg/popover AND on card/muted),
-     hover 6%. */
-  --background: #212222;
+  /* Figma 69:862: near-black page (#020202) under the backdrop; sidebar
+     black/70; stage black/40 blurred; cards white/4 on white/8 lines; type
+     #fcfcf5 with #a3a09e secondary. Popovers are opaque so menus stay legible
+     over the scene. */
+  --background: #0b0d10;
   --foreground: #fcfcf5;
-  --card: #2e3030;
+  --card: #1a1d21;
   --card-foreground: #fcfcf5;
-  --popover: #242529;
+  --popover: #1c1f23;
   --popover-foreground: #fcfcf5;
   --primary: #fcfcf5;
-  --primary-foreground: #212222;
-  --secondary: #2b2d2d;
+  --primary-foreground: #0b0d10;
+  --secondary: #262a2f;
   --secondary-foreground: #fcfcf5;
-  --muted: #303030;
+  --muted: #262a2f;
   --muted-foreground: #a3a09e;
-  --accent: #fcfcf50f;
+  --accent: rgb(252 252 245 / 7%);
   --accent-foreground: #fcfcf5;
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: #fcfcf50f;
-  --input: #fcfcf526;
-  --ring: #a3a09e;
+  --destructive: #e05a50;
+  --border: rgb(252 252 245 / 8%);
+  --input: rgb(252 252 245 / 12%);
+  --ring: rgb(252 252 245 / 70%);
   --chart-1: #d4d0cc;
   --chart-2: #a3a09e;
   --chart-3: #757370;
   --chart-4: #5c5a57;
   --chart-5: #434140;
-  --sidebar: #212222;
+  --sidebar: rgb(44 47 56 / 90%);
   --sidebar-foreground: #fcfcf5;
-  --sidebar-primary: #4580e5;
-  --sidebar-primary-foreground: #fcfcf5;
-  --sidebar-accent: #fcfcf51f;
+  --sidebar-primary: #fcfcf5;
+  --sidebar-primary-foreground: #0b0d10;
+  --sidebar-accent: rgb(252 252 245 / 9%);
   --sidebar-accent-foreground: #fcfcf5;
-  --sidebar-border: #fcfcf50f;
-  --sidebar-ring: #a3a09e;
-  --brand: #438eff;
+  --sidebar-border: rgb(252 252 245 / 12%);
+  --sidebar-ring: rgb(252 252 245 / 70%);
+  --dropdown: #1c1f23;
+  --brand: #4580e5;
   --brand-shadow: #2a5a9e;
-  --neutral-line: #71717a;
-  --neutral-shadow: #52525b;
+  --neutral-line: rgb(255 255 255 / 30%);
+  --neutral-shadow: rgb(0 0 0 / 40%);
+  --panel: rgb(0 0 0 / 40%);
+  /* Frosted, not opaque: the scene stays readable through the sidebar. */
+  --panel-strong: rgb(44 47 56 / 70%);
+  --lifted: rgb(255 255 255 / 4%);
+  /* Menus frost like the sidebar but a step lighter: grey-slate at 78% under the 20px blur. */
+  --glass: rgb(62 66 76 / 78%);
   --text-primary: #fcfcf5;
-  /* Opaque so labels clear WCAG AA on --card / --muted (~4.7:1). */
-  --text-secondary: #b8b5b2;
+  --text-secondary: #c9ccc9;
   --text-muted: #a3a09e;
-  --primary-border: #fcfcf580;
-  --primary-muted: #fcfcf51a;
-  --emphatic: #4580e5;
+  --primary-border: rgb(252 252 245 / 50%);
+  --primary-muted: rgb(252 252 245 / 10%);
+  --emphatic: #378b3f;
   --emphatic-foreground: #fcfcf5;
-  --emphatic-dark: oklch(0.471 0.130 260.407);
-  --emphatic-light: oklch(0.760 0.110 260.407);
+  --emphatic-dark: #2d7334;
+  --emphatic-light: #4aa354;
+  --power: #4fd0d0;
+  --positive: #62b96a;
+  --warning: #eade8b;
+  --label: rgb(252 237 211 / 0.75);
+  --outline-strong: rgb(255 255 255 / 85%);
+  --outline-glow: rgb(255 255 255 / 25%);
 }
 
 @layer base {
@@ -254,60 +312,267 @@ input[type="number"] {
 }
 
 @utility corner-smooth {
-    corner-shape: superellipse(1.2);
+  corner-shape: superellipse(1.2);
 }
 
-/* Figma 54:6099 — same 1px inset stroke as before, faded top→bottom.
-   Single-layer mask so the face stays empty and corners stay round. */
-@utility build-card-edge {
+/* ── Destiny 2 accents ──────────────────────────────────────────────────── */
+
+/* The blurred scene behind the whole app (Figma "image 1"). Dark mode shows
+   it under a light black wash; light mode frosts it like the Character screen. */
+@utility app-backdrop {
+  position: fixed;
+  /* Overscan so the blur has no soft edge at the viewport boundary. */
+  inset: -48px;
+  z-index: -1;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgb(255 255 255 / 0.55), rgb(255 255 255 / 0.55)),
+    url("/backdrop.jpg");
+  background-size: cover;
+  background-position: center;
+  /* The Figma scene is pre-blurred; blur the asset itself so every surface
+     (sidebar, header, stage) sits on the same soft image. */
+  filter: blur(24px) saturate(0.6);
+  .dark & {
+    background-image:
+      linear-gradient(rgb(0 0 0 / 0.35), rgb(0 0 0 / 0.35)),
+      url("/backdrop.jpg");
+    filter: blur(24px);
+  }
+}
+
+/* Small uppercase label in the display face (Futura in the Figma; Jost here):
+   column headers, stat names, section tags, the EQUIP label. */
+@utility d2-label {
+  font-family: var(--font-display);
+  font-size: 0.6875rem;
+  line-height: 1rem;
+  font-weight: 500;
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--label);
+}
+
+/* Display-face uppercase for the few loud elements (the EQUIP CTA). */
+@utility d2-heading {
+  font-family: var(--font-display);
+  font-weight: 500;
+  letter-spacing: var(--tracking-heading);
+  text-transform: uppercase;
+}
+
+/* Section rule: a hairline that fades out to the right. */
+@utility d2-rule {
+  background: linear-gradient(
+    to right,
+    color-mix(in srgb, var(--foreground) 22%, transparent),
+    color-mix(in srgb, var(--foreground) 6%, transparent) 60%,
+    transparent
+  );
+  height: 1px;
+}
+
+/* Empty-slot bracket corners (the marks around an unfilled socket). */
+@utility d2-brackets {
+  --bracket: color-mix(in srgb, var(--foreground) 40%, transparent);
+  --bracket-len: 6px;
+  background:
+    linear-gradient(var(--bracket), var(--bracket)) top left / var(--bracket-len) 1px no-repeat,
+    linear-gradient(var(--bracket), var(--bracket)) top left / 1px var(--bracket-len) no-repeat,
+    linear-gradient(var(--bracket), var(--bracket)) top right / var(--bracket-len) 1px no-repeat,
+    linear-gradient(var(--bracket), var(--bracket)) top right / 1px var(--bracket-len) no-repeat,
+    linear-gradient(var(--bracket), var(--bracket)) bottom left / var(--bracket-len) 1px no-repeat,
+    linear-gradient(var(--bracket), var(--bracket)) bottom left / 1px var(--bracket-len) no-repeat,
+    linear-gradient(var(--bracket), var(--bracket)) bottom right / var(--bracket-len) 1px no-repeat,
+    linear-gradient(var(--bracket), var(--bracket)) bottom right / 1px var(--bracket-len) no-repeat;
+}
+
+/* Item tile: a hairline frame, like an inventory cell (Figma: white/12 line). */
+@utility d2-tile {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--foreground) 14%, transparent);
+}
+
+/* Hover/selected frame: a white outline with a soft glow. */
+@utility d2-tile-selected {
+  box-shadow:
+    0 0 0 1px var(--outline-strong),
+    0 0 8px 1px var(--outline-glow);
+}
+
+/* D2 button hover: a square ring sitting outside the control, gap of 2px. */
+/* Hovered button: a 1px light ring standing 2px off the button, with the gap
+   showing the surface behind (the game's selection frame). Pointer-only, so
+   touch taps do not leave it behind. */
+@utility d2-hover-ring {
+  /* The whole outline lives in the hover rule: buttons carry outline-none at
+     rest, and the hover rule's higher specificity is what lets the ring win. */
+  @media (hover: hover) and (pointer: fine) {
+    &:hover {
+      outline: 1px solid color-mix(in srgb, var(--foreground) 55%, transparent);
+      outline-offset: 2px;
+    }
+  }
+}
+
+/* Exotic tile frame: gold line with the darker lip inside it. */
+@utility d2-tile-exotic {
+  box-shadow:
+    inset 0 0 0 1px var(--exotic-line),
+    inset 0 0 0 2px var(--exotic-lip);
+}
+
+/* Figma "Select Menu" 70:1571: frosted glass, 20px blur, a centre-bright
+   hairline, 0 2px 16px shadow. Menus, popovers, tooltips, and dialogs float on this. */
+@utility d2-glass {
+  background-color: var(--glass);
+  backdrop-filter: blur(20px);
+  /* The app's line (see d2-line) at its default stops. */
+  --line-side: color-mix(in srgb, var(--foreground) calc(var(--line-alpha, 1) * 6%), transparent);
+  --line-mid: color-mix(in srgb, var(--foreground) calc(var(--line-alpha, 1) * 24%), transparent);
+  border: 1px solid transparent;
+  border-image: var(--line-image, linear-gradient(to right, var(--line-side), var(--line-mid) 50%, var(--line-side))) 1;
+  box-shadow: 0 2px 16px rgb(0 0 0 / 0.25);
+}
+
+/* Figma sidebar 69:863: slate at 90% with a 10px blur. Sidebar, drawers,
+   and the loadout editor share it. */
+@utility d2-slate {
+  background-color: var(--panel-strong);
+  backdrop-filter: blur(14px) saturate(1.1);
+}
+
+/* Figma 69:883 icon well: a faint white/16 frame all round with brighter
+   5px ticks on the four corners, over the white/4 lifted fill. The ticks live
+   on a pseudo-element that overlaps the border, so the button's own
+   background-clip can't trim them away. */
+@utility d2-corner-well {
+  --tick: color-mix(in srgb, var(--foreground) var(--tick-alpha, 32%), transparent);
+  --tick-len: 5px;
+  position: relative;
+  border: 1px solid color-mix(in srgb, var(--foreground) 16%, transparent);
+  background-color: var(--lifted);
   &::before {
     content: "";
     pointer-events: none;
     position: absolute;
-    inset: 0;
-    z-index: 1;
-    border-radius: inherit;
-    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--foreground) 6%, transparent);
-    -webkit-mask-image: linear-gradient(to bottom, #000, #0000);
-    mask-image: linear-gradient(to bottom, #000, #0000);
+    inset: -1px;
+    background:
+      linear-gradient(var(--tick), var(--tick)) top left / var(--tick-len) 1px no-repeat,
+      linear-gradient(var(--tick), var(--tick)) top left / 1px var(--tick-len) no-repeat,
+      linear-gradient(var(--tick), var(--tick)) top right / var(--tick-len) 1px no-repeat,
+      linear-gradient(var(--tick), var(--tick)) top right / 1px var(--tick-len) no-repeat,
+      linear-gradient(var(--tick), var(--tick)) bottom left / var(--tick-len) 1px no-repeat,
+      linear-gradient(var(--tick), var(--tick)) bottom left / 1px var(--tick-len) no-repeat,
+      linear-gradient(var(--tick), var(--tick)) bottom right / var(--tick-len) 1px no-repeat,
+      linear-gradient(var(--tick), var(--tick)) bottom right / 1px var(--tick-len) no-repeat;
   }
 }
 
-/* Figma Equip 54:5420 — 1px inside white→dark-blue stroke at 24%,
-   plus a centered 4px shadow. Keep the fill responsive to hover. */
-[data-slot="button"].equip-button {
+/* Translucent panel (Figma stage body): black/40 with a 40px backdrop blur. */
+@utility d2-panel {
+  background-color: var(--panel);
+  backdrop-filter: blur(40px);
+}
+
+/* Kept for older call sites; the dot grid is gone, this is now a no-op. */
+@utility d2-texture {
+  background-image: none;
+}
+
+/* Figma Equip 69:1430: #378b3f fill under a 1px line that runs white/14 at
+   the sides (white/26) up to white/60 in the middle. The line is a border-box gradient
+   painted over the green (colour layer), so it reads as light green, with a
+   padding-box green layer on top keeping the face pure. Hover swaps the fill. */
+@utility d2-equip {
   --equip-fill: var(--emphatic);
+  --line-side: rgb(255 255 255 / 0.26);
+  --line-mid: rgb(255 255 255 / 0.6);
+  border: 1px solid transparent;
   background:
     linear-gradient(var(--equip-fill), var(--equip-fill)) padding-box,
-    linear-gradient(to bottom, rgb(255 255 255 / 0.24), rgb(6 31 75 / 0.24))
-      border-box;
-  background-color: var(--equip-fill);
-  box-shadow:
-    var(--tw-ring-offset-shadow, 0 0 #0000),
-    var(--tw-ring-shadow, 0 0 #0000),
-    0 0 4px rgb(0 0 0 / 0.4);
+    var(--line-image, linear-gradient(to right, var(--line-side), var(--line-mid) 50%, var(--line-side)))
+      border-box,
+    var(--equip-fill);
 }
 
-@media (hover: hover) {
-  [data-slot="button"].equip-button:hover {
-    --equip-fill: var(--emphatic-dark);
+/* At rest the line is a linear gradient, faint at the sides and bright across
+   the middle. While `d2-line-drift` runs it becomes a two-lobe conic gradient
+   spun by --line-angle (registered so it animates): the top spot circles right
+   while the bottom spot circles left — on focused fields and the hovered EQUIP. */
+@property --line-angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+@keyframes line-drift {
+  from {
+    --line-angle: 0deg;
+  }
+  to {
+    --line-angle: 360deg;
+  }
+}
+@utility d2-line-drift {
+  /* While spinning, the line becomes a two-lobe conic gradient so the top and
+     bottom highlights can circle; at rest it is the spread linear line. */
+  --line-image: conic-gradient(
+    from var(--line-angle),
+    var(--line-mid) 0deg,
+    var(--line-side) 90deg,
+    var(--line-mid) 180deg,
+    var(--line-side) 270deg,
+    var(--line-mid) 360deg
+  );
+  animation: line-drift 4s linear infinite;
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+    --line-image: linear-gradient(to right, var(--line-side), var(--line-mid) 50%, var(--line-side));
   }
 }
 
-/* Figma Checkbox 54:6032 — 1px inside white→transparent top highlight
-   over the blue fill, with a 0 1px 2px 0.5px drop shadow. */
+/* ── The line ──────────────────────────────────────────────────────────────
+   The app's one hairline: 1px, faint at the left and right edges rising to a
+   brighter centre (first drawn on the EQUIP button). Drawn with border-image
+   so it stays in the border and works over any fill. Tune per use with:
+     --line-alpha  multiplier on both stops (hover: 1.6, focus/open: 2.6)
+     --line-angle  rotation while drifting (0deg; d2-line-drift spins it)
+     --line-image  the gradient itself; d2-line-drift swaps in the conic
+     --line-side   edge stop   (default foreground 6%)
+     --line-mid    centre stop (default foreground 24%)
+   Corners must be square (border-image ignores border-radius). Focus keeps
+   the gradient and just raises --line-alpha; only a state that wants a solid
+   line (the active blue chip) sets [border-image:none] and a border-color. */
+@utility d2-line {
+  --line-side: color-mix(in srgb, var(--foreground) calc(var(--line-alpha, 1) * 6%), transparent);
+  --line-mid: color-mix(in srgb, var(--foreground) calc(var(--line-alpha, 1) * 24%), transparent);
+  border: 1px solid transparent;
+  border-image: var(--line-image, linear-gradient(to right, var(--line-side), var(--line-mid) 50%, var(--line-side))) 1;
+}
+
+/* The line in white, for sitting on a coloured fill (the stat bar's green). */
+@utility d2-line-white {
+  --line-side: rgb(255 255 255 / 0.2);
+  --line-mid: rgb(255 255 255 / 0.55);
+  border: 1px solid transparent;
+  border-image: var(--line-image, linear-gradient(to right, var(--line-side), var(--line-mid) 50%, var(--line-side))) 1;
+}
+
+/* Card frame (loadouts + builds): the line over the lifted fill. Left/right
+   stops sit a bit brighter than the default d2-line so the verticals read. */
+@utility d2-card-frame {
+  --line-side: color-mix(in srgb, var(--foreground) calc(var(--line-alpha, 1) * 14%), transparent);
+  --line-mid: color-mix(in srgb, var(--foreground) calc(var(--line-alpha, 1) * 28%), transparent);
+  border: 1px solid transparent;
+  border-image: var(--line-image, linear-gradient(to right, var(--line-side), var(--line-mid) 50%, var(--line-side))) 1;
+  background-color: var(--lifted);
+}
+
+/* Checked checkbox: white plate, dark check. */
 [data-slot="checkbox"][data-checked],
 [data-slot="checkbox"][data-checked]:focus-visible,
 [data-slot="dropdown-menu-checkbox-item"][data-indicator="start"][data-checked]
   [data-slot="dropdown-menu-checkbox-item-indicator"] {
-  border-color: transparent;
-  background:
-    linear-gradient(var(--emphatic), var(--emphatic)) padding-box,
-    linear-gradient(to bottom, rgb(255 255 255 / 0.24), rgb(255 255 255 / 0))
-      border-box;
-  background-color: var(--emphatic);
-  box-shadow:
-    var(--tw-ring-offset-shadow, 0 0 #0000),
-    var(--tw-ring-shadow, 0 0 #0000),
-    0 1px 2px 0.5px rgb(19 20 20 / 0.35);
+  border-color: var(--foreground);
+  background-color: var(--foreground);
+  color: var(--background);
 }

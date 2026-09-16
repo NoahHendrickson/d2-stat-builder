@@ -33,9 +33,9 @@ function CollapseButton({ onToggle }: { onToggle: () => void }) {
 function LoadoutsListPlaceholder({ headerAction }: { headerAction?: ReactNode }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4" aria-busy>
-      <div className="flex flex-col gap-1 px-4">
+      <div className="flex flex-col gap-2 px-2">
         <div className="flex items-center gap-1">
-          <div className="h-9 min-w-0 flex-1" />
+          <div className="h-8 min-w-0 flex-1" />
           {headerAction}
         </div>
         <div className="h-8" />
@@ -119,7 +119,7 @@ export function AppSidebar({
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col pt-4">
+    <div className="flex h-full min-h-0 flex-col pt-[22px]">
       <div className="flex min-h-0 flex-1 flex-col">{body}</div>
 
       {showAccount && authed && (

@@ -60,7 +60,7 @@ export const ArmorRow = memo(function ArmorRow({
     <tr
       ref={measureRef}
       data-index={dataIndex}
-      className="hover:bg-foreground/4 border-border border-t"
+      className="border-t border-foreground/8 hover:bg-foreground/6"
     >
       <td className="overflow-hidden py-2 pr-3 pl-3">
         <div className="flex items-center gap-2">
@@ -70,15 +70,15 @@ export const ArmorRow = memo(function ArmorRow({
               alt=""
               width={32}
               height={32}
-              className="size-8 shrink-0 rounded-[2px]"
+              className={piece.isExotic ? "d2-tile-exotic size-8 shrink-0" : "d2-tile size-8 shrink-0"}
               unoptimized
             />
           ) : (
-            <span className="bg-muted size-8 shrink-0 rounded-[2px]" aria-hidden />
+            <span className="d2-brackets bg-black/25 size-8 shrink-0" aria-hidden />
           )}
           <span className="truncate text-sm">{piece.name}</span>
           {piece.isArtifice && (
-            <Badge variant="outline" className="px-1.5 text-[10px]">
+            <Badge variant="outline">
               Artifice
             </Badge>
           )}

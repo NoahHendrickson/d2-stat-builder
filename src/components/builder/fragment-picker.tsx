@@ -50,7 +50,6 @@ export const FragmentPicker = memo(function FragmentPicker({
     <div className="space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-3">
         <div className="space-y-2">
-          <h3 className="text-sm font-medium">Fragments</h3>
           <Tabs
             value={activeSubclass}
             onValueChange={(v) => onSubclassChange(v as Subclass)}
@@ -89,7 +88,7 @@ export const FragmentPicker = memo(function FragmentPicker({
         </p>
       ) : (
         <div className="overflow-x-auto">
-          <div className="divide-border min-w-max divide-y">
+          <div className="min-w-max divide-y divide-foreground/10">
             <div className="grid grid-cols-[1fr_repeat(6,2rem)] items-center gap-x-2 py-1.5">
               <span aria-hidden />
               {STAT_ORDER.map((key) => (
@@ -102,7 +101,7 @@ export const FragmentPicker = memo(function FragmentPicker({
                         tabIndex={0}
                         width={16}
                         height={16}
-                        className="size-4 shrink-0 opacity-65 invert dark:invert-0"
+                        className="size-4 shrink-0 opacity-80 invert dark:invert-0"
                         unoptimized
                       />
                     </TooltipLabel>
@@ -122,7 +121,7 @@ export const FragmentPicker = memo(function FragmentPicker({
                 >
                   <label
                     className={cn(
-                      "group flex cursor-pointer items-center gap-2 rounded-md px-1 text-left text-sm transition-colors",
+                      "group flex cursor-pointer items-center gap-2 rounded-none px-1 text-left text-sm transition-colors",
                       on
                         ? "text-foreground"
                         : "text-muted-foreground hover:text-foreground",
@@ -131,7 +130,7 @@ export const FragmentPicker = memo(function FragmentPicker({
                     <Checkbox
                       checked={on}
                       onCheckedChange={() => onToggle(f.hash)}
-                      className="group-hover:not-data-checked:border-emphatic/60"
+                      className="group-hover:not-data-checked:border-foreground/80"
                     />
                     {f.icon && (
                       <Image
@@ -139,7 +138,7 @@ export const FragmentPicker = memo(function FragmentPicker({
                         alt=""
                         width={20}
                         height={20}
-                        className="size-5 rounded-sm"
+                        className="size-5 rounded-none"
                         unoptimized
                       />
                     )}
@@ -150,8 +149,8 @@ export const FragmentPicker = memo(function FragmentPicker({
                       key={key}
                       className={cn(
                         "text-center text-xs tabular-nums",
-                        f.stats[i] > 0 && "text-brand",
-                        f.stats[i] < 0 && "text-red-400",
+                        f.stats[i] > 0 && "text-positive",
+                        f.stats[i] < 0 && "text-destructive",
                       )}
                     >
                       {f.stats[i]

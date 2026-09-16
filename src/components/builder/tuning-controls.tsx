@@ -34,7 +34,7 @@ export const TuningControls = memo(function TuningControls({
       </div>
       <div className="flex items-center justify-between gap-4">
         <div className="space-y-0.5">
-          <span className="text-sm">Use balanced tuning mods</span>
+          <span className="text-sm font-medium">Use balanced tuning mods</span>
           <p className="text-muted-foreground text-xs">
             When off, builds are searched without the Balanced (+1 to off-stats)
             tune — directional tuning stays available.

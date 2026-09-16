@@ -65,6 +65,7 @@ import { cn } from "@/lib/utils";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { StatTargetRow } from "@/components/builder/stat-target-row";
+import { SectionHeading } from "@/components/section-heading";
 import { SetRow } from "@/components/builder/set-row";
 import { ArmoryStatus } from "@/components/armory/armory-status";
 import { ManifestStatus } from "@/components/manifest/manifest-status";
@@ -874,7 +875,7 @@ export function BuilderPanel({
     <div className="mx-auto grid w-full max-w-7xl grid-cols-1 gap-10 lg:grid-cols-[minmax(18rem,33.12rem)_minmax(29rem,1fr)] lg:items-start lg:gap-x-20">
       {/* Left — configure the build. 33.12rem cap so the builds column is 15%
           wider at max-w-7xl. Sections: 1px dividers, 32px above and below. */}
-      <div className="divide-border divide-y">
+      <div className="divide-y divide-foreground/10">
         {ready && (
           <>
             {classes.length > 1 && classType !== null && (
@@ -887,8 +888,8 @@ export function BuilderPanel({
               </div>
             )}
 
-            <Section>
-              <div className="space-y-8">
+            <Section title="Stat targets" detail={CLASS_NAMES[classType ?? -1]}>
+              <div className="space-y-7">
                 {STAT_DISPLAY_ORDER.map((key) => {
                   const i = STAT_ORDER.indexOf(key);
                   return (
@@ -906,12 +907,12 @@ export function BuilderPanel({
               </div>
             </Section>
 
-            <Section title="Major mods" className="space-y-2">
+            <Section title="Major mods" detail={`${major} of ${MAX_MODS}`} className="space-y-3">
               <Tabs
                 value={String(major)}
                 onValueChange={(v) => setMajor(Number(v))}
               >
-                <TabsList>
+                <TabsList variant="default" aria-label="Major stat mods">
                   {[0, 1, 2, 3, 4, 5].map((n) => (
                     <TabsTrigger key={n} value={String(n)}>
                       {n}
@@ -921,7 +922,7 @@ export function BuilderPanel({
               </Tabs>
             </Section>
 
-            <Section>
+            <Section title="Exotic" detail={selectedExoticOption?.name ?? "Any"}>
               <ExoticPicker
                 options={exotics}
                 selected={selectedExotic}
@@ -940,9 +941,8 @@ export function BuilderPanel({
               )}
             </Section>
 
-            <Section className="space-y-0">
-              {/* Figma 17:5659: full-width search, then the count line with sort + settings */}
-              <div className="space-y-2">
+            <Section title="Set bonuses" className="space-y-0">
+              <div className="space-y-2 pt-1">
                 <div className="relative">
                   <MagnifyingGlass
                     className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 z-10 size-4 -translate-y-1/2"
@@ -1012,7 +1012,7 @@ export function BuilderPanel({
               )}
             </Section>
 
-            <Section>
+            <Section title="Fragments" detail={activeSubclass}>
               {fragments && (
                 <FragmentPicker
                   fragments={fragments}
@@ -1028,7 +1028,7 @@ export function BuilderPanel({
               )}
             </Section>
 
-            <Section title="Tier-5 tuning">
+            <Section title="Tier-5 tuning" detail={allowTuning ? "On" : "Off"}>
               <TuningControls
                 allowTuning={allowTuning}
                 onAllowTuningChange={setAllowTuning}
@@ -1037,7 +1037,7 @@ export function BuilderPanel({
               />
             </Section>
 
-            <Section title="Power">
+            <Section title="Power" detail={powerRange.enabled ? "Ranged" : "Any"}>
               <PowerRangeControls
                 value={powerRange}
                 onChange={onPowerRangeChange}
@@ -1050,7 +1050,7 @@ export function BuilderPanel({
               <div className="space-y-3">
                 <div className="flex items-center justify-between gap-4">
                   <div className="space-y-0.5">
-                    <span className="text-sm">Legacy exotics</span>
+                    <span className="text-sm font-medium">Legacy exotics</span>
                     <p className="text-muted-foreground text-xs">
                       Include Armor 2.0 exotics — the optimizer spends their
                       artifice +3 automatically.
@@ -1064,7 +1064,7 @@ export function BuilderPanel({
                 </div>
                 <div className="flex items-center justify-between gap-4">
                   <div className="space-y-0.5">
-                    <span className="text-sm">Legacy legendaries</span>
+                    <span className="text-sm font-medium">Legacy legendaries</span>
                     <p className="text-muted-foreground text-xs">
                       Not possible yet.
                     </p>
@@ -1104,16 +1104,21 @@ export function BuilderPanel({
 
 function Section({
   title,
+  detail,
   className,
   children,
 }: {
   title?: string;
+  /** Secondary text after the "//" separator in the heading. */
+  detail?: ReactNode;
   className?: string;
   children: ReactNode;
 }) {
   return (
-    <section className={cn("space-y-3 py-8 first:pt-0", className)}>
-      {title ? <h3 className="text-sm font-medium">{title}</h3> : null}
+    <section className={cn("space-y-4 py-8 first:pt-0", className)}>
+      {title ? (
+        <SectionHeading detail={detail}>{title}</SectionHeading>
+      ) : null}
       {children}
     </section>
   );

@@ -1,12 +1,15 @@
 import { test, expect, describe } from "vitest";
 import {
   LOADOUT_SCHEMA_VERSION,
+  MAX_NOTES_LENGTH,
   loadoutHashtags,
+  normalizeTag,
   parseBuilderSnapshot,
   parseDimLoadout,
   parseOptimizerLoadout,
   parseSavedLoadout,
   parseSavedLoadoutData,
+  withLoadoutTag,
 } from "./types";
 
 const dim = () => ({
@@ -216,4 +219,36 @@ test("loadoutHashtags pulls tags from name + notes, lower-cased, deduped", () =>
     "dps-phase",
   ]);
   expect(loadoutHashtags({ name: "no tags", notes: "c#4 isn't one" })).toEqual([]);
+});
+
+test("normalizeTag strips #, lower-cases, and rejects junk", () => {
+  expect(normalizeTag(" #PvE ")).toBe("pve");
+  expect(normalizeTag("dps-phase")).toBe("dps-phase");
+  expect(normalizeTag("")).toBeNull();
+  expect(normalizeTag("#")).toBeNull();
+  expect(normalizeTag("has space")).toBeNull();
+  expect(normalizeTag("!!!")).toBeNull();
+});
+
+test("withLoadoutTag writes hashtags into notes and strips them back out", () => {
+  const base = parseDimLoadout(dim())!;
+  const tagged = withLoadoutTag({ ...base, notes: undefined }, "PvE", true);
+  expect(tagged.notes).toBe("#pve");
+  expect(withLoadoutTag(tagged, "raid", true).notes).toBe("#pve #raid");
+  expect(withLoadoutTag(tagged, "pve", true)).toBe(tagged);
+
+  const both = withLoadoutTag(withLoadoutTag({ ...base, notes: "keep me" }, "pve", true), "raid", true);
+  expect(both.notes).toBe("keep me #pve #raid");
+  expect(withLoadoutTag(both, "pve", false).notes).toBe("keep me #raid");
+  expect(withLoadoutTag(withLoadoutTag(both, "pve", false), "raid", false).notes).toBe("keep me");
+
+  const onlyTags = withLoadoutTag(withLoadoutTag({ ...base, notes: undefined }, "pve", true), "pve", false);
+  expect(onlyTags.notes).toBeUndefined();
+  expect(onlyTags).not.toHaveProperty("notes");
+});
+
+test("withLoadoutTag no-ops when notes would overflow", () => {
+  const base = parseDimLoadout(dim())!;
+  const full = { ...base, notes: "x".repeat(MAX_NOTES_LENGTH) };
+  expect(withLoadoutTag(full, "pve", true)).toBe(full);
 });
