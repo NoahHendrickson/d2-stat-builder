@@ -79,7 +79,7 @@ export function CustomOrderList({
           {showSlot(i) && (
             <div
               aria-hidden
-              className="bg-brand pointer-events-none absolute inset-x-1 top-0 z-10 h-0.5 -translate-y-1/2 rounded-full"
+              className="pointer-events-none absolute inset-x-1 top-0 z-10 h-0.5 -translate-y-1/2 rounded-full bg-brand d2:rounded-none d2:bg-foreground"
             />
           )}
           <div
@@ -89,7 +89,7 @@ export function CustomOrderList({
             onDrop={(e) => onDrop(e, i)}
             onDragEnd={clearDrag}
             className={cn(
-              "group/row hover:bg-accent flex h-8 cursor-grab items-center gap-1.5 rounded-[4px] pr-0.5 pl-1.5 text-sm active:cursor-grabbing",
+              "group/row hover:bg-accent flex h-8 cursor-grab items-center gap-1.5 rounded-[4px] pr-0.5 pl-1.5 text-sm active:cursor-grabbing d2:rounded-none",
               dragFrom === i && "bg-accent opacity-60",
             )}
           >
@@ -109,7 +109,7 @@ export function CustomOrderList({
                   aria-label={`Move ${value} up`}
                   disabled={i === 0}
                   onClick={() => onMove(i, i - 1)}
-                  className="text-muted-foreground hover:text-foreground focus-visible:ring-ring/50 flex size-6 cursor-pointer items-center justify-center rounded outline-none focus-visible:ring-2 disabled:pointer-events-none disabled:opacity-30"
+                  className="text-muted-foreground hover:text-foreground flex size-6 cursor-pointer items-center justify-center rounded outline-none focus-visible:ring-2 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-30 d2:rounded-none d2:focus-visible:ring-1 d2:focus-visible:ring-outline-strong"
                 >
                   <CaretUp weight="bold" className="size-3.5" aria-hidden />
                 </button>
@@ -120,7 +120,7 @@ export function CustomOrderList({
                   aria-label={`Move ${value} down`}
                   disabled={i === values.length - 1}
                   onClick={() => onMove(i, i + 1)}
-                  className="text-muted-foreground hover:text-foreground focus-visible:ring-ring/50 flex size-6 cursor-pointer items-center justify-center rounded outline-none focus-visible:ring-2 disabled:pointer-events-none disabled:opacity-30"
+                  className="text-muted-foreground hover:text-foreground flex size-6 cursor-pointer items-center justify-center rounded outline-none focus-visible:ring-2 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-30 d2:rounded-none d2:focus-visible:ring-1 d2:focus-visible:ring-outline-strong"
                 >
                   <CaretDown weight="bold" className="size-3.5" aria-hidden />
                 </button>
@@ -130,7 +130,7 @@ export function CustomOrderList({
           {i === values.length - 1 && showSlot(values.length) && (
             <div
               aria-hidden
-              className="bg-brand pointer-events-none absolute inset-x-1 bottom-0 z-10 h-0.5 translate-y-1/2 rounded-full"
+              className="pointer-events-none absolute inset-x-1 bottom-0 z-10 h-0.5 translate-y-1/2 rounded-full bg-brand d2:rounded-none d2:bg-foreground"
             />
           )}
         </li>

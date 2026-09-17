@@ -103,7 +103,11 @@ function CascadeFacetSubmenu<V extends string | number>({
           </span>
         ) : null}
       </DropdownMenuSubTrigger>
-      <DropdownMenuSubContent side="inline-end" align="start" className="w-64">
+      <DropdownMenuSubContent
+        side="inline-end"
+        align="start"
+        className={searchable ? "w-64" : "w-max"}
+      >
         <FilterMultiselectPanel
           allLabel={allLabel}
           options={options}
@@ -205,14 +209,14 @@ export function FilterCascadeMenu({
               {triggerLabel}
             </span>
             {active && (
-              <Badge className="h-4 shrink-0 border-transparent bg-white/20 px-1 text-[10px] text-emphatic-foreground tabular-nums">
+              <Badge className="h-4 shrink-0 border-transparent bg-white/20 px-1 text-[10px] text-emphatic-foreground tabular-nums d2:text-white">
                 {totalSelected}
               </Badge>
             )}
             <CaretUpDown
               className={cn(
                 "pointer-events-none size-4 shrink-0",
-                active ? "text-emphatic-foreground" : "text-foreground/70",
+                active ? "text-emphatic-foreground d2:text-white" : "text-foreground/70",
               )}
               aria-hidden
             />

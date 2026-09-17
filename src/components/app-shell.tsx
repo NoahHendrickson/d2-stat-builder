@@ -18,7 +18,8 @@ import { ApplyProgressSection } from "@/components/loadouts/apply-progress-card"
 import { ViewTabs } from "@/components/view-tabs";
 import { Button } from "@/components/ui/button";
 import { Drawer, DrawerClose, DrawerContent } from "@/components/ui/drawer";
-import { ThemeToggle } from "@/components/theme-toggle";
+import { SkinToggle, ThemeToggle } from "@/components/theme-toggle";
+import { useSkin } from "@/lib/use-skin";
 import { SHARE_PARAM } from "@/lib/loadouts/share";
 import { useMinWidth } from "@/lib/use-min-width";
 import { cn } from "@/lib/utils";
@@ -128,8 +129,9 @@ export function useDesktopLayout(): boolean {
 /**
  * App frame (Figma 46:1657): a resizable loadouts sidebar beside the active
  * view. Logo, view tabs, and account/status live in the main-column header;
- * the page sits in a rounded card under it. On narrow viewports the sidebar
- * becomes a left drawer behind a top bar.
+ * the page sits in a rounded card under it (classic skin) or fills the column
+ * (D2 skin). On narrow viewports the sidebar becomes a left drawer behind a
+ * top bar.
  *
  * The desktop column and the narrow-viewport drawer never both mount the loadouts
  * list, so its share-link import dialog can't exist twice at once.
@@ -179,25 +181,27 @@ export function AppShell({ children }: { children: ReactNode }) {
   }, []);
 
   // Portaled surfaces (the loadout editor drawer) sit over the stage, not the
-  // sidebar or the `lg:p-3` chrome around it. Publish both so anything under
-  // <html> can inset itself.
+  // sidebar or (classic skin) the `lg:p-3` chrome around it. Publish both so
+  // anything under <html> can inset itself.
+  const { skin } = useSkin();
   useEffect(() => {
     const root = document.documentElement;
     root.style.setProperty(
       "--app-sidebar-width",
       `${desktopSidebarOpen ? sidebarWidth : 0}px`,
     );
-    // Mirrors `lg:p-3` (0.75rem) plus the stage's 1px border. `desktop` is
+    // Classic mirrors `lg:p-3` (0.75rem) plus the stage's 1px border; the D2
+    // skin has no stage card, so the page fills the column. `desktop` is
     // SIDEBAR_BREAKPOINT_PX, which is Tailwind `lg` (1024) — keep them in lockstep.
     root.style.setProperty(
       "--app-stage-inset",
-      desktop ? "calc(0.75rem + 1px)" : "0px",
+      desktop && skin === "classic" ? "calc(0.75rem + 1px)" : "0px",
     );
     return () => {
       root.style.removeProperty("--app-sidebar-width");
       root.style.removeProperty("--app-stage-inset");
     };
-  }, [desktopSidebarOpen, sidebarWidth, desktop]);
+  }, [desktopSidebarOpen, sidebarWidth, desktop, skin]);
 
   useEffect(() => {
     if (!resizing) return;
@@ -270,7 +274,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       >
         <div
           className={cn(
-            "bg-sidebar relative flex h-full min-h-0 flex-col",
+            "d2-sidebar relative flex h-full min-h-0 flex-col",
             slideTransition && `transition-transform ${slideTransition}`,
           )}
           style={{
@@ -286,9 +290,8 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
       </aside>
 
-      {/* Lives outside the clipped sidebar column so the full hit area straddles the
-          edge and spans the gutter beside the page card; the column's overflow-hidden
-          would otherwise cut it down to a few pixels. */}
+      {/* Lives outside the clipped sidebar column so the full hit area straddles
+          the edge; the column's overflow-hidden would otherwise cut it down. */}
       {desktopSidebarOpen && (
         <div
           role="separator"
@@ -307,28 +310,37 @@ export function AppShell({ children }: { children: ReactNode }) {
           }}
           className={cn(
             "absolute inset-y-0 z-10 cursor-col-resize touch-none outline-none",
-            "after:absolute after:inset-y-3 after:left-1 after:w-0.5 after:-translate-x-1/2 after:rounded-full after:transition-colors",
+            "after:absolute after:inset-y-3 after:left-1 after:w-0.5 after:rounded-full after:-translate-x-1/2 after:transition-colors d2:after:w-px d2:after:rounded-none",
             "after:bg-transparent hover:after:bg-foreground/40 focus-visible:after:bg-foreground",
             resizing && "after:bg-foreground",
           )}
         />
       )}
 
-      <div className="bg-sidebar flex min-w-0 flex-1 flex-col">
-        <header className="border-border bg-sidebar flex h-14 shrink-0 items-center gap-3 border-b px-3 lg:hidden">
-          <TooltipLabel label="Open loadouts">
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label="Open loadouts"
-              onClick={() => setDrawerOpen(true)}
-            >
-              <List weight="bold" aria-hidden />
-            </Button>
-          </TooltipLabel>
-          <span className="flex-1 text-sm font-medium">D2 stat builder</span>
-          <ViewTabs />
-          <ThemeToggle />
+      <div className="d2-sidebar flex min-h-0 min-w-0 flex-1 flex-col">
+        <header className="flex h-14 shrink-0 items-stretch gap-2 border-b border-border pr-2 pl-1 lg:hidden d2:border-foreground/8">
+          <div className="flex items-center">
+            <TooltipLabel label="Open loadouts">
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="Open loadouts"
+                onClick={() => setDrawerOpen(true)}
+              >
+                <List weight="bold" aria-hidden />
+              </Button>
+            </TooltipLabel>
+          </div>
+          <span className="hidden min-w-0 flex-1 items-center truncate text-sm font-medium min-[420px]:flex">
+            D2 stat builder
+          </span>
+          <div className="ml-auto flex items-center">
+            <ViewTabs />
+          </div>
+          <div className="flex items-center">
+            <SkinToggle />
+            <ThemeToggle />
+          </div>
         </header>
         {desktop && (
           <AppHeader
@@ -336,8 +348,9 @@ export function AppShell({ children }: { children: ReactNode }) {
             onExpand={() => setSidebarCollapsed(false)}
           />
         )}
-        <div className="flex min-h-0 flex-1 flex-col lg:p-3">
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:rounded-xl lg:border lg:border-border lg:bg-card lg:shadow-[-2px_2px_8px_0px_rgba(0,0,0,0.3),0_0_12px_0px_rgba(0,0,0,0.25)]">
+        {/* Classic: the page sits in a rounded card inside `lg:p-3` chrome. D2: it fills the column. */}
+        <div className="flex min-h-0 flex-1 flex-col lg:p-3 d2:lg:p-0">
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:rounded-xl lg:border lg:border-border lg:bg-card lg:shadow-[-2px_2px_8px_0px_rgba(0,0,0,0.3),0_0_12px_0px_rgba(0,0,0,0.25)] d2:lg:rounded-none d2:lg:border-0 d2:lg:bg-transparent d2:lg:shadow-none">
             <div className="min-h-0 flex-1 overflow-y-auto">
               {desktop && (
                 <div className="px-6 pt-6 empty:hidden">
@@ -357,7 +370,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           onOpenChange={setDrawerOpen}
           swipeDirection="left"
         >
-          <DrawerContent aria-label="Loadouts" className="bg-sidebar">
+          <DrawerContent aria-label="Loadouts" className="d2-sidebar">
             <div className="flex shrink-0 justify-end px-2 pt-2">
               <TooltipLabel label="Close loadouts">
                 <DrawerClose

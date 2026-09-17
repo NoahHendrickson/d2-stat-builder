@@ -100,7 +100,7 @@ export function FilterMultiselectPanel<V extends string | number>({
                 onTogglePin(opt.value);
               }}
               className={cn(
-                "relative flex size-7 shrink-0 items-center justify-center rounded-[4px] transition-opacity outline-none focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring/50",
+                "relative flex size-7 shrink-0 items-center justify-center rounded-[4px] transition-opacity outline-none focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring/50 d2:rounded-none d2:focus-visible:ring-1 d2:focus-visible:ring-outline-strong",
                 isPinned
                   ? "text-foreground"
                   : "text-muted-foreground hover:text-foreground opacity-0 group-hover/dropdown-menu-checkbox-item:opacity-100",
@@ -256,7 +256,7 @@ export function FilterMultiselect<V extends string | number>({
               <CaretUpDown
                 className={cn(
                   "pointer-events-none size-4 shrink-0",
-                  active ? "text-emphatic-foreground" : "text-foreground/70",
+                  active ? "text-emphatic-foreground d2:text-white" : "text-foreground/70",
                 )}
                 aria-hidden
               />
@@ -272,13 +272,16 @@ export function FilterMultiselect<V extends string | number>({
                 onChange([]);
                 triggerRef.current?.focus();
               }}
-              className="text-emphatic-foreground focus-visible:ring-ring/50 absolute top-1/2 right-8 flex size-4 -translate-y-1/2 items-center justify-center rounded-[4px] outline-none focus-visible:ring-3"
+              className="absolute top-1/2 right-8 flex size-4 -translate-y-1/2 items-center justify-center rounded-[4px] text-emphatic-foreground outline-none focus-visible:ring-3 focus-visible:ring-ring/50 d2:rounded-none d2:text-current d2:focus-visible:ring-1 d2:focus-visible:ring-outline-strong"
             >
               <X className="size-4" aria-hidden />
             </button>
           </TooltipLabel>
         )}
-        <DropdownMenuContent align="start" className="w-64">
+        <DropdownMenuContent
+          align="start"
+          className={searchable ? "w-64" : undefined}
+        >
           <FilterMultiselectPanel
             allLabel={allLabel}
             options={options}

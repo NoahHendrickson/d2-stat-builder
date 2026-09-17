@@ -17,11 +17,13 @@ const existing: PersistedSelections = {
   allowTuning: false,
   balancedTuning: false,
   legacyExotics: false,
+  lowerTierArmor: true,
   powerRange: {
     enabled: true,
     bounds: { min: 280, max: 290 },
     weapons: [null, 285, null],
     dreamersBond: false,
+    legacyArmor: false,
   },
   activeSubclass: "Arc",
   fragSel: { Arc: [5], Solar: [], Void: [], Stasis: [], Strand: [], Prismatic: [7] },
@@ -62,11 +64,13 @@ test("with a builder snapshot: restores it, keeps pins/filters, merges fragSel",
         allowTuning: true,
         balancedTuning: true,
         legacyExotics: true,
+        lowerTierArmor: false,
         powerRange: {
           enabled: true,
           bounds: { min: 287, max: 292 },
           weapons: [290, 291, 292],
           dreamersBond: true,
+          legacyArmor: false,
         },
         activeSubclass: "Prismatic",
         fragmentHashes: [8, 9],
@@ -88,6 +92,7 @@ test("with a builder snapshot: restores it, keeps pins/filters, merges fragSel",
     bounds: { min: 287, max: 292 },
     weapons: [290, 291, 292],
     dreamersBond: true,
+    legacyArmor: false,
   });
 });
 
@@ -105,6 +110,7 @@ test("without a snapshot: derives targets/sets from parameters, exotic by name",
     bounds: null,
     weapons: [null, null, null],
     dreamersBond: false,
+    legacyArmor: false,
   });
 });
 
@@ -135,7 +141,8 @@ test("opts.major overrides a stale builder snapshot (Optimize from edited mods)"
         allowTuning: true,
         balancedTuning: true,
         legacyExotics: true,
-        powerRange: { enabled: false, bounds: null, weapons: [null, null, null], dreamersBond: false },
+        lowerTierArmor: false,
+        powerRange: { enabled: false, bounds: null, weapons: [null, null, null], dreamersBond: false, legacyArmor: false },
         activeSubclass: "Prismatic",
         fragmentHashes: [],
       },

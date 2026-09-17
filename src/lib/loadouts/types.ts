@@ -283,6 +283,7 @@ export function parseBuilderSnapshot(v: unknown): BuilderSnapshot | null {
     balancedTuning: v.balancedTuning,
     legacyExotics: v.legacyExotics,
     // Added after the first snapshots shipped: default off when absent.
+    lowerTierArmor: v.lowerTierArmor === true,
     powerRange: parsePowerRange(v.powerRange),
     activeSubclass: v.activeSubclass as Subclass,
     fragmentHashes,
@@ -347,4 +348,52 @@ export function loadoutHashtags(loadout: Pick<DimLoadout, "name" | "notes">): st
   const out = new Set<string>();
   for (const m of text.matchAll(/(?:^|\s)#([\p{L}\p{N}_-]+)/gu)) out.add(m[1].toLowerCase());
   return [...out];
+}
+
+/** Same alphabet as `loadoutHashtags` — letters, numbers, underscore, hyphen. */
+export const MAX_TAG_LENGTH = 40;
+const MAX_TAGS = 24;
+const TAG_BODY = /^[\p{L}\p{N}_-]+$/u;
+
+/** Strip a leading `#`, trim, lower-case. Null when empty or not a legal tag. */
+export function normalizeTag(raw: string): string | null {
+  const tag = raw.trim().replace(/^#+/, "").toLowerCase();
+  if (!tag || tag.length > MAX_TAG_LENGTH || !TAG_BODY.test(tag)) return null;
+  return tag;
+}
+
+/**
+ * Add or remove a hashtag in `loadout.notes` (DIM's tag storage). Name-embedded
+ * hashtags are left alone. No-ops return the same object.
+ */
+export function withLoadoutTag(loadout: DimLoadout, raw: string, present: boolean): DimLoadout {
+  const tag = normalizeTag(raw);
+  if (!tag) return loadout;
+  const current = new Set(loadoutHashtags(loadout));
+  if (current.has(tag) === present) return loadout;
+
+  if (present) {
+    if (current.size >= MAX_TAGS) return loadout;
+    const notes = (loadout.notes ?? "").trimEnd();
+    const next = notes ? `${notes} #${tag}` : `#${tag}`;
+    if (next.length > MAX_NOTES_LENGTH) return loadout;
+    return { ...loadout, notes: next };
+  }
+
+  const notes = loadout.notes;
+  if (!notes) return loadout;
+  const escaped = tag.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const stripped = notes
+    .replace(new RegExp(`(^|\\s)#${escaped}(?=\\s|$)`, "giu"), "$1")
+    .replace(/ {2,}/g, " ")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+  if (stripped === (notes.trim() || "")) return loadout;
+  if (!stripped) {
+    const rest = { ...loadout };
+    delete rest.notes;
+    return rest;
+  }
+  return { ...loadout, notes: stripped };
 }

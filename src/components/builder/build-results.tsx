@@ -4,6 +4,7 @@ import { TooltipLabel } from "@/components/ui/tooltip";
 import {
   Fragment,
   memo,
+  useCallback,
   useMemo,
   useState,
   useSyncExternalStore,
@@ -11,6 +12,7 @@ import {
 } from "react";
 import { CaretDown, CheckCircle, CircleNotch, X } from "@phosphor-icons/react";
 import type { ArmorPiece } from "@/lib/armory/normalize";
+import { materialScore, summarizeMasterwork } from "@/lib/armory/masterwork";
 import type { ArmorSetInfo } from "@/lib/armory/sets";
 import {
   STAT_DISPLAY_ORDER,
@@ -20,11 +22,13 @@ import {
 } from "@/lib/armory/stats";
 import {
   sortLoadouts,
+  type LoadoutCostFn,
   type LoadoutSortState,
 } from "@/lib/builder/sort-loadouts";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { StatGlyph } from "@/components/stat-glyph";
+import { PowerValue } from "@/components/power-value";
 import {
   BuildActions,
   type BuildActionProps,
@@ -32,7 +36,8 @@ import {
 import { cn } from "@/lib/utils";
 import { useStoreValue, type ValueStore } from "@/lib/value-store";
 import { liveTargets } from "@/lib/builder/live-targets";
-import { BUNGIE_IMAGE_BASE } from "@/lib/bungie/constants";
+import { ArmorThumb } from "@/components/armor-thumb";
+import { MaterialCost, materialSummary } from "@/components/material-cost";
 import type {
   AppliedTuning,
   OptimizerLoadout,
@@ -45,14 +50,13 @@ export type { DimSubclassInput, GetBuilderState } from "@/components/builder/bui
 const MAX_SHOWN = 50;
 export { MAX_SHOWN };
 
-/** Figma 54:6099 — fading 1px edge (`build-card-edge` ::before) plus an inset
- *  highlight (::after). Both use foreground so light mode still reads. */
+/** A build card: lifted face with the EQUIP centre-bright stroke. */
 export const BUILD_CARD_LIFT_CLASS =
-  "build-card-edge relative rounded-[8px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.24)] after:pointer-events-none after:absolute after:inset-0 after:rounded-[8px] after:shadow-[inset_0px_1px_2px_0px_color-mix(in_srgb,var(--foreground)_6%,transparent)] after:content-['']";
+  "build-card-edge d2-card-frame relative rounded-[8px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.24)] after:pointer-events-none after:absolute after:inset-0 after:rounded-[8px] after:shadow-[inset_0px_1px_2px_0px_color-mix(in_srgb,var(--foreground)_6%,transparent)] after:content-[''] [--card-line-width:1.5px] d2:rounded-none d2:shadow-none d2:after:hidden";
 
-/** Figma 54:6446 — 8px padded, 12px rounded well the build cards sit in. */
+/** Stack of build cards — no well; they sit on the main column. */
 export const BUILD_LIST_WELL_CLASS =
-  "flex flex-col gap-2 rounded-[12px] bg-foreground/5 p-2 dark:bg-background";
+  "flex flex-col gap-2 rounded-[12px] bg-foreground/5 p-2 dark:bg-background d2:gap-3 d2:rounded-none d2:bg-transparent d2:p-0";
 
 /** Display stat columns paired with their STAT_ORDER index (used by the build breakdown). */
 const STAT_COLS = STAT_DISPLAY_ORDER.map((key) => ({
@@ -109,7 +113,7 @@ function ArtificeCell({
   if (pick === null) return null;
   const key = STAT_ORDER[pick];
   return (
-    <span className="flex items-center gap-0.5 text-[10px] text-brand/80 tabular-nums">
+    <span className="flex items-center gap-0.5 text-[10px] text-brand/80 d2:text-positive/90 tabular-nums">
       <StatGlyph
         src={statIcons[key]}
         label={`Artifice +3 ${STAT_LABELS[key]}`}
@@ -128,8 +132,8 @@ function ArtificeCell({
 const BREAKDOWN_GRID =
   "grid grid-cols-[minmax(7rem,max-content)_repeat(6,minmax(2.25rem,1fr))_auto] items-center gap-x-2 @[44rem]/build:grid-cols-[minmax(8rem,max-content)_repeat(6,minmax(2.5rem,1fr))_auto] @[44rem]/build:gap-x-4";
 
-/** Figma 18:6865 delta colours: +n green, -n destructive, 0 secondary. */
-const POSITIVE_CLASS = "text-[#1be364]";
+/** Delta colours: +n the game's stat-gain green, -n red, 0 secondary. */
+const POSITIVE_CLASS = "text-[#1be364] d2:text-positive";
 
 function Delta({ value }: { value: number }) {
   if (!value) return <span className="text-text-secondary">0</span>;
@@ -181,7 +185,7 @@ function StatValue({ index, value }: { index: number; value: number }) {
     () => false,
   );
   return (
-    <span className={met ? "text-brand" : "text-foreground"}>{value}</span>
+    <span className={met ? "text-brand d2:text-positive" : "text-foreground"}>{value}</span>
   );
 }
 
@@ -216,6 +220,9 @@ const BuildRow = memo(function BuildRow({
   const [open, setOpen] = useState(false);
   const pieces = loadout.pieceIds.map((id) => pieceMap.get(id));
   const exotic = pieces.find((p) => p?.isExotic);
+  // What finishing the pieces' masterworks would cost — the stats above already
+  // assume it's done; this only tells the player what they'd have to spend.
+  const masterwork = summarizeMasterwork(pieces);
 
   const setCounts = new Map<number, number>();
   for (const p of pieces) {
@@ -231,33 +238,32 @@ const BuildRow = memo(function BuildRow({
 
   return (
     <div className={cn(BUILD_CARD_LIFT_CLASS, "@container/build")}>
-      <div className="overflow-hidden rounded-[8px]">
+      <div className="overflow-hidden rounded-[8px] d2:rounded-none">
       {/* Figma 17:6044 — exotic tile, six stat chips spread over ~456px, total + set badge, caret */}
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
         className={cn(
-          "bg-foreground/6 flex w-full items-center gap-3 p-2 text-left transition-colors 2xl:gap-4",
-          !open && "hover:bg-foreground/10",
+          "flex w-full items-center gap-3 p-2 text-left transition-colors 2xl:gap-4",
+          open
+            ? "bg-foreground/6"
+            : "classic:bg-foreground/6 classic:hover:bg-foreground/10 d2:hover:bg-foreground/8",
         )}
       >
         <div className="flex min-w-0 flex-1 items-center gap-3 2xl:gap-6">
           {exotic?.icon ? (
-            // eslint-disable-next-line @next/next/no-img-element -- collapsed header: no tooltip/optimizer
-            <img
-              src={`${BUNGIE_IMAGE_BASE}${exotic.icon}`}
+            <ArmorThumb
+              icon={exotic.icon}
+              watermark={exotic.watermark}
               alt={exotic.name}
-              title={exotic.name}
-              width={40}
-              height={40}
-              loading="lazy"
-              decoding="async"
-              className="size-10 max-w-none shrink-0 rounded-[2px]"
+              size={40}
+              exoticFrame
+              isTier5={exotic.tunedStat !== undefined}
             />
           ) : (
             <span
-              className="size-10 shrink-0 rounded-[2px] border border-dashed border-foreground/35 bg-foreground/12"
+              className="d2-brackets size-10 shrink-0 rounded-[2px] border border-dashed border-foreground/35 bg-foreground/12 d2:rounded-none d2:border-0 d2:bg-black/25"
               aria-hidden
             />
           )}
@@ -271,7 +277,7 @@ const BuildRow = memo(function BuildRow({
                 <StatGlyph
                   src={statIcons[key]}
                   label={STAT_LABELS[key]}
-                  className="size-4 opacity-65 2xl:size-5"
+                  className="size-4 opacity-65 d2:opacity-70 2xl:size-5"
                   plain
                 />
                 <StatValue index={i} value={loadout.stats[i]} />
@@ -280,27 +286,46 @@ const BuildRow = memo(function BuildRow({
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-2 2xl:gap-5">
-          <span className="text-sm tabular-nums 2xl:text-base">{loadout.total}</span>
+          <span className="text-sm tabular-nums d2:font-medium 2xl:text-base">{loadout.total}</span>
           {loadout.power !== null && (
-            <span
-              className="text-muted-foreground text-xs tabular-nums max-lg:hidden 2xl:text-sm"
+            <PowerValue
+              value={loadout.power}
+              size="xs"
+              className="max-lg:hidden 2xl:text-sm"
               title="Gear power — the game's average over these pieces (and your weapons, if entered)"
+            />
+          )}
+          {/* Header real estate is tight (the stat chips share it), so only the two
+              scarcest materials show here; the expanded card lists everything. Hidden
+              on narrow cards rather than squeezing the stat chips into each other. */}
+          {!masterwork.complete && (
+            <span
+              className="hidden items-center gap-1.5 text-[11px] text-muted-foreground @[36rem]/build:inline-flex"
+              title={
+                masterwork.cost.length > 0
+                  ? `To fully masterwork: ${materialSummary(masterwork.cost, manifest)}`
+                  : "Some pieces are not fully masterworked"
+              }
             >
-              ✦ {loadout.power}
+              <MaterialCost stacks={masterwork.cost.slice(-2)} manifest={manifest} compact />
+              {masterwork.unknownCostPieces > 0 && (
+                <span title="Some pieces have an unknown upgrade cost">?</span>
+              )}
             </span>
           )}
           {setBadges.map((b) => (
             <Badge
               key={b.name}
               title={b.name}
-              className="px-1.5 text-[10px] max-lg:hidden 2xl:px-2 2xl:text-xs"
+              variant="outline"
+              className="max-lg:hidden classic:border-primary-border classic:bg-primary classic:px-1.5 classic:text-[10px] classic:text-primary-foreground classic:2xl:px-2 classic:2xl:text-xs"
             >
               {b.count}pc
             </Badge>
           ))}
         </div>
         <span
-          className="text-foreground flex size-8 shrink-0 items-center justify-center rounded-[10px]"
+          className="text-foreground flex size-8 shrink-0 items-center justify-center rounded-[10px] d2:rounded-none"
           aria-hidden
         >
           <CaretDown
@@ -313,17 +338,17 @@ const BuildRow = memo(function BuildRow({
       </button>
 
       {open && (
-        <div className="border-border bg-foreground/6 border-t">
+        <div className="border-border bg-foreground/6 border-t d2:border-foreground/8 d2:bg-black/15">
           {/* Shared column tracks so totals line up with per-piece stats
               (name column is max-content of the longest piece name). */}
-          <div className={cn(BREAKDOWN_GRID, "border-border border-b px-4")}>
+          <div className={cn(BREAKDOWN_GRID, "border-border border-b px-4 d2:border-foreground/8")}>
             {/* Armor table — Figma 18:6899 */}
             <div className="col-span-full grid grid-cols-subgrid items-center gap-y-4 py-4">
-              <div className="text-text-secondary text-sm font-medium">Armor</div>
+              <div className="d2-label classic:text-sm classic:text-text-secondary">Armor</div>
               {STAT_COLS.map(({ key }) => (
                 <div
                   key={key}
-                  className="text-text-secondary text-sm font-medium"
+                  className="d2-label classic:text-sm classic:text-text-secondary"
                 >
                   <span className="@[44rem]/build:hidden">
                     <StatGlyph src={statIcons[key]} label={STAT_LABELS[key]} />
@@ -331,7 +356,7 @@ const BuildRow = memo(function BuildRow({
                   <span className="hidden @[44rem]/build:inline">{STAT_LABELS[key]}</span>
                 </div>
               ))}
-              <div className="text-text-secondary text-sm font-medium">
+              <div className="d2-label classic:text-sm classic:text-text-secondary">
                 <span className="@[44rem]/build:hidden" aria-hidden />
                 <span className="hidden @[44rem]/build:inline">Tuning</span>
               </div>
@@ -343,19 +368,16 @@ const BuildRow = memo(function BuildRow({
                   <Fragment key={id}>
                     <div className="flex min-w-0 items-center gap-2">
                       {piece.icon ? (
-                        // eslint-disable-next-line @next/next/no-img-element -- expand mount: skip next/image
-                        <img
-                          src={`${BUNGIE_IMAGE_BASE}${piece.icon}`}
-                          alt=""
-                          width={32}
-                          height={32}
-                          loading="lazy"
-                          decoding="async"
-                          className="size-8 max-w-none shrink-0 rounded-[2px]"
+                        <ArmorThumb
+                          icon={piece.icon}
+                          watermark={piece.isExotic ? piece.watermark : undefined}
+                          size={32}
+                          exoticFrame={piece.isExotic}
+                          isTier5={piece.isExotic && piece.tunedStat !== undefined}
                         />
                       ) : (
                         <span
-                          className="bg-muted size-8 shrink-0 rounded-[2px]"
+                          className="d2-brackets bg-muted size-8 shrink-0 rounded-[2px] d2:rounded-none d2:bg-black/25"
                           aria-hidden
                         />
                       )}
@@ -363,13 +385,23 @@ const BuildRow = memo(function BuildRow({
                         {piece.name}
                       </span>
                       {piece.power !== undefined && (
-                        <span
-                          className="text-muted-foreground shrink-0 text-xs tabular-nums"
+                        <PowerValue
+                          value={piece.power}
+                          size="xs"
+                          muted
+                          className="shrink-0"
                           title="Power"
-                        >
-                          ✦ {piece.power}
-                        </span>
+                        />
                       )}
+                      {piece.masterwork &&
+                        piece.masterwork.level < piece.masterwork.max && (
+                          <span
+                            className="shrink-0 text-[10px] font-medium text-warning tabular-nums"
+                            title={`Masterwork level ${piece.masterwork.level} of ${piece.masterwork.max} — stats shown assume it's finished`}
+                          >
+                            MW {piece.masterwork.level}/{piece.masterwork.max}
+                          </span>
+                        )}
                     </div>
                     {STAT_COLS.map(({ key, i }) => (
                       <div
@@ -398,7 +430,7 @@ const BuildRow = memo(function BuildRow({
               })}
             </div>
 
-            <div className="border-border col-span-full -mx-4 border-t" />
+            <div className="border-border col-span-full -mx-4 border-t d2:border-foreground/8" />
 
             {/* Totals — Figma 18:6970 */}
             <div className="col-span-full grid grid-cols-subgrid items-center gap-y-6 py-4">
@@ -424,6 +456,55 @@ const BuildRow = memo(function BuildRow({
                 render={(i) => <Delta value={loadout.tuningBonus[i]} />}
               />
               <TotalsRow label="Total" render={(i) => loadout.stats[i]} />
+            </div>
+
+            <div className="border-border col-span-full -mx-4 border-t d2:border-foreground/8" />
+
+            {/* Masterwork — what it costs to make the assumed-full masterwork real */}
+            <div className="col-span-full py-4">
+              <div className="d2-label mb-2">Masterwork</div>
+              {masterwork.complete ? (
+                <p className="text-sm text-text-secondary">
+                  Every piece is fully masterworked.
+                </p>
+              ) : (
+                <div className="flex flex-col gap-1.5 text-sm">
+                  {pieces.map((piece, pi) => {
+                    const mw = piece?.masterwork;
+                    if (!piece || !mw || mw.level >= mw.max) return null;
+                    return (
+                      <div
+                        key={loadout.pieceIds[pi]}
+                        className="flex flex-wrap items-center gap-x-3 gap-y-0.5"
+                      >
+                        <span className="min-w-0 truncate">{piece.name}</span>
+                        <span className="text-text-secondary tabular-nums">
+                          {mw.level}/{mw.max}
+                        </span>
+                        {mw.cost ? (
+                          <MaterialCost stacks={mw.cost} manifest={manifest} />
+                        ) : (
+                          <span className="text-text-secondary">cost unknown</span>
+                        )}
+                      </div>
+                    );
+                  })}
+                  <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 font-medium">
+                    <span>To finish</span>
+                    <MaterialCost stacks={masterwork.cost} manifest={manifest} />
+                    {masterwork.unknownCostPieces > 0 && (
+                      <span className="font-normal text-text-secondary">
+                        + {masterwork.unknownCostPieces}{" "}
+                        {masterwork.unknownCostPieces === 1 ? "piece" : "pieces"} with
+                        an unknown cost
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-text-secondary">
+                    Stats above already assume every piece is fully masterworked.
+                  </p>
+                </div>
+              )}
             </div>
           </div>
 
@@ -458,12 +539,12 @@ function ImprovedMaximaAlert() {
   // Same alert footprint as the running card — green with a check instead of a spinner.
   return (
     <div
-      className="flex items-center gap-2.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2.5"
+      className="flex items-center gap-2.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2.5 d2:rounded-md d2:border-positive/30 d2:bg-positive/10"
       aria-live="polite"
     >
       <CheckCircle
         weight="fill"
-        className="size-4 shrink-0 text-emerald-600 dark:text-emerald-500"
+        className="size-4 shrink-0 text-emerald-600 dark:text-emerald-500 d2:text-positive"
         aria-hidden
       />
       <p className="text-foreground/90 min-w-0 flex-1 text-sm">
@@ -505,7 +586,7 @@ function SearchStatus({
   onCancel: () => void;
 }) {
   const cappedBanner = capped ? (
-    <p className="text-xs text-amber-600/90 dark:text-amber-500/90">
+    <p className="text-xs text-amber-600/90 dark:text-amber-500/90 d2:text-warning">
       Hit the time limit — showing the best found so far. Narrow your targets
       for an exhaustive search.
     </p>
@@ -519,7 +600,7 @@ function SearchStatus({
       // visual weight than a status line.
       return (
         <div
-          className="flex items-center gap-2.5 rounded-lg border border-brand/30 bg-brand/10 px-3 py-2.5"
+          className="flex items-center gap-2.5 rounded-lg border border-brand/30 bg-brand/10 px-3 py-2.5 d2:rounded-md d2:border-foreground/15 d2:bg-lifted"
           aria-live="polite"
         >
           <CircleNotch
@@ -558,14 +639,14 @@ function SearchStatus({
         lines.push(
           <p
             key="pending"
-            className="flex items-center gap-2 text-xs text-emerald-600/90 dark:text-emerald-500/90"
+            className="flex items-center gap-2 text-xs text-emerald-600/90 dark:text-emerald-500/90 d2:text-positive"
             aria-live="polite"
           >
             Stronger builds found
             <Button
               variant="link"
               onClick={onShowPending}
-              className="h-auto p-0 text-xs font-medium text-emerald-600 dark:text-emerald-500"
+              className="h-auto p-0 text-xs font-medium text-emerald-600 dark:text-emerald-500 d2:text-positive"
             >
               Show them
             </Button>
@@ -646,9 +727,21 @@ export function BuildResults({
   balancedTuningIcon?: string;
   sort: LoadoutSortState;
 } & BuildActionProps) {
+  // "Upgrade cost" sorts by a scarcity-weighted total of each build's remaining
+  // masterwork materials (see materialScore) — pieces with an unknown cost count as 0.
+  const costOf = useCallback<LoadoutCostFn>(
+    (loadout) => {
+      let score = 0;
+      for (const id of loadout.pieceIds) {
+        score += materialScore(pieceMap.get(id)?.masterwork?.cost);
+      }
+      return score;
+    },
+    [pieceMap],
+  );
   const sortedLoadouts = useMemo(
-    () => sortLoadouts(result.loadouts, sort),
-    [result.loadouts, sort],
+    () => sortLoadouts(result.loadouts, sort, costOf),
+    [result.loadouts, sort, costOf],
   );
   const status = (
     <SearchStatus

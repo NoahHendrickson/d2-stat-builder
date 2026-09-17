@@ -7,6 +7,7 @@ import {
   SCHEMA_VERSION,
   enteredWeaponPowers,
   forcesDreamersBond,
+  includesLegacyArmor,
   parsePowerRange,
   samePowerRangeSelection,
   toOptimizerPowerRange,
@@ -70,11 +71,13 @@ function sampleSelections(): PersistedSelections {
     allowTuning: true,
     balancedTuning: false,
     legacyExotics: false,
+    lowerTierArmor: true,
     powerRange: {
       enabled: true,
       bounds: { min: 287, max: 292 },
       weapons: [290, null, 288],
       dreamersBond: true,
+      legacyArmor: false,
     },
     activeSubclass: "Void",
     fragSel: fragSelToArrays(frag),
@@ -130,6 +133,13 @@ test("load defaults legacyExotics to true for data stored before the field exist
   expect(loadSelections()).toEqual({ ...old, legacyExotics: true });
 });
 
+test("load defaults lowerTierArmor to false for data stored before the field existed", () => {
+  const old: Partial<PersistedSelections> = sampleSelections();
+  delete old.lowerTierArmor;
+  localStorage.setItem(SELECTIONS_KEY, JSON.stringify(old));
+  expect(loadSelections()).toEqual({ ...old, lowerTierArmor: false });
+});
+
 test("load ignores the retired top-level dreamersBond / festivalMasks pins", () => {
   const old = { ...sampleSelections(), dreamersBond: true, festivalMasks: true };
   localStorage.setItem(SELECTIONS_KEY, JSON.stringify(old));
@@ -151,6 +161,7 @@ test("parsePowerRange orders an inverted range, drops a non-integer one and bad 
     bounds: { min: 287, max: 292 },
     weapons: [null, null, null],
     dreamersBond: false,
+    legacyArmor: false,
   });
   expect(parsePowerRange({ enabled: true, bounds: { min: -1, max: 287 } })).toEqual(
     DEFAULT_POWER_RANGE,
@@ -171,6 +182,7 @@ test("parsePowerRange orders an inverted range, drops a non-integer one and bad 
     bounds: { min: 287, max: 292 },
     weapons: [290, null, null],
     dreamersBond: false,
+    legacyArmor: false,
   });
   expect(
     enteredWeaponPowers({ ...DEFAULT_POWER_RANGE, enabled: true, weapons: [290, null, 288] }),
@@ -190,12 +202,26 @@ test("forcesDreamersBond only while Power matters is on", () => {
   expect(forcesDreamersBond({ ...DEFAULT_POWER_RANGE, enabled: true })).toBe(false);
 });
 
+test("parsePowerRange reads legacyArmor, defaulting anything but true to off", () => {
+  expect(parsePowerRange({ enabled: true, legacyArmor: true }).legacyArmor).toBe(true);
+  expect(parsePowerRange({ enabled: true, legacyArmor: 1 }).legacyArmor).toBe(false);
+  expect(parsePowerRange({ enabled: true }).legacyArmor).toBe(false);
+});
+
+test("includesLegacyArmor only while Power matters is on", () => {
+  const checked = { ...DEFAULT_POWER_RANGE, legacyArmor: true };
+  expect(includesLegacyArmor({ ...checked, enabled: true })).toBe(true);
+  expect(includesLegacyArmor({ ...checked, enabled: false })).toBe(false);
+  expect(includesLegacyArmor({ ...DEFAULT_POWER_RANGE, enabled: true })).toBe(false);
+});
+
 test("toOptimizerPowerRange is undefined unless enabled with bounds set", () => {
   const on: PersistedSelections["powerRange"] = {
     enabled: true,
     bounds: { min: 287, max: 292 },
     weapons: [290, null, 288],
     dreamersBond: false,
+    legacyArmor: false,
   };
   expect(toOptimizerPowerRange(on)).toEqual({ min: 287, max: 292, weapons: [290, 288] });
   expect(toOptimizerPowerRange({ ...on, enabled: false })).toBeUndefined();
@@ -287,6 +313,7 @@ test("samePowerRangeSelection compares by value, bounds and weapons included", (
     bounds: { min: 287, max: 292 },
     weapons: [290, null, 288],
     dreamersBond: false,
+    legacyArmor: false,
   };
   expect(samePowerRangeSelection(on, { ...on, bounds: { min: 287, max: 292 } })).toBe(true);
   expect(samePowerRangeSelection(on, { ...on, weapons: [290, null, 288] })).toBe(true);
@@ -295,5 +322,6 @@ test("samePowerRangeSelection compares by value, bounds and weapons included", (
   expect(samePowerRangeSelection(on, { ...on, weapons: [290, 300, 288] })).toBe(false);
   expect(samePowerRangeSelection(on, { ...on, enabled: false })).toBe(false);
   expect(samePowerRangeSelection(on, { ...on, dreamersBond: true })).toBe(false);
+  expect(samePowerRangeSelection(on, { ...on, legacyArmor: true })).toBe(false);
   expect(samePowerRangeSelection({ ...on, bounds: null }, { ...on, bounds: null })).toBe(true);
 });

@@ -19,7 +19,7 @@ import { useSession } from "@/lib/auth/use-session";
 import { BUNGIE_IMAGE_BASE } from "@/lib/bungie/constants";
 import { useManifest } from "@/lib/manifest/use-manifest";
 import { toast } from "@/lib/toast";
-import { ThemeToggle } from "@/components/theme-toggle";
+import { SkinToggle, ThemeToggle } from "@/components/theme-toggle";
 import { cn } from "@/lib/utils";
 
 const REFRESH_SUCCESS_MS = 2500;
@@ -51,7 +51,7 @@ function StatusIcon({
     return (
       <CloudCheck
         weight="duotone"
-        className="size-4 shrink-0 text-emerald-500"
+        className="size-4 shrink-0 text-emerald-500 d2:text-positive"
         aria-hidden
       />
     );
@@ -106,7 +106,7 @@ function RefreshIcon({
     return <CircleNotch weight="duotone" className="animate-spin" aria-hidden />;
   }
   if (refreshSucceeded) {
-    return <CheckCircle weight="duotone" className="text-emerald-500" aria-hidden />;
+    return <CheckCircle weight="duotone" className="text-emerald-500 d2:text-positive" aria-hidden />;
   }
   return <ArrowsCounterClockwise weight="duotone" aria-hidden />;
 }
@@ -356,7 +356,7 @@ function AccountColumn({
 }
 
 function ToolbarDivider() {
-  return <div className="bg-border hidden h-7 w-px shrink-0 xl:block" aria-hidden />;
+  return <div className="hidden h-7 w-px shrink-0 bg-border xl:block d2:h-8 d2:bg-foreground/15" aria-hidden />;
 }
 
 function Columns({
@@ -369,7 +369,7 @@ function Columns({
   trailing?: ReactNode;
 }) {
   const compact = layout === "toolbar";
-  const divider = compact ? <ToolbarDivider /> : <div className="bg-border h-px" />;
+  const divider = compact ? <ToolbarDivider /> : <div className="h-px bg-border d2:bg-foreground/15" />;
   return (
     <>
       <ArmorColumn account={account} layout={layout} />
@@ -403,6 +403,7 @@ export function ArmoryStatus({
             trailing={<ToolbarDivider />}
           />
         )}
+        <SkinToggle />
         <ThemeToggle />
       </div>
     );
@@ -413,16 +414,16 @@ export function ArmoryStatus({
   return (
     <section
       aria-label="Account and game data"
-      className="border-border bg-primary/6 flex w-full flex-col overflow-hidden rounded-2xl border"
+      className="flex w-full flex-col overflow-hidden rounded-2xl border border-border bg-primary/6 d2:rounded-none d2:border-foreground/8 d2:bg-lifted d2:shadow-raised"
     >
       <div className="flex flex-col gap-2 p-3">
         <ArmorColumn account={account} layout="stacked" />
       </div>
-      <div className="bg-border h-px" />
+      <div className="h-px bg-border d2:bg-foreground/15" />
       <div className="flex flex-col gap-2 p-3">
         <GameDataColumn account={account} layout="stacked" />
       </div>
-      <div className="bg-border h-px" />
+      <div className="h-px bg-border d2:bg-foreground/15" />
       <AccountColumn account={account} layout="stacked" />
     </section>
   );

@@ -95,7 +95,7 @@ export const SetListControls = memo(function SetListControls({
                   size="icon-xs"
                   className={cn(
                     "text-foreground/90 hover:text-foreground [&_svg:not([class*='size-'])]:size-4",
-                    customFilters && "text-emphatic hover:text-emphatic",
+                    customFilters && "text-emphatic hover:text-emphatic d2:text-power d2:hover:text-power",
                   )}
                 />
               }
@@ -108,7 +108,7 @@ export const SetListControls = memo(function SetListControls({
             align="end"
             className="w-58 gap-0 overflow-hidden p-0"
           >
-            <PopoverTitle className="border-border text-text-secondary border-b px-3 py-2 text-sm font-medium">
+            <PopoverTitle className="border-border text-text-secondary border-b d2:border-foreground/10 px-3 py-2 text-sm font-medium">
               Hide sets
             </PopoverTitle>
             <div className="flex flex-col gap-3 p-3">

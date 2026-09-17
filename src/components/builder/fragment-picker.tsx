@@ -1,7 +1,12 @@
 "use client";
 
-import { memo } from "react";
-import { TooltipLabel } from "@/components/ui/tooltip";
+import { memo, type CSSProperties } from "react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipLabel,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import Image from "next/image";
 import { CircleNotch } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
@@ -11,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
+  SUBCLASS_LINE,
   SUBCLASSES,
   type FragmentInfo,
   type Subclass,
@@ -50,12 +56,11 @@ export const FragmentPicker = memo(function FragmentPicker({
     <div className="space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-3">
         <div className="space-y-2">
-          <h3 className="text-sm font-medium">Fragments</h3>
           <Tabs
             value={activeSubclass}
             onValueChange={(v) => onSubclassChange(v as Subclass)}
           >
-            <TabsList>
+            <TabsList variant="default" aria-label="Subclass">
               {SUBCLASSES.map((s) => (
                 <TabsTrigger key={s} value={s}>
                   {s}
@@ -89,7 +94,7 @@ export const FragmentPicker = memo(function FragmentPicker({
         </p>
       ) : (
         <div className="overflow-x-auto">
-          <div className="divide-border min-w-max divide-y">
+          <div className="divide-border min-w-max divide-y d2:divide-foreground/10">
             <div className="grid grid-cols-[1fr_repeat(6,2rem)] items-center gap-x-2 py-1.5">
               <span aria-hidden />
               {STAT_ORDER.map((key) => (
@@ -102,7 +107,7 @@ export const FragmentPicker = memo(function FragmentPicker({
                         tabIndex={0}
                         width={16}
                         height={16}
-                        className="size-4 shrink-0 opacity-65 invert dark:invert-0"
+                        className="size-4 shrink-0 opacity-65 invert dark:invert-0 d2:opacity-80"
                         unoptimized
                       />
                     </TooltipLabel>
@@ -115,6 +120,27 @@ export const FragmentPicker = memo(function FragmentPicker({
 
             {rows.map((f) => {
               const on = selected.has(f.hash);
+              const tooltip = f.description?.trim();
+              const identity = (
+                <span className="flex min-w-0 items-center gap-2">
+                  {f.icon && (
+                    <Image
+                      src={`${BUNGIE_IMAGE_BASE}${f.icon}`}
+                      alt=""
+                      width={20}
+                      height={20}
+                      className="d2-tile-element size-5 shrink-0 rounded-sm d2:rounded-none"
+                      style={
+                        {
+                          "--element-line": SUBCLASS_LINE[activeSubclass],
+                        } as CSSProperties
+                      }
+                      unoptimized
+                    />
+                  )}
+                  <span className="truncate">{f.name}</span>
+                </span>
+              );
               return (
                 <div
                   key={f.hash}
@@ -122,7 +148,7 @@ export const FragmentPicker = memo(function FragmentPicker({
                 >
                   <label
                     className={cn(
-                      "group flex cursor-pointer items-center gap-2 rounded-md px-1 text-left text-sm transition-colors",
+                      "group flex cursor-pointer items-center gap-2 rounded-md px-1 text-left text-sm transition-colors d2:rounded-none",
                       on
                         ? "text-foreground"
                         : "text-muted-foreground hover:text-foreground",
@@ -131,27 +157,34 @@ export const FragmentPicker = memo(function FragmentPicker({
                     <Checkbox
                       checked={on}
                       onCheckedChange={() => onToggle(f.hash)}
-                      className="group-hover:not-data-checked:border-emphatic/60"
+                      className="group-hover:not-data-checked:border-emphatic/60 d2:group-hover:not-data-checked:[--line-alpha:1.6]"
                     />
-                    {f.icon && (
-                      <Image
-                        src={`${BUNGIE_IMAGE_BASE}${f.icon}`}
-                        alt=""
-                        width={20}
-                        height={20}
-                        className="size-5 rounded-sm"
-                        unoptimized
-                      />
+                    {tooltip ? (
+                      <Tooltip>
+                        <TooltipTrigger
+                          delay={0}
+                          closeDelay={0}
+                          render={identity}
+                        />
+                        <TooltipContent
+                          side="top"
+                          align="start"
+                          className="pointer-events-none max-w-sm px-4 py-3 text-sm leading-relaxed data-open:animate-none data-closed:animate-none"
+                        >
+                          {tooltip}
+                        </TooltipContent>
+                      </Tooltip>
+                    ) : (
+                      identity
                     )}
-                    <span className="truncate">{f.name}</span>
                   </label>
                   {STAT_ORDER.map((key, i) => (
                     <span
                       key={key}
                       className={cn(
                         "text-center text-xs tabular-nums",
-                        f.stats[i] > 0 && "text-brand",
-                        f.stats[i] < 0 && "text-red-400",
+                        f.stats[i] > 0 && "text-brand d2:text-positive",
+                        f.stats[i] < 0 && "text-red-400 d2:text-destructive",
                       )}
                     >
                       {f.stats[i]
