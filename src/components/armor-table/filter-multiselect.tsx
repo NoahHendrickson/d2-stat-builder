@@ -278,7 +278,10 @@ export function FilterMultiselect<V extends string | number>({
             </button>
           </TooltipLabel>
         )}
-        <DropdownMenuContent align="start" className="w-64">
+        <DropdownMenuContent
+          align="start"
+          className={searchable ? "w-64" : undefined}
+        >
           <FilterMultiselectPanel
             allLabel={allLabel}
             options={options}

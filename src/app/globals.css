@@ -72,6 +72,13 @@
   --rare: #5076a3;
   --uncommon: #366f42;
   --common: #c3bcb4;
+  /* Subclass / damage-type frames (aspects, fragments). */
+  --subclass-arc: #5ec8e8;
+  --subclass-solar: #e87a32;
+  --subclass-void: #b888e0;
+  --subclass-stasis: #6b9fff;
+  --subclass-strand: #3cce74;
+  --subclass-prismatic: #d4a0dc;
   --text-primary: #1f2124;
   --text-secondary: #46484d;
   --text-muted: #5c5e63;
@@ -95,7 +102,7 @@
 @theme inline {
   --font-heading: var(--font-sans);
   --font-sans: var(--font-sans);
-  --font-display: var(--font-display);
+  --font-display: var(--font-sans);
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -196,8 +203,8 @@
 .dark {
   /* Figma 69:862: near-black page (#020202) under the backdrop; sidebar
      black/70; stage black/40 blurred; cards white/4 on white/8 lines; type
-     #fcfcf5 with #a3a09e secondary. Popovers are opaque so menus stay legible
-     over the scene. */
+     #fcfcf5 with white/70 secondary. Popovers are opaque so menus stay
+     legible over the scene. */
   --background: #0b0d10;
   --foreground: #fcfcf5;
   --card: #1a1d21;
@@ -209,7 +216,7 @@
   --secondary: #262a2f;
   --secondary-foreground: #fcfcf5;
   --muted: #262a2f;
-  --muted-foreground: #a3a09e;
+  --muted-foreground: rgb(255 255 255 / 0.7);
   --accent: rgb(252 252 245 / 7%);
   --accent-foreground: #fcfcf5;
   --destructive: #e05a50;
@@ -241,8 +248,8 @@
   /* Menus frost like the sidebar but a step lighter: grey-slate at 78% under the 20px blur. */
   --glass: rgb(62 66 76 / 78%);
   --text-primary: #fcfcf5;
-  --text-secondary: #c9ccc9;
-  --text-muted: #a3a09e;
+  --text-secondary: rgb(255 255 255 / 0.7);
+  --text-muted: rgb(255 255 255 / 0.7);
   --primary-border: rgb(252 252 245 / 50%);
   --primary-muted: rgb(252 252 245 / 10%);
   --emphatic: #378b3f;
@@ -252,7 +259,7 @@
   --power: #4fd0d0;
   --positive: #62b96a;
   --warning: #eade8b;
-  --label: rgb(252 237 211 / 0.75);
+  --label: rgb(255 255 255 / 0.7);
   --outline-strong: rgb(255 255 255 / 85%);
   --outline-glow: rgb(255 255 255 / 25%);
 }
@@ -341,10 +348,9 @@ input[type="number"] {
   }
 }
 
-/* Small uppercase label in the display face (Futura in the Figma; Jost here):
-   column headers, stat names, section tags, the EQUIP label. */
+/* Small uppercase label: column headers, stat names, section tags, EQUIP. */
 @utility d2-label {
-  font-family: var(--font-display);
+  font-family: var(--font-sans);
   font-size: 0.6875rem;
   line-height: 1rem;
   font-weight: 500;
@@ -353,9 +359,9 @@ input[type="number"] {
   color: var(--label);
 }
 
-/* Display-face uppercase for the few loud elements (the EQUIP CTA). */
+/* Uppercase for the few loud elements (the EQUIP CTA). */
 @utility d2-heading {
-  font-family: var(--font-display);
+  font-family: var(--font-sans);
   font-weight: 500;
   letter-spacing: var(--tracking-heading);
   text-transform: uppercase;
@@ -392,6 +398,19 @@ input[type="number"] {
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--foreground) 14%, transparent);
 }
 
+/* Aspect / fragment tile: the same 1px inset, tinted with `--element-line`. */
+@utility d2-tile-element {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--element-line) 55%, transparent);
+}
+
+/* Editor cell border using `--element-line` (unselected aspect / fragment). */
+@utility d2-element-border {
+  border-color: color-mix(in srgb, var(--element-line) 42%, transparent);
+  &:hover:not(:disabled):not([aria-pressed="true"]) {
+    border-color: color-mix(in srgb, var(--element-line) 78%, transparent);
+  }
+}
+
 /* Hover/selected frame: a white outline with a soft glow. */
 @utility d2-tile-selected {
   box-shadow:
@@ -422,23 +441,32 @@ input[type="number"] {
 }
 
 /* Figma "Select Menu" 70:1571: frosted glass, 20px blur, a centre-bright
-   hairline, 0 2px 16px shadow. Menus, popovers, tooltips, and dialogs float on this. */
+   hairline, 0 2px 16px shadow. Menus, popovers, tooltips, and dialogs float on this.
+   The line sits a step brighter than the default field/button stops so the
+   floating frame reads against the scene. */
 @utility d2-glass {
   background-color: var(--glass);
   backdrop-filter: blur(20px);
-  /* The app's line (see d2-line) at its default stops. */
-  --line-side: color-mix(in srgb, var(--foreground) calc(var(--line-alpha, 1) * 6%), transparent);
-  --line-mid: color-mix(in srgb, var(--foreground) calc(var(--line-alpha, 1) * 24%), transparent);
+  --line-side: color-mix(in srgb, var(--foreground) calc(var(--line-alpha, 1) * 12%), transparent);
+  --line-mid: color-mix(in srgb, var(--foreground) calc(var(--line-alpha, 1) * 40%), transparent);
   border: 1px solid transparent;
   border-image: var(--line-image, linear-gradient(to right, var(--line-side), var(--line-mid) 50%, var(--line-side))) 1;
   box-shadow: 0 2px 16px rgb(0 0 0 / 0.25);
 }
 
-/* Figma sidebar 69:863: slate at 90% with a 10px blur. Sidebar, drawers,
-   and the loadout editor share it. */
+/* Darker frosted slate: the loadout editor and dialogs sit on this. Stronger
+   than the app glass so they read as a deeper layer, with enough blur that
+   the scene still ghosts through. */
 @utility d2-slate {
   background-color: var(--panel-strong);
-  backdrop-filter: blur(14px) saturate(1.1);
+  backdrop-filter: blur(20px) saturate(1.1);
+}
+
+/* Loadouts column: the dropdown's grey-slate fill (--glass) without the
+   floating menu line or shadow. */
+@utility d2-sidebar {
+  background-color: var(--glass);
+  backdrop-filter: blur(20px);
 }
 
 /* Figma 69:883 icon well: a faint white/16 frame all round with brighter
@@ -539,13 +567,14 @@ input[type="number"] {
      --line-image  the gradient itself; d2-line-drift swaps in the conic
      --line-side   edge stop   (default foreground 6%)
      --line-mid    centre stop (default foreground 24%)
+     --line-width  border thickness (default 1px; cards/drawer use 1.5px)
    Corners must be square (border-image ignores border-radius). Focus keeps
    the gradient and just raises --line-alpha; only a state that wants a solid
    line (the active blue chip) sets [border-image:none] and a border-color. */
 @utility d2-line {
   --line-side: color-mix(in srgb, var(--foreground) calc(var(--line-alpha, 1) * 6%), transparent);
   --line-mid: color-mix(in srgb, var(--foreground) calc(var(--line-alpha, 1) * 24%), transparent);
-  border: 1px solid transparent;
+  border: var(--line-width, 1px) solid transparent;
   border-image: var(--line-image, linear-gradient(to right, var(--line-side), var(--line-mid) 50%, var(--line-side))) 1;
 }
 
@@ -557,22 +586,66 @@ input[type="number"] {
   border-image: var(--line-image, linear-gradient(to right, var(--line-side), var(--line-mid) 50%, var(--line-side))) 1;
 }
 
+/* Pane scroller (optimizer settings / builds). An explicit width turns
+   overlay scrollbars into a layout-occupying lane so the thumb sits *beside*
+   the cards, not on them. Thumb matches the card-line mix: square, faint,
+   brighter on hover. */
+@utility d2-scroll {
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--foreground) 28%, transparent) transparent;
+  &::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  &::-webkit-scrollbar-button {
+    display: none;
+    width: 0;
+    height: 0;
+  }
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  &::-webkit-scrollbar-thumb {
+    background-color: color-mix(in srgb, var(--foreground) 22%, transparent);
+    background-clip: padding-box;
+    border: 3px solid transparent;
+    border-radius: 0;
+  }
+  &::-webkit-scrollbar-thumb:hover {
+    background-color: color-mix(in srgb, var(--foreground) 40%, transparent);
+  }
+  &::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+}
+
 /* Card frame (loadouts + builds): the line over the lifted fill. Left/right
-   stops sit a bit brighter than the default d2-line so the verticals read. */
+   stops sit a bit brighter than the default d2-line so the verticals read.
+   `--card-line-width` thickens the line (loadout cards use 1.5px). */
 @utility d2-card-frame {
   --line-side: color-mix(in srgb, var(--foreground) calc(var(--line-alpha, 1) * 14%), transparent);
   --line-mid: color-mix(in srgb, var(--foreground) calc(var(--line-alpha, 1) * 28%), transparent);
-  border: 1px solid transparent;
+  border: var(--card-line-width, 1px) solid transparent;
   border-image: var(--line-image, linear-gradient(to right, var(--line-side), var(--line-mid) 50%, var(--line-side))) 1;
   background-color: var(--lifted);
 }
 
-/* Checked checkbox: white plate, dark check. */
+/* Checked checkbox / switch: EQUIP green fill and white line. */
 [data-slot="checkbox"][data-checked],
 [data-slot="checkbox"][data-checked]:focus-visible,
+[data-slot="switch"][data-checked],
+[data-slot="switch"][data-checked]:focus-visible,
 [data-slot="dropdown-menu-checkbox-item"][data-indicator="start"][data-checked]
   [data-slot="dropdown-menu-checkbox-item-indicator"] {
-  border-color: var(--foreground);
-  background-color: var(--foreground);
-  color: var(--background);
+  --line-side: rgb(255 255 255 / 0.26);
+  --line-mid: rgb(255 255 255 / 0.6);
+  background-color: var(--emphatic);
+  color: var(--emphatic-foreground);
+}
+@media (hover: hover) and (pointer: fine) {
+  [data-slot="checkbox"][data-checked]:hover,
+  [data-slot="switch"][data-checked]:hover {
+    background-color: var(--emphatic-light);
+  }
 }

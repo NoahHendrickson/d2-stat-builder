@@ -39,7 +39,7 @@ export function ViewTabs({
                 <Link {...props} href={href} onClick={onNavigate} />
               )}
             >
-              <Icon weight="bold" aria-hidden />
+              <Icon weight="duotone" className="size-4" aria-hidden />
             </TabsTrigger>
           </TooltipLabel>
         ))}

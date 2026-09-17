@@ -149,7 +149,7 @@ export function LoadingScreenView({
       role="status"
       aria-live="polite"
       className={cn(
-        "bg-background/70 fixed inset-0 z-[60] overflow-hidden transition-opacity duration-500",
+        "bg-background fixed inset-0 z-[60] overflow-hidden transition-opacity duration-500",
         fading && "pointer-events-none opacity-0",
       )}
     >

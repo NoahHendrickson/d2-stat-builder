@@ -42,7 +42,7 @@ function DropdownMenuContent({
       >
         <MenuPrimitive.Popup
           data-slot="dropdown-menu-content"
-          className={cn("z-50 max-h-(--available-height) w-(--anchor-width) min-w-32 origin-(--transform-origin) d2-glass overflow-x-hidden overflow-y-auto rounded-none px-1 py-1 text-foreground duration-100 outline-none data-[side=bottom]:slide-in-from-top-2 data-[side=inline-end]:slide-in-from-left-2 data-[side=inline-start]:slide-in-from-right-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:overflow-hidden data-closed:fade-out-0 data-closed:zoom-out-95", className )}
+          className={cn("z-50 max-h-(--available-height) w-max min-w-(--anchor-width) origin-(--transform-origin) d2-glass overflow-x-hidden overflow-y-auto rounded-none px-1 py-1 text-foreground duration-100 outline-none data-[side=bottom]:slide-in-from-top-2 data-[side=inline-end]:slide-in-from-left-2 data-[side=inline-start]:slide-in-from-right-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:overflow-hidden data-closed:fade-out-0 data-closed:zoom-out-95", className )}
           {...props}
         />
       </MenuPrimitive.Positioner>
@@ -136,7 +136,7 @@ function DropdownMenuSubContent({
   return (
     <DropdownMenuContent
       data-slot="dropdown-menu-sub-content"
-      className={cn("d2-glass w-auto min-w-[96px] rounded-none px-1 py-1 text-foreground duration-100 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95", className )}
+      className={cn("d2-glass w-auto rounded-none px-1 py-1 text-foreground duration-100 data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95", className )}
       align={align}
       alignOffset={alignOffset}
       side={side}
@@ -177,7 +177,7 @@ function DropdownMenuCheckboxItem({
           "pointer-events-none absolute flex items-center justify-center",
           indicator === "end"
             ? "right-2"
-            : "left-2 size-4 rounded-[4px] border border-input bg-lifted group-data-checked/dropdown-menu-checkbox-item:text-background",
+            : "left-2 size-4 rounded-none d2-line bg-lifted group-data-checked/dropdown-menu-checkbox-item:text-emphatic-foreground",
         )}
         data-slot="dropdown-menu-checkbox-item-indicator"
       >
@@ -185,7 +185,7 @@ function DropdownMenuCheckboxItem({
           {indicator === "end" ? (
             <CheckIcon className="text-foreground!" />
           ) : (
-            <CheckboxCheckIcon className="text-background!" />
+            <CheckboxCheckIcon className="text-emphatic-foreground!" />
           )}
         </MenuPrimitive.CheckboxItemIndicator>
       </span>

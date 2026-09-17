@@ -1,7 +1,12 @@
 "use client";
 
-import { memo } from "react";
-import { TooltipLabel } from "@/components/ui/tooltip";
+import { memo, type CSSProperties } from "react";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipLabel,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import Image from "next/image";
 import { CircleNotch } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
@@ -11,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
+  SUBCLASS_LINE,
   SUBCLASSES,
   type FragmentInfo,
   type Subclass,
@@ -54,7 +60,7 @@ export const FragmentPicker = memo(function FragmentPicker({
             value={activeSubclass}
             onValueChange={(v) => onSubclassChange(v as Subclass)}
           >
-            <TabsList>
+            <TabsList variant="default" aria-label="Subclass">
               {SUBCLASSES.map((s) => (
                 <TabsTrigger key={s} value={s}>
                   {s}
@@ -114,6 +120,27 @@ export const FragmentPicker = memo(function FragmentPicker({
 
             {rows.map((f) => {
               const on = selected.has(f.hash);
+              const tooltip = f.description?.trim();
+              const identity = (
+                <span className="flex min-w-0 items-center gap-2">
+                  {f.icon && (
+                    <Image
+                      src={`${BUNGIE_IMAGE_BASE}${f.icon}`}
+                      alt=""
+                      width={20}
+                      height={20}
+                      className="d2-tile-element size-5 shrink-0 rounded-none"
+                      style={
+                        {
+                          "--element-line": SUBCLASS_LINE[activeSubclass],
+                        } as CSSProperties
+                      }
+                      unoptimized
+                    />
+                  )}
+                  <span className="truncate">{f.name}</span>
+                </span>
+              );
               return (
                 <div
                   key={f.hash}
@@ -130,19 +157,27 @@ export const FragmentPicker = memo(function FragmentPicker({
                     <Checkbox
                       checked={on}
                       onCheckedChange={() => onToggle(f.hash)}
-                      className="group-hover:not-data-checked:border-foreground/80"
+                      className="group-hover:not-data-checked:[--line-alpha:1.6]"
                     />
-                    {f.icon && (
-                      <Image
-                        src={`${BUNGIE_IMAGE_BASE}${f.icon}`}
-                        alt=""
-                        width={20}
-                        height={20}
-                        className="size-5 rounded-none"
-                        unoptimized
-                      />
+                    {tooltip ? (
+                      <Tooltip>
+                        <TooltipTrigger
+                          nativeButton={false}
+                          delay={0}
+                          closeDelay={0}
+                          render={identity}
+                        />
+                        <TooltipContent
+                          side="top"
+                          align="start"
+                          className="pointer-events-none max-w-sm px-4 py-3 text-sm leading-relaxed data-open:animate-none data-closed:animate-none"
+                        >
+                          {tooltip}
+                        </TooltipContent>
+                      </Tooltip>
+                    ) : (
+                      identity
                     )}
-                    <span className="truncate">{f.name}</span>
                   </label>
                   {STAT_ORDER.map((key, i) => (
                     <span

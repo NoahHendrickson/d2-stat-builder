@@ -4,6 +4,7 @@ import { TooltipLabel } from "@/components/ui/tooltip";
 import {
   Fragment,
   memo,
+  useCallback,
   useMemo,
   useState,
   useSyncExternalStore,
@@ -11,6 +12,7 @@ import {
 } from "react";
 import { CaretDown, CheckCircle, CircleNotch, X } from "@phosphor-icons/react";
 import type { ArmorPiece } from "@/lib/armory/normalize";
+import { materialScore, summarizeMasterwork } from "@/lib/armory/masterwork";
 import type { ArmorSetInfo } from "@/lib/armory/sets";
 import {
   STAT_DISPLAY_ORDER,
@@ -20,6 +22,7 @@ import {
 } from "@/lib/armory/stats";
 import {
   sortLoadouts,
+  type LoadoutCostFn,
   type LoadoutSortState,
 } from "@/lib/builder/sort-loadouts";
 import { Badge } from "@/components/ui/badge";
@@ -33,7 +36,8 @@ import {
 import { cn } from "@/lib/utils";
 import { useStoreValue, type ValueStore } from "@/lib/value-store";
 import { liveTargets } from "@/lib/builder/live-targets";
-import { BUNGIE_IMAGE_BASE } from "@/lib/bungie/constants";
+import { ArmorThumb } from "@/components/armor-thumb";
+import { MaterialCost, materialSummary } from "@/components/material-cost";
 import type {
   AppliedTuning,
   OptimizerLoadout,
@@ -48,10 +52,10 @@ export { MAX_SHOWN };
 
 /** A build card: lifted face with the EQUIP centre-bright stroke. */
 export const BUILD_CARD_LIFT_CLASS =
-  "d2-card-frame relative rounded-none shadow-raised";
+  "d2-card-frame relative rounded-none [--card-line-width:1.5px]";
 
 /** Stack of build cards — no well; they sit on the main column. */
-export const BUILD_LIST_WELL_CLASS = "flex flex-col gap-2";
+export const BUILD_LIST_WELL_CLASS = "flex flex-col gap-3";
 
 /** Display stat columns paired with their STAT_ORDER index (used by the build breakdown). */
 const STAT_COLS = STAT_DISPLAY_ORDER.map((key) => ({
@@ -215,6 +219,9 @@ const BuildRow = memo(function BuildRow({
   const [open, setOpen] = useState(false);
   const pieces = loadout.pieceIds.map((id) => pieceMap.get(id));
   const exotic = pieces.find((p) => p?.isExotic);
+  // What finishing the pieces' masterworks would cost — the stats above already
+  // assume it's done; this only tells the player what they'd have to spend.
+  const masterwork = summarizeMasterwork(pieces);
 
   const setCounts = new Map<number, number>();
   for (const p of pieces) {
@@ -244,16 +251,13 @@ const BuildRow = memo(function BuildRow({
       >
         <div className="flex min-w-0 flex-1 items-center gap-3 2xl:gap-6">
           {exotic?.icon ? (
-            // eslint-disable-next-line @next/next/no-img-element -- collapsed header: no tooltip/optimizer
-            <img
-              src={`${BUNGIE_IMAGE_BASE}${exotic.icon}`}
+            <ArmorThumb
+              icon={exotic.icon}
+              watermark={exotic.watermark}
               alt={exotic.name}
-              title={exotic.name}
-              width={40}
-              height={40}
-              loading="lazy"
-              decoding="async"
-              className="d2-tile-exotic size-10 max-w-none shrink-0 rounded-none"
+              size={40}
+              exoticFrame
+              isTier5={exotic.tunedStat !== undefined}
             />
           ) : (
             <span
@@ -288,6 +292,24 @@ const BuildRow = memo(function BuildRow({
               className="max-lg:hidden 2xl:text-sm"
               title="Gear power — the game's average over these pieces (and your weapons, if entered)"
             />
+          )}
+          {/* Header real estate is tight (the stat chips share it), so only the two
+              scarcest materials show here; the expanded card lists everything. Hidden
+              on narrow cards rather than squeezing the stat chips into each other. */}
+          {!masterwork.complete && (
+            <span
+              className="hidden items-center gap-1.5 text-[11px] text-muted-foreground @[36rem]/build:inline-flex"
+              title={
+                masterwork.cost.length > 0
+                  ? `To fully masterwork: ${materialSummary(masterwork.cost, manifest)}`
+                  : "Some pieces are not fully masterworked"
+              }
+            >
+              <MaterialCost stacks={masterwork.cost.slice(-2)} manifest={manifest} compact />
+              {masterwork.unknownCostPieces > 0 && (
+                <span title="Some pieces have an unknown upgrade cost">?</span>
+              )}
+            </span>
           )}
           {setBadges.map((b) => (
             <Badge
@@ -344,18 +366,12 @@ const BuildRow = memo(function BuildRow({
                   <Fragment key={id}>
                     <div className="flex min-w-0 items-center gap-2">
                       {piece.icon ? (
-                        // eslint-disable-next-line @next/next/no-img-element -- expand mount: skip next/image
-                        <img
-                          src={`${BUNGIE_IMAGE_BASE}${piece.icon}`}
-                          alt=""
-                          width={32}
-                          height={32}
-                          loading="lazy"
-                          decoding="async"
-                          className={cn(
-                            "size-8 max-w-none shrink-0 rounded-none",
-                            piece.isExotic ? "d2-tile-exotic" : "d2-tile",
-                          )}
+                        <ArmorThumb
+                          icon={piece.icon}
+                          watermark={piece.isExotic ? piece.watermark : undefined}
+                          size={32}
+                          exoticFrame={piece.isExotic}
+                          isTier5={piece.isExotic && piece.tunedStat !== undefined}
                         />
                       ) : (
                         <span
@@ -375,6 +391,15 @@ const BuildRow = memo(function BuildRow({
                           title="Power"
                         />
                       )}
+                      {piece.masterwork &&
+                        piece.masterwork.level < piece.masterwork.max && (
+                          <span
+                            className="shrink-0 text-[10px] font-medium text-warning tabular-nums"
+                            title={`Masterwork level ${piece.masterwork.level} of ${piece.masterwork.max} — stats shown assume it's finished`}
+                          >
+                            MW {piece.masterwork.level}/{piece.masterwork.max}
+                          </span>
+                        )}
                     </div>
                     {STAT_COLS.map(({ key, i }) => (
                       <div
@@ -429,6 +454,55 @@ const BuildRow = memo(function BuildRow({
                 render={(i) => <Delta value={loadout.tuningBonus[i]} />}
               />
               <TotalsRow label="Total" render={(i) => loadout.stats[i]} />
+            </div>
+
+            <div className="col-span-full -mx-4 border-t border-foreground/8" />
+
+            {/* Masterwork — what it costs to make the assumed-full masterwork real */}
+            <div className="col-span-full py-4">
+              <div className="d2-label mb-2">Masterwork</div>
+              {masterwork.complete ? (
+                <p className="text-sm text-text-secondary">
+                  Every piece is fully masterworked.
+                </p>
+              ) : (
+                <div className="flex flex-col gap-1.5 text-sm">
+                  {pieces.map((piece, pi) => {
+                    const mw = piece?.masterwork;
+                    if (!piece || !mw || mw.level >= mw.max) return null;
+                    return (
+                      <div
+                        key={loadout.pieceIds[pi]}
+                        className="flex flex-wrap items-center gap-x-3 gap-y-0.5"
+                      >
+                        <span className="min-w-0 truncate">{piece.name}</span>
+                        <span className="text-text-secondary tabular-nums">
+                          {mw.level}/{mw.max}
+                        </span>
+                        {mw.cost ? (
+                          <MaterialCost stacks={mw.cost} manifest={manifest} />
+                        ) : (
+                          <span className="text-text-secondary">cost unknown</span>
+                        )}
+                      </div>
+                    );
+                  })}
+                  <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 font-medium">
+                    <span>To finish</span>
+                    <MaterialCost stacks={masterwork.cost} manifest={manifest} />
+                    {masterwork.unknownCostPieces > 0 && (
+                      <span className="font-normal text-text-secondary">
+                        + {masterwork.unknownCostPieces}{" "}
+                        {masterwork.unknownCostPieces === 1 ? "piece" : "pieces"} with
+                        an unknown cost
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-text-secondary">
+                    Stats above already assume every piece is fully masterworked.
+                  </p>
+                </div>
+              )}
             </div>
           </div>
 
@@ -651,9 +725,21 @@ export function BuildResults({
   balancedTuningIcon?: string;
   sort: LoadoutSortState;
 } & BuildActionProps) {
+  // "Upgrade cost" sorts by a scarcity-weighted total of each build's remaining
+  // masterwork materials (see materialScore) — pieces with an unknown cost count as 0.
+  const costOf = useCallback<LoadoutCostFn>(
+    (loadout) => {
+      let score = 0;
+      for (const id of loadout.pieceIds) {
+        score += materialScore(pieceMap.get(id)?.masterwork?.cost);
+      }
+      return score;
+    },
+    [pieceMap],
+  );
   const sortedLoadouts = useMemo(
-    () => sortLoadouts(result.loadouts, sort),
-    [result.loadouts, sort],
+    () => sortLoadouts(result.loadouts, sort, costOf),
+    [result.loadouts, sort, costOf],
   );
   const status = (
     <SearchStatus

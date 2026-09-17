@@ -59,7 +59,7 @@ import {
   offArchetypeIndices,
   type StatIconMap,
 } from "@/lib/armory/stats";
-import type { ArmorPiece } from "@/lib/armory/normalize";
+import { itemWatermark, type ArmorPiece } from "@/lib/armory/normalize";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { Switch } from "@/components/ui/switch";
@@ -82,6 +82,7 @@ import type { ExoticConstraint, OptimizerPiece } from "@/lib/optimizer/types";
 import {
   DEFAULT_POWER_RANGE,
   forcesDreamersBond,
+  includesLegacyArmor,
   loadSelections,
   saveSelections,
   fragSelToArrays,
@@ -186,16 +187,21 @@ export function BuilderPanel({
           SUBCLASSES.map((s) => [s, new Set<number>()]),
         ) as Record<Subclass, Set<number>>),
   );
-  // Legacy EXOTICS are supported (the solver spends their artifice +3); legacy
-  // legendaries are not yet — that toggle stays disabled.
+  // Legacy EXOTICS: the solver spends their artifice +3.
   const [useLegacyExotics, setUseLegacyExotics] = useState(
     initialSaved?.legacyExotics ?? true,
+  );
+  // Tier 1–4 Armor 3.0 legendaries: no tuning socket, otherwise ordinary pieces.
+  const [useLowerTierArmor, setUseLowerTierArmor] = useState(
+    initialSaved?.lowerTierArmor ?? false,
   );
   const [powerRange, setPowerRange] = useState<PowerRangeSelection>(
     () => initialSaved?.powerRange ?? DEFAULT_POWER_RANGE,
   );
-  // Dreamer's Bond is a "Power matters" option: checked but with the toggle off, it's inert.
+  // Dreamer's Bond and legacy armor are "Power matters" options: checked but with the
+  // toggle off, they're inert.
   const useDreamersBond = forcesDreamersBond(powerRange);
+  const useLegacyArmor = includesLegacyArmor(powerRange);
 
   // The exotic is persisted by name and resolved to an index once the live exotics list
   // exists; while it's pending (not `undefined`), the save effect holds off so a
@@ -230,13 +236,19 @@ export function BuilderPanel({
 
   // Candidate pool for the optimizer: Tier-5 pieces (exactly those with a tuning
   // socket) plus — when enabled — legacy/non-tunable exotics, whose artifice +3 the
-  // solver spends. Legacy legendaries stay excluded until supported. FotL masks
-  // are never in this pool; they replace the helmet slot when that toggle is on, and
-  // join it as optional power-0 candidates while "Power matters" is on.
+  // solver spends, Tier 1–4 Armor 3.0 legendaries, and (only while "Power matters" is
+  // on) legacy Armor 2.0 legendaries. FotL masks are never in this pool; they join the
+  // helmet slot as optional power-0 candidates while "Power matters" is on.
   const pool = useMemo(
     () =>
-      classPieces.filter((p) => inDefaultOptimizerPool(p, useLegacyExotics)),
-    [classPieces, useLegacyExotics],
+      classPieces.filter((p) =>
+        inDefaultOptimizerPool(p, {
+          legacyExotics: useLegacyExotics,
+          lowerTierArmor: useLowerTierArmor,
+          legacyArmor: useLegacyArmor,
+        }),
+      ),
+    [classPieces, useLegacyExotics, useLowerTierArmor, useLegacyArmor],
   );
 
   const sets = useMemo(
@@ -385,24 +397,45 @@ export function BuilderPanel({
   // with different hashes; the optimizer picks whichever version builds best.
   // Exotic class items are always listed (from the manifest) even when unowned.
   const exotics = useMemo(() => {
-    const map = new Map<string, { hashes: number[]; icon?: string }>();
+    const map = new Map<
+      string,
+      { hashes: number[]; icon?: string; watermark?: string; isTier5?: boolean }
+    >();
     for (const p of pool) {
       if (!p.isExotic) continue;
-      const entry = map.get(p.name) ?? { hashes: [], icon: p.icon };
+      const entry = map.get(p.name) ?? {
+        hashes: [],
+        icon: p.icon,
+        watermark: p.watermark,
+        isTier5: p.tunedStat !== undefined,
+      };
       if (!entry.hashes.includes(p.itemHash)) entry.hashes.push(p.itemHash);
       if (!entry.icon) entry.icon = p.icon;
+      if (!entry.watermark && p.watermark) entry.watermark = p.watermark;
+      if (p.tunedStat !== undefined) entry.isTier5 = true;
       map.set(p.name, entry);
     }
     if (manifest && classType !== null) {
       for (const item of availableExoticClassItems(manifest, classType)) {
-        const entry = map.get(item.name) ?? { hashes: [], icon: item.icon };
+        const entry = map.get(item.name) ?? {
+          hashes: [],
+          icon: item.icon,
+          watermark: itemWatermark(
+            manifest.def("DestinyInventoryItemDefinition", item.hash),
+          ),
+        };
         if (!entry.hashes.includes(item.hash)) entry.hashes.push(item.hash);
         if (!entry.icon) entry.icon = item.icon;
+        if (!entry.watermark) {
+          entry.watermark = itemWatermark(
+            manifest.def("DestinyInventoryItemDefinition", item.hash),
+          );
+        }
         map.set(item.name, entry);
       }
     }
     return [...map]
-      .map(([name, { hashes, icon }]) => ({ name, hashes, icon }))
+      .map(([name, rest]) => ({ name, ...rest }))
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [pool, manifest, classType]);
 
@@ -505,16 +538,40 @@ export function BuilderPanel({
   );
 
   // The pool as it stands once Power matters is ON — identical while it is; with the
-  // toggle off and Dreamer's Bond checked, the class-item slot the toggle will pin. The
-  // power controls seed the first-enable range from this, so the seed can't be read off
-  // a slot the same click replaces with a 21-power piece.
+  // toggle off, the class-item slot a checked Dreamer's Bond will pin and the legacy
+  // legendaries a checked "Include legacy armor" will let in. The power controls seed
+  // the first-enable range from this, so the seed can't be read off a pool the same
+  // click replaces with a 21-power piece or widens with low-power legacy rolls.
   const powerSlotPieces = useMemo(() => {
-    if (useDreamersBond || !powerRange.dreamersBond) return slotPieces;
-    const pinned = dreamersPiece ? [dreamersPiece] : [];
-    return slotPieces.map((pieces, i) =>
-      ARMOR_SLOTS[i] === "classItem" ? pinned : pieces,
-    );
-  }, [slotPieces, useDreamersBond, powerRange.dreamersBond, dreamersPiece]);
+    if (powerRange.enabled) return slotPieces;
+    let pieces = slotPieces;
+    if (powerRange.dreamersBond) {
+      const pinned = dreamersPiece ? [dreamersPiece] : [];
+      pieces = pieces.map((slot, i) => (ARMOR_SLOTS[i] === "classItem" ? pinned : slot));
+    }
+    if (powerRange.legacyArmor) {
+      const legacy = classPieces.filter((p) =>
+        inDefaultOptimizerPool(p, {
+          legacyExotics: false,
+          lowerTierArmor: false,
+          legacyArmor: true,
+        }),
+      );
+      pieces = pieces.map((slot, i) => {
+        const name = ARMOR_SLOTS[i];
+        if (name === "classItem") return slot;
+        return [...slot, ...legacy.filter((p) => p.slot === name)];
+      });
+    }
+    return pieces;
+  }, [
+    slotPieces,
+    classPieces,
+    powerRange.enabled,
+    powerRange.dreamersBond,
+    powerRange.legacyArmor,
+    dreamersPiece,
+  ]);
 
   // A stored exotic class item loses to a forced Dreamer's Bond on restore. From then on
   // the exotic picker and the power-range handler keep the two exclusive, so no effect
@@ -558,6 +615,7 @@ export function BuilderPanel({
       setAllowTuning(saved.allowTuning);
       setUseBalancedTuning(saved.balancedTuning);
       setUseLegacyExotics(saved.legacyExotics);
+      setUseLowerTierArmor(saved.lowerTierArmor);
       setPowerRange(saved.powerRange);
       setActiveSubclass(saved.activeSubclass);
       setFragSel(fragSelFromArrays(saved.fragSel));
@@ -598,6 +656,7 @@ export function BuilderPanel({
         allowTuning,
         balancedTuning: useBalancedTuning,
         legacyExotics: useLegacyExotics,
+        lowerTierArmor: useLowerTierArmor,
         powerRange,
         activeSubclass,
         fragSel: fragSelToArrays(fragSel),
@@ -619,6 +678,7 @@ export function BuilderPanel({
     allowTuning,
     useBalancedTuning,
     useLegacyExotics,
+    useLowerTierArmor,
     powerRange,
     activeSubclass,
     fragSel,
@@ -781,6 +841,7 @@ export function BuilderPanel({
       allowTuning,
       balancedTuning: useBalancedTuning,
       legacyExotics: useLegacyExotics,
+      lowerTierArmor: useLowerTierArmor,
       powerRange,
       activeSubclass,
       fragmentHashes: [...fragSel[activeSubclass]],
@@ -795,6 +856,7 @@ export function BuilderPanel({
       allowTuning,
       useBalancedTuning,
       useLegacyExotics,
+      useLowerTierArmor,
       powerRange,
       activeSubclass,
       fragSel,
@@ -872,23 +934,23 @@ export function BuilderPanel({
   );
 
   return (
-    <div className="mx-auto grid w-full max-w-7xl grid-cols-1 gap-10 lg:grid-cols-[minmax(18rem,33.12rem)_minmax(29rem,1fr)] lg:items-start lg:gap-x-20">
-      {/* Left — configure the build. 33.12rem cap so the builds column is 15%
-          wider at max-w-7xl. Sections: 1px dividers, 32px above and below. */}
-      <div className="divide-y divide-foreground/10">
-        {ready && (
+    <div className="grid h-full min-h-0 w-full flex-1 grid-cols-1 gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,39.74rem)_5rem_minmax(29rem,calc(80rem-39.74rem-5rem))_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)] lg:gap-x-0">
+      {/* Settings scroller spans the left leftover + the card column, so
+          wheel-scrolling anywhere to the left of the cards still moves this
+          pane. Inner max-width keeps the cards on the 39.74rem track. */}
+      <div className="d2-scroll flex min-h-0 flex-col lg:col-start-1 lg:col-end-3 lg:overflow-y-auto lg:overscroll-contain lg:pl-6 lg:pr-2">
+        <div className="flex flex-col gap-4 lg:ml-auto lg:w-full lg:max-w-[39.74rem]">
+          {ready && (
           <>
             {classes.length > 1 && classType !== null && (
-              <div className="pb-8">
-                <ClassEmblemTabs
-                  characters={armory?.characters ?? []}
-                  value={classType}
-                  onChange={onClassChange}
-                />
-              </div>
+              <ClassEmblemTabs
+                characters={armory?.characters ?? []}
+                value={classType}
+                onChange={onClassChange}
+              />
             )}
 
-            <Section title="Stat targets" detail={CLASS_NAMES[classType ?? -1]}>
+            <Section title="Stats">
               <div className="space-y-7">
                 {STAT_DISPLAY_ORDER.map((key) => {
                   const i = STAT_ORDER.indexOf(key);
@@ -907,12 +969,12 @@ export function BuilderPanel({
               </div>
             </Section>
 
-            <Section title="Major mods" detail={`${major} of ${MAX_MODS}`} className="space-y-3">
+            <Section title="Major mods">
               <Tabs
                 value={String(major)}
                 onValueChange={(v) => setMajor(Number(v))}
               >
-                <TabsList variant="default" aria-label="Major stat mods">
+                <TabsList variant="icon" aria-label="Major stat mods">
                   {[0, 1, 2, 3, 4, 5].map((n) => (
                     <TabsTrigger key={n} value={String(n)}>
                       {n}
@@ -922,27 +984,25 @@ export function BuilderPanel({
               </Tabs>
             </Section>
 
-            <Section title="Exotic" detail={selectedExoticOption?.name ?? "Any"}>
+            <Section title="Exotic">
               <ExoticPicker
                 options={exotics}
                 selected={selectedExotic}
                 onSelect={onExoticSelect}
               />
               {spiritPerks && !useDreamersBond && (
-                <div className="mt-4">
-                  <ExoticClassPerkPicker
-                    left={spiritPerks.left}
-                    right={spiritPerks.right}
-                    selected={exoticPerks}
-                    onChange={setExoticPerks}
-                    statIcons={statIcons}
-                  />
-                </div>
+                <ExoticClassPerkPicker
+                  left={spiritPerks.left}
+                  right={spiritPerks.right}
+                  selected={exoticPerks}
+                  onChange={setExoticPerks}
+                  statIcons={statIcons}
+                />
               )}
             </Section>
 
-            <Section title="Set bonuses" className="space-y-0">
-              <div className="space-y-2 pt-1">
+            <Section title="Set bonuses">
+              <div className="space-y-2">
                 <div className="relative">
                   <MagnifyingGlass
                     className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 z-10 size-4 -translate-y-1/2"
@@ -966,11 +1026,11 @@ export function BuilderPanel({
                 />
               </div>
               {sets.length === 0 ? (
-                <p className="text-muted-foreground pt-4 text-xs">
+                <p className="text-muted-foreground text-xs">
                   No set-bonus armor found for this class.
                 </p>
               ) : pinnedList.length === 0 && unpinnedList.length === 0 ? (
-                <p className="text-muted-foreground pt-4 text-xs">
+                <p className="text-muted-foreground text-xs">
                   {setQuery.trim() && customSetFilters
                     ? `No sets match "${setQuery.trim()}" with the current settings.`
                     : setQuery.trim()
@@ -981,7 +1041,7 @@ export function BuilderPanel({
                 </p>
               ) : (
                 // Figma 17:5731: name · 2pc perk · 4pc perk columns, 16px row gap
-                <div className="grid grid-cols-[minmax(0,1.4fr)_minmax(0,0.75fr)_minmax(0,1fr)] items-center gap-x-4 gap-y-4 pt-4">
+                <div className="grid grid-cols-[minmax(0,1.4fr)_minmax(0,0.75fr)_minmax(0,1fr)] items-center gap-x-4 gap-y-4">
                   {pinnedList.map((s) => (
                     <SetRow
                       key={s.setHash}
@@ -1012,7 +1072,7 @@ export function BuilderPanel({
               )}
             </Section>
 
-            <Section title="Fragments" detail={activeSubclass}>
+            <Section title="Fragments">
               {fragments && (
                 <FragmentPicker
                   fragments={fragments}
@@ -1028,26 +1088,20 @@ export function BuilderPanel({
               )}
             </Section>
 
-            <Section title="Tier-5 tuning" detail={allowTuning ? "On" : "Off"}>
-              <TuningControls
-                allowTuning={allowTuning}
-                onAllowTuningChange={setAllowTuning}
-                useBalancedTuning={useBalancedTuning}
-                onUseBalancedTuningChange={setUseBalancedTuning}
-              />
-            </Section>
-
-            <Section title="Power" detail={powerRange.enabled ? "Ranged" : "Any"}>
-              <PowerRangeControls
-                value={powerRange}
-                onChange={onPowerRangeChange}
-                slotPieces={powerSlotPieces}
-                dreamersItemName={dreamersClassItemName(classType ?? 2)}
-              />
-            </Section>
-
-            <Section title="Armor pool">
-              <div className="space-y-3">
+            <Section title="Additional settings">
+              <div className="space-y-6">
+                <TuningControls
+                  allowTuning={allowTuning}
+                  onAllowTuningChange={setAllowTuning}
+                  useBalancedTuning={useBalancedTuning}
+                  onUseBalancedTuningChange={setUseBalancedTuning}
+                />
+                <PowerRangeControls
+                  value={powerRange}
+                  onChange={onPowerRangeChange}
+                  slotPieces={powerSlotPieces}
+                  dreamersItemName={dreamersClassItemName(classType ?? 2)}
+                />
                 <div className="flex items-center justify-between gap-4">
                   <div className="space-y-0.5">
                     <span className="text-sm font-medium">Legacy exotics</span>
@@ -1064,15 +1118,16 @@ export function BuilderPanel({
                 </div>
                 <div className="flex items-center justify-between gap-4">
                   <div className="space-y-0.5">
-                    <span className="text-sm font-medium">Legacy legendaries</span>
+                    <span className="text-sm font-medium">Lower-tier armor</span>
                     <p className="text-muted-foreground text-xs">
-                      Not possible yet.
+                      Include Tier 1–4 Armor 3.0 legendaries. They can&apos;t be
+                      tuned, but they still count toward set bonuses.
                     </p>
                   </div>
                   <Switch
-                    checked={false}
-                    disabled
-                    aria-label="Include legacy legendaries (not possible yet)"
+                    checked={useLowerTierArmor}
+                    onCheckedChange={setUseLowerTierArmor}
+                    aria-label="Include lower-tier Armor 3.0 legendaries"
                   />
                 </div>
               </div>
@@ -1092,10 +1147,13 @@ export function BuilderPanel({
           </div>
         )}
       </div>
+      </div>
 
-      {/* Right — builds. */}
-      <div className="min-w-0">
-        <BuildsSurface {...buildsProps} />
+      {/* Builds scroller spans the results column + the right leftover. */}
+      <div className="d2-scroll min-h-0 min-w-0 lg:col-start-4 lg:col-end-6 lg:overflow-y-auto lg:overscroll-contain lg:pr-6 lg:pl-2">
+        <div className="lg:max-w-[calc(80rem-39.74rem-5rem)]">
+          <BuildsSurface {...buildsProps} />
+        </div>
       </div>
     </div>
   );
@@ -1104,21 +1162,21 @@ export function BuilderPanel({
 
 function Section({
   title,
-  detail,
   className,
   children,
 }: {
   title?: string;
-  /** Secondary text after the "//" separator in the heading. */
-  detail?: ReactNode;
   className?: string;
   children: ReactNode;
 }) {
   return (
-    <section className={cn("space-y-4 py-8 first:pt-0", className)}>
-      {title ? (
-        <SectionHeading detail={detail}>{title}</SectionHeading>
-      ) : null}
+    <section
+      className={cn(
+        "d2-card-frame relative flex flex-col gap-3 rounded-none p-3 [--card-line-width:1.5px] hover:[--line-alpha:1.6]",
+        className,
+      )}
+    >
+      {title ? <SectionHeading>{title}</SectionHeading> : null}
       {children}
     </section>
   );

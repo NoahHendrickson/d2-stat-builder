@@ -2,9 +2,8 @@
 
 import { memo } from "react";
 import { TooltipLabel } from "@/components/ui/tooltip";
-import Image from "next/image";
 import { cn } from "@/lib/utils";
-import { BUNGIE_IMAGE_BASE } from "@/lib/bungie/constants";
+import { ArmorThumb } from "@/components/armor-thumb";
 import { Button } from "@/components/ui/button";
 
 export interface ExoticOption {
@@ -13,15 +12,18 @@ export interface ExoticOption {
   hashes: number[];
   /** Relative Bungie icon path, if any. */
   icon?: string;
+  watermark?: string;
+  isTier5?: boolean;
 }
 
 /**
- * Inventory cells: 44px squares in a tight grid, each framed with the exotic
- * gold line and its darker lip. Unselected cells sit dimmed and come up on
- * hover with the white outline; the selected one keeps the outline + glow.
+ * Inventory cells: 44px squares in a tight grid. Armor 3.0 tiles get the
+ * gold glow frame; Armor 2.0 / un-tiered ones stay a plain icon. Unselected
+ * cells sit dimmed and come up on hover with the white outline; the selected
+ * one keeps the outline + glow.
  */
 const tileBase =
-  "group/tile relative size-11 shrink-0 overflow-hidden rounded-none d2-tile-exotic outline-none transition-[opacity,box-shadow,filter] focus-visible:d2-tile-selected";
+  "group/tile relative size-11 shrink-0 overflow-hidden rounded-none outline-none transition-[opacity,box-shadow,filter] focus-visible:d2-tile-selected";
 
 const tileInactive =
   "opacity-60 saturate-[0.8] hover:opacity-100 hover:saturate-100 hover:d2-tile-selected";
@@ -64,13 +66,13 @@ export const ExoticPicker = memo(function ExoticPicker({
                 className={cn(tileBase, active ? tileSelected : tileInactive)}
               >
                 {exotic.icon ? (
-                  <Image
-                    src={`${BUNGIE_IMAGE_BASE}${exotic.icon}`}
+                  <ArmorThumb
+                    icon={exotic.icon}
+                    watermark={exotic.watermark}
                     alt={exotic.name}
-                    fill
-                    sizes="44px"
-                    className="object-cover"
-                    unoptimized
+                    size={44}
+                    exoticFrame
+                    isTier5={exotic.isTier5}
                   />
                 ) : (
                   <span className="flex size-full items-center justify-center bg-exotic/20 text-xs text-exotic-line">

@@ -55,11 +55,13 @@ const builder = () => ({
   allowTuning: true,
   balancedTuning: true,
   legacyExotics: false,
+  lowerTierArmor: true,
   powerRange: {
     enabled: true,
     bounds: { min: 287, max: 292 },
     weapons: [290, null, 295],
     dreamersBond: true,
+    legacyArmor: false,
   },
   activeSubclass: "Prismatic",
   fragmentHashes: [1, 2],
@@ -131,12 +133,13 @@ describe("parseBuilderSnapshot", () => {
     expect(out).not.toHaveProperty("festivalMasks");
   });
   test("round-trips the power range and defaults it off when missing or malformed", () => {
-    const off = { enabled: false, bounds: null, weapons: [null, null, null], dreamersBond: false };
+    const off = { enabled: false, bounds: null, weapons: [null, null, null], dreamersBond: false, legacyArmor: false };
     expect(parseBuilderSnapshot(builder())?.powerRange).toEqual({
       enabled: true,
       bounds: { min: 287, max: 292 },
       weapons: [290, null, 295],
       dreamersBond: true,
+      legacyArmor: false,
     });
     const old = builder() as { powerRange?: unknown };
     delete old.powerRange;
@@ -151,6 +154,7 @@ describe("parseBuilderSnapshot", () => {
       bounds: { min: 290, max: 300 },
       weapons: [null, null, null],
       dreamersBond: false,
+      legacyArmor: false,
     });
     expect(
       parseBuilderSnapshot({
@@ -162,7 +166,7 @@ describe("parseBuilderSnapshot", () => {
     expect(
       parseBuilderSnapshot({ ...builder(), powerRange: { enabled: true, bounds: null } })
         ?.powerRange,
-    ).toEqual({ enabled: true, bounds: null, weapons: [null, null, null], dreamersBond: false });
+    ).toEqual({ enabled: true, bounds: null, weapons: [null, null, null], dreamersBond: false, legacyArmor: false });
     // Malformed weapons drop to "nothing entered" without losing the range itself.
     expect(
       parseBuilderSnapshot({
@@ -174,6 +178,7 @@ describe("parseBuilderSnapshot", () => {
       bounds: { min: 287, max: 292 },
       weapons: [null, null, null],
       dreamersBond: false,
+      legacyArmor: false,
     });
   });
   test("rejects an unknown subclass", () => {

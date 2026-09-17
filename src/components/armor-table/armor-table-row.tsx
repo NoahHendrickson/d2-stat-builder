@@ -13,6 +13,7 @@ import {
 import { statLabel } from "@/lib/armor-table/sort";
 import { Badge } from "@/components/ui/badge";
 import { ArmorRowActions } from "@/components/armor-table/armor-row-actions";
+import { ArmorThumb } from "@/components/armor-thumb";
 
 export const COLUMN_COUNT = 13;
 
@@ -65,14 +66,24 @@ export const ArmorRow = memo(function ArmorRow({
       <td className="overflow-hidden py-2 pr-3 pl-3">
         <div className="flex items-center gap-2">
           {piece.icon ? (
-            <Image
-              src={`${BUNGIE_IMAGE_BASE}${piece.icon}`}
-              alt=""
-              width={32}
-              height={32}
-              className={piece.isExotic ? "d2-tile-exotic size-8 shrink-0" : "d2-tile size-8 shrink-0"}
-              unoptimized
-            />
+            piece.isExotic ? (
+              <ArmorThumb
+                icon={piece.icon}
+                watermark={piece.watermark}
+                size={32}
+                exoticFrame
+                isTier5={piece.tunedStat !== undefined}
+              />
+            ) : (
+              <Image
+                src={`${BUNGIE_IMAGE_BASE}${piece.icon}`}
+                alt=""
+                width={32}
+                height={32}
+                className="d2-tile size-8 shrink-0"
+                unoptimized
+              />
+            )
           ) : (
             <span className="d2-brackets bg-black/25 size-8 shrink-0" aria-hidden />
           )}

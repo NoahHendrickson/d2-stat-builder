@@ -261,7 +261,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       >
         <div
           className={cn(
-            "d2-slate relative flex h-full min-h-0 flex-col",
+            "d2-sidebar relative flex h-full min-h-0 flex-col",
             slideTransition && `transition-transform ${slideTransition}`,
           )}
           style={{
@@ -304,7 +304,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         />
       )}
 
-      <div className="d2-slate flex min-h-0 min-w-0 flex-1 flex-col">
+      <div className="d2-sidebar flex min-h-0 min-w-0 flex-1 flex-col">
         <header className="flex h-14 shrink-0 items-stretch gap-2 border-b border-foreground/8 pr-2 pl-1 lg:hidden">
           <div className="flex items-center">
             <TooltipLabel label="Open loadouts">
@@ -351,7 +351,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           onOpenChange={setDrawerOpen}
           swipeDirection="left"
         >
-          <DrawerContent aria-label="Loadouts" className="d2-slate">
+          <DrawerContent aria-label="Loadouts" className="d2-sidebar">
             <div className="flex shrink-0 justify-end px-2 pt-2">
               <TooltipLabel label="Close loadouts">
                 <DrawerClose

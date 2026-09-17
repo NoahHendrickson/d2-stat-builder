@@ -6,6 +6,7 @@ import { Check, CircleNotch, X } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { TooltipLabel } from "@/components/ui/tooltip";
 import { BUNGIE_IMAGE_BASE } from "@/lib/bungie/constants";
+import { ArmorThumb } from "@/components/armor-thumb";
 import {
   dismissApplyProgress,
   getApplyProgress,
@@ -42,26 +43,39 @@ function Cell({ step }: { step: ApplyStep }) {
         )}
       >
         {step.icon ? (
-          <Image
-            src={`${BUNGIE_IMAGE_BASE}${step.icon}`}
-            alt=""
-            width={32}
-            height={32}
-            className="size-full rounded-none"
-            unoptimized
-          />
+          step.isExotic ? (
+            <ArmorThumb
+              icon={step.icon}
+              watermark={step.watermark}
+              size={32}
+              exoticFrame
+              isTier5={step.isTier5}
+              className="size-full"
+            />
+          ) : (
+            <>
+              <Image
+                src={`${BUNGIE_IMAGE_BASE}${step.icon}`}
+                alt=""
+                width={32}
+                height={32}
+                className="size-full rounded-none"
+                unoptimized
+              />
+              {step.watermark && (
+                <Image
+                  src={`${BUNGIE_IMAGE_BASE}${step.watermark}`}
+                  alt=""
+                  width={32}
+                  height={32}
+                  className="absolute inset-0 size-full rounded-none"
+                  unoptimized
+                />
+              )}
+            </>
+          )
         ) : (
           <span className="bg-muted block size-full" aria-hidden />
-        )}
-        {step.watermark && (
-          <Image
-            src={`${BUNGIE_IMAGE_BASE}${step.watermark}`}
-            alt=""
-            width={32}
-            height={32}
-            className="absolute inset-0 size-full rounded-none"
-            unoptimized
-          />
         )}
         {step.status === "active" && (
           <span className="absolute inset-0 flex items-center justify-center bg-black/40">

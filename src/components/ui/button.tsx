@@ -24,7 +24,7 @@ const buttonVariants = cva(
           "d2-line d2-hover-ring bg-transparent text-foreground hover:[--line-alpha:1.6] hover:bg-foreground/6 aria-expanded:[--line-alpha:1.6] aria-expanded:bg-foreground/6",
         emphatic:
           // Figma 69:1430: green with the centre-bright gradient line (d2-equip),
-          // Futura Medium 12px with no extra tracking.
+          // 12px uppercase EQUIP label in Geist, with the centre-bright line.
           "d2-heading d2-equip d2-hover-ring rounded-none text-xs tracking-[0.02em] text-emphatic-foreground hover:[--equip-fill:var(--emphatic-light)] hover:d2-line-drift aria-expanded:[--equip-fill:var(--emphatic-light)]",
         ghost:
           "rounded-[10px] border-transparent text-foreground hover:bg-foreground/8 aria-expanded:bg-foreground/8",

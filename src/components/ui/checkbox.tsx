@@ -5,7 +5,7 @@ import { Checkbox as CheckboxPrimitive } from "@base-ui/react/checkbox"
 import { cn } from "@/lib/utils"
 import { CheckboxCheckIcon } from "@/components/ui/checkbox-check-icon"
 
-/** 4px selection box: hairline frame on a lifted well, white plate with a dark check when on. */
+/** Square selection box: default-button line and hover ring; EQUIP green when checked. */
 function Checkbox({
   className,
   size = "default",
@@ -18,7 +18,7 @@ function Checkbox({
       data-slot="checkbox"
       data-size={size}
       className={cn(
-        "peer group/checkbox relative flex shrink-0 items-center justify-center rounded-[4px] border border-input bg-lifted transition-colors outline-none group-has-disabled/field:opacity-40 after:absolute after:-inset-x-3 after:-inset-y-2 hover:border-foreground/40 focus-visible:border-outline-strong focus-visible:shadow-[0_0_0_1px_var(--outline-strong)] disabled:cursor-not-allowed disabled:opacity-40 aria-invalid:border-destructive data-[size=default]:size-4 data-[size=lg]:size-5",
+        "peer group/checkbox relative flex shrink-0 items-center justify-center rounded-none d2-line d2-hover-ring bg-lifted transition-[background-color,border-color,color,box-shadow] outline-none group-has-disabled/field:opacity-40 after:absolute after:-inset-x-3 after:-inset-y-2 hover:[--line-alpha:1.6] hover:not-data-checked:bg-foreground/8 focus-visible:[--line-alpha:2.6] disabled:cursor-not-allowed disabled:opacity-40 aria-invalid:border-destructive data-[size=default]:size-4 data-[size=lg]:size-5",
         className
       )}
       {...props}

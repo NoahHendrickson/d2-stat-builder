@@ -154,7 +154,7 @@ export const LoadoutRow = memo(function LoadoutRow({
   };
 
   return (
-    <div className="d2-card-frame mx-2 flex flex-col gap-3 p-3 hover:[--line-alpha:1.6]">
+    <div className="d2-card-frame mx-2 flex flex-col gap-3 p-3 [--card-line-width:1.5px] hover:[--line-alpha:1.6]">
       <div className="flex flex-col gap-2">
         <div className="flex h-8 items-center justify-between gap-2">
           <TooltipLabel

@@ -26,6 +26,7 @@ import { StatGlyph } from "@/components/stat-glyph";
 import { statIconsFromManifest } from "@/lib/manifest/stat-icons";
 import { sumEditorStats } from "@/lib/loadouts/editor-stats";
 import { BUNGIE_IMAGE_BASE } from "@/lib/bungie/constants";
+import { ArmorThumb } from "@/components/armor-thumb";
 import type { ModOption, ModOptionCatalog } from "@/lib/loadouts/mod-options";
 import {
   chosenCount,
@@ -232,31 +233,17 @@ function StatModChip({
   );
 }
 
-/** Square piece art: the exotic-gold frame with an inset glow, T5 rail + pips. */
+/** Square piece art: T5 overlay (watermark, pips, gold frame) only when the piece is tiered. */
 function PieceThumb({ piece }: { piece: ArmorPiece }) {
-  const tier5 = piece.tunedStat !== undefined;
+  const tiered = piece.tunedStat !== undefined;
   return (
-    <span className="relative size-16 shrink-0 overflow-hidden">
-      <ItemIcon
-        icon={piece.icon}
-        watermark={piece.watermark}
-        size={64}
-        className="rounded-none"
-      />
-      {tier5 && (
-        <img
-          src="/loadout/tier-5-pips.svg"
-          alt=""
-          width={7}
-          height={38}
-          className="pointer-events-none absolute top-[21px] left-1.5 h-[38px] w-[7.14px]"
-        />
-      )}
-      <span
-        className="pointer-events-none absolute inset-0 border-2 border-exotic-line shadow-[inset_0_0_12px_rgba(255,240,107,0.5)]"
-        aria-hidden
-      />
-    </span>
+    <ArmorThumb
+      icon={piece.icon}
+      watermark={piece.watermark}
+      size={64}
+      exoticFrame={tiered}
+      isTier5={tiered}
+    />
   );
 }
 
@@ -973,7 +960,7 @@ export function LoadoutEditorDrawer({
     >
       <DrawerContent
         aria-label={form.title}
-        className="d2-slate rounded-none border-t border-foreground/8 shadow-[0_-12px_40px_rgba(0,0,0,0.45)] data-[swipe-axis=y]:[--drawer-content-max-height:min(80dvh,60rem)] [--bleed:0px] [--drawer-bleed-background:var(--color-sidebar)]"
+        className="d2-slate d2-line bg-panel-strong rounded-none border-[1.5px] border-transparent shadow-none [--line-width:1.5px] data-[swipe-axis=y]:[--drawer-content-max-height:min(80dvh,60rem)] [--bleed:0px] [--drawer-bleed-background:var(--panel-strong)]"
         // Over the main column only — past the sidebar. `--app-sidebar-width` is 0 below `lg`.
         style={{
           left: "var(--app-sidebar-width, 0px)",

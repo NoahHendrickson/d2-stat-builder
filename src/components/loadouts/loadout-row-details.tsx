@@ -6,10 +6,10 @@ import {
   TooltipLabel,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Fragment } from "react";
+import { Fragment, type CSSProperties } from "react";
 import Image from "next/image";
 import type { ArmoryCharacter } from "@/lib/armory/fetch";
-import { buildFragmentStats, formatFragmentStats } from "@/lib/armory/fragments";
+import { buildFragmentStats, formatFragmentStats, SUBCLASS_LINE, subclassFromPlugCategory, type Subclass } from "@/lib/armory/fragments";
 import { ABILITY_KINDS, ABILITY_LABELS, isStrandSharedAbilityIcon } from "@/lib/dim/subclasses";
 import {
   STRAND_ABILITY_PLATE_FILTER,
@@ -32,7 +32,9 @@ import type { ResolvedLoadout } from "@/lib/loadouts/resolve";
 import { loadoutHashtags, type SavedLoadout } from "@/lib/loadouts/types";
 import { StatGlyph } from "@/components/stat-glyph";
 import { Badge } from "@/components/ui/badge";
+import { ArmorThumb } from "@/components/armor-thumb";
 import { cn } from "@/lib/utils";
+import { itemWatermark } from "@/lib/armory/normalize";
 
 const STAT_COLS = STAT_DISPLAY_ORDER.map((key) => ({
   key,
@@ -50,15 +52,18 @@ function PlugIcon({
   size = 24,
   className,
   classType,
+  element,
 }: {
   hash: number;
   manifest: Manifest;
   dim?: boolean;
   suffix?: string;
-  size?: 16 | 20 | 24;
+  size?: 16 | 20 | 24 | 32;
   className?: string;
   /** When set, append armor-stat bonuses (fragments' +10 / −10). */
   classType?: number;
+  /** Subclass damage type — tints the tile frame (aspects / fragments). */
+  element?: Subclass;
 }) {
   const def = manifest.def("DestinyInventoryItemDefinition", hash);
   const name = def?.displayProperties?.name ?? `#${hash}`;
@@ -72,7 +77,20 @@ function PlugIcon({
   const label = stats ? `${title}\n${stats}` : title;
   const icon = def?.displayProperties?.icon;
   const recolor = isStrandSharedAbilityIcon(def?.plug?.plugCategoryIdentifier);
-  const sizeClass = size === 16 ? "size-4" : size === 20 ? "size-5" : "size-6";
+  const plugElement =
+    subclassFromPlugCategory(def?.plug?.plugCategoryIdentifier) ?? element;
+  const sizeClass =
+    size === 16
+      ? "size-4"
+      : size === 20
+        ? "size-5"
+        : size === 32
+          ? "size-8"
+          : "size-6";
+  const tileClass = plugElement ? "d2-tile-element" : undefined;
+  const tileStyle = plugElement
+    ? ({ "--element-line": SUBCLASS_LINE[plugElement] } as CSSProperties)
+    : undefined;
   return icon ? (
     <TooltipLabel label={label}>
       <span
@@ -81,6 +99,7 @@ function PlugIcon({
           "relative inline-flex shrink-0",
           recolor && "isolate",
         )}
+        style={tileStyle}
         tabIndex={0}
       >
         <Image
@@ -92,6 +111,7 @@ function PlugIcon({
             sizeClass,
             "rounded-none",
             dim && "opacity-40 grayscale",
+            tileClass,
             className,
           )}
           style={recolor ? { filter: STRAND_ABILITY_PLATE_FILTER } : undefined}
@@ -107,8 +127,10 @@ function PlugIcon({
           "bg-muted shrink-0 rounded-none",
           sizeClass,
           dim && "opacity-40",
+          tileClass,
           className,
         )}
+        style={tileStyle}
         tabIndex={0}
         aria-label={label}
       />
@@ -123,14 +145,27 @@ function ManifestIcon({
   size,
   className,
   showTooltip = true,
+  element,
 }: {
   showTooltip?: boolean;
   icon?: string;
   label: string;
-  size: 12 | 16 | 24;
+  size: 12 | 16 | 24 | 32;
   className?: string;
+  element?: Subclass;
 }) {
-  const sizeClass = size === 12 ? "size-3" : size === 24 ? "size-6" : "size-4";
+  const sizeClass =
+    size === 12
+      ? "size-3"
+      : size === 24
+        ? "size-6"
+        : size === 32
+          ? "size-8"
+          : "size-4";
+  const tileClass = element ? "d2-tile-element" : undefined;
+  const tileStyle = element
+    ? ({ "--element-line": SUBCLASS_LINE[element] } as CSSProperties)
+    : undefined;
   return icon ? (
     <TooltipLabel label={showTooltip ? label : undefined}>
       <Image
@@ -139,14 +174,16 @@ function ManifestIcon({
         tabIndex={showTooltip ? 0 : undefined}
         width={size}
         height={size}
-        className={cn(sizeClass, "shrink-0", className)}
+        className={cn(sizeClass, "shrink-0", tileClass, className)}
+        style={tileStyle}
         unoptimized
       />
     </TooltipLabel>
   ) : (
     <TooltipLabel label={showTooltip ? label : undefined}>
       <span
-        className={cn("bg-muted shrink-0 rounded-none", sizeClass, className)}
+        className={cn("bg-muted shrink-0 rounded-none", sizeClass, tileClass, className)}
+        style={tileStyle}
         tabIndex={showTooltip ? 0 : undefined}
       />
     </TooltipLabel>
@@ -154,7 +191,7 @@ function ManifestIcon({
 }
 
 function ChipDivider() {
-  return <span className="h-4 w-px shrink-0 bg-foreground/8" aria-hidden />;
+  return <span className="h-8 w-px shrink-0 bg-foreground/8" aria-hidden />;
 }
 
 function DetailRow({
@@ -214,6 +251,9 @@ export function LoadoutRowDetails({
   const exoticDef = manifest.def("DestinyInventoryItemDefinition", exoticHash);
   const exoticIcon = exoticDef?.displayProperties?.icon;
   const exoticName = exoticDef?.displayProperties?.name ?? "Exotic";
+  const exoticPiece = resolved.armor.find((a) => a.piece?.isExotic)?.piece;
+  const exoticWatermark =
+    exoticPiece?.watermark ?? itemWatermark(exoticDef);
 
   // Set bonuses → the perk each piece count unlocks (its icon is the set's glyph).
   const setBonuses = Object.entries(loadout.parameters.setBonuses ?? {}).map(
@@ -305,15 +345,16 @@ export function LoadoutRowDetails({
           <div className="flex h-8 items-center gap-2 overflow-hidden">
             {exoticIcon && (
               <TooltipLabel label={exoticName} delay={100}>
-                <Image
-                  src={`${BUNGIE_IMAGE_BASE}${exoticIcon}`}
-                  alt={exoticName}
-                  width={24}
-                  height={24}
-                  className="size-6 shrink-0"
-                  tabIndex={0}
-                  unoptimized
-                />
+                <span tabIndex={0} className="inline-flex outline-none">
+                  <ArmorThumb
+                    icon={exoticIcon}
+                    watermark={exoticWatermark}
+                    alt={exoticName}
+                    size={32}
+                    exoticFrame
+                    isTier5={exoticPiece?.tunedStat !== undefined}
+                  />
+                </span>
               </TooltipLabel>
             )}
             {exoticIcon && setBonuses.length > 0 && <ChipDivider />}
@@ -357,8 +398,12 @@ export function LoadoutRowDetails({
                 <ManifestIcon
                   icon={superIcon}
                   label={superLabel}
-                  size={24}
-                  className="d2-tile"
+                  size={32}
+                  className="rounded-none"
+                  element={
+                    subclassFromPlugCategory(superDef?.plug?.plugCategoryIdentifier) ??
+                    subclass.subclass
+                  }
                 />
                 {abilityChips.map(({ kind, hash }) => (
                   <PlugIcon
@@ -366,8 +411,9 @@ export function LoadoutRowDetails({
                     hash={hash}
                     manifest={manifest}
                     suffix={ABILITY_LABELS[kind]}
-                    size={24}
-                    className="d2-tile rounded-none"
+                    size={32}
+                    className="rounded-none"
+                    element={subclass.subclass}
                   />
                 ))}
                 {subclass.aspectHashes.map((hash) => (
@@ -375,8 +421,9 @@ export function LoadoutRowDetails({
                     key={hash}
                     hash={hash}
                     manifest={manifest}
-                    size={24}
-                    className="d2-tile rounded-none"
+                    size={32}
+                    className="rounded-none"
+                    element={subclass.subclass}
                   />
                 ))}
                 {subclass.fragmentHashes.map((hash, i) => (
@@ -384,9 +431,10 @@ export function LoadoutRowDetails({
                     key={`${hash}-${i}`}
                     hash={hash}
                     manifest={manifest}
-                    size={24}
-                    className="d2-tile rounded-none"
+                    size={32}
+                    className="rounded-none"
                     classType={loadout.classType}
+                    element={subclass.subclass}
                   />
                 ))}
               </span>
@@ -441,18 +489,28 @@ export function LoadoutRowDetails({
                 <Fragment key={`${a.ref.id ?? a.ref.hash}-${idx}`}>
                   <div className="flex min-w-0 items-center gap-1.5">
                     {a.icon ? (
-                      <Image
-                        src={`${BUNGIE_IMAGE_BASE}${a.icon}`}
-                        alt=""
-                        width={20}
-                        height={20}
-                        className={cn(
-                          "size-5 shrink-0 rounded-none",
-                          a.piece?.isExotic ? "d2-tile-exotic" : "d2-tile",
-                          a.missing && "opacity-50",
-                        )}
-                        unoptimized
-                      />
+                      a.piece?.isExotic ? (
+                        <ArmorThumb
+                          icon={a.icon}
+                          watermark={a.piece.watermark}
+                          size={20}
+                          exoticFrame
+                          isTier5={a.piece.tunedStat !== undefined}
+                          className={a.missing ? "opacity-50" : undefined}
+                        />
+                      ) : (
+                        <Image
+                          src={`${BUNGIE_IMAGE_BASE}${a.icon}`}
+                          alt=""
+                          width={20}
+                          height={20}
+                          className={cn(
+                            "size-5 shrink-0 rounded-none d2-tile",
+                            a.missing && "opacity-50",
+                          )}
+                          unoptimized
+                        />
+                      )
                     ) : (
                       <span
                         className="d2-brackets bg-black/25 size-5 shrink-0"

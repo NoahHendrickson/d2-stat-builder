@@ -103,7 +103,11 @@ function CascadeFacetSubmenu<V extends string | number>({
           </span>
         ) : null}
       </DropdownMenuSubTrigger>
-      <DropdownMenuSubContent side="inline-end" align="start" className="w-64">
+      <DropdownMenuSubContent
+        side="inline-end"
+        align="start"
+        className={searchable ? "w-64" : "w-max"}
+      >
         <FilterMultiselectPanel
           allLabel={allLabel}
           options={options}

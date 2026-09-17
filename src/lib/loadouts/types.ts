@@ -283,6 +283,7 @@ export function parseBuilderSnapshot(v: unknown): BuilderSnapshot | null {
     balancedTuning: v.balancedTuning,
     legacyExotics: v.legacyExotics,
     // Added after the first snapshots shipped: default off when absent.
+    lowerTierArmor: v.lowerTierArmor === true,
     powerRange: parsePowerRange(v.powerRange),
     activeSubclass: v.activeSubclass as Subclass,
     fragmentHashes,

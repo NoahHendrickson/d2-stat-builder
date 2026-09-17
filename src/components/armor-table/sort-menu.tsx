@@ -33,8 +33,8 @@ import {
 } from "@/lib/armor-table/sort";
 import { CustomOrderList } from "@/components/armor-table/custom-order-list";
 
-/** Opaque stand-in for Figma's 16% black overlay — translucent fills show rows through sticky headers. */
-export const TABLE_HEADER_BG = "bg-black/40";
+/** Same grey-slate fill as dropdown menus (`d2-glass` / `--glass`), without the floating line or shadow. */
+export const TABLE_HEADER_BG = "d2-sidebar";
 
 const TABLE_HEAD_CELL =
   "d2-label border-b border-foreground/15 py-2.5 pr-3 whitespace-nowrap first:pl-3 " +
