@@ -35,9 +35,9 @@ export function ArmorTablePageShell() {
   }
 
   // Fills the app shell's main area so the table body is the scroll container.
-  // p-6 keeps a gutter from the sidebar (and the other edges), matching the builder.
+  // D2 adds p-6 for a gutter from the sidebar (and the other edges), matching the builder.
   return (
-    <main className="flex h-full min-h-0 w-full flex-col p-6">
+    <main className="flex h-full min-h-0 w-full flex-col d2:p-6">
       <ArmorTable />
     </main>
   );

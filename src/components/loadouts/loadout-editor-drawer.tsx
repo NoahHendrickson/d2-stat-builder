@@ -140,7 +140,7 @@ function ItemIcon({
   return (
     <span
       className={cn(
-        "relative inline-block shrink-0 overflow-hidden rounded-none",
+        "relative inline-block shrink-0 overflow-hidden rounded-sm d2:rounded-none",
         sizeClass,
         className,
       )}
@@ -203,21 +203,21 @@ function StatModChip({
         disabled={disabled}
         onClick={onSlot}
         className={cn(
-          "relative flex size-9 shrink-0 items-center justify-center border border-foreground/30",
-          "outline-none focus-visible:d2-tile-selected",
+          "relative flex size-9 shrink-0 items-center justify-center border border-input d2:border-foreground/30",
+          "classic:focus-visible:ring-ring/50 outline-none classic:focus-visible:ring-[3px] focus-visible:d2-tile-selected",
           slotted
             ? "disabled:cursor-default"
             : blocked
               ? "disabled:cursor-not-allowed"
-              : "hover:border-foreground hover:bg-foreground/8",
+              : "hover:border-emphatic hover:bg-emphatic/6 d2:hover:border-foreground d2:hover:bg-foreground/8",
         )}
       >
         <ItemIcon icon={option?.icon} size={32} className="rounded-none" />
         <span
           className={cn(
-            "absolute -top-1 -right-1 flex size-3.5 items-center justify-center rounded-none",
+            "absolute -top-1 -right-1 flex size-3.5 items-center justify-center rounded-full d2:rounded-none",
             slotted
-              ? "bg-positive text-black"
+              ? "bg-emphatic text-emphatic-foreground d2:bg-positive d2:text-black"
               : "bg-destructive text-white",
           )}
           aria-hidden
@@ -296,24 +296,24 @@ const ModCell = memo(function ModCell({
           aria-disabled={!chosen && blocked}
           onClick={() => onPick(option)}
           className={cn(
-            "relative flex size-14 shrink-0 items-center justify-center rounded-none border p-1 transition-[opacity,border-color,background-color,box-shadow] outline-none focus-visible:d2-tile-selected",
+            "classic:focus-visible:ring-ring relative flex size-14 shrink-0 items-center justify-center rounded-none border p-1 transition-[opacity,border-color,background-color,box-shadow] outline-none classic:focus-visible:ring-2 focus-visible:d2-tile-selected",
             chosen
-              ? "border-foreground bg-foreground/10 cursor-pointer d2-tile-selected"
+              ? "border-emphatic bg-emphatic/6 cursor-pointer d2:border-foreground d2:bg-foreground/10 d2-tile-selected"
               : blocked
                 ? // Flagged mods stay at full strength so the badge reads.
-                  cn("cursor-not-allowed border-foreground/20", !problem && "opacity-40")
-                : "hover:border-foreground/70 hover:bg-foreground/6 focus-visible:bg-foreground/6 cursor-pointer border-foreground/25",
+                  cn("cursor-not-allowed border-input d2:border-foreground/20", !problem && "opacity-40")
+                : "hover:bg-foreground/6 focus-visible:bg-foreground/6 cursor-pointer border-input d2:border-foreground/25 d2:hover:border-foreground/70",
           )}
         >
           <ItemIcon icon={option.icon} size={48} className="rounded-none" />
           {count > 1 && (
-            <span className="bg-foreground text-background absolute -top-1 -right-1 rounded-none px-1 text-[9px] leading-3 font-medium tabular-nums">
+            <span className="bg-emphatic text-emphatic-foreground absolute -top-1 -right-1 rounded-full px-1 text-[9px] leading-3 font-medium tabular-nums d2:rounded-none d2:bg-foreground d2:text-background">
               ×{count}
             </span>
           )}
           {problem && (
             <span
-              className="bg-destructive absolute -top-1 -left-1 flex size-3.5 items-center justify-center rounded-none text-[9px] leading-none font-bold text-white"
+              className="bg-destructive absolute -top-1 -left-1 flex size-3.5 items-center justify-center rounded-full text-[9px] leading-none font-bold text-white d2:rounded-none"
               aria-hidden
             >
               !
@@ -413,7 +413,7 @@ function KindGrid({
       className="space-y-1 text-xs"
     >
       <div className="flex flex-wrap items-baseline justify-between gap-x-2">
-        <span className="d2-label text-[10px]">{heading}</span>
+        <span className="d2-label classic:text-foreground d2:text-[10px]">{heading}</span>
         <span className="text-muted-foreground flex items-baseline gap-1.5 tabular-nums">
           {sockets.length > 1 ? `${used}/${sockets.length} sockets` : used ? "1/1" : "Keeps current"}
           {keeping > 0 && sockets.length > 1 && ` · ${keeping} kept`}
@@ -889,7 +889,7 @@ function EditorForm({
                   <ItemIcon icon={subclassDef?.displayProperties?.icon} size={24} />
                   <div className="flex min-w-0 flex-1 flex-col">
                     <span className="truncate text-sm font-medium">{subclassName}</span>
-                    <span className="d2-label text-[10px]">Subclass</span>
+                    <span className="d2-label d2:text-[10px]">Subclass</span>
                   </div>
                 </div>
                 {/* The column scrolls its options; the drawer body stays put. */}
@@ -960,10 +960,13 @@ export function LoadoutEditorDrawer({
     >
       <DrawerContent
         aria-label={form.title}
-        className="d2-slate d2-line bg-panel-strong rounded-none border-[1.5px] border-transparent shadow-none [--line-width:1.5px] data-[swipe-axis=y]:[--drawer-content-max-height:min(80dvh,60rem)] [--bleed:0px] [--drawer-bleed-background:var(--panel-strong)]"
-        // Over the main column only — past the sidebar. `--app-sidebar-width` is 0 below `lg`.
+        className="d2-slate d2-line rounded-none classic:bg-sidebar shadow-[0_-8px_32px_rgba(0,0,0,0.13)] lg:rounded-b-xl data-[swipe-direction=down]:rounded-none lg:data-[swipe-direction=down]:rounded-b-xl d2:bg-panel-strong d2:border-[1.5px] d2:border-transparent d2:shadow-none d2:lg:rounded-none d2:lg:data-[swipe-direction=down]:rounded-none [--line-width:1.5px] data-[swipe-axis=y]:[--drawer-content-max-height:min(80dvh,60rem)] [--bleed:0px] [--drawer-bleed-background:var(--color-sidebar)] d2:[--drawer-bleed-background:var(--panel-strong)]"
+        // Over the stage card only: past the sidebar, the `lg:p-3` chrome, and
+        // the 1px stage border. `--app-sidebar-width` is 0 below `lg`.
         style={{
-          left: "var(--app-sidebar-width, 0px)",
+          left: "calc(var(--app-sidebar-width, 0px) + var(--app-stage-inset, 0px))",
+          right: "var(--app-stage-inset, 0px)",
+          bottom: "var(--app-stage-inset, 0px)",
         }}
       >
         {open && (

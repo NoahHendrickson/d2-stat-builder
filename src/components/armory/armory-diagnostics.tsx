@@ -21,7 +21,7 @@ export function ArmoryDiagnostics({
   loadError,
 }: ArmoryDiagnosticsProps) {
   return (
-    <div className="space-y-1 rounded-md border border-foreground/10 bg-lifted px-3 py-2 text-xs">
+    <div className="space-y-1 rounded-lg border border-border/60 bg-muted/30 px-3 py-2 text-xs d2:rounded-md d2:border-foreground/10 d2:bg-lifted">
       <p className="text-muted-foreground font-medium">Diagnostics</p>
       <dl className="text-muted-foreground grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5">
         <dt>Linked Destiny profile</dt>

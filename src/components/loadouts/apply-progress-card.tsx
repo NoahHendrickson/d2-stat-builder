@@ -37,8 +37,8 @@ function Cell({ step }: { step: ApplyStep }) {
         className={cn(
           "relative flex aspect-square w-full min-w-0 items-center justify-center border border-input leading-none",
           step.status === "pending" && "opacity-40",
-          step.status === "active" && "border-foreground d2-tile-selected",
-          step.status === "ok" && "border-positive",
+          step.status === "active" && "border-emphatic d2:border-foreground d2-tile-selected",
+          step.status === "ok" && "border-emerald-500 d2:border-positive",
           step.status === "fail" && "border-destructive",
         )}
       >
@@ -83,12 +83,12 @@ function Cell({ step }: { step: ApplyStep }) {
           </span>
         )}
         {step.status === "ok" && (
-          <span className="absolute -top-0.5 -right-1 flex size-3 items-center justify-center rounded-none bg-positive text-black">
+          <span className="absolute -top-0.5 -right-1 flex size-3 items-center justify-center rounded-full bg-emerald-500 text-white d2:rounded-none d2:bg-positive d2:text-black">
             <Check weight="bold" className="size-2" aria-hidden />
           </span>
         )}
         {step.status === "fail" && (
-          <span className="bg-destructive absolute -top-0.5 -right-1 flex size-3 items-center justify-center rounded-none text-white">
+          <span className="bg-destructive absolute -top-0.5 -right-1 flex size-3 items-center justify-center rounded-full text-white d2:rounded-none">
             <X weight="bold" className="size-2" aria-hidden />
           </span>
         )}
@@ -124,7 +124,7 @@ export function ApplyProgressSection() {
       role="status"
       aria-live="polite"
       aria-label={title}
-      className="m-3 flex shrink-0 flex-col gap-2 rounded-md border border-foreground/15 bg-popover p-3 text-popover-foreground shadow-[0_8px_24px_rgb(0_0_0/0.45)]"
+      className="m-3 flex shrink-0 flex-col gap-2 rounded-2xl border bg-popover p-3 text-popover-foreground shadow-lg d2:rounded-md d2:border-foreground/15 d2:shadow-[0_8px_24px_rgb(0_0_0/0.45)]"
     >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">

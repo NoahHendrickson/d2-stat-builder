@@ -119,18 +119,18 @@ function PlugOptionButton({
             } as CSSProperties
           }
           className={cn(
-            "relative flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-none border transition-[opacity,border-color,background-color,box-shadow] outline-none focus-visible:d2-tile-selected",
+            "classic:focus-visible:ring-ring relative flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-none border transition-[opacity,border-color,background-color,box-shadow] outline-none classic:focus-visible:ring-2 focus-visible:d2-tile-selected",
             recolor && "isolate",
             flush ? "p-0" : "p-1",
             tint && "bg-[hsl(var(--icon-tint)_72%)] dark:bg-[hsl(var(--icon-tint)_26%)]",
             checked
-              ? "border-foreground cursor-pointer d2-tile-selected"
+              ? "border-emphatic cursor-pointer d2:border-foreground d2-tile-selected"
               : disabled
-                ? "cursor-not-allowed border-foreground/20 opacity-40"
+                ? "cursor-not-allowed border-input opacity-40 d2:border-foreground/20"
                 : element
-                  ? "cursor-pointer d2-element-border"
-                  : "cursor-pointer border-foreground/25 hover:border-foreground/70",
-            checked && !tint && "bg-foreground/10",
+                  ? "cursor-pointer classic:border-input d2-element-border"
+                  : "cursor-pointer border-input d2:border-foreground/25 d2:hover:border-foreground/70",
+            checked && !tint && "bg-emphatic/6 d2:bg-foreground/10",
             !checked && !disabled && !tint && "hover:bg-foreground/6 focus-visible:bg-foreground/6",
           )}
         >
@@ -169,7 +169,7 @@ function PlugOptionButton({
         }
         className={cn(
           "h-auto min-h-12 w-full justify-start px-2 py-2 text-left",
-          checked && "border-foreground bg-foreground/10 d2-tile-selected",
+          checked && "border-brand/60 bg-brand/10 d2:border-foreground d2:bg-foreground/10 d2-tile-selected",
           !checked && element && "d2-element-border",
         )}
         onClick={onClick}
@@ -181,7 +181,7 @@ function PlugOptionButton({
               alt=""
               width={28}
               height={28}
-              className="size-7 rounded-none"
+              className="size-7 rounded-sm d2:rounded-none"
               style={recolor ? { filter: STRAND_ABILITY_PLATE_FILTER } : undefined}
               unoptimized
             />
@@ -297,7 +297,7 @@ export function LoadoutSubclassEditor({
     <section
       className={cn(
         "group/subclass space-y-3",
-        !compact && "border-foreground/15 rounded-none border p-3",
+        !compact && "border-border/60 rounded-lg border p-3 d2:rounded-none d2:border-foreground/15",
       )}
       data-compact={compact || undefined}
       aria-label="Subclass configuration"
@@ -310,7 +310,7 @@ export function LoadoutSubclassEditor({
           <DropdownMenuTrigger
             id={id}
             aria-label="Subclass"
-            className="inline-flex h-8 w-full min-w-0 cursor-pointer items-center justify-between gap-1.5 rounded-none border border-foreground/30 bg-black/15 pr-2 pl-2.5 text-sm whitespace-nowrap transition-colors outline-none select-none hover:border-foreground/60 focus-visible:border-outline-strong data-popup-open:border-outline-strong dark:bg-black/25"
+            className="inline-flex h-8 w-full min-w-0 cursor-pointer items-center justify-between gap-1.5 rounded-lg border border-input bg-transparent pr-2 pl-2.5 text-sm whitespace-nowrap transition-colors outline-none select-none hover:bg-muted/60 focus-visible:border-emphatic data-popup-open:border-emphatic dark:bg-input/30 dark:hover:bg-input/50 d2:rounded-none d2:border-foreground/30 d2:bg-black/15 d2:hover:border-foreground/60 d2:hover:bg-black/15 d2:focus-visible:border-outline-strong d2:data-popup-open:border-outline-strong d2:dark:bg-black/25 d2:dark:hover:bg-black/25"
           >
             <span className="truncate">
               {active ? `${active} · ${catalog[active].name}` : "No subclass"}

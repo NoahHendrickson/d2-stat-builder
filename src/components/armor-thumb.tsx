@@ -42,7 +42,7 @@ export function ArmorThumb({
   return (
     <span
       className={cn(
-        "relative inline-block shrink-0 overflow-hidden rounded-none",
+        "relative inline-block shrink-0 overflow-hidden rounded-[2px] d2:rounded-none",
         SIZE_CLASS[size],
         className,
       )}

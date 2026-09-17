@@ -209,14 +209,14 @@ export function FilterCascadeMenu({
               {triggerLabel}
             </span>
             {active && (
-              <Badge className="h-4 shrink-0 border-transparent bg-white/20 px-1 text-[10px] text-white tabular-nums">
+              <Badge className="h-4 shrink-0 border-transparent bg-white/20 px-1 text-[10px] text-emphatic-foreground tabular-nums d2:text-white">
                 {totalSelected}
               </Badge>
             )}
             <CaretUpDown
               className={cn(
                 "pointer-events-none size-4 shrink-0",
-                active ? "text-white" : "text-foreground/70",
+                active ? "text-emphatic-foreground d2:text-white" : "text-foreground/70",
               )}
               aria-hidden
             />

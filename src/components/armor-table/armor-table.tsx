@@ -63,7 +63,7 @@ import { useArmorTableSort } from "@/components/armor-table/use-armor-table-sort
 const ESTIMATED_ROW_HEIGHT_PX = 48;
 
 const TABLE_HEAD_CELL =
-  "d2-label border-b border-foreground/15 py-2.5 pr-3 whitespace-nowrap first:pl-3 " +
+  "d2-label border-b border-border/50 py-2.5 pr-3 whitespace-nowrap first:pl-3 classic:text-sm classic:text-foreground d2:border-foreground/15 " +
   TABLE_HEADER_BG;
 
 /** Header-cell order → sort key; `undefined` marks unsortable columns (Actions). */
@@ -426,7 +426,7 @@ export function ArmorTable() {
   const refresh = useCallback(() => void refetch(), [refetch]);
 
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-none border border-foreground/12">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-border/50 d2:rounded-none d2:border-foreground/12">
       {/* Toolbar + column headers share one tinted header band. The toolbar
           sits outside the scroller so it survives horizontal scroll; thead
           stays sticky inside it. */}
@@ -493,7 +493,7 @@ export function ArmorTable() {
             </tbody>
           </table>
           {filtered.length === 0 && (
-            <p className="text-muted-foreground border-t border-foreground/15 py-6 text-center text-sm">
+            <p className="text-muted-foreground border-t border-border py-6 text-center text-sm d2:border-foreground/15">
               {rows.length === 0
                 ? "No armor pieces loaded yet."
                 : "No armor matches your filters."}

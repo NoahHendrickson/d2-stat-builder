@@ -192,8 +192,8 @@ export function LoadingScreenView({
       </div>
 
       <div className="relative z-10 flex h-full flex-col items-center justify-center px-6">
-        <div className="d2-panel flex w-full max-w-sm flex-col items-center gap-4 border border-foreground/12 px-8 py-6 shadow-[-2px_2px_8px_0px_rgba(0,0,0,0.3),0_0_12px_0px_rgba(0,0,0,0.25)]">
-          <h1 className="text-lg font-medium">
+        <div className="d2-panel flex w-full max-w-sm flex-col items-center gap-4 rounded-2xl px-8 py-6 classic:bg-background/90 classic:backdrop-blur-sm d2:rounded-none d2:border d2:border-foreground/12 d2:shadow-[-2px_2px_8px_0px_rgba(0,0,0,0.3),0_0_12px_0px_rgba(0,0,0,0.25)]">
+          <h1 className="text-lg font-semibold tracking-tight d2:font-medium d2:tracking-normal">
             Loading your armor
           </h1>
           <div
@@ -202,10 +202,10 @@ export function LoadingScreenView({
             aria-valuemin={0}
             aria-valuemax={100}
             aria-valuenow={pct}
-            className="h-2 w-full max-w-xs overflow-hidden rounded-[3px] border border-input bg-black/35"
+            className="h-1.5 w-full max-w-xs overflow-hidden rounded-full bg-muted d2:h-2 d2:rounded-[3px] d2:border d2:border-input d2:bg-black/35"
           >
             <div
-              className="bg-foreground h-full"
+              className="h-full rounded-full bg-primary d2:rounded-none d2:bg-foreground"
               style={{ width: `${pct}%` }}
             />
           </div>

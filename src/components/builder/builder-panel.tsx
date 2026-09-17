@@ -939,19 +939,21 @@ export function BuilderPanel({
           wheel-scrolling anywhere to the left of the cards still moves this
           pane. Inner max-width keeps the cards on the 39.74rem track. */}
       <div className="d2-scroll flex min-h-0 flex-col lg:col-start-1 lg:col-end-3 lg:overflow-y-auto lg:overscroll-contain lg:pl-6 lg:pr-2">
-        <div className="flex flex-col gap-4 lg:ml-auto lg:w-full lg:max-w-[39.74rem]">
+        <div className="divide-border flex flex-col divide-y lg:ml-auto lg:w-full lg:max-w-[39.74rem] d2:gap-4 d2:divide-y-0">
           {ready && (
           <>
             {classes.length > 1 && classType !== null && (
-              <ClassEmblemTabs
-                characters={armory?.characters ?? []}
-                value={classType}
-                onChange={onClassChange}
-              />
+              <div className="pb-8 d2:pb-0">
+                <ClassEmblemTabs
+                  characters={armory?.characters ?? []}
+                  value={classType}
+                  onChange={onClassChange}
+                />
+              </div>
             )}
 
             <Section title="Stats">
-              <div className="space-y-7">
+              <div className="space-y-8 d2:space-y-7">
                 {STAT_DISPLAY_ORDER.map((key) => {
                   const i = STAT_ORDER.indexOf(key);
                   return (
@@ -969,7 +971,7 @@ export function BuilderPanel({
               </div>
             </Section>
 
-            <Section title="Major mods">
+            <Section title="Major mods" className="gap-2 d2:gap-3">
               <Tabs
                 value={String(major)}
                 onValueChange={(v) => setMajor(Number(v))}
@@ -991,13 +993,15 @@ export function BuilderPanel({
                 onSelect={onExoticSelect}
               />
               {spiritPerks && !useDreamersBond && (
-                <ExoticClassPerkPicker
-                  left={spiritPerks.left}
-                  right={spiritPerks.right}
-                  selected={exoticPerks}
-                  onChange={setExoticPerks}
-                  statIcons={statIcons}
-                />
+                <div className="mt-4 d2:mt-0">
+                  <ExoticClassPerkPicker
+                    left={spiritPerks.left}
+                    right={spiritPerks.right}
+                    selected={exoticPerks}
+                    onChange={setExoticPerks}
+                    statIcons={statIcons}
+                  />
+                </div>
               )}
             </Section>
 
@@ -1104,7 +1108,7 @@ export function BuilderPanel({
                 />
                 <div className="flex items-center justify-between gap-4">
                   <div className="space-y-0.5">
-                    <span className="text-sm font-medium">Legacy exotics</span>
+                    <span className="text-sm d2:font-medium">Legacy exotics</span>
                     <p className="text-muted-foreground text-xs">
                       Include Armor 2.0 exotics — the optimizer spends their
                       artifice +3 automatically.
@@ -1118,7 +1122,7 @@ export function BuilderPanel({
                 </div>
                 <div className="flex items-center justify-between gap-4">
                   <div className="space-y-0.5">
-                    <span className="text-sm font-medium">Lower-tier armor</span>
+                    <span className="text-sm d2:font-medium">Lower-tier armor</span>
                     <p className="text-muted-foreground text-xs">
                       Include Tier 1–4 Armor 3.0 legendaries. They can&apos;t be
                       tuned, but they still count toward set bonuses.
@@ -1172,7 +1176,7 @@ function Section({
   return (
     <section
       className={cn(
-        "d2-card-frame relative flex flex-col gap-3 rounded-none p-3 [--card-line-width:1.5px] hover:[--line-alpha:1.6]",
+        "d2-card-frame relative flex flex-col gap-3 bg-transparent py-8 shadow-none first:pt-0 [--card-line-width:1.5px] hover:[--line-alpha:1.6] d2:rounded-none d2:bg-lifted d2:p-3 d2:first:pt-3",
         className,
       )}
     >

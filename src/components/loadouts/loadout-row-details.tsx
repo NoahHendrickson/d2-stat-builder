@@ -109,7 +109,7 @@ function PlugIcon({
           height={size}
           className={cn(
             sizeClass,
-            "rounded-none",
+            "rounded-sm d2:rounded-none",
             dim && "opacity-40 grayscale",
             tileClass,
             className,
@@ -124,7 +124,7 @@ function PlugIcon({
     <TooltipLabel label={label}>
       <span
         className={cn(
-          "bg-muted shrink-0 rounded-none",
+          "bg-muted shrink-0 rounded-sm d2:rounded-none",
           sizeClass,
           dim && "opacity-40",
           tileClass,
@@ -182,7 +182,7 @@ function ManifestIcon({
   ) : (
     <TooltipLabel label={showTooltip ? label : undefined}>
       <span
-        className={cn("bg-muted shrink-0 rounded-none", sizeClass, tileClass, className)}
+        className={cn("bg-muted shrink-0 rounded-sm d2:rounded-none", sizeClass, tileClass, className)}
         style={tileStyle}
         tabIndex={showTooltip ? 0 : undefined}
       />
@@ -191,7 +191,7 @@ function ManifestIcon({
 }
 
 function ChipDivider() {
-  return <span className="h-8 w-px shrink-0 bg-foreground/8" aria-hidden />;
+  return <span className="bg-border h-8 w-px shrink-0 d2:bg-foreground/8" aria-hidden />;
 }
 
 function DetailRow({
@@ -366,7 +366,7 @@ export function LoadoutRowDetails({
                     <span
                       tabIndex={0}
                       aria-label={setBonuses.map((b) => b.label).join(", ")}
-                      className="bg-lifted flex h-[26px] shrink-0 items-center gap-1.5 rounded-none border border-foreground/8 px-1.5 outline-none focus-visible:border-outline-strong"
+                      className="bg-foreground/4 flex shrink-0 items-center gap-1 rounded-[4px] p-1 outline-none focus-visible:ring-2 focus-visible:ring-ring d2:h-[26px] d2:gap-1.5 d2:rounded-none d2:border d2:border-foreground/8 d2:bg-lifted d2:px-1.5 d2:focus-visible:border-outline-strong d2:focus-visible:ring-0"
                     />
                   }
                 >
@@ -393,7 +393,7 @@ export function LoadoutRowDetails({
             {subclass && (
               <span
                 aria-label={superLabel}
-                className="flex min-w-0 items-center gap-2"
+                className="flex min-w-0 items-center gap-1 d2:gap-2"
               >
                 <ManifestIcon
                   icon={superIcon}
@@ -445,7 +445,7 @@ export function LoadoutRowDetails({
 
   if (!open) return null;
   return (
-        <div className="space-y-3 border-t border-foreground/15 pt-2 text-xs">
+        <div className="border-border space-y-3 border-t pt-2 text-xs d2:border-foreground/15">
           {loadout.notes && (
             <p className="text-muted-foreground whitespace-pre-wrap">
               {loadout.notes}
@@ -457,7 +457,7 @@ export function LoadoutRowDetails({
                 <Badge
                   key={t}
                   variant="outline"
-                  className="normal-case tracking-normal"
+                  className="px-1.5 py-0 text-[10px] normal-case! d2:tracking-normal"
                 >
                   #{t}
                 </Badge>
@@ -475,7 +475,7 @@ export function LoadoutRowDetails({
                 <StatGlyph src={statIcons[key]} label={STAT_LABELS[key]} />
               </div>
             ))}
-            <div className="d2-label pb-0.5 text-center text-[9px]">
+            <div className="d2-label pb-0.5 text-center classic:text-[10px] classic:font-normal d2:text-[9px]">
               Tuned
             </div>
 
@@ -505,7 +505,7 @@ export function LoadoutRowDetails({
                           width={20}
                           height={20}
                           className={cn(
-                            "size-5 shrink-0 rounded-none d2-tile",
+                            "size-5 shrink-0 rounded-sm d2:rounded-none d2-tile",
                             a.missing && "opacity-50",
                           )}
                           unoptimized
@@ -513,7 +513,7 @@ export function LoadoutRowDetails({
                       )
                     ) : (
                       <span
-                        className="d2-brackets bg-black/25 size-5 shrink-0"
+                        className="d2-brackets bg-muted size-5 shrink-0 rounded-sm d2:rounded-none d2:bg-black/25"
                         aria-hidden
                       />
                     )}
@@ -535,7 +535,7 @@ export function LoadoutRowDetails({
                     {a.missing && (
                       <Badge
                         variant="outline"
-                        className="shrink-0 border-warning/60 text-warning"
+                        className="shrink-0 px-1 py-0 text-[10px] d2:border-warning/60 d2:text-warning"
                       >
                         missing
                       </Badge>
@@ -562,7 +562,7 @@ export function LoadoutRowDetails({
                         label={`Tuned +5 ${STAT_LABELS[STAT_ORDER[tune.plus]]}`}
                       />
                     ) : artificePick !== null && artificePick !== undefined ? (
-                      <span className="flex items-center gap-0.5 text-[10px] text-positive/90 tabular-nums">
+                      <span className="flex items-center gap-0.5 text-[10px] text-brand/80 tabular-nums d2:text-positive/90">
                         <StatGlyph
                           src={statIcons[STAT_ORDER[artificePick]]}
                           label={`Artifice +3 ${STAT_LABELS[STAT_ORDER[artificePick]]}`}
@@ -577,7 +577,7 @@ export function LoadoutRowDetails({
 
             {optimizer && (
               <>
-                <div className="col-span-full my-0.5 border-t border-foreground/15" />
+                <div className="border-border/60 col-span-full my-0.5 border-t d2:border-foreground/15" />
                 <DetailRow
                   label="Armor"
                   render={(i) => optimizer.baseStats[i] || ""}
@@ -586,7 +586,7 @@ export function LoadoutRowDetails({
                   label="Mods"
                   render={(i) =>
                     optimizer.modBonus[i] ? (
-                      <span className="text-positive/90">
+                      <span className="text-brand/80 d2:text-positive/90">
                         +{optimizer.modBonus[i]}
                       </span>
                     ) : (
@@ -599,7 +599,7 @@ export function LoadoutRowDetails({
                     label="Artifice"
                     render={(i) =>
                       optimizer.artificeBonus[i] ? (
-                        <span className="text-positive/90">
+                        <span className="text-brand/80 d2:text-positive/90">
                           +{optimizer.artificeBonus[i]}
                         </span>
                       ) : (
@@ -615,14 +615,14 @@ export function LoadoutRowDetails({
                     if (!v) return "";
                     return (
                       <span
-                        className={v < 0 ? "text-destructive" : "text-positive/90"}
+                        className={v < 0 ? "text-red-400/80 d2:text-destructive" : "text-brand/80 d2:text-positive/90"}
                       >
                         {v > 0 ? `+${v}` : v}
                       </span>
                     );
                   }}
                 />
-                <div className="col-span-full my-0.5 border-t border-foreground/15" />
+                <div className="border-border/60 col-span-full my-0.5 border-t d2:border-foreground/15" />
                 <DetailRow
                   label="Total"
                   labelClass="text-foreground font-medium"

@@ -517,7 +517,7 @@ export function LoadoutsList({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
-      <div className="flex flex-col gap-2 px-2">
+      <div className="flex flex-col gap-1 px-4 d2:gap-2 d2:px-2">
         <div className="flex items-center gap-1">
           <div className="relative min-w-0 flex-1">
             <MagnifyingGlass
@@ -537,7 +537,7 @@ export function LoadoutsList({
                 type="button"
                 aria-label="Clear search"
                 onClick={() => setQuery("")}
-                className="text-muted-foreground hover:text-foreground absolute top-1/2 right-1.5 flex size-5 -translate-y-1/2 cursor-pointer items-center justify-center rounded-none outline-none focus-visible:ring-1 focus-visible:ring-outline-strong"
+                className="text-muted-foreground hover:text-foreground focus-visible:ring-ring/50 absolute top-1/2 right-1.5 flex size-5 -translate-y-1/2 cursor-pointer items-center justify-center rounded-[4px] outline-none focus-visible:ring-3 d2:rounded-none d2:focus-visible:ring-1 d2:focus-visible:ring-outline-strong"
               >
                 <X weight="bold" className="size-3.5" aria-hidden />
               </button>
@@ -592,7 +592,7 @@ export function LoadoutsList({
                   {filterCount > 0 && (
                     <Badge
                       variant="emphatic"
-                      className="absolute top-0 right-0 h-3.5 min-w-3.5 px-1 text-[9px] leading-none tracking-normal"
+                      className="absolute top-0.5 right-0.5 h-3.5 min-w-3.5 px-1 text-[9px] leading-none d2:top-0 d2:right-0 d2:tracking-normal"
                     >
                       {filterCount}
                     </Badge>

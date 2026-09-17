@@ -106,7 +106,7 @@ export const PowerRangeControls = memo(function PowerRangeControls({
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-4">
         <div className="space-y-0.5">
-          <span className="text-sm font-medium">Power matters</span>
+          <span className="text-sm d2:font-medium">Power matters</span>
           <p className="text-muted-foreground text-xs">
             Only show builds whose gear power lands in a range. Festival of
             the Lost masks count as power 0, so your masks join the helmet
@@ -127,7 +127,7 @@ export const PowerRangeControls = memo(function PowerRangeControls({
         >
           <Step n={1}>
             <div>
-              <p className="text-sm font-medium">
+              <p className="text-sm d2:font-medium">
                 Set the power range you want
               </p>
               <p className="text-muted-foreground text-xs">
@@ -151,7 +151,7 @@ export const PowerRangeControls = memo(function PowerRangeControls({
                 />
                 {reach && (
                   <span className="ml-auto flex items-baseline gap-1.5 text-xs tabular-nums">
-                    <span className="d2-label text-[10px]">Reach</span>
+                    <span className="d2-label d2:text-[10px]">Reach</span>
                     <PowerValue value={`${reach.min}–${reach.max}`} size="xs" />
                   </span>
                 )}
@@ -181,7 +181,7 @@ export const PowerRangeControls = memo(function PowerRangeControls({
 
           <Step n={2}>
             <div className="flex items-baseline justify-between gap-4">
-              <p className="text-sm font-medium">
+              <p className="text-sm d2:font-medium">
                 Enter the weapons you&apos;ll use
               </p>
               <span className="text-muted-foreground text-xs">
@@ -197,7 +197,9 @@ export const PowerRangeControls = memo(function PowerRangeControls({
             <div className="grid grid-cols-3 gap-2">
               {WEAPON_SLOTS.map((name, i) => (
                 <label key={name} className="space-y-1">
-                  <span className="d2-label block text-[10px]">{name}</span>
+                  <span className="d2-label block text-[10px] tracking-wide uppercase d2:tracking-(--tracking-label)">
+                    {name}
+                  </span>
                   <PowerInput
                     label={`${name} weapon power`}
                     value={weapons[i]}
@@ -225,7 +227,7 @@ export const PowerRangeControls = memo(function PowerRangeControls({
                 htmlFor={legacyArmorId}
                 className="cursor-pointer space-y-0.5"
               >
-                <span className="block text-sm font-medium">
+                <span className="block text-sm d2:font-medium">
                   Turn on legacy armor
                 </span>
                 <span className="text-muted-foreground block text-xs">
@@ -248,7 +250,7 @@ export const PowerRangeControls = memo(function PowerRangeControls({
                 className="mt-0.5 cursor-pointer"
               />
               <label htmlFor={dreamersId} className="cursor-pointer space-y-0.5">
-                <span className="block text-sm font-medium">
+                <span className="block text-sm d2:font-medium">
                   Force {dreamersItemName}
                 </span>
                 <span className="text-muted-foreground block text-xs">
@@ -270,7 +272,7 @@ function Step({ n, children }: { n: number; children: ReactNode }) {
   return (
     <li className="flex list-none gap-3">
       <span
-        className="mt-0.5 flex size-5 shrink-0 items-center justify-center bg-power/20 text-[11px] font-medium tabular-nums text-power"
+        className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-md bg-power/20 text-[11px] font-medium tabular-nums text-power"
         aria-hidden
       >
         {n}

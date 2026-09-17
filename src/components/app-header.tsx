@@ -25,7 +25,7 @@ export function AppHeader({
   return (
     <header
       className={cn(
-        "flex h-[76px] shrink-0 items-center justify-between gap-4 px-4",
+        "flex shrink-0 items-start justify-between gap-4 p-4 [--icon-tab-surface:var(--sidebar)] d2:h-[76px] d2:items-center d2:py-0",
         className,
       )}
     >
@@ -34,7 +34,8 @@ export function AppHeader({
           <TooltipLabel label="Show loadouts">
             <Button
               variant="ghost"
-              size="icon"
+              size="icon-lg"
+              className="d2:size-8"
               aria-label="Show loadouts"
               onClick={onExpand}
             >
@@ -47,7 +48,7 @@ export function AppHeader({
           alt=""
           width={28}
           height={28}
-          className="size-7 shrink-0 rounded-[4px]"
+          className="size-9 shrink-0 rounded-[6px] d2:size-7 d2:rounded-[4px]"
           unoptimized
           aria-hidden
         />

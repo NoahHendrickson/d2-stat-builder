@@ -16,12 +16,13 @@ import { PowerValue } from "@/components/power-value";
  * the others sit dimmed until hovered.
  */
 const tabBase =
-  "relative flex-1 shrink-0 cursor-pointer overflow-hidden rounded-md border text-left outline-none transition-[opacity,box-shadow,border-color] focus-visible:d2-tile-selected";
+  "relative flex-1 shrink-0 cursor-pointer overflow-hidden rounded-[7px] border text-left outline-none transition-[opacity,box-shadow,border-color] classic:focus-visible:ring-3 classic:focus-visible:ring-ring/50 focus-visible:d2-tile-selected d2:rounded-md";
 
 const tabInactive =
-  "border-foreground/15 opacity-75 saturate-[0.85] hover:opacity-100 hover:saturate-100 hover:border-foreground/40";
+  "border-[var(--neutral-line)] opacity-80 hover:opacity-100 d2:border-foreground/15 d2:opacity-75 d2:saturate-[0.85] d2:hover:opacity-100 d2:hover:saturate-100 d2:hover:border-foreground/40";
 
-const tabSelected = "border-foreground d2-tile-selected opacity-100";
+const tabSelected =
+  "d2-tile-selected border-background opacity-100 classic:shadow-[0_0_0_2px_var(--background),0_0_0_4px_var(--emphatic)] d2:border-foreground";
 
 interface ClassEmblemTabsProps {
   /** All of the player's characters; grouped into one tab per class internally. */
@@ -65,7 +66,7 @@ function EmblemTab({
       aria-label={`${name}, Power ${character.light}`}
       className={cn(tabBase, active ? tabSelected : tabInactive)}
     >
-      <span className="relative block h-14 overflow-hidden">
+      <span className="relative block h-14 overflow-hidden rounded-[6px] d2:rounded-none">
         {showImage ? (
           <Image
             src={`${BUNGIE_IMAGE_BASE}${character.emblemBackgroundPath}`}
@@ -91,11 +92,11 @@ function EmblemTab({
 
         {/* The nameplate text block: class in bold, "// POWER" beneath. */}
         <div className="absolute inset-y-0 right-0 flex flex-col items-end justify-center gap-0.5 px-2.5 text-right">
-          <span className="d2-heading text-xs leading-none text-white drop-shadow">
+          <span className="d2-heading text-xs leading-none text-white uppercase drop-shadow classic:font-semibold classic:tracking-wide">
             {name}
           </span>
-          <span className="flex items-baseline gap-1 text-[10px] leading-none text-white/70">
-            <span aria-hidden>{"//"}</span>
+          <span className="flex items-baseline gap-1 text-[10px] leading-none text-white/90 d2:text-white/70">
+            <span aria-hidden className="hidden d2:inline">{"//"}</span>
             <PowerValue value={character.light} size="xs" className="drop-shadow" />
           </span>
         </div>
@@ -121,7 +122,7 @@ export function ClassEmblemTabs({
       value={String(value)}
       onValueChange={(v) => onChange(Number(v))}
     >
-      <TabsPrimitive.List className="flex gap-3 p-1">
+      <TabsPrimitive.List className="flex gap-2 p-1.5 d2:gap-3 d2:p-1">
         {tabs.map((character) => (
           <EmblemTab
             key={character.classType}

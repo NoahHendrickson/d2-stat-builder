@@ -4,7 +4,11 @@ import { memo } from "react";
 import Image from "next/image";
 import { TooltipLabel } from "@/components/ui/tooltip";
 import { Input } from "@/components/ui/input";
-import { Slider, sliderValueLeft } from "@/components/ui/slider";
+import {
+  Slider,
+  sliderValueLeft,
+  useSliderThumbPx,
+} from "@/components/ui/slider";
 import { cn } from "@/lib/utils";
 import { BUNGIE_IMAGE_BASE } from "@/lib/bungie/constants";
 import {
@@ -40,6 +44,7 @@ export const StatTargetRow = memo(function StatTargetRow({
   onChange: (index: number, value: number) => void;
 }) {
   const { values: ceilings, exact: ceilingsExact } = useStoreValue(ceilingsView);
+  const thumbPx = useSliderThumbPx();
   const cap = ceilings ? ceilings[index] : null;
   const label = STAT_LABELS[statKey];
   // Achievable ceiling for this stat given the others. Overlay it as a
@@ -90,7 +95,7 @@ export const StatTargetRow = memo(function StatTargetRow({
             {label}
           </span>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex shrink-0 items-center gap-0.5 d2:gap-2">
           <Input
             type="number"
             min={0}
@@ -108,11 +113,11 @@ export const StatTargetRow = memo(function StatTargetRow({
                   : 0,
               );
             }}
-            className="h-5 w-9 border-foreground/12 bg-foreground/8 px-1 text-center text-[11px] leading-5 font-medium tabular-nums [appearance:textfield] md:text-[11px] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+            className="h-7 w-10 px-2 text-center text-xs tabular-nums [appearance:textfield] md:text-xs [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none d2:h-5 d2:w-9 d2:border-foreground/12 d2:bg-foreground/8 d2:px-1 d2:text-[11px] d2:leading-5 d2:font-medium d2:md:text-[11px]"
           />
           {capText && <span className="sr-only">{capText.srText}</span>}
           <span
-            className="text-[11px] leading-5 font-medium text-foreground/50 tabular-nums whitespace-nowrap"
+            className="text-muted-foreground w-9 shrink-0 text-xs tabular-nums whitespace-nowrap d2:w-auto d2:text-[11px] d2:leading-5 d2:font-medium d2:text-foreground/50"
             aria-hidden
           >
             / {cap ?? STAT_SLIDER_MAX}
@@ -120,7 +125,7 @@ export const StatTargetRow = memo(function StatTargetRow({
         </div>
       </div>
       {/* 3px side padding makes room for the bar's frame, which sits 2px + 1px outside the well. */}
-      <div className="min-w-0 px-[3px]">
+      <div className="min-w-0 d2:px-[3px]">
         <Slider
           min={0}
           max={STAT_SLIDER_MAX}
@@ -152,14 +157,14 @@ export const StatTargetRow = memo(function StatTargetRow({
                   onClick={() => onChange(index, tickValue)}
                   aria-label={tickAria}
                   style={{
-                    left: sliderValueLeft(t, 0, STAT_SLIDER_MAX),
+                    left: sliderValueLeft(t, 0, STAT_SLIDER_MAX, thumbPx),
                   }}
                   className={cn(
                     // Centered under the thumb (sliderValueLeft is the thumb's center).
-                    "absolute top-0 -translate-x-1/2 cursor-pointer text-[10px] leading-4 font-medium tracking-wider uppercase tabular-nums transition-colors after:absolute after:-inset-x-2 after:-inset-y-1.5 after:content-[''] focus-visible:outline-1 focus-visible:outline-outline-strong",
+                    "absolute top-0 -translate-x-1/2 cursor-pointer text-xs leading-4 tabular-nums transition-colors after:absolute after:-inset-x-2 after:-inset-y-1.5 after:content-[''] focus-visible:ring-2 focus-visible:ring-ring/50 focus-visible:outline-hidden d2:text-[10px] d2:font-medium d2:tracking-wider d2:uppercase d2:focus-visible:ring-0 d2:focus-visible:outline-1 d2:focus-visible:outline-offset-0 d2:focus-visible:outline-outline-strong",
                     value === tickValue
                       ? "text-foreground"
-                      : "text-muted-foreground hover:text-foreground",
+                      : "text-foreground/75 hover:text-foreground d2:text-muted-foreground d2:hover:text-foreground",
                   )}
                 >
                   {tickLabel}

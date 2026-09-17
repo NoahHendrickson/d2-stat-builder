@@ -52,10 +52,11 @@ export { MAX_SHOWN };
 
 /** A build card: lifted face with the EQUIP centre-bright stroke. */
 export const BUILD_CARD_LIFT_CLASS =
-  "d2-card-frame relative rounded-none [--card-line-width:1.5px]";
+  "build-card-edge d2-card-frame relative rounded-[8px] shadow-[0px_1px_2px_0px_rgba(0,0,0,0.24)] after:pointer-events-none after:absolute after:inset-0 after:rounded-[8px] after:shadow-[inset_0px_1px_2px_0px_color-mix(in_srgb,var(--foreground)_6%,transparent)] after:content-[''] [--card-line-width:1.5px] d2:rounded-none d2:shadow-none d2:after:hidden";
 
 /** Stack of build cards — no well; they sit on the main column. */
-export const BUILD_LIST_WELL_CLASS = "flex flex-col gap-3";
+export const BUILD_LIST_WELL_CLASS =
+  "flex flex-col gap-2 rounded-[12px] bg-foreground/5 p-2 dark:bg-background d2:gap-3 d2:rounded-none d2:bg-transparent d2:p-0";
 
 /** Display stat columns paired with their STAT_ORDER index (used by the build breakdown). */
 const STAT_COLS = STAT_DISPLAY_ORDER.map((key) => ({
@@ -112,7 +113,7 @@ function ArtificeCell({
   if (pick === null) return null;
   const key = STAT_ORDER[pick];
   return (
-    <span className="flex items-center gap-0.5 text-[10px] text-positive/90 tabular-nums">
+    <span className="flex items-center gap-0.5 text-[10px] text-brand/80 d2:text-positive/90 tabular-nums">
       <StatGlyph
         src={statIcons[key]}
         label={`Artifice +3 ${STAT_LABELS[key]}`}
@@ -132,7 +133,7 @@ const BREAKDOWN_GRID =
   "grid grid-cols-[minmax(7rem,max-content)_repeat(6,minmax(2.25rem,1fr))_auto] items-center gap-x-2 @[44rem]/build:grid-cols-[minmax(8rem,max-content)_repeat(6,minmax(2.5rem,1fr))_auto] @[44rem]/build:gap-x-4";
 
 /** Delta colours: +n the game's stat-gain green, -n red, 0 secondary. */
-const POSITIVE_CLASS = "text-positive";
+const POSITIVE_CLASS = "text-[#1be364] d2:text-positive";
 
 function Delta({ value }: { value: number }) {
   if (!value) return <span className="text-text-secondary">0</span>;
@@ -184,7 +185,7 @@ function StatValue({ index, value }: { index: number; value: number }) {
     () => false,
   );
   return (
-    <span className={met ? "text-positive" : "text-foreground"}>{value}</span>
+    <span className={met ? "text-brand d2:text-positive" : "text-foreground"}>{value}</span>
   );
 }
 
@@ -237,7 +238,7 @@ const BuildRow = memo(function BuildRow({
 
   return (
     <div className={cn(BUILD_CARD_LIFT_CLASS, "@container/build")}>
-      <div className="overflow-hidden rounded-none">
+      <div className="overflow-hidden rounded-[8px] d2:rounded-none">
       {/* Figma 17:6044 — exotic tile, six stat chips spread over ~456px, total + set badge, caret */}
       <button
         type="button"
@@ -245,8 +246,9 @@ const BuildRow = memo(function BuildRow({
         aria-expanded={open}
         className={cn(
           "flex w-full items-center gap-3 p-2 text-left transition-colors 2xl:gap-4",
-          !open && "hover:bg-foreground/8",
-          open && "bg-foreground/6",
+          open
+            ? "bg-foreground/6"
+            : "classic:bg-foreground/6 classic:hover:bg-foreground/10 d2:hover:bg-foreground/8",
         )}
       >
         <div className="flex min-w-0 flex-1 items-center gap-3 2xl:gap-6">
@@ -261,7 +263,7 @@ const BuildRow = memo(function BuildRow({
             />
           ) : (
             <span
-              className="d2-brackets size-10 shrink-0 rounded-none bg-black/25"
+              className="d2-brackets size-10 shrink-0 rounded-[2px] border border-dashed border-foreground/35 bg-foreground/12 d2:rounded-none d2:border-0 d2:bg-black/25"
               aria-hidden
             />
           )}
@@ -275,7 +277,7 @@ const BuildRow = memo(function BuildRow({
                 <StatGlyph
                   src={statIcons[key]}
                   label={STAT_LABELS[key]}
-                  className="size-4 opacity-70 2xl:size-5"
+                  className="size-4 opacity-65 d2:opacity-70 2xl:size-5"
                   plain
                 />
                 <StatValue index={i} value={loadout.stats[i]} />
@@ -284,7 +286,7 @@ const BuildRow = memo(function BuildRow({
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-2 2xl:gap-5">
-          <span className="text-sm font-medium tabular-nums 2xl:text-base">{loadout.total}</span>
+          <span className="text-sm tabular-nums d2:font-medium 2xl:text-base">{loadout.total}</span>
           {loadout.power !== null && (
             <PowerValue
               value={loadout.power}
@@ -316,14 +318,14 @@ const BuildRow = memo(function BuildRow({
               key={b.name}
               title={b.name}
               variant="outline"
-              className="max-lg:hidden"
+              className="max-lg:hidden classic:border-primary-border classic:bg-primary classic:px-1.5 classic:text-[10px] classic:text-primary-foreground classic:2xl:px-2 classic:2xl:text-xs"
             >
               {b.count}pc
             </Badge>
           ))}
         </div>
         <span
-          className="text-foreground flex size-8 shrink-0 items-center justify-center rounded-none"
+          className="text-foreground flex size-8 shrink-0 items-center justify-center rounded-[10px] d2:rounded-none"
           aria-hidden
         >
           <CaretDown
@@ -336,17 +338,17 @@ const BuildRow = memo(function BuildRow({
       </button>
 
       {open && (
-        <div className="border-t border-foreground/8 bg-black/15">
+        <div className="border-border bg-foreground/6 border-t d2:border-foreground/8 d2:bg-black/15">
           {/* Shared column tracks so totals line up with per-piece stats
               (name column is max-content of the longest piece name). */}
-          <div className={cn(BREAKDOWN_GRID, "border-b border-foreground/8 px-4")}>
+          <div className={cn(BREAKDOWN_GRID, "border-border border-b px-4 d2:border-foreground/8")}>
             {/* Armor table — Figma 18:6899 */}
             <div className="col-span-full grid grid-cols-subgrid items-center gap-y-4 py-4">
-              <div className="d2-label">Armor</div>
+              <div className="d2-label classic:text-sm classic:text-text-secondary">Armor</div>
               {STAT_COLS.map(({ key }) => (
                 <div
                   key={key}
-                  className="d2-label"
+                  className="d2-label classic:text-sm classic:text-text-secondary"
                 >
                   <span className="@[44rem]/build:hidden">
                     <StatGlyph src={statIcons[key]} label={STAT_LABELS[key]} />
@@ -354,7 +356,7 @@ const BuildRow = memo(function BuildRow({
                   <span className="hidden @[44rem]/build:inline">{STAT_LABELS[key]}</span>
                 </div>
               ))}
-              <div className="d2-label">
+              <div className="d2-label classic:text-sm classic:text-text-secondary">
                 <span className="@[44rem]/build:hidden" aria-hidden />
                 <span className="hidden @[44rem]/build:inline">Tuning</span>
               </div>
@@ -375,7 +377,7 @@ const BuildRow = memo(function BuildRow({
                         />
                       ) : (
                         <span
-                          className="d2-brackets size-8 shrink-0 rounded-none bg-black/25"
+                          className="d2-brackets bg-muted size-8 shrink-0 rounded-[2px] d2:rounded-none d2:bg-black/25"
                           aria-hidden
                         />
                       )}
@@ -428,7 +430,7 @@ const BuildRow = memo(function BuildRow({
               })}
             </div>
 
-            <div className="col-span-full -mx-4 border-t border-foreground/8" />
+            <div className="border-border col-span-full -mx-4 border-t d2:border-foreground/8" />
 
             {/* Totals — Figma 18:6970 */}
             <div className="col-span-full grid grid-cols-subgrid items-center gap-y-6 py-4">
@@ -456,7 +458,7 @@ const BuildRow = memo(function BuildRow({
               <TotalsRow label="Total" render={(i) => loadout.stats[i]} />
             </div>
 
-            <div className="col-span-full -mx-4 border-t border-foreground/8" />
+            <div className="border-border col-span-full -mx-4 border-t d2:border-foreground/8" />
 
             {/* Masterwork — what it costs to make the assumed-full masterwork real */}
             <div className="col-span-full py-4">
@@ -537,12 +539,12 @@ function ImprovedMaximaAlert() {
   // Same alert footprint as the running card — green with a check instead of a spinner.
   return (
     <div
-      className="flex items-center gap-2.5 rounded-md border border-positive/30 bg-positive/10 px-3 py-2.5"
+      className="flex items-center gap-2.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2.5 d2:rounded-md d2:border-positive/30 d2:bg-positive/10"
       aria-live="polite"
     >
       <CheckCircle
         weight="fill"
-        className="size-4 shrink-0 text-positive"
+        className="size-4 shrink-0 text-emerald-600 dark:text-emerald-500 d2:text-positive"
         aria-hidden
       />
       <p className="text-foreground/90 min-w-0 flex-1 text-sm">
@@ -584,7 +586,7 @@ function SearchStatus({
   onCancel: () => void;
 }) {
   const cappedBanner = capped ? (
-    <p className="text-xs text-warning">
+    <p className="text-xs text-amber-600/90 dark:text-amber-500/90 d2:text-warning">
       Hit the time limit — showing the best found so far. Narrow your targets
       for an exhaustive search.
     </p>
@@ -598,7 +600,7 @@ function SearchStatus({
       // visual weight than a status line.
       return (
         <div
-          className="flex items-center gap-2.5 rounded-md border border-foreground/15 bg-lifted px-3 py-2.5"
+          className="flex items-center gap-2.5 rounded-lg border border-brand/30 bg-brand/10 px-3 py-2.5 d2:rounded-md d2:border-foreground/15 d2:bg-lifted"
           aria-live="polite"
         >
           <CircleNotch
@@ -637,14 +639,14 @@ function SearchStatus({
         lines.push(
           <p
             key="pending"
-            className="flex items-center gap-2 text-xs text-positive"
+            className="flex items-center gap-2 text-xs text-emerald-600/90 dark:text-emerald-500/90 d2:text-positive"
             aria-live="polite"
           >
             Stronger builds found
             <Button
               variant="link"
               onClick={onShowPending}
-              className="h-auto p-0 text-xs font-medium text-positive"
+              className="h-auto p-0 text-xs font-medium text-emerald-600 dark:text-emerald-500 d2:text-positive"
             >
               Show them
             </Button>
