@@ -7,6 +7,7 @@ import { toast } from "@/lib/toast";
 import {
   LOADOUT_SCHEMA_VERSION,
   editLoadoutTag,
+  newerSavedLoadout,
   parseSavedLoadout,
   withLoadoutTag,
   type SavedLoadout,
@@ -115,7 +116,9 @@ export function useLoadoutMutations() {
     },
     onSuccess: (saved, { skipCache }) => {
       if (skipCache) return;
-      patchList((list) => list.map((l) => (l.id === saved.id ? saved : l)));
+      patchList((list) =>
+        list.map((l) => (l.id === saved.id ? newerSavedLoadout(l, saved) : l)),
+      );
     },
   });
 
@@ -133,8 +136,9 @@ export function useLoadoutMutations() {
   /**
    * Toggle a hashtag on one loadout. Applies the edit to the cached row immediately,
    * then serializes PUTs per id — each request is rebuilt from the cache at send time
-   * so an earlier response cannot drop tags (or a rename) that landed while it was
-   * in flight. Refusals (cap / overflow / invalid) are synchronous; the caller toasts.
+   * so an earlier tag response cannot drop tags that landed while it was in flight.
+   * Ordinary `update.mutate` can still run concurrently; a response never replaces a
+   * cached row with a later `updatedAt`. Refusals are synchronous; the caller toasts.
    */
   const setTag = useCallback(
     (id: string, tag: string, present: boolean): TagEditResult => {
@@ -166,7 +170,9 @@ export function useLoadoutMutations() {
           tagPending.current.set(id, left);
           if (left <= 0) {
             queryClient.setQueryData<SavedLoadout[]>(LOADOUTS_QUERY_KEY, (list) =>
-              list?.map((l) => (l.id === saved.id ? saved : l)),
+              list?.map((l) =>
+                l.id === saved.id ? newerSavedLoadout(l, saved) : l,
+              ),
             );
           }
         } catch (err) {

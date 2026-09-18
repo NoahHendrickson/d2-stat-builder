@@ -5,6 +5,7 @@ import {
   loadoutHashtags,
   loadoutNotesHashtags,
   normalizeTag,
+  newerSavedLoadout,
   parseBuilderSnapshot,
   parseDimLoadout,
   parseOptimizerLoadout,
@@ -216,6 +217,24 @@ describe("parseSavedLoadoutData / parseSavedLoadout", () => {
     expect(rec.id).toBe("abc");
     expect(rec.updatedAt).toBe(2);
   });
+});
+
+test("newerSavedLoadout keeps a later updatedAt so a stale PUT cannot roll back", () => {
+  const body = { version: 1, loadout: dim() };
+  const older = parseSavedLoadout({ ...body, id: "abc", createdAt: 1, updatedAt: 1 })!;
+  const newer = parseSavedLoadout({
+    ...body,
+    id: "abc",
+    createdAt: 1,
+    updatedAt: 2,
+    loadout: { ...dim(), name: "After" },
+  })!;
+  expect(
+    newerSavedLoadout(newer, { ...older, loadout: { ...older.loadout, name: "Before" } })
+      .loadout.name,
+  ).toBe("After");
+  expect(newerSavedLoadout(older, newer).loadout.name).toBe("After");
+  expect(newerSavedLoadout(newer, { ...newer, loadout: { ...newer.loadout, name: "Same ts" } }).loadout.name).toBe("Same ts");
 });
 
 test("loadoutHashtags pulls tags from name + notes, lower-cased, deduped", () => {

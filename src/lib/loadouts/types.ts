@@ -67,6 +67,17 @@ export interface SavedLoadout extends SavedLoadoutData {
   updatedAt: number;
 }
 
+/**
+ * Prefer `cached` when it was written later. An in-flight PUT must not replace a
+ * newer edit that already landed (tag vs rename racing on the same row).
+ */
+export function newerSavedLoadout(
+  cached: SavedLoadout,
+  incoming: SavedLoadout,
+): SavedLoadout {
+  return cached.updatedAt > incoming.updatedAt ? cached : incoming;
+}
+
 // --- primitives ---
 
 const isObj = (v: unknown): v is Record<string, unknown> =>

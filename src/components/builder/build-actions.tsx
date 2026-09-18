@@ -40,6 +40,8 @@ import type { OptimizerLoadout } from "@/lib/optimizer/types";
 export type GetBuilderState = () => {
   targets: number[];
   builderSnapshot?: BuilderSnapshot;
+  /** Set bonuses the current pool can satisfy — DIM export, not "Load in builder". */
+  setBonuses?: Record<number, 2 | 4>;
 };
 
 /** The active subclass's DIM handoff data (undefined hash = unknown subclass/class combo). */
@@ -139,7 +141,7 @@ export function BuildActions({
 
   /** The dim-api object for this build (shared by Open in DIM and Save). */
   const makeDimLoadout = (name: string, notes?: string) => {
-    const { targets, builderSnapshot } = getBuilderState();
+    const { targets, setBonuses } = getBuilderState();
     return buildDimLoadout({
       loadout,
       pieces: livePieces,
@@ -158,7 +160,7 @@ export function BuildActions({
           : undefined,
       name,
       notes,
-      setBonuses: builderSnapshot?.setReqs,
+      setBonuses,
       artifactUnlocks: targetCharacter?.artifactUnlocks,
     });
   };

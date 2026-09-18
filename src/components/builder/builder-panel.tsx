@@ -282,9 +282,9 @@ export function BuilderPanel({
 
   // Set requirements narrowed to sets the player owns for this class: a restored (or
   // class-corrected) requirement for a set they no longer own would make every build
-  // infeasible. The optimizer reads this pruned view; persistence and loadout snapshots
-  // keep the raw `setReqs` so turning a pool toggle off can't permanently drop a
-  // requirement for a set that only exists on the wider pool.
+  // infeasible. The optimizer and DIM/export read this pruned view; persistence and
+  // "Load in builder" keep the raw `setReqs` so turning a pool toggle off can't
+  // permanently drop a requirement for a set that only exists on the wider pool.
   const ownedSetReqs = useMemo(() => {
     if (!setMap.size) return setReqs;
     const kept = Object.entries(setReqs).filter(([h]) => setMap.has(Number(h)));
@@ -533,8 +533,8 @@ export function BuilderPanel({
 
   // The pool as it stands once Power matters is ON — identical while it is; with the
   // toggle off, the same builder runs again with Dreamer's pinned (if checked) and
-  // legacy legendaries admitted (if checked), including class items. The power
-  // controls seed the first-enable range from this.
+  // legacy legendaries admitted (if checked), including class items. Spirit selection
+  // is applied too, so a theoretical exotic class item seeds the first-enable range.
   const powerSlotPieces = useMemo(() => {
     if (powerRange.enabled) return slotPieces;
     const previewPool = classPieces.filter((p) =>
@@ -544,11 +544,29 @@ export function BuilderPanel({
         legacyArmor: powerRange.legacyArmor,
       }),
     );
-    const previewClassItems = powerRange.dreamersBond
-      ? dreamersPiece
-        ? [dreamersPiece]
-        : []
-      : previewPool.filter((p) => p.slot === "classItem");
+    let previewClassItems;
+    if (powerRange.dreamersBond) {
+      previewClassItems = dreamersPiece ? [dreamersPiece] : [];
+    } else {
+      previewClassItems = previewPool.filter((p) => p.slot === "classItem");
+      if (
+        manifest &&
+        classType !== null &&
+        selectedClassItemHash !== undefined
+      ) {
+        previewClassItems = applySpiritSelectionToClassItems(
+          previewClassItems,
+          manifest,
+          {
+            selectedClassItemHash,
+            exoticPerks,
+            name: selectedExoticOption?.name ?? "Exotic class item",
+            icon: selectedExoticOption?.icon,
+            classType,
+          },
+        );
+      }
+    }
     return buildOptimizerSlots(previewPool, {
       classItemPieces: previewClassItems,
       masks: festivalMaskHelmets,
@@ -564,6 +582,11 @@ export function BuilderPanel({
     powerRange.legacyArmor,
     dreamersPiece,
     festivalMaskHelmets,
+    manifest,
+    classType,
+    selectedClassItemHash,
+    selectedExoticOption,
+    exoticPerks,
   ]);
 
   // A stored exotic class item loses to a forced Dreamer's Bond on restore. From then on
@@ -863,10 +886,18 @@ export function BuilderPanel({
   // a discarded concurrent render can never leave it stale. (A plain ref would do the same
   // job, but react-hooks/refs flags a ref-reading callback passed into useMemo.)
   const [builderState] = useState(() =>
-    createValueStore({ targets, builderSnapshot }),
+    createValueStore({
+      targets,
+      builderSnapshot,
+      setBonuses: ownedSetReqs,
+    }),
   );
   useLayoutEffect(() => {
-    builderState.set({ targets, builderSnapshot });
+    builderState.set({
+      targets,
+      builderSnapshot,
+      setBonuses: ownedSetReqs,
+    });
   });
   const getBuilderState = builderState.get;
   // The rows' stat chips light up on met targets; they subscribe to this store per chip
@@ -927,11 +958,13 @@ export function BuilderPanel({
   );
 
   return (
-    <div className="grid h-full min-h-0 w-full flex-1 grid-cols-1 gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(18rem,39.74rem)_5rem_minmax(29rem,calc(80rem-39.74rem-5rem))_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)] lg:gap-x-0">
+    <div className="grid h-full min-h-0 w-full flex-1 grid-cols-1 gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,39.74rem)_5rem_minmax(0,calc(80rem-39.74rem-5rem))_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)] lg:gap-x-0">
       {/* Settings scroller spans the left leftover + the card column, so
           wheel-scrolling anywhere to the left of the cards still moves this
-          pane. Inner max-width keeps the cards on the 39.74rem track. */}
-      <div className="d2-scroll flex min-h-0 flex-col lg:col-start-1 lg:col-end-3 lg:overflow-y-auto lg:overscroll-contain lg:pl-6 lg:pr-2">
+          pane. Inner max-width keeps the cards on the 39.74rem track. Mins are
+          0 so the two columns share a narrow main pane instead of overflowing
+          past `lg:overflow-hidden`. */}
+      <div className="d2-scroll flex min-h-0 min-w-0 flex-col lg:col-start-1 lg:col-end-3 lg:overflow-y-auto lg:overscroll-contain lg:pl-6 lg:pr-2">
         <div className="flex flex-col gap-4 lg:ml-auto lg:w-full lg:max-w-[39.74rem]">
           {ready && (
           <>

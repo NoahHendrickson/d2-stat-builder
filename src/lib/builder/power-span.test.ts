@@ -55,6 +55,18 @@ test("a slot with an unknown-power piece can be left out of the mean, as the sol
   ).toEqual({ min: 300, max: 300 });
 });
 
+test("seedPowerRange lifts when a theoretical exotic can drop a low class item from the mean", () => {
+  const four = [[p(500)], [p(500)], [p(500)], [p(500)]];
+  expect(seedPowerRange(armorPowerSpan([...four, [p(300)]])!, [])).toEqual({
+    min: 460,
+    max: 460,
+  });
+  expect(seedPowerRange(armorPowerSpan([...four, [p(300), x()]])!, [])).toEqual({
+    min: 495,
+    max: 500,
+  });
+});
+
 test("at most one exotic joins the mean", () => {
   // A 300 exotic and a 200 legendary in every slot: only one exotic fits, so 220 tops out.
   const slots = [
