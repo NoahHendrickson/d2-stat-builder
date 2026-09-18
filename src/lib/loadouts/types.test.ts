@@ -3,6 +3,7 @@ import {
   LOADOUT_SCHEMA_VERSION,
   MAX_NOTES_LENGTH,
   loadoutHashtags,
+  loadoutNotesHashtags,
   normalizeTag,
   parseBuilderSnapshot,
   parseDimLoadout,
@@ -256,4 +257,20 @@ test("withLoadoutTag no-ops when notes would overflow", () => {
   const base = parseDimLoadout(dim())!;
   const full = { ...base, notes: "x".repeat(MAX_NOTES_LENGTH) };
   expect(withLoadoutTag(full, "pve", true)).toBe(full);
+});
+
+test("withLoadoutTag strips a tag even when punctuation follows it", () => {
+  const base = parseDimLoadout(dim())!;
+  const noted = { ...base, notes: "Use for #raid, or #pve." };
+  expect(loadoutHashtags(noted)).toEqual(["raid", "pve"]);
+  expect(withLoadoutTag(noted, "raid", false).notes).toBe("Use for , or #pve.");
+  expect(withLoadoutTag(noted, "pve", false).notes).toBe("Use for #raid, or .");
+});
+
+test("withLoadoutTag does not uncheck a tag that only lives in the name", () => {
+  const base = parseDimLoadout(dim())!;
+  const named = { ...base, name: "Raid #pve set", notes: undefined };
+  expect(loadoutHashtags(named)).toEqual(["pve"]);
+  expect(loadoutNotesHashtags(named.notes)).toEqual([]);
+  expect(withLoadoutTag(named, "pve", false)).toBe(named);
 });

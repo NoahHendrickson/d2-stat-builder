@@ -306,7 +306,7 @@ const BuildRow = memo(function BuildRow({
               }
             >
               <MaterialCost stacks={masterwork.cost.slice(-2)} manifest={manifest} compact />
-              {masterwork.unknownCostPieces > 0 && (
+              {masterwork.unknownCostPieces + masterwork.unknownPieces > 0 && (
                 <span title="Some pieces have an unknown upgrade cost">?</span>
               )}
             </span>
@@ -368,10 +368,10 @@ const BuildRow = memo(function BuildRow({
                       {piece.icon ? (
                         <ArmorThumb
                           icon={piece.icon}
-                          watermark={piece.isExotic ? piece.watermark : undefined}
+                          watermark={piece.watermark}
                           size={32}
                           exoticFrame={piece.isExotic}
-                          isTier5={piece.isExotic && piece.tunedStat !== undefined}
+                          isTier5={piece.tunedStat !== undefined}
                         />
                       ) : (
                         <span
@@ -469,7 +469,19 @@ const BuildRow = memo(function BuildRow({
                 <div className="flex flex-col gap-1.5 text-sm">
                   {pieces.map((piece, pi) => {
                     const mw = piece?.masterwork;
-                    if (!piece || !mw || mw.level >= mw.max) return null;
+                    if (!piece) return null;
+                    if (!mw) {
+                      return (
+                        <div
+                          key={loadout.pieceIds[pi]}
+                          className="flex flex-wrap items-center gap-x-3 gap-y-0.5"
+                        >
+                          <span className="min-w-0 truncate">{piece.name}</span>
+                          <span className="text-text-secondary">masterwork unknown</span>
+                        </div>
+                      );
+                    }
+                    if (mw.level >= mw.max) return null;
                     return (
                       <div
                         key={loadout.pieceIds[pi]}
@@ -490,11 +502,13 @@ const BuildRow = memo(function BuildRow({
                   <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 font-medium">
                     <span>To finish</span>
                     <MaterialCost stacks={masterwork.cost} manifest={manifest} />
-                    {masterwork.unknownCostPieces > 0 && (
+                    {masterwork.unknownCostPieces + masterwork.unknownPieces > 0 && (
                       <span className="font-normal text-text-secondary">
-                        + {masterwork.unknownCostPieces}{" "}
-                        {masterwork.unknownCostPieces === 1 ? "piece" : "pieces"} with
-                        an unknown cost
+                        + {masterwork.unknownCostPieces + masterwork.unknownPieces}{" "}
+                        {masterwork.unknownCostPieces + masterwork.unknownPieces === 1
+                          ? "piece"
+                          : "pieces"}{" "}
+                        with an unknown cost
                       </span>
                     )}
                   </div>
@@ -726,12 +740,14 @@ export function BuildResults({
   sort: LoadoutSortState;
 } & BuildActionProps) {
   // "Upgrade cost" sorts by a scarcity-weighted total of each build's remaining
-  // masterwork materials (see materialScore) — pieces with an unknown cost count as 0.
+  // masterwork materials (see materialScore). Builds with any unknown cost sort last.
   const costOf = useCallback<LoadoutCostFn>(
     (loadout) => {
       let score = 0;
       for (const id of loadout.pieceIds) {
-        score += materialScore(pieceMap.get(id)?.masterwork?.cost);
+        const mw = pieceMap.get(id)?.masterwork;
+        if (!mw || (mw.level < mw.max && mw.cost === undefined)) return null;
+        score += materialScore(mw.cost);
       }
       return score;
     },

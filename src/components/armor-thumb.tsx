@@ -17,8 +17,9 @@ const SIZE_CLASS = {
 export type ArmorThumbSize = keyof typeof SIZE_CLASS;
 
 /**
- * Armor icon. Watermark, T5 pip rail, and gold glow frame are Armor 3.0 only —
- * Armor 2.0 / un-tiered pieces (including legacy exotics) render the icon alone.
+ * Armor icon. The watermark renders whenever one is supplied (legacy and
+ * lower-tier Armor 3.0 pieces carry one too). The T5 pip rail is Tier-5 only;
+ * the gold glow frame follows `exoticFrame`.
  */
 export function ArmorThumb({
   icon,
@@ -37,8 +38,6 @@ export function ArmorThumb({
   isTier5?: boolean;
   className?: string;
 }) {
-  const tiered = isTier5;
-  const goldFrame = exoticFrame && tiered;
   return (
     <span
       className={cn(
@@ -59,7 +58,7 @@ export function ArmorThumb({
       ) : (
         <span className="bg-muted block size-full" aria-hidden />
       )}
-      {tiered && watermark && (
+      {watermark && (
         <Image
           src={`${BUNGIE_IMAGE_BASE}${watermark}`}
           alt=""
@@ -69,15 +68,16 @@ export function ArmorThumb({
           unoptimized
         />
       )}
-      {tiered && (
-        // Scaled from the 64px editor thumb (7.14×38 at left 6 / top 21).
-        <img
+      {isTier5 && (
+        <Image
           src="/loadout/tier-5-pips.svg"
           alt=""
-          className="pointer-events-none absolute top-[32.8125%] left-[9.375%] h-[59.375%] w-[11.16%]"
+          width={size}
+          height={size}
+          className="pointer-events-none absolute top-[32.8125%] left-[9.375%] h-[59.375%] w-[11.16%] max-w-none"
         />
       )}
-      {goldFrame && (
+      {exoticFrame && (
         <span
           className="pointer-events-none absolute inset-0 border-2 border-exotic-line shadow-[inset_0_0_12px_rgba(255,240,107,0.5)]"
           aria-hidden

@@ -208,10 +208,15 @@ test("parsePowerRange reads legacyArmor, defaulting anything but true to off", (
   expect(parsePowerRange({ enabled: true }).legacyArmor).toBe(false);
 });
 
-test("includesLegacyArmor only while Power matters is on", () => {
-  const checked = { ...DEFAULT_POWER_RANGE, legacyArmor: true };
+test("includesLegacyArmor only while Power matters is constraining (enabled with bounds)", () => {
+  const checked = {
+    ...DEFAULT_POWER_RANGE,
+    legacyArmor: true,
+    bounds: { min: 200, max: 300 },
+  };
   expect(includesLegacyArmor({ ...checked, enabled: true })).toBe(true);
   expect(includesLegacyArmor({ ...checked, enabled: false })).toBe(false);
+  expect(includesLegacyArmor({ ...checked, enabled: true, bounds: null })).toBe(false);
   expect(includesLegacyArmor({ ...DEFAULT_POWER_RANGE, enabled: true })).toBe(false);
 });
 

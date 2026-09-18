@@ -209,6 +209,35 @@ test("legacy armor reads energy capacity as its level; only energy 10 is free", 
   expect(readMasterwork("g", def, legacy, manifest, undefined)).toBeUndefined();
 });
 
+test("energy 11 without a v460 plug is Armor 3.0 with unreadable masterwork, not a finished legacy piece", () => {
+  expect(readMasterwork("h", def, profile("h", 999), manifest, ENERGY)).toBeUndefined();
+});
+
+test("the next rung is the plug at level+1, not reusablePlugs[0]", () => {
+  // Component 310 lists every insertable plug; [0] is often the level-1 rung.
+  const mw = readMasterwork(
+    "i",
+    def,
+    profile("i", E[2], undefined, {
+      reusablePlugs: {
+        data: { i: { plugs: { [SOCKET]: E.map((plugItemHash) => ({ plugItemHash })) } } },
+      },
+    }),
+    manifest,
+    ENERGY,
+  );
+  expect(mw).toEqual({
+    level: 3,
+    max: 5,
+    cost: [
+      { itemHash: GLIMMER_HASH, count: 9100 + 12500 },
+      { itemHash: ENHANCEMENT_CORE_HASH, count: 7 + 9 },
+      { itemHash: ENHANCEMENT_PRISM_HASH, count: 3 + 5 },
+      { itemHash: ASCENDANT_SHARD_HASH, count: 1 + 2 },
+    ],
+  });
+});
+
 test("no live sockets means no masterwork info at all", () => {
   expect(
     readMasterwork("zz", def, {} as DestinyProfileResponse, manifest, ENERGY),
@@ -272,9 +301,30 @@ test("summarizeMasterwork rolls pieces up, counting unknown costs separately", (
     ],
     remainingLevels: 2 + 6,
     unknownCostPieces: 1,
+    unknownPieces: 2,
     complete: false,
   });
   expect(
     summarizeMasterwork([{ masterwork: { level: 5, max: 5, cost: [] } }]),
-  ).toEqual({ cost: [], remainingLevels: 0, unknownCostPieces: 0, complete: true });
+  ).toEqual({
+    cost: [],
+    remainingLevels: 0,
+    unknownCostPieces: 0,
+    unknownPieces: 0,
+    complete: true,
+  });
+  expect(summarizeMasterwork([undefined, {}])).toEqual({
+    cost: [],
+    remainingLevels: 0,
+    unknownCostPieces: 0,
+    unknownPieces: 2,
+    complete: false,
+  });
+  expect(summarizeMasterwork([])).toEqual({
+    cost: [],
+    remainingLevels: 0,
+    unknownCostPieces: 0,
+    unknownPieces: 0,
+    complete: false,
+  });
 });

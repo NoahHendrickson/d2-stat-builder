@@ -75,47 +75,10 @@ export function ownedFestivalMasks<
  * - otherwise: the helmets alone.
  */
 export function helmetCandidates<T>(
-  helmets: T[],
-  masks: T[],
+  helmets: readonly T[],
+  masks: readonly T[],
   powerConstrained: boolean,
-): T[] {
+): readonly T[] {
   if (powerConstrained && masks.length > 0) return [...helmets, ...masks];
   return helmets;
-}
-
-/** Which non-Tier-5 pieces join the optimizer pool alongside the T5 ones. */
-export interface PoolOptions {
-  /** Legacy (Armor 2.0 / non-tunable) exotics — the solver spends their artifice +3. */
-  legacyExotics: boolean;
-  /**
-   * Tier 1–4 Armor 3.0 legendaries: an archetype but no tuning socket. Stats assume
-   * a full masterwork like any other piece; they just can't be tuned.
-   */
-  lowerTierArmor: boolean;
-  /**
-   * Legacy (Armor 2.0) legendaries: no archetype, no tuning socket. Stats assume the
-   * flat +2 legacy masterwork; artifice ones keep their +3. A "Power matters" option
-   * (see includesLegacyArmor) — off while the toggle is, like the FotL masks.
-   */
-  legacyArmor: boolean;
-}
-
-/**
- * Default optimizer pool: T5 pieces (exactly those with a tuning socket) plus whatever
- * `opts` lets in, excluding FotL masks. Masks enter the helmet slot only as optional
- * candidates while a power range is enforced (see helmetCandidates).
- */
-export function inDefaultOptimizerPool(
-  piece: {
-    isFestivalMask: boolean;
-    tunedStat?: number;
-    archetype?: string;
-    isExotic: boolean;
-  },
-  opts: PoolOptions,
-): boolean {
-  if (piece.isFestivalMask) return false;
-  if (piece.tunedStat !== undefined) return true;
-  if (piece.isExotic) return opts.legacyExotics;
-  return piece.archetype !== undefined ? opts.lowerTierArmor : opts.legacyArmor;
 }

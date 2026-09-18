@@ -98,6 +98,23 @@ test("sort by cost without a cost function leaves the solver order alone", () =>
   expect(sorted.map((l) => l.pieceIds[0])).toEqual(sample.map((l) => l.pieceIds[0]));
 });
 
+test("unknown costs pin to the end regardless of direction", () => {
+  const cost = (l: OptimizerLoadout) =>
+    ({ "high-total": 30, "high-grenade": null, mid: 12, low: 0 })[l.pieceIds[0]!] ?? null;
+  expect(sortLoadouts(sample, { key: "cost", asc: true }, cost).map((l) => l.pieceIds[0])).toEqual([
+    "low",
+    "mid",
+    "high-total",
+    "high-grenade",
+  ]);
+  expect(sortLoadouts(sample, { key: "cost", asc: false }, cost).map((l) => l.pieceIds[0])).toEqual([
+    "high-total",
+    "mid",
+    "low",
+    "high-grenade",
+  ]);
+});
+
 test("sort by total descending matches solver default order for distinct totals", () => {
   const sorted = sortLoadouts(sample, { key: "total", asc: false });
   expect(sorted.map((l) => l.pieceIds[0])).toEqual([

@@ -33,11 +33,11 @@ function TagPanel({
   onCreate?: (tag: string) => void;
 }) {
   const draft = normalizeTag(query);
-  const q = query.trim().toLowerCase();
+  const needle = (draft ?? query.trim().replace(/^#+/, "").toLowerCase());
   const selectedSet = new Set(selected);
   const catalog = [...new Set([...tags, ...selected])];
-  const shown = q ? catalog.filter((tag) => tag.includes(q)) : catalog;
-  const canCreate = !!onCreate && draft !== null && !selectedSet.has(draft);
+  const shown = needle ? catalog.filter((tag) => tag.includes(needle)) : catalog;
+  const canCreate = !!onCreate && draft !== null && !catalog.includes(draft);
 
   const create = () => {
     if (!onCreate || !draft || selectedSet.has(draft)) return;

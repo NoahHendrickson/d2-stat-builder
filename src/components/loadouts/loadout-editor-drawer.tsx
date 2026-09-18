@@ -233,16 +233,15 @@ function StatModChip({
   );
 }
 
-/** Square piece art: T5 overlay (watermark, pips, gold frame) only when the piece is tiered. */
+/** Square piece art: watermark when supplied, T5 pips on tiered pieces, gold frame on exotics. */
 function PieceThumb({ piece }: { piece: ArmorPiece }) {
-  const tiered = piece.tunedStat !== undefined;
   return (
     <ArmorThumb
       icon={piece.icon}
       watermark={piece.watermark}
       size={64}
-      exoticFrame={tiered}
-      isTier5={tiered}
+      exoticFrame={piece.isExotic}
+      isTier5={piece.tunedStat !== undefined}
     />
   );
 }

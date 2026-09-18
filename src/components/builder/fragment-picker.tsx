@@ -161,12 +161,7 @@ export const FragmentPicker = memo(function FragmentPicker({
                     />
                     {tooltip ? (
                       <Tooltip>
-                        <TooltipTrigger
-                          nativeButton={false}
-                          delay={0}
-                          closeDelay={0}
-                          render={identity}
-                        />
+                        <TooltipTrigger delay={0} render={identity} />
                         <TooltipContent
                           side="top"
                           align="start"

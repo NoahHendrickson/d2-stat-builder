@@ -30,7 +30,7 @@ const buttonVariants = cva(
           "rounded-[10px] border-transparent text-foreground hover:bg-foreground/8 aria-expanded:bg-foreground/8",
         dashed:
           // Figma 69:883: faint white/16 frame with corner ticks over the white/4 fill, no shadow.
-          "d2-corner-well d2-hover-ring rounded-none text-foreground hover:[--tick-alpha:60%] hover:[--lifted:rgb(255_255_255/8%)] aria-expanded:[--tick-alpha:60%] aria-expanded:[--lifted:rgb(255_255_255/8%)]",
+          "d2-corner-well d2-hover-ring rounded-none text-foreground hover:[--tick-alpha:60%] hover:[--lifted:color-mix(in_srgb,var(--foreground)_8%,transparent)] aria-expanded:[--tick-alpha:60%] aria-expanded:[--lifted:color-mix(in_srgb,var(--foreground)_8%,transparent)]",
         destructive:
           "d2-hover-ring border-destructive/40 bg-destructive/10 text-destructive hover:border-destructive/70 hover:bg-destructive/20 focus-visible:border-destructive",
         link: "border-transparent text-foreground underline-offset-4 hover:underline",

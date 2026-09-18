@@ -105,7 +105,7 @@ export function sumMaterialStacks(
     .sort((a, b) => orderIndex(a.itemHash) - orderIndex(b.itemHash) || a.itemHash - b.itemHash);
 }
 
-/** Scarcity-weighted scalar for sorting (see MATERIAL_WEIGHTS). Unknown costs count as 0. */
+/** Scarcity-weighted scalar for sorting (see MATERIAL_WEIGHTS). */
 export function materialScore(stacks: readonly MaterialStack[] | undefined): number {
   let score = 0;
   for (const { itemHash, count } of stacks ?? []) {
@@ -114,17 +114,62 @@ export function materialScore(stacks: readonly MaterialStack[] | undefined): num
   return score;
 }
 
+const socketIndexByDef = new WeakMap<object, number>();
+const ladderByKey = new Map<string, number[] | undefined>();
+const materialsByPlug = new Map<number, MaterialStack[]>();
+
+function masterworkSocketIndex(
+  def: Pick<DestinyInventoryItemDefinition, "sockets">,
+  sockets: readonly { plugHash?: number }[],
+  manifest: Manifest,
+): number {
+  const cached = socketIndexByDef.get(def);
+  if (cached !== undefined) {
+    const plugHash = sockets[cached]?.plugHash;
+    if (plugHash) {
+      const plug = manifest.def("DestinyInventoryItemDefinition", plugHash);
+      if (plug?.plug?.plugCategoryIdentifier === ARMOR_MASTERWORK_PLUG_CATEGORY) {
+        return cached;
+      }
+    }
+  }
+  for (let i = 0; i < sockets.length; i++) {
+    const plugHash = sockets[i].plugHash;
+    if (!plugHash) continue;
+    const plug = manifest.def("DestinyInventoryItemDefinition", plugHash);
+    if (plug?.plug?.plugCategoryIdentifier !== ARMOR_MASTERWORK_PLUG_CATEGORY) continue;
+    socketIndexByDef.set(def, i);
+    return i;
+  }
+  return -1;
+}
+
+function plugMaterials(plugHash: number, manifest: Manifest): MaterialStack[] {
+  const cached = materialsByPlug.get(plugHash);
+  if (cached) return cached;
+  const plug = manifest.def("DestinyInventoryItemDefinition", plugHash);
+  const set = manifest.def(
+    "DestinyMaterialRequirementSetDefinition",
+    plug?.plug?.insertionMaterialRequirementHash,
+  );
+  const stacks = (set?.materials ?? [])
+    .filter((m) => !m.omitFromRequirements)
+    .map((m) => ({ itemHash: m.itemHash, count: m.count }));
+  materialsByPlug.set(plugHash, stacks);
+  return stacks;
+}
+
 /**
  * Read a piece's masterwork state from its live sockets.
  *
  * Armor 3.0: the socketed `v460.plugs.armor.masterworks` plug gives the level. The
  * remaining cost comes from the piece's tier-specific ladder — the socket's plug set
- * lists one 1→5 run per gear tier, back to back, and component 310 names the exact
- * next-level plug for this instance, which anchors the right run. (The socketed
- * level-0 plug is NOT a reliable tier signal: many Tier-5 drops carry the Tier-4
- * empty plug.) Each rung's DestinyMaterialRequirementSetDefinition is what the game
- * charges for that single step, so the ladder above the current level sums to the
- * total.
+ * lists one 1→5 run per gear tier, back to back, and component 310 lists every
+ * insertable plug. The remaining ladder is the entry whose level is `level + 1` and
+ * every rung after it that climbs by exactly one. (The socketed level-0 plug is NOT a
+ * reliable tier signal: many Tier-5 drops carry the Tier-4 empty plug.) Each rung's
+ * DestinyMaterialRequirementSetDefinition is what the game charges for that single
+ * step, so the ladder above the current level sums to the total.
  *
  * Legacy (Armor 2.0): no v460 socket; energy capacity is the level and the API
  * exposes no upgrade plugs, so the cost is unknown unless it's already 10.
@@ -139,21 +184,18 @@ export function readMasterwork(
   const sockets = profile.itemComponents?.sockets?.data?.[instanceId]?.sockets;
   if (!sockets) return undefined;
 
-  let socketIndex = -1;
-  let level = 0;
-  for (let i = 0; i < sockets.length; i++) {
-    const plugHash = sockets[i].plugHash;
-    if (!plugHash) continue;
-    const plug = manifest.def("DestinyInventoryItemDefinition", plugHash);
-    if (plug?.plug?.plugCategoryIdentifier !== ARMOR_MASTERWORK_PLUG_CATEGORY) continue;
-    socketIndex = i;
-    level = masterworkPlugLevel(plug);
-    break;
-  }
+  const socketIndex = masterworkSocketIndex(def, sockets, manifest);
+  const socketed = socketIndex === -1 ? undefined : sockets[socketIndex]?.plugHash;
+  const level = socketed
+    ? masterworkPlugLevel(manifest.def("DestinyInventoryItemDefinition", socketed))
+    : 0;
 
   if (socketIndex === -1) {
     if (!energy) return undefined;
-    const capacity = Math.min(energy.capacity, LEGACY_MAX_ENERGY);
+    // Armor 3.0 energy is 11; treating that as a finished Armor 2.0 piece would
+    // report unreadable 3.0 masterwork sockets as free.
+    if (energy.capacity > LEGACY_MAX_ENERGY) return undefined;
+    const capacity = energy.capacity;
     return {
       level: capacity,
       max: LEGACY_MAX_ENERGY,
@@ -163,52 +205,56 @@ export function readMasterwork(
 
   if (level >= ARMOR3_MAX_LEVEL) return { level, max: ARMOR3_MAX_LEVEL, cost: [] };
 
-  const next = profile.itemComponents?.reusablePlugs?.data?.[instanceId]?.plugs?.[
-    socketIndex
-  ]?.[0]?.plugItemHash;
-  const ladder = next ? remainingLadder(def, socketIndex, next, manifest) : undefined;
-  if (!ladder) return { level, max: ARMOR3_MAX_LEVEL };
+  const plugs =
+    profile.itemComponents?.reusablePlugs?.data?.[instanceId]?.plugs?.[socketIndex] ?? [];
+  let next: number | undefined;
+  for (const p of plugs) {
+    if (
+      masterworkPlugLevel(manifest.def("DestinyInventoryItemDefinition", p.plugItemHash)) ===
+      level + 1
+    ) {
+      next = p.plugItemHash;
+      break;
+    }
+  }
+  const ladder = next ? remainingLadder(def, socketIndex, next, level + 1, manifest) : undefined;
+  if (!ladder?.length) return { level, max: ARMOR3_MAX_LEVEL };
 
-  const cost = sumMaterialStacks(
-    ladder.map((plugHash) => {
-      const plug = manifest.def("DestinyInventoryItemDefinition", plugHash);
-      const set = manifest.def(
-        "DestinyMaterialRequirementSetDefinition",
-        plug?.plug?.insertionMaterialRequirementHash,
-      );
-      return (set?.materials ?? [])
-        .filter((m) => !m.omitFromRequirements)
-        .map((m) => ({ itemHash: m.itemHash, count: m.count }));
-    }),
-  );
+  const cost = sumMaterialStacks(ladder.map((plugHash) => plugMaterials(plugHash, manifest)));
   return { level, max: ARMOR3_MAX_LEVEL, cost };
 }
 
 /**
- * The rungs from `next` up to level 5, in order: `next` and every plug that follows it
- * in the socket's plug set while the level keeps climbing by exactly one. Undefined
- * when the plug set can't be resolved or doesn't contain `next`.
+ * The rungs from `next` (the plug at `expectedStart`) up to level 5, in order.
+ * Undefined when the plug set can't be resolved, doesn't contain `next`, or the
+ * climb doesn't start at `expectedStart`.
  */
 function remainingLadder(
   def: Pick<DestinyInventoryItemDefinition, "sockets">,
   socketIndex: number,
   next: number,
+  expectedStart: number,
   manifest: Manifest,
 ): number[] | undefined {
   const entry = def.sockets?.socketEntries?.[socketIndex];
-  const plugSet = manifest.def(
-    "DestinyPlugSetDefinition",
-    entry?.reusablePlugSetHash || entry?.randomizedPlugSetHash,
-  );
+  const plugSetHash = entry?.reusablePlugSetHash || entry?.randomizedPlugSetHash;
+  const cacheKey = `${plugSetHash ?? 0}:${next}:${expectedStart}`;
+  if (ladderByKey.has(cacheKey)) return ladderByKey.get(cacheKey);
+
+  const plugSet = manifest.def("DestinyPlugSetDefinition", plugSetHash);
   const items = plugSet?.reusablePlugItems;
-  if (!items) return undefined;
+  if (!items) {
+    ladderByKey.set(cacheKey, undefined);
+    return undefined;
+  }
   const start = items.findIndex((p) => p.plugItemHash === next);
-  if (start === -1) return undefined;
+  if (start === -1) {
+    ladderByKey.set(cacheKey, undefined);
+    return undefined;
+  }
 
   const ladder: number[] = [];
-  let expected = masterworkPlugLevel(
-    manifest.def("DestinyInventoryItemDefinition", next),
-  );
+  let expected = expectedStart;
   for (let i = start; i < items.length; i++) {
     const hash = items[i].plugItemHash;
     const level = masterworkPlugLevel(manifest.def("DestinyInventoryItemDefinition", hash));
@@ -216,7 +262,9 @@ function remainingLadder(
     ladder.push(hash);
     expected++;
   }
-  return ladder;
+  const result = ladder.length > 0 ? ladder : undefined;
+  ladderByKey.set(cacheKey, result);
+  return result;
 }
 
 export interface LoadoutMasterworkSummary {
@@ -226,7 +274,9 @@ export interface LoadoutMasterworkSummary {
   remainingLevels: number;
   /** Pieces below max whose cost the game doesn't expose. */
   unknownCostPieces: number;
-  /** True when every piece is already fully masterworked. */
+  /** Pieces with no masterwork info at all (synthetic pins, missing sockets). */
+  unknownPieces: number;
+  /** True when every piece reported a masterwork and none have levels left to buy. */
   complete: boolean;
 }
 
@@ -237,9 +287,15 @@ export function summarizeMasterwork(
   const costs: MaterialStack[][] = [];
   let remainingLevels = 0;
   let unknownCostPieces = 0;
+  let unknownPieces = 0;
+  let known = 0;
   for (const piece of pieces) {
     const mw = piece?.masterwork;
-    if (!mw) continue;
+    if (!mw) {
+      unknownPieces++;
+      continue;
+    }
+    known++;
     const remaining = Math.max(0, mw.max - mw.level);
     remainingLevels += remaining;
     if (remaining === 0) continue;
@@ -250,6 +306,7 @@ export function summarizeMasterwork(
     cost: sumMaterialStacks(costs),
     remainingLevels,
     unknownCostPieces,
-    complete: remainingLevels === 0,
+    unknownPieces,
+    complete: unknownPieces === 0 && known > 0 && remainingLevels === 0,
   };
 }

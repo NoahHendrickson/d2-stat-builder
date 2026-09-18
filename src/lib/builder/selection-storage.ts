@@ -62,9 +62,12 @@ export function forcesDreamersBond(range: PowerRangeSelection): boolean {
   return range.enabled && range.dreamersBond;
 }
 
-/** Whether legacy (Armor 2.0) legendaries join the pool: only while Power matters is on. */
+/**
+ * Whether legacy (Armor 2.0) legendaries join the pool: only while Power matters is
+ * actually constraining (enabled with bounds), the same contract FotL masks use.
+ */
 export function includesLegacyArmor(range: PowerRangeSelection): boolean {
-  return range.enabled && range.legacyArmor;
+  return range.enabled && range.bounds !== null && range.legacyArmor;
 }
 
 /** The weapon powers that were actually entered, in slot order — what the solver averages in. */

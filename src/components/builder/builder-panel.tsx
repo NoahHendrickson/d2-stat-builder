@@ -44,13 +44,12 @@ import {
   dreamersBondPiece,
   dreamersClassItemName,
 } from "@/lib/armory/dreamers-bond";
+import { ownedFestivalMasks } from "@/lib/armory/festival-masks";
 import {
-  helmetCandidates,
+  buildOptimizerSlots,
   inDefaultOptimizerPool,
-  ownedFestivalMasks,
-} from "@/lib/armory/festival-masks";
+} from "@/lib/armory/optimizer-pool";
 import {
-  ARMOR_SLOTS,
   BALANCED_TUNING_PLUG_HASH,
   CLASS_NAMES,
   STAT_DISPLAY_ORDER,
@@ -283,9 +282,9 @@ export function BuilderPanel({
 
   // Set requirements narrowed to sets the player owns for this class: a restored (or
   // class-corrected) requirement for a set they no longer own would make every build
-  // infeasible. Everything downstream — the optimizer, persistence, loadout snapshots —
-  // reads this; the toggles only ever list owned sets, so the raw state needs no pruning.
-  // Left untouched until the set list exists so stored requirements survive the load.
+  // infeasible. The optimizer reads this pruned view; persistence and loadout snapshots
+  // keep the raw `setReqs` so turning a pool toggle off can't permanently drop a
+  // requirement for a set that only exists on the wider pool.
   const ownedSetReqs = useMemo(() => {
     if (!setMap.size) return setReqs;
     const kept = Object.entries(setReqs).filter(([h]) => setMap.has(Number(h)));
@@ -423,6 +422,7 @@ export function BuilderPanel({
           watermark: itemWatermark(
             manifest.def("DestinyInventoryItemDefinition", item.hash),
           ),
+          isTier5: true,
         };
         if (!entry.hashes.includes(item.hash)) entry.hashes.push(item.hash);
         if (!entry.icon) entry.icon = item.icon;
@@ -517,60 +517,53 @@ export function BuilderPanel({
   // the same contract runOptimizer uses (enabled with no bounds constrains nothing).
   const powerConstrained = toOptimizerPowerRange(powerRange) !== undefined;
 
-  // The optimizer's candidates per slot, in ARMOR_SLOTS order: the class-item pool
-  // (Spirit-filtered / Dreamer's-pinned), the helmet pool per helmetCandidates (masks
-  // optional under a power range / absent), the T5 pool otherwise. runOptimizer maps
-  // these to OptimizerPieces; the power range controls read their power.
+  // The optimizer's candidates per slot: the class-item pool (Spirit-filtered /
+  // Dreamer's-pinned), the helmet pool per helmetCandidates (masks optional under a
+  // power range), the T5 pool otherwise. runOptimizer maps these to OptimizerPieces;
+  // the power range controls read their power.
   const slotPieces = useMemo(
     () =>
-      ARMOR_SLOTS.map((slot) =>
-        slot === "classItem"
-          ? classItemPieces
-          : slot === "helmet"
-            ? helmetCandidates(
-                pool.filter((p) => p.slot === "helmet"),
-                festivalMaskHelmets,
-                powerConstrained,
-              )
-            : pool.filter((p) => p.slot === slot),
-      ),
+      buildOptimizerSlots(pool, {
+        classItemPieces,
+        masks: festivalMaskHelmets,
+        powerConstrained,
+      }),
     [pool, classItemPieces, festivalMaskHelmets, powerConstrained],
   );
 
   // The pool as it stands once Power matters is ON — identical while it is; with the
-  // toggle off, the class-item slot a checked Dreamer's Bond will pin and the legacy
-  // legendaries a checked "Include legacy armor" will let in. The power controls seed
-  // the first-enable range from this, so the seed can't be read off a pool the same
-  // click replaces with a 21-power piece or widens with low-power legacy rolls.
+  // toggle off, the same builder runs again with Dreamer's pinned (if checked) and
+  // legacy legendaries admitted (if checked), including class items. The power
+  // controls seed the first-enable range from this.
   const powerSlotPieces = useMemo(() => {
     if (powerRange.enabled) return slotPieces;
-    let pieces = slotPieces;
-    if (powerRange.dreamersBond) {
-      const pinned = dreamersPiece ? [dreamersPiece] : [];
-      pieces = pieces.map((slot, i) => (ARMOR_SLOTS[i] === "classItem" ? pinned : slot));
-    }
-    if (powerRange.legacyArmor) {
-      const legacy = classPieces.filter((p) =>
-        inDefaultOptimizerPool(p, {
-          legacyExotics: false,
-          lowerTierArmor: false,
-          legacyArmor: true,
-        }),
-      );
-      pieces = pieces.map((slot, i) => {
-        const name = ARMOR_SLOTS[i];
-        if (name === "classItem") return slot;
-        return [...slot, ...legacy.filter((p) => p.slot === name)];
-      });
-    }
-    return pieces;
+    const previewPool = classPieces.filter((p) =>
+      inDefaultOptimizerPool(p, {
+        legacyExotics: useLegacyExotics,
+        lowerTierArmor: useLowerTierArmor,
+        legacyArmor: powerRange.legacyArmor,
+      }),
+    );
+    const previewClassItems = powerRange.dreamersBond
+      ? dreamersPiece
+        ? [dreamersPiece]
+        : []
+      : previewPool.filter((p) => p.slot === "classItem");
+    return buildOptimizerSlots(previewPool, {
+      classItemPieces: previewClassItems,
+      masks: festivalMaskHelmets,
+      powerConstrained: true,
+    });
   }, [
     slotPieces,
     classPieces,
+    useLegacyExotics,
+    useLowerTierArmor,
     powerRange.enabled,
     powerRange.dreamersBond,
     powerRange.legacyArmor,
     dreamersPiece,
+    festivalMaskHelmets,
   ]);
 
   // A stored exotic class item loses to a forced Dreamer's Bond on restore. From then on
@@ -645,7 +638,7 @@ export function BuilderPanel({
         classType,
         targets,
         major,
-        setReqs: ownedSetReqs,
+        setReqs,
         pinnedSets,
         setFilters,
         exoticName:
@@ -669,7 +662,7 @@ export function BuilderPanel({
     classType,
     targets,
     major,
-    ownedSetReqs,
+    setReqs,
     pinnedSets,
     setFilters,
     selectedExotic,
@@ -832,7 +825,7 @@ export function BuilderPanel({
     () => ({
       targets,
       major,
-      setReqs: ownedSetReqs,
+      setReqs,
       exoticName:
         selectedExotic === null
           ? null
@@ -849,7 +842,7 @@ export function BuilderPanel({
     [
       targets,
       major,
-      ownedSetReqs,
+      setReqs,
       selectedExotic,
       exotics,
       exoticPerks,

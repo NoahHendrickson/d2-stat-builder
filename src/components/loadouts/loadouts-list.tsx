@@ -51,7 +51,7 @@ import { selectionsForLoadout } from "@/lib/loadouts/load-in-builder";
 import { loadoutSubclass, withLoadoutSubclass } from "@/lib/loadouts/subclass";
 import {
   LOADOUT_SCHEMA_VERSION,
-  withLoadoutTag,
+  MAX_TAGS,
   type SavedLoadout,
   type SavedLoadoutData,
 } from "@/lib/loadouts/types";
@@ -141,9 +141,9 @@ const ESTIMATED_ROW_HEIGHT_PX = 104;
 const ROW_GAP_PX = 10;
 
 /**
- * The sidebar's loadouts section (Figma 1:409): search, the count with sort / filter
- * menus, and the virtualized card list. Rows scroll inside this section — the sidebar
- * itself never scrolls, so the armor summary stays pinned below.
+ * The sidebar's loadouts section (Figma 69:865): collapse + search, then the count
+ * with sort / filter menus, and the virtualized card list. Rows scroll inside this
+ * section — the sidebar itself never scrolls, so the armor summary stays pinned below.
  */
 export function LoadoutsList({
   armory,
@@ -157,7 +157,7 @@ export function LoadoutsList({
   onArmoryChanged: () => void;
   /** Called after an action that switches views (the mobile drawer closes itself). */
   onNavigate?: () => void;
-  /** Desktop collapse control — sits beside the search field (Figma 46:2958). */
+  /** Desktop collapse control — sits left of the search field (Figma 69:865). */
   headerAction?: ReactNode;
 }) {
   const router = useRouter();
@@ -172,9 +172,7 @@ export function LoadoutsList({
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const loadouts = useLoadouts();
-  const { create, update, remove } = useLoadoutMutations();
-  const updateMutateAsync = update.mutateAsync;
-  const tagUpdateById = useRef(new Map<string, Promise<void>>());
+  const { create, update, remove, setTag } = useLoadoutMutations();
 
   const [query, setQuery] = useState("");
   // The filter pass runs on the deferred value so typing never waits on it.
@@ -425,35 +423,17 @@ export function LoadoutsList({
 
   const setLoadoutTag = useCallback(
     (saved: SavedLoadout, tag: string, present: boolean) => {
-      const current =
-        queryClient
-          .getQueryData<SavedLoadout[]>(LOADOUTS_QUERY_KEY)
-          ?.find((l) => l.id === saved.id) ?? saved;
-      const loadout = withLoadoutTag(current.loadout, tag, present);
-      if (loadout === current.loadout) return;
-      const data: SavedLoadoutData = {
-        version: LOADOUT_SCHEMA_VERSION,
-        loadout,
-        ...(current.optimizer ? { optimizer: current.optimizer } : {}),
-        ...(current.builder ? { builder: current.builder } : {}),
-        ...(current.modPlacement ? { modPlacement: current.modPlacement } : {}),
-      };
-      queryClient.setQueryData<SavedLoadout[]>(LOADOUTS_QUERY_KEY, (list) =>
-        list?.map((l) => (l.id === current.id ? { ...l, loadout } : l)),
+      const result = setTag(saved.id, tag, present);
+      if (result.status !== "refused") return;
+      toast.error(
+        result.reason === "cap"
+          ? `A loadout can have at most ${MAX_TAGS} tags`
+          : result.reason === "overflow"
+            ? "Notes are too long to add that tag"
+            : "That's not a valid tag",
       );
-      const run = async () => {
-        try {
-          await updateMutateAsync({ id: current.id, data });
-        } catch (err) {
-          onMutationError(err as { notConfigured: boolean; message: string });
-          await queryClient.invalidateQueries({ queryKey: LOADOUTS_QUERY_KEY });
-        }
-      };
-      const prev = tagUpdateById.current.get(saved.id) ?? Promise.resolve();
-      const next = prev.then(run, run);
-      tagUpdateById.current.set(saved.id, next);
     },
-    [queryClient, updateMutateAsync],
+    [setTag],
   );
 
   /**
@@ -518,7 +498,8 @@ export function LoadoutsList({
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
       <div className="flex flex-col gap-2 px-2">
-        <div className="flex items-center gap-1">
+        <div className="flex items-start gap-2">
+          {headerAction}
           <div className="relative min-w-0 flex-1">
             <MagnifyingGlass
               className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 z-10 size-4 -translate-y-1/2"
@@ -543,18 +524,17 @@ export function LoadoutsList({
               </button>
             )}
           </div>
-          {headerAction}
         </div>
 
         <div className="flex items-center justify-between pl-1">
           <span className="text-sm tabular-nums" aria-live="polite">
             {countLabel}
           </span>
-          <div className="flex items-center gap-px">
+          <div className="flex items-center gap-2">
             <DropdownMenu>
               <TooltipLabel label={`Sort by ${sortLabel}`}>
                 <DropdownMenuTrigger
-                  render={<Button variant="ghost" size="icon" />}
+                  render={<Button variant="default" size="icon" />}
                   aria-label={`Sort by ${sortLabel}`}
                 >
                   <ArrowsDownUp aria-hidden />
@@ -580,7 +560,7 @@ export function LoadoutsList({
               <TooltipLabel label="Filter loadouts">
                 <DropdownMenuTrigger
                   render={
-                    <Button variant="ghost" size="icon" className="relative" />
+                    <Button variant="default" size="icon" className="relative" />
                   }
                   aria-label={
                     filterCount > 0
