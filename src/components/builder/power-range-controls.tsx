@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useId, useMemo } from "react";
+import { memo, useId, useMemo, type ReactNode } from "react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Slider } from "@/components/ui/slider";
@@ -17,6 +17,7 @@ import {
 } from "@/lib/builder/power-span";
 import { DREAMERS_BOND_POWER } from "@/lib/armory/dreamers-bond";
 import { cn } from "@/lib/utils";
+import { PowerValue } from "@/components/power-value";
 
 const WEAPON_SLOTS = ["Kinetic", "Energy", "Heavy"] as const;
 /** Upper bound on what a power input accepts — generous, the game's cap moves. */
@@ -58,8 +59,9 @@ export const PowerRangeControls = memo(function PowerRangeControls({
   /** Class-specific collections item: Dreamer's Bond / Cloak / Mark. */
   dreamersItemName: string;
 }) {
-  const { enabled, bounds, weapons, dreamersBond } = value;
+  const { enabled, bounds, weapons, dreamersBond, legacyArmor } = value;
   const dreamersId = useId();
+  const legacyArmorId = useId();
   const armorSpan = useMemo(() => armorPowerSpan(slotPieces), [slotPieces]);
   // The gear power a build can land on with the weapons entered so far.
   const reach = armorSpan
@@ -104,12 +106,11 @@ export const PowerRangeControls = memo(function PowerRangeControls({
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-4">
         <div className="space-y-0.5">
-          <span className="text-sm">Power matters</span>
+          <span className="text-sm font-medium">Power matters</span>
           <p className="text-muted-foreground text-xs">
-            Only show builds whose gear power lands in a range. Power is the
-            game&apos;s average over the five armor pieces and the weapons you
-            enter below. Festival of the Lost masks count as power 0, so your
-            masks join the helmet candidates while this is on.
+            Only show builds whose gear power lands in a range. Festival of
+            the Lost masks count as power 0, so your masks join the helmet
+            candidates while this is on.
           </p>
         </div>
         <Switch
@@ -120,61 +121,83 @@ export const PowerRangeControls = memo(function PowerRangeControls({
       </div>
 
       {enabled && (
-        <>
-          <div className="space-y-2">
-            <div className="flex items-center gap-2">
-              <PowerInput
-                label="Minimum power"
-                value={bounds?.min ?? null}
-                onCommit={commitMin}
-              />
-              <span className="text-muted-foreground text-xs">to</span>
-              <PowerInput
-                label="Maximum power"
-                value={bounds?.max ?? null}
-                onCommit={commitMax}
-              />
-              {reach && (
-                <span className="text-muted-foreground ml-auto text-xs tabular-nums">
-                  Reachable {reach.min}–{reach.max}
-                </span>
+        <ol
+          className="list-none space-y-4 rounded-md border border-power/30 bg-power/10 p-3"
+          aria-label="Power matters steps"
+        >
+          <Step n={1}>
+            <div>
+              <p className="text-sm font-medium">
+                Set the power range you want
+              </p>
+              <p className="text-muted-foreground text-xs">
+                Gear power is the game&apos;s average over the five armor
+                pieces and the weapons you enter next. Pick the light level
+                you want the build to land in.
+              </p>
+            </div>
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <PowerInput
+                  label="Minimum power"
+                  value={bounds?.min ?? null}
+                  onCommit={commitMin}
+                />
+                <span className="text-muted-foreground text-xs">to</span>
+                <PowerInput
+                  label="Maximum power"
+                  value={bounds?.max ?? null}
+                  onCommit={commitMax}
+                />
+                {reach && (
+                  <span className="ml-auto flex items-baseline gap-1.5 text-xs tabular-nums">
+                    <span className="d2-label text-[10px]">Reach</span>
+                    <PowerValue value={`${reach.min}–${reach.max}`} size="xs" />
+                  </span>
+                )}
+              </div>
+              {reach && bounds && sliderMax > sliderMin && (
+                <Slider
+                  min={sliderMin}
+                  max={sliderMax}
+                  step={1}
+                  value={[bounds.min, bounds.max]}
+                  onValueChange={(v) => {
+                    if (!Array.isArray(v) || v.length !== 2) return;
+                    emit({ ...value, bounds: { min: v[0], max: v[1] } });
+                  }}
+                  aria-label="Power range"
+                  className="cursor-pointer"
+                />
+              )}
+              {outOfReach && reach && (
+                <p className="text-destructive text-xs" role="status">
+                  No build can land in this range — with these weapons your
+                  gear reaches {reach.min}–{reach.max}.
+                </p>
               )}
             </div>
-            {reach && bounds && sliderMax > sliderMin && (
-              <Slider
-                min={sliderMin}
-                max={sliderMax}
-                step={1}
-                value={[bounds.min, bounds.max]}
-                onValueChange={(v) => {
-                  if (!Array.isArray(v) || v.length !== 2) return;
-                  emit({ ...value, bounds: { min: v[0], max: v[1] } });
-                }}
-                aria-label="Power range"
-                className="cursor-pointer"
-              />
-            )}
-            {outOfReach && reach && (
-              <p className="text-destructive text-xs" role="status">
-                No build can land in this range — with these weapons your gear
-                reaches {reach.min}–{reach.max}.
-              </p>
-            )}
-          </div>
+          </Step>
 
-          <div className="space-y-1.5">
+          <Step n={2}>
             <div className="flex items-baseline justify-between gap-4">
-              <span className="text-sm">Weapons</span>
+              <p className="text-sm font-medium">
+                Enter the weapons you&apos;ll use
+              </p>
               <span className="text-muted-foreground text-xs">
                 Leave a slot blank to skip it
               </span>
             </div>
+            <p className="text-muted-foreground text-xs">
+              Figure out what you want to run, then input their light level.
+              Ideally have at least one 10-power weapon and the others at 300
+              or below. The lower your weapons, the better stats you&apos;ll
+              get — the armor can sit higher.
+            </p>
             <div className="grid grid-cols-3 gap-2">
               {WEAPON_SLOTS.map((name, i) => (
                 <label key={name} className="space-y-1">
-                  <span className="text-muted-foreground block text-[10px] font-medium tracking-wide uppercase">
-                    {name}
-                  </span>
+                  <span className="d2-label block text-[10px]">{name}</span>
                   <PowerInput
                     label={`${name} weapon power`}
                     value={weapons[i]}
@@ -186,35 +209,76 @@ export const PowerRangeControls = memo(function PowerRangeControls({
                 </label>
               ))}
             </div>
-            <p className="text-muted-foreground text-xs">
-              The power of the weapons you&apos;ll equip with the build, averaged
-              in with the armor.
-            </p>
-          </div>
+          </Step>
 
-          <div className="flex items-start gap-3">
-            <Checkbox
-              id={dreamersId}
-              checked={dreamersBond}
-              onCheckedChange={(checked) =>
-                emit({ ...value, dreamersBond: checked === true })
-              }
-              className="mt-0.5 cursor-pointer"
-            />
-            <label htmlFor={dreamersId} className="cursor-pointer space-y-0.5">
-              <span className="block text-sm">Force {dreamersItemName}</span>
-              <span className="text-muted-foreground block text-xs">
-                Pins the collections class item at power {DREAMERS_BOND_POWER} with
-                no stats, so it drags the average down and the other four pieces
-                carry the build.
-              </span>
-            </label>
-          </div>
-        </>
+          <Step n={3}>
+            <div className="flex items-start gap-3">
+              <Checkbox
+                id={legacyArmorId}
+                checked={legacyArmor}
+                onCheckedChange={(checked) =>
+                  emit({ ...value, legacyArmor: checked === true })
+                }
+                className="mt-0.5 cursor-pointer"
+              />
+              <label
+                htmlFor={legacyArmorId}
+                className="cursor-pointer space-y-0.5"
+              >
+                <span className="block text-sm font-medium">
+                  Turn on legacy armor
+                </span>
+                <span className="text-muted-foreground block text-xs">
+                  If you&apos;re having trouble landing in range, include
+                  Armor 2.0 legendaries. They can&apos;t be tuned and join no
+                  set, but their lower power can help.
+                </span>
+              </label>
+            </div>
+          </Step>
+
+          <Step n={4}>
+            <div className="flex items-start gap-3">
+              <Checkbox
+                id={dreamersId}
+                checked={dreamersBond}
+                onCheckedChange={(checked) =>
+                  emit({ ...value, dreamersBond: checked === true })
+                }
+                className="mt-0.5 cursor-pointer"
+              />
+              <label htmlFor={dreamersId} className="cursor-pointer space-y-0.5">
+                <span className="block text-sm font-medium">
+                  Force {dreamersItemName}
+                </span>
+                <span className="text-muted-foreground block text-xs">
+                  If you&apos;re still having trouble, pin the collections
+                  class item at power {DREAMERS_BOND_POWER} with no stats. It
+                  drags the average down so the other four pieces carry the
+                  build.
+                </span>
+              </label>
+            </div>
+          </Step>
+        </ol>
       )}
     </div>
   );
 });
+
+function Step({ n, children }: { n: number; children: ReactNode }) {
+  return (
+    <li className="flex list-none gap-3">
+      <span
+        className="mt-0.5 flex size-5 shrink-0 items-center justify-center bg-power/20 text-[11px] font-medium tabular-nums text-power"
+        aria-hidden
+      >
+        {n}
+      </span>
+      <div className="min-w-0 flex-1 space-y-2">{children}</div>
+    </li>
+  );
+}
 
 /**
  * An uncontrolled numeric field that commits on blur / Enter. Keyed on the committed

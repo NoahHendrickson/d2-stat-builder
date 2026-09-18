@@ -27,6 +27,10 @@ function TooltipTrigger({ ...props }: TooltipPrimitive.Trigger.Props) {
   return <TooltipPrimitive.Trigger data-slot="tooltip-trigger" {...props} closeDelay={0} />;
 }
 
+/**
+ * The item-inspect tooltip, reduced: a near-black square plate with a hairline
+ * frame, a brighter top edge, and a deep drop shadow. No radius, no arrow.
+ */
 function TooltipContent({
   className,
   side = "top",
@@ -52,7 +56,7 @@ function TooltipContent({
         <TooltipPrimitive.Popup
           data-slot="tooltip-content"
           className={cn(
-            "z-50 w-fit max-w-xs origin-(--transform-origin) rounded-[10px] corner-smooth border border-border/70 bg-popover px-3 py-2 text-xs leading-relaxed text-popover-foreground shadow-lg whitespace-pre-line data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:hidden motion-reduce:animate-none",
+            "z-50 w-fit max-w-xs origin-(--transform-origin) d2-glass rounded-none bg-panel-strong px-3 py-2 text-xs leading-relaxed text-popover-foreground whitespace-pre-line data-open:animate-in data-open:fade-in-0 data-closed:hidden motion-reduce:animate-none",
             className,
           )}
           {...props}
@@ -87,7 +91,7 @@ function TooltipLabel({
           disabled ? (
             <span
               tabIndex={0}
-              className="inline-flex rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring [&>*]:pointer-events-none"
+              className="inline-flex rounded-sm outline-none focus-visible:ring-1 focus-visible:ring-outline-strong [&>*]:pointer-events-none"
             >
               {children}
             </span>

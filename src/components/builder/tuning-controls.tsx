@@ -20,12 +20,15 @@ export const TuningControls = memo(function TuningControls({
   onUseBalancedTuningChange: (checked: boolean) => void;
 }) {
   return (
-    <div className="space-y-3">
+    <>
       <div className="flex items-center justify-between gap-4">
-        <p className="text-muted-foreground text-xs">
-          Auto-apply tuning on tunable pieces to hit your targets: directional
-          (+5/−5) tunes, plus Balanced (+1 to off-stats) when enabled below.
-        </p>
+        <div className="space-y-0.5">
+          <span className="text-sm font-medium">Tier-5 tuning</span>
+          <p className="text-muted-foreground text-xs">
+            Auto-apply tuning on tunable pieces to hit your targets: directional
+            (+5/−5) tunes, plus Balanced (+1 to off-stats) when enabled below.
+          </p>
+        </div>
         <Switch
           checked={allowTuning}
           onCheckedChange={onAllowTuningChange}
@@ -34,7 +37,7 @@ export const TuningControls = memo(function TuningControls({
       </div>
       <div className="flex items-center justify-between gap-4">
         <div className="space-y-0.5">
-          <span className="text-sm">Use balanced tuning mods</span>
+          <span className="text-sm font-medium">Use balanced tuning mods</span>
           <p className="text-muted-foreground text-xs">
             When off, builds are searched without the Balanced (+1 to off-stats)
             tune — directional tuning stays available.
@@ -47,6 +50,6 @@ export const TuningControls = memo(function TuningControls({
           aria-label="Use balanced tuning mods"
         />
       </div>
-    </div>
+    </>
   );
 });

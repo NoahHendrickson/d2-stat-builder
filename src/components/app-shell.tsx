@@ -126,10 +126,9 @@ export function useDesktopLayout(): boolean {
 }
 
 /**
- * App frame (Figma 46:1657): a resizable loadouts sidebar beside the active
- * view. Logo, view tabs, and account/status live in the main-column header;
- * the page sits in a rounded card under it. On narrow viewports the sidebar
- * becomes a left drawer behind a top bar.
+ * App frame: a resizable loadouts sidebar beside the active view. Logo, view
+ * tabs, and account/status live in the main-column header; the page fills the
+ * rest. On narrow viewports the sidebar becomes a left drawer behind a top bar.
  *
  * The desktop column and the narrow-viewport drawer never both mount the loadouts
  * list, so its share-link import dialog can't exist twice at once.
@@ -178,26 +177,18 @@ export function AppShell({ children }: { children: ReactNode }) {
     return () => cancelAnimationFrame(frame);
   }, []);
 
-  // Portaled surfaces (the loadout editor drawer) sit over the stage, not the
-  // sidebar or the `lg:p-3` chrome around it. Publish both so anything under
-  // <html> can inset itself.
+  // Portaled surfaces (the loadout editor drawer) sit over the main column,
+  // not the sidebar. Publish the open width so anything under <html> can inset.
   useEffect(() => {
     const root = document.documentElement;
     root.style.setProperty(
       "--app-sidebar-width",
       `${desktopSidebarOpen ? sidebarWidth : 0}px`,
     );
-    // Mirrors `lg:p-3` (0.75rem) plus the stage's 1px border. `desktop` is
-    // SIDEBAR_BREAKPOINT_PX, which is Tailwind `lg` (1024) — keep them in lockstep.
-    root.style.setProperty(
-      "--app-stage-inset",
-      desktop ? "calc(0.75rem + 1px)" : "0px",
-    );
     return () => {
       root.style.removeProperty("--app-sidebar-width");
-      root.style.removeProperty("--app-stage-inset");
     };
-  }, [desktopSidebarOpen, sidebarWidth, desktop]);
+  }, [desktopSidebarOpen, sidebarWidth]);
 
   useEffect(() => {
     if (!resizing) return;
@@ -270,7 +261,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       >
         <div
           className={cn(
-            "bg-sidebar relative flex h-full min-h-0 flex-col",
+            "d2-sidebar relative flex h-full min-h-0 flex-col",
             slideTransition && `transition-transform ${slideTransition}`,
           )}
           style={{
@@ -286,9 +277,8 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
       </aside>
 
-      {/* Lives outside the clipped sidebar column so the full hit area straddles the
-          edge and spans the gutter beside the page card; the column's overflow-hidden
-          would otherwise cut it down to a few pixels. */}
+      {/* Lives outside the clipped sidebar column so the full hit area straddles
+          the edge; the column's overflow-hidden would otherwise cut it down. */}
       {desktopSidebarOpen && (
         <div
           role="separator"
@@ -307,28 +297,36 @@ export function AppShell({ children }: { children: ReactNode }) {
           }}
           className={cn(
             "absolute inset-y-0 z-10 cursor-col-resize touch-none outline-none",
-            "after:absolute after:inset-y-3 after:left-1 after:w-0.5 after:-translate-x-1/2 after:rounded-full after:transition-colors",
+            "after:absolute after:inset-y-3 after:left-1 after:w-px after:-translate-x-1/2 after:transition-colors",
             "after:bg-transparent hover:after:bg-foreground/40 focus-visible:after:bg-foreground",
             resizing && "after:bg-foreground",
           )}
         />
       )}
 
-      <div className="bg-sidebar flex min-w-0 flex-1 flex-col">
-        <header className="border-border bg-sidebar flex h-14 shrink-0 items-center gap-3 border-b px-3 lg:hidden">
-          <TooltipLabel label="Open loadouts">
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label="Open loadouts"
-              onClick={() => setDrawerOpen(true)}
-            >
-              <List weight="bold" aria-hidden />
-            </Button>
-          </TooltipLabel>
-          <span className="flex-1 text-sm font-medium">D2 stat builder</span>
-          <ViewTabs />
-          <ThemeToggle />
+      <div className="d2-sidebar flex min-h-0 min-w-0 flex-1 flex-col">
+        <header className="flex h-14 shrink-0 items-stretch gap-2 border-b border-foreground/8 pr-2 pl-1 lg:hidden">
+          <div className="flex items-center">
+            <TooltipLabel label="Open loadouts">
+              <Button
+                variant="ghost"
+                size="icon"
+                aria-label="Open loadouts"
+                onClick={() => setDrawerOpen(true)}
+              >
+                <List weight="bold" aria-hidden />
+              </Button>
+            </TooltipLabel>
+          </div>
+          <span className="hidden min-w-0 flex-1 items-center truncate text-sm font-medium min-[420px]:flex">
+            D2 stat builder
+          </span>
+          <div className="ml-auto flex items-center">
+            <ViewTabs />
+          </div>
+          <div className="flex items-center">
+            <ThemeToggle />
+          </div>
         </header>
         {desktop && (
           <AppHeader
@@ -336,19 +334,15 @@ export function AppShell({ children }: { children: ReactNode }) {
             onExpand={() => setSidebarCollapsed(false)}
           />
         )}
-        <div className="flex min-h-0 flex-1 flex-col lg:p-3">
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden lg:rounded-xl lg:border lg:border-border lg:bg-card lg:shadow-[-2px_2px_8px_0px_rgba(0,0,0,0.3),0_0_12px_0px_rgba(0,0,0,0.25)]">
-            <div className="min-h-0 flex-1 overflow-y-auto">
-              {desktop && (
-                <div className="px-6 pt-6 empty:hidden">
-                  <ArmoryDiagnosticsGate />
-                </div>
-              )}
-              {children}
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          {desktop && (
+            <div className="px-6 pt-6 empty:hidden">
+              <ArmoryDiagnosticsGate />
             </div>
-            <ApplyProgressSection />
-          </div>
+          )}
+          {children}
         </div>
+        <ApplyProgressSection />
       </div>
 
       {!desktop && (
@@ -357,7 +351,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           onOpenChange={setDrawerOpen}
           swipeDirection="left"
         >
-          <DrawerContent aria-label="Loadouts" className="bg-sidebar">
+          <DrawerContent aria-label="Loadouts" className="d2-sidebar">
             <div className="flex shrink-0 justify-end px-2 pt-2">
               <TooltipLabel label="Close loadouts">
                 <DrawerClose

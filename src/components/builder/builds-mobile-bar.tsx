@@ -43,14 +43,14 @@ export function BuildsMobileBar({
         aria-expanded={open}
         aria-controls="builds-mobile-sheet"
         className={cn(
-          "border-border/60 bg-background/95 supports-[backdrop-filter]:bg-background/80 pointer-events-auto relative flex w-full flex-col gap-2 border-t px-4 py-3 text-left backdrop-blur transition-colors",
+          "border-foreground/15 bg-background/95 supports-[backdrop-filter]:bg-panel-strong pointer-events-auto relative flex w-full flex-col gap-2 border-t px-4 py-3 text-left backdrop-blur transition-colors",
           "pb-[calc(0.75rem+env(safe-area-inset-bottom))] hover:bg-muted/40 active:bg-muted/60",
           "fine-pointer:border-t-2 fine-pointer:px-5 fine-pointer:py-4",
           state === "results"
-            ? "fine-pointer:border-brand"
+            ? "fine-pointer:border-foreground/70"
             : state === "searching"
               ? "fine-pointer:border-transparent"
-              : "fine-pointer:border-border/60",
+              : "fine-pointer:border-foreground/25",
         )}
       >
         {state === "searching" && (
@@ -60,10 +60,10 @@ export function BuildsMobileBar({
             aria-valuemin={0}
             aria-valuemax={100}
             aria-valuenow={Math.round(displayedProgress * 100)}
-            className="bg-muted absolute inset-x-0 top-0 hidden h-[2px] overflow-hidden fine-pointer:block"
+            className="bg-black/30 absolute inset-x-0 top-0 hidden h-[2px] overflow-hidden fine-pointer:block"
           >
             <div
-              className="bg-brand h-full transition-[width] duration-150"
+              className="bg-foreground h-full transition-[width] duration-150"
               style={{ width: `${displayedProgress * 100}%` }}
             />
           </div>
@@ -75,10 +75,10 @@ export function BuildsMobileBar({
             aria-valuemin={0}
             aria-valuemax={100}
             aria-valuenow={Math.round(displayedProgress * 100)}
-            className="bg-muted h-0.5 w-full overflow-hidden rounded-full fine-pointer:hidden"
+            className="bg-black/30 h-0.5 w-full overflow-hidden rounded-none fine-pointer:hidden"
           >
             <div
-              className="bg-primary h-full rounded-full transition-[width] duration-150"
+              className="bg-foreground h-full rounded-none transition-[width] duration-150"
               style={{ width: `${displayedProgress * 100}%` }}
             />
           </div>

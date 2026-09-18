@@ -75,27 +75,10 @@ export function ownedFestivalMasks<
  * - otherwise: the helmets alone.
  */
 export function helmetCandidates<T>(
-  helmets: T[],
-  masks: T[],
+  helmets: readonly T[],
+  masks: readonly T[],
   powerConstrained: boolean,
-): T[] {
+): readonly T[] {
   if (powerConstrained && masks.length > 0) return [...helmets, ...masks];
   return helmets;
-}
-
-/**
- * Default optimizer pool: T5 (or legacy exotic) pieces, excluding FotL masks.
- * Masks enter the helmet slot only as optional candidates while a power range is
- * enforced (see helmetCandidates).
- */
-export function inDefaultOptimizerPool(
-  piece: {
-    isFestivalMask: boolean;
-    tunedStat?: number;
-    isExotic: boolean;
-  },
-  useLegacyExotics: boolean,
-): boolean {
-  if (piece.isFestivalMask) return false;
-  return piece.tunedStat !== undefined || (useLegacyExotics && piece.isExotic);
 }

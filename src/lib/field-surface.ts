@@ -21,14 +21,10 @@ export const fieldControlInnerTriggerClasses = cn(
  */
 export const fieldFilterControlShellClasses = cn(
   fieldControlHeightClasses,
-  "relative box-border overflow-hidden rounded-lg border border-input bg-foreground/6 transition-colors",
-  "hover:bg-foreground/8 has-data-popup-open:border-emphatic focus-within:border-emphatic",
-  "data-active:border-0 data-active:bg-emphatic data-active:text-emphatic-foreground data-active:shadow-none data-active:hover:bg-emphatic data-active:has-data-popup-open:border-0 data-active:focus-within:border-0",
+  "d2-line relative box-border overflow-hidden rounded-none bg-lifted transition-colors",
+  "hover:[--line-alpha:1.6] has-data-popup-open:[--line-alpha:2.6] focus-within:[--line-alpha:2.6]",
+  "data-active:[border-image:none] data-active:border-white/70 data-active:bg-brand data-active:text-white data-active:shadow-[0_0_2px_1px_rgb(25_25_25/0.4)] data-active:hover:bg-brand data-active:has-data-popup-open:border-white data-active:focus-within:border-white",
 );
 
-/** Same top-lit rim as build cards, 24% so it reads on --emphatic. */
-export const fieldFilterActiveEdgeClasses = cn(
-  "before:pointer-events-none before:absolute before:inset-0 before:z-1 before:rounded-[inherit] before:content-['']",
-  "before:shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--foreground)_24%,transparent)]",
-  "before:[mask-image:linear-gradient(to_bottom,#000,#0000)] before:[-webkit-mask-image:linear-gradient(to_bottom,#000,#0000)]",
-);
+/** Active filter chips are a plain white plate; no extra rim. */
+export const fieldFilterActiveEdgeClasses = "";

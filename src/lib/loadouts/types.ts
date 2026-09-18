@@ -67,6 +67,17 @@ export interface SavedLoadout extends SavedLoadoutData {
   updatedAt: number;
 }
 
+/**
+ * Prefer `cached` when it was written later. An in-flight PUT must not replace a
+ * newer edit that already landed (tag vs rename racing on the same row).
+ */
+export function newerSavedLoadout(
+  cached: SavedLoadout,
+  incoming: SavedLoadout,
+): SavedLoadout {
+  return cached.updatedAt > incoming.updatedAt ? cached : incoming;
+}
+
 // --- primitives ---
 
 const isObj = (v: unknown): v is Record<string, unknown> =>
@@ -283,6 +294,7 @@ export function parseBuilderSnapshot(v: unknown): BuilderSnapshot | null {
     balancedTuning: v.balancedTuning,
     legacyExotics: v.legacyExotics,
     // Added after the first snapshots shipped: default off when absent.
+    lowerTierArmor: v.lowerTierArmor === true,
     powerRange: parsePowerRange(v.powerRange),
     activeSubclass: v.activeSubclass as Subclass,
     fragmentHashes,
@@ -341,10 +353,88 @@ export function parseSavedLoadout(v: unknown): SavedLoadout | null {
   return { ...data, id: v.id, createdAt: v.createdAt, updatedAt: v.updatedAt };
 }
 
+/** Same alphabet as `loadoutHashtags` — letters, numbers, underscore, hyphen. */
+export const MAX_TAG_LENGTH = 40;
+export const MAX_TAGS = 24;
+const TAG_BODY = /^[\p{L}\p{N}_-]+$/u;
+
 /** Hashtags (`#pve`, `#raid`) from a loadout's name + notes, lower-cased and deduped. */
 export function loadoutHashtags(loadout: Pick<DimLoadout, "name" | "notes">): string[] {
-  const text = `${loadout.name} ${loadout.notes ?? ""}`;
+  return hashtagsIn(`${loadout.name} ${loadout.notes ?? ""}`);
+}
+
+/** Hashtags stored in notes only — the ones the tag menu can toggle. */
+export function loadoutNotesHashtags(notes: string | undefined): string[] {
+  return hashtagsIn(notes ?? "");
+}
+
+function hashtagsIn(text: string): string[] {
   const out = new Set<string>();
-  for (const m of text.matchAll(/(?:^|\s)#([\p{L}\p{N}_-]+)/gu)) out.add(m[1].toLowerCase());
+  for (const m of text.matchAll(/(?:^|\s)#([\p{L}\p{N}_-]+)/gu)) {
+    const tag = m[1].toLowerCase();
+    if (tag.length <= MAX_TAG_LENGTH) out.add(tag);
+  }
   return [...out];
+}
+
+/** Strip a leading `#`, trim, lower-case. Null when empty or not a legal tag. */
+export function normalizeTag(raw: string): string | null {
+  const tag = raw.trim().replace(/^#+/, "").toLowerCase();
+  if (!tag || tag.length > MAX_TAG_LENGTH || !TAG_BODY.test(tag)) return null;
+  return tag;
+}
+
+export type TagEditResult =
+  | { status: "applied"; loadout: DimLoadout }
+  | { status: "unchanged" }
+  | { status: "refused"; reason: "invalid" | "cap" | "overflow" };
+
+/**
+ * Add or remove a hashtag in `loadout.notes` (DIM's tag storage). Name-embedded
+ * hashtags are left alone. Distinguishes a true no-op from a refused edit.
+ */
+export function editLoadoutTag(
+  loadout: DimLoadout,
+  raw: string,
+  present: boolean,
+): TagEditResult {
+  const tag = normalizeTag(raw);
+  if (!tag) return { status: "refused", reason: "invalid" };
+  const notesTags = new Set(loadoutNotesHashtags(loadout.notes));
+  if (present) {
+    if (notesTags.has(tag)) return { status: "unchanged" };
+    if (new Set(loadoutHashtags(loadout)).size >= MAX_TAGS) {
+      return { status: "refused", reason: "cap" };
+    }
+    const notes = (loadout.notes ?? "").trimEnd();
+    const next = notes ? `${notes} #${tag}` : `#${tag}`;
+    if (next.length > MAX_NOTES_LENGTH) return { status: "refused", reason: "overflow" };
+    return { status: "applied", loadout: { ...loadout, notes: next } };
+  }
+
+  if (!notesTags.has(tag)) return { status: "unchanged" };
+  const notes = loadout.notes ?? "";
+  const escaped = tag.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const stripped = notes
+    .replace(new RegExp(`(^|\\s)#${escaped}(?![\\p{L}\\p{N}_-])`, "giu"), "$1")
+    .replace(/ {2,}/g, " ")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+  if (stripped === (notes.trim() || "")) return { status: "unchanged" };
+  if (!stripped) {
+    const rest = { ...loadout };
+    delete rest.notes;
+    return { status: "applied", loadout: rest };
+  }
+  return { status: "applied", loadout: { ...loadout, notes: stripped } };
+}
+
+/**
+ * Add or remove a hashtag in `loadout.notes` (DIM's tag storage). Name-embedded
+ * hashtags are left alone. No-ops and refusals return the same object.
+ */
+export function withLoadoutTag(loadout: DimLoadout, raw: string, present: boolean): DimLoadout {
+  const result = editLoadoutTag(loadout, raw, present);
+  return result.status === "applied" ? result.loadout : loadout;
 }

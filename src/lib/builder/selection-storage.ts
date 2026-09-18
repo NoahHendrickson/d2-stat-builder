@@ -23,8 +23,9 @@ export interface PowerBounds {
  * floor of the mean power over the five armor pieces and the weapons entered below —
  * inside `bounds`. `bounds` is null until the user (or the controls' first-enable seed)
  * sets it, and is kept while the toggle is off so switching it back on restores it.
- * Enabled with null bounds constrains nothing. `dreamersBond` and the weapon powers are
- * likewise kept while off; they only act while `enabled` (see forcesDreamersBond).
+ * Enabled with null bounds constrains nothing. `dreamersBond`, `legacyArmor` and the
+ * weapon powers are likewise kept while off; they only act while `enabled` (see
+ * forcesDreamersBond / includesLegacyArmor).
  */
 export interface PowerRangeSelection {
   enabled: boolean;
@@ -40,6 +41,12 @@ export interface PowerRangeSelection {
    * power-range option because the 21 is the whole point: it drags the average down.
    */
   dreamersBond: boolean;
+  /**
+   * Let legacy (Armor 2.0) legendaries — no archetype, no tuning socket — into the
+   * optimizer pool. Like the FotL masks, a power-range option: their power is what
+   * makes them worth wearing, since they can't be tuned and join no set.
+   */
+  legacyArmor: boolean;
 }
 
 export const DEFAULT_POWER_RANGE: PowerRangeSelection = {
@@ -47,11 +54,20 @@ export const DEFAULT_POWER_RANGE: PowerRangeSelection = {
   bounds: null,
   weapons: [null, null, null],
   dreamersBond: false,
+  legacyArmor: false,
 };
 
 /** Whether the class-item slot is pinned to Dreamer's Bond: only while Power matters is on. */
 export function forcesDreamersBond(range: PowerRangeSelection): boolean {
   return range.enabled && range.dreamersBond;
+}
+
+/**
+ * Whether legacy (Armor 2.0) legendaries join the pool: only while Power matters is
+ * actually constraining (enabled with bounds), the same contract FotL masks use.
+ */
+export function includesLegacyArmor(range: PowerRangeSelection): boolean {
+  return range.enabled && range.bounds !== null && range.legacyArmor;
 }
 
 /** The weapon powers that were actually entered, in slot order — what the solver averages in. */
@@ -79,6 +95,7 @@ export function samePowerRangeSelection(
     bounds &&
     a.enabled === b.enabled &&
     a.dreamersBond === b.dreamersBond &&
+    a.legacyArmor === b.legacyArmor &&
     a.weapons.every((w, i) => w === b.weapons[i])
   );
 }
@@ -119,6 +136,8 @@ export interface PersistedSelections {
   balancedTuning: boolean;
   /** Include legacy (Armor 2.0 / non-tunable) exotics in the optimizer pool. */
   legacyExotics: boolean;
+  /** Include Tier 1–4 Armor 3.0 legendaries (no tuning socket) in the optimizer pool. */
+  lowerTierArmor: boolean;
   /** "Power matters": gear-power range, weapon powers, Dreamer's Bond (see PowerRangeSelection). */
   powerRange: PowerRangeSelection;
   activeSubclass: Subclass;
@@ -233,6 +252,10 @@ function parse(raw: string | null): PersistedSelections | null {
   // Optional (added after v1 shipped) — older stored blobs won't have it. Default ON.
   const legacyExotics =
     typeof o.legacyExotics === "boolean" ? o.legacyExotics : true;
+  // Optional (added after v1 shipped) — older stored blobs won't have it. Default OFF:
+  // it widens the pool with pieces that can't be tuned.
+  const lowerTierArmor =
+    typeof o.lowerTierArmor === "boolean" ? o.lowerTierArmor : false;
   // Optional — exotic class item Spirit pair; default Any/Any.
   const exoticPerks = parseExoticPerks(o.exoticPerks);
   // Optional (added after v1 shipped) — older stored blobs won't have it. Default OFF.
@@ -265,6 +288,7 @@ function parse(raw: string | null): PersistedSelections | null {
     allowTuning: o.allowTuning as boolean,
     balancedTuning,
     legacyExotics,
+    lowerTierArmor,
     powerRange,
     activeSubclass: o.activeSubclass as Subclass,
     fragSel,
@@ -276,8 +300,8 @@ function parse(raw: string | null): PersistedSelections | null {
  * are null (unset) or a pair of non-negative integers, else the whole value is dropped
  * (a half-valid range would enable a constraint the user never chose); an inverted
  * pair is put in order rather than dropped, since the inputs commit on blur and a
- * debounced save can catch a min typed above the max. `dreamersBond` was added after
- * the range shipped: absent reads as off.
+ * debounced save can catch a min typed above the max. `dreamersBond` and `legacyArmor`
+ * were added after the range shipped: absent reads as off.
  */
 export function parsePowerRange(v: unknown): PowerRangeSelection {
   if (typeof v !== "object" || v === null) return DEFAULT_POWER_RANGE;
@@ -290,6 +314,7 @@ export function parsePowerRange(v: unknown): PowerRangeSelection {
     bounds,
     weapons: parseWeaponPowers(raw.weapons),
     dreamersBond: raw.dreamersBond === true,
+    legacyArmor: raw.legacyArmor === true,
   };
 }
 

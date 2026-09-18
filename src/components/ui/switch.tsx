@@ -4,6 +4,12 @@ import { Switch as SwitchPrimitive } from "@base-ui/react/switch"
 
 import { cn } from "@/lib/utils"
 
+/**
+ * Square toggle: off is a lifted well with the app's centre-bright line; on
+ * fills EQUIP green (see globals.css checked rule) with a white thumb. Sizes:
+ * default 36×20 (16px thumb), sm 28×16 (12px thumb) — 1px border + 1px padding
+ * each side, so the thumb travels track − thumb − 4.
+ */
 function Switch({
   className,
   size = "default",
@@ -16,14 +22,14 @@ function Switch({
       data-slot="switch"
       data-size={size}
       className={cn(
-        "peer group/switch relative inline-flex shrink-0 items-center rounded-full border border-transparent transition-all outline-none after:absolute after:-inset-x-3 after:-inset-y-2 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 aria-invalid:border-destructive aria-invalid:ring-3 aria-invalid:ring-destructive/20 data-[size=default]:h-[18.4px] data-[size=default]:w-[32px] data-[size=sm]:h-[14px] data-[size=sm]:w-[24px] dark:aria-invalid:border-destructive/50 dark:aria-invalid:ring-destructive/40 data-checked:border-primary-border data-checked:bg-primary data-unchecked:bg-input dark:data-unchecked:bg-input/80 data-disabled:cursor-not-allowed data-disabled:opacity-50",
+        "peer group/switch relative inline-flex shrink-0 items-center rounded-none p-px d2-line d2-hover-ring bg-lifted transition-[background-color,border-color,color,box-shadow] outline-none after:absolute after:-inset-x-3 after:-inset-y-2 hover:[--line-alpha:1.6] hover:not-data-checked:bg-foreground/8 focus-visible:[--line-alpha:2.6] aria-invalid:border-destructive data-[size=default]:h-5 data-[size=default]:w-9 data-[size=sm]:h-4 data-[size=sm]:w-7 data-disabled:cursor-not-allowed data-disabled:opacity-40",
         className
       )}
       {...props}
     >
       <SwitchPrimitive.Thumb
         data-slot="switch-thumb"
-        className="pointer-events-none block rounded-full bg-background ring-0 transition-transform group-data-[size=default]/switch:size-4 group-data-[size=sm]/switch:size-3 group-data-[size=default]/switch:data-checked:translate-x-[calc(100%-2px)] group-data-[size=sm]/switch:data-checked:translate-x-[calc(100%-2px)] dark:data-checked:bg-primary-foreground group-data-[size=default]/switch:data-unchecked:translate-x-0 group-data-[size=sm]/switch:data-unchecked:translate-x-0 dark:data-unchecked:bg-foreground"
+        className="pointer-events-none block rounded-none transition-[translate,background-color] group-data-[size=default]/switch:size-4 group-data-[size=sm]/switch:size-3 data-checked:bg-white data-unchecked:bg-foreground/50 group-data-[size=default]/switch:data-checked:translate-x-4 group-data-[size=sm]/switch:data-checked:translate-x-3 data-unchecked:translate-x-0"
       />
     </SwitchPrimitive.Root>
   )

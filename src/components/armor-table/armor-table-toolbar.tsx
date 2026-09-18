@@ -106,7 +106,7 @@ export const ArmorTableToolbar = memo(function ArmorTableToolbar({
           }}
           placeholder="Press F to search"
           aria-label="Search armor by name"
-          className="h-8 bg-foreground/6 pl-8 dark:bg-foreground/6"
+          className="h-8 pl-8"
         />
       </div>
       <div className="hidden min-w-0 items-center gap-2 @[58rem]/toolbar:flex">
@@ -177,7 +177,7 @@ export const ArmorTableToolbar = memo(function ArmorTableToolbar({
         <Button
           type="button"
           variant="ghost"
-          className="ml-auto h-8 shrink-0 gap-1.5 rounded-lg border border-input bg-foreground/6 px-2.5 pr-3 font-normal text-foreground/70 hover:bg-foreground/8"
+          className="ml-auto h-8 shrink-0 gap-1.5 px-2.5 pr-3"
           onClick={onClearFilters}
         >
           <X className="size-4" aria-hidden />

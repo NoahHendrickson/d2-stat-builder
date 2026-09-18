@@ -23,18 +23,25 @@ function Tabs({
   )
 }
 
+/** Figma 77:1640 well: square frame, faint fill, EQUIP plate under the active cell. */
+const wellTrack = "rounded-none border border-foreground/16 bg-primary/6 p-0.5"
+const wellPlate =
+  "rounded-none d2-equip group-has-[[data-active]:hover]/tabs-list:[--equip-fill:var(--emphatic-light)] group-has-[[data-active]:hover]/tabs-list:d2-line-drift"
+
+/**
+ * Tab strips. `default` is labelled cells in the 77:1640 well (fragments);
+ * `icon` is 32×32 cells in the same well (optimizer / table, major mods);
+ * `line` is text on a hairline with a white underline under the active item.
+ */
 const tabsListVariants = cva(
   "group/tabs-list relative isolate inline-flex w-fit items-center justify-center text-muted-foreground group-data-vertical/tabs:h-fit group-data-vertical/tabs:flex-col",
   {
     variants: {
       variant: {
-        // Figma "Tabs List" (54:386 light / 54:393 dark): flush track,
-        // #E8E4E1 on light, white 8% over the stage on dark, radius matches Button (10px).
-        default:
-          "group-data-horizontal/tabs:h-8 overflow-clip rounded-[10px] corner-smooth bg-[#E8E4E1] dark:bg-foreground/8",
-        // Same 36px row as the loadouts search / icon buttons so the header strip lines up.
-        icon: "h-9 overflow-clip rounded-[10px] corner-smooth bg-foreground/6",
-        line: "group-data-horizontal/tabs:h-8 gap-1 rounded-none bg-transparent p-[3px]",
+        default: wellTrack,
+        // 2px pad + 1px line around two 32px cells (70×38).
+        icon: wellTrack,
+        line: "group-data-horizontal/tabs:h-8 gap-4 rounded-none border-b border-foreground/12 bg-transparent",
       },
     },
     defaultVariants: {
@@ -48,14 +55,10 @@ const tabsIndicatorVariants = cva(
   {
     variants: {
       variant: {
-        // Figma (54:393 dark): the active pill is the stage surface recessed
-        // into the track, bordered with the track colour — not a lighter raise.
-        default:
-          "rounded-[10px] corner-smooth border border-foreground/12 bg-card dark:border-foreground/8",
-        // Recessed into the track with the header surface (sidebar when open,
-        // page background when collapsed) so the pill doesn't flash a second color.
-        icon: "rounded-[10px] corner-smooth border border-foreground/6 bg-[var(--icon-tab-surface,var(--sidebar))]",
-        line: "bg-primary group-data-horizontal/tabs:top-[calc(var(--active-tab-top)+var(--active-tab-height)+3px)] group-data-horizontal/tabs:h-0.5 group-data-horizontal/tabs:translate-y-0 group-data-vertical/tabs:left-[calc(var(--active-tab-left)+var(--active-tab-width)+2px)] group-data-vertical/tabs:w-0.5 group-data-vertical/tabs:translate-x-0",
+        default: wellPlate,
+        // EQUIP plate slides under the icons; hover lightens like the CTA.
+        icon: wellPlate,
+        line: "bg-foreground group-data-horizontal/tabs:top-[calc(var(--active-tab-top)+var(--active-tab-height)-2px)] group-data-horizontal/tabs:h-0.5 group-data-horizontal/tabs:translate-y-0 group-data-vertical/tabs:left-[calc(var(--active-tab-left)+var(--active-tab-width)-2px)] group-data-vertical/tabs:w-0.5 group-data-vertical/tabs:translate-x-0",
       },
     },
     defaultVariants: {
@@ -91,13 +94,13 @@ function TabsTrigger({ className, ...props }: TabsPrimitive.Tab.Props) {
     <TabsPrimitive.Tab
       data-slot="tabs-trigger"
       className={cn(
-        "relative z-10 inline-flex flex-1 items-center justify-center gap-1.5 rounded-md border border-transparent text-xs font-medium whitespace-nowrap text-muted-foreground transition-colors group-data-vertical/tabs:w-full group-data-vertical/tabs:justify-start hover:text-foreground focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-1 focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-50 has-data-[icon=inline-end]:pr-1 has-data-[icon=inline-start]:pl-1 aria-disabled:pointer-events-none aria-disabled:opacity-50 data-active:text-foreground [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
-        // default variant: full-height pill (h-8, px-3, radius matches Button) inside the track
-        "group-data-[variant=default]/tabs-list:h-full group-data-[variant=default]/tabs-list:rounded-[10px] group-data-[variant=default]/tabs-list:corner-smooth group-data-[variant=default]/tabs-list:px-3",
-        // icon variant: 36×36 square, no label padding
-        "group-data-[variant=icon]/tabs-list:size-9 group-data-[variant=icon]/tabs-list:flex-none group-data-[variant=icon]/tabs-list:rounded-[10px] group-data-[variant=icon]/tabs-list:corner-smooth group-data-[variant=icon]/tabs-list:px-0 group-data-[variant=icon]/tabs-list:justify-center",
-        // line variant: compact trigger; underline lives on the sliding indicator
-        "group-data-[variant=line]/tabs-list:h-[calc(100%-1px)] group-data-[variant=line]/tabs-list:px-1.5 group-data-[variant=line]/tabs-list:py-0.5 group-data-[variant=line]/tabs-list:bg-transparent",
+        "relative z-10 inline-flex flex-1 items-center justify-center gap-1.5 rounded-none border border-transparent text-xs font-medium whitespace-nowrap text-muted-foreground transition-colors group-data-vertical/tabs:w-full group-data-vertical/tabs:justify-start hover:text-foreground focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-outline-strong disabled:pointer-events-none disabled:opacity-40 has-data-[icon=inline-end]:pr-1 has-data-[icon=inline-start]:pl-1 aria-disabled:pointer-events-none aria-disabled:opacity-40 data-active:text-foreground [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+        // default variant: labelled cell in the well; the green plate is the sliding indicator
+        "group-data-[variant=default]/tabs-list:h-8 group-data-[variant=default]/tabs-list:min-w-8 group-data-[variant=default]/tabs-list:flex-none group-data-[variant=default]/tabs-list:border-0 group-data-[variant=default]/tabs-list:bg-transparent group-data-[variant=default]/tabs-list:px-2.5 group-data-[variant=default]/tabs-list:text-foreground/50 group-data-[variant=default]/tabs-list:transition-[color] group-data-[variant=default]/tabs-list:data-active:text-emphatic-foreground",
+        // icon variant: 32×32 idle well; the green plate is the sliding indicator
+        "group-data-[variant=icon]/tabs-list:size-8 group-data-[variant=icon]/tabs-list:flex-none group-data-[variant=icon]/tabs-list:rounded-xl group-data-[variant=icon]/tabs-list:border-0 group-data-[variant=icon]/tabs-list:bg-transparent group-data-[variant=icon]/tabs-list:px-0 group-data-[variant=icon]/tabs-list:justify-center group-data-[variant=icon]/tabs-list:text-foreground/50 group-data-[variant=icon]/tabs-list:transition-[color] group-data-[variant=icon]/tabs-list:data-active:text-emphatic-foreground",
+        // line variant: text on the rule; the underline is the sliding indicator
+        "group-data-[variant=line]/tabs-list:h-full group-data-[variant=line]/tabs-list:rounded-none group-data-[variant=line]/tabs-list:px-0.5 group-data-[variant=line]/tabs-list:pb-0.5 group-data-[variant=line]/tabs-list:text-sm",
         className
       )}
       {...props}

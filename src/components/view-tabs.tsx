@@ -12,15 +12,21 @@ const VIEWS = [
 ] as const;
 
 /**
- * Figma "IconTabList" (1:229): the two-way switch between the optimizer and the
- * armor table. Route-based so each view keeps its own URL.
+ * Two-way icon switch between the optimizer and the armor table. Route-based
+ * so each view keeps its own URL.
  */
-export function ViewTabs({ onNavigate }: { onNavigate?: () => void }) {
+export function ViewTabs({
+  onNavigate,
+  className,
+}: {
+  onNavigate?: () => void;
+  className?: string;
+}) {
   const pathname = usePathname();
   const value = VIEWS.find((v) => v.href === pathname)?.href ?? "/";
 
   return (
-    <Tabs value={value}>
+    <Tabs value={value} className={className}>
       <TabsList variant="icon" aria-label="View">
         {VIEWS.map(({ href, label, Icon }) => (
           <TooltipLabel label={label} key={href}>
@@ -33,7 +39,7 @@ export function ViewTabs({ onNavigate }: { onNavigate?: () => void }) {
                 <Link {...props} href={href} onClick={onNavigate} />
               )}
             >
-              <Icon weight="duotone" aria-hidden />
+              <Icon weight="duotone" className="size-4" aria-hidden />
             </TabsTrigger>
           </TooltipLabel>
         ))}

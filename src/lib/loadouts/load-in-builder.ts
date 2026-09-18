@@ -51,6 +51,7 @@ export function selectionsForLoadout(
     allowTuning: true,
     balancedTuning: true,
     legacyExotics: true,
+    lowerTierArmor: false,
     powerRange: DEFAULT_POWER_RANGE,
     activeSubclass: opts.subclass?.subclass ?? existing?.activeSubclass ?? "Prismatic",
     fragSel: opts.subclass?.subclass

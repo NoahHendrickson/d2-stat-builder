@@ -7,16 +7,19 @@ import { cn } from "@/lib/utils"
 
 // App-specific fork of @noey-ui/slider: keeps the achievable-ceiling overlay,
 // hover/drag value tooltip and `sliderValueLeft` (used by builder-panel ticks),
-// restyled to the Figma "Progress" recipe (14:5187): an 8px bordered track with
-// the emphatic raised indicator and an always-visible, edge-aligned 16px thumb.
+// styled to Figma 73:1613: a 10px well inside a frame that sits 2px out
+// (a pseudo-element carrying the app's centre-bright line, so it costs no
+// layout), a bright-to-deep green gradient fill (#54c55f to #378b3f) wearing the same line in white, a
+// white/12 "achievable" fill behind it, and a 2px white thumb, 16px tall so it spans
+// the frame, on the fill's edge.
 // Re-adding from the registry with --overwrite will drop those features.
 
 function clampNumber(n: number, lo: number, hi: number) {
   return Math.min(hi, Math.max(lo, n))
 }
 
-/** Thumb diameter in px — keep in sync with the Thumb's `size-*` class. */
-const THUMB_PX = 16
+/** Thumb width in px — keep in sync with the Thumb's `w-*` class. */
+const THUMB_PX = 2
 
 function sliderFraction(value: number, min: number, max: number) {
   return max <= min ? 0 : (value - min) / (max - min)
@@ -112,7 +115,7 @@ function Slider({
       {...props}
     >
       <SliderPrimitive.Control
-        className="group/slider relative flex w-full touch-none items-center select-none data-disabled:opacity-50 data-horizontal:py-1.5 data-vertical:h-full data-vertical:min-h-40 data-vertical:w-auto data-vertical:flex-col"
+        className="group/slider relative flex w-full touch-none items-center select-none data-disabled:opacity-40 data-horizontal:py-1.5 data-vertical:h-full data-vertical:min-h-40 data-vertical:w-auto data-vertical:flex-col"
         onPointerMove={updateHover}
         onPointerDown={(e) => {
           setDragging(true)
@@ -132,15 +135,15 @@ function Slider({
           data-slot="slider-track"
           // box-content: Base UI sets `height: inherit` (horizontal) / `width: inherit`
           // (vertical) on the Indicator, so the track's declared size must be its
-          // inner size — a border-box 8px track would leave the 8px indicator
-          // clipped on one side by overflow-hidden. 6px + 1px border = 8px total.
-          className="relative box-content grow overflow-hidden rounded-[4px] border border-border bg-muted select-none data-horizontal:h-1.5 data-horizontal:w-full data-vertical:h-full data-vertical:w-1.5 dark:bg-foreground/12"
+          // inner size. The 10px well; the frame is a ::before 3px outside it
+          // (2px gap + the 1px line).
+          className="relative box-content grow rounded-none select-none before:pointer-events-none before:absolute before:-inset-[3px] before:d2-line before:content-[''] data-horizontal:h-2.5 data-horizontal:w-full data-vertical:h-full data-vertical:w-2.5"
         >
           {ceiling != null && (
             <div
               data-slot="slider-ceiling"
               aria-hidden
-              className="absolute top-0 left-0 h-full rounded-[3px] bg-foreground/40 shadow-raised transition-[width] duration-300 ease-out"
+              className="absolute top-0 left-0 h-full bg-foreground/12 transition-[width] duration-300 ease-out"
               style={{
                 width: sliderFillWidth(ceiling, min, max),
               }}
@@ -148,14 +151,14 @@ function Slider({
           )}
           <SliderPrimitive.Indicator
             data-slot="slider-range"
-            className="rounded-[3px] border border-input bg-emphatic shadow-raised select-none data-horizontal:h-full data-vertical:w-full dark:border-white/24"
+            className="d2-line-white bg-[linear-gradient(to_right,#54c55f,#378b3f)] select-none data-horizontal:h-full data-vertical:w-full data-vertical:bg-[linear-gradient(to_top,#54c55f,#378b3f)]"
           />
         </SliderPrimitive.Track>
         {hover != null && (
           <div
             data-slot="slider-tooltip"
             aria-hidden
-            className="pointer-events-none absolute bottom-full z-10 mb-1 -translate-x-1/2 rounded-md bg-foreground px-1.5 py-0.5 text-xs font-medium text-background tabular-nums"
+            className="pointer-events-none absolute bottom-full z-10 mb-1.5 -translate-x-1/2 rounded-[4px] border border-foreground/15 bg-popover px-1.5 py-0.5 text-[11px] font-medium text-popover-foreground tabular-nums shadow-[0_6px_16px_rgb(0_0_0/0.5)]"
             style={{ left: hover.x }}
           >
             {liveValue ?? hover.value}
@@ -165,7 +168,7 @@ function Slider({
           <SliderPrimitive.Thumb
             data-slot="slider-thumb"
             key={index}
-            className="relative block size-4 shrink-0 rounded-full border border-emphatic-dark bg-emphatic-foreground shadow-raised ring-ring/50 transition-[box-shadow] select-none after:absolute after:-inset-2 focus-visible:ring-3 focus-visible:outline-hidden active:ring-3 disabled:pointer-events-none disabled:opacity-50"
+            className="relative block h-4 w-0.5 shrink-0 rounded-none bg-white transition-[box-shadow] select-none after:absolute after:-inset-x-3 after:-inset-y-2 hover:shadow-[0_0_6px_rgb(255_255_255/0.6)] focus-visible:shadow-[0_0_0_1px_#fff,0_0_8px_rgb(255_255_255/0.6)] focus-visible:outline-hidden active:shadow-[0_0_8px_rgb(255_255_255/0.8)] disabled:pointer-events-none disabled:opacity-50"
           />
         ))}
       </SliderPrimitive.Control>

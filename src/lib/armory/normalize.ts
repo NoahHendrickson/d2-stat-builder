@@ -11,6 +11,7 @@ import {
   isExoticClassItemHash,
 } from "./exotic-class-perks";
 import { isFestivalMask } from "./festival-masks";
+import { readMasterwork, type MasterworkInfo } from "./masterwork";
 import {
   ARMOR_ARCHETYPE_PLUG_CATEGORY,
   ARMOR_BUCKETS,
@@ -108,6 +109,11 @@ export interface ArmorPiece {
   armorSockets?: ArmorSocket[];
   /** Armor energy (component 300) — capacity and what current plugs use. */
   energy?: { capacity: number; used: number };
+  /**
+   * Current masterwork level and what finishing it costs. Informational only —
+   * `stats` already assume a full masterwork. Undefined without live sockets.
+   */
+  masterwork?: MasterworkInfo;
   /**
    * Power level — the instance's primary stat (component 300). Undefined only when the
    * instance itself is missing (synthetic pieces with no live instance, or the component
@@ -515,6 +521,7 @@ function buildPiece(
 
   const armorSockets = findArmorSockets(item.itemInstanceId, def, profile, manifest);
   const energy = readEnergy(item.itemInstanceId, profile);
+  const masterwork = readMasterwork(item.itemInstanceId, def, profile, manifest, energy);
   const power = readPower(item.itemInstanceId, profile);
   const watermark = itemWatermark(def, item.versionNumber);
 
@@ -545,6 +552,7 @@ function buildPiece(
     ...(watermark ? { watermark } : {}),
     ...(armorSockets ? { armorSockets } : {}),
     ...(energy ? { energy } : {}),
+    ...(masterwork ? { masterwork } : {}),
     ...(power !== undefined ? { power } : {}),
   };
 }
