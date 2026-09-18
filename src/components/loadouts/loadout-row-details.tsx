@@ -6,10 +6,10 @@ import {
   TooltipLabel,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Fragment, type CSSProperties } from "react";
+import { Fragment } from "react";
 import Image from "next/image";
 import type { ArmoryCharacter } from "@/lib/armory/fetch";
-import { buildFragmentStats, formatFragmentStats, SUBCLASS_LINE, subclassFromPlugCategory, type Subclass } from "@/lib/armory/fragments";
+import { buildFragmentStats, formatFragmentStats } from "@/lib/armory/fragments";
 import { ABILITY_KINDS, ABILITY_LABELS, isStrandSharedAbilityIcon } from "@/lib/dim/subclasses";
 import {
   STRAND_ABILITY_PLATE_FILTER,
@@ -32,9 +32,7 @@ import type { ResolvedLoadout } from "@/lib/loadouts/resolve";
 import { loadoutHashtags, type SavedLoadout } from "@/lib/loadouts/types";
 import { StatGlyph } from "@/components/stat-glyph";
 import { Badge } from "@/components/ui/badge";
-import { ArmorThumb } from "@/components/armor-thumb";
 import { cn } from "@/lib/utils";
-import { itemWatermark } from "@/lib/armory/normalize";
 
 const STAT_COLS = STAT_DISPLAY_ORDER.map((key) => ({
   key,
@@ -52,18 +50,15 @@ function PlugIcon({
   size = 24,
   className,
   classType,
-  element,
 }: {
   hash: number;
   manifest: Manifest;
   dim?: boolean;
   suffix?: string;
-  size?: 16 | 20 | 24 | 32;
+  size?: 16 | 20 | 24;
   className?: string;
   /** When set, append armor-stat bonuses (fragments' +10 / −10). */
   classType?: number;
-  /** Subclass damage type — tints the tile frame (aspects / fragments). */
-  element?: Subclass;
 }) {
   const def = manifest.def("DestinyInventoryItemDefinition", hash);
   const name = def?.displayProperties?.name ?? `#${hash}`;
@@ -77,20 +72,7 @@ function PlugIcon({
   const label = stats ? `${title}\n${stats}` : title;
   const icon = def?.displayProperties?.icon;
   const recolor = isStrandSharedAbilityIcon(def?.plug?.plugCategoryIdentifier);
-  const plugElement =
-    subclassFromPlugCategory(def?.plug?.plugCategoryIdentifier) ?? element;
-  const sizeClass =
-    size === 16
-      ? "size-4"
-      : size === 20
-        ? "size-5"
-        : size === 32
-          ? "size-8"
-          : "size-6";
-  const tileClass = plugElement ? "d2-tile-element" : undefined;
-  const tileStyle = plugElement
-    ? ({ "--element-line": SUBCLASS_LINE[plugElement] } as CSSProperties)
-    : undefined;
+  const sizeClass = size === 16 ? "size-4" : size === 20 ? "size-5" : "size-6";
   return icon ? (
     <TooltipLabel label={label}>
       <span
@@ -99,7 +81,6 @@ function PlugIcon({
           "relative inline-flex shrink-0",
           recolor && "isolate",
         )}
-        style={tileStyle}
         tabIndex={0}
       >
         <Image
@@ -109,9 +90,8 @@ function PlugIcon({
           height={size}
           className={cn(
             sizeClass,
-            "rounded-sm d2:rounded-none",
+            "rounded-sm",
             dim && "opacity-40 grayscale",
-            tileClass,
             className,
           )}
           style={recolor ? { filter: STRAND_ABILITY_PLATE_FILTER } : undefined}
@@ -124,13 +104,11 @@ function PlugIcon({
     <TooltipLabel label={label}>
       <span
         className={cn(
-          "bg-muted shrink-0 rounded-sm d2:rounded-none",
+          "bg-muted shrink-0 rounded-sm",
           sizeClass,
           dim && "opacity-40",
-          tileClass,
           className,
         )}
-        style={tileStyle}
         tabIndex={0}
         aria-label={label}
       />
@@ -145,27 +123,14 @@ function ManifestIcon({
   size,
   className,
   showTooltip = true,
-  element,
 }: {
   showTooltip?: boolean;
   icon?: string;
   label: string;
-  size: 12 | 16 | 24 | 32;
+  size: 12 | 16 | 24;
   className?: string;
-  element?: Subclass;
 }) {
-  const sizeClass =
-    size === 12
-      ? "size-3"
-      : size === 24
-        ? "size-6"
-        : size === 32
-          ? "size-8"
-          : "size-4";
-  const tileClass = element ? "d2-tile-element" : undefined;
-  const tileStyle = element
-    ? ({ "--element-line": SUBCLASS_LINE[element] } as CSSProperties)
-    : undefined;
+  const sizeClass = size === 12 ? "size-3" : size === 24 ? "size-6" : "size-4";
   return icon ? (
     <TooltipLabel label={showTooltip ? label : undefined}>
       <Image
@@ -174,16 +139,14 @@ function ManifestIcon({
         tabIndex={showTooltip ? 0 : undefined}
         width={size}
         height={size}
-        className={cn(sizeClass, "shrink-0", tileClass, className)}
-        style={tileStyle}
+        className={cn(sizeClass, "shrink-0", className)}
         unoptimized
       />
     </TooltipLabel>
   ) : (
     <TooltipLabel label={showTooltip ? label : undefined}>
       <span
-        className={cn("bg-muted shrink-0 rounded-sm d2:rounded-none", sizeClass, tileClass, className)}
-        style={tileStyle}
+        className={cn("bg-muted shrink-0 rounded-sm", sizeClass, className)}
         tabIndex={showTooltip ? 0 : undefined}
       />
     </TooltipLabel>
@@ -191,7 +154,7 @@ function ManifestIcon({
 }
 
 function ChipDivider() {
-  return <span className="bg-border h-8 w-px shrink-0 d2:bg-foreground/8" aria-hidden />;
+  return <span className="bg-border h-4 w-px shrink-0" aria-hidden />;
 }
 
 function DetailRow({
@@ -251,9 +214,6 @@ export function LoadoutRowDetails({
   const exoticDef = manifest.def("DestinyInventoryItemDefinition", exoticHash);
   const exoticIcon = exoticDef?.displayProperties?.icon;
   const exoticName = exoticDef?.displayProperties?.name ?? "Exotic";
-  const exoticPiece = resolved.armor.find((a) => a.piece?.isExotic)?.piece;
-  const exoticWatermark =
-    exoticPiece?.watermark ?? itemWatermark(exoticDef);
 
   // Set bonuses → the perk each piece count unlocks (its icon is the set's glyph).
   const setBonuses = Object.entries(loadout.parameters.setBonuses ?? {}).map(
@@ -345,16 +305,15 @@ export function LoadoutRowDetails({
           <div className="flex h-8 items-center gap-2 overflow-hidden">
             {exoticIcon && (
               <TooltipLabel label={exoticName} delay={100}>
-                <span tabIndex={0} className="inline-flex outline-none">
-                  <ArmorThumb
-                    icon={exoticIcon}
-                    watermark={exoticWatermark}
-                    alt={exoticName}
-                    size={32}
-                    exoticFrame
-                    isTier5={exoticPiece?.tunedStat !== undefined}
-                  />
-                </span>
+                <Image
+                  src={`${BUNGIE_IMAGE_BASE}${exoticIcon}`}
+                  alt={exoticName}
+                  width={24}
+                  height={24}
+                  className="size-6 shrink-0 ring-1 ring-[#fff600]/70"
+                  tabIndex={0}
+                  unoptimized
+                />
               </TooltipLabel>
             )}
             {exoticIcon && setBonuses.length > 0 && <ChipDivider />}
@@ -366,7 +325,7 @@ export function LoadoutRowDetails({
                     <span
                       tabIndex={0}
                       aria-label={setBonuses.map((b) => b.label).join(", ")}
-                      className="bg-foreground/4 flex shrink-0 items-center gap-1 rounded-[4px] p-1 outline-none focus-visible:ring-2 focus-visible:ring-ring d2:h-[26px] d2:gap-1.5 d2:rounded-none d2:border d2:border-foreground/8 d2:bg-lifted d2:px-1.5 d2:focus-visible:border-outline-strong d2:focus-visible:ring-0"
+                      className="bg-foreground/4 flex shrink-0 items-center gap-1 rounded-[4px] p-1 outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     />
                   }
                 >
@@ -375,7 +334,7 @@ export function LoadoutRowDetails({
                       key={b.hash}
                       icon={b.icon}
                       label={b.label}
-                      size={16}
+                      size={24}
                       showTooltip={false}
                     />
                   ))}
@@ -393,17 +352,12 @@ export function LoadoutRowDetails({
             {subclass && (
               <span
                 aria-label={superLabel}
-                className="flex min-w-0 items-center gap-1 d2:gap-2"
+                className="flex min-w-0 items-center gap-1"
               >
                 <ManifestIcon
                   icon={superIcon}
                   label={superLabel}
-                  size={32}
-                  className="rounded-none"
-                  element={
-                    subclassFromPlugCategory(superDef?.plug?.plugCategoryIdentifier) ??
-                    subclass.subclass
-                  }
+                  size={24}
                 />
                 {abilityChips.map(({ kind, hash }) => (
                   <PlugIcon
@@ -411,9 +365,8 @@ export function LoadoutRowDetails({
                     hash={hash}
                     manifest={manifest}
                     suffix={ABILITY_LABELS[kind]}
-                    size={32}
+                    size={24}
                     className="rounded-none"
-                    element={subclass.subclass}
                   />
                 ))}
                 {subclass.aspectHashes.map((hash) => (
@@ -421,9 +374,8 @@ export function LoadoutRowDetails({
                     key={hash}
                     hash={hash}
                     manifest={manifest}
-                    size={32}
+                    size={24}
                     className="rounded-none"
-                    element={subclass.subclass}
                   />
                 ))}
                 {subclass.fragmentHashes.map((hash, i) => (
@@ -431,10 +383,9 @@ export function LoadoutRowDetails({
                     key={`${hash}-${i}`}
                     hash={hash}
                     manifest={manifest}
-                    size={32}
+                    size={24}
                     className="rounded-none"
                     classType={loadout.classType}
-                    element={subclass.subclass}
                   />
                 ))}
               </span>
@@ -445,7 +396,7 @@ export function LoadoutRowDetails({
 
   if (!open) return null;
   return (
-        <div className="border-border space-y-3 border-t pt-2 text-xs d2:border-foreground/15">
+        <div className="border-border space-y-3 border-t pt-2 text-xs">
           {loadout.notes && (
             <p className="text-muted-foreground whitespace-pre-wrap">
               {loadout.notes}
@@ -457,7 +408,7 @@ export function LoadoutRowDetails({
                 <Badge
                   key={t}
                   variant="outline"
-                  className="px-1.5 py-0 text-[10px] normal-case! d2:tracking-normal"
+                  className="px-1.5 py-0 text-[10px]"
                 >
                   #{t}
                 </Badge>
@@ -475,7 +426,7 @@ export function LoadoutRowDetails({
                 <StatGlyph src={statIcons[key]} label={STAT_LABELS[key]} />
               </div>
             ))}
-            <div className="d2-label pb-0.5 text-center classic:text-[10px] classic:font-normal d2:text-[9px]">
+            <div className="text-muted-foreground pb-0.5 text-center text-[10px] leading-4">
               Tuned
             </div>
 
@@ -489,31 +440,20 @@ export function LoadoutRowDetails({
                 <Fragment key={`${a.ref.id ?? a.ref.hash}-${idx}`}>
                   <div className="flex min-w-0 items-center gap-1.5">
                     {a.icon ? (
-                      a.piece?.isExotic ? (
-                        <ArmorThumb
-                          icon={a.icon}
-                          watermark={a.piece.watermark}
-                          size={20}
-                          exoticFrame
-                          isTier5={a.piece.tunedStat !== undefined}
-                          className={a.missing ? "opacity-50" : undefined}
-                        />
-                      ) : (
-                        <Image
-                          src={`${BUNGIE_IMAGE_BASE}${a.icon}`}
-                          alt=""
-                          width={20}
-                          height={20}
-                          className={cn(
-                            "size-5 shrink-0 rounded-sm d2:rounded-none d2-tile",
-                            a.missing && "opacity-50",
-                          )}
-                          unoptimized
-                        />
-                      )
+                      <Image
+                        src={`${BUNGIE_IMAGE_BASE}${a.icon}`}
+                        alt=""
+                        width={20}
+                        height={20}
+                        className={cn(
+                          "size-5 shrink-0 rounded-sm",
+                          a.missing && "opacity-50",
+                        )}
+                        unoptimized
+                      />
                     ) : (
                       <span
-                        className="d2-brackets bg-muted size-5 shrink-0 rounded-sm d2:rounded-none d2:bg-black/25"
+                        className="bg-muted size-5 shrink-0 rounded-sm"
                         aria-hidden
                       />
                     )}
@@ -535,7 +475,7 @@ export function LoadoutRowDetails({
                     {a.missing && (
                       <Badge
                         variant="outline"
-                        className="shrink-0 px-1 py-0 text-[10px] d2:border-warning/60 d2:text-warning"
+                        className="shrink-0 px-1 py-0 text-[10px]"
                       >
                         missing
                       </Badge>
@@ -562,7 +502,7 @@ export function LoadoutRowDetails({
                         label={`Tuned +5 ${STAT_LABELS[STAT_ORDER[tune.plus]]}`}
                       />
                     ) : artificePick !== null && artificePick !== undefined ? (
-                      <span className="flex items-center gap-0.5 text-[10px] text-brand/80 tabular-nums d2:text-positive/90">
+                      <span className="flex items-center gap-0.5 text-[10px] text-brand/80 tabular-nums">
                         <StatGlyph
                           src={statIcons[STAT_ORDER[artificePick]]}
                           label={`Artifice +3 ${STAT_LABELS[STAT_ORDER[artificePick]]}`}
@@ -577,7 +517,7 @@ export function LoadoutRowDetails({
 
             {optimizer && (
               <>
-                <div className="border-border/60 col-span-full my-0.5 border-t d2:border-foreground/15" />
+                <div className="border-border/60 col-span-full my-0.5 border-t" />
                 <DetailRow
                   label="Armor"
                   render={(i) => optimizer.baseStats[i] || ""}
@@ -586,7 +526,7 @@ export function LoadoutRowDetails({
                   label="Mods"
                   render={(i) =>
                     optimizer.modBonus[i] ? (
-                      <span className="text-brand/80 d2:text-positive/90">
+                      <span className="text-brand/80">
                         +{optimizer.modBonus[i]}
                       </span>
                     ) : (
@@ -599,7 +539,7 @@ export function LoadoutRowDetails({
                     label="Artifice"
                     render={(i) =>
                       optimizer.artificeBonus[i] ? (
-                        <span className="text-brand/80 d2:text-positive/90">
+                        <span className="text-brand/80">
                           +{optimizer.artificeBonus[i]}
                         </span>
                       ) : (
@@ -615,14 +555,14 @@ export function LoadoutRowDetails({
                     if (!v) return "";
                     return (
                       <span
-                        className={v < 0 ? "text-red-400/80 d2:text-destructive" : "text-brand/80 d2:text-positive/90"}
+                        className={v < 0 ? "text-red-400/80" : "text-brand/80"}
                       >
                         {v > 0 ? `+${v}` : v}
                       </span>
                     );
                   }}
                 />
-                <div className="border-border/60 col-span-full my-0.5 border-t d2:border-foreground/15" />
+                <div className="border-border/60 col-span-full my-0.5 border-t" />
                 <DetailRow
                   label="Total"
                   labelClass="text-foreground font-medium"

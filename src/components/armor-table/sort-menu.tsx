@@ -33,16 +33,12 @@ import {
 } from "@/lib/armor-table/sort";
 import { CustomOrderList } from "@/components/armor-table/custom-order-list";
 
-/**
- * Classic: opaque stand-in for Figma's 16% black overlay (translucent fills show rows
- * through sticky headers). D2: the dropdowns' grey-slate fill (`--glass`) without the
- * floating line or shadow.
- */
+/** Opaque stand-in for Figma's 16% black overlay — translucent fills show rows through sticky headers. */
 export const TABLE_HEADER_BG =
-  "d2-sidebar classic:bg-[color-mix(in_srgb,black_16%,var(--card))]";
+  "bg-[color-mix(in_srgb,black_16%,var(--card))]";
 
 const TABLE_HEAD_CELL =
-  "d2-label border-b border-border/50 py-2.5 pr-3 whitespace-nowrap first:pl-3 classic:text-sm classic:text-foreground d2:border-foreground/15 " +
+  "border-border/50 border-b py-2.5 pr-3 text-sm font-medium whitespace-nowrap first:pl-3 " +
   TABLE_HEADER_BG;
 
 /**
@@ -158,7 +154,7 @@ export const SortMenu = memo(function SortMenu({
             <span
               aria-hidden
               className={cn(
-                "absolute flex size-4 items-center justify-center rounded-[4px] transition-colors d2:rounded-none",
+                "absolute flex size-4 items-center justify-center rounded-[4px] transition-colors",
                 "hover:bg-accent group-data-popup-open:bg-accent",
                 align === "right"
                   ? "top-1/2 left-[calc(50%+0.5rem+2px)] -translate-y-1/2"
@@ -170,7 +166,7 @@ export const SortMenu = memo(function SortMenu({
                 className={cn(
                   "size-3 transition-opacity",
                   active
-                    ? "text-brand opacity-100 d2:text-foreground"
+                    ? "text-brand opacity-100"
                     : hovered
                       ? "opacity-40"
                       : "opacity-0 group-hover:opacity-40 group-data-popup-open:opacity-100",

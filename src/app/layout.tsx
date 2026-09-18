@@ -5,7 +5,6 @@ import { AppShell } from "@/components/app-shell";
 import { LoadingScreen } from "@/components/loading/loading-screen";
 import { Providers } from "@/components/providers";
 import { Analytics } from "@vercel/analytics/next";
-import { DEFAULT_SKIN, SKIN_BOOTSTRAP_SCRIPT } from "@/lib/skin";
 
 const geistSans = Geist({
   variable: "--font-sans",
@@ -31,17 +30,10 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      // next-themes rewrites `class` and the skin bootstrap rewrites `data-skin`
-      // before hydration, so the server's defaults may not match the client's.
       suppressHydrationWarning
-      data-skin={DEFAULT_SKIN}
       className={`${geistSans.variable} ${geistMono.variable}`}
     >
       <body className="h-dvh antialiased">
-        {/* Applies the saved skin before first paint (see src/lib/skin.ts). */}
-        <script dangerouslySetInnerHTML={{ __html: SKIN_BOOTSTRAP_SCRIPT }} />
-        {/* The blurred scene every panel floats over (D2 skin only). */}
-        <div className="app-backdrop" aria-hidden />
         <Providers>
           <AppShell>{children}</AppShell>
           <LoadingScreen />

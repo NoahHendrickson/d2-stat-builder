@@ -10,9 +10,6 @@ function mockManifest(
     number,
     {
       name: string;
-      description?: string;
-      flavorText?: string;
-      perkHash?: number;
       category: string;
       investmentStats?: {
         statTypeHash: number;
@@ -21,34 +18,19 @@ function mockManifest(
       }[];
     }
   >,
-  perks: Record<number, { description: string }> = {},
 ): Manifest {
   const table = Object.fromEntries(
     Object.entries(items).map(([hash, item]) => [
       hash,
       {
-        displayProperties: { name: item.name, description: item.description },
-        flavorText: item.flavorText,
-        perks: item.perkHash != null ? [{ perkHash: item.perkHash }] : [],
+        displayProperties: { name: item.name },
         plug: { plugCategoryIdentifier: item.category },
         investmentStats: item.investmentStats,
       },
     ]),
   );
-  const perkTable = Object.fromEntries(
-    Object.entries(perks).map(([hash, perk]) => [
-      hash,
-      { displayProperties: { description: perk.description } },
-    ]),
-  );
   return {
-    all: (name: string) =>
-      name === "DestinySandboxPerkDefinition" ? perkTable : table,
-    def: (name: string, hash?: number | null) => {
-      if (hash == null) return undefined;
-      if (name === "DestinySandboxPerkDefinition") return perkTable[hash];
-      return table[hash];
-    },
+    all: () => table,
   } as unknown as Manifest;
 }
 
@@ -99,40 +81,6 @@ describe("availableFragments", () => {
 
     const warlock = availableFragments(manifest, 2).Void[0];
     expect(warlock.stats).toEqual([0, 0, -10, 0, 0, 0]);
-  });
-
-  test("copies the fragment description from the item when there is no perk text", () => {
-    const manifest = mockManifest({
-      1: {
-        name: "Echo of Persistence",
-        description: "Increases class ability regeneration at the cost of class.",
-        category: "shared.void.fragments",
-        investmentStats: [{ statTypeHash: H.class, value: -10 }],
-      },
-    });
-
-    expect(availableFragments(manifest, 2).Void[0].description).toBe(
-      "Increases class ability regeneration at the cost of class.",
-    );
-  });
-
-  test("prefers sandbox perk description over an empty item description", () => {
-    const manifest = mockManifest(
-      {
-        1: {
-          name: "Spark of Beacons",
-          description: "",
-          perkHash: 99,
-          category: "shared.arc.fragments",
-          investmentStats: [{ statTypeHash: H.class, value: 10 }],
-        },
-      },
-      { 99: { description: "Your Arc grenades jolt targets." } },
-    );
-
-    expect(availableFragments(manifest, 1).Arc[0].description).toBe(
-      "Your Arc grenades jolt targets.",
-    );
   });
 });
 

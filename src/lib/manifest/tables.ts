@@ -9,7 +9,6 @@ import type {
   DestinyClassDefinition,
   DestinyDamageTypeDefinition,
   DestinySeasonDefinition,
-  DestinyMaterialRequirementSetDefinition,
 } from "bungie-api-ts/destiny2";
 
 /** The manifest definition tables this app needs for armor optimization. */
@@ -25,8 +24,6 @@ export const MANIFEST_TABLES = [
   "DestinyDamageTypeDefinition",
   // Tiny; maps the profile's currentSeasonHash → seasonNumber for saved artifact perks.
   "DestinySeasonDefinition",
-  // Tiny; what each armor masterwork level costs (glimmer, cores, prisms, shards).
-  "DestinyMaterialRequirementSetDefinition",
 ] as const;
 
 export type ManifestTableName = (typeof MANIFEST_TABLES)[number];
@@ -45,5 +42,4 @@ export interface ManifestTables {
   DestinyClassDefinition: DefinitionTable<DestinyClassDefinition>;
   DestinyDamageTypeDefinition: DefinitionTable<DestinyDamageTypeDefinition>;
   DestinySeasonDefinition: DefinitionTable<DestinySeasonDefinition>;
-  DestinyMaterialRequirementSetDefinition: DefinitionTable<DestinyMaterialRequirementSetDefinition>;
 }

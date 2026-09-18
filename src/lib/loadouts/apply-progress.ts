@@ -7,8 +7,6 @@ export interface ApplyStep {
   name: string;
   icon?: string;
   watermark?: string;
-  isExotic?: boolean;
-  isTier5?: boolean;
   status: ApplyStepStatus;
   message?: string;
 }

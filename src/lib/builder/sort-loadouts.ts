@@ -11,11 +11,8 @@ import {
 } from "../armory/stats";
 import type { OptimizerLoadout } from "../optimizer/types";
 
-/**
- * Sort by overall total, one of the six final stats, or what it costs to finish
- * masterworking the pieces (see masterwork.ts — informational, never a solver input).
- */
-export type LoadoutSortKey = "total" | StatKey | "cost";
+/** Sort by overall total, or by one of the six final stats. */
+export type LoadoutSortKey = "total" | StatKey;
 
 export type LoadoutSortState = {
   key: LoadoutSortKey;
@@ -28,7 +25,7 @@ export const DEFAULT_LOADOUT_SORT: LoadoutSortState = {
   asc: false,
 };
 
-/** Menu options in UI display order, with Total first (solver default) and cost last. */
+/** Menu options in UI display order, with Total first (solver default). */
 export const LOADOUT_SORT_OPTIONS: readonly {
   key: LoadoutSortKey;
   label: string;
@@ -38,42 +35,30 @@ export const LOADOUT_SORT_OPTIONS: readonly {
     key,
     label: STAT_LABELS[key],
   })),
-  { key: "cost", label: "Upgrade cost" },
 ];
 
 export function loadoutSortLabel(key: LoadoutSortKey): string {
   if (key === "total") return "Total";
-  if (key === "cost") return "Upgrade cost";
   return STAT_LABELS[key];
 }
 
-/** A build's masterwork-cost score (see materialScore in masterwork.ts). */
-export type LoadoutCostFn = (loadout: OptimizerLoadout) => number;
-
-function sortValue(
-  loadout: OptimizerLoadout,
-  key: LoadoutSortKey,
-  cost: LoadoutCostFn | undefined,
-): number {
+function sortValue(loadout: OptimizerLoadout, key: LoadoutSortKey): number {
   if (key === "total") return loadout.total;
-  if (key === "cost") return cost?.(loadout) ?? 0;
   return loadout.stats[STAT_ORDER.indexOf(key)];
 }
 
 /**
  * Stable sort of loadouts by the chosen key/direction. Ties keep the solver's
  * relative order (already total-desc), so switching sort doesn't reshuffle equals.
- * `cost` supplies the "cost" key's value; without it every build costs 0.
  */
 export function sortLoadouts(
   loadouts: readonly OptimizerLoadout[],
   sort: LoadoutSortState,
-  cost?: LoadoutCostFn,
 ): OptimizerLoadout[] {
   const indexed = loadouts.map((loadout, index) => ({ loadout, index }));
   indexed.sort((a, b) => {
-    const av = sortValue(a.loadout, sort.key, cost);
-    const bv = sortValue(b.loadout, sort.key, cost);
+    const av = sortValue(a.loadout, sort.key);
+    const bv = sortValue(b.loadout, sort.key);
     if (av !== bv) return sort.asc ? av - bv : bv - av;
     return a.index - b.index;
   });

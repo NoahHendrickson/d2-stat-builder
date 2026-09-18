@@ -219,10 +219,10 @@ function BuildsProgressBar({
       aria-valuemin={0}
       aria-valuemax={100}
       aria-valuenow={Math.round(progress * 100)}
-      className="bg-muted h-1 w-full overflow-hidden rounded-full d2:h-1.5 d2:rounded-[3px] d2:border d2:border-input d2:bg-black/30"
+      className="bg-muted h-1 w-full overflow-hidden rounded-full"
     >
       <div
-        className="bg-primary h-full rounded-full d2:rounded-none d2:bg-foreground"
+        className="bg-primary h-full rounded-full"
         style={{ width: `${progress * 100}%` }}
       />
     </div>
@@ -238,17 +238,17 @@ export function BuildsLoading({ progress: store }: { progress: ValueStore<number
         {Array.from({ length: LOADING_ROWS }, (_, i) => (
           <div
             key={i}
-            className={`${BUILD_CARD_LIFT_CLASS} bg-foreground/6 flex animate-pulse items-center gap-6 p-2 d2:bg-lifted`}
+            className={`${BUILD_CARD_LIFT_CLASS} bg-foreground/6 flex animate-pulse items-center gap-6 p-2`}
             style={{ animationDelay: `${i * 120}ms` }}
             aria-hidden
           >
-            <span className="d2-brackets bg-muted size-10 shrink-0 rounded-[2px] d2:rounded-none d2:bg-black/25" />
+            <span className="bg-muted size-10 shrink-0 rounded-[2px]" />
             <div className="flex max-w-[28.5rem] flex-1 items-center justify-between gap-3">
               {Array.from({ length: 6 }, (_, j) => (
-                <span key={j} className="bg-muted h-4 w-11 rounded d2:rounded-none d2:bg-foreground/10" />
+                <span key={j} className="bg-muted h-4 w-11 rounded" />
               ))}
             </div>
-            <span className="bg-muted ml-auto h-4 w-10 shrink-0 rounded d2:rounded-none d2:bg-foreground/10" />
+            <span className="bg-muted ml-auto h-4 w-10 shrink-0 rounded" />
             <span className="size-8 shrink-0" />
           </div>
         ))}

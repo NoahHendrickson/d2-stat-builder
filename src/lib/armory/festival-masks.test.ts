@@ -52,50 +52,14 @@ test("hashesIncludeHelmet matches an owned helmet, not other slots", () => {
 });
 
 test("T5 Festival of the Lost masks stay out of the default optimizer pool", () => {
-  const off = { legacyExotics: false, lowerTierArmor: false, legacyArmor: false };
   const mask = { isFestivalMask: true, tunedStat: 0, isExotic: false };
   const t5Helmet = { isFestivalMask: false, tunedStat: 2, isExotic: false };
   const legacyExotic = { isFestivalMask: false, isExotic: true };
-  expect(inDefaultOptimizerPool(mask, { ...off, legacyExotics: true })).toBe(false);
-  expect(inDefaultOptimizerPool(mask, off)).toBe(false);
-  expect(inDefaultOptimizerPool(t5Helmet, off)).toBe(true);
-  expect(inDefaultOptimizerPool(legacyExotic, { ...off, legacyExotics: true })).toBe(true);
-  expect(inDefaultOptimizerPool(legacyExotic, off)).toBe(false);
-});
-
-test("lower-tier Armor 3.0 legendaries join the pool only with the toggle on", () => {
-  const off = { legacyExotics: false, lowerTierArmor: false, legacyArmor: false };
-  const on = { ...off, lowerTierArmor: true };
-  // Tier 1–4 Armor 3.0: archetype but no tuning socket.
-  const tier3 = { isFestivalMask: false, archetype: "Gunner", isExotic: false };
-  // Legacy Armor 2.0 legendary: neither.
-  const legacy = { isFestivalMask: false, isExotic: false };
-  // A lower-tier mask is still a mask.
-  const tier3Mask = { isFestivalMask: true, archetype: "Gunner", isExotic: false };
-  expect(inDefaultOptimizerPool(tier3, on)).toBe(true);
-  expect(inDefaultOptimizerPool(tier3, off)).toBe(false);
-  expect(inDefaultOptimizerPool(legacy, on)).toBe(false);
-  expect(inDefaultOptimizerPool(tier3Mask, on)).toBe(false);
-  // The exotic toggle is what governs a non-tunable exotic, not this one.
-  const lowerExotic = { isFestivalMask: false, archetype: "Brawler", isExotic: true };
-  expect(inDefaultOptimizerPool(lowerExotic, on)).toBe(false);
-  expect(inDefaultOptimizerPool(lowerExotic, { ...off, legacyExotics: true })).toBe(true);
-});
-
-test("legacy Armor 2.0 legendaries join the pool only with legacyArmor on", () => {
-  const off = { legacyExotics: false, lowerTierArmor: false, legacyArmor: false };
-  const on = { ...off, legacyArmor: true };
-  // Legacy: no archetype, no tuning socket, not exotic.
-  const legacy = { isFestivalMask: false, isExotic: false };
-  expect(inDefaultOptimizerPool(legacy, on)).toBe(true);
-  expect(inDefaultOptimizerPool(legacy, off)).toBe(false);
-  // Neither of the other toggles lets a legacy legendary through...
-  expect(inDefaultOptimizerPool(legacy, { ...off, lowerTierArmor: true })).toBe(false);
-  expect(inDefaultOptimizerPool(legacy, { ...off, legacyExotics: true })).toBe(false);
-  // ...and legacyArmor governs neither lower-tier 3.0 pieces, legacy exotics, nor masks.
-  expect(inDefaultOptimizerPool({ ...legacy, archetype: "Gunner" }, on)).toBe(false);
-  expect(inDefaultOptimizerPool({ ...legacy, isExotic: true }, on)).toBe(false);
-  expect(inDefaultOptimizerPool({ ...legacy, isFestivalMask: true }, on)).toBe(false);
+  expect(inDefaultOptimizerPool(mask, true)).toBe(false);
+  expect(inDefaultOptimizerPool(mask, false)).toBe(false);
+  expect(inDefaultOptimizerPool(t5Helmet, false)).toBe(true);
+  expect(inDefaultOptimizerPool(legacyExotic, true)).toBe(true);
+  expect(inDefaultOptimizerPool(legacyExotic, false)).toBe(false);
 });
 
 test("ownedFestivalMasks: this class's masks plus any-class ones, nothing else", () => {

@@ -65,7 +65,6 @@ export function SignInCard() {
           <Button
             render={<a href="/api/auth/login" />}
             nativeButton={false}
-            variant="emphatic"
             size="lg"
             className="w-full"
           >

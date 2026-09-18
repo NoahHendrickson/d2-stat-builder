@@ -14,30 +14,6 @@ export const SUBCLASSES: Subclass[] = [
   "Prismatic",
 ];
 
-/** CSS `var(--subclass-*)` for a 1px element frame on aspects / fragments. */
-export const SUBCLASS_LINE: Record<Subclass, string> = {
-  Arc: "var(--subclass-arc)",
-  Solar: "var(--subclass-solar)",
-  Void: "var(--subclass-void)",
-  Stasis: "var(--subclass-stasis)",
-  Strand: "var(--subclass-strand)",
-  Prismatic: "var(--subclass-prismatic)",
-};
-
-/** Damage type from a plug category (`hunter.solar.aspects`, `shared.arc.grenades`, …). */
-export function subclassFromPlugCategory(
-  category: string | undefined,
-): Subclass | undefined {
-  if (!category) return undefined;
-  if (category.includes(".solar.")) return "Solar";
-  if (category.includes(".arc.")) return "Arc";
-  if (category.includes(".void.")) return "Void";
-  if (category.includes(".stasis.")) return "Stasis";
-  if (category.includes(".strand.")) return "Strand";
-  if (category.includes(".prism.")) return "Prismatic";
-  return undefined;
-}
-
 // Fragment plug category -> subclass. NOTE: Stasis fragments live under
 // `shared.stasis.trinkets`, NOT `.fragments` — verified against the live manifest,
 // and a naive "fragments" filter silently drops all of Stasis.
@@ -115,37 +91,9 @@ export interface FragmentInfo {
   hash: number;
   name: string;
   icon?: string;
-  /** Player-facing inspect text (sandbox perk, then item description). */
-  description?: string;
   subclass: Subclass;
   /** Summed investment stats on the six armor stats (STAT_ORDER); may be negative. */
   stats: StatArray;
-}
-
-/** Same source the loadout subclass editor uses: perk text, then the item's own description. */
-export function fragmentDescription(
-  def: {
-    displayProperties?: { description?: string };
-    flavorText?: string;
-    perks?: { perkHash: number }[];
-  },
-  manifest: Manifest,
-): string | undefined {
-  const fromPerks = (def.perks ?? [])
-    .map(
-      (p) =>
-        manifest.def("DestinySandboxPerkDefinition", p.perkHash)
-          ?.displayProperties?.description,
-    )
-    .filter((d): d is string => Boolean(d?.trim()))
-    .join("\n")
-    .trim();
-  return (
-    fromPerks ||
-    def.displayProperties?.description?.trim() ||
-    def.flavorText?.trim() ||
-    undefined
-  );
 }
 
 /**
@@ -199,7 +147,6 @@ function scanFragments(
       hash: Number(key),
       name: def.displayProperties?.name ?? "Unknown",
       icon: def.displayProperties?.icon,
-      description: fragmentDescription(def, manifest),
       subclass,
       stats,
     });

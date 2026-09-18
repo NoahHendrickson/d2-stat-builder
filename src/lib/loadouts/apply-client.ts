@@ -142,8 +142,6 @@ export async function applySavedLoadout({
       name: piece.name,
       icon: piece.icon,
       watermark: piece.watermark,
-      isExotic: piece.isExotic,
-      isTier5: piece.tunedStat !== undefined,
       status: "pending",
     });
   }

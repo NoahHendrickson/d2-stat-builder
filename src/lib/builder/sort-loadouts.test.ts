@@ -67,35 +67,9 @@ test("sort options list Total then display-order stats", () => {
     "super",
     "class",
     "weapons",
-    "cost",
   ]);
   expect(loadoutSortLabel("grenade")).toBe("Grenade");
   expect(loadoutSortLabel("total")).toBe("Total");
-  expect(loadoutSortLabel("cost")).toBe("Upgrade cost");
-});
-
-test("sort by cost uses the supplied cost function, cheapest first when ascending", () => {
-  const cost = (l: OptimizerLoadout) =>
-    ({ "high-total": 30, "high-grenade": 0, mid: 12, low: 30 })[l.pieceIds[0]!] ?? 0;
-  const asc = sortLoadouts(sample, { key: "cost", asc: true }, cost);
-  expect(asc.map((l) => l.pieceIds[0])).toEqual([
-    "high-grenade",
-    "mid",
-    "high-total", // ties keep solver order
-    "low",
-  ]);
-  const desc = sortLoadouts(sample, { key: "cost", asc: false }, cost);
-  expect(desc.map((l) => l.pieceIds[0])).toEqual([
-    "high-total",
-    "low",
-    "mid",
-    "high-grenade",
-  ]);
-});
-
-test("sort by cost without a cost function leaves the solver order alone", () => {
-  const sorted = sortLoadouts(sample, { key: "cost", asc: false });
-  expect(sorted.map((l) => l.pieceIds[0])).toEqual(sample.map((l) => l.pieceIds[0]));
 });
 
 test("sort by total descending matches solver default order for distinct totals", () => {

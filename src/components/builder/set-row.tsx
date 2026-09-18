@@ -28,17 +28,16 @@ export const SetRow = memo(function SetRow({
   const perk2Info = set.perks.find((p) => p.requiredCount === 2);
   const perk4Info = set.perks.find((p) => p.requiredCount === 4);
   return (
-    <div className="group/set-row relative col-span-full grid grid-cols-subgrid items-center">
-      {/* Pin sits in a reserved gutter inside the name column. Floating it
-          outside the row (Figma 17:5828) gets clipped by the card padding and
-          the settings pane's overflow-y-auto. */}
+    <div className="group/set-row relative col-span-full grid grid-cols-subgrid items-center before:absolute before:inset-y-0 before:-left-7 before:w-7">
+      {/* Figma 17:5828 ("when row is hovered the pin appears"): the pin floats in
+          the left margin, 24px outside the name column. */}
       <TooltipLabel label={pinned ? "Unpin set" : "Pin set"}>
         <button
           type="button"
           onClick={() => onTogglePin(set.setHash)}
           aria-label={pinned ? "Unpin set" : "Pin set"}
           className={cn(
-            "absolute top-1/2 left-0 z-10 flex size-6 -translate-y-1/2 items-center justify-center rounded-md transition-opacity outline-none focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring/50 d2:rounded-none d2:focus-visible:ring-1 d2:focus-visible:ring-outline-strong",
+            "absolute top-1/2 -left-7 flex size-6 -translate-y-1/2 items-center justify-center rounded-md transition-opacity outline-none focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring/50",
             pinned
               ? "text-foreground"
               : "text-muted-foreground opacity-0 group-hover/set-row:opacity-100 group-focus-within/set-row:opacity-100 hover:text-foreground",
@@ -51,7 +50,7 @@ export const SetRow = memo(function SetRow({
           />
         </button>
       </TooltipLabel>
-      <span className="truncate pl-7 text-sm">
+      <span className="truncate text-sm">
         {set.name} ({set.ownedCount})
       </span>
       <SetPerkCell

@@ -21,7 +21,7 @@ export function ManifestStatus() {
             <CircleNotch weight="duotone" className="size-4 animate-spin" />
           )}
           {status.state === "ready" && (
-            <CheckCircle weight="duotone" className="size-4 text-emerald-500 d2:text-positive" />
+            <CheckCircle weight="duotone" className="size-4 text-emerald-500" />
           )}
           {status.state === "error" && (
             <XCircle weight="duotone" className="text-destructive size-4" />

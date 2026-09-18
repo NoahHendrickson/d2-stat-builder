@@ -4,13 +4,13 @@ import type { Subclass } from "../armory/fragments";
 import { subclassFromItemHash } from "../dim/subclasses";
 import { MAX_NAME_LENGTH, loadoutHashtags, type SavedLoadout } from "./types";
 
-export type LoadoutListSortKey = "created" | "name" | "total";
+export type LoadoutListSortKey = "edited" | "name" | "total";
 
 export const LOADOUT_LIST_SORT_OPTIONS: readonly {
   key: LoadoutListSortKey;
   label: string;
 }[] = [
-  { key: "created", label: "Created at" },
+  { key: "edited", label: "Last edited" },
   { key: "name", label: "Name" },
   { key: "total", label: "Total stats" },
 ];
@@ -24,8 +24,6 @@ export interface LoadoutListFilter {
   subclasses?: readonly Subclass[];
   /** Equipable-item-set hashes. Empty/omitted = all. Matches if the loadout has any selected set. */
   setHashes?: readonly number[];
-  /** Hashtags. Empty/omitted = all. Matches if the loadout has any selected tag. */
-  tags?: readonly string[];
   /** Resolve a set hash to its display name so the query can match set bonuses. */
   setName?: (hash: number) => string | undefined;
 }
@@ -52,10 +50,6 @@ export function filterLoadouts(
     if (filter.setHashes?.length) {
       const sets = l.loadout.parameters.setBonuses ?? {};
       if (!filter.setHashes.some((hash) => Object.hasOwn(sets, hash))) return false;
-    }
-    if (filter.tags?.length) {
-      const have = loadoutHashtags(l.loadout);
-      if (!filter.tags.some((tag) => have.includes(tag))) return false;
     }
     if (!q) return true;
     if (tag !== null) {
@@ -84,12 +78,12 @@ export function sortSavedLoadouts(
       out.sort(
         (a, b) =>
           (b.optimizer?.total ?? -1) - (a.optimizer?.total ?? -1) ||
-          a.loadout.name.localeCompare(b.loadout.name, undefined, { sensitivity: "base" }),
+          b.updatedAt - a.updatedAt,
       );
       break;
-    case "created":
+    case "edited":
     default:
-      out.sort((a, b) => b.createdAt - a.createdAt);
+      out.sort((a, b) => b.updatedAt - a.updatedAt);
   }
   return out;
 }

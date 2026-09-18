@@ -177,7 +177,7 @@ export const ArmorTableToolbar = memo(function ArmorTableToolbar({
         <Button
           type="button"
           variant="ghost"
-          className="ml-auto h-8 shrink-0 gap-1.5 rounded-lg border border-input bg-foreground/6 px-2.5 pr-3 font-normal text-foreground/70 hover:bg-foreground/8 d2:border-transparent d2:bg-transparent d2:font-medium"
+          className="ml-auto h-8 shrink-0 gap-1.5 rounded-lg border border-input bg-foreground/6 px-2.5 pr-3 font-normal text-foreground/70 hover:bg-foreground/8"
           onClick={onClearFilters}
         >
           <X className="size-4" aria-hidden />

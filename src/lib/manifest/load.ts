@@ -1,7 +1,6 @@
 import {
   getDestinyManifest,
   type DestinyInventoryItemDefinition,
-  type DestinyMaterialRequirementSetDefinition,
 } from "bungie-api-ts/destiny2";
 import { isFestivalMask } from "@/lib/armory/festival-masks";
 import { createBungieHttp } from "@/lib/bungie/http";
@@ -25,7 +24,7 @@ const ITEM_TYPE_ARMOR = 2;
 const ITEM_TYPE_MOD = 19;
 const ITEM_TYPE_SUBCLASS = 16;
 // Bump when the item-table filter changes so IndexedDB isn't stuck without new defs.
-const CACHE_REVISION = "masterwork-cost-v1";
+const CACHE_REVISION = "festival-masks-v1";
 
 export interface Manifest {
   version: string;
@@ -60,25 +59,9 @@ function makeManifest(version: string, tables: ManifestTables): Manifest {
   };
 }
 
-/**
- * Every item any material requirement set charges (Glimmer, Enhancement Cores, …).
- * Materials are itemType None/Currency, so they need keeping by hash to survive the
- * item-table filter and give masterwork costs their names and icons.
- */
-function materialItemHashes(
-  sets: Record<number, DestinyMaterialRequirementSetDefinition>,
-): Set<number> {
-  const out = new Set<number>();
-  for (const key in sets) {
-    for (const m of sets[key].materials ?? []) out.add(m.itemHash);
-  }
-  return out;
-}
-
-/** Keep armor, subclasses, plugs/mods, Festival of the Lost masks, and upgrade materials. */
+/** Keep armor, subclasses, plugs/mods, and Festival of the Lost masks. */
 function filterInventoryItems(
   all: Record<number, DestinyInventoryItemDefinition>,
-  materials: Set<number>,
 ): Record<number, DestinyInventoryItemDefinition> {
   const out: Record<number, DestinyInventoryItemDefinition> = {};
   for (const key in all) {
@@ -87,7 +70,6 @@ function filterInventoryItems(
     // they vanish from the cached item table and never enter the armory.
     if (
       def.itemType === ITEM_TYPE_ARMOR ||
-      materials.has(Number(key)) ||
       def.itemType === ITEM_TYPE_MOD ||
       def.itemType === ITEM_TYPE_SUBCLASS ||
       def.plug ||
@@ -145,21 +127,13 @@ export async function loadManifest(
   const tables = {} as ManifestTables;
   let done = 0;
   onProgress?.(`Downloading game data (0/${MANIFEST_TABLES.length})…`, 0);
-  // The item filter needs the (tiny) material table to know which currencies to keep.
-  const materialSets = downloadTable(
-    paths.DestinyMaterialRequirementSetDefinition,
-  ) as Promise<Record<number, DestinyMaterialRequirementSetDefinition>>;
   await Promise.all(
     MANIFEST_TABLES.map(async (table) => {
-      const raw =
-        table === "DestinyMaterialRequirementSetDefinition"
-          ? await materialSets
-          : await downloadTable(paths[table]);
+      const raw = await downloadTable(paths[table]);
       const data =
         table === "DestinyInventoryItemDefinition"
           ? filterInventoryItems(
               raw as Record<number, DestinyInventoryItemDefinition>,
-              materialItemHashes(await materialSets),
             )
           : raw;
       tables[table] = data as never;

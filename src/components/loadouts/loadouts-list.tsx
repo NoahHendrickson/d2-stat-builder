@@ -51,11 +51,9 @@ import { selectionsForLoadout } from "@/lib/loadouts/load-in-builder";
 import { loadoutSubclass, withLoadoutSubclass } from "@/lib/loadouts/subclass";
 import {
   LOADOUT_SCHEMA_VERSION,
-  withLoadoutTag,
   type SavedLoadout,
   type SavedLoadoutData,
 } from "@/lib/loadouts/types";
-import { LoadoutTagFilterSubmenu } from "@/components/loadouts/loadout-tag-menu";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -103,13 +101,10 @@ function filterSummary(labels: string[]): string | undefined {
 function FilterCascade({
   label,
   summary,
-  empty,
   children,
 }: {
   label: string;
   summary?: string;
-  /** Shown in the submenu when there is nothing to pick. */
-  empty?: string;
   children: ReactNode;
 }) {
   return (
@@ -122,14 +117,8 @@ function FilterCascade({
           </span>
         ) : null}
       </DropdownMenuSubTrigger>
-      <DropdownMenuSubContent className="min-w-52">
-        {empty ? (
-          <p className="text-muted-foreground px-2 py-2.5 text-sm leading-5">
-            {empty}
-          </p>
-        ) : (
-          children
-        )}
+      <DropdownMenuSubContent className="min-w-40">
+        {children}
       </DropdownMenuSubContent>
     </DropdownMenuSub>
   );
@@ -173,8 +162,6 @@ export function LoadoutsList({
   const queryClient = useQueryClient();
   const loadouts = useLoadouts();
   const { create, update, remove } = useLoadoutMutations();
-  const updateMutateAsync = update.mutateAsync;
-  const tagUpdateById = useRef(new Map<string, Promise<void>>());
 
   const [query, setQuery] = useState("");
   // The filter pass runs on the deferred value so typing never waits on it.
@@ -182,8 +169,7 @@ export function LoadoutsList({
   const [classFilter, setClassFilter] = useState<number[]>([]);
   const [subclassFilter, setSubclassFilter] = useState<Subclass[]>([]);
   const [setFilter, setSetFilter] = useState<number[]>([]);
-  const [tagFilter, setTagFilter] = useState<string[]>([]);
-  const [sortKey, setSortKey] = useState<LoadoutListSortKey>("created");
+  const [sortKey, setSortKey] = useState<LoadoutListSortKey>("edited");
   const [dialog, setDialog] = useState<DialogState>({ kind: "none" });
   // Expanded rows, by id — kept here (not in the row) so it survives virtualization.
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(
@@ -253,14 +239,13 @@ export function LoadoutsList({
           classTypes: classFilter,
           subclasses: subclassFilter,
           setHashes: setFilter,
-          tags: tagFilter,
           setName: (hash) =>
             manifest.def("DestinyEquipableItemSetDefinition", hash)?.displayProperties
               ?.name,
         }),
         sortKey,
       ),
-    [all, deferredQuery, classFilter, subclassFilter, setFilter, tagFilter, sortKey, manifest],
+    [all, deferredQuery, classFilter, subclassFilter, setFilter, sortKey, manifest],
   );
   const activeTag = query.trim().toLowerCase().startsWith("#")
     ? query.trim().toLowerCase().slice(1)
@@ -423,39 +408,6 @@ export function LoadoutsList({
     );
   }, []);
 
-  const setLoadoutTag = useCallback(
-    (saved: SavedLoadout, tag: string, present: boolean) => {
-      const current =
-        queryClient
-          .getQueryData<SavedLoadout[]>(LOADOUTS_QUERY_KEY)
-          ?.find((l) => l.id === saved.id) ?? saved;
-      const loadout = withLoadoutTag(current.loadout, tag, present);
-      if (loadout === current.loadout) return;
-      const data: SavedLoadoutData = {
-        version: LOADOUT_SCHEMA_VERSION,
-        loadout,
-        ...(current.optimizer ? { optimizer: current.optimizer } : {}),
-        ...(current.builder ? { builder: current.builder } : {}),
-        ...(current.modPlacement ? { modPlacement: current.modPlacement } : {}),
-      };
-      queryClient.setQueryData<SavedLoadout[]>(LOADOUTS_QUERY_KEY, (list) =>
-        list?.map((l) => (l.id === current.id ? { ...l, loadout } : l)),
-      );
-      const run = async () => {
-        try {
-          await updateMutateAsync({ id: current.id, data });
-        } catch (err) {
-          onMutationError(err as { notConfigured: boolean; message: string });
-          await queryClient.invalidateQueries({ queryKey: LOADOUTS_QUERY_KEY });
-        }
-      };
-      const prev = tagUpdateById.current.get(saved.id) ?? Promise.resolve();
-      const next = prev.then(run, run);
-      tagUpdateById.current.set(saved.id, next);
-    },
-    [queryClient, updateMutateAsync],
-  );
-
   /**
    * "Optimize": push the loadout's stat targets, exotic, set bonuses, fragments,
    * and major-mod count into the optimizer and show it.
@@ -507,7 +459,6 @@ export function LoadoutsList({
     classFilter.length +
     subclassFilter.length +
     setFilter.length +
-    tagFilter.length +
     (activeTag !== null ? 1 : 0);
   const countLabel = loadouts.isPending
     ? "Loading…"
@@ -517,7 +468,7 @@ export function LoadoutsList({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
-      <div className="flex flex-col gap-1 px-4 d2:gap-2 d2:px-2">
+      <div className="flex flex-col gap-1 px-4">
         <div className="flex items-center gap-1">
           <div className="relative min-w-0 flex-1">
             <MagnifyingGlass
@@ -537,7 +488,7 @@ export function LoadoutsList({
                 type="button"
                 aria-label="Clear search"
                 onClick={() => setQuery("")}
-                className="text-muted-foreground hover:text-foreground focus-visible:ring-ring/50 absolute top-1/2 right-1.5 flex size-5 -translate-y-1/2 cursor-pointer items-center justify-center rounded-[4px] outline-none focus-visible:ring-3 d2:rounded-none d2:focus-visible:ring-1 d2:focus-visible:ring-outline-strong"
+                className="text-muted-foreground hover:text-foreground focus-visible:ring-ring/50 absolute top-1/2 right-1.5 flex size-5 -translate-y-1/2 cursor-pointer items-center justify-center rounded-[4px] outline-none focus-visible:ring-3"
               >
                 <X weight="bold" className="size-3.5" aria-hidden />
               </button>
@@ -592,7 +543,7 @@ export function LoadoutsList({
                   {filterCount > 0 && (
                     <Badge
                       variant="emphatic"
-                      className="absolute top-0.5 right-0.5 h-3.5 min-w-3.5 px-1 text-[9px] leading-none d2:top-0 d2:right-0 d2:tracking-normal"
+                      className="absolute top-0.5 right-0.5 h-3.5 min-w-3.5 px-1 text-[9px] leading-none"
                     >
                       {filterCount}
                     </Badge>
@@ -603,9 +554,6 @@ export function LoadoutsList({
                 <FilterCascade
                   label="Class"
                   summary={filterSummary(classFilter.map((c) => CLASS_NAMES[c]))}
-                  empty={
-                    ownedClasses.length === 0 ? "No classes to filter" : undefined
-                  }
                 >
                   {ownedClasses.map((c) => (
                     <DropdownMenuCheckboxItem
@@ -648,11 +596,6 @@ export function LoadoutsList({
                         `Set ${hash}`,
                     ),
                   )}
-                  empty={
-                    setBonusOptions.length === 0
-                      ? "No loadouts with set bonuses"
-                      : undefined
-                  }
                 >
                   {setBonusOptions.map((s) => (
                     <DropdownMenuCheckboxItem
@@ -668,15 +611,26 @@ export function LoadoutsList({
                     </DropdownMenuCheckboxItem>
                   ))}
                 </FilterCascade>
-                <LoadoutTagFilterSubmenu
-                  tags={hashtags}
-                  selected={tagFilter}
-                  onToggle={(tag, checked) =>
-                    setTagFilter((prev) =>
-                      checked ? [...new Set([...prev, tag])] : prev.filter((t) => t !== tag),
-                    )
-                  }
-                />
+                {hashtags.length > 0 && (
+                  <FilterCascade
+                    label="Hashtag"
+                    summary={activeTag !== null ? `#${activeTag}` : undefined}
+                  >
+                    {hashtags.map((tag) => (
+                      <DropdownMenuCheckboxItem
+                        key={tag}
+                        indicator="start"
+                        closeOnClick={false}
+                        checked={activeTag === tag}
+                        onCheckedChange={(checked) =>
+                          setQuery(checked ? `#${tag}` : "")
+                        }
+                      >
+                        #{tag}
+                      </DropdownMenuCheckboxItem>
+                    ))}
+                  </FilterCascade>
+                )}
                 {filterCount > 0 && (
                   <>
                     <DropdownMenuSeparator />
@@ -685,7 +639,6 @@ export function LoadoutsList({
                         setClassFilter([]);
                         setSubclassFilter([]);
                         setSetFilter([]);
-                        setTagFilter([]);
                         if (activeTag !== null) setQuery("");
                       }}
                     >
@@ -751,8 +704,6 @@ export function LoadoutsList({
                     onShare={shareLoadout}
                     onOptimize={optimizeLoadout}
                     onArmoryChanged={onArmoryChanged}
-                    allTags={hashtags}
-                    onSetTag={setLoadoutTag}
                   />
                 </div>
               );

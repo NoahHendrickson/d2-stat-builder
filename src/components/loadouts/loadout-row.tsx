@@ -31,8 +31,7 @@ import { buildDimLoadoutUrl } from "@/lib/dim/loadout-link";
 import { applySavedLoadout } from "@/lib/loadouts/apply-client";
 import { formatRelativeTime } from "@/lib/armor-table/relative-time";
 import { resolveLoadout } from "@/lib/loadouts/resolve";
-import { loadoutHashtags, type SavedLoadout } from "@/lib/loadouts/types";
-import { LoadoutTagAssignSubmenu } from "@/components/loadouts/loadout-tag-menu";
+import type { SavedLoadout } from "@/lib/loadouts/types";
 import { StatGlyph } from "@/components/stat-glyph";
 import { Button } from "@/components/ui/button";
 import {
@@ -75,8 +74,6 @@ export const LoadoutRow = memo(function LoadoutRow({
   onShare,
   onOptimize,
   onArmoryChanged,
-  allTags,
-  onSetTag,
 }: {
   saved: SavedLoadout;
   open: boolean;
@@ -95,9 +92,6 @@ export const LoadoutRow = memo(function LoadoutRow({
   /** Load the loadout's targets into the optimizer to look for better builds. */
   onOptimize: (saved: SavedLoadout) => void;
   onArmoryChanged: () => void;
-  /** Every hashtag across the library, for the Tag submenu. */
-  allTags: readonly string[];
-  onSetTag: (saved: SavedLoadout, tag: string, present: boolean) => void;
 }) {
   const queryClient = useQueryClient();
   const [applying, setApplying] = useState(false);
@@ -154,7 +148,7 @@ export const LoadoutRow = memo(function LoadoutRow({
   };
 
   return (
-    <div className="d2-card-frame flex flex-col gap-4 px-4 py-2 classic:border-b classic:border-border classic:bg-transparent classic:shadow-none d2:mx-2 d2:gap-3 d2:p-3 [--card-line-width:1.5px] hover:[--line-alpha:1.6]">
+    <div className="border-border flex flex-col gap-4 border-b px-4 py-2">
       <div className="flex flex-col gap-2">
         <div className="flex h-8 items-center justify-between gap-2">
           <TooltipLabel
@@ -170,17 +164,17 @@ export const LoadoutRow = memo(function LoadoutRow({
               {resolved.missing && (
                 <Warning
                   weight="fill"
-                  className="size-4 shrink-0 text-amber-500 d2:text-warning"
+                  className="size-4 shrink-0 text-amber-500"
                   aria-label="Missing items"
                 />
               )}
             </button>
           </TooltipLabel>
-          <div className="flex shrink-0 items-center gap-0.5 d2:gap-2">
+          <div className="flex shrink-0 items-center gap-0.5">
             <Button
               variant="emphatic"
               size="xs"
-              className="equip-button h-8 gap-1.5 d2:px-3"
+              className="equip-button h-8 gap-1.5"
               onClick={applyLoadout}
               disabled={!canApply}
             >
@@ -191,13 +185,7 @@ export const LoadoutRow = memo(function LoadoutRow({
             </Button>
             <DropdownMenu>
               <DropdownMenuTrigger
-                render={
-                  <Button
-                    size="icon"
-                    variant="dashed"
-                    className="classic:border-solid classic:border-transparent"
-                  />
-                }
+                render={<Button size="icon" variant="ghost" />}
                 aria-label={`Actions for ${loadout.name}`}
               >
                 <DotsThreeVertical
@@ -219,12 +207,6 @@ export const LoadoutRow = memo(function LoadoutRow({
                   <PencilSimple weight="duotone" aria-hidden />
                   Edit
                 </DropdownMenuItem>
-                <LoadoutTagAssignSubmenu
-                  assigned={loadoutHashtags(loadout)}
-                  tags={allTags}
-                  onToggle={(tag, checked) => onSetTag(saved, tag, checked)}
-                  onCreate={(tag) => onSetTag(saved, tag, true)}
-                />
                 <DropdownMenuItem onClick={() => onShare(saved)}>
                   <ShareFat weight="duotone" aria-hidden />
                   Share
@@ -273,7 +255,7 @@ export const LoadoutRow = memo(function LoadoutRow({
       {optimizer ? (
         <div className="flex items-start justify-between gap-1 text-xs leading-4 tabular-nums">
           <TooltipLabel label="Total stats">
-            <span tabIndex={0} className="d2:text-foreground">{optimizer.total}</span>
+            <span tabIndex={0}>{optimizer.total}</span>
           </TooltipLabel>
           {STAT_COLS.map(({ key, i }) => {
             const value = optimizer.stats[i];
@@ -282,7 +264,7 @@ export const LoadoutRow = memo(function LoadoutRow({
                 <StatGlyph
                   src={statIcons[key]}
                   label={STAT_LABELS[key]}
-                  className="d2:size-3 opacity-65"
+                  className="opacity-65"
                 />
                 <span className={cn(value === 0 && "text-muted-foreground")}>
                   {value}
