@@ -699,7 +699,7 @@ export function LoadoutsList({
       ) : (
         <div
           ref={setScrollEl}
-          className="min-h-0 flex-1 overflow-y-auto overscroll-contain"
+          className="d2-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain"
         >
           <div
             className="relative w-full"
