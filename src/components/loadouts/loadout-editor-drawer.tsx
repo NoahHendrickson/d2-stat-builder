@@ -15,7 +15,8 @@ import {
 import { Tooltip as BaseTooltip } from "@base-ui/react/tooltip";
 import Image from "next/image";
 import { CircleNotch, Check, X } from "@phosphor-icons/react";
-import type { ArmorPiece, ArmorSocket } from "@/lib/armory/normalize";
+import { armorPipTier, type ArmorPiece, type ArmorSocket } from "@/lib/armory/normalize";
+import { isFullyMasterworked } from "@/lib/armory/masterwork";
 import {
   SLOT_LABELS,
   STAT_DISPLAY_ORDER,
@@ -27,6 +28,7 @@ import { statIconsFromManifest } from "@/lib/manifest/stat-icons";
 import { sumEditorStats } from "@/lib/loadouts/editor-stats";
 import { BUNGIE_IMAGE_BASE } from "@/lib/bungie/constants";
 import { ArmorThumb } from "@/components/armor-thumb";
+import { PowerValue } from "@/components/power-value";
 import type { ModOption, ModOptionCatalog } from "@/lib/loadouts/mod-options";
 import {
   chosenCount,
@@ -233,15 +235,15 @@ function StatModChip({
   );
 }
 
-/** Square piece art: watermark when supplied, T5 pips on tiered pieces, gold frame on exotics. */
+/** Square piece art: watermark when supplied, pip rail from gear tier, gold frame when fully masterworked. */
 function PieceThumb({ piece }: { piece: ArmorPiece }) {
   return (
     <ArmorThumb
       icon={piece.icon}
       watermark={piece.watermark}
       size={64}
-      exoticFrame={piece.isExotic}
-      isTier5={piece.tunedStat !== undefined}
+      masterworked={isFullyMasterworked(piece)}
+      gearTier={armorPipTier(piece)}
     />
   );
 }
@@ -505,14 +507,27 @@ const PiecePanel = memo(function PiecePanel({
         <PieceThumb piece={piece} />
         <div className="flex min-w-0 flex-1 flex-col">
           <span className="truncate text-sm font-medium">{piece.name}</span>
-          {capacity !== undefined && (
-            <span
-              className={cn(
-                "text-muted-foreground text-xs tabular-nums",
-                over && "text-destructive font-medium",
+          {(piece.power !== undefined || capacity !== undefined) && (
+            <span className="flex items-center gap-2">
+              {piece.power !== undefined && (
+                <PowerValue
+                  value={piece.power}
+                  size="xs"
+                  tone="gold"
+                  className="shrink-0 items-center gap-0.5 text-xs"
+                  title="Power"
+                />
               )}
-            >
-              Energy {used}/{capacity}
+              {capacity !== undefined && (
+                <span
+                  className={cn(
+                    "text-muted-foreground text-xs tabular-nums",
+                    over && "text-destructive font-medium",
+                  )}
+                >
+                  Energy {used}/{capacity}
+                </span>
+              )}
             </span>
           )}
         </div>
@@ -959,7 +974,7 @@ export function LoadoutEditorDrawer({
     >
       <DrawerContent
         aria-label={form.title}
-        className="d2-slate d2-line bg-panel-strong rounded-none border-[1.5px] border-transparent shadow-none [--line-width:1.5px] data-[swipe-axis=y]:[--drawer-content-max-height:min(80dvh,60rem)] [--bleed:0px] [--drawer-bleed-background:var(--panel-strong)]"
+        className="d2-sidebar d2-line bg-glass rounded-none border-[1.5px] border-transparent shadow-none [--line-width:1.5px] data-[swipe-axis=y]:[--drawer-content-max-height:min(80dvh,60rem)] [--bleed:0px] [--drawer-bleed-background:var(--glass)]"
         // Over the main column only — past the sidebar. `--app-sidebar-width` is 0 below `lg`.
         style={{
           left: "var(--app-sidebar-width, 0px)",

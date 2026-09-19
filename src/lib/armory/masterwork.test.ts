@@ -7,6 +7,7 @@ import {
   ENHANCEMENT_CORE_HASH,
   ENHANCEMENT_PRISM_HASH,
   GLIMMER_HASH,
+  isFullyMasterworked,
   masterworkPlugLevel,
   materialScore,
   readMasterwork,
@@ -133,7 +134,7 @@ test("masterwork plug level is the +N it grants to the six stats", () => {
 });
 
 test("a level-2 Tier-5 piece sums the remaining three rungs of its own ladder", () => {
-  const mw = readMasterwork("a", def, profile("a", E[1], E[2]), manifest, ENERGY);
+  const mw = readMasterwork("a", def, profile("a", E[1], E[2]), manifest, ENERGY, false);
   expect(mw).toEqual({
     level: 2,
     max: 5,
@@ -149,7 +150,7 @@ test("a level-2 Tier-5 piece sums the remaining three rungs of its own ladder", 
 test("the ladder is anchored on the game's next plug, not the socketed level-0 plug", () => {
   // Real-world: many Tier-5 drops carry the Tier-4 empty plug, while component 310
   // offers the Tier-5 level-1 plug. The Tier-5 ladder must win.
-  const mw = readMasterwork("b", def, profile("b", D0, E[0]), manifest, ENERGY);
+  const mw = readMasterwork("b", def, profile("b", D0, E[0]), manifest, ENERGY, false);
   expect(mw?.level).toBe(0);
   expect(mw?.cost).toEqual([
     { itemHash: GLIMMER_HASH, count: 2400 + 3500 + 7500 + 9100 + 12500 },
@@ -160,7 +161,7 @@ test("the ladder is anchored on the game's next plug, not the socketed level-0 p
 });
 
 test("a Tier-4 piece follows the Tier-4 ladder and stops where it ends", () => {
-  const mw = readMasterwork("c", def, profile("c", D[3], D[4]), manifest, ENERGY);
+  const mw = readMasterwork("c", def, profile("c", D[3], D[4]), manifest, ENERGY, false);
   expect(mw).toEqual({
     level: 4,
     max: 5,
@@ -174,7 +175,7 @@ test("a Tier-4 piece follows the Tier-4 ladder and stops where it ends", () => {
 });
 
 test("a fully masterworked piece costs nothing and needs no reusable plugs", () => {
-  expect(readMasterwork("d", def, profile("d", E[4]), manifest, ENERGY)).toEqual({
+  expect(readMasterwork("d", def, profile("d", E[4]), manifest, ENERGY, false)).toEqual({
     level: 5,
     max: 5,
     cost: [],
@@ -182,14 +183,14 @@ test("a fully masterworked piece costs nothing and needs no reusable plugs", () 
 });
 
 test("without component 310 the level is known but the cost is not", () => {
-  expect(readMasterwork("e", def, profile("e", E[0]), manifest, ENERGY)).toEqual({
+  expect(readMasterwork("e", def, profile("e", E[0]), manifest, ENERGY, false)).toEqual({
     level: 1,
     max: 5,
   });
 });
 
 test("a next plug missing from the plug set leaves the cost unknown", () => {
-  expect(readMasterwork("f", def, profile("f", E[0], 777), manifest, ENERGY)).toEqual({
+  expect(readMasterwork("f", def, profile("f", E[0], 777), manifest, ENERGY, false)).toEqual({
     level: 1,
     max: 5,
   });
@@ -197,20 +198,27 @@ test("a next plug missing from the plug set leaves the cost unknown", () => {
 
 test("legacy armor reads energy capacity as its level; only energy 10 is free", () => {
   const legacy = profile("g", 999); // no v460 plug in any socket
-  expect(readMasterwork("g", def, legacy, manifest, { capacity: 10 })).toEqual({
+  expect(readMasterwork("g", def, legacy, manifest, { capacity: 10 }, true)).toEqual({
     level: 10,
     max: 10,
     cost: [],
   });
-  expect(readMasterwork("g", def, legacy, manifest, { capacity: 4 })).toEqual({
+  expect(readMasterwork("g", def, legacy, manifest, { capacity: 4 }, true)).toEqual({
     level: 4,
     max: 10,
   });
-  expect(readMasterwork("g", def, legacy, manifest, undefined)).toBeUndefined();
+  expect(readMasterwork("g", def, legacy, manifest, undefined, true)).toBeUndefined();
 });
 
-test("energy 11 without a v460 plug is Armor 3.0 with unreadable masterwork, not a finished legacy piece", () => {
-  expect(readMasterwork("h", def, profile("h", 999), manifest, ENERGY)).toBeUndefined();
+test("Armor 3.0 with an unreadable masterwork socket is unknown, not a finished legacy piece", () => {
+  // Every Armor 3.0 masterwork plug below Tier 4 reports energy capacity 10, so
+  // capacity can't stand in for the generation — the caller's flag decides.
+  expect(
+    readMasterwork("h", def, profile("h", 999), manifest, { capacity: 10 }, false),
+  ).toBeUndefined();
+  expect(
+    readMasterwork("h", def, profile("h", 999), manifest, ENERGY, false),
+  ).toBeUndefined();
 });
 
 test("the next rung is the plug at level+1, not reusablePlugs[0]", () => {
@@ -225,6 +233,7 @@ test("the next rung is the plug at level+1, not reusablePlugs[0]", () => {
     }),
     manifest,
     ENERGY,
+    false,
   );
   expect(mw).toEqual({
     level: 3,
@@ -240,7 +249,7 @@ test("the next rung is the plug at level+1, not reusablePlugs[0]", () => {
 
 test("no live sockets means no masterwork info at all", () => {
   expect(
-    readMasterwork("zz", def, {} as DestinyProfileResponse, manifest, ENERGY),
+    readMasterwork("zz", def, {} as DestinyProfileResponse, manifest, ENERGY, false),
   ).toBeUndefined();
 });
 
@@ -275,6 +284,16 @@ test("materialScore ranks by scarcity: a shard outweighs prisms, prisms outweigh
   expect(glimmer).toBeGreaterThan(0);
   expect(materialScore(undefined)).toBe(0);
   expect(materialScore([])).toBe(0);
+});
+
+test("isFullyMasterworked is only true at max level", () => {
+  expect(isFullyMasterworked(undefined)).toBe(false);
+  expect(isFullyMasterworked({})).toBe(false);
+  expect(isFullyMasterworked({ masterwork: { level: 4, max: 5 } })).toBe(false);
+  expect(isFullyMasterworked({ masterwork: { level: 5, max: 5, cost: [] } })).toBe(
+    true,
+  );
+  expect(isFullyMasterworked({ masterwork: { level: 10, max: 10 } })).toBe(true);
 });
 
 test("summarizeMasterwork rolls pieces up, counting unknown costs separately", () => {

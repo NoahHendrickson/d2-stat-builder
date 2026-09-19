@@ -33,12 +33,12 @@ export function AppHeader({
         {collapsed && onExpand && (
           <TooltipLabel label="Show loadouts">
             <Button
-              variant="ghost"
+              variant="default"
               size="icon"
               aria-label="Show loadouts"
               onClick={onExpand}
             >
-              <SidebarSimple weight="bold" aria-hidden />
+              <SidebarSimple aria-hidden />
             </Button>
           </TooltipLabel>
         )}
@@ -47,7 +47,7 @@ export function AppHeader({
           alt=""
           width={28}
           height={28}
-          className="size-7 shrink-0 rounded-[4px]"
+          className="size-7 shrink-0 rounded-none"
           unoptimized
           aria-hidden
         />

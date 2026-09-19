@@ -3,7 +3,8 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { toast } from "@/lib/toast";
 import type { ArmoryCharacter } from "@/lib/armory/fetch";
-import type { ArmorPiece } from "@/lib/armory/normalize";
+import { isFullyMasterworked } from "@/lib/armory/masterwork";
+import { armorPipTier, type ArmorPiece } from "@/lib/armory/normalize";
 import type { Manifest } from "@/lib/manifest/load";
 import { ABILITY_KINDS } from "@/lib/dim/subclasses";
 import { equipItemRef, vaultedNote } from "@/lib/bungie/equip-client";
@@ -142,8 +143,8 @@ export async function applySavedLoadout({
       name: piece.name,
       icon: piece.icon,
       watermark: piece.watermark,
-      isExotic: piece.isExotic,
-      isTier5: piece.tunedStat !== undefined,
+      gearTier: armorPipTier(piece),
+      masterworked: isFullyMasterworked(piece),
       status: "pending",
     });
   }

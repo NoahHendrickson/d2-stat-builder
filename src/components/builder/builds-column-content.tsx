@@ -238,17 +238,26 @@ export function BuildsLoading({ progress: store }: { progress: ValueStore<number
         {Array.from({ length: LOADING_ROWS }, (_, i) => (
           <div
             key={i}
-            className={`${BUILD_CARD_LIFT_CLASS} flex animate-pulse items-center gap-6 p-2`}
+            className={`${BUILD_CARD_LIFT_CLASS} flex animate-pulse items-center gap-4 p-2`}
             style={{ animationDelay: `${i * 120}ms` }}
             aria-hidden
           >
-            <span className="d2-brackets size-10 shrink-0 bg-black/25" />
-            <div className="flex max-w-[28.5rem] flex-1 items-center justify-between gap-3">
-              {Array.from({ length: 6 }, (_, j) => (
-                <span key={j} className="bg-foreground/10 h-4 w-11" />
-              ))}
+            <span className="d2-brackets size-14 shrink-0 bg-black/25" />
+            <div className="flex min-w-0 flex-1 flex-col justify-center gap-2">
+              <div className="flex items-center gap-4">
+                <span className="bg-foreground/10 h-5 w-8 shrink-0" />
+                <div className="flex flex-1 items-center gap-8">
+                  {Array.from({ length: 6 }, (_, j) => (
+                    <span key={j} className="bg-foreground/10 h-5 w-11" />
+                  ))}
+                </div>
+              </div>
+              <div className="flex items-center gap-4">
+                <span className="bg-foreground/10 h-5 w-9 rounded-full" />
+                <span className="bg-foreground/10 h-4 w-10" />
+                <span className="bg-foreground/10 h-4 w-24" />
+              </div>
             </div>
-            <span className="bg-foreground/10 ml-auto h-4 w-10 shrink-0" />
             <span className="size-8 shrink-0" />
           </div>
         ))}

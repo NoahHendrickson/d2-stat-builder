@@ -16,7 +16,6 @@ import { useManifest } from "@/lib/manifest/use-manifest";
 import { useOptimizer } from "@/lib/optimizer/use-optimizer";
 import { useSmoothedProgress } from "@/lib/use-smoothed-progress";
 import { createValueStore } from "@/lib/value-store";
-import { liveTargets } from "@/lib/builder/live-targets";
 import { availableSets } from "@/lib/armory/sets";
 import {
   DEFAULT_SET_FILTERS,
@@ -61,7 +60,6 @@ import {
 import { itemWatermark, type ArmorPiece } from "@/lib/armory/normalize";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { StatTargetRow } from "@/components/builder/stat-target-row";
 import { SectionHeading } from "@/components/section-heading";
@@ -73,7 +71,7 @@ import { ExoticClassPerkPicker } from "@/components/builder/exotic-class-perk-pi
 import { FragmentPicker } from "@/components/builder/fragment-picker";
 import { SetListControls } from "@/components/builder/set-list-controls";
 import { ClassEmblemTabs } from "@/components/builder/class-emblem-tabs";
-import { TuningControls } from "@/components/builder/tuning-controls";
+import { SettingRow } from "@/components/builder/setting-row";
 import { PowerRangeControls } from "@/components/builder/power-range-controls";
 import { BuildsSurface } from "@/components/builder/builds-surface";
 import type { BuildsColumnContentProps } from "@/components/builder/builds-column-content";
@@ -103,7 +101,7 @@ import {
   SUBCLASS_ITEM_HASHES,
 } from "@/lib/dim/subclasses";
 import { useApplyCurrentFragments } from "@/lib/armory/use-apply-current-fragments";
-import type { BuilderSnapshot } from "@/lib/loadouts/types";
+import { MAX_SET_BONUSES, type BuilderSnapshot } from "@/lib/loadouts/types";
 
 const MAX_MODS = 5;
 
@@ -170,9 +168,6 @@ export function BuilderPanel({
   const [exoticPerks, setExoticPerks] = useState<
     [number | null, number | null]
   >(() => initialSaved?.exoticPerks ?? [null, null]);
-  const [allowTuning, setAllowTuning] = useState(
-    initialSaved?.allowTuning ?? true,
-  );
   const [useBalancedTuning, setUseBalancedTuning] = useState(
     initialSaved?.balancedTuning ?? true,
   );
@@ -291,6 +286,21 @@ export function BuilderPanel({
     return kept.length === Object.keys(setReqs).length
       ? setReqs
       : (Object.fromEntries(kept) as Record<number, 2 | 4>);
+  }, [setReqs, setMap]);
+
+  // What persistence and "Load in builder" store: the raw map, capped at what
+  // parseBuilderSnapshot accepts. Requirements for sets that left the pool are
+  // invisible in the UI, so without the cap they accumulate silently and every
+  // later save is rejected with a bare "Invalid loadout". Owned ones take the
+  // slots first; orphans fill what's left.
+  const persistedSetReqs = useMemo(() => {
+    const entries = Object.entries(setReqs);
+    if (entries.length <= MAX_SET_BONUSES) return setReqs;
+    const owned = entries.filter(([h]) => setMap.has(Number(h)));
+    const orphans = entries.filter(([h]) => !setMap.has(Number(h)));
+    return Object.fromEntries(
+      [...owned, ...orphans].slice(0, MAX_SET_BONUSES),
+    ) as Record<number, 2 | 4>;
   }, [setReqs, setMap]);
 
   const fragments = useMemo(
@@ -628,7 +638,6 @@ export function BuilderPanel({
       setSetReqs(saved.setReqs);
       setPinnedSets(saved.pinnedSets);
       setSetFilters(saved.setFilters);
-      setAllowTuning(saved.allowTuning);
       setUseBalancedTuning(saved.balancedTuning);
       setUseLegacyExotics(saved.legacyExotics);
       setUseLowerTierArmor(saved.lowerTierArmor);
@@ -661,7 +670,7 @@ export function BuilderPanel({
         classType,
         targets,
         major,
-        setReqs,
+        setReqs: persistedSetReqs,
         pinnedSets,
         setFilters,
         exoticName:
@@ -669,7 +678,7 @@ export function BuilderPanel({
             ? null
             : (exotics[selectedExotic]?.name ?? null),
         exoticPerks,
-        allowTuning,
+        allowTuning: true,
         balancedTuning: useBalancedTuning,
         legacyExotics: useLegacyExotics,
         lowerTierArmor: useLowerTierArmor,
@@ -685,13 +694,12 @@ export function BuilderPanel({
     classType,
     targets,
     major,
-    setReqs,
+    persistedSetReqs,
     pinnedSets,
     setFilters,
     selectedExotic,
     exotics,
     exoticPerks,
-    allowTuning,
     useBalancedTuning,
     useLegacyExotics,
     useLowerTierArmor,
@@ -742,7 +750,7 @@ export function BuilderPanel({
       mods: { major, minor: MAX_MODS - major },
       setRequirements,
       exotic,
-      allowTuning,
+      allowTuning: true,
       allowBalancedTuning: useBalancedTuning,
       fragmentBonus,
       powerRange: toOptimizerPowerRange(powerRange),
@@ -756,7 +764,6 @@ export function BuilderPanel({
     setRequirements,
     selectedExotic,
     exotics,
-    allowTuning,
     useBalancedTuning,
     fragmentBonus,
     powerRange,
@@ -821,14 +828,30 @@ export function BuilderPanel({
     [],
   );
 
-  const toggleSet = useCallback((setHash: number, count: 2 | 4) => {
-    setSetReqs((prev) => {
-      const next = { ...prev };
-      if (next[setHash] === count) delete next[setHash];
-      else next[setHash] = count;
-      return next;
-    });
-  }, []);
+  const toggleSet = useCallback(
+    (setHash: number, count: 2 | 4) => {
+      setSetReqs((prev) => {
+        const next = { ...prev };
+        if (next[setHash] === count) {
+          delete next[setHash];
+          return next;
+        }
+        next[setHash] = count;
+        // Requirements for sets no longer in the pool are kept (a pool toggle
+        // shouldn't drop one for good) but they're invisible here, so they must
+        // never crowd out a pick the player can actually see.
+        const keys = Object.keys(next);
+        if (keys.length > MAX_SET_BONUSES) {
+          const evict =
+            keys.find((h) => Number(h) !== setHash && !setMap.has(Number(h))) ??
+            keys.find((h) => Number(h) !== setHash);
+          if (evict !== undefined) delete next[Number(evict)];
+        }
+        return next;
+      });
+    },
+    [setMap],
+  );
 
   const togglePin = useCallback((setHash: number) => {
     setPinnedSets((prev) =>
@@ -848,13 +871,13 @@ export function BuilderPanel({
     () => ({
       targets,
       major,
-      setReqs,
+      setReqs: persistedSetReqs,
       exoticName:
         selectedExotic === null
           ? null
           : (exotics[selectedExotic]?.name ?? null),
       exoticPerks,
-      allowTuning,
+      allowTuning: true,
       balancedTuning: useBalancedTuning,
       legacyExotics: useLegacyExotics,
       lowerTierArmor: useLowerTierArmor,
@@ -865,11 +888,10 @@ export function BuilderPanel({
     [
       targets,
       major,
-      setReqs,
+      persistedSetReqs,
       selectedExotic,
       exotics,
       exoticPerks,
-      allowTuning,
       useBalancedTuning,
       useLegacyExotics,
       useLowerTierArmor,
@@ -900,11 +922,6 @@ export function BuilderPanel({
     });
   });
   const getBuilderState = builderState.get;
-  // The rows' stat chips light up on met targets; they subscribe to this store per chip
-  // (selector → boolean), so a drag re-renders only the chips whose state flips.
-  useLayoutEffect(() => {
-    liveTargets.set(targets);
-  }, [targets]);
 
   const buildsProps: BuildsColumnContentProps = useMemo(
     () => ({
@@ -958,7 +975,7 @@ export function BuilderPanel({
   );
 
   return (
-    <div className="grid h-full min-h-0 w-full flex-1 grid-cols-1 gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,39.74rem)_5rem_minmax(0,calc(80rem-39.74rem-5rem))_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)] lg:gap-x-0">
+    <div className="grid h-full min-h-0 w-full flex-1 grid-cols-1 gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,39.74rem)_5rem_minmax(0,calc((80rem-39.74rem-5rem)*1.15))_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)] lg:gap-x-0">
       {/* Settings scroller spans the left leftover + the card column, so
           wheel-scrolling anywhere to the left of the cards still moves this
           pane. Inner max-width keeps the cards on the 39.74rem track. Mins are
@@ -1114,49 +1131,38 @@ export function BuilderPanel({
               )}
             </Section>
 
-            <Section title="Additional settings">
-              <div className="space-y-6">
-                <TuningControls
-                  allowTuning={allowTuning}
-                  onAllowTuningChange={setAllowTuning}
-                  useBalancedTuning={useBalancedTuning}
-                  onUseBalancedTuningChange={setUseBalancedTuning}
+            <Section title="Advanced settings">
+              <div className="flex flex-col gap-4">
+                <SettingRow
+                  checkbox
+                  checked={useBalancedTuning}
+                  onCheckedChange={setUseBalancedTuning}
+                  title="Use balanced tuning mods"
+                  description="When off, builds are searched without the Balanced (+1 to off-stats) tune. Directional tuning stays available."
                 />
-                <PowerRangeControls
-                  value={powerRange}
-                  onChange={onPowerRangeChange}
-                  slotPieces={powerSlotPieces}
-                  dreamersItemName={dreamersClassItemName(classType ?? 2)}
+                <SettingRow
+                  checkbox
+                  checked={useLegacyExotics}
+                  onCheckedChange={setUseLegacyExotics}
+                  title="Legacy exotics"
+                  description="Include Armor 2.0 exotics"
                 />
-                <div className="flex items-center justify-between gap-4">
-                  <div className="space-y-0.5">
-                    <span className="text-sm font-medium">Legacy exotics</span>
-                    <p className="text-muted-foreground text-xs">
-                      Include Armor 2.0 exotics — the optimizer spends their
-                      artifice +3 automatically.
-                    </p>
-                  </div>
-                  <Switch
-                    checked={useLegacyExotics}
-                    onCheckedChange={setUseLegacyExotics}
-                    aria-label="Include legacy exotics"
-                  />
-                </div>
-                <div className="flex items-center justify-between gap-4">
-                  <div className="space-y-0.5">
-                    <span className="text-sm font-medium">Lower-tier armor</span>
-                    <p className="text-muted-foreground text-xs">
-                      Include Tier 1–4 Armor 3.0 legendaries. They can&apos;t be
-                      tuned, but they still count toward set bonuses.
-                    </p>
-                  </div>
-                  <Switch
-                    checked={useLowerTierArmor}
-                    onCheckedChange={setUseLowerTierArmor}
-                    aria-label="Include lower-tier Armor 3.0 legendaries"
-                  />
-                </div>
+                <SettingRow
+                  checkbox
+                  checked={useLowerTierArmor}
+                  onCheckedChange={setUseLowerTierArmor}
+                  title="Lower tier armor"
+                  description="Include Tier 1–4 Armor 3.0 legendaries. They can't be tuned, but they still count toward set bonuses."
+                />
               </div>
+            </Section>
+            <Section title="Underlight settings">
+              <PowerRangeControls
+                value={powerRange}
+                onChange={onPowerRangeChange}
+                slotPieces={powerSlotPieces}
+                dreamersItemName={dreamersClassItemName(classType ?? 2)}
+              />
             </Section>
           </>
         )}
@@ -1177,7 +1183,7 @@ export function BuilderPanel({
 
       {/* Builds scroller spans the results column + the right leftover. */}
       <div className="d2-scroll min-h-0 min-w-0 lg:col-start-4 lg:col-end-6 lg:overflow-y-auto lg:overscroll-contain lg:pr-6 lg:pl-2">
-        <div className="lg:max-w-[calc(80rem-39.74rem-5rem)]">
+        <div className="lg:max-w-[calc((80rem-39.74rem-5rem)*1.15)]">
           <BuildsSurface {...buildsProps} />
         </div>
       </div>

@@ -181,7 +181,7 @@ export function LoadoutsList({
   const [subclassFilter, setSubclassFilter] = useState<Subclass[]>([]);
   const [setFilter, setSetFilter] = useState<number[]>([]);
   const [tagFilter, setTagFilter] = useState<string[]>([]);
-  const [sortKey, setSortKey] = useState<LoadoutListSortKey>("created");
+  const [sortKey, setSortKey] = useState<LoadoutListSortKey>("edited");
   const [dialog, setDialog] = useState<DialogState>({ kind: "none" });
   // Expanded rows, by id — kept here (not in the row) so it survives virtualization.
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(

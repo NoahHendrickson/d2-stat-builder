@@ -1,10 +1,8 @@
 "use client";
 
-import Image from "next/image";
 import { memo } from "react";
-import type { ArmorPiece } from "@/lib/armory/normalize";
+import { armorPipTier, type ArmorPiece } from "@/lib/armory/normalize";
 import type { ArmoryCharacter } from "@/lib/armory/fetch";
-import { BUNGIE_IMAGE_BASE } from "@/lib/bungie/constants";
 import {
   CLASS_NAMES,
   STAT_DISPLAY_ORDER,
@@ -14,6 +12,7 @@ import { statLabel } from "@/lib/armor-table/sort";
 import { Badge } from "@/components/ui/badge";
 import { ArmorRowActions } from "@/components/armor-table/armor-row-actions";
 import { ArmorThumb } from "@/components/armor-thumb";
+import { isFullyMasterworked } from "@/lib/armory/masterwork";
 
 export const COLUMN_COUNT = 13;
 
@@ -66,24 +65,13 @@ export const ArmorRow = memo(function ArmorRow({
       <td className="overflow-hidden py-2 pr-3 pl-3">
         <div className="flex items-center gap-2">
           {piece.icon ? (
-            piece.isExotic ? (
-              <ArmorThumb
-                icon={piece.icon}
-                watermark={piece.watermark}
-                size={32}
-                exoticFrame
-                isTier5={piece.tunedStat !== undefined}
-              />
-            ) : (
-              <Image
-                src={`${BUNGIE_IMAGE_BASE}${piece.icon}`}
-                alt=""
-                width={32}
-                height={32}
-                className="d2-tile size-8 shrink-0"
-                unoptimized
-              />
-            )
+            <ArmorThumb
+              icon={piece.icon}
+              watermark={piece.watermark}
+              size={32}
+              masterworked={isFullyMasterworked(piece)}
+              gearTier={armorPipTier(piece)}
+            />
           ) : (
             <span className="d2-brackets bg-black/25 size-8 shrink-0" aria-hidden />
           )}

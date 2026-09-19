@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef } from "react";
+import { useCallback } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSession } from "@/lib/auth/use-session";
 import { toast } from "@/lib/toast";
@@ -45,6 +45,16 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
   }
   return body as T;
 }
+
+/**
+ * In-flight tag writes, per loadout id: the promise the next write chains behind,
+ * and how many are still queued. Module-level on purpose — `LoadoutsList` unmounts
+ * whenever the mobile drawer closes or the sidebar breakpoint flips, and a chain
+ * that resets there would let two PUTs for the same row interleave. Entries are
+ * dropped once a row's queue drains.
+ */
+const tagChain = new Map<string, Promise<void>>();
+const tagPending = new Map<string, number>();
 
 function writeData(saved: SavedLoadout, loadout = saved.loadout): SavedLoadoutData {
   return {
@@ -130,8 +140,6 @@ export function useLoadoutMutations() {
   });
 
   const updateMutateAsync = update.mutateAsync;
-  const tagChain = useRef(new Map<string, Promise<void>>());
-  const tagPending = useRef(new Map<string, number>());
 
   /**
    * Toggle a hashtag on one loadout. Applies the edit to the cached row immediately,
@@ -152,45 +160,56 @@ export function useLoadoutMutations() {
       queryClient.setQueryData<SavedLoadout[]>(LOADOUTS_QUERY_KEY, (list) =>
         list?.map((l) => (l.id === id ? { ...l, loadout: result.loadout } : l)),
       );
-      tagPending.current.set(id, (tagPending.current.get(id) ?? 0) + 1);
+      tagPending.set(id, (tagPending.get(id) ?? 0) + 1);
 
       const run = async () => {
-        const latest = queryClient
-          .getQueryData<SavedLoadout[]>(LOADOUTS_QUERY_KEY)
-          ?.find((l) => l.id === id);
-        if (!latest) return;
-        const loadout = withLoadoutTag(latest.loadout, tag, present);
+        let saved: SavedLoadout | undefined;
+        let failed = false;
         try {
-          const saved = await updateMutateAsync({
-            id,
-            data: writeData(latest, loadout),
-            skipCache: true,
-          });
-          const left = (tagPending.current.get(id) ?? 1) - 1;
-          tagPending.current.set(id, left);
-          if (left <= 0) {
-            queryClient.setQueryData<SavedLoadout[]>(LOADOUTS_QUERY_KEY, (list) =>
-              list?.map((l) =>
-                l.id === saved.id ? newerSavedLoadout(l, saved) : l,
-              ),
-            );
+          const latest = queryClient
+            .getQueryData<SavedLoadout[]>(LOADOUTS_QUERY_KEY)
+            ?.find((l) => l.id === id);
+          if (latest) {
+            const loadout = withLoadoutTag(latest.loadout, tag, present);
+            saved = await updateMutateAsync({
+              id,
+              data: writeData(latest, loadout),
+              skipCache: true,
+            });
           }
         } catch (err) {
-          const left = (tagPending.current.get(id) ?? 1) - 1;
-          tagPending.current.set(id, left);
-          if (left <= 0) {
-            await queryClient.invalidateQueries({ queryKey: LOADOUTS_QUERY_KEY });
-          }
+          failed = true;
           const apiErr = err as LoadoutsApiError;
           toast.error(
             apiErr.notConfigured
               ? "Loadout storage isn't configured — set DATABASE_URL"
               : apiErr.message,
           );
+        } finally {
+          // Every exit decrements, including the one where the row went away —
+          // a counter stuck above zero would silence the reconcile below for good.
+          const left = (tagPending.get(id) ?? 1) - 1;
+          if (left > 0) tagPending.set(id, left);
+          else tagPending.delete(id);
+          // Only the last queued write reconciles: an earlier response would
+          // otherwise undo tags that landed while it was in flight.
+          if (left <= 0) {
+            if (saved) {
+              const done = saved;
+              queryClient.setQueryData<SavedLoadout[]>(LOADOUTS_QUERY_KEY, (list) =>
+                list?.map((l) => (l.id === done.id ? newerSavedLoadout(l, done) : l)),
+              );
+            } else if (failed) {
+              await queryClient.invalidateQueries({ queryKey: LOADOUTS_QUERY_KEY });
+            }
+          }
         }
       };
-      const prev = tagChain.current.get(id) ?? Promise.resolve();
-      tagChain.current.set(id, prev.then(run, run));
+      const settle = () => {
+        if ((tagPending.get(id) ?? 0) <= 0) tagChain.delete(id);
+      };
+      const prev = tagChain.get(id) ?? Promise.resolve();
+      tagChain.set(id, prev.then(run, run).then(settle, settle));
       return result;
     },
     [queryClient, updateMutateAsync],

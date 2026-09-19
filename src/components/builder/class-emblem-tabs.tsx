@@ -16,7 +16,7 @@ import { PowerValue } from "@/components/power-value";
  * the others sit dimmed until hovered.
  */
 const tabBase =
-  "relative flex-1 shrink-0 cursor-pointer overflow-hidden rounded-md border text-left outline-none transition-[opacity,box-shadow,border-color] focus-visible:d2-tile-selected";
+  "relative min-w-0 flex-1 cursor-pointer overflow-hidden rounded-md border text-left outline-none transition-[opacity,box-shadow,border-color] focus-visible:d2-tile-selected";
 
 const tabInactive =
   "border-foreground/15 opacity-75 saturate-[0.85] hover:opacity-100 hover:saturate-100 hover:border-foreground/40";
@@ -118,10 +118,11 @@ export function ClassEmblemTabs({
 
   return (
     <TabsPrimitive.Root
+      className="w-full min-w-0"
       value={String(value)}
       onValueChange={(v) => onChange(Number(v))}
     >
-      <TabsPrimitive.List className="flex gap-3 p-1">
+      <TabsPrimitive.List className="flex w-full min-w-0 gap-3">
         {tabs.map((character) => (
           <EmblemTab
             key={character.classType}

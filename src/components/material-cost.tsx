@@ -1,9 +1,22 @@
 "use client";
 
-import { MATERIAL_LABELS, type MaterialStack } from "@/lib/armory/masterwork";
+import {
+  ASCENDANT_SHARD_HASH,
+  ENHANCEMENT_CORE_HASH,
+  ENHANCEMENT_PRISM_HASH,
+  MATERIAL_LABELS,
+  type MaterialStack,
+} from "@/lib/armory/masterwork";
 import { BUNGIE_IMAGE_BASE } from "@/lib/bungie/constants";
 import type { Manifest } from "@/lib/manifest/load";
 import { cn } from "@/lib/utils";
+
+/** Figma 86:862 rarity frames on the collapsed-card material icons. */
+const MATERIAL_ICON_FRAME: Record<number, string> = {
+  [ASCENDANT_SHARD_HASH]: "border-[0.5px] border-[#ffd53b]",
+  [ENHANCEMENT_PRISM_HASH]: "border-[0.5px] border-[rgba(159,60,215,0.6)]",
+  [ENHANCEMENT_CORE_HASH]: "border-[0.5px] border-[rgba(159,60,215,0.6)]",
+};
 
 /** "35k" for compact chips, "35,000" otherwise. */
 function formatCount(count: number, compact: boolean): string {
@@ -37,24 +50,32 @@ export function MaterialCost({
   stacks,
   manifest,
   compact = false,
+  header = false,
   className,
 }: {
   stacks: readonly MaterialStack[];
   manifest?: Manifest;
   /** Abbreviate thousands and tighten spacing for collapsed card headers. */
   compact?: boolean;
+  /**
+   * Collapsed build-card treatment (Figma 86:862): rarest-first, 12px counts,
+   * rarity-coloured frames on shard / prism / core.
+   */
+  header?: boolean;
   className?: string;
 }) {
   if (stacks.length === 0) return null;
+  const abbreviate = compact || header;
+  const shown = header ? [...stacks].reverse() : stacks;
   return (
     <span
       className={cn(
         "inline-flex items-center tabular-nums",
-        compact ? "gap-1.5" : "gap-2.5",
+        header ? "gap-3 text-xs font-medium" : compact ? "gap-1.5" : "gap-2.5",
         className,
       )}
     >
-      {stacks.map(({ itemHash, count }) => {
+      {shown.map(({ itemHash, count }) => {
         const def = manifest?.def("DestinyInventoryItemDefinition", itemHash);
         const name =
           def?.displayProperties?.name ||
@@ -76,12 +97,17 @@ export function MaterialCost({
                 width={16}
                 height={16}
                 decoding="async"
-                className="inline-block size-4 shrink-0 rounded-[2px]"
+                className={cn(
+                  "inline-block size-4 shrink-0",
+                  header
+                    ? MATERIAL_ICON_FRAME[itemHash]
+                    : "rounded-[2px]",
+                )}
               />
             ) : (
               <span className="text-[10px] uppercase">{name}</span>
             )}
-            {formatCount(count, compact)}
+            {formatCount(count, abbreviate)}
           </span>
         );
       })}

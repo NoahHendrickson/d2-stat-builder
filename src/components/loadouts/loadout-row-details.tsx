@@ -33,8 +33,9 @@ import { loadoutHashtags, type SavedLoadout } from "@/lib/loadouts/types";
 import { StatGlyph } from "@/components/stat-glyph";
 import { Badge } from "@/components/ui/badge";
 import { ArmorThumb } from "@/components/armor-thumb";
+import { isFullyMasterworked } from "@/lib/armory/masterwork";
 import { cn } from "@/lib/utils";
-import { itemWatermark } from "@/lib/armory/normalize";
+import { armorPipTier, itemWatermark } from "@/lib/armory/normalize";
 
 const STAT_COLS = STAT_DISPLAY_ORDER.map((key) => ({
   key,
@@ -351,8 +352,8 @@ export function LoadoutRowDetails({
                     watermark={exoticWatermark}
                     alt={exoticName}
                     size={32}
-                    exoticFrame
-                    isTier5={exoticPiece?.tunedStat !== undefined}
+                    masterworked={isFullyMasterworked(exoticPiece)}
+                    gearTier={armorPipTier(exoticPiece)}
                   />
                 </span>
               </TooltipLabel>
@@ -489,28 +490,14 @@ export function LoadoutRowDetails({
                 <Fragment key={`${a.ref.id ?? a.ref.hash}-${idx}`}>
                   <div className="flex min-w-0 items-center gap-1.5">
                     {a.icon ? (
-                      a.piece?.isExotic ? (
-                        <ArmorThumb
-                          icon={a.icon}
-                          watermark={a.piece.watermark}
-                          size={20}
-                          exoticFrame
-                          isTier5={a.piece.tunedStat !== undefined}
-                          className={a.missing ? "opacity-50" : undefined}
-                        />
-                      ) : (
-                        <Image
-                          src={`${BUNGIE_IMAGE_BASE}${a.icon}`}
-                          alt=""
-                          width={20}
-                          height={20}
-                          className={cn(
-                            "size-5 shrink-0 rounded-none d2-tile",
-                            a.missing && "opacity-50",
-                          )}
-                          unoptimized
-                        />
-                      )
+                      <ArmorThumb
+                        icon={a.icon}
+                        watermark={a.piece?.watermark}
+                        size={20}
+                        masterworked={isFullyMasterworked(a.piece)}
+                        gearTier={armorPipTier(a.piece)}
+                        className={a.missing ? "opacity-50" : undefined}
+                      />
                     ) : (
                       <span
                         className="d2-brackets bg-black/25 size-5 shrink-0"

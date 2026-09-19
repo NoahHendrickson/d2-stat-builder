@@ -121,6 +121,11 @@ export interface ArmorPiece {
    * the game averages such a piece in at zero power, over the full eight slots.
    */
   power?: number;
+  /**
+   * Armor 3.0 gear tier (1–5) from the instance. Undefined on Armor 2.0 and on
+   * synthetic pieces with no live instance. The five-diamond pip rail is T5 only.
+   */
+  gearTier?: number;
 }
 
 const ITEM_TYPE_ARMOR = 2;
@@ -415,6 +420,29 @@ function readPower(
   return typeof value === "number" && Number.isFinite(value) ? value : 0;
 }
 
+/** Live Armor 3.0 gear tier (1–5). Rejects 0 / out-of-range so a missing value stays undefined. */
+function readGearTier(
+  instanceId: string,
+  profile: DestinyProfileResponse,
+): number | undefined {
+  const tier = profile.itemComponents?.instances?.data?.[instanceId]?.gearTier;
+  return typeof tier === "number" && tier >= 1 && tier <= 5 ? tier : undefined;
+}
+
+/**
+ * Pip-rail tier to draw on an icon: the instance's gearTier when known, otherwise
+ * 5 if the piece can be tuned (the old T5 signal, for synthetic / un-instanced rows).
+ */
+export function armorPipTier(
+  piece: { gearTier?: number; tunedStat?: number } | undefined,
+): number | undefined {
+  if (!piece) return undefined;
+  if (piece.gearTier != null && piece.gearTier >= 1 && piece.gearTier <= 5) {
+    return piece.gearTier;
+  }
+  return piece.tunedStat !== undefined ? 5 : undefined;
+}
+
 /** True when a tuning-category plug is currently in any socket (empty or slotted). */
 function hasTuningSocket(
   instanceId: string,
@@ -521,8 +549,16 @@ function buildPiece(
 
   const armorSockets = findArmorSockets(item.itemInstanceId, def, profile, manifest);
   const energy = readEnergy(item.itemInstanceId, profile);
-  const masterwork = readMasterwork(item.itemInstanceId, def, profile, manifest, energy);
+  const masterwork = readMasterwork(
+    item.itemInstanceId,
+    def,
+    profile,
+    manifest,
+    energy,
+    legacy,
+  );
   const power = readPower(item.itemInstanceId, profile);
+  const gearTier = readGearTier(item.itemInstanceId, profile);
   const watermark = itemWatermark(def, item.versionNumber);
 
   return {
@@ -554,6 +590,7 @@ function buildPiece(
     ...(energy ? { energy } : {}),
     ...(masterwork ? { masterwork } : {}),
     ...(power !== undefined ? { power } : {}),
+    ...(gearTier !== undefined ? { gearTier } : {}),
   };
 }
 

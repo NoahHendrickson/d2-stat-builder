@@ -17,10 +17,10 @@ export interface ExoticOption {
 }
 
 /**
- * Inventory cells: 44px squares in a tight grid. Armor 3.0 tiles get the
- * gold glow frame; Armor 2.0 / un-tiered ones stay a plain icon. Unselected
- * cells sit dimmed and come up on hover with the white outline; the selected
- * one keeps the outline + glow.
+ * Inventory cells: 44px squares in a tight grid. Unselected cells sit dimmed
+ * and come up on hover with the white outline; the selected one keeps the
+ * outline + glow. These tiles are exotic identities, not inventory instances,
+ * so they never get the masterwork gold frame.
  */
 const tileBase =
   "group/tile relative size-11 shrink-0 overflow-hidden rounded-none outline-none transition-[opacity,box-shadow,filter] focus-visible:d2-tile-selected";
@@ -71,8 +71,7 @@ export const ExoticPicker = memo(function ExoticPicker({
                     watermark={exotic.watermark}
                     alt={exotic.name}
                     size={44}
-                    exoticFrame
-                    isTier5={exotic.isTier5}
+                    gearTier={exotic.isTier5 ? 5 : undefined}
                   />
                 ) : (
                   <span className="flex size-full items-center justify-center bg-exotic/20 text-xs text-exotic-line">

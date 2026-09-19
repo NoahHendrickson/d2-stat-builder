@@ -144,7 +144,12 @@ test("text query matches set bonus names", () => {
   expect(filterLoadouts([withSet], { query: "aion" })).toEqual([]);
 });
 
-test("sorts by created (newest first), name (case-insensitive), and total (missing last)", () => {
+test("sorts by edited, created, name (case-insensitive), and total (missing last)", () => {
+  expect(sortSavedLoadouts(rows, "edited").map((l) => l.id)).toEqual([
+    "Alpha #pve",
+    "Charlie",
+    "bravo",
+  ]);
   expect(sortSavedLoadouts(rows, "created").map((l) => l.id)).toEqual([
     "bravo",
     "Charlie",
@@ -159,6 +164,15 @@ test("sorts by created (newest first), name (case-insensitive), and total (missi
     "bravo",
     "Alpha #pve",
     "Charlie",
+  ]);
+});
+
+test("equal totals break the tie on most-recently-edited", () => {
+  const older = make("Aion", { updatedAt: 1, total: 400 });
+  const newer = make("Zephyr", { updatedAt: 9, total: 400 });
+  expect(sortSavedLoadouts([older, newer], "total").map((l) => l.id)).toEqual([
+    "Zephyr",
+    "Aion",
   ]);
 });
 

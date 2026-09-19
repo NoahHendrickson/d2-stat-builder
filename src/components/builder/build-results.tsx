@@ -7,12 +7,17 @@ import {
   useCallback,
   useMemo,
   useState,
-  useSyncExternalStore,
   type ReactNode,
 } from "react";
 import { CaretDown, CheckCircle, CircleNotch, X } from "@phosphor-icons/react";
-import type { ArmorPiece } from "@/lib/armory/normalize";
-import { materialScore, summarizeMasterwork } from "@/lib/armory/masterwork";
+import { armorPipTier, type ArmorPiece } from "@/lib/armory/normalize";
+import {
+  isFullyMasterworked,
+  materialScore,
+  summarizeMasterwork,
+  type LoadoutMasterworkSummary,
+} from "@/lib/armory/masterwork";
+import type { Manifest } from "@/lib/manifest/load";
 import type { ArmorSetInfo } from "@/lib/armory/sets";
 import {
   STAT_DISPLAY_ORDER,
@@ -35,7 +40,6 @@ import {
 } from "@/components/builder/build-actions";
 import { cn } from "@/lib/utils";
 import { useStoreValue, type ValueStore } from "@/lib/value-store";
-import { liveTargets } from "@/lib/builder/live-targets";
 import { ArmorThumb } from "@/components/armor-thumb";
 import { MaterialCost, materialSummary } from "@/components/material-cost";
 import type {
@@ -169,22 +173,90 @@ function TotalsRow({
 }
 
 
+const SET_BADGE_CLASS =
+  "h-5 rounded-full border-transparent bg-[#41a6ff] px-2 font-sans text-xs font-medium tracking-normal text-foreground normal-case";
+
+/** Vertical rule between collapsed-header clusters (Figma 86:862). */
+function HeaderRule() {
+  return <span className="h-[15px] w-px shrink-0 bg-foreground/16" aria-hidden />;
+}
+
 /**
- * One stat chip value in a build's collapsed header, lit once it meets the slider
- * target. It subscribes to the live targets itself with a boolean selector, so a slider
- * drag re-renders only the chips whose met state flips — never the memoized rows.
+ * Second line of a collapsed build card: 2pc set pills, gold light level, and
+ * remaining masterwork materials (rarest first).
  */
-function StatValue({ index, value }: { index: number; value: number }) {
-  const met = useSyncExternalStore(
-    liveTargets.subscribe,
-    () => {
-      const target = liveTargets.get()[index];
-      return target > 0 && value >= target;
-    },
-    () => false,
-  );
+function BuildHeaderMeta({
+  setBadges,
+  power,
+  masterwork,
+  manifest,
+}: {
+  setBadges: { name: string; count: number }[];
+  power: number | null;
+  masterwork: LoadoutMasterworkSummary;
+  manifest?: Manifest;
+}) {
+  const clusters: ReactNode[] = [];
+  if (setBadges.length > 0) {
+    clusters.push(
+      <span key="sets" className="flex items-center gap-2">
+        {setBadges.map((b) => (
+          <Badge
+            key={b.name}
+            title={b.name}
+            variant="default"
+            className={SET_BADGE_CLASS}
+          >
+            {b.count}pc
+          </Badge>
+        ))}
+      </span>,
+    );
+  }
+  if (power !== null) {
+    clusters.push(
+      <PowerValue
+        key="power"
+        value={power}
+        size="xs"
+        tone="gold"
+        className="gap-0.5 text-xs items-center"
+        title="Gear power — the game's average over these pieces (and your weapons, if entered)"
+      />,
+    );
+  }
+  if (
+    !masterwork.complete &&
+    (masterwork.cost.length > 0 ||
+      masterwork.unknownCostPieces + masterwork.unknownPieces > 0)
+  ) {
+    clusters.push(
+      <span
+        key="mw"
+        className="inline-flex items-center gap-1.5"
+        title={
+          masterwork.cost.length > 0
+            ? `To fully masterwork: ${materialSummary(masterwork.cost, manifest)}`
+            : "Some pieces are not fully masterworked"
+        }
+      >
+        <MaterialCost stacks={masterwork.cost} manifest={manifest} header />
+        {masterwork.unknownCostPieces + masterwork.unknownPieces > 0 && (
+          <span title="Some pieces have an unknown upgrade cost">?</span>
+        )}
+      </span>,
+    );
+  }
+  if (clusters.length === 0) return null;
   return (
-    <span className={met ? "text-positive" : "text-foreground"}>{value}</span>
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+      {clusters.map((cluster, i) => (
+        <Fragment key={i}>
+          {i > 0 && <HeaderRule />}
+          {cluster}
+        </Fragment>
+      ))}
+    </div>
   );
 }
 
@@ -236,91 +308,60 @@ const BuildRow = memo(function BuildRow({
   }
 
   return (
-    <div className={cn(BUILD_CARD_LIFT_CLASS, "@container/build")}>
+    <div className={cn(BUILD_CARD_LIFT_CLASS, "d2-hover-ring", "@container/build")}>
       <div className="overflow-hidden rounded-none">
-      {/* Figma 17:6044 — exotic tile, six stat chips spread over ~456px, total + set badge, caret */}
+      {/* Figma 86:862 — 56px exotic, total + six stats, then set pills / light / materials */}
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
         className={cn(
-          "flex w-full items-center gap-3 p-2 text-left transition-colors 2xl:gap-4",
-          !open && "hover:bg-foreground/8",
-          open && "bg-foreground/6",
+          "flex w-full items-center justify-between gap-4 p-2 text-left transition-colors",
+          !open && "hover:bg-foreground/4",
         )}
       >
-        <div className="flex min-w-0 flex-1 items-center gap-3 2xl:gap-6">
+        <div className="flex min-w-0 flex-1 items-center gap-4">
           {exotic?.icon ? (
             <ArmorThumb
               icon={exotic.icon}
               watermark={exotic.watermark}
               alt={exotic.name}
-              size={40}
-              exoticFrame
-              isTier5={exotic.tunedStat !== undefined}
+              size={56}
+              masterworked={isFullyMasterworked(exotic)}
+              gearTier={armorPipTier(exotic)}
             />
           ) : (
             <span
-              className="d2-brackets size-10 shrink-0 rounded-none bg-black/25"
+              className="d2-brackets size-14 shrink-0 rounded-none bg-black/25"
               aria-hidden
             />
           )}
-          {/* Six evenly spaced stat chips; type and glyphs step up at 2xl where the column is Figma-wide */}
-          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-0.5 text-sm xl:grid xl:grid-cols-6 xl:gap-x-0.5 lg:max-w-[28.5rem] 2xl:gap-x-2 2xl:text-base">
-            {STAT_COLS.map(({ key, i }) => (
-              <span
-                key={key}
-                className="flex min-w-0 items-center gap-1 tabular-nums"
-              >
-                <StatGlyph
-                  src={statIcons[key]}
-                  label={STAT_LABELS[key]}
-                  className="size-4 opacity-70 2xl:size-5"
-                  plain
-                />
-                <StatValue index={i} value={loadout.stats[i]} />
+          <div className="flex min-w-0 flex-col justify-center gap-2">
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+              <span className="text-base font-medium tabular-nums">
+                {loadout.total}
               </span>
-            ))}
-          </div>
-        </div>
-        <div className="flex shrink-0 items-center gap-2 2xl:gap-5">
-          <span className="text-sm font-medium tabular-nums 2xl:text-base">{loadout.total}</span>
-          {loadout.power !== null && (
-            <PowerValue
-              value={loadout.power}
-              size="xs"
-              className="max-lg:hidden 2xl:text-sm"
-              title="Gear power — the game's average over these pieces (and your weapons, if entered)"
+              <div className="flex flex-wrap items-center gap-x-8 gap-y-1 text-base font-medium tabular-nums">
+                {STAT_COLS.map(({ key, i }) => (
+                  <span key={key} className="flex items-center gap-1">
+                    <StatGlyph
+                      src={statIcons[key]}
+                      label={STAT_LABELS[key]}
+                      className="size-5"
+                      plain
+                    />
+                    {loadout.stats[i]}
+                  </span>
+                ))}
+              </div>
+            </div>
+            <BuildHeaderMeta
+              setBadges={setBadges}
+              power={loadout.power}
+              masterwork={masterwork}
+              manifest={manifest}
             />
-          )}
-          {/* Header real estate is tight (the stat chips share it), so only the two
-              scarcest materials show here; the expanded card lists everything. Hidden
-              on narrow cards rather than squeezing the stat chips into each other. */}
-          {!masterwork.complete && (
-            <span
-              className="hidden items-center gap-1.5 text-[11px] text-muted-foreground @[36rem]/build:inline-flex"
-              title={
-                masterwork.cost.length > 0
-                  ? `To fully masterwork: ${materialSummary(masterwork.cost, manifest)}`
-                  : "Some pieces are not fully masterworked"
-              }
-            >
-              <MaterialCost stacks={masterwork.cost.slice(-2)} manifest={manifest} compact />
-              {masterwork.unknownCostPieces + masterwork.unknownPieces > 0 && (
-                <span title="Some pieces have an unknown upgrade cost">?</span>
-              )}
-            </span>
-          )}
-          {setBadges.map((b) => (
-            <Badge
-              key={b.name}
-              title={b.name}
-              variant="outline"
-              className="max-lg:hidden"
-            >
-              {b.count}pc
-            </Badge>
-          ))}
+          </div>
         </div>
         <span
           className="text-foreground flex size-8 shrink-0 items-center justify-center rounded-none"
@@ -336,7 +377,7 @@ const BuildRow = memo(function BuildRow({
       </button>
 
       {open && (
-        <div className="border-t border-foreground/8 bg-black/15">
+        <div className="border-t border-foreground/8">
           {/* Shared column tracks so totals line up with per-piece stats
               (name column is max-content of the longest piece name). */}
           <div className={cn(BREAKDOWN_GRID, "border-b border-foreground/8 px-4")}>
@@ -370,8 +411,8 @@ const BuildRow = memo(function BuildRow({
                           icon={piece.icon}
                           watermark={piece.watermark}
                           size={32}
-                          exoticFrame={piece.isExotic}
-                          isTier5={piece.tunedStat !== undefined}
+                          masterworked={isFullyMasterworked(piece)}
+                          gearTier={armorPipTier(piece)}
                         />
                       ) : (
                         <span
@@ -379,27 +420,33 @@ const BuildRow = memo(function BuildRow({
                           aria-hidden
                         />
                       )}
-                      <span className="truncate text-sm @[44rem]/build:text-base">
-                        {piece.name}
-                      </span>
-                      {piece.power !== undefined && (
-                        <PowerValue
-                          value={piece.power}
-                          size="xs"
-                          muted
-                          className="shrink-0"
-                          title="Power"
-                        />
-                      )}
-                      {piece.masterwork &&
-                        piece.masterwork.level < piece.masterwork.max && (
-                          <span
-                            className="shrink-0 text-[10px] font-medium text-warning tabular-nums"
-                            title={`Masterwork level ${piece.masterwork.level} of ${piece.masterwork.max} — stats shown assume it's finished`}
-                          >
-                            MW {piece.masterwork.level}/{piece.masterwork.max}
-                          </span>
+                      <div className="flex min-w-0 flex-col justify-center">
+                        <span className="truncate text-sm">{piece.name}</span>
+                        {(piece.power !== undefined ||
+                          (piece.masterwork &&
+                            piece.masterwork.level < piece.masterwork.max)) && (
+                          <div className="flex items-center gap-2">
+                            {piece.power !== undefined && (
+                              <PowerValue
+                                value={piece.power}
+                                size="xs"
+                                tone="gold"
+                                className="shrink-0 items-center gap-0.5 text-xs"
+                                title="Power"
+                              />
+                            )}
+                            {piece.masterwork &&
+                              piece.masterwork.level < piece.masterwork.max && (
+                                <span
+                                  className="text-muted-foreground shrink-0 text-xs font-medium tabular-nums"
+                                  title={`Masterwork level ${piece.masterwork.level} of ${piece.masterwork.max} — stats shown assume it's finished`}
+                                >
+                                  MW {piece.masterwork.level}/{piece.masterwork.max}
+                                </span>
+                              )}
+                          </div>
                         )}
+                      </div>
                     </div>
                     {STAT_COLS.map(({ key, i }) => (
                       <div
@@ -740,16 +787,22 @@ export function BuildResults({
   sort: LoadoutSortState;
 } & BuildActionProps) {
   // "Upgrade cost" sorts by a scarcity-weighted total of each build's remaining
-  // masterwork materials (see materialScore). Builds with any unknown cost sort last.
+  // masterwork materials (see materialScore). Builds with an unknown cost sort last.
+  // Synthetic pins (Dreamer's Bond, theoretical exotic class items) report no
+  // masterwork at all; they're in every build, so counting them as unknown would
+  // make the sort a no-op — skip them, the way summarizeMasterwork does.
   const costOf = useCallback<LoadoutCostFn>(
     (loadout) => {
       let score = 0;
+      let known = 0;
       for (const id of loadout.pieceIds) {
         const mw = pieceMap.get(id)?.masterwork;
-        if (!mw || (mw.level < mw.max && mw.cost === undefined)) return null;
+        if (!mw) continue;
+        if (mw.level < mw.max && mw.cost === undefined) return null;
+        known++;
         score += materialScore(mw.cost);
       }
-      return score;
+      return known > 0 ? score : null;
     },
     [pieceMap],
   );

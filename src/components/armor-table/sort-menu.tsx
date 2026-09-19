@@ -33,8 +33,12 @@ import {
 } from "@/lib/armor-table/sort";
 import { CustomOrderList } from "@/components/armor-table/custom-order-list";
 
-/** Same grey-slate fill as dropdown menus (`d2-glass` / `--glass`), without the floating line or shadow. */
-export const TABLE_HEADER_BG = "d2-sidebar";
+/**
+ * Same grey-slate fill as dropdown menus (`d2-glass` / `--glass`), without the
+ * floating line or shadow — and opaque: translucent fills show rows through
+ * sticky headers, and a backdrop blur here re-runs on every scroll frame.
+ */
+export const TABLE_HEADER_BG = "d2-sidebar-opaque";
 
 const TABLE_HEAD_CELL =
   "d2-label border-b border-foreground/15 py-2.5 pr-3 whitespace-nowrap first:pl-3 " +

@@ -64,6 +64,8 @@ export function selectionsForLoadout(
     return {
       ...base,
       ...snapshot,
+      // Directional tuning is always on; old snapshots that stored false are upgraded.
+      allowTuning: true,
       major,
       activeSubclass: opts.subclass?.subclass ?? builder.activeSubclass,
       fragSel: opts.subclass?.subclass ? base.fragSel : { ...base.fragSel, [builder.activeSubclass]: fragmentHashes },

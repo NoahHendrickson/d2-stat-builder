@@ -4,12 +4,13 @@ import type { Subclass } from "../armory/fragments";
 import { subclassFromItemHash } from "../dim/subclasses";
 import { MAX_NAME_LENGTH, loadoutHashtags, type SavedLoadout } from "./types";
 
-export type LoadoutListSortKey = "created" | "name" | "total";
+export type LoadoutListSortKey = "edited" | "created" | "name" | "total";
 
 export const LOADOUT_LIST_SORT_OPTIONS: readonly {
   key: LoadoutListSortKey;
   label: string;
 }[] = [
+  { key: "edited", label: "Last edited" },
   { key: "created", label: "Created at" },
   { key: "name", label: "Name" },
   { key: "total", label: "Total stats" },
@@ -81,15 +82,20 @@ export function sortSavedLoadouts(
       );
       break;
     case "total":
+      // Ties are common (the solver caps many rolls at the same total), so the
+      // one you touched last wins — the same recency the default sort uses.
       out.sort(
         (a, b) =>
           (b.optimizer?.total ?? -1) - (a.optimizer?.total ?? -1) ||
-          a.loadout.name.localeCompare(b.loadout.name, undefined, { sensitivity: "base" }),
+          b.updatedAt - a.updatedAt,
       );
       break;
     case "created":
-    default:
       out.sort((a, b) => b.createdAt - a.createdAt);
+      break;
+    case "edited":
+    default:
+      out.sort((a, b) => b.updatedAt - a.updatedAt);
   }
   return out;
 }

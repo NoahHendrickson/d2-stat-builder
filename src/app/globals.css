@@ -61,6 +61,9 @@
   --lifted: rgb(0 0 0 / 4%);
   /* Figma "Select Menu": the glass a dropdown floats on. */
   --glass: rgb(236 234 230 / 82%);
+  /* Same hue at full alpha, for surfaces that must not show what scrolls under
+     them (sticky table headers). */
+  --glass-opaque: rgb(236 234 230);
   /* Rarity plates. */
   --exotic: #ceae33;
   --exotic-line: #e2c04b;
@@ -91,6 +94,9 @@
   --emphatic-light: #4aa354;
   /* Game accents: Power diamond, stat gains, warning text. */
   --power: #147f86;
+  /* Destiny's gold light level (Figma 86:862), darkened so it still reads on
+     the light surface. */
+  --power-gold: #8a6300;
   --positive: #2f8f47;
   --warning: #8a6d0a;
   --label: #4a4c50;
@@ -152,6 +158,7 @@
   --color-panel-strong: var(--panel-strong);
   --color-lifted: var(--lifted);
   --color-glass: var(--glass);
+  --color-glass-opaque: var(--glass-opaque);
   --color-exotic: var(--exotic);
   --color-exotic-line: var(--exotic-line);
   --color-exotic-lip: var(--exotic-lip);
@@ -162,6 +169,7 @@
   --color-uncommon: var(--uncommon);
   --color-common: var(--common);
   --color-power: var(--power);
+  --color-power-gold: var(--power-gold);
   --color-positive: var(--positive);
   --color-warning: var(--warning);
   --color-outline-strong: var(--outline-strong);
@@ -247,6 +255,7 @@
   --lifted: rgb(255 255 255 / 4%);
   /* Menus frost like the sidebar but a step lighter: grey-slate at 78% under the 20px blur. */
   --glass: rgb(62 66 76 / 78%);
+  --glass-opaque: rgb(62 66 76);
   --text-primary: #fcfcf5;
   --text-secondary: rgb(255 255 255 / 0.7);
   --text-muted: rgb(255 255 255 / 0.7);
@@ -257,6 +266,7 @@
   --emphatic-dark: #2d7334;
   --emphatic-light: #4aa354;
   --power: #4fd0d0;
+  --power-gold: #ffcf11;
   --positive: #62b96a;
   --warning: #eade8b;
   --label: rgb(255 255 255 / 0.7);
@@ -454,9 +464,9 @@ input[type="number"] {
   box-shadow: 0 2px 16px rgb(0 0 0 / 0.25);
 }
 
-/* Darker frosted slate: the loadout editor and dialogs sit on this. Stronger
-   than the app glass so they read as a deeper layer, with enough blur that
-   the scene still ghosts through. */
+/* Darker frosted slate: dialogs and toasts sit on this. Stronger than the
+   app glass so they read as a deeper layer, with enough blur that the scene
+   still ghosts through. */
 @utility d2-slate {
   background-color: var(--panel-strong);
   backdrop-filter: blur(20px) saturate(1.1);
@@ -467,6 +477,13 @@ input[type="number"] {
 @utility d2-sidebar {
   background-color: var(--glass);
   backdrop-filter: blur(20px);
+}
+
+/* The same fill, opaque and unblurred. A sticky table header scrolls rows under
+   itself, so a translucent fill shows those rows through the header — and makes
+   the browser recompute a 20px backdrop blur on every scroll frame. */
+@utility d2-sidebar-opaque {
+  background-color: var(--glass-opaque);
 }
 
 /* Figma 69:883 icon well: a faint white/16 frame all round with brighter
@@ -631,11 +648,10 @@ input[type="number"] {
   background-color: var(--lifted);
 }
 
-/* Checked checkbox / switch: EQUIP green fill and white line. */
+/* Checked checkbox: EQUIP green fill and white line. The switch paints its
+   own greeny gradient (Figma 98:1855) so it is not in this list. */
 [data-slot="checkbox"][data-checked],
 [data-slot="checkbox"][data-checked]:focus-visible,
-[data-slot="switch"][data-checked],
-[data-slot="switch"][data-checked]:focus-visible,
 [data-slot="dropdown-menu-checkbox-item"][data-indicator="start"][data-checked]
   [data-slot="dropdown-menu-checkbox-item-indicator"] {
   --line-side: rgb(255 255 255 / 0.26);
@@ -644,8 +660,7 @@ input[type="number"] {
   color: var(--emphatic-foreground);
 }
 @media (hover: hover) and (pointer: fine) {
-  [data-slot="checkbox"][data-checked]:hover,
-  [data-slot="switch"][data-checked]:hover {
+  [data-slot="checkbox"][data-checked]:hover {
     background-color: var(--emphatic-light);
   }
 }

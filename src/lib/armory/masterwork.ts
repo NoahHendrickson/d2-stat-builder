@@ -9,6 +9,7 @@ import type {
   DestinyProfileResponse,
 } from "bungie-api-ts/destiny2";
 import type { Manifest } from "../manifest/load";
+import { memoByManifest } from "../manifest/memo";
 import { STAT_HASH_TO_INDEX } from "./stats";
 
 /**
@@ -72,6 +73,14 @@ export interface MasterworkInfo {
   cost?: MaterialStack[];
 }
 
+/** True when the piece reported a masterwork and has no levels left to buy. */
+export function isFullyMasterworked(
+  piece: { masterwork?: MasterworkInfo } | undefined,
+): boolean {
+  const mw = piece?.masterwork;
+  return mw != null && mw.level >= mw.max;
+}
+
 /** The masterwork level a v460 plug grants: its +N to the six stats (0 for the empty plug). */
 export function masterworkPlugLevel(
   def: Pick<DestinyInventoryItemDefinition, "investmentStats"> | undefined,
@@ -115,8 +124,30 @@ export function materialScore(stacks: readonly MaterialStack[] | undefined): num
 }
 
 const socketIndexByDef = new WeakMap<object, number>();
-const ladderByKey = new Map<string, number[] | undefined>();
-const materialsByPlug = new Map<number, MaterialStack[]>();
+
+/**
+ * Ladders, material costs and plug levels are all manifest-derived, so they hang off
+ * the manifest instance. Keyed on hashes alone they would outlive the manifest they
+ * were read from, and a refreshed manifest (a Bungie hotfix re-pricing a rung) would
+ * keep serving the previous season's answers for the rest of the session.
+ */
+const cachesFor = memoByManifest(() => ({
+  ladders: new Map<string, number[] | undefined>(),
+  materials: new Map<number, MaterialStack[]>(),
+  plugLevels: new Map<number, number>(),
+}));
+
+/** `masterworkPlugLevel` by plug hash — the same few plugs are read once per piece. */
+function plugLevelOf(plugHash: number, manifest: Manifest): number {
+  const { plugLevels } = cachesFor(manifest);
+  const cached = plugLevels.get(plugHash);
+  if (cached !== undefined) return cached;
+  const level = masterworkPlugLevel(
+    manifest.def("DestinyInventoryItemDefinition", plugHash),
+  );
+  plugLevels.set(plugHash, level);
+  return level;
+}
 
 function masterworkSocketIndex(
   def: Pick<DestinyInventoryItemDefinition, "sockets">,
@@ -145,6 +176,7 @@ function masterworkSocketIndex(
 }
 
 function plugMaterials(plugHash: number, manifest: Manifest): MaterialStack[] {
+  const materialsByPlug = cachesFor(manifest).materials;
   const cached = materialsByPlug.get(plugHash);
   if (cached) return cached;
   const plug = manifest.def("DestinyInventoryItemDefinition", plugHash);
@@ -173,6 +205,9 @@ function plugMaterials(plugHash: number, manifest: Manifest): MaterialStack[] {
  *
  * Legacy (Armor 2.0): no v460 socket; energy capacity is the level and the API
  * exposes no upgrade plugs, so the cost is unknown unless it's already 10.
+ * `legacy` comes from the caller (normalize.ts decides it from the tuning and
+ * archetype sockets) — energy capacity cannot tell the two apart, because every
+ * Armor 3.0 masterwork plug below Tier 4 also reports a capacity of 10.
  */
 export function readMasterwork(
   instanceId: string,
@@ -180,21 +215,13 @@ export function readMasterwork(
   profile: DestinyProfileResponse,
   manifest: Manifest,
   energy: { capacity: number } | undefined,
+  legacy: boolean,
 ): MasterworkInfo | undefined {
   const sockets = profile.itemComponents?.sockets?.data?.[instanceId]?.sockets;
   if (!sockets) return undefined;
 
-  const socketIndex = masterworkSocketIndex(def, sockets, manifest);
-  const socketed = socketIndex === -1 ? undefined : sockets[socketIndex]?.plugHash;
-  const level = socketed
-    ? masterworkPlugLevel(manifest.def("DestinyInventoryItemDefinition", socketed))
-    : 0;
-
-  if (socketIndex === -1) {
+  if (legacy) {
     if (!energy) return undefined;
-    // Armor 3.0 energy is 11; treating that as a finished Armor 2.0 piece would
-    // report unreadable 3.0 masterwork sockets as free.
-    if (energy.capacity > LEGACY_MAX_ENERGY) return undefined;
     const capacity = energy.capacity;
     return {
       level: capacity,
@@ -203,16 +230,22 @@ export function readMasterwork(
     };
   }
 
+  const socketIndex = masterworkSocketIndex(def, sockets, manifest);
+  // Armor 3.0 whose masterwork socket the profile didn't report: unknown, not
+  // finished. Guessing "done" here paints the gold frame on a level-0 piece and
+  // tells the player it costs nothing to finish.
+  if (socketIndex === -1) return undefined;
+
+  const socketed = sockets[socketIndex]?.plugHash;
+  const level = socketed ? plugLevelOf(socketed, manifest) : 0;
+
   if (level >= ARMOR3_MAX_LEVEL) return { level, max: ARMOR3_MAX_LEVEL, cost: [] };
 
   const plugs =
     profile.itemComponents?.reusablePlugs?.data?.[instanceId]?.plugs?.[socketIndex] ?? [];
   let next: number | undefined;
   for (const p of plugs) {
-    if (
-      masterworkPlugLevel(manifest.def("DestinyInventoryItemDefinition", p.plugItemHash)) ===
-      level + 1
-    ) {
+    if (plugLevelOf(p.plugItemHash, manifest) === level + 1) {
       next = p.plugItemHash;
       break;
     }
@@ -238,6 +271,7 @@ function remainingLadder(
 ): number[] | undefined {
   const entry = def.sockets?.socketEntries?.[socketIndex];
   const plugSetHash = entry?.reusablePlugSetHash || entry?.randomizedPlugSetHash;
+  const ladderByKey = cachesFor(manifest).ladders;
   const cacheKey = `${plugSetHash ?? 0}:${next}:${expectedStart}`;
   if (ladderByKey.has(cacheKey)) return ladderByKey.get(cacheKey);
 
@@ -257,8 +291,7 @@ function remainingLadder(
   let expected = expectedStart;
   for (let i = start; i < items.length; i++) {
     const hash = items[i].plugItemHash;
-    const level = masterworkPlugLevel(manifest.def("DestinyInventoryItemDefinition", hash));
-    if (level !== expected) break;
+    if (plugLevelOf(hash, manifest) !== expected) break;
     ladder.push(hash);
     expected++;
   }

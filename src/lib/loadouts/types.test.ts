@@ -2,6 +2,7 @@ import { test, expect, describe } from "vitest";
 import {
   LOADOUT_SCHEMA_VERSION,
   MAX_NOTES_LENGTH,
+  MAX_TAG_LENGTH,
   loadoutHashtags,
   loadoutNotesHashtags,
   normalizeTag,
@@ -286,10 +287,51 @@ test("withLoadoutTag strips a tag even when punctuation follows it", () => {
   expect(withLoadoutTag(noted, "pve", false).notes).toBe("Use for #raid, or .");
 });
 
-test("withLoadoutTag does not uncheck a tag that only lives in the name", () => {
+test("withLoadoutTag unchecks a tag that only lives in the name", () => {
   const base = parseDimLoadout(dim())!;
   const named = { ...base, name: "Raid #pve set", notes: undefined };
   expect(loadoutHashtags(named)).toEqual(["pve"]);
   expect(loadoutNotesHashtags(named.notes)).toEqual([]);
-  expect(withLoadoutTag(named, "pve", false)).toBe(named);
+  // The badges, the filter and the cap all read name + notes, so the menu's
+  // checkbox has to be able to clear either one.
+  expect(withLoadoutTag(named, "pve", false).name).toBe("Raid set");
+  // …except when the name is nothing but the tag: every loadout needs a name.
+  const only = { ...base, name: "#pve", notes: undefined };
+  expect(withLoadoutTag(only, "pve", false)).toBe(only);
+});
+
+test("removing a tag leaves the rest of the note exactly as typed", () => {
+  const base = parseDimLoadout(dim())!;
+  const prose = { ...base, notes: "Boss DPS\n\n\nSwap  to  Still Hunt  #pve" };
+  expect(withLoadoutTag(prose, "pve", false).notes).toBe(
+    "Boss DPS\n\n\nSwap  to  Still Hunt",
+  );
+
+  const markdown = { ...base, notes: "Notes:\n  - step one\n  - step two\n\n#pve" };
+  expect(withLoadoutTag(markdown, "pve", false).notes).toBe(
+    "Notes:\n  - step one\n  - step two",
+  );
+
+  // A tag on its own line takes the line, not the paragraph around it.
+  const ownLine = { ...base, notes: "before\n#pve\nafter" };
+  expect(withLoadoutTag(ownLine, "pve", false).notes).toBe("before\nafter");
+
+  // Adding then removing is a round trip.
+  const typed = { ...base, notes: "Rotation:\n\n1. Do X   then Y" };
+  expect(
+    withLoadoutTag(withLoadoutTag(typed, "pve", true), "pve", false).notes,
+  ).toBe(typed.notes);
+});
+
+test("a tag longer than the add limit can still be read and removed", () => {
+  const base = parseDimLoadout(dim())!;
+  const long = "day-one-vault-of-glass-flawless-challenge-run";
+  expect(long.length).toBeGreaterThan(MAX_TAG_LENGTH);
+  const noted = { ...base, notes: `Run notes #${long}` };
+  // Visible to the badges and the tag filter…
+  expect(loadoutHashtags(noted)).toEqual([long]);
+  // …not offered as something new to create…
+  expect(normalizeTag(long)).toBeNull();
+  // …but the checkbox can still take it off.
+  expect(withLoadoutTag(noted, long, false).notes).toBe("Run notes");
 });

@@ -31,7 +31,7 @@ import { buildDimLoadoutUrl } from "@/lib/dim/loadout-link";
 import { applySavedLoadout } from "@/lib/loadouts/apply-client";
 import { formatRelativeTime } from "@/lib/armor-table/relative-time";
 import { resolveLoadout } from "@/lib/loadouts/resolve";
-import { loadoutNotesHashtags, type SavedLoadout } from "@/lib/loadouts/types";
+import { loadoutHashtags, type SavedLoadout } from "@/lib/loadouts/types";
 import { LoadoutTagAssignSubmenu } from "@/components/loadouts/loadout-tag-menu";
 import { StatGlyph } from "@/components/stat-glyph";
 import { Button } from "@/components/ui/button";
@@ -214,7 +214,7 @@ export const LoadoutRow = memo(function LoadoutRow({
                   Edit
                 </DropdownMenuItem>
                 <LoadoutTagAssignSubmenu
-                  assigned={loadoutNotesHashtags(loadout.notes)}
+                  assigned={loadoutHashtags(loadout)}
                   tags={allTags}
                   onToggle={(tag, checked) => onSetTag(saved, tag, checked)}
                   onCreate={(tag) => onSetTag(saved, tag, true)}
