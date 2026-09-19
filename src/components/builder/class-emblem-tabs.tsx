@@ -8,17 +8,20 @@ import { BUNGIE_IMAGE_BASE } from "@/lib/bungie/constants";
 import { CLASS_NAMES } from "@/lib/armory/stats";
 import type { ArmoryCharacter } from "@/lib/armory/fetch";
 import { characterForClass } from "@/lib/armory/character-for-class";
+import { PowerValue } from "@/components/power-value";
 
-/** Inner radius 6px. 1px border on both states so selecting a tab doesn't
- *  grow the row. Selected ring is an outside box-shadow (layout-neutral). */
+/**
+ * Square nameplates with a 1px frame. The selected one gets the game's white
+ * outline + glow (an outside box-shadow, so the row never changes size);
+ * the others sit dimmed until hovered.
+ */
 const tabBase =
-  "relative flex-1 shrink-0 cursor-pointer rounded-[7px] border text-left outline-none transition-[opacity,box-shadow,border-color] focus-visible:ring-3 focus-visible:ring-ring/50";
+  "relative min-w-0 flex-1 cursor-pointer overflow-hidden rounded-md border text-left outline-none transition-[opacity,box-shadow,border-color] focus-visible:d2-tile-selected";
 
 const tabInactive =
-  "border-[var(--neutral-line)] opacity-80 hover:opacity-100";
+  "border-foreground/15 opacity-75 saturate-[0.85] hover:opacity-100 hover:saturate-100 hover:border-foreground/40";
 
-const tabSelected =
-  "border-background opacity-100 shadow-[0_0_0_2px_var(--background),0_0_0_4px_var(--emphatic)]";
+const tabSelected = "border-foreground d2-tile-selected opacity-100";
 
 interface ClassEmblemTabsProps {
   /** All of the player's characters; grouped into one tab per class internally. */
@@ -62,7 +65,7 @@ function EmblemTab({
       aria-label={`${name}, Power ${character.light}`}
       className={cn(tabBase, active ? tabSelected : tabInactive)}
     >
-      <span className="relative block h-14 overflow-hidden rounded-[6px]">
+      <span className="relative block h-14 overflow-hidden">
         {showImage ? (
           <Image
             src={`${BUNGIE_IMAGE_BASE}${character.emblemBackgroundPath}`}
@@ -84,14 +87,16 @@ function EmblemTab({
         )}
 
         {/* Scrim so the class name + Power stay legible over any emblem art. */}
-        <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/25 to-transparent" />
+        <div className="absolute inset-0 bg-gradient-to-r from-black/10 via-black/45 to-black/75" />
 
-        <div className="absolute inset-x-0 bottom-0 flex items-end justify-between gap-1 px-2 py-1.5">
-          <span className="text-xs font-semibold tracking-wide text-white uppercase drop-shadow">
+        {/* The nameplate text block: class in bold, "// POWER" beneath. */}
+        <div className="absolute inset-y-0 right-0 flex flex-col items-end justify-center gap-0.5 px-2.5 text-right">
+          <span className="d2-heading text-xs leading-none text-white drop-shadow">
             {name}
           </span>
-          <span className="text-[10px] font-medium text-white/90 tabular-nums drop-shadow">
-            ✦ {character.light}
+          <span className="flex items-baseline gap-1 text-[10px] leading-none text-white/70">
+            <span aria-hidden>{"//"}</span>
+            <PowerValue value={character.light} size="xs" className="drop-shadow" />
           </span>
         </div>
       </span>
@@ -113,10 +118,11 @@ export function ClassEmblemTabs({
 
   return (
     <TabsPrimitive.Root
+      className="w-full min-w-0"
       value={String(value)}
       onValueChange={(v) => onChange(Number(v))}
     >
-      <TabsPrimitive.List className="flex gap-2 p-1.5">
+      <TabsPrimitive.List className="flex w-full min-w-0 gap-3">
         {tabs.map((character) => (
           <EmblemTab
             key={character.classType}

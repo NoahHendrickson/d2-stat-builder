@@ -13,6 +13,7 @@ function make(
   opts: {
     classType?: number;
     notes?: string;
+    createdAt?: number;
     updatedAt?: number;
     total?: number;
     setBonuses?: Record<number, number>;
@@ -22,7 +23,7 @@ function make(
   return {
     id: name,
     version: 1,
-    createdAt: 0,
+    createdAt: opts.createdAt ?? 0,
     updatedAt: opts.updatedAt ?? 0,
     loadout: {
       id: "x",
@@ -45,9 +46,9 @@ function make(
 }
 
 const rows = [
-  make("Alpha #pve", { classType: 0, updatedAt: 3, total: 400 }),
-  make("bravo", { classType: 1, notes: "#raid #PvE", updatedAt: 1, total: 500 }),
-  make("Charlie", { classType: 3, updatedAt: 2 }),
+  make("Alpha #pve", { classType: 0, createdAt: 1, updatedAt: 3, total: 400 }),
+  make("bravo", { classType: 1, notes: "#raid #PvE", createdAt: 3, updatedAt: 1, total: 500 }),
+  make("Charlie", { classType: 3, createdAt: 2, updatedAt: 2 }),
 ];
 
 test("filter by class keeps any-class loadouts", () => {
@@ -143,11 +144,16 @@ test("text query matches set bonus names", () => {
   expect(filterLoadouts([withSet], { query: "aion" })).toEqual([]);
 });
 
-test("sorts by edited, name (case-insensitive), and total (missing last)", () => {
+test("sorts by edited, created, name (case-insensitive), and total (missing last)", () => {
   expect(sortSavedLoadouts(rows, "edited").map((l) => l.id)).toEqual([
     "Alpha #pve",
     "Charlie",
     "bravo",
+  ]);
+  expect(sortSavedLoadouts(rows, "created").map((l) => l.id)).toEqual([
+    "bravo",
+    "Charlie",
+    "Alpha #pve",
   ]);
   expect(sortSavedLoadouts(rows, "name").map((l) => l.id)).toEqual([
     "Alpha #pve",
@@ -161,8 +167,29 @@ test("sorts by edited, name (case-insensitive), and total (missing last)", () =>
   ]);
 });
 
+test("equal totals break the tie on most-recently-edited", () => {
+  const older = make("Aion", { updatedAt: 1, total: 400 });
+  const newer = make("Zephyr", { updatedAt: 9, total: 400 });
+  expect(sortSavedLoadouts([older, newer], "total").map((l) => l.id)).toEqual([
+    "Zephyr",
+    "Aion",
+  ]);
+});
+
 test("collectHashtags orders by frequency then name", () => {
   expect(collectHashtags(rows)).toEqual(["pve", "raid"]);
+});
+
+test("tag filter matches loadouts that have any selected hashtag", () => {
+  expect(filterLoadouts(rows, { query: "", tags: ["raid"] }).map((l) => l.id)).toEqual(["bravo"]);
+  expect(filterLoadouts(rows, { query: "", tags: ["pve"] }).map((l) => l.id)).toEqual([
+    "Alpha #pve",
+    "bravo",
+  ]);
+  expect(filterLoadouts(rows, { query: "", tags: ["raid", "missing"] }).map((l) => l.id)).toEqual([
+    "bravo",
+  ]);
+  expect(filterLoadouts(rows, { query: "", tags: [] }).map((l) => l.id)).toEqual(rows.map((l) => l.id));
 });
 
 test("duplicateName avoids collisions", () => {

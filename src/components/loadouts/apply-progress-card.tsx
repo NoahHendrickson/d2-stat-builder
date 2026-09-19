@@ -1,11 +1,10 @@
 "use client";
 
 import { useEffect, useSyncExternalStore } from "react";
-import Image from "next/image";
 import { Check, CircleNotch, X } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { TooltipLabel } from "@/components/ui/tooltip";
-import { BUNGIE_IMAGE_BASE } from "@/lib/bungie/constants";
+import { ArmorThumb } from "@/components/armor-thumb";
 import {
   dismissApplyProgress,
   getApplyProgress,
@@ -36,32 +35,22 @@ function Cell({ step }: { step: ApplyStep }) {
         className={cn(
           "relative flex aspect-square w-full min-w-0 items-center justify-center border border-input leading-none",
           step.status === "pending" && "opacity-40",
-          step.status === "active" && "border-emphatic",
-          step.status === "ok" && "border-emerald-500",
+          step.status === "active" && "border-foreground d2-tile-selected",
+          step.status === "ok" && "border-positive",
           step.status === "fail" && "border-destructive",
         )}
       >
         {step.icon ? (
-          <Image
-            src={`${BUNGIE_IMAGE_BASE}${step.icon}`}
-            alt=""
-            width={32}
-            height={32}
-            className="size-full rounded-none"
-            unoptimized
+          <ArmorThumb
+            icon={step.icon}
+            watermark={step.watermark}
+            size={32}
+            masterworked={step.masterworked}
+            gearTier={step.gearTier}
+            className="size-full"
           />
         ) : (
           <span className="bg-muted block size-full" aria-hidden />
-        )}
-        {step.watermark && (
-          <Image
-            src={`${BUNGIE_IMAGE_BASE}${step.watermark}`}
-            alt=""
-            width={32}
-            height={32}
-            className="absolute inset-0 size-full rounded-none"
-            unoptimized
-          />
         )}
         {step.status === "active" && (
           <span className="absolute inset-0 flex items-center justify-center bg-black/40">
@@ -69,12 +58,12 @@ function Cell({ step }: { step: ApplyStep }) {
           </span>
         )}
         {step.status === "ok" && (
-          <span className="absolute -top-0.5 -right-1 flex size-3 items-center justify-center rounded-full bg-emerald-500 text-white">
+          <span className="absolute -top-0.5 -right-1 flex size-3 items-center justify-center rounded-none bg-positive text-black">
             <Check weight="bold" className="size-2" aria-hidden />
           </span>
         )}
         {step.status === "fail" && (
-          <span className="bg-destructive absolute -top-0.5 -right-1 flex size-3 items-center justify-center rounded-full text-white">
+          <span className="bg-destructive absolute -top-0.5 -right-1 flex size-3 items-center justify-center rounded-none text-white">
             <X weight="bold" className="size-2" aria-hidden />
           </span>
         )}
@@ -90,7 +79,7 @@ function titleFor(name: string, finished: "ok" | "partial" | "fail" | undefined)
   return `Applying ${name}`;
 }
 
-/** Apply-loadout progress — lives on the stage so it outlives a collapsed sidebar / closed drawer. */
+/** Apply-loadout progress — lives on the main column so it outlives a collapsed sidebar / closed drawer. */
 export function ApplyProgressSection() {
   const state = useSyncExternalStore(subscribeApplyProgress, getApplyProgress, () => null);
 
@@ -110,7 +99,7 @@ export function ApplyProgressSection() {
       role="status"
       aria-live="polite"
       aria-label={title}
-      className="m-3 flex shrink-0 flex-col gap-2 rounded-2xl border bg-popover p-3 text-popover-foreground shadow-lg"
+      className="m-3 flex shrink-0 flex-col gap-2 rounded-md border border-foreground/15 bg-popover p-3 text-popover-foreground shadow-[0_8px_24px_rgb(0_0_0/0.45)]"
     >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">

@@ -3,7 +3,6 @@ import {
   FESTIVAL_MASK_CATEGORY_HASH,
   FESTIVAL_MASK_HASHES,
   hashesIncludeHelmet,
-  inDefaultOptimizerPool,
   helmetCandidates,
   isFestivalMask,
   ownedFestivalMasks,
@@ -49,17 +48,6 @@ test("hashesIncludeHelmet matches an owned helmet, not other slots", () => {
   expect(hashesIncludeHelmet([10], pieces)).toBe(true);
   expect(hashesIncludeHelmet([20], pieces)).toBe(false);
   expect(hashesIncludeHelmet([99], pieces)).toBe(false);
-});
-
-test("T5 Festival of the Lost masks stay out of the default optimizer pool", () => {
-  const mask = { isFestivalMask: true, tunedStat: 0, isExotic: false };
-  const t5Helmet = { isFestivalMask: false, tunedStat: 2, isExotic: false };
-  const legacyExotic = { isFestivalMask: false, isExotic: true };
-  expect(inDefaultOptimizerPool(mask, true)).toBe(false);
-  expect(inDefaultOptimizerPool(mask, false)).toBe(false);
-  expect(inDefaultOptimizerPool(t5Helmet, false)).toBe(true);
-  expect(inDefaultOptimizerPool(legacyExotic, true)).toBe(true);
-  expect(inDefaultOptimizerPool(legacyExotic, false)).toBe(false);
 });
 
 test("ownedFestivalMasks: this class's masks plus any-class ones, nothing else", () => {

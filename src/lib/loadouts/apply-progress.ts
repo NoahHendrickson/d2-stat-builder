@@ -7,6 +7,8 @@ export interface ApplyStep {
   name: string;
   icon?: string;
   watermark?: string;
+  gearTier?: number;
+  masterworked?: boolean;
   status: ApplyStepStatus;
   message?: string;
 }

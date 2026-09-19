@@ -2,9 +2,8 @@
 
 import { memo } from "react";
 import { TooltipLabel } from "@/components/ui/tooltip";
-import Image from "next/image";
 import { cn } from "@/lib/utils";
-import { BUNGIE_IMAGE_BASE } from "@/lib/bungie/constants";
+import { ArmorThumb } from "@/components/armor-thumb";
 import { Button } from "@/components/ui/button";
 
 export interface ExoticOption {
@@ -13,21 +12,23 @@ export interface ExoticOption {
   hashes: number[];
   /** Relative Bungie icon path, if any. */
   icon?: string;
+  watermark?: string;
+  isTier5?: boolean;
 }
 
 /**
- * Figma 17:5655 — 40px tiles in a tight 8px grid. Unselected tiles sit at 65%
- * opacity and come up on hover; the selected one is full-strength with a
- * background-coloured inset border and an emphatic ring + glow
- * (0 0 0 2px + 0 0 8px 1px).
+ * Inventory cells: 44px squares in a tight grid. Unselected cells sit dimmed
+ * and come up on hover with the white outline; the selected one keeps the
+ * outline + glow. These tiles are exotic identities, not inventory instances,
+ * so they never get the masterwork gold frame.
  */
 const tileBase =
-  "group/tile relative size-10 shrink-0 overflow-hidden rounded-[2px] border-2 border-transparent outline-none transition-[opacity,box-shadow,border-color] focus-visible:ring-3 focus-visible:ring-ring/50";
+  "group/tile relative size-11 shrink-0 overflow-hidden rounded-none outline-none transition-[opacity,box-shadow,filter] focus-visible:d2-tile-selected";
 
-const tileInactive = "opacity-65 hover:opacity-100";
+const tileInactive =
+  "opacity-60 saturate-[0.8] hover:opacity-100 hover:saturate-100 hover:d2-tile-selected";
 
-const tileSelected =
-  "border-background opacity-100 shadow-[0_0_0_2px_var(--emphatic),0_0_8px_1px_var(--emphatic)]";
+const tileSelected = "d2-tile-selected opacity-100";
 
 /**
  * Thumbnail grid for choosing which exotic to build around. Click a tile to require
@@ -65,16 +66,15 @@ export const ExoticPicker = memo(function ExoticPicker({
                 className={cn(tileBase, active ? tileSelected : tileInactive)}
               >
                 {exotic.icon ? (
-                  <Image
-                    src={`${BUNGIE_IMAGE_BASE}${exotic.icon}`}
+                  <ArmorThumb
+                    icon={exotic.icon}
+                    watermark={exotic.watermark}
                     alt={exotic.name}
-                    fill
-                    sizes="40px"
-                    className="object-cover"
-                    unoptimized
+                    size={44}
+                    gearTier={exotic.isTier5 ? 5 : undefined}
                   />
                 ) : (
-                  <span className="flex size-full items-center justify-center bg-foreground/12 text-xs text-muted-foreground">
+                  <span className="flex size-full items-center justify-center bg-exotic/20 text-xs text-exotic-line">
                     {exotic.name.slice(0, 2)}
                   </span>
                 )}
@@ -86,7 +86,7 @@ export const ExoticPicker = memo(function ExoticPicker({
       {selected !== null && (
         <p className="text-muted-foreground text-xs">
           Requiring{" "}
-          <span className="text-foreground">{options[selected]?.name}</span>.{" "}
+          <span className="text-exotic-line font-medium">{options[selected]?.name}</span>.{" "}
           <Button
             variant="link"
             className="h-auto p-0 text-xs font-normal text-inherit underline"

@@ -14,12 +14,12 @@ function CollapseButton({ onToggle }: { onToggle: () => void }) {
   return (
     <TooltipLabel label="Collapse sidebar">
       <Button
-        variant="ghost"
-        size="icon-lg"
+        variant="default"
+        size="icon"
         aria-label="Collapse sidebar"
         onClick={onToggle}
       >
-        <SidebarSimple weight="bold" aria-hidden />
+        <SidebarSimple aria-hidden />
       </Button>
     </TooltipLabel>
   );
@@ -33,10 +33,10 @@ function CollapseButton({ onToggle }: { onToggle: () => void }) {
 function LoadoutsListPlaceholder({ headerAction }: { headerAction?: ReactNode }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4" aria-busy>
-      <div className="flex flex-col gap-1 px-4">
-        <div className="flex items-center gap-1">
-          <div className="h-9 min-w-0 flex-1" />
+      <div className="flex flex-col gap-2 px-2">
+        <div className="flex items-start gap-2">
           {headerAction}
+          <div className="h-8 min-w-0 flex-1" />
         </div>
         <div className="h-8" />
       </div>
@@ -82,7 +82,7 @@ export function AppSidebar({
     body = (
       <div className="flex flex-col gap-2">
         {collapseButton ? (
-          <div className="flex justify-end px-2">{collapseButton}</div>
+          <div className="px-2">{collapseButton}</div>
         ) : null}
         <p className="text-muted-foreground px-4 text-sm">
           {session.isPending
@@ -96,7 +96,7 @@ export function AppSidebar({
     body = (
       <div className="flex flex-col gap-2">
         {collapseButton ? (
-          <div className="flex justify-end px-2">{collapseButton}</div>
+          <div className="px-2">{collapseButton}</div>
         ) : null}
         <p className="text-muted-foreground px-4 text-sm">
           Loading your loadouts…
@@ -119,7 +119,7 @@ export function AppSidebar({
   }
 
   return (
-    <div className="flex h-full min-h-0 flex-col pt-4">
+    <div className="flex h-full min-h-0 flex-col pt-[22px]">
       <div className="flex min-h-0 flex-1 flex-col">{body}</div>
 
       {showAccount && authed && (

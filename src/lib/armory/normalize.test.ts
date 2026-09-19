@@ -1,7 +1,7 @@
 import { test, expect } from "vitest";
 import type { DestinyProfileResponse } from "bungie-api-ts/destiny2";
 import type { Manifest } from "@/lib/manifest/load";
-import { computeBaseStats, itemWatermark, normalizeArmory } from "./normalize";
+import { armorPipTier, computeBaseStats, itemWatermark, normalizeArmory } from "./normalize";
 import { STAT_HASHES } from "./stats";
 
 const H = STAT_HASHES;
@@ -783,4 +783,54 @@ test("power comes from the instance's primary stat; no instance → undefined; i
   expect(noInstance.power).toBeUndefined();
   expect("power" in noInstance).toBe(false);
   expect(powerless.power).toBe(0);
+});
+
+test("gearTier is copied from the instance when it is 1–5", () => {
+  const ITEM = 4242;
+  const manifest = {
+    def: (_table: string, hash: number | null | undefined) =>
+      hash === ITEM
+        ? {
+            itemType: 2,
+            classType: 2,
+            displayProperties: { name: "Helm" },
+            inventory: { bucketTypeHash: 3448274439, tierType: 5 },
+          }
+        : undefined,
+  } as unknown as Manifest;
+  const profile = {
+    itemComponents: {
+      instances: {
+        data: {
+          t3: { gearTier: 3, primaryStat: { value: 200 } },
+          t5: { gearTier: 5, primaryStat: { value: 200 } },
+          zero: { gearTier: 0, primaryStat: { value: 200 } },
+        },
+      },
+    },
+    profileInventory: {
+      data: {
+        items: [
+          { itemInstanceId: "t3", itemHash: ITEM },
+          { itemInstanceId: "t5", itemHash: ITEM },
+          { itemInstanceId: "zero", itemHash: ITEM },
+          { itemInstanceId: "missing", itemHash: ITEM },
+        ],
+      },
+    },
+  } as unknown as DestinyProfileResponse;
+  const [t3, t5, zero, missing] = normalizeArmory(profile, manifest);
+  expect(t3.gearTier).toBe(3);
+  expect(t5.gearTier).toBe(5);
+  expect(zero.gearTier).toBeUndefined();
+  expect(missing.gearTier).toBeUndefined();
+});
+
+test("armorPipTier prefers live gearTier and falls back to tunedStat as T5", () => {
+  expect(armorPipTier({ gearTier: 3, tunedStat: 0 })).toBe(3);
+  expect(armorPipTier({ tunedStat: 2 })).toBe(5);
+  expect(armorPipTier({ gearTier: 1 })).toBe(1);
+  expect(armorPipTier({ gearTier: 5 })).toBe(5);
+  expect(armorPipTier({})).toBeUndefined();
+  expect(armorPipTier(undefined)).toBeUndefined();
 });

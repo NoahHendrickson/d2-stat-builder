@@ -1,12 +1,18 @@
 import { test, expect, describe } from "vitest";
 import {
   LOADOUT_SCHEMA_VERSION,
+  MAX_NOTES_LENGTH,
+  MAX_TAG_LENGTH,
   loadoutHashtags,
+  loadoutNotesHashtags,
+  normalizeTag,
+  newerSavedLoadout,
   parseBuilderSnapshot,
   parseDimLoadout,
   parseOptimizerLoadout,
   parseSavedLoadout,
   parseSavedLoadoutData,
+  withLoadoutTag,
 } from "./types";
 
 const dim = () => ({
@@ -52,11 +58,13 @@ const builder = () => ({
   allowTuning: true,
   balancedTuning: true,
   legacyExotics: false,
+  lowerTierArmor: true,
   powerRange: {
     enabled: true,
     bounds: { min: 287, max: 292 },
     weapons: [290, null, 295],
     dreamersBond: true,
+    legacyArmor: false,
   },
   activeSubclass: "Prismatic",
   fragmentHashes: [1, 2],
@@ -128,12 +136,13 @@ describe("parseBuilderSnapshot", () => {
     expect(out).not.toHaveProperty("festivalMasks");
   });
   test("round-trips the power range and defaults it off when missing or malformed", () => {
-    const off = { enabled: false, bounds: null, weapons: [null, null, null], dreamersBond: false };
+    const off = { enabled: false, bounds: null, weapons: [null, null, null], dreamersBond: false, legacyArmor: false };
     expect(parseBuilderSnapshot(builder())?.powerRange).toEqual({
       enabled: true,
       bounds: { min: 287, max: 292 },
       weapons: [290, null, 295],
       dreamersBond: true,
+      legacyArmor: false,
     });
     const old = builder() as { powerRange?: unknown };
     delete old.powerRange;
@@ -148,6 +157,7 @@ describe("parseBuilderSnapshot", () => {
       bounds: { min: 290, max: 300 },
       weapons: [null, null, null],
       dreamersBond: false,
+      legacyArmor: false,
     });
     expect(
       parseBuilderSnapshot({
@@ -159,7 +169,7 @@ describe("parseBuilderSnapshot", () => {
     expect(
       parseBuilderSnapshot({ ...builder(), powerRange: { enabled: true, bounds: null } })
         ?.powerRange,
-    ).toEqual({ enabled: true, bounds: null, weapons: [null, null, null], dreamersBond: false });
+    ).toEqual({ enabled: true, bounds: null, weapons: [null, null, null], dreamersBond: false, legacyArmor: false });
     // Malformed weapons drop to "nothing entered" without losing the range itself.
     expect(
       parseBuilderSnapshot({
@@ -171,6 +181,7 @@ describe("parseBuilderSnapshot", () => {
       bounds: { min: 287, max: 292 },
       weapons: [null, null, null],
       dreamersBond: false,
+      legacyArmor: false,
     });
   });
   test("rejects an unknown subclass", () => {
@@ -209,6 +220,24 @@ describe("parseSavedLoadoutData / parseSavedLoadout", () => {
   });
 });
 
+test("newerSavedLoadout keeps a later updatedAt so a stale PUT cannot roll back", () => {
+  const body = { version: 1, loadout: dim() };
+  const older = parseSavedLoadout({ ...body, id: "abc", createdAt: 1, updatedAt: 1 })!;
+  const newer = parseSavedLoadout({
+    ...body,
+    id: "abc",
+    createdAt: 1,
+    updatedAt: 2,
+    loadout: { ...dim(), name: "After" },
+  })!;
+  expect(
+    newerSavedLoadout(newer, { ...older, loadout: { ...older.loadout, name: "Before" } })
+      .loadout.name,
+  ).toBe("After");
+  expect(newerSavedLoadout(older, newer).loadout.name).toBe("After");
+  expect(newerSavedLoadout(newer, { ...newer, loadout: { ...newer.loadout, name: "Same ts" } }).loadout.name).toBe("Same ts");
+});
+
 test("loadoutHashtags pulls tags from name + notes, lower-cased, deduped", () => {
   expect(loadoutHashtags({ name: "Raid #PvE build", notes: "#pve #Raid\n#dps-phase" })).toEqual([
     "pve",
@@ -216,4 +245,93 @@ test("loadoutHashtags pulls tags from name + notes, lower-cased, deduped", () =>
     "dps-phase",
   ]);
   expect(loadoutHashtags({ name: "no tags", notes: "c#4 isn't one" })).toEqual([]);
+});
+
+test("normalizeTag strips #, lower-cases, and rejects junk", () => {
+  expect(normalizeTag(" #PvE ")).toBe("pve");
+  expect(normalizeTag("dps-phase")).toBe("dps-phase");
+  expect(normalizeTag("")).toBeNull();
+  expect(normalizeTag("#")).toBeNull();
+  expect(normalizeTag("has space")).toBeNull();
+  expect(normalizeTag("!!!")).toBeNull();
+});
+
+test("withLoadoutTag writes hashtags into notes and strips them back out", () => {
+  const base = parseDimLoadout(dim())!;
+  const tagged = withLoadoutTag({ ...base, notes: undefined }, "PvE", true);
+  expect(tagged.notes).toBe("#pve");
+  expect(withLoadoutTag(tagged, "raid", true).notes).toBe("#pve #raid");
+  expect(withLoadoutTag(tagged, "pve", true)).toBe(tagged);
+
+  const both = withLoadoutTag(withLoadoutTag({ ...base, notes: "keep me" }, "pve", true), "raid", true);
+  expect(both.notes).toBe("keep me #pve #raid");
+  expect(withLoadoutTag(both, "pve", false).notes).toBe("keep me #raid");
+  expect(withLoadoutTag(withLoadoutTag(both, "pve", false), "raid", false).notes).toBe("keep me");
+
+  const onlyTags = withLoadoutTag(withLoadoutTag({ ...base, notes: undefined }, "pve", true), "pve", false);
+  expect(onlyTags.notes).toBeUndefined();
+  expect(onlyTags).not.toHaveProperty("notes");
+});
+
+test("withLoadoutTag no-ops when notes would overflow", () => {
+  const base = parseDimLoadout(dim())!;
+  const full = { ...base, notes: "x".repeat(MAX_NOTES_LENGTH) };
+  expect(withLoadoutTag(full, "pve", true)).toBe(full);
+});
+
+test("withLoadoutTag strips a tag even when punctuation follows it", () => {
+  const base = parseDimLoadout(dim())!;
+  const noted = { ...base, notes: "Use for #raid, or #pve." };
+  expect(loadoutHashtags(noted)).toEqual(["raid", "pve"]);
+  expect(withLoadoutTag(noted, "raid", false).notes).toBe("Use for , or #pve.");
+  expect(withLoadoutTag(noted, "pve", false).notes).toBe("Use for #raid, or .");
+});
+
+test("withLoadoutTag unchecks a tag that only lives in the name", () => {
+  const base = parseDimLoadout(dim())!;
+  const named = { ...base, name: "Raid #pve set", notes: undefined };
+  expect(loadoutHashtags(named)).toEqual(["pve"]);
+  expect(loadoutNotesHashtags(named.notes)).toEqual([]);
+  // The badges, the filter and the cap all read name + notes, so the menu's
+  // checkbox has to be able to clear either one.
+  expect(withLoadoutTag(named, "pve", false).name).toBe("Raid set");
+  // …except when the name is nothing but the tag: every loadout needs a name.
+  const only = { ...base, name: "#pve", notes: undefined };
+  expect(withLoadoutTag(only, "pve", false)).toBe(only);
+});
+
+test("removing a tag leaves the rest of the note exactly as typed", () => {
+  const base = parseDimLoadout(dim())!;
+  const prose = { ...base, notes: "Boss DPS\n\n\nSwap  to  Still Hunt  #pve" };
+  expect(withLoadoutTag(prose, "pve", false).notes).toBe(
+    "Boss DPS\n\n\nSwap  to  Still Hunt",
+  );
+
+  const markdown = { ...base, notes: "Notes:\n  - step one\n  - step two\n\n#pve" };
+  expect(withLoadoutTag(markdown, "pve", false).notes).toBe(
+    "Notes:\n  - step one\n  - step two",
+  );
+
+  // A tag on its own line takes the line, not the paragraph around it.
+  const ownLine = { ...base, notes: "before\n#pve\nafter" };
+  expect(withLoadoutTag(ownLine, "pve", false).notes).toBe("before\nafter");
+
+  // Adding then removing is a round trip.
+  const typed = { ...base, notes: "Rotation:\n\n1. Do X   then Y" };
+  expect(
+    withLoadoutTag(withLoadoutTag(typed, "pve", true), "pve", false).notes,
+  ).toBe(typed.notes);
+});
+
+test("a tag longer than the add limit can still be read and removed", () => {
+  const base = parseDimLoadout(dim())!;
+  const long = "day-one-vault-of-glass-flawless-challenge-run";
+  expect(long.length).toBeGreaterThan(MAX_TAG_LENGTH);
+  const noted = { ...base, notes: `Run notes #${long}` };
+  // Visible to the badges and the tag filter…
+  expect(loadoutHashtags(noted)).toEqual([long]);
+  // …not offered as something new to create…
+  expect(normalizeTag(long)).toBeNull();
+  // …but the checkbox can still take it off.
+  expect(withLoadoutTag(noted, long, false).notes).toBe("Run notes");
 });

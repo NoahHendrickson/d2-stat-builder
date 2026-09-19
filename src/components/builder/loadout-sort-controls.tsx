@@ -35,7 +35,7 @@ export function LoadoutSortControls({
       <TooltipLabel label={`Sort by ${triggerLabel}, ${directionLabel}`}>
         <DropdownMenuTrigger
           aria-label={`Sort by ${triggerLabel}, ${directionLabel}`}
-          className="inline-flex h-8 w-fit shrink-0 cursor-pointer items-center gap-1.5 rounded-lg border border-input bg-transparent pr-2 pl-2.5 text-sm whitespace-nowrap transition-colors outline-none select-none hover:bg-muted/60 focus-visible:border-emphatic data-popup-open:border-emphatic dark:bg-input/30 dark:hover:bg-input/50"
+          className="inline-flex h-8 w-fit shrink-0 cursor-pointer d2-line items-center gap-1.5 rounded-none bg-lifted pr-2 pl-2.5 text-sm whitespace-nowrap transition-colors outline-none select-none hover:[--line-alpha:1.6] focus-visible:[--line-alpha:2.6] data-popup-open:[--line-alpha:2.6]"
         >
           <span className="text-muted-foreground">Sort:</span>
           <span className="truncate">{triggerLabel}</span>
@@ -52,7 +52,7 @@ export function LoadoutSortControls({
           return (
             <div
               key={opt.key}
-              className="flex items-center gap-0.5 rounded-md px-1 py-0.5"
+              className="flex items-center gap-0.5 rounded-[4px] px-1 py-0.5"
             >
               <span
                 className={cn(
@@ -75,7 +75,7 @@ export function LoadoutSortControls({
                     className={cn(
                       "size-4",
                       active && sort.asc
-                        ? "text-emphatic"
+                        ? "text-foreground"
                         : "text-muted-foreground",
                     )}
                     aria-hidden
@@ -95,7 +95,7 @@ export function LoadoutSortControls({
                     className={cn(
                       "size-4",
                       active && !sort.asc
-                        ? "text-emphatic"
+                        ? "text-foreground"
                         : "text-muted-foreground",
                     )}
                     aria-hidden

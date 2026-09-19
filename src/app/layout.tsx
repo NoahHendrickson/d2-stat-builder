@@ -34,6 +34,8 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable}`}
     >
       <body className="h-dvh antialiased">
+        {/* The blurred scene every panel floats over. */}
+        <div className="app-backdrop" aria-hidden />
         <Providers>
           <AppShell>{children}</AppShell>
           <LoadingScreen />

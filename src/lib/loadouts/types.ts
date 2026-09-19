@@ -21,7 +21,7 @@ const MAX_ARTIFACT_UNLOCKS = 40;
 const MAX_PLACEMENT_ITEMS = 8;
 const MAX_PLACEMENT_SOCKETS = 12;
 const MAX_STAT_CONSTRAINTS = 6;
-const MAX_SET_BONUSES = 8;
+export const MAX_SET_BONUSES = 8;
 
 /**
  * The builder state a loadout was generated from — the parts DIM's `parameters` can't
@@ -65,6 +65,17 @@ export interface SavedLoadout extends SavedLoadoutData {
   /** Epoch ms. */
   createdAt: number;
   updatedAt: number;
+}
+
+/**
+ * Prefer `cached` when it was written later. An in-flight PUT must not replace a
+ * newer edit that already landed (tag vs rename racing on the same row).
+ */
+export function newerSavedLoadout(
+  cached: SavedLoadout,
+  incoming: SavedLoadout,
+): SavedLoadout {
+  return cached.updatedAt > incoming.updatedAt ? cached : incoming;
 }
 
 // --- primitives ---
@@ -283,6 +294,7 @@ export function parseBuilderSnapshot(v: unknown): BuilderSnapshot | null {
     balancedTuning: v.balancedTuning,
     legacyExotics: v.legacyExotics,
     // Added after the first snapshots shipped: default off when absent.
+    lowerTierArmor: v.lowerTierArmor === true,
     powerRange: parsePowerRange(v.powerRange),
     activeSubclass: v.activeSubclass as Subclass,
     fragmentHashes,
@@ -341,10 +353,109 @@ export function parseSavedLoadout(v: unknown): SavedLoadout | null {
   return { ...data, id: v.id, createdAt: v.createdAt, updatedAt: v.updatedAt };
 }
 
+/** Same alphabet as `loadoutHashtags` — letters, numbers, underscore, hyphen. */
+export const MAX_TAG_LENGTH = 40;
+export const MAX_TAGS = 24;
+const TAG_BODY = /^[\p{L}\p{N}_-]+$/u;
+
 /** Hashtags (`#pve`, `#raid`) from a loadout's name + notes, lower-cased and deduped. */
 export function loadoutHashtags(loadout: Pick<DimLoadout, "name" | "notes">): string[] {
-  const text = `${loadout.name} ${loadout.notes ?? ""}`;
+  return hashtagsIn(`${loadout.name} ${loadout.notes ?? ""}`);
+}
+
+/** Hashtags stored in notes only — the ones the tag menu can toggle. */
+export function loadoutNotesHashtags(notes: string | undefined): string[] {
+  return hashtagsIn(notes ?? "");
+}
+
+function hashtagsIn(text: string): string[] {
   const out = new Set<string>();
-  for (const m of text.matchAll(/(?:^|\s)#([\p{L}\p{N}_-]+)/gu)) out.add(m[1].toLowerCase());
+  for (const m of text.matchAll(/(?:^|\s)#([\p{L}\p{N}_-]+)/gu)) {
+    out.add(m[1].toLowerCase());
+  }
   return [...out];
+}
+
+/** Strip a leading `#`, trim, lower-case. Null when empty or not a legal tag. */
+function tagBody(raw: string): string | null {
+  const tag = raw.trim().replace(/^#+/, "").toLowerCase();
+  return tag && TAG_BODY.test(tag) ? tag : null;
+}
+
+/** `tagBody`, held to the length a new tag may be. Null when it doesn't qualify. */
+export function normalizeTag(raw: string): string | null {
+  const tag = tagBody(raw);
+  return tag !== null && tag.length <= MAX_TAG_LENGTH ? tag : null;
+}
+
+/**
+ * Remove one hashtag from a body of text, taking only the whitespace that attached
+ * it: a tag between words leaves a single space behind, a tag that had a line to
+ * itself takes the line. Blank lines, indentation and runs of spaces elsewhere are
+ * the user's prose and are left exactly as typed.
+ */
+function stripTag(text: string, tag: string): string {
+  const escaped = tag.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return text
+    .replace(
+      new RegExp(`(^|\\s)#${escaped}(?![\\p{L}\\p{N}_-])[ \\t]*`, "giu"),
+      (match: string, before: string, offset: number, whole: string) => {
+        const end = offset + match.length;
+        const endOfLine = end >= whole.length || whole[end] === "\n";
+        if (before === "\n" || before === "\r") return endOfLine ? "" : before;
+        return before === "" || endOfLine ? "" : " ";
+      },
+    )
+    .trim();
+}
+
+export type TagEditResult =
+  | { status: "applied"; loadout: DimLoadout }
+  | { status: "unchanged" }
+  | { status: "refused"; reason: "invalid" | "cap" | "overflow" };
+
+/**
+ * Add or remove a hashtag on a loadout. New tags are written to `loadout.notes`
+ * (DIM's tag storage); removal also clears the name, because the badges, the tag
+ * filter and the cap all read name + notes — a tag left in the name would keep
+ * showing after the player took it off. Distinguishes a no-op from a refused edit.
+ */
+export function editLoadoutTag(
+  loadout: DimLoadout,
+  raw: string,
+  present: boolean,
+): TagEditResult {
+  // Adding is held to MAX_TAG_LENGTH; removing is not, so a longer tag that
+  // predates the limit (or arrived from DIM) can still be taken off.
+  const tag = present ? normalizeTag(raw) : tagBody(raw);
+  if (!tag) return { status: "refused", reason: "invalid" };
+  const tags = new Set(loadoutHashtags(loadout));
+  if (present) {
+    if (tags.has(tag)) return { status: "unchanged" };
+    if (tags.size >= MAX_TAGS) return { status: "refused", reason: "cap" };
+    const notes = (loadout.notes ?? "").trimEnd();
+    const next = notes ? `${notes} #${tag}` : `#${tag}`;
+    if (next.length > MAX_NOTES_LENGTH) return { status: "refused", reason: "overflow" };
+    return { status: "applied", loadout: { ...loadout, notes: next } };
+  }
+
+  if (!tags.has(tag)) return { status: "unchanged" };
+  const notes = loadout.notes ?? "";
+  const strippedNotes = stripTag(notes, tag);
+  // A name that is nothing but the tag stays as it is — every loadout needs a name.
+  const strippedName = stripTag(loadout.name, tag);
+  const name = strippedName || loadout.name;
+  if (strippedNotes === notes.trim() && name === loadout.name) {
+    return { status: "unchanged" };
+  }
+  const next: DimLoadout = { ...loadout, name };
+  if (strippedNotes) next.notes = strippedNotes;
+  else delete next.notes;
+  return { status: "applied", loadout: next };
+}
+
+/** `editLoadoutTag`, where a no-op or a refusal returns the same object. */
+export function withLoadoutTag(loadout: DimLoadout, raw: string, present: boolean): DimLoadout {
+  const result = editLoadoutTag(loadout, raw, present);
+  return result.status === "applied" ? result.loadout : loadout;
 }

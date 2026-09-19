@@ -16,7 +16,6 @@ import { useManifest } from "@/lib/manifest/use-manifest";
 import { useOptimizer } from "@/lib/optimizer/use-optimizer";
 import { useSmoothedProgress } from "@/lib/use-smoothed-progress";
 import { createValueStore } from "@/lib/value-store";
-import { liveTargets } from "@/lib/builder/live-targets";
 import { availableSets } from "@/lib/armory/sets";
 import {
   DEFAULT_SET_FILTERS,
@@ -44,13 +43,12 @@ import {
   dreamersBondPiece,
   dreamersClassItemName,
 } from "@/lib/armory/dreamers-bond";
+import { ownedFestivalMasks } from "@/lib/armory/festival-masks";
 import {
-  helmetCandidates,
+  buildOptimizerSlots,
   inDefaultOptimizerPool,
-  ownedFestivalMasks,
-} from "@/lib/armory/festival-masks";
+} from "@/lib/armory/optimizer-pool";
 import {
-  ARMOR_SLOTS,
   BALANCED_TUNING_PLUG_HASH,
   CLASS_NAMES,
   STAT_DISPLAY_ORDER,
@@ -59,12 +57,12 @@ import {
   offArchetypeIndices,
   type StatIconMap,
 } from "@/lib/armory/stats";
-import type { ArmorPiece } from "@/lib/armory/normalize";
+import { itemWatermark, type ArmorPiece } from "@/lib/armory/normalize";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
-import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { StatTargetRow } from "@/components/builder/stat-target-row";
+import { SectionHeading } from "@/components/section-heading";
 import { SetRow } from "@/components/builder/set-row";
 import { ArmoryStatus } from "@/components/armory/armory-status";
 import { ManifestStatus } from "@/components/manifest/manifest-status";
@@ -73,7 +71,7 @@ import { ExoticClassPerkPicker } from "@/components/builder/exotic-class-perk-pi
 import { FragmentPicker } from "@/components/builder/fragment-picker";
 import { SetListControls } from "@/components/builder/set-list-controls";
 import { ClassEmblemTabs } from "@/components/builder/class-emblem-tabs";
-import { TuningControls } from "@/components/builder/tuning-controls";
+import { SettingRow } from "@/components/builder/setting-row";
 import { PowerRangeControls } from "@/components/builder/power-range-controls";
 import { BuildsSurface } from "@/components/builder/builds-surface";
 import type { BuildsColumnContentProps } from "@/components/builder/builds-column-content";
@@ -81,6 +79,7 @@ import type { ExoticConstraint, OptimizerPiece } from "@/lib/optimizer/types";
 import {
   DEFAULT_POWER_RANGE,
   forcesDreamersBond,
+  includesLegacyArmor,
   loadSelections,
   saveSelections,
   fragSelToArrays,
@@ -102,7 +101,7 @@ import {
   SUBCLASS_ITEM_HASHES,
 } from "@/lib/dim/subclasses";
 import { useApplyCurrentFragments } from "@/lib/armory/use-apply-current-fragments";
-import type { BuilderSnapshot } from "@/lib/loadouts/types";
+import { MAX_SET_BONUSES, type BuilderSnapshot } from "@/lib/loadouts/types";
 
 const MAX_MODS = 5;
 
@@ -169,9 +168,6 @@ export function BuilderPanel({
   const [exoticPerks, setExoticPerks] = useState<
     [number | null, number | null]
   >(() => initialSaved?.exoticPerks ?? [null, null]);
-  const [allowTuning, setAllowTuning] = useState(
-    initialSaved?.allowTuning ?? true,
-  );
   const [useBalancedTuning, setUseBalancedTuning] = useState(
     initialSaved?.balancedTuning ?? true,
   );
@@ -185,16 +181,21 @@ export function BuilderPanel({
           SUBCLASSES.map((s) => [s, new Set<number>()]),
         ) as Record<Subclass, Set<number>>),
   );
-  // Legacy EXOTICS are supported (the solver spends their artifice +3); legacy
-  // legendaries are not yet — that toggle stays disabled.
+  // Legacy EXOTICS: the solver spends their artifice +3.
   const [useLegacyExotics, setUseLegacyExotics] = useState(
     initialSaved?.legacyExotics ?? true,
+  );
+  // Tier 1–4 Armor 3.0 legendaries: no tuning socket, otherwise ordinary pieces.
+  const [useLowerTierArmor, setUseLowerTierArmor] = useState(
+    initialSaved?.lowerTierArmor ?? false,
   );
   const [powerRange, setPowerRange] = useState<PowerRangeSelection>(
     () => initialSaved?.powerRange ?? DEFAULT_POWER_RANGE,
   );
-  // Dreamer's Bond is a "Power matters" option: checked but with the toggle off, it's inert.
+  // Dreamer's Bond and legacy armor are "Power matters" options: checked but with the
+  // toggle off, they're inert.
   const useDreamersBond = forcesDreamersBond(powerRange);
+  const useLegacyArmor = includesLegacyArmor(powerRange);
 
   // The exotic is persisted by name and resolved to an index once the live exotics list
   // exists; while it's pending (not `undefined`), the save effect holds off so a
@@ -229,13 +230,19 @@ export function BuilderPanel({
 
   // Candidate pool for the optimizer: Tier-5 pieces (exactly those with a tuning
   // socket) plus — when enabled — legacy/non-tunable exotics, whose artifice +3 the
-  // solver spends. Legacy legendaries stay excluded until supported. FotL masks
-  // are never in this pool; they replace the helmet slot when that toggle is on, and
-  // join it as optional power-0 candidates while "Power matters" is on.
+  // solver spends, Tier 1–4 Armor 3.0 legendaries, and (only while "Power matters" is
+  // on) legacy Armor 2.0 legendaries. FotL masks are never in this pool; they join the
+  // helmet slot as optional power-0 candidates while "Power matters" is on.
   const pool = useMemo(
     () =>
-      classPieces.filter((p) => inDefaultOptimizerPool(p, useLegacyExotics)),
-    [classPieces, useLegacyExotics],
+      classPieces.filter((p) =>
+        inDefaultOptimizerPool(p, {
+          legacyExotics: useLegacyExotics,
+          lowerTierArmor: useLowerTierArmor,
+          legacyArmor: useLegacyArmor,
+        }),
+      ),
+    [classPieces, useLegacyExotics, useLowerTierArmor, useLegacyArmor],
   );
 
   const sets = useMemo(
@@ -270,15 +277,30 @@ export function BuilderPanel({
 
   // Set requirements narrowed to sets the player owns for this class: a restored (or
   // class-corrected) requirement for a set they no longer own would make every build
-  // infeasible. Everything downstream — the optimizer, persistence, loadout snapshots —
-  // reads this; the toggles only ever list owned sets, so the raw state needs no pruning.
-  // Left untouched until the set list exists so stored requirements survive the load.
+  // infeasible. The optimizer and DIM/export read this pruned view; persistence and
+  // "Load in builder" keep the raw `setReqs` so turning a pool toggle off can't
+  // permanently drop a requirement for a set that only exists on the wider pool.
   const ownedSetReqs = useMemo(() => {
     if (!setMap.size) return setReqs;
     const kept = Object.entries(setReqs).filter(([h]) => setMap.has(Number(h)));
     return kept.length === Object.keys(setReqs).length
       ? setReqs
       : (Object.fromEntries(kept) as Record<number, 2 | 4>);
+  }, [setReqs, setMap]);
+
+  // What persistence and "Load in builder" store: the raw map, capped at what
+  // parseBuilderSnapshot accepts. Requirements for sets that left the pool are
+  // invisible in the UI, so without the cap they accumulate silently and every
+  // later save is rejected with a bare "Invalid loadout". Owned ones take the
+  // slots first; orphans fill what's left.
+  const persistedSetReqs = useMemo(() => {
+    const entries = Object.entries(setReqs);
+    if (entries.length <= MAX_SET_BONUSES) return setReqs;
+    const owned = entries.filter(([h]) => setMap.has(Number(h)));
+    const orphans = entries.filter(([h]) => !setMap.has(Number(h)));
+    return Object.fromEntries(
+      [...owned, ...orphans].slice(0, MAX_SET_BONUSES),
+    ) as Record<number, 2 | 4>;
   }, [setReqs, setMap]);
 
   const fragments = useMemo(
@@ -384,24 +406,46 @@ export function BuilderPanel({
   // with different hashes; the optimizer picks whichever version builds best.
   // Exotic class items are always listed (from the manifest) even when unowned.
   const exotics = useMemo(() => {
-    const map = new Map<string, { hashes: number[]; icon?: string }>();
+    const map = new Map<
+      string,
+      { hashes: number[]; icon?: string; watermark?: string; isTier5?: boolean }
+    >();
     for (const p of pool) {
       if (!p.isExotic) continue;
-      const entry = map.get(p.name) ?? { hashes: [], icon: p.icon };
+      const entry = map.get(p.name) ?? {
+        hashes: [],
+        icon: p.icon,
+        watermark: p.watermark,
+        isTier5: p.tunedStat !== undefined,
+      };
       if (!entry.hashes.includes(p.itemHash)) entry.hashes.push(p.itemHash);
       if (!entry.icon) entry.icon = p.icon;
+      if (!entry.watermark && p.watermark) entry.watermark = p.watermark;
+      if (p.tunedStat !== undefined) entry.isTier5 = true;
       map.set(p.name, entry);
     }
     if (manifest && classType !== null) {
       for (const item of availableExoticClassItems(manifest, classType)) {
-        const entry = map.get(item.name) ?? { hashes: [], icon: item.icon };
+        const entry = map.get(item.name) ?? {
+          hashes: [],
+          icon: item.icon,
+          watermark: itemWatermark(
+            manifest.def("DestinyInventoryItemDefinition", item.hash),
+          ),
+          isTier5: true,
+        };
         if (!entry.hashes.includes(item.hash)) entry.hashes.push(item.hash);
         if (!entry.icon) entry.icon = item.icon;
+        if (!entry.watermark) {
+          entry.watermark = itemWatermark(
+            manifest.def("DestinyInventoryItemDefinition", item.hash),
+          );
+        }
         map.set(item.name, entry);
       }
     }
     return [...map]
-      .map(([name, { hashes, icon }]) => ({ name, hashes, icon }))
+      .map(([name, rest]) => ({ name, ...rest }))
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [pool, manifest, classType]);
 
@@ -483,37 +527,77 @@ export function BuilderPanel({
   // the same contract runOptimizer uses (enabled with no bounds constrains nothing).
   const powerConstrained = toOptimizerPowerRange(powerRange) !== undefined;
 
-  // The optimizer's candidates per slot, in ARMOR_SLOTS order: the class-item pool
-  // (Spirit-filtered / Dreamer's-pinned), the helmet pool per helmetCandidates (masks
-  // optional under a power range / absent), the T5 pool otherwise. runOptimizer maps
-  // these to OptimizerPieces; the power range controls read their power.
+  // The optimizer's candidates per slot: the class-item pool (Spirit-filtered /
+  // Dreamer's-pinned), the helmet pool per helmetCandidates (masks optional under a
+  // power range), the T5 pool otherwise. runOptimizer maps these to OptimizerPieces;
+  // the power range controls read their power.
   const slotPieces = useMemo(
     () =>
-      ARMOR_SLOTS.map((slot) =>
-        slot === "classItem"
-          ? classItemPieces
-          : slot === "helmet"
-            ? helmetCandidates(
-                pool.filter((p) => p.slot === "helmet"),
-                festivalMaskHelmets,
-                powerConstrained,
-              )
-            : pool.filter((p) => p.slot === slot),
-      ),
+      buildOptimizerSlots(pool, {
+        classItemPieces,
+        masks: festivalMaskHelmets,
+        powerConstrained,
+      }),
     [pool, classItemPieces, festivalMaskHelmets, powerConstrained],
   );
 
   // The pool as it stands once Power matters is ON — identical while it is; with the
-  // toggle off and Dreamer's Bond checked, the class-item slot the toggle will pin. The
-  // power controls seed the first-enable range from this, so the seed can't be read off
-  // a slot the same click replaces with a 21-power piece.
+  // toggle off, the same builder runs again with Dreamer's pinned (if checked) and
+  // legacy legendaries admitted (if checked), including class items. Spirit selection
+  // is applied too, so a theoretical exotic class item seeds the first-enable range.
   const powerSlotPieces = useMemo(() => {
-    if (useDreamersBond || !powerRange.dreamersBond) return slotPieces;
-    const pinned = dreamersPiece ? [dreamersPiece] : [];
-    return slotPieces.map((pieces, i) =>
-      ARMOR_SLOTS[i] === "classItem" ? pinned : pieces,
+    if (powerRange.enabled) return slotPieces;
+    const previewPool = classPieces.filter((p) =>
+      inDefaultOptimizerPool(p, {
+        legacyExotics: useLegacyExotics,
+        lowerTierArmor: useLowerTierArmor,
+        legacyArmor: powerRange.legacyArmor,
+      }),
     );
-  }, [slotPieces, useDreamersBond, powerRange.dreamersBond, dreamersPiece]);
+    let previewClassItems;
+    if (powerRange.dreamersBond) {
+      previewClassItems = dreamersPiece ? [dreamersPiece] : [];
+    } else {
+      previewClassItems = previewPool.filter((p) => p.slot === "classItem");
+      if (
+        manifest &&
+        classType !== null &&
+        selectedClassItemHash !== undefined
+      ) {
+        previewClassItems = applySpiritSelectionToClassItems(
+          previewClassItems,
+          manifest,
+          {
+            selectedClassItemHash,
+            exoticPerks,
+            name: selectedExoticOption?.name ?? "Exotic class item",
+            icon: selectedExoticOption?.icon,
+            classType,
+          },
+        );
+      }
+    }
+    return buildOptimizerSlots(previewPool, {
+      classItemPieces: previewClassItems,
+      masks: festivalMaskHelmets,
+      powerConstrained: true,
+    });
+  }, [
+    slotPieces,
+    classPieces,
+    useLegacyExotics,
+    useLowerTierArmor,
+    powerRange.enabled,
+    powerRange.dreamersBond,
+    powerRange.legacyArmor,
+    dreamersPiece,
+    festivalMaskHelmets,
+    manifest,
+    classType,
+    selectedClassItemHash,
+    selectedExoticOption,
+    exoticPerks,
+  ]);
 
   // A stored exotic class item loses to a forced Dreamer's Bond on restore. From then on
   // the exotic picker and the power-range handler keep the two exclusive, so no effect
@@ -554,9 +638,9 @@ export function BuilderPanel({
       setSetReqs(saved.setReqs);
       setPinnedSets(saved.pinnedSets);
       setSetFilters(saved.setFilters);
-      setAllowTuning(saved.allowTuning);
       setUseBalancedTuning(saved.balancedTuning);
       setUseLegacyExotics(saved.legacyExotics);
+      setUseLowerTierArmor(saved.lowerTierArmor);
       setPowerRange(saved.powerRange);
       setActiveSubclass(saved.activeSubclass);
       setFragSel(fragSelFromArrays(saved.fragSel));
@@ -586,7 +670,7 @@ export function BuilderPanel({
         classType,
         targets,
         major,
-        setReqs: ownedSetReqs,
+        setReqs: persistedSetReqs,
         pinnedSets,
         setFilters,
         exoticName:
@@ -594,9 +678,10 @@ export function BuilderPanel({
             ? null
             : (exotics[selectedExotic]?.name ?? null),
         exoticPerks,
-        allowTuning,
+        allowTuning: true,
         balancedTuning: useBalancedTuning,
         legacyExotics: useLegacyExotics,
+        lowerTierArmor: useLowerTierArmor,
         powerRange,
         activeSubclass,
         fragSel: fragSelToArrays(fragSel),
@@ -609,15 +694,15 @@ export function BuilderPanel({
     classType,
     targets,
     major,
-    ownedSetReqs,
+    persistedSetReqs,
     pinnedSets,
     setFilters,
     selectedExotic,
     exotics,
     exoticPerks,
-    allowTuning,
     useBalancedTuning,
     useLegacyExotics,
+    useLowerTierArmor,
     powerRange,
     activeSubclass,
     fragSel,
@@ -665,7 +750,7 @@ export function BuilderPanel({
       mods: { major, minor: MAX_MODS - major },
       setRequirements,
       exotic,
-      allowTuning,
+      allowTuning: true,
       allowBalancedTuning: useBalancedTuning,
       fragmentBonus,
       powerRange: toOptimizerPowerRange(powerRange),
@@ -679,7 +764,6 @@ export function BuilderPanel({
     setRequirements,
     selectedExotic,
     exotics,
-    allowTuning,
     useBalancedTuning,
     fragmentBonus,
     powerRange,
@@ -744,14 +828,30 @@ export function BuilderPanel({
     [],
   );
 
-  const toggleSet = useCallback((setHash: number, count: 2 | 4) => {
-    setSetReqs((prev) => {
-      const next = { ...prev };
-      if (next[setHash] === count) delete next[setHash];
-      else next[setHash] = count;
-      return next;
-    });
-  }, []);
+  const toggleSet = useCallback(
+    (setHash: number, count: 2 | 4) => {
+      setSetReqs((prev) => {
+        const next = { ...prev };
+        if (next[setHash] === count) {
+          delete next[setHash];
+          return next;
+        }
+        next[setHash] = count;
+        // Requirements for sets no longer in the pool are kept (a pool toggle
+        // shouldn't drop one for good) but they're invisible here, so they must
+        // never crowd out a pick the player can actually see.
+        const keys = Object.keys(next);
+        if (keys.length > MAX_SET_BONUSES) {
+          const evict =
+            keys.find((h) => Number(h) !== setHash && !setMap.has(Number(h))) ??
+            keys.find((h) => Number(h) !== setHash);
+          if (evict !== undefined) delete next[Number(evict)];
+        }
+        return next;
+      });
+    },
+    [setMap],
+  );
 
   const togglePin = useCallback((setHash: number) => {
     setPinnedSets((prev) =>
@@ -771,15 +871,16 @@ export function BuilderPanel({
     () => ({
       targets,
       major,
-      setReqs: ownedSetReqs,
+      setReqs: persistedSetReqs,
       exoticName:
         selectedExotic === null
           ? null
           : (exotics[selectedExotic]?.name ?? null),
       exoticPerks,
-      allowTuning,
+      allowTuning: true,
       balancedTuning: useBalancedTuning,
       legacyExotics: useLegacyExotics,
+      lowerTierArmor: useLowerTierArmor,
       powerRange,
       activeSubclass,
       fragmentHashes: [...fragSel[activeSubclass]],
@@ -787,13 +888,13 @@ export function BuilderPanel({
     [
       targets,
       major,
-      ownedSetReqs,
+      persistedSetReqs,
       selectedExotic,
       exotics,
       exoticPerks,
-      allowTuning,
       useBalancedTuning,
       useLegacyExotics,
+      useLowerTierArmor,
       powerRange,
       activeSubclass,
       fragSel,
@@ -807,17 +908,20 @@ export function BuilderPanel({
   // a discarded concurrent render can never leave it stale. (A plain ref would do the same
   // job, but react-hooks/refs flags a ref-reading callback passed into useMemo.)
   const [builderState] = useState(() =>
-    createValueStore({ targets, builderSnapshot }),
+    createValueStore({
+      targets,
+      builderSnapshot,
+      setBonuses: ownedSetReqs,
+    }),
   );
   useLayoutEffect(() => {
-    builderState.set({ targets, builderSnapshot });
+    builderState.set({
+      targets,
+      builderSnapshot,
+      setBonuses: ownedSetReqs,
+    });
   });
   const getBuilderState = builderState.get;
-  // The rows' stat chips light up on met targets; they subscribe to this store per chip
-  // (selector → boolean), so a drag re-renders only the chips whose state flips.
-  useLayoutEffect(() => {
-    liveTargets.set(targets);
-  }, [targets]);
 
   const buildsProps: BuildsColumnContentProps = useMemo(
     () => ({
@@ -871,24 +975,26 @@ export function BuilderPanel({
   );
 
   return (
-    <div className="mx-auto grid w-full max-w-7xl grid-cols-1 gap-10 lg:grid-cols-[minmax(18rem,33.12rem)_minmax(29rem,1fr)] lg:items-start lg:gap-x-20">
-      {/* Left — configure the build. 33.12rem cap so the builds column is 15%
-          wider at max-w-7xl. Sections: 1px dividers, 32px above and below. */}
-      <div className="divide-border divide-y">
-        {ready && (
+    <div className="grid h-full min-h-0 w-full flex-1 grid-cols-1 gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,39.74rem)_5rem_minmax(0,calc((80rem-39.74rem-5rem)*1.15))_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)] lg:gap-x-0">
+      {/* Settings scroller spans the left leftover + the card column, so
+          wheel-scrolling anywhere to the left of the cards still moves this
+          pane. Inner max-width keeps the cards on the 39.74rem track. Mins are
+          0 so the two columns share a narrow main pane instead of overflowing
+          past `lg:overflow-hidden`. */}
+      <div className="d2-scroll flex min-h-0 min-w-0 flex-col lg:col-start-1 lg:col-end-3 lg:overflow-y-auto lg:overscroll-contain lg:pl-6 lg:pr-2">
+        <div className="flex flex-col gap-4 lg:ml-auto lg:w-full lg:max-w-[39.74rem]">
+          {ready && (
           <>
             {classes.length > 1 && classType !== null && (
-              <div className="pb-8">
-                <ClassEmblemTabs
-                  characters={armory?.characters ?? []}
-                  value={classType}
-                  onChange={onClassChange}
-                />
-              </div>
+              <ClassEmblemTabs
+                characters={armory?.characters ?? []}
+                value={classType}
+                onChange={onClassChange}
+              />
             )}
 
-            <Section>
-              <div className="space-y-8">
+            <Section title="Stats">
+              <div className="space-y-7">
                 {STAT_DISPLAY_ORDER.map((key) => {
                   const i = STAT_ORDER.indexOf(key);
                   return (
@@ -906,12 +1012,12 @@ export function BuilderPanel({
               </div>
             </Section>
 
-            <Section title="Major mods" className="space-y-2">
+            <Section title="Major mods">
               <Tabs
                 value={String(major)}
                 onValueChange={(v) => setMajor(Number(v))}
               >
-                <TabsList>
+                <TabsList variant="icon" aria-label="Major stat mods">
                   {[0, 1, 2, 3, 4, 5].map((n) => (
                     <TabsTrigger key={n} value={String(n)}>
                       {n}
@@ -921,27 +1027,24 @@ export function BuilderPanel({
               </Tabs>
             </Section>
 
-            <Section>
+            <Section title="Exotic">
               <ExoticPicker
                 options={exotics}
                 selected={selectedExotic}
                 onSelect={onExoticSelect}
               />
               {spiritPerks && !useDreamersBond && (
-                <div className="mt-4">
-                  <ExoticClassPerkPicker
-                    left={spiritPerks.left}
-                    right={spiritPerks.right}
-                    selected={exoticPerks}
-                    onChange={setExoticPerks}
-                    statIcons={statIcons}
-                  />
-                </div>
+                <ExoticClassPerkPicker
+                  left={spiritPerks.left}
+                  right={spiritPerks.right}
+                  selected={exoticPerks}
+                  onChange={setExoticPerks}
+                  statIcons={statIcons}
+                />
               )}
             </Section>
 
-            <Section className="space-y-0">
-              {/* Figma 17:5659: full-width search, then the count line with sort + settings */}
+            <Section title="Set bonuses">
               <div className="space-y-2">
                 <div className="relative">
                   <MagnifyingGlass
@@ -966,11 +1069,11 @@ export function BuilderPanel({
                 />
               </div>
               {sets.length === 0 ? (
-                <p className="text-muted-foreground pt-4 text-xs">
+                <p className="text-muted-foreground text-xs">
                   No set-bonus armor found for this class.
                 </p>
               ) : pinnedList.length === 0 && unpinnedList.length === 0 ? (
-                <p className="text-muted-foreground pt-4 text-xs">
+                <p className="text-muted-foreground text-xs">
                   {setQuery.trim() && customSetFilters
                     ? `No sets match "${setQuery.trim()}" with the current settings.`
                     : setQuery.trim()
@@ -981,7 +1084,7 @@ export function BuilderPanel({
                 </p>
               ) : (
                 // Figma 17:5731: name · 2pc perk · 4pc perk columns, 16px row gap
-                <div className="grid grid-cols-[minmax(0,1.4fr)_minmax(0,0.75fr)_minmax(0,1fr)] items-center gap-x-4 gap-y-4 pt-4">
+                <div className="grid grid-cols-[minmax(0,1.4fr)_minmax(0,0.75fr)_minmax(0,1fr)] items-center gap-x-4 gap-y-4">
                   {pinnedList.map((s) => (
                     <SetRow
                       key={s.setHash}
@@ -1012,7 +1115,7 @@ export function BuilderPanel({
               )}
             </Section>
 
-            <Section>
+            <Section title="Fragments">
               {fragments && (
                 <FragmentPicker
                   fragments={fragments}
@@ -1028,54 +1131,38 @@ export function BuilderPanel({
               )}
             </Section>
 
-            <Section title="Tier-5 tuning">
-              <TuningControls
-                allowTuning={allowTuning}
-                onAllowTuningChange={setAllowTuning}
-                useBalancedTuning={useBalancedTuning}
-                onUseBalancedTuningChange={setUseBalancedTuning}
-              />
+            <Section title="Advanced settings">
+              <div className="flex flex-col gap-4">
+                <SettingRow
+                  checkbox
+                  checked={useBalancedTuning}
+                  onCheckedChange={setUseBalancedTuning}
+                  title="Use balanced tuning mods"
+                  description="When off, builds are searched without the Balanced (+1 to off-stats) tune. Directional tuning stays available."
+                />
+                <SettingRow
+                  checkbox
+                  checked={useLegacyExotics}
+                  onCheckedChange={setUseLegacyExotics}
+                  title="Legacy exotics"
+                  description="Include Armor 2.0 exotics"
+                />
+                <SettingRow
+                  checkbox
+                  checked={useLowerTierArmor}
+                  onCheckedChange={setUseLowerTierArmor}
+                  title="Lower tier armor"
+                  description="Include Tier 1–4 Armor 3.0 legendaries. They can't be tuned, but they still count toward set bonuses."
+                />
+              </div>
             </Section>
-
-            <Section title="Power">
+            <Section title="Underlight settings">
               <PowerRangeControls
                 value={powerRange}
                 onChange={onPowerRangeChange}
                 slotPieces={powerSlotPieces}
                 dreamersItemName={dreamersClassItemName(classType ?? 2)}
               />
-            </Section>
-
-            <Section title="Armor pool">
-              <div className="space-y-3">
-                <div className="flex items-center justify-between gap-4">
-                  <div className="space-y-0.5">
-                    <span className="text-sm">Legacy exotics</span>
-                    <p className="text-muted-foreground text-xs">
-                      Include Armor 2.0 exotics — the optimizer spends their
-                      artifice +3 automatically.
-                    </p>
-                  </div>
-                  <Switch
-                    checked={useLegacyExotics}
-                    onCheckedChange={setUseLegacyExotics}
-                    aria-label="Include legacy exotics"
-                  />
-                </div>
-                <div className="flex items-center justify-between gap-4">
-                  <div className="space-y-0.5">
-                    <span className="text-sm">Legacy legendaries</span>
-                    <p className="text-muted-foreground text-xs">
-                      Not possible yet.
-                    </p>
-                  </div>
-                  <Switch
-                    checked={false}
-                    disabled
-                    aria-label="Include legacy legendaries (not possible yet)"
-                  />
-                </div>
-              </div>
             </Section>
           </>
         )}
@@ -1092,10 +1179,13 @@ export function BuilderPanel({
           </div>
         )}
       </div>
+      </div>
 
-      {/* Right — builds. */}
-      <div className="min-w-0">
-        <BuildsSurface {...buildsProps} />
+      {/* Builds scroller spans the results column + the right leftover. */}
+      <div className="d2-scroll min-h-0 min-w-0 lg:col-start-4 lg:col-end-6 lg:overflow-y-auto lg:overscroll-contain lg:pr-6 lg:pl-2">
+        <div className="lg:max-w-[calc((80rem-39.74rem-5rem)*1.15)]">
+          <BuildsSurface {...buildsProps} />
+        </div>
       </div>
     </div>
   );
@@ -1112,8 +1202,13 @@ function Section({
   children: ReactNode;
 }) {
   return (
-    <section className={cn("space-y-3 py-8 first:pt-0", className)}>
-      {title ? <h3 className="text-sm font-medium">{title}</h3> : null}
+    <section
+      className={cn(
+        "d2-card-frame relative flex flex-col gap-3 rounded-none p-3 [--card-line-width:1.5px] hover:[--line-alpha:1.6]",
+        className,
+      )}
+    >
+      {title ? <SectionHeading>{title}</SectionHeading> : null}
       {children}
     </section>
   );

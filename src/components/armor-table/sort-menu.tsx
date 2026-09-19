@@ -33,12 +33,15 @@ import {
 } from "@/lib/armor-table/sort";
 import { CustomOrderList } from "@/components/armor-table/custom-order-list";
 
-/** Opaque stand-in for Figma's 16% black overlay — translucent fills show rows through sticky headers. */
-export const TABLE_HEADER_BG =
-  "bg-[color-mix(in_srgb,black_16%,var(--card))]";
+/**
+ * Same grey-slate fill as dropdown menus (`d2-glass` / `--glass`), without the
+ * floating line or shadow — and opaque: translucent fills show rows through
+ * sticky headers, and a backdrop blur here re-runs on every scroll frame.
+ */
+export const TABLE_HEADER_BG = "d2-sidebar-opaque";
 
 const TABLE_HEAD_CELL =
-  "border-border/50 border-b py-2.5 pr-3 text-sm font-medium whitespace-nowrap first:pl-3 " +
+  "d2-label border-b border-foreground/15 py-2.5 pr-3 whitespace-nowrap first:pl-3 " +
   TABLE_HEADER_BG;
 
 /**
@@ -154,7 +157,7 @@ export const SortMenu = memo(function SortMenu({
             <span
               aria-hidden
               className={cn(
-                "absolute flex size-4 items-center justify-center rounded-[4px] transition-colors",
+                "absolute flex size-4 items-center justify-center rounded-none transition-colors",
                 "hover:bg-accent group-data-popup-open:bg-accent",
                 align === "right"
                   ? "top-1/2 left-[calc(50%+0.5rem+2px)] -translate-y-1/2"
@@ -166,7 +169,7 @@ export const SortMenu = memo(function SortMenu({
                 className={cn(
                   "size-3 transition-opacity",
                   active
-                    ? "text-brand opacity-100"
+                    ? "text-foreground opacity-100"
                     : hovered
                       ? "opacity-40"
                       : "opacity-0 group-hover:opacity-40 group-data-popup-open:opacity-100",

@@ -4,13 +4,14 @@ import type { Subclass } from "../armory/fragments";
 import { subclassFromItemHash } from "../dim/subclasses";
 import { MAX_NAME_LENGTH, loadoutHashtags, type SavedLoadout } from "./types";
 
-export type LoadoutListSortKey = "edited" | "name" | "total";
+export type LoadoutListSortKey = "edited" | "created" | "name" | "total";
 
 export const LOADOUT_LIST_SORT_OPTIONS: readonly {
   key: LoadoutListSortKey;
   label: string;
 }[] = [
   { key: "edited", label: "Last edited" },
+  { key: "created", label: "Created at" },
   { key: "name", label: "Name" },
   { key: "total", label: "Total stats" },
 ];
@@ -24,6 +25,8 @@ export interface LoadoutListFilter {
   subclasses?: readonly Subclass[];
   /** Equipable-item-set hashes. Empty/omitted = all. Matches if the loadout has any selected set. */
   setHashes?: readonly number[];
+  /** Hashtags. Empty/omitted = all. Matches if the loadout has any selected tag. */
+  tags?: readonly string[];
   /** Resolve a set hash to its display name so the query can match set bonuses. */
   setName?: (hash: number) => string | undefined;
 }
@@ -51,6 +54,10 @@ export function filterLoadouts(
       const sets = l.loadout.parameters.setBonuses ?? {};
       if (!filter.setHashes.some((hash) => Object.hasOwn(sets, hash))) return false;
     }
+    if (filter.tags?.length) {
+      const have = loadoutHashtags(l.loadout);
+      if (!filter.tags.some((tag) => have.includes(tag))) return false;
+    }
     if (!q) return true;
     if (tag !== null) {
       return tag === "" || loadoutHashtags(l.loadout).some((t) => t.startsWith(tag));
@@ -75,11 +82,16 @@ export function sortSavedLoadouts(
       );
       break;
     case "total":
+      // Ties are common (the solver caps many rolls at the same total), so the
+      // one you touched last wins — the same recency the default sort uses.
       out.sort(
         (a, b) =>
           (b.optimizer?.total ?? -1) - (a.optimizer?.total ?? -1) ||
           b.updatedAt - a.updatedAt,
       );
+      break;
+    case "created":
+      out.sort((a, b) => b.createdAt - a.createdAt);
       break;
     case "edited":
     default:

@@ -51,6 +51,7 @@ export function selectionsForLoadout(
     allowTuning: true,
     balancedTuning: true,
     legacyExotics: true,
+    lowerTierArmor: false,
     powerRange: DEFAULT_POWER_RANGE,
     activeSubclass: opts.subclass?.subclass ?? existing?.activeSubclass ?? "Prismatic",
     fragSel: opts.subclass?.subclass
@@ -63,6 +64,8 @@ export function selectionsForLoadout(
     return {
       ...base,
       ...snapshot,
+      // Directional tuning is always on; old snapshots that stored false are upgraded.
+      allowTuning: true,
       major,
       activeSubclass: opts.subclass?.subclass ?? builder.activeSubclass,
       fragSel: opts.subclass?.subclass ? base.fragSel : { ...base.fragSel, [builder.activeSubclass]: fragmentHashes },

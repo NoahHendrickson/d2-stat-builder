@@ -14,7 +14,12 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { BUNGIE_IMAGE_BASE } from "@/lib/bungie/constants";
-import { formatFragmentStats, SUBCLASSES, type Subclass } from "@/lib/armory/fragments";
+import {
+  formatFragmentStats,
+  SUBCLASS_LINE,
+  SUBCLASSES,
+  type Subclass,
+} from "@/lib/armory/fragments";
 import {
   ABILITY_KINDS,
   ABILITY_LABELS,
@@ -76,6 +81,7 @@ function PlugOptionButton({
   compact,
   flush,
   backed,
+  element,
 }: {
   option: SubclassPlugOption;
   checked: boolean;
@@ -88,6 +94,8 @@ function PlugOptionButton({
   flush?: boolean;
   /** Opaque tint behind a flush icon (Prismatic fragments are translucent). */
   backed?: boolean;
+  /** Subclass damage type — tints the unselected cell border. */
+  element?: Subclass;
 }) {
   const tint = useIconLightTint(compact && (!flush || backed) ? option.icon : undefined);
   const recolor = isStrandSharedAbilityIcon(option.plugCategory);
@@ -104,18 +112,25 @@ function PlugOptionButton({
           onClick={() => {
             if (!disabled) onClick();
           }}
-          style={tint ? ({ "--icon-tint": tint } as CSSProperties) : undefined}
+          style={
+            {
+              ...(tint ? { "--icon-tint": tint } : {}),
+              ...(element ? { "--element-line": SUBCLASS_LINE[element] } : {}),
+            } as CSSProperties
+          }
           className={cn(
-            "focus-visible:ring-ring relative flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-none border transition-[opacity,border-color,background-color] outline-none focus-visible:ring-2",
+            "relative flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-none border transition-[opacity,border-color,background-color,box-shadow] outline-none focus-visible:d2-tile-selected",
             recolor && "isolate",
             flush ? "p-0" : "p-1",
             tint && "bg-[hsl(var(--icon-tint)_72%)] dark:bg-[hsl(var(--icon-tint)_26%)]",
             checked
-              ? "border-emphatic cursor-pointer"
+              ? "border-foreground cursor-pointer d2-tile-selected"
               : disabled
-                ? "cursor-not-allowed border-input opacity-40"
-                : "cursor-pointer border-input",
-            checked && !tint && "bg-emphatic/6",
+                ? "cursor-not-allowed border-foreground/20 opacity-40"
+                : element
+                  ? "cursor-pointer d2-element-border"
+                  : "cursor-pointer border-foreground/25 hover:border-foreground/70",
+            checked && !tint && "bg-foreground/10",
             !checked && !disabled && !tint && "hover:bg-foreground/6 focus-visible:bg-foreground/6",
           )}
         >
@@ -147,9 +162,15 @@ function PlugOptionButton({
         variant="outline"
         aria-pressed={checked}
         disabled={disabled}
+        style={
+          element
+            ? ({ "--element-line": SUBCLASS_LINE[element] } as CSSProperties)
+            : undefined
+        }
         className={cn(
           "h-auto min-h-12 w-full justify-start px-2 py-2 text-left",
-          checked && "border-brand/60 bg-brand/10",
+          checked && "border-foreground bg-foreground/10 d2-tile-selected",
+          !checked && element && "d2-element-border",
         )}
         onClick={onClick}
       >
@@ -160,7 +181,7 @@ function PlugOptionButton({
               alt=""
               width={28}
               height={28}
-              className="size-7 rounded-sm"
+              className="size-7 rounded-none"
               style={recolor ? { filter: STRAND_ABILITY_PLATE_FILTER } : undefined}
               unoptimized
             />
@@ -276,7 +297,7 @@ export function LoadoutSubclassEditor({
     <section
       className={cn(
         "group/subclass space-y-3",
-        !compact && "border-border/60 rounded-lg border p-3",
+        !compact && "border-foreground/15 rounded-none border p-3",
       )}
       data-compact={compact || undefined}
       aria-label="Subclass configuration"
@@ -289,7 +310,7 @@ export function LoadoutSubclassEditor({
           <DropdownMenuTrigger
             id={id}
             aria-label="Subclass"
-            className="inline-flex h-8 w-full min-w-0 cursor-pointer items-center justify-between gap-1.5 rounded-lg border border-input bg-transparent pr-2 pl-2.5 text-sm whitespace-nowrap transition-colors outline-none select-none hover:bg-muted/60 focus-visible:border-emphatic data-popup-open:border-emphatic dark:bg-input/30 dark:hover:bg-input/50"
+            className="inline-flex h-8 w-full min-w-0 cursor-pointer items-center justify-between gap-1.5 rounded-none border border-foreground/30 bg-black/15 pr-2 pl-2.5 text-sm whitespace-nowrap transition-colors outline-none select-none hover:border-foreground/60 focus-visible:border-outline-strong data-popup-open:border-outline-strong dark:bg-black/25"
           >
             <span className="truncate">
               {active ? `${active} · ${catalog[active].name}` : "No subclass"}
@@ -363,6 +384,7 @@ export function LoadoutSubclassEditor({
                         checked={checked}
                         compact={compact}
                         flush
+                        element={active}
                         backed={kind === "fragments" && active === "Prismatic"}
                         disabled={!checked && selected.length >= limit}
                         detail={
