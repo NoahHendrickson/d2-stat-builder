@@ -163,7 +163,11 @@ export function BuilderPanel({
   );
   /** Set-list ordering — a view preference, so it's per-session rather than persisted. */
   const [setSort, setSetSort] = useState<SetSortKey>(DEFAULT_SET_SORT);
-  const [selectedExotic, setSelectedExotic] = useState<number | null>(null);
+  // Held by name, not index: the exotics list is rebuilt (and re-indexed) whenever a
+  // pool toggle changes, and an index would slide onto whichever exotic took its place.
+  const [selectedExoticName, setSelectedExoticName] = useState<string | null>(
+    null,
+  );
   /** Exotic class item Spirit pair; null = Any. Cleared when exotic/class changes. */
   const [exoticPerks, setExoticPerks] = useState<
     [number | null, number | null]
@@ -449,6 +453,12 @@ export function BuilderPanel({
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [pool, manifest, classType]);
 
+  // An exotic that a pool toggle removed resolves to null (any exotic) and comes back
+  // with the toggle.
+  const selectedExotic = useMemo(
+    () => resolveExoticIndex(selectedExoticName, exotics),
+    [selectedExoticName, exotics],
+  );
   const selectedExoticOption =
     selectedExotic !== null ? exotics[selectedExotic] : undefined;
   const selectedClassItemHash = selectedExoticOption?.hashes.find(
@@ -603,22 +613,22 @@ export function BuilderPanel({
   // the exotic picker and the power-range handler keep the two exclusive, so no effect
   // has to referee them.
   const resolveRestoredExotic = useCallback(
-    (name: string | null, dreamersBond: boolean): number | null => {
+    (name: string | null, dreamersBond: boolean): string | null => {
       const index = resolveExoticIndex(name, exotics);
       if (index === null) return null;
       if (dreamersBond && exotics[index].hashes.some(isExoticClassItemHash)) return null;
-      return index;
+      return name;
     },
     [exotics],
   );
 
-  // Resolve the restored exotic (persisted by name) to an index once the live list exists.
+  // Resolve the restored exotic (persisted by name) once the live list exists.
   // Consumed once so a later class switch can't re-apply it; not-owned-now → cleared.
   useEffect(() => {
     if (pendingExoticName.current === undefined || !exotics.length) return;
     const name = pendingExoticName.current;
     pendingExoticName.current = undefined;
-    setSelectedExotic(resolveRestoredExotic(name, useDreamersBond));
+    setSelectedExoticName(resolveRestoredExotic(name, useDreamersBond));
   }, [exotics, resolveRestoredExotic, useDreamersBond]);
 
   // "Optimize" in the sidebar replaces the stored selections while this panel may already
@@ -646,7 +656,7 @@ export function BuilderPanel({
       setFragSel(fragSelFromArrays(saved.fragSel));
       setExoticPerks(saved.exoticPerks);
       if (saved.classType === classType && exotics.length) {
-        setSelectedExotic(
+        setSelectedExoticName(
           resolveRestoredExotic(saved.exoticName, forcesDreamersBond(saved.powerRange)),
         );
       } else {
@@ -791,12 +801,12 @@ export function BuilderPanel({
   const onClassChange = useCallback((next: number) => {
     setClassType(next);
     setSetReqs({});
-    setSelectedExotic(null);
+    setSelectedExoticName(null);
     setExoticPerks([null, null]);
   }, []);
 
   const onExoticSelect = useCallback((index: number | null) => {
-    setSelectedExotic(index);
+    setSelectedExoticName(index === null ? null : (exotics[index]?.name ?? null));
     setExoticPerks([null, null]);
     if (index === null) return;
     const hashes = exotics[index]?.hashes ?? [];
@@ -815,7 +825,7 @@ export function BuilderPanel({
         !forcesDreamersBond(powerRange) &&
         selectedClassItemHash !== undefined
       ) {
-        setSelectedExotic(null);
+        setSelectedExoticName(null);
         setExoticPerks([null, null]);
       }
     },
