@@ -342,7 +342,7 @@ input[type="number"] {
   z-index: -1;
   pointer-events: none;
   /* The blur (24px) and light mode's saturate(0.6) are baked into the assets
-     (scripts/bake-backdrop.mjs, from public/backdrop.jpg). A live `filter` on
+     (`npm run bake:backdrop`, from assets/backdrop.jpg). A live `filter` on
      a viewport-sized layer is a per-frame cost in Firefox. */
   background-image:
     linear-gradient(rgb(255 255 255 / 0.55), rgb(255 255 255 / 0.55)),
@@ -475,17 +475,6 @@ input[type="number"] {
 @utility d2-sidebar {
   background-color: var(--glass);
   backdrop-filter: blur(20px);
-}
-
-/* The same fill without the blur, for the app shell's two panes. Together they
-   cover the viewport and only the already-blurred backdrop sits behind them,
-   so a backdrop blur there changes nothing visible — but Firefox re-blurs the
-   whole viewport on every frame anything inside repaints (scroll, hover,
-   slider drag). Drawers float over live content and keep `d2-sidebar`. */
-@utility d2-sidebar-unblurred {
-  background-color: var(--glass);
-  /* Keeps the stacking context the backdrop-filter used to create. */
-  isolation: isolate;
 }
 
 /* The same fill, opaque and unblurred. A sticky table header scrolls rows under
