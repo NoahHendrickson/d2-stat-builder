@@ -338,23 +338,21 @@ input[type="number"] {
    it under a light black wash; light mode frosts it like the Character screen. */
 @utility app-backdrop {
   position: fixed;
-  /* Overscan so the blur has no soft edge at the viewport boundary. */
-  inset: -48px;
+  inset: 0;
   z-index: -1;
   pointer-events: none;
+  /* The blur (24px) and light mode's saturate(0.6) are baked into the assets
+     (`npm run bake:backdrop`, from assets/backdrop.jpg). A live `filter` on
+     a viewport-sized layer is a per-frame cost in Firefox. */
   background-image:
     linear-gradient(rgb(255 255 255 / 0.55), rgb(255 255 255 / 0.55)),
-    url("/backdrop.jpg");
+    url("/backdrop-blur-light.webp");
   background-size: cover;
   background-position: center;
-  /* The Figma scene is pre-blurred; blur the asset itself so every surface
-     (sidebar, header, stage) sits on the same soft image. */
-  filter: blur(24px) saturate(0.6);
   .dark & {
     background-image:
       linear-gradient(rgb(0 0 0 / 0.35), rgb(0 0 0 / 0.35)),
-      url("/backdrop.jpg");
-    filter: blur(24px);
+      url("/backdrop-blur.webp");
   }
 }
 
