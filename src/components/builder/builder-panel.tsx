@@ -3,7 +3,6 @@
 import {
   useCallback,
   useEffect,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -15,7 +14,6 @@ import { useArmory } from "@/lib/armory/use-armory";
 import { useManifest } from "@/lib/manifest/use-manifest";
 import { useOptimizer } from "@/lib/optimizer/use-optimizer";
 import { useSmoothedProgress } from "@/lib/use-smoothed-progress";
-import { createValueStore } from "@/lib/value-store";
 import { availableSets } from "@/lib/armory/sets";
 import {
   DEFAULT_SET_FILTERS,
@@ -101,7 +99,7 @@ import {
   SUBCLASS_ITEM_HASHES,
 } from "@/lib/dim/subclasses";
 import { useApplyCurrentFragments } from "@/lib/armory/use-apply-current-fragments";
-import { MAX_SET_BONUSES, type BuilderSnapshot } from "@/lib/loadouts/types";
+import { MAX_SET_BONUSES, type BuilderSnapshot, type QueryOrigin } from "@/lib/loadouts/types";
 
 const MAX_MODS = 5;
 
@@ -124,6 +122,7 @@ export function BuilderPanel({
     runId,
     refinement,
     applyPending,
+    getSnapshot,
   } = useOptimizer();
   // `progress` is a value store: the smoother reads it per frame and writes the eased
   // value to another store; neither touches this component's render.
@@ -729,6 +728,56 @@ export function BuilderPanel({
     [],
   );
 
+  // What a saved loadout remembers about this session, so "Load in builder" restores it.
+  const builderSnapshot = useMemo<BuilderSnapshot>(
+    () => ({
+      targets,
+      major,
+      setReqs: persistedSetReqs,
+      exoticName:
+        selectedExotic === null
+          ? null
+          : (exotics[selectedExotic]?.name ?? null),
+      exoticPerks,
+      allowTuning: true,
+      balancedTuning: useBalancedTuning,
+      legacyExotics: useLegacyExotics,
+      lowerTierArmor: useLowerTierArmor,
+      powerRange,
+      activeSubclass,
+      fragmentHashes: [...fragSel[activeSubclass]],
+    }),
+    [
+      targets,
+      major,
+      persistedSetReqs,
+      selectedExotic,
+      exotics,
+      exoticPerks,
+      useBalancedTuning,
+      useLegacyExotics,
+      useLowerTierArmor,
+      powerRange,
+      activeSubclass,
+      fragSel,
+    ],
+  );
+
+  // The state a shown build's actions (save, DIM export) act on: the query origin the
+  // store pairs with the shown result (see ShownResult). Every search hands the store
+  // the state it was dispatched from (`origin` in runOptimizer), so the rows always act
+  // on the configuration that PRODUCED the list they show — the list deliberately stays
+  // on screen while a newer query runs, sits in the debounce, or was cancelled, and the
+  // live state would combine a new subclass/targets with an old list's stats. Rows only
+  // exist when a result is shown, so a missing pair is a programming error, not a state.
+  // Stable getter (rows memoize on it): a slider drag re-renders one StatTargetRow, not
+  // fifty BuildRows; rows read it only at click time.
+  const getBuilderState = useCallback((): QueryOrigin => {
+    const shown = getSnapshot().shown;
+    if (!shown) throw new Error("A build acted on with no shown result");
+    return shown.origin;
+  }, [getSnapshot]);
+
   const runOptimizer = useCallback(() => {
     if (classType === null) return;
 
@@ -754,18 +803,25 @@ export function BuilderPanel({
       selectedExotic === null
         ? { mode: "any" }
         : { mode: "specific", hashes: exotics[selectedExotic]?.hashes ?? [] };
-    run({
-      slots,
-      minimums: targets,
-      mods: { major, minor: MAX_MODS - major },
-      setRequirements,
-      exotic,
-      allowTuning: true,
-      allowBalancedTuning: useBalancedTuning,
-      fragmentBonus,
-      powerRange: toOptimizerPowerRange(powerRange),
-      maxResults: 200,
-    });
+    run(
+      {
+        slots,
+        minimums: targets,
+        mods: { major, minor: MAX_MODS - major },
+        setRequirements,
+        exotic,
+        allowTuning: true,
+        allowBalancedTuning: useBalancedTuning,
+        fragmentBonus,
+        powerRange: toOptimizerPowerRange(powerRange),
+        maxResults: 200,
+      },
+      // The state this query is dispatched from, bound to its results (see
+      // getBuilderState). Snapshot/subclass are deps too: an edit that changes them
+      // without changing the optimizer input (a fragment swap with the same stat
+      // effect) still re-dispatches, and the store refreshes the bound state in place.
+      { targets, builderSnapshot, setBonuses: ownedSetReqs, subclass: dimSubclass },
+    );
   }, [
     slotPieces,
     classType,
@@ -777,6 +833,9 @@ export function BuilderPanel({
     useBalancedTuning,
     fragmentBonus,
     powerRange,
+    builderSnapshot,
+    ownedSetReqs,
+    dimSubclass,
     run,
   ]);
 
@@ -876,63 +935,6 @@ export function BuilderPanel({
     void refetchArmory();
   }, [refetchArmory]);
 
-  // What a saved loadout remembers about this session, so "Load in builder" restores it.
-  const builderSnapshot = useMemo<BuilderSnapshot>(
-    () => ({
-      targets,
-      major,
-      setReqs: persistedSetReqs,
-      exoticName:
-        selectedExotic === null
-          ? null
-          : (exotics[selectedExotic]?.name ?? null),
-      exoticPerks,
-      allowTuning: true,
-      balancedTuning: useBalancedTuning,
-      legacyExotics: useLegacyExotics,
-      lowerTierArmor: useLowerTierArmor,
-      powerRange,
-      activeSubclass,
-      fragmentHashes: [...fragSel[activeSubclass]],
-    }),
-    [
-      targets,
-      major,
-      persistedSetReqs,
-      selectedExotic,
-      exotics,
-      exoticPerks,
-      useBalancedTuning,
-      useLegacyExotics,
-      useLowerTierArmor,
-      powerRange,
-      activeSubclass,
-      fragSel,
-    ],
-  );
-
-  // Latest targets/snapshot without changing `buildsProps` identity on slider moves.
-  // Rows only need targets/snapshot at click time (DIM export, save), so hand them a
-  // stable getter instead of the values: a slider drag then re-renders one StatTargetRow,
-  // not fifty BuildRows. The holder is written from a layout effect, not during render, so
-  // a discarded concurrent render can never leave it stale. (A plain ref would do the same
-  // job, but react-hooks/refs flags a ref-reading callback passed into useMemo.)
-  const [builderState] = useState(() =>
-    createValueStore({
-      targets,
-      builderSnapshot,
-      setBonuses: ownedSetReqs,
-    }),
-  );
-  useLayoutEffect(() => {
-    builderState.set({
-      targets,
-      builderSnapshot,
-      setBonuses: ownedSetReqs,
-    });
-  });
-  const getBuilderState = builderState.get;
-
   const buildsProps: BuildsColumnContentProps = useMemo(
     () => ({
       ready,
@@ -952,7 +954,6 @@ export function BuilderPanel({
       statModHashes,
       tuningPlugHashes,
       artificeModHashes,
-      subclass: dimSubclass,
       getBuilderState,
       manifest,
       insertablePlugs: armory?.insertablePlugs,
@@ -976,7 +977,6 @@ export function BuilderPanel({
       statModHashes,
       tuningPlugHashes,
       artificeModHashes,
-      dimSubclass,
       getBuilderState,
       manifest,
       armory?.insertablePlugs,

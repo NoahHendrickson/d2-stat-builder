@@ -22,7 +22,7 @@ test("sums piece stats, placed mods, and fragment bonuses", () => {
     ],
   };
   const { stats, total } = sumEditorStats(
-    [{ instanceId: "helm", stats: [20, 30, 0, 0, 0, 0] }],
+    [{ instanceId: "helm", stats: [20, 30, 0, 0, 0, 0], baseStats: [20, 30, 0, 0, 0, 0] }],
     { helm: { 0: 10 } },
     [20],
     0,
@@ -34,7 +34,7 @@ test("sums piece stats, placed mods, and fragment bonuses", () => {
 
 test("clamps each stat to 0–200", () => {
   const { stats } = sumEditorStats(
-    [{ instanceId: "a", stats: [195, 5, 0, 0, 0, 0] }],
+    [{ instanceId: "a", stats: [195, 5, 0, 0, 0, 0], baseStats: [195, 0, 0, 0, 0, 0] }],
     { a: { 0: 1 } },
     [2],
     0,
@@ -53,11 +53,13 @@ test("splits placement into Mods/Tuning/Artifice so the breakdown matches the he
       {
         instanceId: "helm",
         stats: [20, 0, 0, 0, 0, 0],
+        baseStats: [20, 0, 0, 0, 0, 0],
         armorSockets: [socket(0, "general"), socket(1, "tuning")],
       },
       {
         instanceId: "arms",
         stats: [0, 20, 0, 0, 0, 0],
+        baseStats: [0, 20, 0, 0, 0, 0],
         armorSockets: [socket(0, "artifice")],
       },
     ],
@@ -84,6 +86,75 @@ test("splits placement into Mods/Tuning/Artifice so the breakdown matches the he
   expect(breakdown?.modsUsed).toEqual({ major: 1, minor: 0 });
   expect(breakdown?.piece.helm.tuning).toEqual({ kind: "directional", plus: 0, minus: 1 });
   expect(breakdown?.piece.arms.artifice).toBe(1);
+});
+
+/**
+ * Balanced Tuning's manifest entry lists +1 to all six stats; in-game only the three
+ * off-archetype stats move (the normalizer strips it that way — see normalize.test.ts).
+ * The editor must re-add it the same way: [30,5,5,20,25,5] → [30,6,6,20,25,6] (93), not
+ * [31,6,6,21,26,6] (96). Review finding 2 (2026-09-21).
+ */
+test("Balanced Tuning adds +1 to the three off-archetype stats only, from the base roll", () => {
+  const BAL = 3122197216; // BALANCED_TUNING_PLUG_HASH
+  const sixOnes = Object.values(H).map((statTypeHash) => ({ statTypeHash, value: 1 }));
+  const { stats, total, breakdown } = sumEditorStats(
+    [
+      {
+        instanceId: "helm",
+        // Masterworked roll: archetype weapons/grenade/super = 30/20/25, off-arch = 5.
+        stats: [30, 5, 5, 20, 25, 5],
+        baseStats: [30, 0, 0, 20, 25, 0],
+        armorSockets: [socket(3, "tuning")],
+      },
+    ],
+    { helm: { 3: BAL } },
+    [],
+    0,
+    (hash) => (hash === BAL ? sixOnes : undefined),
+  );
+  expect(stats).toEqual([30, 6, 6, 20, 25, 6]);
+  expect(total).toBe(93);
+  expect(breakdown?.tuningBonus).toEqual([0, 1, 1, 0, 0, 1]);
+  expect(breakdown?.piece.helm.tuning).toEqual({ kind: "balanced" });
+});
+
+test("Balanced Tuning classifies off-archetype stats from the base roll, not the exotic's boosted stats", () => {
+  const BAL = 3122197216;
+  const sixOnes = Object.values(H).map((statTypeHash) => ({ statTypeHash, value: 1 }));
+  // An exotic whose +10 health intrinsic lifts health (base 0) above the archetype's
+  // tertiary grenade (base 20 → 20): by `stats` alone grenade would look off-archetype.
+  const { stats, breakdown } = sumEditorStats(
+    [
+      {
+        instanceId: "ex",
+        stats: [30, 25, 5, 20, 25, 5], // base + MW5 + intrinsic (+20 health, +0 others)
+        baseStats: [30, 0, 0, 20, 25, 0],
+        armorSockets: [socket(0, "tuning")],
+      },
+    ],
+    { ex: { 0: BAL } },
+    [],
+    0,
+    (hash) => (hash === BAL ? sixOnes : undefined),
+  );
+  expect(breakdown?.tuningBonus).toEqual([0, 1, 1, 0, 0, 1]);
+  expect(stats).toEqual([30, 26, 6, 20, 25, 6]);
+});
+
+test("a five-piece Balanced loadout is not overstated by 15", () => {
+  const BAL = 3122197216;
+  const sixOnes = Object.values(H).map((statTypeHash) => ({ statTypeHash, value: 1 }));
+  const pieces = ["h", "a", "c", "l", "k"].map((instanceId) => ({
+    instanceId,
+    stats: [30, 5, 5, 20, 25, 5] as [number, number, number, number, number, number],
+    baseStats: [30, 0, 0, 20, 25, 0] as [number, number, number, number, number, number],
+    armorSockets: [socket(1, "tuning")],
+  }));
+  const placement = Object.fromEntries(pieces.map((p) => [p.instanceId, { 1: BAL }]));
+  const { total } = sumEditorStats(pieces, placement, [], 0, (hash) =>
+    hash === BAL ? sixOnes : undefined,
+  );
+  expect(total).toBe(5 * 90 + 5 * 3);
 });
 
 test("withEditorTotals replaces headline totals and the breakdown when present", () => {

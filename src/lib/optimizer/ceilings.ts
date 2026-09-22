@@ -150,9 +150,6 @@ export function runCeilings(
   // Probe minimums: `min` with one stat temporarily raised during the binary search.
   const probeMins = min.slice(0, NUM_STATS);
 
-  // Per-leaf tuning feasibility probe — the same search the top-N uses, in feasible
-  // (first-hit) mode, so the two can never drift apart again.
-  const tuner = createTuningSearcher(frag, mods);
   // Armor power range — the same tracker the top-N walk uses (null when none is set).
   const power = createPowerTracker(slots, input.powerRange);
 
@@ -192,18 +189,28 @@ export function runCeilings(
   // can sit silent for a probe's whole fair share (seconds on hard pools).
   let lastTickAt = 0;
   const TICK_INTERVAL_MS = 250;
+  // The one deadline check, shared by the walk (every 2048 nodes) and the leaf tuner's
+  // directional search (its `onTick`): a probe whose budget expires inside a long leaf
+  // is flagged `aborted` and counts as timed out — never as a disproof.
+  const tick = (): void => {
+    const now = performance.now();
+    if (now > probeDeadline) {
+      aborted = true;
+      return;
+    }
+    if (onProbe && now - lastTickAt >= TICK_INTERVAL_MS) {
+      lastTickAt = now;
+      onProbe();
+    }
+  };
+  // Per-leaf tuning feasibility probe — the same search the top-N uses, in feasible
+  // (first-hit) mode, so the two can never drift apart again.
+  const tuner = createTuningSearcher(frag, mods, tick);
   const search = (k: number, exoticCount: number): void => {
     if (aborted) return;
     if ((nodes++ & 2047) === 0) {
-      const now = performance.now();
-      if (now > probeDeadline) {
-        aborted = true;
-        return;
-      }
-      if (onProbe && now - lastTickAt >= TICK_INTERVAL_MS) {
-        lastTickAt = now;
-        onProbe();
-      }
+      tick();
+      if (aborted) return;
     }
     if (k === NUM_SLOTS) {
       if (needExotic && exoticCount !== 1) return;
@@ -211,6 +218,8 @@ export function runCeilings(
         if (setCounts[r] < reqs[r].count) return;
       }
       if (power && !power.feasible(NUM_SLOTS)) return;
+      // A witness found after the deadline tripped mid-leaf is still a witness (a found
+      // build is proof); a null after it is a timeout, not a disproof (`aborted` is set).
       const w = tuner(chosen, sum, probeMins, "feasible");
       if (w) {
         found = true;
@@ -348,10 +357,37 @@ export function runCeilings(
   // Exactness is the equality of the proven pair: a stat is exact iff its achievable
   // ceiling has met its proven upper. Any gap (a timed-out or budget-starved window that
   // never closed provenly) makes the whole result inexact.
-  let exact = true;
+  let exact = !reconcileCeilingBounds(ceiling, uppers);
   for (let t = 0; t < NUM_STATS; t++) {
     if (ceiling[t] < uppers[t]) exact = false;
   }
   stats.nodes = nodes;
   return { ceilings: ceiling, uppers, exact, stats };
+}
+
+/**
+ * `ceilings[t] <= uppers[t]` is an invariant, not a clamp: the low side only rises on a
+ * witnessed build (arithmetic proof) and the upper only falls on a probe that ran to
+ * completion infeasible. If they ever cross, one of the two "proofs" was wrong — the
+ * 2026-09-21 review saw exactly that when an incomplete leaf tuner disproved feasible
+ * probes while another stat's witness harvest raised the same stat's floor past them,
+ * and the old `exact` check (only `ceiling < upper` ⇒ inexact) reported the reversed
+ * pair as EXACT. So: outside production this throws (tests and dev must see the bug);
+ * in production it logs, keeps the witnessed value (a real build beats a suspect
+ * disproof), lifts the upper to meet it and returns true so the caller marks the result
+ * inexact — never exact, never silently consistent.
+ */
+function reconcileCeilingBounds(ceilings: number[], uppers: number[]): boolean {
+  let contradiction = false;
+  for (let t = 0; t < NUM_STATS; t++) {
+    if (ceilings[t] <= uppers[t]) continue;
+    const msg = `ceiling invariant violated: stat ${t} achievable ${ceilings[t]} > proven upper ${uppers[t]}`;
+    if (typeof process !== "undefined" && process.env.NODE_ENV !== "production") {
+      throw new Error(msg);
+    }
+    console.error(msg);
+    uppers[t] = ceilings[t];
+    contradiction = true;
+  }
+  return contradiction;
 }
