@@ -637,6 +637,8 @@ export function createTuningSearcher(
       // stat: `suffixDown[i + 1]` — the dynamic refinement of `directionalsBranchable`.
       const opts = chosen[i].tuneOpts;
       const def = opts[0].vec;
+      // Per +5 stat: whether a "plain" minus has already been branched (bit = plus).
+      let plainSeen = 0;
       for (let o = 0; o < opts.length; o++) {
         // Feasible mode early-exits at the first feasible leaf found.
         if (mode === "feasible" && box.winner) return;
@@ -646,6 +648,25 @@ export function createTuningSearcher(
           const plus = ap.plus;
           const m = mins[plus];
           if (m <= 0 || aug[plus] + def[plus] + suffixDown[i + 1][plus] >= m) continue;
+          // Plain-minus dominance. A minus stat is "plain" when it has no minimum (so
+          // it is never modded and never a deficit) and its final value stays inside
+          // [5, 200] under every completion — after this −5 it can't go below 0, and
+          // even with every artifice +3 dumped on it it can't pass the cap. Two plain
+          // minuses for the same +5 then give IDENTICAL totals and feasibility for
+          // every completion (each costs exactly 5, all other stats and deficits are
+          // unchanged), and the unfiltered enumeration already keeps the earlier one
+          // (a later tie never replaces a winner) — so only the first plain minus per
+          // +5 stat is branched. An exotic has 30 directionals; this is what keeps a
+          // minimum-driven leaf from exploring 5 interchangeable −5s per +5.
+          const minus = ap.minus;
+          if (
+            mins[minus] <= 0 &&
+            aug[minus] + suffixDown[i + 1][minus] >= 5 &&
+            aug[minus] + suffixUp[i + 1][minus] + artCount * ARTIFICE_MOD_BONUS <= STAT_CAP
+          ) {
+            if (plainSeen & (1 << plus)) continue;
+            plainSeen |= 1 << plus;
+          }
         }
         curApplied[i] = opt.applied;
         for (let s = 0; s < NUM_STATS; s++) aug[s] += opt.vec[s];
