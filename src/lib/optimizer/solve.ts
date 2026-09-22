@@ -15,6 +15,7 @@ import {
   computeSuffixBounds,
   makeJointMinCheck,
   makeModUpside,
+  tightenTuneTotalUpside,
 } from "./bounds";
 import { CEILING_BUDGET_MS, runCeilings } from "./ceilings";
 import { createPowerTracker, loadoutPower } from "./power";
@@ -163,6 +164,10 @@ export function solve(
     };
   }
 
+  // Pool-wide tightening of the per-piece tuning credit in the admission bound (must
+  // precede computeSuffixBounds, which folds it into suffixTotal). The ceiling probes
+  // share `slots` but never read this field.
+  tightenTuneTotalUpside(slots, frag, min);
   // buildSlots pre-filtered constraint-ineligible exotics out of the pool, so every
   // remaining exotic counts toward "require"/"specific" — the reachability predicate
   // is just p.exotic (one eligibility rule, encoded once, in buildSlots).

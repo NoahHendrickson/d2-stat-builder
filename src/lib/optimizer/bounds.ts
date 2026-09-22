@@ -6,6 +6,7 @@ import type {
 import { NUM_SLOTS, NUM_STATS, STAT_CAP, clamp } from "./floors";
 import {
   deficitPoints,
+  directionalsBranchable,
   makeInternalPiece,
   minShortfall,
   type InternalPiece,
@@ -189,6 +190,83 @@ export function computeSuffixBounds(
     suffixMinStat,
     suffixDownStat,
   };
+}
+
+/** Clamped-total cost of one −5 on a stat whose value, before that −5, is `v`. */
+const minusFiveLoss = (v: number): number => clamp(v) - clamp(v - 5);
+
+/**
+ * Tighten each piece's `tuneTotalUpside` (the top-N bound's per-piece tuning credit)
+ * using pool-wide knowledge. makeInternalPiece credits a directional at its full +5 on
+ * the grounds that the −5 might be absorbed by the 0-clamp (or the 200 cap). Whether it
+ * CAN be is a pool property: with `v` the minus stat's value before that −5, the −5
+ * costs `clamp(v) − clamp(v − 5)` of clamped total, and over every completion `v` lies in
+ *   [frag + Σ lowest rolls + Σ other worst −5s,  frag + Σ best (roll + tuning upside)]
+ * (`suffixMinStat`/`suffixDownStat`/`suffixStat` at slot 0; the "+5" below excludes the
+ * piece's own −5 from the downside sum). The loss is a trapezoid in `v` — 0 below 0,
+ * rising to 5, flat through the cap, falling back to 0 past 205 — so its minimum over an
+ * interval is at an endpoint. On Tier-5 pools every stat sits well inside [5, 200] under
+ * every completion, so the −5 always costs the full 5 and a directional's net upside is
+ * 0 — Balanced's 3 becomes the credit, which is what lets the walk prune ties.
+ *
+ * Soundness of the credit: peeling the chosen tunings off a loadout one piece at a
+ * time, Σ_s clamp(final_s) grows by at most (+5 − loss) per directional (the +5 side is
+ * Lipschitz-1) and by its positive parts per Balanced, whatever else is stacked on the
+ * stat — so the sum of these per-piece credits bounds the tuning's whole contribution to
+ * the clamped total, matching how solve() adds `tuneTotalUpside` into `runningTotal`
+ * and `suffixTotal`. Directionals the searcher never branches (`directionalsBranchable`
+ * false for `mins`) are excluded, as in makeInternalPiece. Only `tuneTotalUpside` is
+ * touched: the per-stat upsides feeding the joint-min check and the ceiling probes
+ * must keep the full +5 (probes raise minimums past the query's).
+ */
+export function tightenTuneTotalUpside(
+  slots: InternalPiece[][],
+  frag: number[],
+  mins: number[],
+): void {
+  const lowest = new Array(NUM_STATS).fill(0);
+  const highest = new Array(NUM_STATS).fill(0);
+  for (let s = 0; s < NUM_STATS; s++) {
+    lowest[s] = frag[s] + 5;
+    highest[s] = frag[s];
+  }
+  for (const slot of slots) {
+    for (let s = 0; s < NUM_STATS; s++) {
+      let mn = Infinity;
+      let down = 0;
+      let mx = 0;
+      for (const p of slot) {
+        if (p.stats[s] < mn) mn = p.stats[s];
+        if (p.tuneStatDownside[s] < down) down = p.tuneStatDownside[s];
+        const up = p.stats[s] + p.tuneStatUpside[s];
+        if (up > mx) mx = up;
+      }
+      lowest[s] += mn + down;
+      highest[s] += mx;
+    }
+  }
+  const minLoss = new Array(NUM_STATS).fill(0);
+  for (let s = 0; s < NUM_STATS; s++) {
+    minLoss[s] = Math.min(minusFiveLoss(lowest[s]), minusFiveLoss(highest[s]));
+  }
+  const short = (s: number): boolean => mins[s] > 0;
+  for (const slot of slots) {
+    for (const p of slot) {
+      const dirReachable = directionalsBranchable(p.exotic, p.tuned, short);
+      let best = 0;
+      for (const opt of p.tuneOpts) {
+        let gain = 0;
+        if (opt.applied?.kind === "directional") {
+          if (!dirReachable) continue;
+          gain = 5 - minLoss[opt.applied.minus];
+        } else {
+          for (let s = 0; s < NUM_STATS; s++) if (opt.vec[s] > 0) gain += opt.vec[s];
+        }
+        if (gain > best) best = gain;
+      }
+      if (best < p.tuneTotalUpside) p.tuneTotalUpside = best;
+    }
+  }
 }
 
 /**

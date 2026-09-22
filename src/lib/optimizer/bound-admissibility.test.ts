@@ -10,7 +10,12 @@
  * failure after a bound change indicts the change, not the harness.
  */
 import { describe, expect, test } from "vitest";
-import { computeSuffixBounds, makeJointMinCheck, makeModUpside } from "./bounds";
+import {
+  computeSuffixBounds,
+  makeJointMinCheck,
+  makeModUpside,
+  tightenTuneTotalUpside,
+} from "./bounds";
 import { solveCeilings } from "./ceilings";
 import {
   NUM_SLOTS,
@@ -252,6 +257,8 @@ describe("top-N admission bound admissibility (never prunes a better completion)
     for (let iter = 0; iter < 200; iter++) {
       const c = randomCase(rng);
       const tuner = createTuningSearcher(c.frag, c.mods);
+      // As solve() does: tighten the per-piece tuning credit before the suffix bounds.
+      tightenTuneTotalUpside(c.slots, c.frag, c.mins);
       const { suffixTotal, artSuffix, suffixMinStat, suffixDownStat } = computeSuffixBounds(
         c.slots,
         [],
