@@ -24,7 +24,13 @@ const DEFAULT_MAX_RESULTS = 200;
  * worker session and surfaces only as the stat sliders' rising max overlays.
  */
 const TOPN_BUDGET_MS = 6000;
-/** Check the wall clock every this many combos (a power of two for a cheap mask). */
+/**
+ * Check the wall clock every this many search NODES (a power of two for a cheap mask).
+ * Nodes, not leaves: a walk that prunes at depth 4 can visit millions of internal
+ * nodes without ever reaching a leaf, so a leaf-only check could run unbounded past
+ * the budget. The leaf tuner ticks the same check from inside long directional
+ * searches (see createTuningSearcher's `onTick`).
+ */
 const BUDGET_CHECK_MASK = 65535;
 /** Portion of the progress bar covered by the top-N walk; ceilings fill the rest. */
 const TOPN_PROGRESS_SHARE = 0.9;
@@ -186,9 +192,7 @@ export function solve(
   const topNDeadline = topNStart + topNBudgetMs;
   let stopped = false;
   let capped = false;
-
-  // Per-leaf tuning + mod search (scratch lives inside the searcher, allocated once).
-  const tuner = createTuningSearcher(frag, mods);
+  let nodes = 0;
   // Armor power range (null when none is set, so the walk skips the calls).
   const power = createPowerTracker(slots, input.powerRange);
 
@@ -210,6 +214,19 @@ export function solve(
     const timeFrac = (now - topNStart) / topNBudgetMs;
     onProgress(Math.min(1, Math.max(enumFrac, timeFrac)) * TOPN_PROGRESS_SHARE);
   };
+  // The one budget check: from the walk (every BUDGET_CHECK_MASK+1 nodes) and from
+  // inside the leaf tuner's directional search. Stopping mid-leaf is safe — the tuner
+  // finishes its leaf (bounded work) and the walk stops at the next node.
+  const checkBudget = (): void => {
+    emitTopNProgress();
+    if (performance.now() > topNDeadline) {
+      stopped = true;
+      capped = true;
+    }
+  };
+
+  // Per-leaf tuning + mod search (scratch lives inside the searcher, allocated once).
+  const tuner = createTuningSearcher(frag, mods, checkBudget);
 
   const canReachMin = makeJointMinCheck(
     min,
@@ -231,16 +248,12 @@ export function solve(
 
   const recurse = (k: number, exoticCount: number): void => {
     if (stopped) return;
+    if ((++nodes & BUDGET_CHECK_MASK) === 0) {
+      checkBudget();
+      if (stopped) return;
+    }
     if (k === NUM_SLOTS) {
       combosTried++;
-      if ((combosTried & BUDGET_CHECK_MASK) === 0) {
-        emitTopNProgress();
-        if (performance.now() > topNDeadline) {
-          stopped = true;
-          capped = true;
-          return;
-        }
-      }
       if (needExotic && exoticCount !== 1) return;
       for (let r = 0; r < reqs.length; r++) {
         if (setCounts[r] < reqs[r].count) return;

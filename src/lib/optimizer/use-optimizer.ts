@@ -10,13 +10,15 @@ import { getOptimizerStore } from "./optimizer-store";
  * flight or finished. Raw progress is exposed as a value store, not React state — only
  * the progress bar subscribes to it.
  */
-export function useOptimizer() {
-  const store = getOptimizerStore();
+export function useOptimizer<O = unknown>() {
+  const store = getOptimizerStore<O>();
   const snapshot = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
   return {
     run: store.run,
     cancel: store.cancel,
     applyPending: store.applyPending,
+    /** Non-subscribing read of the current snapshot, for click-time reads (see resultOrigin). */
+    getSnapshot: store.getSnapshot,
     progress: store.progress,
     refinementProgress: store.refinementProgress,
     ceilingsView: store.ceilingsView,

@@ -7,7 +7,6 @@ import {
   BUILD_LIST_WELL_CLASS,
   BuildResults,
   MAX_SHOWN,
-  type DimSubclassInput,
   type GetBuilderState,
 } from "@/components/builder/build-results";
 import { LoadoutSortControls } from "@/components/builder/loadout-sort-controls";
@@ -99,7 +98,6 @@ export interface BuildsColumnContentProps {
   statModHashes: StatModHashes[] | null;
   tuningPlugHashes: Map<string, number> | null;
   artificeModHashes: (number | undefined)[] | null;
-  subclass?: DimSubclassInput;
   getBuilderState: GetBuilderState;
   manifest?: Manifest;
   insertablePlugs?: ReadonlySet<number>;
@@ -124,7 +122,6 @@ export function BuildsColumnContent({
   statModHashes,
   tuningPlugHashes,
   artificeModHashes,
-  subclass,
   getBuilderState,
   manifest,
   insertablePlugs,
@@ -187,7 +184,6 @@ export function BuildsColumnContent({
               statModHashes={statModHashes}
               tuningPlugHashes={tuningPlugHashes}
               artificeModHashes={artificeModHashes}
-              subclass={subclass}
               getBuilderState={getBuilderState}
               manifest={manifest}
               insertablePlugs={insertablePlugs}

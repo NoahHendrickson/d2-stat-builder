@@ -276,7 +276,6 @@ const BuildRow = memo(function BuildRow({
   statModHashes,
   tuningPlugHashes,
   artificeModHashes,
-  subclass,
   getBuilderState,
   manifest,
   insertablePlugs,
@@ -576,7 +575,6 @@ const BuildRow = memo(function BuildRow({
             statModHashes={statModHashes}
             tuningPlugHashes={tuningPlugHashes}
             artificeModHashes={artificeModHashes}
-            subclass={subclass}
             getBuilderState={getBuilderState}
             manifest={manifest}
             insertablePlugs={insertablePlugs}
@@ -768,7 +766,6 @@ export function BuildResults({
   statModHashes,
   tuningPlugHashes,
   artificeModHashes,
-  subclass,
   getBuilderState,
   manifest,
   insertablePlugs,
@@ -821,13 +818,20 @@ export function BuildResults({
   );
   if (result.loadouts.length === 0) {
     // The definitive "nothing meets those constraints" is only honest once no deeper
-    // search is running and no better list is waiting behind the CTA above.
+    // search is running, no better list is waiting behind the CTA above, AND the walk
+    // that produced this empty list ran to exhaustion. A capped walk (time limit, or a
+    // background pass that also timed out / was cancelled) has NOT proven anything —
+    // say "none found in time", never "none exist".
+    const exhaustive =
+      !result.capped || (refinement.phase === "done" && refinement.verified);
     const emptyCopy =
       refinement.phase === "running"
         ? "No builds found in the first pass yet — the deeper search is still running."
         : refinement.phase === "done" && refinement.pending
           ? "The first pass found none — use “Show them” above to load what the full search found."
-          : "No loadouts from your gear meet those constraints — even with mods. Try easing a target, a set bonus, or raising your mod budget.";
+          : exhaustive
+            ? "No loadouts from your gear meet those constraints — even with mods. Try easing a target, a set bonus, or raising your mod budget."
+            : "No builds found within the search time limit — some may still exist. Narrow your targets (or ease one) and search again.";
     return (
       <div className="space-y-3">
         {status}
@@ -852,7 +856,6 @@ export function BuildResults({
             statModHashes={statModHashes}
             tuningPlugHashes={tuningPlugHashes}
             artificeModHashes={artificeModHashes}
-            subclass={subclass}
             getBuilderState={getBuilderState}
             manifest={manifest}
             insertablePlugs={insertablePlugs}

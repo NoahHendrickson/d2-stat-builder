@@ -227,20 +227,31 @@ describe("ceiling refinement", () => {
   });
 
   test("ceilingSeed floors the seeds (trusted as proven-achievable)", () => {
+    // Two helmets: h-spread wins the top-1 by total (40 vs 30) so the returned build has
+    // weapons 20, while h-weapon's build (weapons 30) is real but not in the list. A
+    // seed of 30 is therefore genuinely achievable (a prior pass could have proven it)
+    // yet strictly above what the loadouts alone derive.
     const slots = [
-      [piece("h", [30, 0, 0, 0, 0, 0])],
+      [piece("h-weapon", [30, 0, 0, 0, 0, 0]), piece("h-spread", [20, 0, 20, 0, 0, 0])],
       [piece("a", [0, 20, 0, 0, 0, 0])],
       [piece("c", [0, 0, 10, 0, 0, 0])],
       [piece("l", [0, 0, 0, 40, 0, 0])],
       [piece("ci", [0, 0, 0, 0, 15, 0])],
     ];
     // Budget 0 → ceilings ARE the seeds. The seed takes max(loadout-derived, ceilingSeed)
-    // per stat: weapons is lifted to the trusted 33, health keeps its own better 20.
-    const out = solve(input(slots), {
-      ceilingBudgetMs: 0,
-      ceilingSeed: [33, 5, 0, 0, 0, 0],
-    });
-    expect(out.ceilings).toEqual([33, 20, 10, 40, 15, 0]);
+    // per stat: weapons is lifted to the trusted 30, health keeps its own better 20.
+    // (A seed ABOVE the pool's proven upper bound is a contract violation and now throws
+    // — see reconcileCeilingBounds — so the seed here must be one a real build meets.)
+    const out = solve(
+      { ...input(slots), maxResults: 1 },
+      {
+        ceilingBudgetMs: 0,
+        ceilingSeed: [30, 5, 0, 0, 0, 0],
+      },
+    );
+    expect(out.loadouts).toHaveLength(1);
+    expect(out.loadouts[0].stats[0]).toBe(20);
+    expect(out.ceilings).toEqual([30, 20, 30, 40, 15, 0]);
   });
 
   test("a slow stat's refinement can't starve the stats after it (real-pool regression)", () => {

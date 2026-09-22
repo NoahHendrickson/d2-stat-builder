@@ -173,7 +173,117 @@ describe("progress stays out of the snapshot", () => {
     store.run(input(2));
     vi.advanceTimersByTime(200);
     // The held [50] belonged to the superseded run and must not land on the new one.
+    // (input(2) tightens input(0)'s minimums with no surviving loadout to carry, so the
+    // new run starts with no overlay at all — the previous query's values are not
+    // claims about this one.)
+    expect(store.ceilingsView.get().values).toBeNull();
+  });
+});
+
+describe("results are bound to the query that produced them", () => {
+  const loadout = () => ({
+    pieceIds: ["h", "a", "c", "l", "k"],
+    baseStats: [50, 0, 0, 0, 0, 0],
+    stats: [50, 0, 0, 0, 0, 0],
+    tuningBonus: [0, 0, 0, 0, 0, 0],
+    tuning: [null, null, null, null, null],
+    modBonus: [0, 0, 0, 0, 0, 0],
+    modsUsed: { major: 0, minor: 0 },
+    artificeBonus: [0, 0, 0, 0, 0, 0],
+    artifice: [null, null, null, null, null],
+    total: 50,
+    exotic: false,
+    power: null,
+  });
+
+  test("the origin handed to run() comes back with that run's result", () => {
+    const { store, worker } = setup();
+    const origin = { targets: [1, 0, 0, 0, 0, 0] };
+    store.run(input(1), origin);
+    expect(store.getSnapshot().resultOrigin).toBeNull();
+    const seq = worker().posted[0].seq;
+    worker().emit({ seq, kind: "result", output: output(), refining: false, verified: true });
+    expect(store.getSnapshot().resultOrigin).toBe(origin);
+  });
+
+  test("a newer query keeps the shown result paired with ITS origin until its own result lands", () => {
+    const { store, worker } = setup();
+    const a = { targets: [1, 0, 0, 0, 0, 0] };
+    const b = { targets: [2, 0, 0, 0, 0, 0] };
+    store.run(input(1), a);
+    let seq = worker().posted[0].seq;
+    worker().emit({ seq, kind: "result", output: output(), refining: false, verified: true });
+    store.run(input(2), b);
+    // Old list still showing (frozen-list UX), old origin still attached — Save/DIM on it
+    // must use `a`, not the live `b`.
+    expect(store.getSnapshot().result).not.toBeNull();
+    expect(store.getSnapshot().resultOrigin).toBe(a);
+    expect(store.getSnapshot().running).toBe(true);
+    // Cancelling leaves the pair intact and honest.
+    store.cancel();
+    expect(store.getSnapshot().resultOrigin).toBe(a);
+    // A fresh run of `b` delivering its result rebinds.
+    store.run(input(2), b);
+    seq = worker().posted.at(-1)!.seq;
+    worker().emit({ seq, kind: "result", output: output(), refining: false, verified: true });
+    expect(store.getSnapshot().resultOrigin).toBe(b);
+  });
+
+  test("a capped result and its later pending offer share the run's origin", () => {
+    const { store, worker } = setup();
+    const a = { targets: [1, 0, 0, 0, 0, 0] };
+    store.run(input(1), a);
+    const seq = worker().posted[0].seq;
+    worker().emit({ seq, kind: "result", output: output({ capped: true }), refining: true, verified: false });
+    expect(store.getSnapshot().resultOrigin).toBe(a);
+    const better = output({ capped: true, loadouts: [loadout()] });
+    worker().emit({ seq, kind: "better", output: better });
+    worker().emit({ seq, kind: "result", output: output({ capped: true }), refining: false, verified: true });
+    store.applyPending();
+    expect(store.getSnapshot().result).toBe(better);
+    expect(store.getSnapshot().resultOrigin).toBe(a);
+  });
+
+  test("re-running the identical query refreshes the origin in place without a new search", () => {
+    const { store, worker } = setup();
+    const a = { fragments: [1] };
+    const b = { fragments: [2] }; // same stat effect ⇒ same optimizer input
+    store.run(input(1), a);
+    const seq = worker().posted[0].seq;
+    worker().emit({ seq, kind: "result", output: output(), refining: false, verified: true });
+    store.run(input(1), b);
+    expect(worker().posted).toHaveLength(1);
+    expect(store.getSnapshot().resultOrigin).toBe(b);
+    // …and while a run is in flight, the newest origin is what its result will carry.
+    store.run(input(3), a);
+    store.run(input(3), b);
+    const seq2 = worker().posted.at(-1)!.seq;
+    worker().emit({ seq: seq2, kind: "result", output: output(), refining: false, verified: true });
+    expect(store.getSnapshot().resultOrigin).toBe(b);
+  });
+});
+
+describe("slider ceilings only claim what is proven for the current query", () => {
+  test("a query that can't carry the previous ceilings starts with none", () => {
+    const { store, worker } = setup();
+    store.run(input(1));
+    const seq = worker().posted[0].seq;
+    worker().emit({ seq, kind: "result", output: output({ ceilings: [40, 1, 1, 1, 1, 1] }), refining: false, verified: true });
     expect(store.ceilingsView.get().values?.[0]).toBe(40);
+    // Different mods ⇒ a different query: the old 40 is not achievable-for-this-query.
+    store.run({ ...input(1), mods: { major: 1, minor: 0 } });
+    expect(store.ceilingsView.get().values).toBeNull();
+    expect(store.ceilingsView.get().exact).toBe(false);
+  });
+
+  test("a loosened edit carries the previous achievable ceilings as its opening overlay", () => {
+    const { store, worker } = setup();
+    store.run(input(5));
+    const seq = worker().posted[0].seq;
+    worker().emit({ seq, kind: "result", output: output({ ceilings: [40, 1, 1, 1, 1, 1] }), refining: false, verified: true });
+    store.run(input(0)); // loosened: what was achievable stays achievable
+    expect(store.ceilingsView.get().values).toEqual([40, 1, 1, 1, 1, 1]);
+    expect(store.ceilingsView.get().exact).toBe(false);
   });
 });
 

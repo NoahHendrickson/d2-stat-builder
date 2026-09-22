@@ -36,14 +36,6 @@ import {
 import { planSpares } from "@/lib/bungie/equip-plan";
 import type { OptimizerLoadout } from "@/lib/optimizer/types";
 
-/** Latest slider targets and builder snapshot; rows read this only on user action. */
-export type GetBuilderState = () => {
-  targets: number[];
-  builderSnapshot?: BuilderSnapshot;
-  /** Set bonuses the current pool can satisfy — DIM export, not "Load in builder". */
-  setBonuses?: Record<number, 2 | 4>;
-};
-
 /** The active subclass's DIM handoff data (undefined hash = unknown subclass/class combo). */
 export interface DimSubclassInput {
   name: string;
@@ -52,12 +44,29 @@ export interface DimSubclassInput {
   socketStart: number;
 }
 
+/**
+ * The builder configuration a shown build's actions act on. Bound to the query that
+ * produced the build (the optimizer store echoes it back with each result), NOT the
+ * live slider/subclass state — the list stays on screen while a newer query runs, and a
+ * loadout must never mix one query's stats with another's targets or fragments.
+ */
+export interface BuilderActionState {
+  targets: number[];
+  builderSnapshot?: BuilderSnapshot;
+  /** Set bonuses the query's pool could satisfy — DIM export, not "Load in builder". */
+  setBonuses?: Record<number, 2 | 4>;
+  /** The subclass + fragments the query's stats assumed. */
+  subclass?: DimSubclassInput;
+}
+
+/** Rows read this only on user action (click), never during render. */
+export type GetBuilderState = () => BuilderActionState;
+
 export interface BuildActionProps {
   characters: ArmoryCharacter[];
   statModHashes: StatModHashes[] | null;
   tuningPlugHashes: Map<string, number> | null;
   artificeModHashes: (number | undefined)[] | null;
-  subclass?: DimSubclassInput;
   getBuilderState: GetBuilderState;
   manifest?: Manifest;
   insertablePlugs?: ReadonlySet<number>;
@@ -88,7 +97,6 @@ export function BuildActions({
   statModHashes,
   tuningPlugHashes,
   artificeModHashes,
-  subclass,
   getBuilderState,
   manifest,
   insertablePlugs,
@@ -107,6 +115,12 @@ export function BuildActions({
   // they are then. It stays mounted after the first click so it can animate closed.
   const [saveSession, setSaveSession] = useState(0);
   const [saveOpen, setSaveOpen] = useState(false);
+  // What the drawer was opened against — read from the bound builder state at click
+  // time (see getBuilderState), so the drawer can't drift from the build's own query.
+  const [saveContext, setSaveContext] = useState<{
+    defaultName: string;
+    subclassItemHash?: number;
+  } | null>(null);
   const { create: createLoadout } = useLoadoutMutations();
 
   const resolved = pieces.filter((p): p is ArmorPiece => p !== undefined);
@@ -132,16 +146,17 @@ export function BuildActions({
     statModHashes && tuningPlugHashes && artificeModHashes,
   );
 
-  const defaultName = defaultLoadoutName({
-    exoticName,
-    subclassName: subclass?.name,
-    sets: setBadges,
-    total: loadout.total,
-  });
+  const defaultName = (subclass: DimSubclassInput | undefined) =>
+    defaultLoadoutName({
+      exoticName,
+      subclassName: subclass?.name,
+      sets: setBadges,
+      total: loadout.total,
+    });
 
   /** The dim-api object for this build (shared by Open in DIM and Save). */
   const makeDimLoadout = (name: string, notes?: string) => {
-    const { targets, setBonuses } = getBuilderState();
+    const { targets, setBonuses, subclass } = getBuilderState();
     return buildDimLoadout({
       loadout,
       pieces: livePieces,
@@ -167,7 +182,7 @@ export function BuildActions({
 
   const openInDim = () => {
     if (!canActOnItems || !hasModHashes) return;
-    const url = buildDimLoadoutUrl(makeDimLoadout(defaultName));
+    const url = buildDimLoadoutUrl(makeDimLoadout(defaultName(getBuilderState().subclass)));
     window.open(url, "_blank", "noopener,noreferrer");
   };
 
@@ -177,6 +192,11 @@ export function BuildActions({
 
   const openSave = () => {
     if (!canSave || !manifest) return;
+    const { subclass } = getBuilderState();
+    setSaveContext({
+      defaultName: defaultName(subclass),
+      subclassItemHash: subclass?.itemHash,
+    });
     setSaveSession((s) => s + 1);
     setSaveOpen(true);
   };
@@ -321,7 +341,7 @@ export function BuildActions({
           Save as loadout
         </Button>
       </TooltipLabel>
-      {saveSession > 0 && manifest && (
+      {saveSession > 0 && manifest && saveContext && (
         <SaveLoadoutDrawer
           open={saveOpen}
           onOpenChange={(open) => {
@@ -332,8 +352,8 @@ export function BuildActions({
           manifest={manifest}
           insertablePlugs={insertablePlugs}
           buildClass={buildClass}
-          defaultName={defaultName}
-          subclassItemHash={subclass?.itemHash}
+          defaultName={saveContext.defaultName}
+          subclassItemHash={saveContext.subclassItemHash}
           makeDimLoadout={makeDimLoadout}
           busy={createLoadout.isPending}
           onSubmit={saveLoadout}

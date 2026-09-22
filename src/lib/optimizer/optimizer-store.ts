@@ -26,8 +26,16 @@ export type CeilingsView = {
   exact: boolean;
 };
 
-export interface OptimizerSnapshot {
+export interface OptimizerSnapshot<O = unknown> {
   result: OptimizerOutput | null;
+  /**
+   * The caller-supplied context of the query that produced `result` (see `run`'s
+   * `origin`) — null iff `result` is null. `result` is deliberately kept on screen while
+   * a NEWER query runs (or after one was cancelled), so anything that acts on a shown
+   * build (save, DIM export) must read its targets/fragments/etc. from HERE, never from
+   * the live builder state, or two queries get combined into one loadout.
+   */
+  resultOrigin: O | null;
   running: boolean;
   /** Identity of the latest run — lets the UI restart progress animation per search. */
   runId: number;
@@ -42,16 +50,23 @@ export interface WorkerLike {
   onerror: ((e: unknown) => void) | null;
 }
 
-export interface OptimizerStore {
+export interface OptimizerStore<O = unknown> {
   subscribe(listener: () => void): () => void;
-  getSnapshot(): OptimizerSnapshot;
+  getSnapshot(): OptimizerSnapshot<O>;
   /** Raw 0–1 progress of the current run, per worker message (not in the snapshot). */
   progress: ValueStore<number>;
   /** Background-refinement 0–1 progress; only SearchStatus subscribes. */
   refinementProgress: ValueStore<number>;
   /** Slider overlays; StatTargetRow subscribes so the rest of the panel can bail out. */
   ceilingsView: ValueStore<CeilingsView>;
-  run(input: OptimizerInput): void;
+  /**
+   * Start (or re-attach to) a search. `origin` is whatever the caller needs to act on
+   * this query's results later (its targets, subclass, snapshot…); it is echoed back as
+   * `resultOrigin` alongside every result of this query. Re-running an identical query
+   * only refreshes the origin — the newest context for the same optimizer input is the
+   * right one to attach.
+   */
+  run(input: OptimizerInput, origin?: O): void;
   cancel(): void;
   applyPending(): void;
 }
@@ -66,18 +81,19 @@ function mergeCeilingsMonotone(prev: StatArray | null, next: StatArray): StatArr
   return prev ? next.map((v, s) => Math.max(v, prev[s])) : next;
 }
 
-export function createOptimizerStore(
+export function createOptimizerStore<O = unknown>(
   makeWorker: () => WorkerLike,
   now: () => number = () => Date.now(),
-): OptimizerStore {
-  let snapshot: OptimizerSnapshot = {
+): OptimizerStore<O> {
+  let snapshot: OptimizerSnapshot<O> = {
     result: null,
+    resultOrigin: null,
     running: false,
     runId: 0,
     refinement: IDLE,
   };
   const listeners = new Set<() => void>();
-  const setState = (patch: Partial<OptimizerSnapshot>) => {
+  const setState = (patch: Partial<OptimizerSnapshot<O>>) => {
     snapshot = { ...snapshot, ...patch };
     for (const l of listeners) l();
   };
@@ -96,6 +112,8 @@ export function createOptimizerStore(
   // The input of the run currently producing messages, paired with each result so `last`
   // can be updated with a matching (input, output). Set on every run() before postMessage.
   let inFlightInput: OptimizerInput | null = null;
+  // The caller's context for that run, echoed as `resultOrigin` with each of its results.
+  let inFlightOrigin: O | null = null;
   // Serialized form of the in-flight / last input, so a remounted builder that
   // reproduces the same query re-attaches instead of restarting the search.
   let inFlightKey: string | null = null;
@@ -180,6 +198,7 @@ export function createOptimizerStore(
             });
             setState({
               result: msg.output,
+              resultOrigin: inFlightOrigin,
               running: false,
               refinement: { phase: "running", progress: 0, interim: msg.output, pending: null },
             });
@@ -193,8 +212,9 @@ export function createOptimizerStore(
               values: ceilings,
               exact: msg.output.ceilingsExact,
             });
-            const patch: Partial<OptimizerSnapshot> = {
+            const patch: Partial<OptimizerSnapshot<O>> = {
               result: msg.output,
+              resultOrigin: inFlightOrigin,
               running: false,
             };
             if (ref.phase === "running") {
@@ -241,12 +261,20 @@ export function createOptimizerStore(
     refinementProgress,
     ceilingsView,
 
-    run(input) {
+    run(input, origin = null as O) {
       const key = JSON.stringify(input);
       // Same query as the run in flight, or as the one whose result is showing (and not
-      // cancelled): nothing to do. This is what lets a re-mounted builder pick the
-      // search back up instead of restarting it.
-      if (key === inFlightKey && (inFlight || (last?.key === key && snapshot.result))) return;
+      // cancelled): nothing to search. This is what lets a re-mounted builder pick the
+      // search back up instead of restarting it. The origin still refreshes: the same
+      // optimizer input can come from a newer builder state (a fragment swap with the
+      // same stat effect), and the shown result belongs to that newest state.
+      if (key === inFlightKey && (inFlight || (last?.key === key && snapshot.result))) {
+        inFlightOrigin = origin;
+        if (snapshot.result && snapshot.resultOrigin !== origin) {
+          setState({ resultOrigin: origin });
+        }
+        return;
+      }
 
       const s = ++seq;
       // Kill a superseded solve so this one starts immediately instead of queueing
@@ -258,15 +286,21 @@ export function createOptimizerStore(
       }
       inFlight = true;
       inFlightInput = input;
+      inFlightOrigin = origin;
       inFlightKey = key;
       progress.set(0);
       refinementProgress.set(0);
       dropPendingCeilings();
-      ceilingsView.set({ values: ceilingsView.get().values, exact: false });
-      setState({ running: true, refinement: IDLE, runId: s });
       // Carry proven ceiling bounds from the previous query when this edit only changed
       // the minimums — lets the worker skip re-proving what the last query established.
       const carry = last ? computeCeilingCarry(last.input, last.output, input) : undefined;
+      // The slider overlays claim "achievable for THIS query". The previous query's values
+      // are that only when the carry says so (its `ceilingSeed` is exactly the set of
+      // prior values still proven achievable here); otherwise they belong to a different
+      // query and must not be shown as current — the overlays go dark until this run's
+      // own seed streams in.
+      ceilingsView.set({ values: carry?.ceilingSeed ?? null, exact: false });
+      setState({ running: true, refinement: IDLE, runId: s });
       getWorker().postMessage({ seq: s, input, carry });
     },
 
@@ -298,15 +332,19 @@ export function createOptimizerStore(
   };
 }
 
-let singleton: OptimizerStore | null = null;
+let singleton: OptimizerStore<unknown> | null = null;
 
-/** The app-wide optimizer (one worker, one search, independent of which page is mounted). */
-export function getOptimizerStore(): OptimizerStore {
+/**
+ * The app-wide optimizer (one worker, one search, independent of which page is mounted).
+ * `O` is the origin type the single caller (the builder panel) attaches to its queries;
+ * there is one store, so every caller must agree on it.
+ */
+export function getOptimizerStore<O = unknown>(): OptimizerStore<O> {
   if (!singleton) {
-    singleton = createOptimizerStore(
+    singleton = createOptimizerStore<unknown>(
       () =>
         new Worker(new URL("./worker.ts", import.meta.url), { type: "module" }) as WorkerLike,
     );
   }
-  return singleton;
+  return singleton as OptimizerStore<O>;
 }

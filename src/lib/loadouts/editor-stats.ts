@@ -1,8 +1,9 @@
 import { buildFragmentStats } from "../armory/fragments";
 import type { ArmorSocket } from "../armory/normalize";
 import {
-  BALANCED_TUNING_PLUG_HASH,
   STAT_HASH_TO_INDEX,
+  balancedTuningBonus,
+  isBalancedTuningPlug,
   type StatArray,
 } from "../armory/stats";
 import type { AppliedTuning } from "../optimizer/types";
@@ -17,7 +18,16 @@ type InvestmentStat = {
 /** Piece fields the drawer totals need — live armor plus whatever is currently placed. */
 export interface EditorStatPiece {
   instanceId: string;
+  /** What the optimizer consumed: base roll + masterwork (+ exotic intrinsic bonus). */
   stats: StatArray;
+  /**
+   * The true base roll. Balanced Tuning's +1s land on its three lowest stats — the
+   * same rule the normalizer used to strip the plug — so a piece with a tuning socket
+   * should always supply it. Falls back to `stats` when absent (masterwork raises the
+   * same three stats, so the classification usually survives; an exotic's intrinsic
+   * bonus can move it, which is why the live `ArmorPiece` always carries `baseStats`).
+   */
+  baseStats?: StatArray;
   armorSockets?: ArmorSocket[];
 }
 
@@ -47,12 +57,33 @@ function addInv(target: StatArray, inv: InvestmentStat[] | undefined): void {
   }
 }
 
+function addStats(target: StatArray, delta: StatArray): void {
+  for (let i = 0; i < 6; i++) target[i] += delta[i];
+}
+
 function armorInv(inv: InvestmentStat[] | undefined): InvestmentStat[] {
   return (inv ?? []).filter((s) => STAT_HASH_TO_INDEX[s.statTypeHash] !== undefined);
 }
 
+/**
+ * A placed tuning plug's EFFECTIVE delta. Balanced is +1 to the piece's three
+ * off-archetype stats only (the manifest lists six +1s, three of which the game
+ * absorbs into the capped archetype stats — see `balancedTuningBonus`); a directional
+ * is exactly what its manifest entry says (+5/−5).
+ */
+function tuningDelta(
+  hash: number,
+  inv: InvestmentStat[] | undefined,
+  baseStats: StatArray,
+): StatArray {
+  if (isBalancedTuningPlug(hash, inv)) return balancedTuningBonus(baseStats);
+  const out = empty();
+  addInv(out, inv);
+  return out;
+}
+
 function tuningFromInv(hash: number, inv: InvestmentStat[] | undefined): AppliedTuning | null {
-  if (hash === BALANCED_TUNING_PLUG_HASH) return { kind: "balanced" };
+  if (isBalancedTuningPlug(hash, inv)) return { kind: "balanced" };
   const armor = armorInv(inv);
   let plus = -1;
   let minus = -1;
@@ -62,7 +93,6 @@ function tuningFromInv(hash: number, inv: InvestmentStat[] | undefined): Applied
     else if (s.value < 0) minus = minus === -1 ? i : -2;
   }
   if (plus >= 0 && minus >= 0) return { kind: "directional", plus, minus };
-  if (plus >= 0 && minus === -1) return { kind: "balanced" };
   return null;
 }
 
@@ -75,6 +105,8 @@ function artificeFromInv(inv: InvestmentStat[] | undefined): number | null {
 /**
  * Armor + placed mods + fragments, clamped to 0–200 per stat (same window the
  * optimizer reports). `investmentStats` is the plug's manifest investment list.
+ * Each placed plug's effective contribution is resolved ONCE and feeds both the
+ * headline total and the Mods/Tuning/Artifice breakdown, so the two can't disagree.
  */
 export function sumEditorStats(
   pieces: readonly EditorStatPiece[],
@@ -92,23 +124,33 @@ export function sumEditorStats(
   let hasSockets = false;
 
   for (const p of pieces) {
-    for (let i = 0; i < 6; i++) stats[i] += p.stats[i];
+    addStats(stats, p.stats);
     const chosen = placement[p.instanceId] ?? {};
-    for (const hash of Object.values(chosen)) addInv(stats, investmentStats(hash));
+    const sockets = p.armorSockets ?? [];
+    if (sockets.length) hasSockets = true;
+    // Sockets the piece describes are resolved by kind below; anything placed outside
+    // that list (a piece with no socket metadata) counts at face value.
+    const described = new Set(sockets.map((s) => s.index));
+    for (const [index, hash] of Object.entries(chosen)) {
+      if (!described.has(Number(index))) addInv(stats, investmentStats(hash));
+    }
     let tuning: AppliedTuning | null = null;
     let artifice: number | null = null;
-    if (p.armorSockets?.length) hasSockets = true;
-    for (const socket of p.armorSockets ?? []) {
+    for (const socket of sockets) {
       const hash = chosen[socket.index];
       if (!hash) continue;
       const inv = investmentStats(hash);
       if (socket.kind === "tuning") {
-        addInv(tuningBonus, inv);
+        const delta = tuningDelta(hash, inv, p.baseStats ?? p.stats);
+        addStats(stats, delta);
+        addStats(tuningBonus, delta);
         tuning = tuningFromInv(hash, inv);
       } else if (socket.kind === "artifice") {
+        addInv(stats, inv);
         addInv(artificeBonus, inv);
         artifice = artificeFromInv(inv);
       } else {
+        addInv(stats, inv);
         addInv(modBonus, inv);
         const armor = armorInv(inv);
         if (socket.kind === "general" && armor.length === 1) {
@@ -121,7 +163,7 @@ export function sumEditorStats(
   }
   for (const hash of fragmentHashes) {
     const bonus = buildFragmentStats(investmentStats(hash), classType).stats;
-    for (let i = 0; i < 6; i++) stats[i] += bonus[i];
+    addStats(stats, bonus);
   }
   const clamped = stats.map((v) => Math.max(0, Math.min(200, v))) as StatArray;
   return {

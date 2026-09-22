@@ -119,6 +119,35 @@ export const BALANCED_TUNING_PLUG_HASH = 3122197216;
 export const BALANCED_TUNING_OFF_STAT_BONUS = 1;
 
 /**
+ * Balanced Tuning's EFFECTIVE stat delta for a piece: +1 to each of its three
+ * off-archetype stats (derived from the base roll, never from stats that already carry
+ * masterwork or an exotic's intrinsic bonus), zero elsewhere. The one definition every
+ * consumer of a placed Balanced plug must use — the normalizer (stripping it), the
+ * optimizer's tune options, and the saved-loadout editor (re-adding it) — because the
+ * manifest's six +1s overstate a piece by three.
+ */
+export function balancedTuningBonus(baseStats: StatArray): StatArray {
+  const out: StatArray = [0, 0, 0, 0, 0, 0];
+  for (const i of offArchetypeIndices(baseStats)) out[i] = BALANCED_TUNING_OFF_STAT_BONUS;
+  return out;
+}
+
+/**
+ * Is this tuning plug Balanced? The live hash, or — for a plug read only by shape — an
+ * armor-stat list with no negative entry (every directional carries a −5).
+ */
+export function isBalancedTuningPlug(
+  hash: number,
+  investmentStats: readonly { statTypeHash: number; value: number }[] | undefined,
+): boolean {
+  if (hash === BALANCED_TUNING_PLUG_HASH) return true;
+  const armor = (investmentStats ?? []).filter(
+    (s) => STAT_HASH_TO_INDEX[s.statTypeHash] !== undefined,
+  );
+  return armor.length > 0 && armor.every((s) => s.value >= 0);
+}
+
+/**
  * The 3 off-archetype stat indices = the 3 lowest base-roll stats (0 at base,
  * bumped to 5 by MW). These are the stats masterwork and Balanced Tuning affect;
  * the other 3 are the fixed archetype stats (30/25/20). Shared by applyMasterwork

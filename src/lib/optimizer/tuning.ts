@@ -43,6 +43,12 @@ export interface InternalPiece {
   /** Best positive tuning contribution reachable per stat (for admissible pruning). */
   tuneStatUpside: number[];
   /**
+   * Worst (most negative) tuning contribution per stat over the piece's options — the
+   * −5 of a directional that lands here, else 0. The searcher's "could this stat still
+   * end up short" test sums these over the pieces not yet tuned.
+   */
+  tuneStatDownside: number[];
+  /**
    * Best realizable total tuning contribution: the max over options of the sum of
    * positive vec components (directional = +5, Balanced = +3, no-tune = 0). Negative
    * components don't count against it — the 0-clamp can absorb them entirely.
@@ -72,11 +78,15 @@ export const minShortfall = (min: number, have: number): number =>
 
 /**
  * The directional-branching policy: a piece's directional tunes are only worth
- * branching where the +5 can land on a short stat — a legendary's +5 goes only to its
- * rolled tuned stat, an exotic's flexible slot to any stat. One definition shared by
- * the leaf searcher (dynamic per-call shortfalls) and the pool-time total-upside bound
- * (static: only a stat with a positive minimum can ever be short), so the two
- * encodings of the policy cannot drift.
+ * branching where the +5 can land on a stat that could still be short — a legendary's
+ * +5 goes only to its rolled tuned stat, an exotic's flexible slot to any stat.
+ *
+ * This static form (only a stat with a positive minimum can ever be short) is what the
+ * pool-time total-upside bound uses. The leaf searcher applies a strictly tighter
+ * dynamic form of the same rule per option (see `createTuningSearcher`: a stat "could
+ * be short" only if the pieces still to tune could drag it under its minimum), so the
+ * static credit here always over-approximates what the searcher branches — which is
+ * what keeps the top-N prune bound admissible.
  */
 export function directionalsBranchable(
   exotic: boolean,
@@ -167,6 +177,7 @@ export function makeInternalPiece(
     mins === undefined ||
     directionalsBranchable(p.exotic, p.tuning ? p.tuning.tuned : -1, (s) => mins[s] > 0);
   const tuneStatUpside = new Array(NUM_STATS).fill(0);
+  const tuneStatDownside = new Array(NUM_STATS).fill(0);
   let tuneTotalUpside = 0;
   for (const opt of tuneOpts) {
     let optTotal = 0;
@@ -174,6 +185,7 @@ export function makeInternalPiece(
       // Per-stat upside stays unconditioned: ceiling probes raise minimums past the
       // query's, so canReachMin/suffixUp must keep crediting every option's +5.
       if (opt.vec[s] > tuneStatUpside[s]) tuneStatUpside[s] = opt.vec[s];
+      if (opt.vec[s] < tuneStatDownside[s]) tuneStatDownside[s] = opt.vec[s];
       // Positive components only: a directional's −5 can be fully absorbed by the
       // 0-clamp (the minus stat is already ≤0 at the leaf), so a signed sum would
       // undercount its realizable gain and make the top-N prune bound inadmissible.
@@ -194,6 +206,7 @@ export function makeInternalPiece(
     tuned: allowTuning && p.tuning ? p.tuning.tuned : -1,
     tuneOpts,
     tuneStatUpside,
+    tuneStatDownside,
     tuneTotalUpside,
   };
 }
@@ -328,13 +341,34 @@ export interface TuningOutcome {
  * instead, and the same structure holds: untuned-everywhere unless a directional is
  * needed to bridge a minimum.
  *
+ * Completeness of the directional search: a piece's directional (+5 on stat `t`) is
+ * branched at a node iff `t` COULD still end up short at a leaf below it with the piece
+ * left on its default option — i.e. `mins[t] > 0` and the current accumulation plus the
+ * default's contribution plus the WORST tuning the not-yet-tuned pieces can do to `t`
+ * (`tuneStatDownside`, the −5s) is still under `mins[t]`. If instead `t` is guaranteed
+ * to meet its minimum under every completion, swapping that directional for the default
+ * never hurts: `t` stays at/over its minimum (no new deficit), the −5 stat gains 5 and
+ * the off-archetype stats gain their +1s (deficits only shrink), so the directional is
+ * dominated and skipping it loses nothing. The test must be evaluated at EACH node, not
+ * frozen at the fast path: choosing a directional on one piece drops that piece's
+ * Balanced +1s, which can push a stat that was fine under Balanced-everywhere one point
+ * short, and only a compensating directional on a later piece can bridge that. (A
+ * frozen Balanced-time mask forbade exactly that compensating tune — a real rejected
+ * build, the 2026-09-21 review's finding 1.)
+ *
  * The factory owns the search's scratch arrays, so a caller allocates them once and pays
  * nothing per leaf. `sum` is the chosen pieces' summed base stats; `mins` the per-stat
- * minimums to meet (the caller may mutate and re-call — probes do).
+ * minimums to meet (the caller may mutate and re-call — probes do). `onTick` (optional)
+ * fires every `TICK_NODES` directional-search nodes so a long leaf can't outrun its
+ * caller's deadline unnoticed — the tuner never aborts a leaf itself (a leaf is bounded),
+ * the caller decides after the leaf returns.
  */
+export const TICK_NODES = 1024;
+
 export function createTuningSearcher(
   frag: number[],
   mods: ModBudget,
+  onTick?: () => void,
 ): (
   chosen: InternalPiece[],
   sum: number[],
@@ -344,15 +378,23 @@ export function createTuningSearcher(
   const maxModPoints = mods.major * 10 + mods.minor * 5;
   const aug = new Array(NUM_STATS).fill(0);
   const deficits = new Array(NUM_STATS).fill(0);
-  // Which stats the fast path left short (so a directional that can feed one may help).
-  const shortStat: boolean[] = new Array(NUM_STATS).fill(false);
-  // Hoisted predicate for directionalsBranchable — no per-node closure allocation.
-  const isShort = (s: number): boolean => shortStat[s];
   const curApplied: (AppliedTuning | null)[] = new Array(NUM_SLOTS).fill(null);
   const artificePoints = new Array(NUM_STATS).fill(0);
   // suffixUp[i][s] = max tuning upside to stat s reachable from chosen pieces i..4.
   const suffixUp: number[][] = Array.from({ length: NUM_SLOTS + 1 }, () =>
     new Array(NUM_STATS).fill(0),
+  );
+  // suffixDown[i][s] = the worst (most negative) tuning contribution to stat s the
+  // chosen pieces i..4 could make — what the could-be-short test charges.
+  const suffixDown: number[][] = Array.from({ length: NUM_SLOTS + 1 }, () =>
+    new Array(NUM_STATS).fill(0),
+  );
+  let tickNodes = 0;
+  // Artifice-dump DP scratch (see dumpArtifice): at most one leftover mod per slot.
+  const dumpBest = new Array(NUM_SLOTS + 1).fill(0);
+  const dumpNext = new Array(NUM_SLOTS + 1).fill(0);
+  const dumpChoice: number[][] = Array.from({ length: NUM_STATS }, () =>
+    new Array(NUM_SLOTS + 1).fill(0),
   );
 
   interface Winner {
@@ -366,24 +408,46 @@ export function createTuningSearcher(
   }
 
   /**
-   * Maximize-mode leftover dump: every unspent artifice mod is worth +3 to the total
-   * (artifice is free and piece-intrinsic — it is always socketed in practice), so
-   * dump each into the stat with the most headroom below the cap. Mutates `art`
-   * in place; `base` is the stat value before artifice.
+   * Maximize-mode leftover dump: every unspent artifice mod is worth up to +3 to the
+   * total (artifice is free and piece-intrinsic — it is always socketed in practice), so
+   * place the leftovers where they raise the CLAMPED total the most. Clamped gain is what
+   * matters, not raw headroom: a stat sitting below zero (negative fragments) has the
+   * most "room" under the cap yet gains nothing until it climbs back over zero, and a
+   * stat two under the cap gains only two. Mods interact (two +3s on a stat at −4 gain
+   * 2 together, 0 each alone), so this is an exact DP over "k mods on stat s" — at most
+   * five mods over six stats, trivially small. Mods that can't gain anything anywhere
+   * are left unplaced. Mutates `art` in place; `base` is the stat value before artifice.
    */
   const dumpArtifice = (base: number[], art: number[], leftovers: number): void => {
-    for (let n = 0; n < leftovers; n++) {
-      let best = -1;
-      let bestRoom = 0;
-      for (let s = 0; s < NUM_STATS; s++) {
-        const room = STAT_CAP - (base[s] + art[s]);
-        if (room > bestRoom) {
-          bestRoom = room;
-          best = s;
+    if (leftovers <= 0) return;
+    const n = leftovers;
+    // dumpBest[j] = best clamped gain using AT MOST j mods over the stats seen so far.
+    for (let j = 0; j <= n; j++) dumpBest[j] = 0;
+    for (let s = 0; s < NUM_STATS; s++) {
+      const v = base[s] + art[s];
+      const before = clamp(v);
+      for (let j = 0; j <= n; j++) {
+        let best = dumpBest[j];
+        let pick = 0;
+        for (let k = 1; k <= j; k++) {
+          const g = dumpBest[j - k] + clamp(v + k * ARTIFICE_MOD_BONUS) - before;
+          if (g > best) {
+            best = g;
+            pick = k;
+          }
         }
+        dumpNext[j] = best;
+        dumpChoice[s][j] = pick;
       }
-      if (best < 0) return; // everything capped — stop dumping
-      art[best] += ARTIFICE_MOD_BONUS;
+      for (let j = 0; j <= n; j++) dumpBest[j] = dumpNext[j];
+    }
+    let j = n;
+    for (let s = NUM_STATS - 1; s >= 0; s--) {
+      const k = dumpChoice[s][j];
+      if (k > 0) {
+        art[s] += k * ARTIFICE_MOD_BONUS;
+        j -= k;
+      }
     }
   };
 
@@ -496,22 +560,25 @@ export function createTuningSearcher(
     }
 
     // Slow path: the default option falls short of a minimum — branch the directional
-    // tunes. `deficits` still holds the fast path's shortfall: a directional only helps
-    // a short stat.
-    for (let s = 0; s < NUM_STATS; s++) shortStat[s] = deficits[s] > 0;
+    // tunes (each one only where its +5 stat could still be short: see the factory doc).
     // Reset the fast path's accumulation: rec() re-adds every piece's tuning (the
     // default option is tuneOpts[0]), so aug must restart at sum+frag or it would be
     // double-counted (the exact drift bug that once over-reported a ceiling).
     for (let s = 0; s < NUM_STATS; s++) aug[s] = sum[s] + frag[s];
-    for (let s = 0; s < NUM_STATS; s++) suffixUp[NUM_SLOTS][s] = 0;
+    for (let s = 0; s < NUM_STATS; s++) {
+      suffixUp[NUM_SLOTS][s] = 0;
+      suffixDown[NUM_SLOTS][s] = 0;
+    }
     for (let i = NUM_SLOTS - 1; i >= 0; i--) {
       for (let s = 0; s < NUM_STATS; s++) {
         suffixUp[i][s] = suffixUp[i + 1][s] + chosen[i].tuneStatUpside[s];
+        suffixDown[i][s] = suffixDown[i + 1][s] + chosen[i].tuneStatDownside[s];
       }
     }
 
     const box: { winner: Winner | null } = { winner: null };
     const rec = (i: number): void => {
+      if (onTick && (++tickNodes & (TICK_NODES - 1)) === 0) onTick();
       // Joint-feasibility prune (both modes — it's admissible for a pure existence
       // check too, since suffixUp upper-bounds the tuning upside of every branch):
       // even with the best remaining tuning upside, if the mod points needed to close
@@ -563,17 +630,23 @@ export function createTuningSearcher(
         }
         return;
       }
-      // Branch a piece's directionals only where they can feed a still-short stat
-      // (directionalsBranchable — the same policy the pool-time upside bound uses);
-      // otherwise the default option (opts[0]) dominates and only it is enumerated.
+      // The default option (opts[0]) is always enumerated, first. A directional is
+      // branched only if its +5 stat COULD still be short at a leaf below this node with
+      // this piece on its default — otherwise the default dominates it (factory doc).
+      // Evaluated here, per node, against the worst the remaining pieces can do to that
+      // stat: `suffixDown[i + 1]` — the dynamic refinement of `directionalsBranchable`.
       const opts = chosen[i].tuneOpts;
-      const limit = directionalsBranchable(chosen[i].exotic, chosen[i].tuned, isShort)
-        ? opts.length
-        : 1;
-      for (let o = 0; o < limit; o++) {
+      const def = opts[0].vec;
+      for (let o = 0; o < opts.length; o++) {
         // Feasible mode early-exits at the first feasible leaf found.
         if (mode === "feasible" && box.winner) return;
         const opt = opts[o];
+        const ap = opt.applied;
+        if (ap !== null && ap.kind === "directional") {
+          const plus = ap.plus;
+          const m = mins[plus];
+          if (m <= 0 || aug[plus] + def[plus] + suffixDown[i + 1][plus] >= m) continue;
+        }
         curApplied[i] = opt.applied;
         for (let s = 0; s < NUM_STATS; s++) aug[s] += opt.vec[s];
         rec(i + 1);
