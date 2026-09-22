@@ -325,3 +325,47 @@ describe("directionalsBranchable (shared searcher/bound policy)", () => {
     ).toBe(false);
   });
 });
+
+describe("assignMods overshoot (the mod-slack bound's premise)", () => {
+  function mulberry32(seed: number): () => number {
+    let a = seed >>> 0;
+    return () => {
+      a = (a + 0x6d2b79f5) | 0;
+      let t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  const randInt = (rng: () => number, lo: number, hi: number): number =>
+    lo + Math.floor(rng() * (hi - lo + 1));
+
+  test("stat-mod points on a stat never exceed its deficit by more than MAX_MOD_OVERSHOOT (9), and are zero without a deficit", () => {
+    // makeModUpside (bounds.ts) credits mods only up to `min + 9` per targeted stat; this
+    // pins the covering policy that premise rests on, with and without artifice.
+    const rng = mulberry32(0x0ff5e7);
+    let coverings = 0;
+    for (let iter = 0; iter < 3000; iter++) {
+      const deficits = Array.from({ length: 6 }, () => {
+        const r = rng();
+        return r < 0.4 ? 0 : r < 0.5 ? -randInt(rng, 1, 20) : randInt(rng, 1, 45);
+      });
+      const major = randInt(rng, 0, 4);
+      const minor = randInt(rng, 0, 5 - major);
+      const art = rng() < 0.5 ? 0 : randInt(rng, 1, 3);
+      const asg = assignMods(deficits, major, minor, art);
+      if (!asg) continue;
+      coverings++;
+      for (let s = 0; s < 6; s++) {
+        const ctx = `iter=${iter} s=${s} deficits=${deficits} mods=${major}/${minor} art=${art}`;
+        if (deficits[s] <= 0) {
+          expect(asg.points[s], ctx).toBe(0);
+          expect(asg.artificePoints[s], ctx).toBe(0);
+        } else {
+          expect(asg.points[s] + asg.artificePoints[s], ctx).toBeGreaterThanOrEqual(deficits[s]);
+          expect(asg.points[s], ctx).toBeLessThanOrEqual(deficits[s] + 9);
+        }
+      }
+    }
+    expect(coverings).toBeGreaterThan(300);
+  });
+});

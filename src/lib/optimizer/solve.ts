@@ -10,7 +10,12 @@ import {
   createTuningSearcher,
   type InternalPiece,
 } from "./tuning";
-import { buildSlots, computeSuffixBounds, makeJointMinCheck } from "./bounds";
+import {
+  buildSlots,
+  computeSuffixBounds,
+  makeJointMinCheck,
+  makeModUpside,
+} from "./bounds";
 import { CEILING_BUDGET_MS, runCeilings } from "./ceilings";
 import { createPowerTracker, loadoutPower } from "./power";
 
@@ -161,8 +166,16 @@ export function solve(
   // buildSlots pre-filtered constraint-ineligible exotics out of the pool, so every
   // remaining exotic counts toward "require"/"specific" — the reachability predicate
   // is just p.exotic (one eligibility rule, encoded once, in buildSlots).
-  const { suffixStat, suffixTotal, setSuffix, exoticSuffix, artSuffix, subsetSuffix } =
-    computeSuffixBounds(slots, reqs, needExotic, (p) => p.exotic);
+  const {
+    suffixStat,
+    suffixTotal,
+    setSuffix,
+    exoticSuffix,
+    artSuffix,
+    subsetSuffix,
+    suffixMinStat,
+    suffixDownStat,
+  } = computeSuffixBounds(slots, reqs, needExotic, (p) => p.exotic);
 
   const heap = new TopNHeap(maxResults);
   // Pre-seed from a prior pass over the SAME input (see SolveOptions.heapSeed): the
@@ -179,6 +192,8 @@ export function solve(
   const sum = new Array(NUM_STATS).fill(0);
   // Best tuning upside per stat from the pieces chosen so far (for canReachMin).
   const sumTuneUp = new Array(NUM_STATS).fill(0);
+  // Worst tuning downside per stat from the pieces chosen so far (for the mod-slack bound).
+  const sumTuneDown = new Array(NUM_STATS).fill(0);
   const chosen: InternalPiece[] = new Array(NUM_SLOTS);
   const setCounts = new Array(reqs.length).fill(0);
   let runningTotal = 0;
@@ -245,6 +260,29 @@ export function solve(
     }
     return true;
   };
+  // The mod term of the admission bound (see makeModUpside): zero when no stat has a
+  // minimum, never more than the budget.
+  const modUpside = makeModUpside(
+    min,
+    sum,
+    frag,
+    sumTuneDown,
+    suffixMinStat,
+    suffixDownStat,
+    maxModPoints,
+  );
+  // Top-N admission bound from slot k: the chosen pieces' stats + credited tuning
+  // upside, the best the remaining slots can add, what mods can still contribute, the
+  // free artifice +3s, and the fragments' positive part. A subtree whose bound can't
+  // beat the heap's worst is skipped (admission is strict, so a tie can't enter either).
+  const cannotBeatWorst = (k: number): boolean =>
+    heap.full() &&
+    runningTotal +
+      suffixTotal[k] +
+      modUpside(k) +
+      (chosenArt.n + artSuffix[k]) * 3 +
+      fragUpside <=
+      heap.worst;
 
   const recurse = (k: number, exoticCount: number): void => {
     if (stopped) return;
@@ -259,8 +297,10 @@ export function solve(
         if (setCounts[r] < reqs[r].count) return;
       }
       if (power && !power.feasible(NUM_SLOTS)) return;
-      // Leaf gate: a final joint-minimum check before the costly tuning search.
+      // Leaf gates: a final joint-minimum check and the admission bound (suffix = 0)
+      // before the costly tuning search — a leaf that can't enter the heap isn't tuned.
       if (!canReachMin(NUM_SLOTS)) return;
+      if (cannotBeatWorst(NUM_SLOTS)) return;
 
       const best = tuner(chosen, sum, min, "maximize");
       if (!best) return;
@@ -290,17 +330,7 @@ export function solve(
     if (!canReachSets(k)) return;
     if (needExotic && exoticCount + exoticSuffix[k] < 1) return;
     if (power && !power.feasible(k)) return;
-    if (
-      heap.full() &&
-      runningTotal +
-        suffixTotal[k] +
-        maxModPoints +
-        (chosenArt.n + artSuffix[k]) * 3 +
-        fragUpside <=
-        heap.worst
-    ) {
-      return;
-    }
+    if (cannotBeatWorst(k)) return;
 
     for (let i = 0; i < slots[k].length; i++) {
       const p = slots[k][i];
@@ -318,6 +348,7 @@ export function solve(
       for (let s = 0; s < NUM_STATS; s++) {
         sum[s] += p.stats[s];
         sumTuneUp[s] += p.tuneStatUpside[s];
+        sumTuneDown[s] += p.tuneStatDownside[s];
       }
       runningTotal += p.total + p.tuneTotalUpside;
       if (p.artifice) chosenArt.n++;
@@ -336,6 +367,7 @@ export function solve(
       for (let s = 0; s < NUM_STATS; s++) {
         sum[s] -= p.stats[s];
         sumTuneUp[s] -= p.tuneStatUpside[s];
+        sumTuneDown[s] -= p.tuneStatDownside[s];
       }
     }
   };

@@ -3,7 +3,7 @@ import type {
   OptimizerPiece,
   SetRequirement,
 } from "./types";
-import { NUM_SLOTS, NUM_STATS } from "./floors";
+import { NUM_SLOTS, NUM_STATS, STAT_CAP, clamp } from "./floors";
 import {
   deficitPoints,
   makeInternalPiece,
@@ -90,8 +90,20 @@ export function computeSuffixBounds(
   exoticSuffix: number[];
   artSuffix: number[];
   subsetSuffix: number[][];
+  suffixMinStat: number[][];
+  suffixDownStat: number[][];
 } {
   const suffixStat: number[][] = Array.from({ length: NUM_SLOTS + 1 }, () =>
+    new Array(NUM_STATS).fill(0),
+  );
+  // Lower-side companions of suffixStat, for the mod-slack bound (makeModUpside):
+  // suffixMinStat[k][s] = Σ over slots k..4 of the slot's LOWEST stat s (any completion
+  // contributes at least this), suffixDownStat[k][s] = Σ of the slot's worst tuning
+  // downside on s (the −5s a completion could still land there).
+  const suffixMinStat: number[][] = Array.from({ length: NUM_SLOTS + 1 }, () =>
+    new Array(NUM_STATS).fill(0),
+  );
+  const suffixDownStat: number[][] = Array.from({ length: NUM_SLOTS + 1 }, () =>
     new Array(NUM_STATS).fill(0),
   );
   const suffixTotal = new Array(NUM_SLOTS + 1).fill(0);
@@ -111,12 +123,16 @@ export function computeSuffixBounds(
   const slotSubsetMax = new Array(NUM_MASKS).fill(0);
   for (let k = NUM_SLOTS - 1; k >= 0; k--) {
     const slotMax = new Array(NUM_STATS).fill(0);
+    const slotMin = new Array(NUM_STATS).fill(Infinity);
+    const slotDown = new Array(NUM_STATS).fill(0);
     let slotBestTotal = 0;
     slotSubsetMax.fill(0);
     for (const p of slots[k]) {
       for (let s = 0; s < NUM_STATS; s++) {
         const v = p.stats[s] + p.tuneStatUpside[s];
         if (v > slotMax[s]) slotMax[s] = v;
+        if (p.stats[s] < slotMin[s]) slotMin[s] = p.stats[s];
+        if (p.tuneStatDownside[s] < slotDown[s]) slotDown[s] = p.tuneStatDownside[s];
       }
       const t = p.total + p.tuneTotalUpside;
       if (t > slotBestTotal) slotBestTotal = t;
@@ -146,6 +162,8 @@ export function computeSuffixBounds(
     }
     for (let s = 0; s < NUM_STATS; s++) {
       suffixStat[k][s] = suffixStat[k + 1][s] + slotMax[s];
+      suffixMinStat[k][s] = suffixMinStat[k + 1][s] + slotMin[s];
+      suffixDownStat[k][s] = suffixDownStat[k + 1][s] + slotDown[s];
     }
     for (let m = 1; m < NUM_MASKS; m++) {
       subsetSuffix[k][m] = subsetSuffix[k + 1][m] + slotSubsetMax[m];
@@ -161,7 +179,72 @@ export function computeSuffixBounds(
     }
     artSuffix[k] = artSuffix[k + 1] + (slots[k].some((p) => p.artifice) ? 1 : 0);
   }
-  return { suffixStat, suffixTotal, setSuffix, exoticSuffix, artSuffix, subsetSuffix };
+  return {
+    suffixStat,
+    suffixTotal,
+    setSuffix,
+    exoticSuffix,
+    artSuffix,
+    subsetSuffix,
+    suffixMinStat,
+    suffixDownStat,
+  };
+}
+
+/**
+ * Overshoot ceiling of a mod covering: `assignMods` closes a deficit with majors first
+ * (at most ⌈d/10⌉ of them, so ≤ 9 over) and finishes with minors (≤ 4 over), so the
+ * stat-mod points it puts on a stat never exceed that stat's deficit by more than this.
+ * Pinned by a property test in tuning.test.ts; the mod-slack bound below relies on it.
+ */
+export const MAX_MOD_OVERSHOOT = 9;
+
+/**
+ * The mod term of the top-N admission bound: how much the stat mods can still add to a
+ * loadout's clamped total from slot k. The flat credit (`maxModPoints`) is admissible but
+ * blind to WHEN mods are used: `assignMods` socket mods only to cover a deficit on a stat
+ * with a positive minimum, so with no minimums the true mod upside is zero — and a flat
+ * +25 there is exactly what stops the walk from pruning total ties against a full heap.
+ *
+ * Per stat with a positive minimum: mods land only if the pre-mod value `aug` is under
+ * the minimum, and then `clamp(aug + points) ≤ min(STAT_CAP, min + MAX_MOD_OVERSHOOT)`.
+ * The gain in the clamped total is therefore at most that cap minus `clamp(aug)`, and
+ * `aug` is at least the chosen pieces' stats + fragments + every −5 the chosen and
+ * remaining pieces could still land + the remaining slots' lowest rolls. Summed over the
+ * minimum-bearing stats and capped by the budget, this is a valid upper bound on
+ * Σ_s [clamp(aug_s + points_s) − clamp(aug_s)] — the part of the total that mods
+ * contribute once tuning has been credited separately (Lipschitz-1 clamp). `mins` is
+ * read live; `sum`/`sumTuneDown` are the walk's running accumulators.
+ */
+export function makeModUpside(
+  mins: number[],
+  sum: number[],
+  frag: number[],
+  sumTuneDown: number[],
+  suffixMinStat: number[][],
+  suffixDownStat: number[][],
+  maxModPoints: number,
+): (k: number) => number {
+  const targeted: number[] = [];
+  const cap: number[] = new Array(NUM_STATS).fill(0);
+  for (let s = 0; s < NUM_STATS; s++) {
+    if (mins[s] > 0) {
+      targeted.push(s);
+      cap[s] = Math.min(STAT_CAP, mins[s] + MAX_MOD_OVERSHOOT);
+    }
+  }
+  if (targeted.length === 0 || maxModPoints === 0) return () => 0;
+  return (k) => {
+    let upside = 0;
+    for (let i = 0; i < targeted.length; i++) {
+      const s = targeted[i];
+      const lowest =
+        sum[s] + frag[s] + sumTuneDown[s] + suffixMinStat[k][s] + suffixDownStat[k][s];
+      const gain = cap[s] - clamp(lowest);
+      if (gain > 0) upside += gain;
+    }
+    return upside < maxModPoints ? upside : maxModPoints;
+  };
 }
 
 /**

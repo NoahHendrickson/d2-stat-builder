@@ -10,7 +10,7 @@
  * failure after a bound change indicts the change, not the harness.
  */
 import { describe, expect, test } from "vitest";
-import { computeSuffixBounds, makeJointMinCheck } from "./bounds";
+import { computeSuffixBounds, makeJointMinCheck, makeModUpside } from "./bounds";
 import { solveCeilings } from "./ceilings";
 import {
   NUM_SLOTS,
@@ -233,5 +233,111 @@ describe("subset-mask suffix bound effectiveness", () => {
         expect(subsetSuffix[k][1 << s], `k=${k} s=${s}`).toBe(suffixStat[k][s]);
       }
     }
+  });
+});
+
+describe("top-N admission bound admissibility (never prunes a better completion)", () => {
+  /**
+   * The bound solve() prunes a prefix with, rebuilt from the same primitives: chosen
+   * pieces' stats + credited tuning upside, the best the remaining slots can add
+   * (suffixTotal), the mod-slack term (makeModUpside), the reachable artifice +3s and
+   * the fragments' positive part. Brute-forcing every completion through the REAL leaf
+   * search must never find a total above it — at every depth, including the leaf itself
+   * (where the same bound gates the tuner).
+   */
+  test("~200 seeded-random pools: bound(k) ≥ the best total of every completion", () => {
+    const rng = mulberry32(0xb0d1e5);
+    let prefixesChecked = 0;
+    let tightPrefixes = 0;
+    for (let iter = 0; iter < 200; iter++) {
+      const c = randomCase(rng);
+      const tuner = createTuningSearcher(c.frag, c.mods);
+      const { suffixTotal, artSuffix, suffixMinStat, suffixDownStat } = computeSuffixBounds(
+        c.slots,
+        [],
+        false,
+        () => false,
+      );
+      const maxModPoints = c.mods.major * 10 + c.mods.minor * 5;
+      const fragUpside = c.frag.reduce((a, v) => a + Math.max(0, v), 0);
+      const sum = new Array(NUM_STATS).fill(0);
+      const sumTuneDown = new Array(NUM_STATS).fill(0);
+      const chosenArt = { n: 0 };
+      const chosen: InternalPiece[] = new Array(NUM_SLOTS);
+      let runningTotal = 0;
+      const modUpside = makeModUpside(
+        c.mins,
+        sum,
+        c.frag,
+        sumTuneDown,
+        suffixMinStat,
+        suffixDownStat,
+        maxModPoints,
+      );
+      const bound = (k: number): number =>
+        runningTotal +
+        suffixTotal[k] +
+        modUpside(k) +
+        (chosenArt.n + artSuffix[k]) * 3 +
+        fragUpside;
+
+      const addPiece = (k: number, p: InternalPiece): void => {
+        chosen[k] = p;
+        for (let s = 0; s < NUM_STATS; s++) {
+          sum[s] += p.stats[s];
+          sumTuneDown[s] += p.tuneStatDownside[s];
+        }
+        runningTotal += p.total + p.tuneTotalUpside;
+        if (p.artifice) chosenArt.n++;
+      };
+      const removePiece = (k: number): void => {
+        const p = chosen[k];
+        for (let s = 0; s < NUM_STATS; s++) {
+          sum[s] -= p.stats[s];
+          sumTuneDown[s] -= p.tuneStatDownside[s];
+        }
+        runningTotal -= p.total + p.tuneTotalUpside;
+        if (p.artifice) chosenArt.n--;
+      };
+
+      // Best maximize-mode total over every completion of slots k..4 (−1 if none feasible).
+      const bestCompletion = (k: number): number => {
+        if (k === NUM_SLOTS) return tuner(chosen, sum, c.mins, "maximize")?.total ?? -1;
+        let best = -1;
+        for (const p of c.slots[k]) {
+          addPiece(k, p);
+          best = Math.max(best, bestCompletion(k + 1));
+          removePiece(k);
+        }
+        return best;
+      };
+
+      for (let k = 0; k <= NUM_SLOTS; k++) {
+        for (let rep = 0; rep < 2; rep++) {
+          if (k === 0 && rep > 0) break;
+          for (let j = 0; j < k; j++) {
+            addPiece(j, c.slots[j][randInt(rng, 0, c.slots[j].length - 1)]);
+          }
+          const b = bound(k);
+          const best = bestCompletion(k);
+          prefixesChecked++;
+          if (best >= 0) {
+            expect(
+              b,
+              `iter=${iter} k=${k} rep=${rep} prefix=${chosen
+                .slice(0, k)
+                .map((p) => p.id)
+                .join(",")} mins=${c.mins} frag=${c.frag} mods=${JSON.stringify(c.mods)}`,
+            ).toBeGreaterThanOrEqual(best);
+            if (b === best) tightPrefixes++;
+          }
+          for (let j = k - 1; j >= 0; j--) removePiece(j);
+        }
+      }
+    }
+    expect(prefixesChecked).toBeGreaterThan(1000);
+    // The bound is exact somewhere (a leaf with no mods/tuning slack) — sanity that the
+    // harness is comparing like with like, not two unrelated quantities.
+    expect(tightPrefixes).toBeGreaterThan(0);
   });
 });
