@@ -1109,3 +1109,33 @@ describe("power range", () => {
     }
   });
 });
+
+describe("required-exotic child skip", () => {
+  test("legendary children that can no longer reach an exotic are never descended", () => {
+    // Slots 0–3: five distinct legendaries each; slot 4: one exotic + five legendaries.
+    // With an exotic required, every leaf under a legendary class item is rejected, so
+    // the walk must try exactly the 5^4 exotic leaves — a leaf per legendary class item
+    // would be 5^4 × 5 wasted tuner-free leaves (and, on real pools, most of the walk).
+    const leg = (id: string, k: number, i: number): OptimizerPiece => ({
+      id,
+      stats: [10 + i, 10 + k, 5, 5, 5, 5],
+      exotic: false,
+    });
+    const slots: OptimizerPiece[][] = Array.from({ length: 4 }, (_, k) =>
+      Array.from({ length: 5 }, (_, i) => leg(`s${k}p${i}`, k, i)),
+    );
+    slots.push([
+      { id: "xk", stats: [20, 20, 5, 5, 5, 5], exotic: true, hash: 1 },
+      ...Array.from({ length: 5 }, (_, i) => leg(`s4p${i}`, 4, i)),
+    ]);
+    // maxResults above the leaf count keeps the heap from filling, so the admission
+    // bound never prunes and every exotic leaf is a tried combo.
+    const out = solve(
+      input(slots, { exotic: { mode: "require" }, allowTuning: false, maxResults: 1000 }),
+    );
+    expect(out.combosTried).toBe(5 ** 4);
+    expect(out.loadouts.length).toBe(5 ** 4);
+    expect(out.loadouts.every((l) => l.pieceIds[4] === "xk")).toBe(true);
+    expect(out.ceilingsExact).toBe(true);
+  });
+});

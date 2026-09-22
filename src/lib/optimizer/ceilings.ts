@@ -236,6 +236,9 @@ export function runCeilings(
       // Exotic-ineligible pieces were pre-filtered from the pool (solve() built `slots`).
       const nextExotic = exoticCount + (p.exotic ? 1 : 0);
       if (nextExotic > 1) continue;
+      // Same child-skip as the top-N walk: a required exotic no later slot can supply
+      // means every leaf below is rejected — don't descend.
+      if (needExotic && nextExotic === 0 && exoticSuffix[k + 1] === 0) continue;
       for (let s = 0; s < NUM_STATS; s++) {
         sum[s] += p.stats[s];
         sumTuneUp[s] += p.tuneStatUpside[s];

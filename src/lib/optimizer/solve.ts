@@ -345,6 +345,10 @@ export function solve(
       // Exotic-ineligible pieces were pre-filtered from the pool; only the ≤1 rule remains.
       const nextExotic = exoticCount + (p.exotic ? 1 : 0);
       if (nextExotic > 1) continue; // ≤1 exotic per loadout
+      // A required exotic that no later slot can supply: this child can only lead to
+      // exotic-less leaves, which the leaf rejects anyway — skip it here (the child's
+      // own reachability check runs AFTER its joint-min work, and a leaf has none).
+      if (needExotic && nextExotic === 0 && exoticSuffix[k + 1] === 0) continue;
       for (let s = 0; s < NUM_STATS; s++) {
         sum[s] += p.stats[s];
         sumTuneUp[s] += p.tuneStatUpside[s];
