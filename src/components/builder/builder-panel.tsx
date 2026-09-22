@@ -3,7 +3,6 @@
 import {
   useCallback,
   useEffect,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -15,7 +14,6 @@ import { useArmory } from "@/lib/armory/use-armory";
 import { useManifest } from "@/lib/manifest/use-manifest";
 import { useOptimizer } from "@/lib/optimizer/use-optimizer";
 import { useSmoothedProgress } from "@/lib/use-smoothed-progress";
-import { createValueStore } from "@/lib/value-store";
 import { availableSets } from "@/lib/armory/sets";
 import {
   DEFAULT_SET_FILTERS,
@@ -75,7 +73,6 @@ import { SettingRow } from "@/components/builder/setting-row";
 import { PowerRangeControls } from "@/components/builder/power-range-controls";
 import { BuildsSurface } from "@/components/builder/builds-surface";
 import type { BuildsColumnContentProps } from "@/components/builder/builds-column-content";
-import type { BuilderActionState } from "@/components/builder/build-actions";
 import type { ExoticConstraint, OptimizerPiece } from "@/lib/optimizer/types";
 import {
   DEFAULT_POWER_RANGE,
@@ -102,7 +99,7 @@ import {
   SUBCLASS_ITEM_HASHES,
 } from "@/lib/dim/subclasses";
 import { useApplyCurrentFragments } from "@/lib/armory/use-apply-current-fragments";
-import { MAX_SET_BONUSES, type BuilderSnapshot } from "@/lib/loadouts/types";
+import { MAX_SET_BONUSES, type BuilderSnapshot, type QueryOrigin } from "@/lib/loadouts/types";
 
 const MAX_MODS = 5;
 
@@ -126,7 +123,7 @@ export function BuilderPanel({
     refinement,
     applyPending,
     getSnapshot,
-  } = useOptimizer<BuilderActionState>();
+  } = useOptimizer();
   // `progress` is a value store: the smoother reads it per frame and writes the eased
   // value to another store; neither touches this component's render.
   const { displayedProgress, showLoading } = useSmoothedProgress(
@@ -766,38 +763,20 @@ export function BuilderPanel({
     ],
   );
 
-  // The state a shown build's actions (save, DIM export) act on: targets, the builder
-  // snapshot, set bonuses and the subclass/fragments. Every search hands the store the
-  // state it was dispatched from (`origin` below), and the store echoes it back bound to
-  // that query's result (`resultOrigin`) — so the rows always act on the configuration
-  // that PRODUCED the list they show. The list deliberately stays on screen while a newer
-  // query runs, sits in the debounce, or was cancelled; reading the live state then
-  // would combine a new subclass/targets with an old list's stats into one loadout.
-  // The live holder is only the typed fallback for "no result yet" (nothing to act on):
-  // written from a layout effect, not during render, so a discarded concurrent render
-  // can never leave it stale.
-  const [liveActionState] = useState(() =>
-    createValueStore<BuilderActionState>({
-      targets,
-      builderSnapshot,
-      setBonuses: ownedSetReqs,
-      subclass: dimSubclass,
-    }),
-  );
-  useLayoutEffect(() => {
-    liveActionState.set({
-      targets,
-      builderSnapshot,
-      setBonuses: ownedSetReqs,
-      subclass: dimSubclass,
-    });
-  });
+  // The state a shown build's actions (save, DIM export) act on: the query origin the
+  // store pairs with the shown result (see ShownResult). Every search hands the store
+  // the state it was dispatched from (`origin` in runOptimizer), so the rows always act
+  // on the configuration that PRODUCED the list they show — the list deliberately stays
+  // on screen while a newer query runs, sits in the debounce, or was cancelled, and the
+  // live state would combine a new subclass/targets with an old list's stats. Rows only
+  // exist when a result is shown, so a missing pair is a programming error, not a state.
   // Stable getter (rows memoize on it): a slider drag re-renders one StatTargetRow, not
   // fifty BuildRows; rows read it only at click time.
-  const getBuilderState = useCallback(
-    (): BuilderActionState => getSnapshot().resultOrigin ?? liveActionState.get(),
-    [getSnapshot, liveActionState],
-  );
+  const getBuilderState = useCallback((): QueryOrigin => {
+    const shown = getSnapshot().shown;
+    if (!shown) throw new Error("A build acted on with no shown result");
+    return shown.origin;
+  }, [getSnapshot]);
 
   const runOptimizer = useCallback(() => {
     if (classType === null) return;

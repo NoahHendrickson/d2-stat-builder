@@ -459,3 +459,29 @@ export function withLoadoutTag(loadout: DimLoadout, raw: string, present: boolea
   const result = editLoadoutTag(loadout, raw, present);
   return result.status === "applied" ? result.loadout : loadout;
 }
+
+// --- Query origin ---
+
+/** The active subclass's DIM handoff data (undefined hash = unknown subclass/class combo). */
+export interface DimSubclassInput {
+  name: string;
+  itemHash?: number;
+  fragmentHashes: number[];
+  socketStart: number;
+}
+
+/**
+ * The builder configuration an optimizer query was dispatched from. The optimizer store
+ * pairs it with that query's result (`shown: { result, origin }`), and a shown build's
+ * actions (Save, Open in DIM) act on THIS, never on the live slider/subclass state — the
+ * list stays on screen while a newer query runs, and a loadout must never mix one
+ * query's stats with another's targets or fragments.
+ */
+export interface QueryOrigin {
+  targets: number[];
+  builderSnapshot?: BuilderSnapshot;
+  /** Set bonuses the query's pool could satisfy — DIM export, not "Load in builder". */
+  setBonuses?: Record<number, 2 | 4>;
+  /** The subclass + fragments the query's stats assumed. */
+  subclass?: DimSubclassInput;
+}

@@ -22,7 +22,7 @@ test("sums piece stats, placed mods, and fragment bonuses", () => {
     ],
   };
   const { stats, total } = sumEditorStats(
-    [{ instanceId: "helm", stats: [20, 30, 0, 0, 0, 0] }],
+    [{ instanceId: "helm", stats: [20, 30, 0, 0, 0, 0], baseStats: [20, 30, 0, 0, 0, 0] }],
     { helm: { 0: 10 } },
     [20],
     0,
@@ -34,7 +34,7 @@ test("sums piece stats, placed mods, and fragment bonuses", () => {
 
 test("clamps each stat to 0–200", () => {
   const { stats } = sumEditorStats(
-    [{ instanceId: "a", stats: [195, 5, 0, 0, 0, 0] }],
+    [{ instanceId: "a", stats: [195, 5, 0, 0, 0, 0], baseStats: [195, 0, 0, 0, 0, 0] }],
     { a: { 0: 1 } },
     [2],
     0,
@@ -53,11 +53,13 @@ test("splits placement into Mods/Tuning/Artifice so the breakdown matches the he
       {
         instanceId: "helm",
         stats: [20, 0, 0, 0, 0, 0],
+        baseStats: [20, 0, 0, 0, 0, 0],
         armorSockets: [socket(0, "general"), socket(1, "tuning")],
       },
       {
         instanceId: "arms",
         stats: [0, 20, 0, 0, 0, 0],
+        baseStats: [0, 20, 0, 0, 0, 0],
         armorSockets: [socket(0, "artifice")],
       },
     ],

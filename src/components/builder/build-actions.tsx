@@ -24,7 +24,8 @@ import { useLoadoutMutations } from "@/lib/loadouts/use-loadouts";
 import { commitLoadout } from "@/lib/loadouts/commit";
 import {
   LOADOUT_SCHEMA_VERSION,
-  type BuilderSnapshot,
+  type DimSubclassInput,
+  type QueryOrigin,
 } from "@/lib/loadouts/types";
 import type { Manifest } from "@/lib/manifest/load";
 import {
@@ -36,31 +37,14 @@ import {
 import { planSpares } from "@/lib/bungie/equip-plan";
 import type { OptimizerLoadout } from "@/lib/optimizer/types";
 
-/** The active subclass's DIM handoff data (undefined hash = unknown subclass/class combo). */
-export interface DimSubclassInput {
-  name: string;
-  itemHash?: number;
-  fragmentHashes: number[];
-  socketStart: number;
-}
+export type { DimSubclassInput } from "@/lib/loadouts/types";
 
 /**
- * The builder configuration a shown build's actions act on. Bound to the query that
- * produced the build (the optimizer store echoes it back with each result), NOT the
- * live slider/subclass state — the list stays on screen while a newer query runs, and a
- * loadout must never mix one query's stats with another's targets or fragments.
+ * The query origin paired with the shown result (see `QueryOrigin`) — the configuration
+ * a shown build's actions act on. Rows read this only on user action (click), never
+ * during render.
  */
-export interface BuilderActionState {
-  targets: number[];
-  builderSnapshot?: BuilderSnapshot;
-  /** Set bonuses the query's pool could satisfy — DIM export, not "Load in builder". */
-  setBonuses?: Record<number, 2 | 4>;
-  /** The subclass + fragments the query's stats assumed. */
-  subclass?: DimSubclassInput;
-}
-
-/** Rows read this only on user action (click), never during render. */
-export type GetBuilderState = () => BuilderActionState;
+export type GetBuilderState = () => QueryOrigin;
 
 export interface BuildActionProps {
   characters: ArmoryCharacter[];

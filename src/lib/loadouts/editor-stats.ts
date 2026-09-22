@@ -22,12 +22,11 @@ export interface EditorStatPiece {
   stats: StatArray;
   /**
    * The true base roll. Balanced Tuning's +1s land on its three lowest stats — the
-   * same rule the normalizer used to strip the plug — so a piece with a tuning socket
-   * should always supply it. Falls back to `stats` when absent (masterwork raises the
-   * same three stats, so the classification usually survives; an exotic's intrinsic
-   * bonus can move it, which is why the live `ArmorPiece` always carries `baseStats`).
+   * same rule the normalizer used to strip the plug. Required: `stats` already carry
+   * masterwork and an exotic's intrinsic bonus, which can move the classification, so
+   * the archetype must never be inferred from them.
    */
-  baseStats?: StatArray;
+  baseStats: StatArray;
   armorSockets?: ArmorSocket[];
 }
 
@@ -141,7 +140,7 @@ export function sumEditorStats(
       if (!hash) continue;
       const inv = investmentStats(hash);
       if (socket.kind === "tuning") {
-        const delta = tuningDelta(hash, inv, p.baseStats ?? p.stats);
+        const delta = tuningDelta(hash, inv, p.baseStats);
         addStats(stats, delta);
         addStats(tuningBonus, delta);
         tuning = tuningFromInv(hash, inv);
