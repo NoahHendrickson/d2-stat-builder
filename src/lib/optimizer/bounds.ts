@@ -93,6 +93,7 @@ export function computeSuffixBounds(
   subsetSuffix: number[][];
   suffixMinStat: number[][];
   suffixDownStat: number[][];
+  suffixNetTotal: number[];
 } {
   const suffixStat: number[][] = Array.from({ length: NUM_SLOTS + 1 }, () =>
     new Array(NUM_STATS).fill(0),
@@ -108,6 +109,8 @@ export function computeSuffixBounds(
     new Array(NUM_STATS).fill(0),
   );
   const suffixTotal = new Array(NUM_SLOTS + 1).fill(0);
+  // suffixTotal's twin for the second admission bound: best (total + NET tuning) per slot.
+  const suffixNetTotal = new Array(NUM_SLOTS + 1).fill(0);
   // setSuffix[r][k] = number of slots in k..4 that contain ≥1 piece of reqs[r].setHash.
   const setSuffix = reqs.map(() => new Array(NUM_SLOTS + 1).fill(0));
   const exoticSuffix = new Array(NUM_SLOTS + 1).fill(0);
@@ -127,6 +130,7 @@ export function computeSuffixBounds(
     const slotMin = new Array(NUM_STATS).fill(Infinity);
     const slotDown = new Array(NUM_STATS).fill(0);
     let slotBestTotal = 0;
+    let slotBestNet = 0;
     slotSubsetMax.fill(0);
     for (const p of slots[k]) {
       for (let s = 0; s < NUM_STATS; s++) {
@@ -137,6 +141,8 @@ export function computeSuffixBounds(
       }
       const t = p.total + p.tuneTotalUpside;
       if (t > slotBestTotal) slotBestTotal = t;
+      const n = p.total + p.tuneNetUpside;
+      if (n > slotBestNet) slotBestNet = n;
       // This piece's summed stats over every stat-subset mask (statSum[m] extends the
       // mask-minus-lowest-bit sum by the lowest bit's stat).
       for (let m = 1; m < NUM_MASKS; m++) {
@@ -170,6 +176,7 @@ export function computeSuffixBounds(
       subsetSuffix[k][m] = subsetSuffix[k + 1][m] + slotSubsetMax[m];
     }
     suffixTotal[k] = suffixTotal[k + 1] + slotBestTotal;
+    suffixNetTotal[k] = suffixNetTotal[k + 1] + slotBestNet;
     for (let r = 0; r < reqs.length; r++) {
       const has = slots[k].some((p) => p.setHash === reqs[r].setHash) ? 1 : 0;
       setSuffix[r][k] = setSuffix[r][k + 1] + has;
@@ -189,7 +196,37 @@ export function computeSuffixBounds(
     subsetSuffix,
     suffixMinStat,
     suffixDownStat,
+    suffixNetTotal,
   };
+}
+
+/**
+ * The clamp-at-zero term of the second admission bound. That bound sums each stat's
+ * pre-mod value SIGNED (pieces' stats + fragments + net tuning, where a directional's
+ * +5/−5 cancel) and pays for the 0-clamp separately: `Σ_s clamp(v_s) ≤ Σ_s v_s +
+ * Σ_s max(0, −v_s)`, and `−v_s` is bounded pool-wide by the lowest `v_s` any leaf the
+ * tuner can accept has — the lowest rolls plus every −5 that could land there, or, for a
+ * stat with a minimum, that minimum minus everything mods and artifice could have
+ * supplied (a feasible leaf ends at or above its minimum). Constant per query.
+ */
+export function zeroClampSlack(
+  frag: number[],
+  mins: number[],
+  suffixMinStat: number[][],
+  suffixDownStat: number[][],
+  maxModPoints: number,
+  maxArtifice: number,
+): number {
+  let slack = 0;
+  for (let s = 0; s < NUM_STATS; s++) {
+    let lowest = frag[s] + suffixMinStat[0][s] + suffixDownStat[0][s];
+    if (mins[s] > 0) {
+      const fromMin = mins[s] - maxModPoints - maxArtifice * 3;
+      if (fromMin > lowest) lowest = fromMin;
+    }
+    if (lowest < 0) slack -= lowest;
+  }
+  return slack;
 }
 
 /** Clamped-total cost of one −5 on a stat whose value, before that −5, is `v`. */
@@ -267,6 +304,23 @@ export function tightenTuneTotalUpside(
       if (best < p.tuneTotalUpside) p.tuneTotalUpside = best;
     }
   }
+}
+
+/**
+ * The fragment term of the top-N admission bound. The bound sums each stat's pre-clamp
+ * value as `Σ pieces' stats + fragment`, and `Σ_s clamp(v_s) ≤ Σ_s max(0, v_s)`. Crediting
+ * every fragment's positive part (ignoring the negatives) is always admissible, but on a
+ * pool whose lowest rolls already cover a negative fragment the stat can't fall below 0,
+ * so `max(0, v_s) = v_s` and the negative fragment counts in full — a mixed fragment set
+ * that nets to zero then adds nothing to the bound instead of its positive half.
+ */
+export function fragmentCredit(frag: number[], suffixMinStat: number[][]): number {
+  let credit = 0;
+  for (let s = 0; s < NUM_STATS; s++) {
+    if (frag[s] + suffixMinStat[0][s] >= 0) credit += frag[s];
+    else if (frag[s] > 0) credit += frag[s];
+  }
+  return credit;
 }
 
 /**

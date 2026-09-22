@@ -54,6 +54,12 @@ export interface InternalPiece {
    * components don't count against it — the 0-clamp can absorb them entirely.
    */
   tuneTotalUpside: number;
+  /**
+   * Best NET total tuning contribution over the piece's options (a directional's +5 and
+   * −5 cancel to 0, Balanced nets its +1s). The second admission bound charges each
+   * clamp-at-zero absorption once, pool-wide, instead of crediting it per piece.
+   */
+  tuneNetUpside: number;
 }
 
 /**
@@ -179,8 +185,10 @@ export function makeInternalPiece(
   const tuneStatUpside = new Array(NUM_STATS).fill(0);
   const tuneStatDownside = new Array(NUM_STATS).fill(0);
   let tuneTotalUpside = 0;
+  let tuneNetUpside = 0;
   for (const opt of tuneOpts) {
     let optTotal = 0;
+    let optNet = 0;
     for (let s = 0; s < NUM_STATS; s++) {
       // Per-stat upside stays unconditioned: ceiling probes raise minimums past the
       // query's, so canReachMin/suffixUp must keep crediting every option's +5.
@@ -190,9 +198,11 @@ export function makeInternalPiece(
       // 0-clamp (the minus stat is already ≤0 at the leaf), so a signed sum would
       // undercount its realizable gain and make the top-N prune bound inadmissible.
       if (opt.vec[s] > 0) optTotal += opt.vec[s];
+      optNet += opt.vec[s];
     }
     if (opt.applied?.kind === "directional" && !dirReachable) continue;
     if (optTotal > tuneTotalUpside) tuneTotalUpside = optTotal;
+    if (optNet > tuneNetUpside) tuneNetUpside = optNet;
   }
   return {
     id: p.id,
@@ -208,6 +218,7 @@ export function makeInternalPiece(
     tuneStatUpside,
     tuneStatDownside,
     tuneTotalUpside,
+    tuneNetUpside,
   };
 }
 

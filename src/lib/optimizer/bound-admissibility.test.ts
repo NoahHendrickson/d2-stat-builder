@@ -12,9 +12,11 @@
 import { describe, expect, test } from "vitest";
 import {
   computeSuffixBounds,
+  fragmentCredit,
   makeJointMinCheck,
   makeModUpside,
   tightenTuneTotalUpside,
+  zeroClampSlack,
 } from "./bounds";
 import { solveCeilings } from "./ceilings";
 import {
@@ -259,19 +261,25 @@ describe("top-N admission bound admissibility (never prunes a better completion)
       const tuner = createTuningSearcher(c.frag, c.mods);
       // As solve() does: tighten the per-piece tuning credit before the suffix bounds.
       tightenTuneTotalUpside(c.slots, c.frag, c.mins);
-      const { suffixTotal, artSuffix, suffixMinStat, suffixDownStat } = computeSuffixBounds(
-        c.slots,
-        [],
-        false,
-        () => false,
-      );
+      const { suffixTotal, suffixNetTotal, artSuffix, suffixMinStat, suffixDownStat } =
+        computeSuffixBounds(c.slots, [], false, () => false);
       const maxModPoints = c.mods.major * 10 + c.mods.minor * 5;
-      const fragUpside = c.frag.reduce((a, v) => a + Math.max(0, v), 0);
+      const fragUpside = fragmentCredit(c.frag, suffixMinStat);
+      const fragSum = c.frag.reduce((a, v) => a + v, 0);
+      const zeroSlack = zeroClampSlack(
+        c.frag,
+        c.mins,
+        suffixMinStat,
+        suffixDownStat,
+        maxModPoints,
+        artSuffix[0],
+      );
       const sum = new Array(NUM_STATS).fill(0);
       const sumTuneDown = new Array(NUM_STATS).fill(0);
       const chosenArt = { n: 0 };
       const chosen: InternalPiece[] = new Array(NUM_SLOTS);
       let runningTotal = 0;
+      let runningNet = 0;
       const modUpside = makeModUpside(
         c.mins,
         sum,
@@ -281,12 +289,14 @@ describe("top-N admission bound admissibility (never prunes a better completion)
         suffixDownStat,
         maxModPoints,
       );
-      const bound = (k: number): number =>
-        runningTotal +
-        suffixTotal[k] +
-        modUpside(k) +
-        (chosenArt.n + artSuffix[k]) * 3 +
-        fragUpside;
+      // Both admissible bounds solve() takes the min of; each must hold on its own.
+      const bounds = (k: number): [number, number] => {
+        const shared = modUpside(k) + (chosenArt.n + artSuffix[k]) * 3;
+        return [
+          runningTotal + suffixTotal[k] + fragUpside + shared,
+          runningNet + suffixNetTotal[k] + fragSum + zeroSlack + shared,
+        ];
+      };
 
       const addPiece = (k: number, p: InternalPiece): void => {
         chosen[k] = p;
@@ -295,6 +305,7 @@ describe("top-N admission bound admissibility (never prunes a better completion)
           sumTuneDown[s] += p.tuneStatDownside[s];
         }
         runningTotal += p.total + p.tuneTotalUpside;
+        runningNet += p.total + p.tuneNetUpside;
         if (p.artifice) chosenArt.n++;
       };
       const removePiece = (k: number): void => {
@@ -304,6 +315,7 @@ describe("top-N admission bound admissibility (never prunes a better completion)
           sumTuneDown[s] -= p.tuneStatDownside[s];
         }
         runningTotal -= p.total + p.tuneTotalUpside;
+        runningNet -= p.total + p.tuneNetUpside;
         if (p.artifice) chosenArt.n--;
       };
 
@@ -325,18 +337,17 @@ describe("top-N admission bound admissibility (never prunes a better completion)
           for (let j = 0; j < k; j++) {
             addPiece(j, c.slots[j][randInt(rng, 0, c.slots[j].length - 1)]);
           }
-          const b = bound(k);
+          const [positive, net] = bounds(k);
           const best = bestCompletion(k);
           prefixesChecked++;
           if (best >= 0) {
-            expect(
-              b,
-              `iter=${iter} k=${k} rep=${rep} prefix=${chosen
-                .slice(0, k)
-                .map((p) => p.id)
-                .join(",")} mins=${c.mins} frag=${c.frag} mods=${JSON.stringify(c.mods)}`,
-            ).toBeGreaterThanOrEqual(best);
-            if (b === best) tightPrefixes++;
+            const ctx = `iter=${iter} k=${k} rep=${rep} prefix=${chosen
+              .slice(0, k)
+              .map((p) => p.id)
+              .join(",")} mins=${c.mins} frag=${c.frag} mods=${JSON.stringify(c.mods)}`;
+            expect(positive, `positive-parts bound: ${ctx}`).toBeGreaterThanOrEqual(best);
+            expect(net, `net-tuning bound: ${ctx}`).toBeGreaterThanOrEqual(best);
+            if (Math.min(positive, net) === best) tightPrefixes++;
           }
           for (let j = k - 1; j >= 0; j--) removePiece(j);
         }

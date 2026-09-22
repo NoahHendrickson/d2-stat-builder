@@ -13,9 +13,11 @@ import {
 import {
   buildSlots,
   computeSuffixBounds,
+  fragmentCredit,
   makeJointMinCheck,
   makeModUpside,
   tightenTuneTotalUpside,
+  zeroClampSlack,
 } from "./bounds";
 import { CEILING_BUDGET_MS, runCeilings } from "./ceilings";
 import { createPowerTracker, loadoutPower } from "./power";
@@ -144,9 +146,8 @@ export function solve(
   const mods: ModBudget = input.mods ?? { major: 0, minor: 0 };
   const maxModPoints = mods.major * 10 + mods.minor * 5;
   // Build-wide fragment constant, folded into every loadout's effective stats. May be
-  // negative. fragUpside = its positive part, added to the top-N bound to keep it admissible.
+  // negative; its share of the top-N bound is fragUpside (see fragmentCredit).
   const frag = input.fragmentBonus ?? new Array(NUM_STATS).fill(0);
-  const fragUpside = frag.reduce((a: number, v: number) => a + Math.max(0, v), 0);
   const reqs: SetRequirement[] = input.setRequirements ?? [];
   const exoticMode = input.exotic?.mode ?? "any";
   const needExotic = exoticMode === "require" || exoticMode === "specific";
@@ -180,7 +181,20 @@ export function solve(
     subsetSuffix,
     suffixMinStat,
     suffixDownStat,
+    suffixNetTotal,
   } = computeSuffixBounds(slots, reqs, needExotic, (p) => p.exotic);
+  const fragUpside = fragmentCredit(frag, suffixMinStat);
+  // Second admission bound's constants: fragments counted signed, plus the pool-wide
+  // clamp-at-zero allowance (see zeroClampSlack).
+  const fragSum = frag.reduce((a: number, v: number) => a + v, 0);
+  const zeroSlack = zeroClampSlack(
+    frag,
+    min,
+    suffixMinStat,
+    suffixDownStat,
+    maxModPoints,
+    artSuffix[0],
+  );
 
   const heap = new TopNHeap(maxResults);
   // Pre-seed from a prior pass over the SAME input (see SolveOptions.heapSeed): the
@@ -202,6 +216,8 @@ export function solve(
   const chosen: InternalPiece[] = new Array(NUM_SLOTS);
   const setCounts = new Array(reqs.length).fill(0);
   let runningTotal = 0;
+  // runningTotal's twin with each piece's NET tuning credit (second admission bound).
+  let runningNet = 0;
   // Artifice pieces chosen so far — each is a free +3 the bounds must account for.
   // Boxed so the shared joint-min check reads the live count.
   const chosenArt = { n: 0 };
@@ -276,18 +292,24 @@ export function solve(
     suffixDownStat,
     maxModPoints,
   );
-  // Top-N admission bound from slot k: the chosen pieces' stats + credited tuning
-  // upside, the best the remaining slots can add, what mods can still contribute, the
-  // free artifice +3s, and the fragments' positive part. A subtree whose bound can't
-  // beat the heap's worst is skipped (admission is strict, so a tie can't enter either).
-  const cannotBeatWorst = (k: number): boolean =>
-    heap.full() &&
-    runningTotal +
-      suffixTotal[k] +
-      modUpside(k) +
-      (chosenArt.n + artSuffix[k]) * 3 +
-      fragUpside <=
-      heap.worst;
+  // Top-N admission bound from slot k — the tighter of two admissible bounds on any
+  // leaf the tuner can accept, each = pieces' stats + a tuning credit + the best the
+  // remaining slots can add + what mods can still contribute + the free artifice +3s +
+  // a fragment term:
+  //  1. tuning credited by its positive parts per piece (a −5 might be absorbed by a
+  //     clamp), fragments by their unabsorbable part (fragmentCredit);
+  //  2. tuning credited NET per piece (+5/−5 cancel), fragments signed, and every
+  //     clamp-at-zero absorption paid once pool-wide (zeroClampSlack) — tighter when
+  //     negative fragments or many directionals make bound 1 credit −5s as free.
+  // A subtree whose bound can't beat the heap's worst is skipped (admission is strict,
+  // so a tie can't enter either).
+  const cannotBeatWorst = (k: number): boolean => {
+    if (!heap.full()) return false;
+    const shared = modUpside(k) + (chosenArt.n + artSuffix[k]) * 3;
+    const positive = runningTotal + suffixTotal[k] + fragUpside;
+    const net = runningNet + suffixNetTotal[k] + fragSum + zeroSlack;
+    return (positive < net ? positive : net) + shared <= heap.worst;
+  };
 
   const recurse = (k: number, exoticCount: number): void => {
     if (stopped) return;
@@ -360,6 +382,7 @@ export function solve(
         sumTuneDown[s] += p.tuneStatDownside[s];
       }
       runningTotal += p.total + p.tuneTotalUpside;
+      runningNet += p.total + p.tuneNetUpside;
       if (p.artifice) chosenArt.n++;
       for (let r = 0; r < reqs.length; r++) {
         if (p.setHash === reqs[r].setHash) setCounts[r]++;
@@ -373,6 +396,7 @@ export function solve(
       }
       if (p.artifice) chosenArt.n--;
       runningTotal -= p.total + p.tuneTotalUpside;
+      runningNet -= p.total + p.tuneNetUpside;
       for (let s = 0; s < NUM_STATS; s++) {
         sum[s] -= p.stats[s];
         sumTuneUp[s] -= p.tuneStatUpside[s];
