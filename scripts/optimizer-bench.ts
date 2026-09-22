@@ -252,4 +252,4 @@ function main(): void {
   console.error(`all ${Object.keys(current).length} queries identical to the snapshot`);
 }
 
-main();
+if (process.argv[1]?.endsWith("optimizer-bench.ts")) main();
