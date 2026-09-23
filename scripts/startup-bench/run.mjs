@@ -15,7 +15,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let wsUrl; for (let i = 0; i < 50 && !wsUrl; i++) { try { wsUrl = (await (await fetch(`http://localhost:${PORT}/json/version`)).json()).webSocketDebuggerUrl; } catch { await sleep(100); } }
 const ws = new WebSocket(wsUrl); await new Promise((r) => (ws.onopen = r));
 let id = 0; const pending = new Map(); const handlers = [];
-ws.onmessage = (e) => { const m = JSON.parse(e.data); if (m.id && pending.has(m.id)) { const { res, rej } = pending.get(m.id); pending.delete(m.id); m.error ? rej(new Error(JSON.stringify(m.error))) : res(m.result); } else if (m.method) for (const h of handlers) h(m); };
+ws.onmessage = (e) => { const m = JSON.parse(e.data); if (m.id && pending.has(m.id)) { const { res, rej } = pending.get(m.id); pending.delete(m.id); if (m.error) rej(new Error(JSON.stringify(m.error))); else res(m.result); } else if (m.method) for (const h of handlers) h(m); };
 const send = (method, params = {}, sessionId) => new Promise((res, rej) => { const i = ++id; pending.set(i, { res, rej }); ws.send(JSON.stringify({ id: i, method, params, sessionId })); });
 const { targetId } = await send("Target.createTarget", { url: "about:blank" });
 const { sessionId } = await send("Target.attachToTarget", { targetId, flatten: true });
@@ -34,7 +34,6 @@ await s("Runtime.enable"); await s("Page.enable");
 await s("Page.addScriptToEvaluateOnNewDocument", { source: "window.__lt=[];new PerformanceObserver(l=>{for(const e of l.getEntries())window.__lt.push([Math.round(e.startTime),Math.round(e.duration)])}).observe({type:'longtask',buffered:true});" });
 const evalJs = async (expression) => (await s("Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true })).result.value;
 async function run(label) {
-  const t0 = Date.now();
   await s("Page.navigate", { url: APP });
   let ready = false, state = "", readyMs = 0, resultMs = 0;
   for (let i = 0; i < 1200 && !(ready && resultMs); i++) {
