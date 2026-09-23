@@ -1,6 +1,7 @@
 "use client";
 
 import { useQuery, type UseQueryResult } from "@tanstack/react-query";
+import { takeEarlyResponse } from "@/lib/early-fetch";
 import { useHydrated } from "@/lib/use-hydrated";
 
 export interface SessionUser {
@@ -44,7 +45,9 @@ export function useSession(): UseQueryResult<SessionState> {
   const query = useQuery<SessionState>({
     queryKey: ["session"],
     queryFn: async () => {
-      const res = await fetch("/api/auth/session", { cache: "no-store" });
+      const res =
+        (await takeEarlyResponse("session")) ??
+        (await fetch("/api/auth/session", { cache: "no-store" }));
       if (!res.ok) throw new Error("Failed to load session");
       return (await res.json()) as SessionState;
     },

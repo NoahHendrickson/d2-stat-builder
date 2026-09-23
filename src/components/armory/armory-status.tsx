@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { TooltipLabel } from "@/components/ui/tooltip";
 import { ArmoryDiagnosticsGate } from "@/components/armory/armory-diagnostics-gate";
 import { useArmory } from "@/lib/armory/use-armory";
+import { clearArmoryCache } from "@/lib/armory/armory-cache";
 import { useSession } from "@/lib/auth/use-session";
 import { BUNGIE_IMAGE_BASE } from "@/lib/bungie/constants";
 import { useManifest } from "@/lib/manifest/use-manifest";
@@ -149,6 +150,7 @@ function useArmoryAccount() {
       toast.error("Sign out failed. Please try again.");
       return;
     }
+    await clearArmoryCache();
     window.location.assign("/");
   };
 

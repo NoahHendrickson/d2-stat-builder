@@ -2,8 +2,7 @@
 
 import { useState } from "react";
 import { toast } from "@/lib/toast";
-import type { UseQueryResult } from "@tanstack/react-query";
-import type { Armory } from "./fetch";
+import type { ArmoryQuery } from "./use-armory";
 import type { FragmentInfo, Subclass } from "./fragments";
 import { characterForClass } from "./character-for-class";
 import { fragSelFromEquipped } from "./frag-sel-from-equipped";
@@ -22,7 +21,7 @@ export function useApplyCurrentFragments({
   classType,
   fragments,
 }: {
-  armoryQuery: UseQueryResult<Armory>;
+  armoryQuery: ArmoryQuery;
   classType: number | null;
   fragments: Record<Subclass, FragmentInfo[]> | null | undefined;
 }) {

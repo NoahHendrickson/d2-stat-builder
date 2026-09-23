@@ -5,6 +5,8 @@ import { AppShell } from "@/components/app-shell";
 import { LoadingScreen } from "@/components/loading/loading-screen";
 import { Providers } from "@/components/providers";
 import { Analytics } from "@vercel/analytics/next";
+import Script from "next/script";
+import { EARLY_FETCH_SCRIPT } from "@/lib/early-fetch";
 
 const geistSans = Geist({
   variable: "--font-sans",
@@ -34,6 +36,12 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable}`}
     >
       <body className="h-dvh antialiased">
+        {/* Start the session + profile requests before the bundle arrives (see early-fetch.ts). */}
+        <Script
+          id="early-fetch"
+          strategy="beforeInteractive"
+          dangerouslySetInnerHTML={{ __html: EARLY_FETCH_SCRIPT }}
+        />
         {/* The blurred scene every panel floats over. */}
         <div className="app-backdrop" aria-hidden />
         <Providers>
