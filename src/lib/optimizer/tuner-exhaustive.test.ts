@@ -60,7 +60,7 @@ function randomCase(rng: () => number): Case {
     stats[idx[0]] = 30;
     stats[idx[1]] = 25;
     stats[idx[2]] = 20;
-    if (rng() < 0.2) for (let s = 0; s < NUM_STATS; s++) stats[s] = randInt(rng, 0, 40);
+    if (rng() < 0.2) for (let s = 0; s < NUM_STATS; s++) stats[s] = randInt(rng, 0, 55);
     const off = idx.slice(3).sort((a, b) => a - b);
     const p: OptimizerPiece = {
       id: `p${k}`,

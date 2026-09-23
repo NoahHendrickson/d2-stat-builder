@@ -15,6 +15,7 @@ import { solveCeilings } from "./ceilings";
 import {
   NUM_SLOTS,
   NUM_STATS,
+  STAT_CAP,
   createTuningSearcher,
   makeInternalPiece,
   type InternalPiece,
@@ -44,9 +45,15 @@ interface RandomCase {
 }
 
 /**
- * A tiny random pool: 2–3 pieces/slot, 5-grain stats, random subsets of tuning options,
- * artifice flags, fragment bonuses (may be negative), mod budgets, and minimums. NO set
- * requirements and NO exotics — those constraints have separate bounds not under test.
+ * A tiny random pool: 2–3 pieces/slot, 5-grain stats up to 55 (so five pieces plus
+ * fragments and tuning routinely reach and exceed the 200 cap — the bounds' clamp
+ * arithmetic has an upper arm that lower stats never exercise), a quarter of them
+ * exotic (an exotic's flexible tuning has 30 directionals, the case the plain-minus
+ * dominance rule was written for), random subsets of tuning options, artifice flags,
+ * fragment bonuses (may be negative), mod budgets, and minimums. NO set requirements
+ * — that constraint has a separate bound not under test. Completions are enumerated
+ * without the ≤1-exotic rule: the bounds don't depend on it, so this only makes the
+ * check stricter.
  */
 function randomCase(rng: () => number): RandomCase {
   const slots: InternalPiece[][] = [];
@@ -54,8 +61,8 @@ function randomCase(rng: () => number): RandomCase {
     const n = randInt(rng, 2, 3);
     const pieces: InternalPiece[] = [];
     for (let i = 0; i < n; i++) {
-      const stats = Array.from({ length: NUM_STATS }, () => 5 * randInt(rng, 0, 6));
-      const p: OptimizerPiece = { id: `s${k}p${i}`, stats, exotic: false };
+      const stats = Array.from({ length: NUM_STATS }, () => 5 * randInt(rng, 0, 11));
+      const p: OptimizerPiece = { id: `s${k}p${i}`, stats, exotic: rng() < 0.25 };
       const roll = rng();
       if (roll < 0.25) {
         p.artifice = true; // legacy piece: free +3 mod, no tuning
@@ -76,12 +83,13 @@ function randomCase(rng: () => number): RandomCase {
     rng() < 0.5 ? 0 : randInt(rng, -10, 10),
   );
   const mods: ModBudget = { major: randInt(rng, 0, 3), minor: randInt(rng, 0, 3) };
-  // Mix of zero, 5-grain, and off-grain minimums (off-grain exercises the rounding).
+  // Mix of zero, 5-grain, and off-grain minimums (off-grain exercises the rounding),
+  // scaled to the stat range so a good share of prefixes is genuinely infeasible.
   const mins = Array.from({ length: NUM_STATS }, () => {
     const r = rng();
     if (r < 0.4) return 0;
-    if (r < 0.85) return 5 * randInt(rng, 1, 18);
-    return randInt(rng, 1, 90);
+    if (r < 0.85) return 5 * randInt(rng, 1, 36);
+    return randInt(rng, 1, 190);
   });
   return { slots, frag, mods, mins };
 }
@@ -249,8 +257,13 @@ describe("top-N admission bound admissibility (never prunes a better completion)
     const rng = mulberry32(0xb0d1e5);
     let prefixesChecked = 0;
     let tightPrefixes = 0;
+    // Coverage of the regimes the bound's reasoning turns on: pools where a stat can
+    // reach the cap, and pools with exotics (30-directional tuning).
+    let capReachable = 0;
+    let withExotic = 0;
     for (let iter = 0; iter < 200; iter++) {
       const c = randomCase(rng);
+      if (c.slots.some((slot) => slot.some((p) => p.exotic))) withExotic++;
       const tuner = createTuningSearcher(c.frag, c.mods);
       // Exactly as solve() builds it: top-N suffix bounds (tightened tuning credit for
       // these minimums + fragments) and the one admission-bound factory.
@@ -259,6 +272,7 @@ describe("top-N admission bound admissibility (never prunes a better completion)
         mins: c.mins,
       });
       const maxModPoints = c.mods.major * 10 + c.mods.minor * 5;
+      if (suffix.suffixStat[0].some((v, s) => v + c.frag[s] >= STAT_CAP)) capReachable++;
       const sum = new Array(NUM_STATS).fill(0);
       const sumTuneDown = new Array(NUM_STATS).fill(0);
       const chosenArt = { n: 0 };
@@ -336,5 +350,10 @@ describe("top-N admission bound admissibility (never prunes a better completion)
     // The bound is exact somewhere (a leaf with no mods/tuning slack) — sanity that the
     // harness is comparing like with like, not two unrelated quantities.
     expect(tightPrefixes).toBeGreaterThan(0);
+    // The generator must keep producing the two regimes above (a narrowed stat range or
+    // exotic-free pools would silently stop testing the clamp arm and the 30-directional
+    // dominance rule).
+    expect(capReachable).toBeGreaterThan(50);
+    expect(withExotic).toBeGreaterThan(100);
   });
 });
