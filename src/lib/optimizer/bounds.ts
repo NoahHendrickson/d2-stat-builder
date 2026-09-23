@@ -112,9 +112,7 @@ export function computeSuffixBounds(
    */
   topN?: { frag: number[]; mins: number[] },
 ): SuffixBounds {
-  const tuneCredit = topN
-    ? tightenedTuneCredit(slots, topN.frag, topN.mins)
-    : slots.map((slot) => slot.map((p) => p.tuneTotalUpside));
+
   const suffixStat: number[][] = Array.from({ length: NUM_SLOTS + 1 }, () =>
     new Array(NUM_STATS).fill(0),
   );
@@ -149,7 +147,6 @@ export function computeSuffixBounds(
     const slotMax = new Array(NUM_STATS).fill(0);
     const slotMin = new Array(NUM_STATS).fill(Infinity);
     const slotDown = new Array(NUM_STATS).fill(0);
-    let slotBestTotal = 0;
     let slotBestNet = 0;
     slotSubsetMax.fill(0);
     for (let i = 0; i < slots[k].length; i++) {
@@ -160,8 +157,6 @@ export function computeSuffixBounds(
         if (p.stats[s] < slotMin[s]) slotMin[s] = p.stats[s];
         if (p.tuneStatDownside[s] < slotDown[s]) slotDown[s] = p.tuneStatDownside[s];
       }
-      const t = p.total + tuneCredit[k][i];
-      if (t > slotBestTotal) slotBestTotal = t;
       const n = p.total + p.tuneNetUpside;
       if (n > slotBestNet) slotBestNet = n;
       // This piece's summed stats over every stat-subset mask (statSum[m] extends the
@@ -196,7 +191,6 @@ export function computeSuffixBounds(
     for (let m = 1; m < NUM_MASKS; m++) {
       subsetSuffix[k][m] = subsetSuffix[k + 1][m] + slotSubsetMax[m];
     }
-    suffixTotal[k] = suffixTotal[k + 1] + slotBestTotal;
     suffixNetTotal[k] = suffixNetTotal[k + 1] + slotBestNet;
     for (let r = 0; r < reqs.length; r++) {
       const has = slots[k].some((p) => p.setHash === reqs[r].setHash) ? 1 : 0;
@@ -207,6 +201,19 @@ export function computeSuffixBounds(
       exoticSuffix[k] = exoticSuffix[k + 1] + has;
     }
     artSuffix[k] = artSuffix[k + 1] + (slots[k].some((p) => p.artifice) ? 1 : 0);
+  }
+  // The tuning credit needs the pool-wide per-stat ranges above (slot 0 = whole pool),
+  // so suffixTotal is a second, cheap pass.
+  const tuneCredit = topN
+    ? tightenedTuneCredit(slots, topN.frag, topN.mins, suffixStat[0], suffixMinStat[0], suffixDownStat[0])
+    : slots.map((slot) => slot.map((p) => p.tuneTotalUpside));
+  for (let k = NUM_SLOTS - 1; k >= 0; k--) {
+    let slotBestTotal = 0;
+    for (let i = 0; i < slots[k].length; i++) {
+      const t = slots[k][i].total + tuneCredit[k][i];
+      if (t > slotBestTotal) slotBestTotal = t;
+    }
+    suffixTotal[k] = suffixTotal[k + 1] + slotBestTotal;
   }
   return {
     suffixStat,
@@ -284,31 +291,17 @@ function tightenedTuneCredit(
   slots: InternalPiece[][],
   frag: number[],
   mins: number[],
+  /** Pool-wide per-stat ranges: computeSuffixBounds' slot-0 rows. */
+  poolMaxStat: number[],
+  poolMinStat: number[],
+  poolDownStat: number[],
 ): number[][] {
-  const lowest = new Array(NUM_STATS).fill(0);
-  const highest = new Array(NUM_STATS).fill(0);
-  for (let s = 0; s < NUM_STATS; s++) {
-    lowest[s] = frag[s] + 5;
-    highest[s] = frag[s];
-  }
-  for (const slot of slots) {
-    for (let s = 0; s < NUM_STATS; s++) {
-      let mn = Infinity;
-      let down = 0;
-      let mx = 0;
-      for (const p of slot) {
-        if (p.stats[s] < mn) mn = p.stats[s];
-        if (p.tuneStatDownside[s] < down) down = p.tuneStatDownside[s];
-        const up = p.stats[s] + p.tuneStatUpside[s];
-        if (up > mx) mx = up;
-      }
-      lowest[s] += mn + down;
-      highest[s] += mx;
-    }
-  }
   const minLoss = new Array(NUM_STATS).fill(0);
   for (let s = 0; s < NUM_STATS; s++) {
-    minLoss[s] = Math.min(minusFiveLoss(lowest[s]), minusFiveLoss(highest[s]));
+    // The "+5" excludes the piece's own −5 from the worst-downside sum.
+    const lowest = frag[s] + 5 + poolMinStat[s] + poolDownStat[s];
+    const highest = frag[s] + poolMaxStat[s];
+    minLoss[s] = Math.min(minusFiveLoss(lowest), minusFiveLoss(highest));
   }
   const short = (s: number): boolean => mins[s] > 0;
   return slots.map((slot) =>
@@ -547,8 +540,12 @@ export interface AdmissionBound {
   /** Account for the piece at slots[k][i] being chosen / undo it. */
   push(k: number, i: number): void;
   pop(k: number, i: number): void;
-  /** min(positive, net): what solve() compares against the heap's worst. */
-  bound(k: number): number;
+  /**
+   * True when no leaf completing the prefix from slot k can beat `worst` (admission is
+   * strict, so a tie can't enter either). Evaluates the cheap part of both bounds first
+   * and only loops over the mod term when it could still matter.
+   */
+  cannotBeat(k: number, worst: number): boolean;
   /** The two bounds on their own — each must be admissible by itself (tests). */
   positive(k: number): number;
   net(k: number): number;
@@ -588,8 +585,8 @@ export function makeAdmissionBound(
   );
   let runningTotal = 0;
   let runningNet = 0;
-  const shared = (k: number): number =>
-    modUpside(k) + (chosenArt.n + artSuffix[k]) * ARTIFICE_MOD_BONUS;
+  const artUpside = (k: number): number => (chosenArt.n + artSuffix[k]) * ARTIFICE_MOD_BONUS;
+  const shared = (k: number): number => modUpside(k) + artUpside(k);
   const positive = (k: number): number => runningTotal + suffixTotal[k] + fragUpside;
   const net = (k: number): number => runningNet + suffixNetTotal[k] + fragSum + zeroSlack;
   return {
@@ -603,10 +600,13 @@ export function makeAdmissionBound(
       runningTotal -= p.total + tuneCredit[k][i];
       runningNet -= p.total + p.tuneNetUpside;
     },
-    bound(k) {
+    cannotBeat(k, worst) {
       const a = positive(k);
       const b = net(k);
-      return (a < b ? a : b) + shared(k);
+      const base = (a < b ? a : b) + artUpside(k);
+      // modUpside(k) ≥ 0: if the rest already beats worst, the answer is known.
+      if (base > worst) return false;
+      return base + modUpside(k) <= worst;
     },
     positive: (k) => positive(k) + shared(k),
     net: (k) => net(k) + shared(k),

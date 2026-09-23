@@ -19,6 +19,7 @@
  * oracle's unrestricted maximum as an upper bound.
  */
 import { describe, expect, test } from "vitest";
+import { mulberry32, randInt } from "./test-rng";
 import { solve } from "./solve";
 import { NUM_SLOTS, NUM_STATS, clamp } from "./floors";
 import { createTuningSearcher, makeInternalPiece } from "./tuning";
@@ -28,19 +29,7 @@ import type {
   OptimizerPiece,
   SetRequirement,
 } from "./types";
-
-function mulberry32(seed: number): () => number {
-  let a = seed;
-  return () => {
-    a |= 0;
-    a = (a + 0x6d2b79f5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-const randInt = (rnd: () => number, lo: number, hi: number): number =>
-  lo + Math.floor(rnd() * (hi - lo + 1));
+import { mulberry32, randInt } from "./test-rng";
 
 // ---------------------------------------------------------------------------
 // The oracle

@@ -272,8 +272,7 @@ export function solve(
     chosenArt,
   );
   const cannotBeatWorst = (k: number): boolean => {
-    if (!heap.full()) return false;
-    if (admission.bound(k) > heap.worst) return false;
+    if (!heap.full() || !admission.cannotBeat(k, heap.worst)) return false;
     boundPruned = true;
     return true;
   };
