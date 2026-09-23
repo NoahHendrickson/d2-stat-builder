@@ -3,7 +3,7 @@ import type {
   DestinyMaterialRequirementSetDefinition,
 } from "bungie-api-ts/destiny2";
 import { isFestivalMask } from "@/lib/armory/festival-masks";
-import { clearCache, setCachedTable } from "./db";
+import { setCachedTable } from "./db";
 import { projectItemDef, type ItemDef } from "./item-def";
 import { MANIFEST_TABLES, type ManifestTableName, type ManifestTables } from "./tables";
 
@@ -27,7 +27,7 @@ export type TablePaths = Record<ManifestTableName, string>;
 export type DownloadProgress = (message: string, progress: number) => void;
 
 /** Worker protocol. */
-export type DownloadRequest = { paths: TablePaths };
+export type DownloadRequest = { stamp: string; paths: TablePaths };
 export type DownloadResponse =
   | { kind: "progress"; message: string; progress: number }
   | { kind: "done"; tables: ManifestTables }
@@ -82,15 +82,16 @@ async function downloadTable(path: string): Promise<Record<number, unknown>> {
 }
 
 /**
- * Download every table concurrently and cache each as it lands. The cache is cleared
- * first and the caller writes the version stamp afterwards, so a failed download
- * leaves no stamp and the next load re-downloads cleanly.
+ * Download every table concurrently and cache each as it lands under `stamp`. Nothing
+ * already cached is touched: the caller commits the stamp (db.ts `commitVersion`) only
+ * after every table is in, so a download that fails partway leaves the previous cache
+ * intact and the next load serves it (and retries the download in the background).
  */
 export async function downloadTables(
+  stamp: string,
   paths: TablePaths,
   onProgress?: DownloadProgress,
 ): Promise<ManifestTables> {
-  await clearCache();
   const tables = {} as ManifestTables;
   let done = 0;
   onProgress?.(`Downloading game data (0/${MANIFEST_TABLES.length})…`, 0);
@@ -112,7 +113,7 @@ export async function downloadTables(
             )
           : raw;
       tables[table] = data as never;
-      await setCachedTable(table, data as Record<number, unknown>);
+      await setCachedTable(stamp, table, data as Record<number, unknown>);
       done++;
       onProgress?.(
         `Downloading game data (${done}/${MANIFEST_TABLES.length})…`,

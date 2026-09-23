@@ -5,16 +5,15 @@ import { MANIFEST_TABLES } from "./tables";
 const store = { version: undefined as string | undefined, tables: new Map<string, unknown>() };
 vi.mock("./db", () => ({
   getCachedVersion: vi.fn(async () => store.version),
-  setCachedVersion: vi.fn(async (v: string) => {
-    store.version = v;
+  getCachedTable: vi.fn(async (stamp: string, t: string) => store.tables.get(`${stamp}/${t}`)),
+  setCachedTable: vi.fn(async (stamp: string, t: string, d: unknown) => {
+    store.tables.set(`${stamp}/${t}`, d);
   }),
-  getCachedTable: vi.fn(async (t: string) => store.tables.get(t)),
-  setCachedTable: vi.fn(async (t: string, d: unknown) => {
-    store.tables.set(t, d);
-  }),
-  clearCache: vi.fn(async () => {
-    store.version = undefined;
-    store.tables.clear();
+  commitVersion: vi.fn(async (stamp: string) => {
+    for (const key of [...store.tables.keys()]) {
+      if (!key.startsWith(`${stamp}/`)) store.tables.delete(key);
+    }
+    store.version = stamp;
   }),
 }));
 vi.mock("@/lib/bungie/http", () => ({ createBungieHttp: () => ({}) }));
@@ -35,8 +34,12 @@ const info = (version: string) => ({
     },
   },
 });
-const cachedTables = (tag: string) =>
-  Object.fromEntries(MANIFEST_TABLES.map((t) => [t, { 1: { tag, t } }]));
+const cachedTables = (stamp: string, tag: string) =>
+  Object.fromEntries(MANIFEST_TABLES.map((t) => [`${stamp}/${t}`, { 1: { tag, t } }]));
+const seedCache = (stamp: string, tag: string) => {
+  store.version = stamp;
+  for (const [k, d] of Object.entries(cachedTables(stamp, tag))) store.tables.set(k, d);
+};
 
 let downloads: string[];
 beforeEach(() => {
@@ -65,8 +68,7 @@ const flush = () => new Promise((r) => setTimeout(r, 0));
 
 describe("loadManifest", () => {
   it("serves a complete cache immediately and skips the download when the version matches", async () => {
-    store.version = `v1:${REV}`;
-    for (const [t, d] of Object.entries(cachedTables("cached"))) store.tables.set(t, d);
+    seedCache(`v1:${REV}`, "cached");
     let resolveInfo!: (v: unknown) => void;
     getDestinyManifest.mockReturnValue(new Promise((r) => (resolveInfo = r)));
     const onUpdate = vi.fn();
@@ -82,8 +84,7 @@ describe("loadManifest", () => {
   });
 
   it("revalidates in the background and hands over the newer version", async () => {
-    store.version = `v1:${REV}`;
-    for (const [t, d] of Object.entries(cachedTables("cached"))) store.tables.set(t, d);
+    seedCache(`v1:${REV}`, "cached");
     getDestinyManifest.mockResolvedValue(info("v2"));
     const onUpdate = vi.fn();
 
@@ -95,11 +96,36 @@ describe("loadManifest", () => {
     expect(fresh.def("DestinyInventoryItemDefinition", 5)?.displayProperties.name).toBe("Helm");
     expect(store.version).toBe(`v2:${REV}`);
     expect(downloads).toHaveLength(MANIFEST_TABLES.length);
+    // Commit dropped the old version's tables and kept only v2's.
+    expect([...store.tables.keys()].every((k) => k.startsWith(`v2:${REV}/`))).toBe(true);
+    expect(store.tables.size).toBe(MANIFEST_TABLES.length);
+  });
+
+  it("a revalidation that fails partway leaves the old cache intact and served", async () => {
+    seedCache(`v1:${REV}`, "cached");
+    getDestinyManifest.mockResolvedValue(info("v2"));
+    const realFetch = globalThis.fetch;
+    vi.stubGlobal("fetch", async (url: string) => {
+      if (url.includes("DestinyStatDefinition")) throw new Error("connection lost");
+      return realFetch(url);
+    });
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const onUpdate = vi.fn();
+
+    const manifest = await loadManifest({ onUpdate });
+    expect(manifest.version).toBe("v1");
+    await vi.waitFor(() => expect(warn).toHaveBeenCalled());
+    expect(onUpdate).not.toHaveBeenCalled();
+    // Old stamp + tables untouched; the next load serves them again.
+    expect(store.version).toBe(`v1:${REV}`);
+    for (const t of MANIFEST_TABLES) expect(store.tables.get(`v1:${REV}/${t}`)).toBeDefined();
+    getDestinyManifest.mockReturnValue(new Promise(() => {}));
+    expect((await loadManifest()).all("DestinyStatDefinition")).toEqual({ 1: { tag: "cached", t: "DestinyStatDefinition" } });
+    warn.mockRestore();
   });
 
   it("keeps serving the cache when the version check fails", async () => {
-    store.version = `v1:${REV}`;
-    for (const [t, d] of Object.entries(cachedTables("cached"))) store.tables.set(t, d);
+    seedCache(`v1:${REV}`, "cached");
     getDestinyManifest.mockRejectedValue(new Error("bungie down"));
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     const onUpdate = vi.fn();
@@ -128,16 +154,26 @@ describe("loadManifest", () => {
     });
   });
 
-  it("treats a cache from an older filter revision or a missing table as a miss", async () => {
-    store.version = "v1:older-revision";
-    for (const [t, d] of Object.entries(cachedTables("stale"))) store.tables.set(t, d);
+  it("treats a cache from an older filter revision or a missing table as a miss, without reading tables", async () => {
+    const { getCachedTable } = await import("./db");
+    seedCache("v1:older-revision", "stale");
     getDestinyManifest.mockResolvedValue(info("v1"));
     expect((await loadManifest()).all("DestinyStatDefinition")).not.toEqual({ 1: { tag: "stale", t: "DestinyStatDefinition" } });
     expect(downloads).toHaveLength(MANIFEST_TABLES.length);
+    // The revision check comes first: no stale table was deserialized.
+    expect(vi.mocked(getCachedTable)).not.toHaveBeenCalledWith("v1:older-revision", expect.anything());
 
     downloads = [];
-    store.tables.delete("DestinyStatDefinition");
+    store.tables.delete(`v1:${REV}/DestinyStatDefinition`);
     expect(store.version).toBe(`v1:${REV}`);
+    await loadManifest();
+    expect(downloads).toHaveLength(MANIFEST_TABLES.length);
+  });
+
+  it("only accepts a stamp whose revision suffix matches exactly", async () => {
+    // A revision name that merely ends with the current one must not match.
+    seedCache(`v1:x${REV}`, "stale");
+    getDestinyManifest.mockResolvedValue(info("v1"));
     await loadManifest();
     expect(downloads).toHaveLength(MANIFEST_TABLES.length);
   });

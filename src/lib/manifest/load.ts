@@ -5,7 +5,7 @@ import {
   type ManifestTableName,
   type ManifestTables,
 } from "./tables";
-import { getCachedTable, getCachedVersion, setCachedVersion } from "./db";
+import { commitVersion, getCachedTable, getCachedVersion } from "./db";
 import {
   downloadTables,
   type DownloadProgress,
@@ -62,18 +62,28 @@ export interface LoadManifestOptions {
 }
 
 /** Cache stamp: Bungie's version plus our filter revision, so either change invalidates. */
-const stampFor = (version: string) => `${version}:${CACHE_REVISION}`;
-const versionOf = (stamp: string) => stamp.slice(0, stamp.lastIndexOf(":"));
+const REVISION_SUFFIX = `:${CACHE_REVISION}`;
+const stampFor = (version: string) => `${version}${REVISION_SUFFIX}`;
+/** The Bungie version inside a stamp of THIS revision, else undefined (exact split). */
+const versionOf = (stamp: string): string | undefined =>
+  stamp.endsWith(REVISION_SUFFIX) && stamp.length > REVISION_SUFFIX.length
+    ? stamp.slice(0, -REVISION_SUFFIX.length)
+    : undefined;
 
-/** Every table from IndexedDB, if the cache is complete and from this filter revision. */
+/**
+ * Every table from IndexedDB, if the cache is complete and from this filter revision.
+ * The stamp is checked BEFORE any table is read: on a revision bump the old tables are
+ * useless, and deserializing them (the biggest cost on this path) just to discard them
+ * would stall the main thread for nothing.
+ */
 async function readCache(): Promise<
   { stamp: string; tables: ManifestTables } | undefined
 > {
-  const [stamp, ...cached] = await Promise.all([
-    getCachedVersion(),
-    ...MANIFEST_TABLES.map((table) => getCachedTable(table)),
-  ]);
-  if (!stamp || !stamp.endsWith(`:${CACHE_REVISION}`)) return undefined;
+  const stamp = await getCachedVersion();
+  if (!stamp || versionOf(stamp) === undefined) return undefined;
+  const cached = await Promise.all(
+    MANIFEST_TABLES.map((table) => getCachedTable(stamp, table)),
+  );
   if (!cached.every((data) => data)) return undefined;
   const tables = {} as ManifestTables;
   MANIFEST_TABLES.forEach((table, i) => {
@@ -82,8 +92,16 @@ async function readCache(): Promise<
   return { stamp, tables };
 }
 
+/**
+ * Outer limit on the worker download. A worker killed under memory pressure does not
+ * reliably fire `onerror`; without this the promise (and the loading screen) would hang
+ * forever. Generous: a 10.7 MB gz download + 200 MB parse on a slow phone takes minutes.
+ */
+const WORKER_TIMEOUT_MS = 10 * 60_000;
+
 /** Run `downloadTables` in a dedicated worker, relaying its progress. */
 function downloadTablesInWorker(
+  stamp: string,
   paths: TablePaths,
   onProgress?: DownloadProgress,
 ): Promise<ManifestTables> {
@@ -91,7 +109,12 @@ function downloadTablesInWorker(
     const worker = new Worker(new URL("./download-worker.ts", import.meta.url), {
       type: "module",
     });
+    const timer = setTimeout(
+      () => finish(() => reject(new Error("Manifest download timed out"))),
+      WORKER_TIMEOUT_MS,
+    );
     const finish = (settle: () => void) => {
+      clearTimeout(timer);
       worker.terminate();
       settle();
     };
@@ -103,26 +126,29 @@ function downloadTablesInWorker(
     };
     worker.onerror = (e) =>
       finish(() => reject(new Error(e.message || "Manifest download worker failed")));
-    worker.postMessage({ paths } satisfies DownloadRequest);
+    worker.onmessageerror = () =>
+      finish(() => reject(new Error("Manifest download worker sent an unreadable message")));
+    worker.postMessage({ stamp, paths } satisfies DownloadRequest);
   });
 }
 
 /**
  * Download every table (in a worker when available — the item table alone is 200 MB
- * of JSON to parse) and cache them. The version stamp is written only after every
- * table lands, so a failed download leaves no stamp and the next load re-downloads
- * cleanly.
+ * of JSON to parse) under the new stamp, then commit: the stamp flips and older
+ * tables are dropped only after every table has landed, so a failed download leaves
+ * the previous cache intact (db.ts).
  */
 async function downloadAll(
   info: DestinyManifest,
   onProgress?: DownloadProgress,
 ): Promise<Manifest> {
   const paths = info.jsonWorldComponentContentPaths.en as TablePaths;
+  const stamp = stampFor(info.version);
   const tables =
     typeof Worker === "undefined"
-      ? await downloadTables(paths, onProgress)
-      : await downloadTablesInWorker(paths, onProgress);
-  await setCachedVersion(stampFor(info.version));
+      ? await downloadTables(stamp, paths, onProgress)
+      : await downloadTablesInWorker(stamp, paths, onProgress);
+  await commitVersion(stamp);
   onProgress?.("Manifest ready", 1);
   return makeManifest(info.version, tables);
 }
@@ -152,13 +178,26 @@ export async function loadManifest({
     void infoPromise
       .then(async (info) => {
         if (stampFor(info.version) === cached.stamp) return;
-        onUpdate?.(await downloadAll(info));
+        // One tab at a time: two tabs revalidating together would interleave their
+        // table writes under the same stamp. A tab that can't get the lock skips —
+        // the other tab's commit serves it on its next load.
+        const manifest = await withRevalidationLock(() => downloadAll(info));
+        if (manifest) onUpdate?.(manifest);
       })
       .catch((err: unknown) => {
         console.warn("Manifest revalidation failed; keeping the cached version", err);
       });
-    return makeManifest(versionOf(cached.stamp), cached.tables);
+    return makeManifest(versionOf(cached.stamp) as string, cached.tables);
   }
 
   return downloadAll(await infoPromise, onProgress);
+}
+
+/** Run `fn` under the cross-tab revalidation lock, or resolve undefined if another tab holds it. */
+async function withRevalidationLock<T>(fn: () => Promise<T>): Promise<T | undefined> {
+  const locks = typeof navigator !== "undefined" ? navigator.locks : undefined;
+  if (!locks) return fn();
+  return locks.request("manifest-revalidate", { ifAvailable: true }, (lock) =>
+    lock ? fn() : Promise.resolve(undefined),
+  );
 }
