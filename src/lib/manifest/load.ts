@@ -10,6 +10,7 @@ import {
   type ManifestTableName,
   type ManifestTables,
 } from "./tables";
+import { projectItemDef, type ItemDef } from "./item-def";
 import {
   clearCache,
   getCachedTable,
@@ -25,7 +26,7 @@ const ITEM_TYPE_ARMOR = 2;
 const ITEM_TYPE_MOD = 19;
 const ITEM_TYPE_SUBCLASS = 16;
 // Bump when the item-table filter changes so IndexedDB isn't stuck without new defs.
-const CACHE_REVISION = "masterwork-cost-v1";
+const CACHE_REVISION = "item-def-projection-v1";
 
 export interface Manifest {
   version: string;
@@ -75,12 +76,15 @@ function materialItemHashes(
   return out;
 }
 
-/** Keep armor, subclasses, plugs/mods, Festival of the Lost masks, and upgrade materials. */
-function filterInventoryItems(
+/**
+ * Keep armor, subclasses, plugs/mods, Festival of the Lost masks, and upgrade materials,
+ * projected down to the fields the app reads (`ItemDef`).
+ */
+export function filterInventoryItems(
   all: Record<number, DestinyInventoryItemDefinition>,
   materials: Set<number>,
-): Record<number, DestinyInventoryItemDefinition> {
-  const out: Record<number, DestinyInventoryItemDefinition> = {};
+): Record<number, ItemDef> {
+  const out: Record<number, ItemDef> = {};
   for (const key in all) {
     const def = all[key];
     // FotL masks use the helmet bucket but are not itemType Armor — without this
@@ -93,7 +97,7 @@ function filterInventoryItems(
       def.plug ||
       isFestivalMask(Number(key), def)
     ) {
-      out[key as unknown as number] = def;
+      out[key as unknown as number] = projectItemDef(def);
     }
   }
   return out;

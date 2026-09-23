@@ -4,10 +4,8 @@
 // the game will charge to get them there.
 //
 // Runtime imports are relative (not `@/`) — the vitest runner has no `@/` alias.
-import type {
-  DestinyInventoryItemDefinition,
-  DestinyProfileResponse,
-} from "bungie-api-ts/destiny2";
+import type { DestinyProfileResponse } from "bungie-api-ts/destiny2";
+import type { ItemDef } from "../manifest/item-def";
 import type { Manifest } from "../manifest/load";
 import { memoByManifest } from "../manifest/memo";
 import { STAT_HASH_TO_INDEX } from "./stats";
@@ -83,7 +81,7 @@ export function isFullyMasterworked(
 
 /** The masterwork level a v460 plug grants: its +N to the six stats (0 for the empty plug). */
 export function masterworkPlugLevel(
-  def: Pick<DestinyInventoryItemDefinition, "investmentStats"> | undefined,
+  def: Pick<ItemDef, "investmentStats"> | undefined,
 ): number {
   let level = 0;
   for (const s of def?.investmentStats ?? []) {
@@ -150,7 +148,7 @@ function plugLevelOf(plugHash: number, manifest: Manifest): number {
 }
 
 function masterworkSocketIndex(
-  def: Pick<DestinyInventoryItemDefinition, "sockets">,
+  def: Pick<ItemDef, "sockets">,
   sockets: readonly { plugHash?: number }[],
   manifest: Manifest,
 ): number {
@@ -211,7 +209,7 @@ function plugMaterials(plugHash: number, manifest: Manifest): MaterialStack[] {
  */
 export function readMasterwork(
   instanceId: string,
-  def: Pick<DestinyInventoryItemDefinition, "sockets">,
+  def: Pick<ItemDef, "sockets">,
   profile: DestinyProfileResponse,
   manifest: Manifest,
   energy: { capacity: number } | undefined,
@@ -263,7 +261,7 @@ export function readMasterwork(
  * climb doesn't start at `expectedStart`.
  */
 function remainingLadder(
-  def: Pick<DestinyInventoryItemDefinition, "sockets">,
+  def: Pick<ItemDef, "sockets">,
   socketIndex: number,
   next: number,
   expectedStart: number,
