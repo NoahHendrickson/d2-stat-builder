@@ -29,7 +29,6 @@ import type {
   OptimizerPiece,
   SetRequirement,
 } from "./types";
-import { mulberry32, randInt } from "./test-rng";
 
 // ---------------------------------------------------------------------------
 // The oracle

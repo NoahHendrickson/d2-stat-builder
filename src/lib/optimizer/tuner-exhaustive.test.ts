@@ -25,7 +25,6 @@ import {
   type TuningOutcome,
 } from "./tuning";
 import type { AppliedTuning, ModBudget, OptimizerPiece } from "./types";
-import { mulberry32, randInt } from "./test-rng";
 
 interface Case {
   chosen: InternalPiece[];

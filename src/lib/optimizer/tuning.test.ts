@@ -9,7 +9,6 @@ import {
   type InternalPiece,
 } from "./tuning";
 import type { OptimizerPiece } from "./types";
-import { mulberry32, randInt } from "./test-rng";
 
 describe("assignMods", () => {
   test("zero deficits: succeeds with no mods used", () => {

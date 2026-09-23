@@ -23,7 +23,6 @@ import {
 } from "./tuning";
 import { realWarlockSlots } from "./real-pool.fixture";
 import type { ModBudget, OptimizerInput, OptimizerPiece } from "./types";
-import { mulberry32, randInt } from "./test-rng";
 
 interface RandomCase {
   slots: InternalPiece[][];
