@@ -10,7 +10,13 @@ import {
   createTuningSearcher,
   type InternalPiece,
 } from "./tuning";
-import { buildSlots, computeSuffixBounds, makeJointMinCheck } from "./bounds";
+import {
+  buildSlots,
+  computeSuffixBounds,
+  makeAdmissionBound,
+  makeJointMinCheck,
+  nextExoticCount,
+} from "./bounds";
 import { CEILING_BUDGET_MS, runCeilings } from "./ceilings";
 import { createPowerTracker, loadoutPower } from "./power";
 
@@ -138,9 +144,8 @@ export function solve(
   const mods: ModBudget = input.mods ?? { major: 0, minor: 0 };
   const maxModPoints = mods.major * 10 + mods.minor * 5;
   // Build-wide fragment constant, folded into every loadout's effective stats. May be
-  // negative. fragUpside = its positive part, added to the top-N bound to keep it admissible.
+  // negative; its share of the top-N bound is fragUpside (see fragmentCredit).
   const frag = input.fragmentBonus ?? new Array(NUM_STATS).fill(0);
-  const fragUpside = frag.reduce((a: number, v: number) => a + Math.max(0, v), 0);
   const reqs: SetRequirement[] = input.setRequirements ?? [];
   const exoticMode = input.exotic?.mode ?? "any";
   const needExotic = exoticMode === "require" || exoticMode === "specific";
@@ -151,6 +156,7 @@ export function solve(
       loadouts: [],
       combosTried: 0,
       combosValid: 0,
+      combosValidExact: true,
       ceilings: [0, 0, 0, 0, 0, 0],
       ceilingUppers: [0, 0, 0, 0, 0, 0],
       ceilingsExact: true,
@@ -160,9 +166,13 @@ export function solve(
 
   // buildSlots pre-filtered constraint-ineligible exotics out of the pool, so every
   // remaining exotic counts toward "require"/"specific" — the reachability predicate
-  // is just p.exotic (one eligibility rule, encoded once, in buildSlots).
-  const { suffixStat, suffixTotal, setSuffix, exoticSuffix, artSuffix, subsetSuffix } =
-    computeSuffixBounds(slots, reqs, needExotic, (p) => p.exotic);
+  // is just p.exotic (one eligibility rule, encoded once, in buildSlots). The top-N
+  // options tighten the per-piece tuning credit inside suffixTotal for this query.
+  const suffix = computeSuffixBounds(slots, reqs, needExotic, (p) => p.exotic, {
+    frag,
+    mins: min,
+  });
+  const { suffixStat, setSuffix, exoticSuffix, artSuffix, subsetSuffix } = suffix;
 
   const heap = new TopNHeap(maxResults);
   // Pre-seed from a prior pass over the SAME input (see SolveOptions.heapSeed): the
@@ -179,14 +189,17 @@ export function solve(
   const sum = new Array(NUM_STATS).fill(0);
   // Best tuning upside per stat from the pieces chosen so far (for canReachMin).
   const sumTuneUp = new Array(NUM_STATS).fill(0);
+  // Worst tuning downside per stat from the pieces chosen so far (for the mod-slack bound).
+  const sumTuneDown = new Array(NUM_STATS).fill(0);
   const chosen: InternalPiece[] = new Array(NUM_SLOTS);
   const setCounts = new Array(reqs.length).fill(0);
-  let runningTotal = 0;
   // Artifice pieces chosen so far — each is a free +3 the bounds must account for.
   // Boxed so the shared joint-min check reads the live count.
   const chosenArt = { n: 0 };
   let combosTried = 0;
   let combosValid = 0;
+  // Set once the admission bound cuts any subtree: from then on combosValid undercounts.
+  let boundPruned = false;
   // Time cap for the top-N search: past the deadline it stops and reports `capped`.
   const topNStart = performance.now();
   const topNDeadline = topNStart + topNBudgetMs;
@@ -245,6 +258,24 @@ export function solve(
     }
     return true;
   };
+  // Top-N admission bound from slot k (see makeAdmissionBound). A subtree whose bound
+  // can't beat the heap's worst is skipped (admission is strict, so a tie can't enter
+  // either).
+  const admission = makeAdmissionBound(
+    slots,
+    suffix,
+    min,
+    sum,
+    frag,
+    sumTuneDown,
+    maxModPoints,
+    chosenArt,
+  );
+  const cannotBeatWorst = (k: number): boolean => {
+    if (!heap.full() || !admission.cannotBeat(k, heap.worst)) return false;
+    boundPruned = true;
+    return true;
+  };
 
   const recurse = (k: number, exoticCount: number): void => {
     if (stopped) return;
@@ -259,8 +290,10 @@ export function solve(
         if (setCounts[r] < reqs[r].count) return;
       }
       if (power && !power.feasible(NUM_SLOTS)) return;
-      // Leaf gate: a final joint-minimum check before the costly tuning search.
+      // Leaf gates: a final joint-minimum check and the admission bound (suffix = 0)
+      // before the costly tuning search — a leaf that can't enter the heap isn't tuned.
       if (!canReachMin(NUM_SLOTS)) return;
+      if (cannotBeatWorst(NUM_SLOTS)) return;
 
       const best = tuner(chosen, sum, min, "maximize");
       if (!best) return;
@@ -290,17 +323,7 @@ export function solve(
     if (!canReachSets(k)) return;
     if (needExotic && exoticCount + exoticSuffix[k] < 1) return;
     if (power && !power.feasible(k)) return;
-    if (
-      heap.full() &&
-      runningTotal +
-        suffixTotal[k] +
-        maxModPoints +
-        (chosenArt.n + artSuffix[k]) * 3 +
-        fragUpside <=
-        heap.worst
-    ) {
-      return;
-    }
+    if (cannotBeatWorst(k)) return;
 
     for (let i = 0; i < slots[k].length; i++) {
       const p = slots[k][i];
@@ -312,14 +335,14 @@ export function solve(
         idx1 = i;
         emitTopNProgress();
       }
-      // Exotic-ineligible pieces were pre-filtered from the pool; only the ≤1 rule remains.
-      const nextExotic = exoticCount + (p.exotic ? 1 : 0);
-      if (nextExotic > 1) continue; // ≤1 exotic per loadout
+      const nextExotic = nextExoticCount(exoticCount, p, k, needExotic, exoticSuffix);
+      if (nextExotic < 0) continue;
       for (let s = 0; s < NUM_STATS; s++) {
         sum[s] += p.stats[s];
         sumTuneUp[s] += p.tuneStatUpside[s];
+        sumTuneDown[s] += p.tuneStatDownside[s];
       }
-      runningTotal += p.total + p.tuneTotalUpside;
+      admission.push(k, i);
       if (p.artifice) chosenArt.n++;
       for (let r = 0; r < reqs.length; r++) {
         if (p.setHash === reqs[r].setHash) setCounts[r]++;
@@ -332,10 +355,11 @@ export function solve(
         if (p.setHash === reqs[r].setHash) setCounts[r]--;
       }
       if (p.artifice) chosenArt.n--;
-      runningTotal -= p.total + p.tuneTotalUpside;
+      admission.pop(k, i);
       for (let s = 0; s < NUM_STATS; s++) {
         sum[s] -= p.stats[s];
         sumTuneUp[s] -= p.tuneStatUpside[s];
+        sumTuneDown[s] -= p.tuneStatDownside[s];
       }
     }
   };
@@ -371,6 +395,7 @@ export function solve(
     exact: ceilingsExact,
   } = runCeilings(input, slots, seed, ceilingBudgetMs, {
     upperSeed: opts.ceilingUpperSeed,
+    suffix,
     onCeilings,
     onProbe: () =>
       onProgress?.(
@@ -384,6 +409,7 @@ export function solve(
     loadouts,
     combosTried,
     combosValid,
+    combosValidExact: !boundPruned,
     ceilings,
     ceilingUppers,
     ceilingsExact,

@@ -10,31 +10,19 @@
  * failure after a bound change indicts the change, not the harness.
  */
 import { describe, expect, test } from "vitest";
-import { computeSuffixBounds, makeJointMinCheck } from "./bounds";
+import { mulberry32, randInt } from "./test-rng";
+import { computeSuffixBounds, makeAdmissionBound, makeJointMinCheck } from "./bounds";
 import { solveCeilings } from "./ceilings";
 import {
   NUM_SLOTS,
   NUM_STATS,
+  STAT_CAP,
   createTuningSearcher,
   makeInternalPiece,
   type InternalPiece,
 } from "./tuning";
 import { realWarlockSlots } from "./real-pool.fixture";
 import type { ModBudget, OptimizerInput, OptimizerPiece } from "./types";
-
-/** Deterministic PRNG (mulberry32) so failures reproduce exactly. */
-function mulberry32(seed: number): () => number {
-  let a = seed >>> 0;
-  return () => {
-    a = (a + 0x6d2b79f5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
-
-const randInt = (rng: () => number, lo: number, hi: number): number =>
-  lo + Math.floor(rng() * (hi - lo + 1));
 
 interface RandomCase {
   slots: InternalPiece[][];
@@ -44,9 +32,15 @@ interface RandomCase {
 }
 
 /**
- * A tiny random pool: 2–3 pieces/slot, 5-grain stats, random subsets of tuning options,
- * artifice flags, fragment bonuses (may be negative), mod budgets, and minimums. NO set
- * requirements and NO exotics — those constraints have separate bounds not under test.
+ * A tiny random pool: 2–3 pieces/slot, 5-grain stats up to 55 (so five pieces plus
+ * fragments and tuning routinely reach and exceed the 200 cap — the bounds' clamp
+ * arithmetic has an upper arm that lower stats never exercise), a quarter of them
+ * exotic (an exotic's flexible tuning has 30 directionals, the case the plain-minus
+ * dominance rule was written for), random subsets of tuning options, artifice flags,
+ * fragment bonuses (may be negative), mod budgets, and minimums. NO set requirements
+ * — that constraint has a separate bound not under test. Completions are enumerated
+ * without the ≤1-exotic rule: the bounds don't depend on it, so this only makes the
+ * check stricter.
  */
 function randomCase(rng: () => number): RandomCase {
   const slots: InternalPiece[][] = [];
@@ -54,8 +48,8 @@ function randomCase(rng: () => number): RandomCase {
     const n = randInt(rng, 2, 3);
     const pieces: InternalPiece[] = [];
     for (let i = 0; i < n; i++) {
-      const stats = Array.from({ length: NUM_STATS }, () => 5 * randInt(rng, 0, 6));
-      const p: OptimizerPiece = { id: `s${k}p${i}`, stats, exotic: false };
+      const stats = Array.from({ length: NUM_STATS }, () => 5 * randInt(rng, 0, 11));
+      const p: OptimizerPiece = { id: `s${k}p${i}`, stats, exotic: rng() < 0.25 };
       const roll = rng();
       if (roll < 0.25) {
         p.artifice = true; // legacy piece: free +3 mod, no tuning
@@ -76,12 +70,13 @@ function randomCase(rng: () => number): RandomCase {
     rng() < 0.5 ? 0 : randInt(rng, -10, 10),
   );
   const mods: ModBudget = { major: randInt(rng, 0, 3), minor: randInt(rng, 0, 3) };
-  // Mix of zero, 5-grain, and off-grain minimums (off-grain exercises the rounding).
+  // Mix of zero, 5-grain, and off-grain minimums (off-grain exercises the rounding),
+  // scaled to the stat range so a good share of prefixes is genuinely infeasible.
   const mins = Array.from({ length: NUM_STATS }, () => {
     const r = rng();
     if (r < 0.4) return 0;
-    if (r < 0.85) return 5 * randInt(rng, 1, 18);
-    return randInt(rng, 1, 90);
+    if (r < 0.85) return 5 * randInt(rng, 1, 36);
+    return randInt(rng, 1, 190);
   });
   return { slots, frag, mods, mins };
 }
@@ -233,5 +228,119 @@ describe("subset-mask suffix bound effectiveness", () => {
         expect(subsetSuffix[k][1 << s], `k=${k} s=${s}`).toBe(suffixStat[k][s]);
       }
     }
+  });
+});
+
+describe("top-N admission bound admissibility (never prunes a better completion)", () => {
+  /**
+   * The bound solve() prunes a prefix with, rebuilt from the same primitives: chosen
+   * pieces' stats + credited tuning upside, the best the remaining slots can add
+   * (suffixTotal), the mod-slack term (makeModUpside), the reachable artifice +3s and
+   * the fragments' positive part. Brute-forcing every completion through the REAL leaf
+   * search must never find a total above it — at every depth, including the leaf itself
+   * (where the same bound gates the tuner).
+   */
+  test("~200 seeded-random pools: bound(k) ≥ the best total of every completion", () => {
+    const rng = mulberry32(0xb0d1e5);
+    let prefixesChecked = 0;
+    let tightPrefixes = 0;
+    // Coverage of the regimes the bound's reasoning turns on: pools where a stat can
+    // reach the cap, and pools with exotics (30-directional tuning).
+    let capReachable = 0;
+    let withExotic = 0;
+    for (let iter = 0; iter < 200; iter++) {
+      const c = randomCase(rng);
+      if (c.slots.some((slot) => slot.some((p) => p.exotic))) withExotic++;
+      const tuner = createTuningSearcher(c.frag, c.mods);
+      // Exactly as solve() builds it: top-N suffix bounds (tightened tuning credit for
+      // these minimums + fragments) and the one admission-bound factory.
+      const suffix = computeSuffixBounds(c.slots, [], false, () => false, {
+        frag: c.frag,
+        mins: c.mins,
+      });
+      const maxModPoints = c.mods.major * 10 + c.mods.minor * 5;
+      if (suffix.suffixStat[0].some((v, s) => v + c.frag[s] >= STAT_CAP)) capReachable++;
+      const sum = new Array(NUM_STATS).fill(0);
+      const sumTuneDown = new Array(NUM_STATS).fill(0);
+      const chosenArt = { n: 0 };
+      const chosen: InternalPiece[] = new Array(NUM_SLOTS);
+      const chosenIdx: number[] = new Array(NUM_SLOTS);
+      const admission = makeAdmissionBound(
+        c.slots,
+        suffix,
+        c.mins,
+        sum,
+        c.frag,
+        sumTuneDown,
+        maxModPoints,
+        chosenArt,
+      );
+
+      const addPiece = (k: number, i: number): void => {
+        const p = c.slots[k][i];
+        chosen[k] = p;
+        chosenIdx[k] = i;
+        for (let s = 0; s < NUM_STATS; s++) {
+          sum[s] += p.stats[s];
+          sumTuneDown[s] += p.tuneStatDownside[s];
+        }
+        admission.push(k, i);
+        if (p.artifice) chosenArt.n++;
+      };
+      const removePiece = (k: number): void => {
+        const p = chosen[k];
+        for (let s = 0; s < NUM_STATS; s++) {
+          sum[s] -= p.stats[s];
+          sumTuneDown[s] -= p.tuneStatDownside[s];
+        }
+        admission.pop(k, chosenIdx[k]);
+        if (p.artifice) chosenArt.n--;
+      };
+
+      // Best maximize-mode total over every completion of slots k..4 (−1 if none feasible).
+      const bestCompletion = (k: number): number => {
+        if (k === NUM_SLOTS) return tuner(chosen, sum, c.mins, "maximize")?.total ?? -1;
+        let best = -1;
+        for (let i = 0; i < c.slots[k].length; i++) {
+          addPiece(k, i);
+          best = Math.max(best, bestCompletion(k + 1));
+          removePiece(k);
+        }
+        return best;
+      };
+
+      for (let k = 0; k <= NUM_SLOTS; k++) {
+        for (let rep = 0; rep < 2; rep++) {
+          if (k === 0 && rep > 0) break;
+          for (let j = 0; j < k; j++) {
+            addPiece(j, randInt(rng, 0, c.slots[j].length - 1));
+          }
+          // Both admissible bounds solve() takes the min of; each must hold on its own.
+          const positive = admission.positive(k);
+          const net = admission.net(k);
+          const best = bestCompletion(k);
+          prefixesChecked++;
+          if (best >= 0) {
+            const ctx = `iter=${iter} k=${k} rep=${rep} prefix=${chosen
+              .slice(0, k)
+              .map((p) => p.id)
+              .join(",")} mins=${c.mins} frag=${c.frag} mods=${JSON.stringify(c.mods)}`;
+            expect(positive, `positive-parts bound: ${ctx}`).toBeGreaterThanOrEqual(best);
+            expect(net, `net-tuning bound: ${ctx}`).toBeGreaterThanOrEqual(best);
+            if (Math.min(positive, net) === best) tightPrefixes++;
+          }
+          for (let j = k - 1; j >= 0; j--) removePiece(j);
+        }
+      }
+    }
+    expect(prefixesChecked).toBeGreaterThan(1000);
+    // The bound is exact somewhere (a leaf with no mods/tuning slack) — sanity that the
+    // harness is comparing like with like, not two unrelated quantities.
+    expect(tightPrefixes).toBeGreaterThan(0);
+    // The generator must keep producing the two regimes above (a narrowed stat range or
+    // exotic-free pools would silently stop testing the clamp arm and the 30-directional
+    // dominance rule).
+    expect(capReachable).toBeGreaterThan(50);
+    expect(withExotic).toBeGreaterThan(100);
   });
 });

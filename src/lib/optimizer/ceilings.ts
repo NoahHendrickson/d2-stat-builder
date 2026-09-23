@@ -5,7 +5,13 @@ import {
   type InternalPiece,
   type TuningOutcome,
 } from "./tuning";
-import { buildSlots, computeSuffixBounds, makeJointMinCheck } from "./bounds";
+import {
+  buildSlots,
+  computeSuffixBounds,
+  makeJointMinCheck,
+  nextExoticCount,
+  type SuffixBounds,
+} from "./bounds";
 import { createPowerTracker } from "./power";
 
 /**
@@ -120,6 +126,12 @@ export function runCeilings(
     upperSeed?: number[];
     onCeilings?: (ceilings: number[]) => void;
     onProbe?: () => void;
+    /**
+     * The top-N walk's computeSuffixBounds output for these same slots, reused instead of
+     * recomputed. Its top-N option only tightens `suffixTotal`/`tuneCredit`, which the
+     * probes never read; every field used here matches an option-less call.
+     */
+    suffix?: SuffixBounds;
   } = {},
 ): { ceilings: number[]; uppers: number[]; exact: boolean; stats: CeilingStats } {
   const onProgress = opts.onCeilings;
@@ -136,7 +148,7 @@ export function runCeilings(
   // buildSlots pre-filtered constraint-ineligible exotics (see solve()) — reachability
   // is just p.exotic.
   const { suffixStat, setSuffix, exoticSuffix, artSuffix, subsetSuffix } =
-    computeSuffixBounds(slots, reqs, needExotic, (p) => p.exotic);
+    opts.suffix ?? computeSuffixBounds(slots, reqs, needExotic, (p) => p.exotic);
 
   const ceiling = seed.slice(0, NUM_STATS);
   const sum = new Array(NUM_STATS).fill(0);
@@ -233,9 +245,9 @@ export function runCeilings(
     if (power && !power.feasible(k)) return;
     for (const p of slots[k]) {
       if (found || aborted) return;
-      // Exotic-ineligible pieces were pre-filtered from the pool (solve() built `slots`).
-      const nextExotic = exoticCount + (p.exotic ? 1 : 0);
-      if (nextExotic > 1) continue;
+      // The one exotic child rule, shared with the top-N walk.
+      const nextExotic = nextExoticCount(exoticCount, p, k, needExotic, exoticSuffix);
+      if (nextExotic < 0) continue;
       for (let s = 0; s < NUM_STATS; s++) {
         sum[s] += p.stats[s];
         sumTuneUp[s] += p.tuneStatUpside[s];

@@ -54,6 +54,12 @@ export interface InternalPiece {
    * components don't count against it — the 0-clamp can absorb them entirely.
    */
   tuneTotalUpside: number;
+  /**
+   * Best NET total tuning contribution over the piece's options (a directional's +5 and
+   * −5 cancel to 0, Balanced nets its +1s). The second admission bound charges each
+   * clamp-at-zero absorption once, pool-wide, instead of crediting it per piece.
+   */
+  tuneNetUpside: number;
 }
 
 /**
@@ -179,8 +185,10 @@ export function makeInternalPiece(
   const tuneStatUpside = new Array(NUM_STATS).fill(0);
   const tuneStatDownside = new Array(NUM_STATS).fill(0);
   let tuneTotalUpside = 0;
+  let tuneNetUpside = 0;
   for (const opt of tuneOpts) {
     let optTotal = 0;
+    let optNet = 0;
     for (let s = 0; s < NUM_STATS; s++) {
       // Per-stat upside stays unconditioned: ceiling probes raise minimums past the
       // query's, so canReachMin/suffixUp must keep crediting every option's +5.
@@ -190,9 +198,11 @@ export function makeInternalPiece(
       // 0-clamp (the minus stat is already ≤0 at the leaf), so a signed sum would
       // undercount its realizable gain and make the top-N prune bound inadmissible.
       if (opt.vec[s] > 0) optTotal += opt.vec[s];
+      optNet += opt.vec[s];
     }
     if (opt.applied?.kind === "directional" && !dirReachable) continue;
     if (optTotal > tuneTotalUpside) tuneTotalUpside = optTotal;
+    if (optNet > tuneNetUpside) tuneNetUpside = optNet;
   }
   return {
     id: p.id,
@@ -208,6 +218,7 @@ export function makeInternalPiece(
     tuneStatUpside,
     tuneStatDownside,
     tuneTotalUpside,
+    tuneNetUpside,
   };
 }
 
@@ -218,6 +229,12 @@ export function makeInternalPiece(
  * here is worth a full +3 to the maximize dump, while a stat mod left unspent is worth
  * nothing (mods are only ever socketed to cover targets). Returns per-stat mod points,
  * artifice points, and counts, or null if infeasible.
+ *
+ * CONTRACT with the admission bound (bounds.ts, `MAX_MOD_OVERSHOOT` = 9): the stat-mod
+ * points placed on a stat never exceed its deficit by more than 9 — majors first (at most
+ * ⌈d/10⌉, so ≤ 9 over), then minors (≤ 4 over). Reordering minors before majors, or
+ * covering with more points than the deficit needs, would silently make that bound
+ * inadmissible (results change with no type error); tuning.test.ts pins the overshoot.
  */
 export function assignMods(
   deficits: number[],
@@ -637,6 +654,8 @@ export function createTuningSearcher(
       // stat: `suffixDown[i + 1]` — the dynamic refinement of `directionalsBranchable`.
       const opts = chosen[i].tuneOpts;
       const def = opts[0].vec;
+      // Per +5 stat: whether a "plain" minus has already been branched (bit = plus).
+      let plainSeen = 0;
       for (let o = 0; o < opts.length; o++) {
         // Feasible mode early-exits at the first feasible leaf found.
         if (mode === "feasible" && box.winner) return;
@@ -646,6 +665,25 @@ export function createTuningSearcher(
           const plus = ap.plus;
           const m = mins[plus];
           if (m <= 0 || aug[plus] + def[plus] + suffixDown[i + 1][plus] >= m) continue;
+          // Plain-minus dominance. A minus stat is "plain" when it has no minimum (so
+          // it is never modded and never a deficit) and its final value stays inside
+          // [5, 200] under every completion — after this −5 it can't go below 0, and
+          // even with every artifice +3 dumped on it it can't pass the cap. Two plain
+          // minuses for the same +5 then give IDENTICAL totals and feasibility for
+          // every completion (each costs exactly 5, all other stats and deficits are
+          // unchanged), and the unfiltered enumeration already keeps the earlier one
+          // (a later tie never replaces a winner) — so only the first plain minus per
+          // +5 stat is branched. An exotic has 30 directionals; this is what keeps a
+          // minimum-driven leaf from exploring 5 interchangeable −5s per +5.
+          const minus = ap.minus;
+          if (
+            mins[minus] <= 0 &&
+            aug[minus] + suffixDown[i + 1][minus] >= 5 &&
+            aug[minus] + suffixUp[i + 1][minus] + artCount * ARTIFICE_MOD_BONUS <= STAT_CAP
+          ) {
+            if (plainSeen & (1 << plus)) continue;
+            plainSeen |= 1 << plus;
+          }
         }
         curApplied[i] = opt.applied;
         for (let s = 0; s < NUM_STATS; s++) aug[s] += opt.vec[s];

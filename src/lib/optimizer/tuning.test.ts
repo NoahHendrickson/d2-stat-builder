@@ -1,4 +1,5 @@
 import { describe, expect, test } from "vitest";
+import { mulberry32, randInt } from "./test-rng";
 import {
   assignMods,
   createTuningSearcher,
@@ -141,16 +142,6 @@ describe("assignMods", () => {
 
 describe("maximize/feasible consistency (property)", () => {
   // Deterministic PRNG so a failure is reproducible from the seed.
-  function mulberry32(seed: number): () => number {
-    let a = seed;
-    return () => {
-      a |= 0;
-      a = (a + 0x6d2b79f5) | 0;
-      let t = Math.imul(a ^ (a >>> 15), 1 | a);
-      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-    };
-  }
 
   /** A random archetype-shaped piece: 3 high stats, 3 low; ~50% tunable. */
   function randomPiece(
@@ -323,5 +314,38 @@ describe("directionalsBranchable (shared searcher/bound policy)", () => {
     expect(
       directionalsBranchable(true, 2, short([false, false, false, false, false, false])),
     ).toBe(false);
+  });
+});
+
+describe("assignMods overshoot (the mod-slack bound's premise)", () => {
+
+  test("stat-mod points on a stat never exceed its deficit by more than MAX_MOD_OVERSHOOT (9), and are zero without a deficit", () => {
+    // makeModUpside (bounds.ts) credits mods only up to `min + 9` per targeted stat; this
+    // pins the covering policy that premise rests on, with and without artifice.
+    const rng = mulberry32(0x0ff5e7);
+    let coverings = 0;
+    for (let iter = 0; iter < 3000; iter++) {
+      const deficits = Array.from({ length: 6 }, () => {
+        const r = rng();
+        return r < 0.4 ? 0 : r < 0.5 ? -randInt(rng, 1, 20) : randInt(rng, 1, 45);
+      });
+      const major = randInt(rng, 0, 4);
+      const minor = randInt(rng, 0, 5 - major);
+      const art = rng() < 0.5 ? 0 : randInt(rng, 1, 3);
+      const asg = assignMods(deficits, major, minor, art);
+      if (!asg) continue;
+      coverings++;
+      for (let s = 0; s < 6; s++) {
+        const ctx = `iter=${iter} s=${s} deficits=${deficits} mods=${major}/${minor} art=${art}`;
+        if (deficits[s] <= 0) {
+          expect(asg.points[s], ctx).toBe(0);
+          expect(asg.artificePoints[s], ctx).toBe(0);
+        } else {
+          expect(asg.points[s] + asg.artificePoints[s], ctx).toBeGreaterThanOrEqual(deficits[s]);
+          expect(asg.points[s], ctx).toBeLessThanOrEqual(deficits[s] + 9);
+        }
+      }
+    }
+    expect(coverings).toBeGreaterThan(300);
   });
 });

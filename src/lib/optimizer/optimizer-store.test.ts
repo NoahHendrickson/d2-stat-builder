@@ -39,6 +39,7 @@ const output = (over: Partial<OptimizerOutput> = {}): OptimizerOutput => ({
   loadouts: [],
   combosTried: 0,
   combosValid: 0,
+  combosValidExact: true,
   ceilings: [1, 1, 1, 1, 1, 1],
   ceilingUppers: [1, 1, 1, 1, 1, 1],
   ceilingsExact: true,

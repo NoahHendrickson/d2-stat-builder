@@ -1,0 +1,506 @@
+{
+  "loose (all 0)": {
+    "hash": "a1ff79f118714192",
+    "n": 200,
+    "best": 465,
+    "ceilings": [
+      200,
+      96,
+      165,
+      195,
+      185,
+      165
+    ],
+    "uppers": [
+      200,
+      96,
+      165,
+      195,
+      185,
+      165
+    ],
+    "exact": true,
+    "counters": {
+      "tried": 216,
+      "valid": 200,
+      "validExact": false,
+      "capped": false
+    }
+  },
+  "loose, tuning off": {
+    "hash": "19e601c61f011746",
+    "n": 200,
+    "best": 450,
+    "ceilings": [
+      175,
+      80,
+      155,
+      175,
+      175,
+      150
+    ],
+    "uppers": [
+      175,
+      80,
+      155,
+      175,
+      175,
+      150
+    ],
+    "exact": true,
+    "counters": {
+      "tried": 205,
+      "valid": 200,
+      "validExact": false,
+      "capped": false
+    }
+  },
+  "loose, balanced off": {
+    "hash": "7696583e83c55554",
+    "n": 200,
+    "best": 450,
+    "ceilings": [
+      200,
+      95,
+      165,
+      195,
+      185,
+      165
+    ],
+    "uppers": [
+      200,
+      95,
+      165,
+      195,
+      185,
+      165
+    ],
+    "exact": true,
+    "counters": {
+      "tried": 216,
+      "valid": 200,
+      "validExact": false,
+      "capped": false
+    }
+  },
+  "one stat 200 (weapons)": {
+    "hash": "9d42f029b68cf1af",
+    "n": 200,
+    "best": 475,
+    "ceilings": [
+      200,
+      40,
+      100,
+      125,
+      115,
+      70
+    ],
+    "uppers": [
+      200,
+      40,
+      100,
+      125,
+      115,
+      70
+    ],
+    "exact": true,
+    "counters": {
+      "tried": 2496,
+      "valid": 736,
+      "validExact": true,
+      "capped": false
+    }
+  },
+  "one stat 100 (health), 5 minor": {
+    "hash": "c11f4281113be048",
+    "n": 0,
+    "best": null,
+    "ceilings": [
+      0,
+      96,
+      0,
+      0,
+      0,
+      0
+    ],
+    "uppers": [
+      0,
+      96,
+      0,
+      0,
+      0,
+      0
+    ],
+    "exact": true,
+    "counters": {
+      "tried": 3600,
+      "valid": 0,
+      "validExact": true,
+      "capped": false
+    }
+  },
+  "two stats 150/150 (w/g)": {
+    "hash": "6169670ad4f23e8e",
+    "n": 200,
+    "best": 505,
+    "ceilings": [
+      190,
+      75,
+      140,
+      190,
+      140,
+      115
+    ],
+    "uppers": [
+      190,
+      75,
+      140,
+      190,
+      140,
+      115
+    ],
+    "exact": true,
+    "counters": {
+      "tried": 768,
+      "valid": 582,
+      "validExact": false,
+      "capped": false
+    }
+  },
+  "three stats 120/100/100": {
+    "hash": "90d64284f6c697a8",
+    "n": 200,
+    "best": 505,
+    "ceilings": [
+      200,
+      93,
+      180,
+      195,
+      140,
+      120
+    ],
+    "uppers": [
+      200,
+      93,
+      180,
+      195,
+      140,
+      120
+    ],
+    "exact": true,
+    "counters": {
+      "tried": 8142,
+      "valid": 3426,
+      "validExact": false,
+      "capped": false
+    }
+  },
+  "six stats 70 each, frag": {
+    "hash": "85784eafa7fe2aeb",
+    "n": 200,
+    "best": 500,
+    "ceilings": [
+      136,
+      83,
+      95,
+      135,
+      130,
+      95
+    ],
+    "uppers": [
+      136,
+      83,
+      95,
+      135,
+      130,
+      95
+    ],
+    "exact": true,
+    "counters": {
+      "tried": 312756,
+      "valid": 1259,
+      "validExact": true,
+      "capped": false
+    }
+  },
+  "infeasible 200/200": {
+    "hash": "391781f2ed86558c",
+    "n": 0,
+    "best": null,
+    "ceilings": [
+      0,
+      65,
+      0,
+      0,
+      0,
+      0
+    ],
+    "uppers": [
+      0,
+      65,
+      0,
+      0,
+      0,
+      0
+    ],
+    "exact": true,
+    "counters": {
+      "tried": 0,
+      "valid": 0,
+      "validExact": true,
+      "capped": false
+    }
+  },
+  "fixture two-set": {
+    "hash": "87633de1846c63e0",
+    "n": 200,
+    "best": 487,
+    "ceilings": [
+      195,
+      41,
+      115,
+      145,
+      120,
+      71
+    ],
+    "uppers": [
+      195,
+      41,
+      115,
+      145,
+      120,
+      71
+    ],
+    "exact": true,
+    "counters": {
+      "tried": 7882,
+      "valid": 267,
+      "validExact": true,
+      "capped": false
+    }
+  },
+  "fixture coda": {
+    "hash": "2ca3d9a03b5c0fce",
+    "n": 16,
+    "best": 483,
+    "ceilings": [
+      190,
+      26,
+      105,
+      120,
+      75,
+      45
+    ],
+    "uppers": [
+      190,
+      26,
+      105,
+      120,
+      75,
+      45
+    ],
+    "exact": true,
+    "counters": {
+      "tried": 442,
+      "valid": 16,
+      "validExact": true,
+      "capped": false
+    }
+  },
+  "specific exotic, loose": {
+    "hash": "f5aee8fe3c2e4929",
+    "n": 200,
+    "best": 465,
+    "ceilings": [
+      200,
+      77,
+      165,
+      190,
+      185,
+      165
+    ],
+    "uppers": [
+      200,
+      77,
+      165,
+      190,
+      185,
+      165
+    ],
+    "exact": true,
+    "counters": {
+      "tried": 204,
+      "valid": 200,
+      "validExact": false,
+      "capped": false
+    }
+  },
+  "specific exotic, 150/150": {
+    "hash": "236e7f71997c4bc9",
+    "n": 200,
+    "best": 505,
+    "ceilings": [
+      190,
+      75,
+      140,
+      185,
+      140,
+      100
+    ],
+    "uppers": [
+      190,
+      75,
+      140,
+      185,
+      140,
+      100
+    ],
+    "exact": true,
+    "counters": {
+      "tried": 636,
+      "valid": 484,
+      "validExact": false,
+      "capped": false
+    }
+  },
+  "no exotic, 150/150": {
+    "hash": "d36886a1284a7eac",
+    "n": 200,
+    "best": 505,
+    "ceilings": [
+      190,
+      75,
+      140,
+      185,
+      140,
+      111
+    ],
+    "uppers": [
+      190,
+      75,
+      140,
+      185,
+      140,
+      111
+    ],
+    "exact": true,
+    "counters": {
+      "tried": 552,
+      "valid": 484,
+      "validExact": false,
+      "capped": false
+    }
+  },
+  "artifice pool, loose": {
+    "hash": "75f334c1206802ce",
+    "n": 200,
+    "best": 465,
+    "ceilings": [
+      200,
+      87,
+      165,
+      195,
+      180,
+      155
+    ],
+    "uppers": [
+      200,
+      87,
+      165,
+      195,
+      180,
+      155
+    ],
+    "exact": true,
+    "counters": {
+      "tried": 386463,
+      "valid": 281,
+      "validExact": false,
+      "capped": false
+    }
+  },
+  "artifice pool, 150/150": {
+    "hash": "2fe29b7560aad316",
+    "n": 200,
+    "best": 505,
+    "ceilings": [
+      190,
+      65,
+      140,
+      190,
+      140,
+      115
+    ],
+    "uppers": [
+      190,
+      65,
+      140,
+      190,
+      140,
+      115
+    ],
+    "exact": true,
+    "counters": {
+      "tried": 237964,
+      "valid": 124693,
+      "validExact": false,
+      "capped": false
+    }
+  },
+  "power range 402-408, loose": {
+    "hash": "80f96eb7a29dcf95",
+    "n": 200,
+    "best": 465,
+    "ceilings": [
+      200,
+      96,
+      165,
+      195,
+      185,
+      165
+    ],
+    "uppers": [
+      200,
+      96,
+      165,
+      195,
+      185,
+      165
+    ],
+    "exact": true,
+    "counters": {
+      "tried": 469,
+      "valid": 200,
+      "validExact": false,
+      "capped": false
+    }
+  },
+  "power range, 150/150": {
+    "hash": "b60f4ae260c53a00",
+    "n": 200,
+    "best": 505,
+    "ceilings": [
+      190,
+      75,
+      140,
+      190,
+      140,
+      115
+    ],
+    "uppers": [
+      190,
+      75,
+      140,
+      190,
+      140,
+      115
+    ],
+    "exact": true,
+    "counters": {
+      "tried": 1092,
+      "valid": 517,
+      "validExact": false,
+      "capped": false
+    }
+  }
+}

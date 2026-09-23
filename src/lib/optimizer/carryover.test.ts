@@ -33,6 +33,7 @@ function output(overrides: Partial<OptimizerOutput> = {}): OptimizerOutput {
     loadouts: [],
     combosTried: 0,
     combosValid: 0,
+    combosValidExact: true,
     ceilings: [30, 20, 10, 40, 15, 0],
     ceilingUppers: [30, 20, 10, 40, 15, 0],
     ceilingsExact: true,

@@ -8,6 +8,9 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
+    "bench:time": "tsx scripts/optimizer-bench.ts time",
+    "bench:verify": "tsx scripts/optimizer-bench.ts verify",
+    "bench:snapshot": "tsx scripts/optimizer-bench.ts snapshot",
     "bake:backdrop": "node scripts/bake-backdrop.mjs"
   },
   "dependencies": {
@@ -38,6 +41,7 @@
     "eslint-config-next": "16.2.9",
     "sharp": "0.34.5",
     "tailwindcss": "^4",
+    "tsx": "^4.23.15",
     "typescript": "^5",
     "vitest": "^4.1.9"
   }
