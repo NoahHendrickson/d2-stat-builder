@@ -69,36 +69,31 @@ function Slider({
     null
   )
   const [dragging, setDragging] = React.useState(false)
-  // The control's box, measured on pointerenter / pointerdown rather than on every
-  // pointermove — a layout read per tick forces synchronous layout while the thumb
-  // is animating. The rect is viewport-relative, so any scroll (capture phase: the
-  // builder column scrolls, not the window) or resize while hovered drops it; the
-  // next move re-measures lazily.
+  // The control's box, measured at most once per animation frame: pointer events can
+  // arrive several times per frame, and a layout read per event forces synchronous
+  // layout while the thumb is animating. Caching for one frame bounds that cost while
+  // never going stale past a frame — scrolls, resizes, remounts, and layout shifts
+  // (a scrollbar appearing, a section expanding) are all picked up on the next move.
   const rectRef = React.useRef<DOMRect | null>(null)
-  const unwatchRef = React.useRef<(() => void) | null>(null)
-  const measure = (e: React.PointerEvent<HTMLDivElement>) => {
-    rectRef.current = e.currentTarget.getBoundingClientRect()
-    if (unwatchRef.current) return
-    const invalidate = () => {
+  const rectFrame = React.useRef(0)
+  const measure = (el: HTMLElement): DOMRect => {
+    const rect = el.getBoundingClientRect()
+    rectRef.current = rect
+    cancelAnimationFrame(rectFrame.current)
+    rectFrame.current = requestAnimationFrame(() => {
       rectRef.current = null
-    }
-    window.addEventListener("scroll", invalidate, { capture: true, passive: true })
-    window.addEventListener("resize", invalidate)
-    unwatchRef.current = () => {
-      window.removeEventListener("scroll", invalidate, { capture: true })
-      window.removeEventListener("resize", invalidate)
-    }
+    })
+    return rect
   }
   const forget = () => {
     rectRef.current = null
-    unwatchRef.current?.()
-    unwatchRef.current = null
+    cancelAnimationFrame(rectFrame.current)
   }
-  React.useEffect(() => () => unwatchRef.current?.(), [])
+  React.useEffect(() => forget, [])
 
   function updateHover(e: React.PointerEvent<HTMLDivElement>) {
     if (!horizontal || max <= min) return
-    const rect = rectRef.current ?? (rectRef.current = e.currentTarget.getBoundingClientRect())
+    const rect = rectRef.current ?? measure(e.currentTarget)
     const range = rect.width - THUMB_PX
     if (range <= 0) return
     const fraction = clampNumber(
@@ -142,10 +137,9 @@ function Slider({
     >
       <SliderPrimitive.Control
         className="group/slider relative flex w-full touch-none items-center select-none data-disabled:opacity-40 data-horizontal:py-1.5 data-vertical:h-full data-vertical:min-h-40 data-vertical:w-auto data-vertical:flex-col"
-        onPointerEnter={measure}
         onPointerMove={updateHover}
         onPointerDown={(e) => {
-          measure(e)
+          measure(e.currentTarget) // fresh box for the committed value
           setDragging(true)
           updateHover(e)
         }}

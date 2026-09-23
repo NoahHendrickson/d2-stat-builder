@@ -11,7 +11,7 @@ vi.mock("idb", () => ({
   }),
 }));
 
-const { ARMORY_CACHE_TTL_MS, clearArmoryCache, readArmoryCache, writeArmoryCache } = await import("./armory-cache");
+const { ARMORY_CACHE_TTL_MS, clearArmoryCache, persistArmoryWhenIdle, readArmoryCache, writeArmoryCache } = await import("./armory-cache");
 const armory = { pieces: [], characters: [] };
 
 describe("armory cache", () => {
@@ -22,6 +22,22 @@ describe("armory cache", () => {
     expect(await readArmoryCache("me", 2_000)).toEqual({ manifestVersion: "v1", savedAt: 1_000, armory });
     expect(await readArmoryCache("someone-else", 2_000)).toBeNull();
     expect(await readArmoryCache("me", 1_000 + ARMORY_CACHE_TTL_MS + 1)).toBeNull();
+  });
+
+  it("a deferred write queued before a clear is dropped, one queued after it lands", async () => {
+    vi.useFakeTimers();
+    try {
+      persistArmoryWhenIdle("me", { manifestVersion: "v1", savedAt: 5, armory });
+      await clearArmoryCache(); // the session ended while the write was queued
+      await vi.runAllTimersAsync();
+      expect(store.size).toBe(0);
+
+      persistArmoryWhenIdle("me", { manifestVersion: "v1", savedAt: 6, armory });
+      await vi.runAllTimersAsync();
+      expect((store.get("me") as { savedAt: number }).savedAt).toBe(6);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("clears every account", async () => {

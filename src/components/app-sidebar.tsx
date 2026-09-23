@@ -109,6 +109,7 @@ export const AppSidebar = memo(function AppSidebar({
       <Suspense fallback={<LoadoutsListPlaceholder headerAction={collapseButton} />}>
         <LoadoutsList
           armory={armory.data}
+          provisional={armory.isProvisional}
           manifest={manifestStatus.manifest}
           onArmoryChanged={onArmoryChanged}
           onNavigate={onNavigate}

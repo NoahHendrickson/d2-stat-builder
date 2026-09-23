@@ -11,7 +11,12 @@ import { loadManifest, type Manifest } from "./load";
 export type ManifestStatus =
   | { state: "idle" }
   | { state: "loading"; message: string; progress: number }
-  | { state: "ready"; manifest: Manifest }
+  | {
+      state: "ready";
+      manifest: Manifest;
+      /** A newer manifest is downloading in the background (gear released with it can't be resolved yet). */
+      updating: boolean;
+    }
   | { state: "error"; message: string };
 
 interface ManifestProgress {
@@ -21,6 +26,7 @@ interface ManifestProgress {
 
 export const MANIFEST_KEY = ["manifest"];
 const PROGRESS_KEY = ["manifest-progress"];
+const UPDATING_KEY = ["manifest-updating"];
 
 /**
  * Loads the Destiny manifest once per page session via the shared query cache,
@@ -35,6 +41,13 @@ export function useManifest(): ManifestStatus {
   // Subscribe-only view of download progress; written from the query function.
   const progress = useQuery<ManifestProgress>({
     queryKey: PROGRESS_KEY,
+    queryFn: skipToken,
+    staleTime: Infinity,
+    gcTime: Infinity,
+  });
+
+  const updating = useQuery<boolean>({
+    queryKey: UPDATING_KEY,
     queryFn: skipToken,
     staleTime: Infinity,
     gcTime: Infinity,
@@ -63,10 +76,15 @@ export function useManifest(): ManifestStatus {
         onUpdate: (manifest) => {
           queryClient.setQueryData<Manifest>(MANIFEST_KEY, manifest);
         },
+        onUpdating: (value) => {
+          queryClient.setQueryData<boolean>(UPDATING_KEY, value);
+        },
       }),
   });
 
-  if (manifest.data) return { state: "ready", manifest: manifest.data };
+  if (manifest.data) {
+    return { state: "ready", manifest: manifest.data, updating: updating.data ?? false };
+  }
   if (manifest.isError) {
     const err = manifest.error;
     return {

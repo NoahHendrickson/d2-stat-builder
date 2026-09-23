@@ -90,7 +90,11 @@ function AccountAvatar({ iconPath }: { iconPath?: string }) {
 }
 
 function manifestCopy(status: ReturnType<typeof useManifest>): string {
-  if (status.state === "ready") return `Manifest ${status.manifest.version} ready.`;
+  if (status.state === "ready") {
+    return status.updating
+      ? `Manifest ${status.manifest.version} — newer version downloading; new gear may be missing until it finishes.`
+      : `Manifest ${status.manifest.version} ready.`;
+  }
   if (status.state === "loading") return status.message;
   if (status.state === "error") return `Couldn't load manifest: ${status.message}`;
   return "Waiting to load the Destiny manifest…";
@@ -115,7 +119,7 @@ function RefreshIcon({
 function useArmoryAccount() {
   const session = useSession();
   const queryClient = useQueryClient();
-  const { data, isLoading, isError, error, isFetching, isPlaceholderData, refetch } =
+  const { data, isLoading, isError, error, isFetching, isProvisional, refetch } =
     useArmory();
   const manifestStatus = useManifest();
   const [refreshSucceeded, setRefreshSucceeded] = useState(false);
@@ -152,7 +156,7 @@ function useArmoryAccount() {
   };
 
   const pieces = data?.pieces ?? [];
-  const refreshLabel = isPlaceholderData
+  const refreshLabel = isProvisional
     ? "Refreshing from Bungie…"
     : isFetching
       ? "Refreshing…"

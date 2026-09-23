@@ -510,7 +510,7 @@ export function ArmorTable() {
                     row={row}
                     characters={characters}
                     onRefresh={refresh}
-                    provisional={armory.isPlaceholderData}
+                    provisional={armory.isProvisional}
                     dataIndex={vRow.index}
                     measureRef={rowVirtualizer.measureElement}
                   />

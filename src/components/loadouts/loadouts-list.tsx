@@ -147,12 +147,15 @@ const ROW_GAP_PX = 10;
  */
 export function LoadoutsList({
   armory,
+  provisional = false,
   manifest,
   onArmoryChanged,
   onNavigate,
   headerAction,
 }: {
   armory: Armory;
+  /** `armory` is last visit's copy; applying a loadout waits for the live profile. */
+  provisional?: boolean;
   manifest: Manifest;
   onArmoryChanged: () => void;
   /** Called after an action that switches views (the mobile drawer closes itself). */
@@ -720,6 +723,7 @@ export function LoadoutsList({
                     open={expanded.has(saved.id)}
                     onToggle={toggleExpanded}
                     pieceMap={pieceMap}
+                    provisional={provisional}
                     manifest={manifest}
                     characters={armory.characters}
                     statIcons={statIcons}

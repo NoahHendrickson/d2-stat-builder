@@ -1,6 +1,6 @@
 "use client";
 
-import { useSyncExternalStore, useEffect } from "react";
+import { useSyncExternalStore } from "react";
 import { getOptimizerStore } from "./optimizer-store";
 
 /**
@@ -16,9 +16,6 @@ import { getOptimizerStore } from "./optimizer-store";
 export function useOptimizer() {
   const store = getOptimizerStore();
   const snapshot = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
-  // Spawn the worker as soon as anything subscribes, so the first search doesn't also
-  // wait on the worker chunk fetch and module evaluation.
-  useEffect(() => store.warm(), [store]);
   return {
     run: store.run,
     cancel: store.cancel,

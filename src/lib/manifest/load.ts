@@ -59,6 +59,12 @@ export interface LoadManifestOptions {
    * Bungie has published a newer version, it is downloaded, cached, and handed here.
    */
   onUpdate?: (manifest: Manifest) => void;
+  /**
+   * The cached manifest served is older than Bungie's current one and the newer one is
+   * on its way (true), or that finished / failed (false). While true, gear released
+   * with the new version can't be resolved yet.
+   */
+  onUpdating?: (updating: boolean) => void;
 }
 
 /** Cache stamp: Bungie's version plus our filter revision, so either change invalidates. */
@@ -165,6 +171,7 @@ async function downloadAll(
 export async function loadManifest({
   onProgress,
   onUpdate,
+  onUpdating,
 }: LoadManifestOptions = {}): Promise<Manifest> {
   const http = createBungieHttp();
   onProgress?.("Loading game data…", 0);
@@ -177,12 +184,26 @@ export async function loadManifest({
     onProgress?.("Loaded game data from cache", 1);
     void infoPromise
       .then(async (info) => {
-        if (stampFor(info.version) === cached.stamp) return;
-        // One tab at a time: two tabs revalidating together would interleave their
-        // table writes under the same stamp. A tab that can't get the lock skips —
-        // the other tab's commit serves it on its next load.
-        const manifest = await withRevalidationLock(() => downloadAll(info));
-        if (manifest) onUpdate?.(manifest);
+        const target = stampFor(info.version);
+        if (target === cached.stamp) return;
+        onUpdating?.(true);
+        try {
+          // One tab at a time: two tabs revalidating together would interleave their
+          // table writes under the same stamp. A tab that can't get the lock waits for
+          // the holder and then reads what it committed, so it gets the update too.
+          const manifest = await withRevalidationLock(
+            () => downloadAll(info),
+            async () => {
+              const fresh = await readCache();
+              return fresh?.stamp === target
+                ? makeManifest(info.version, fresh.tables)
+                : undefined;
+            },
+          );
+          if (manifest) onUpdate?.(manifest);
+        } finally {
+          onUpdating?.(false);
+        }
       })
       .catch((err: unknown) => {
         console.warn("Manifest revalidation failed; keeping the cached version", err);
@@ -193,11 +214,22 @@ export async function loadManifest({
   return downloadAll(await infoPromise, onProgress);
 }
 
-/** Run `fn` under the cross-tab revalidation lock, or resolve undefined if another tab holds it. */
-async function withRevalidationLock<T>(fn: () => Promise<T>): Promise<T | undefined> {
+/**
+ * Run `fn` under the cross-tab revalidation lock. If another tab holds it, wait for
+ * that tab to finish and run `afterHolder` instead (it reads the holder's commit).
+ */
+async function withRevalidationLock<T>(
+  fn: () => Promise<T>,
+  afterHolder: () => Promise<T | undefined>,
+): Promise<T | undefined> {
   const locks = typeof navigator !== "undefined" ? navigator.locks : undefined;
   if (!locks) return fn();
-  return locks.request("manifest-revalidate", { ifAvailable: true }, (lock) =>
-    lock ? fn() : Promise.resolve(undefined),
+  const NAME = "manifest-revalidate";
+  const ran = await locks.request(NAME, { ifAvailable: true }, async (lock) =>
+    lock ? { value: await fn() } : undefined,
   );
+  if (ran) return ran.value;
+  // Held elsewhere: a plain request resolves once the holder releases.
+  await locks.request(NAME, () => Promise.resolve());
+  return afterHolder();
 }

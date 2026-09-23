@@ -358,7 +358,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           onOpenChange={setDrawerOpen}
           swipeDirection="left"
         >
-          <DrawerContent aria-label="Loadouts" className="bg-glass">
+          <DrawerContent aria-label="Loadouts" className="d2-sidebar">
             <div className="flex shrink-0 justify-end px-2 pt-2">
               <TooltipLabel label="Close loadouts">
                 <DrawerClose

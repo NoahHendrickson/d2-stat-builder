@@ -31,7 +31,10 @@ export function ManifestStatus() {
         <CardDescription>
           {status.state === "idle" && "Waiting to load the Destiny manifest…"}
           {status.state === "loading" && status.message}
-          {status.state === "ready" && `Manifest ${status.manifest.version} ready.`}
+          {status.state === "ready" &&
+            (status.updating
+              ? `Manifest ${status.manifest.version} ready — a newer version is downloading; gear released with it may be missing until that finishes.`
+              : `Manifest ${status.manifest.version} ready.`)}
           {status.state === "error" && `Couldn't load manifest: ${status.message}`}
         </CardDescription>
       </CardHeader>

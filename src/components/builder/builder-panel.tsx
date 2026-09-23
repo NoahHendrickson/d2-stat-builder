@@ -100,6 +100,7 @@ import {
 } from "@/lib/dim/subclasses";
 import { useApplyCurrentFragments } from "@/lib/armory/use-apply-current-fragments";
 import { useAutoSearch } from "@/lib/optimizer/use-auto-search";
+import { useOptimizerWarmup } from "@/lib/optimizer/use-optimizer-warmup";
 import { MAX_SET_BONUSES, type BuilderSnapshot, type QueryOrigin } from "@/lib/loadouts/types";
 
 const MAX_MODS = 5;
@@ -841,14 +842,16 @@ export function BuilderPanel({
   ]);
 
   const authed = session.data?.authenticated ?? false;
-  // Last visit's gear (placeholder) drives the controls and lists, but never a search
+  // Last visit's gear (provisional) drives the controls and lists, but never a search
   // or a build card: builds are computed only from a live profile.
-  const provisional = armoryQuery.isPlaceholderData;
-  const ready = authed && Boolean(armory) && Boolean(manifest) && !provisional;
+  const provisional = armoryQuery.isProvisional;
+  const ready = authed && Boolean(armory) && Boolean(manifest);
+  const searchReady = ready && !provisional;
 
+  useOptimizerWarmup();
   // Auto-search (see useAutoSearch): `runOptimizer` is memoized on exactly the build
   // inputs, so its identity changing is the "something changed" signal.
-  useAutoSearch(ready && classType !== null, runOptimizer);
+  useAutoSearch(searchReady && classType !== null, runOptimizer);
 
   const setTarget = useCallback(
     (i: number, value: number) =>
@@ -942,7 +945,7 @@ export function BuilderPanel({
 
   const buildsProps: BuildsColumnContentProps = useMemo(
     () => ({
-      ready,
+      ready: searchReady,
       provisional,
       showLoading,
       running,
@@ -966,7 +969,7 @@ export function BuilderPanel({
       onEquipped,
     }),
     [
-      ready,
+      searchReady,
       provisional,
       showLoading,
       running,

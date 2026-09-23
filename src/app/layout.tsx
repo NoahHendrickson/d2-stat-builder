@@ -5,7 +5,6 @@ import { AppShell } from "@/components/app-shell";
 import { LoadingScreen } from "@/components/loading/loading-screen";
 import { Providers } from "@/components/providers";
 import { Analytics } from "@vercel/analytics/next";
-import Script from "next/script";
 import { EARLY_FETCH_SCRIPT } from "@/lib/early-fetch";
 
 const geistSans = Geist({
@@ -30,13 +29,15 @@ export default function RootLayout({
       suppressHydrationWarning
       className={geistSans.variable}
     >
+      <head>
+        {/* A plain inline script, not next/script: in the App Router a "beforeInteractive"
+            next/script is queued on self.__next_s and run by the app bootstrap only after
+            the main chunk loads. This runs during HTML parse, which is the point — it
+            starts the session + profile requests before the bundle arrives
+            (see early-fetch.ts). */}
+        <script id="early-fetch" dangerouslySetInnerHTML={{ __html: EARLY_FETCH_SCRIPT }} />
+      </head>
       <body className="h-dvh antialiased">
-        {/* Start the session + profile requests before the bundle arrives (see early-fetch.ts). */}
-        <Script
-          id="early-fetch"
-          strategy="beforeInteractive"
-          dangerouslySetInnerHTML={{ __html: EARLY_FETCH_SCRIPT }}
-        />
         {/* The blurred scene every panel floats over. */}
         <div className="app-backdrop" aria-hidden />
         <Providers>

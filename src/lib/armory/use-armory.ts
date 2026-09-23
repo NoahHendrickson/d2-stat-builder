@@ -1,12 +1,12 @@
 "use client";
 
 import { useCallback } from "react";
-import { useQuery, type QueryClient, type UseQueryResult } from "@tanstack/react-query";
+import { useQuery, useQueryClient, type QueryClient, type UseQueryResult } from "@tanstack/react-query";
 import type { DestinyProfileResponse } from "bungie-api-ts/destiny2";
 import type { SessionState } from "@/lib/auth/use-session";
 import type { Manifest } from "@/lib/manifest/load";
 import { MANIFEST_KEY, useManifest } from "@/lib/manifest/use-manifest";
-import { readArmoryCache, writeArmoryCache, type ArmoryCacheEntry } from "./armory-cache";
+import { persistArmoryWhenIdle, readArmoryCache, type ArmoryCacheEntry } from "./armory-cache";
 import { deriveArmory, type Armory } from "./fetch";
 import { ARMORY_KEY, armoryCacheKey, armoryKey } from "./keys";
 import { sessionMembershipId, useProfile } from "./use-profile";
@@ -18,32 +18,41 @@ export interface RefreshResult {
 }
 
 /**
- * The armory query result. `refetch` is the one departure from a plain query result:
- * it refetches the PROFILE from Bungie (re-deriving the armory from the profile already
- * in memory would make "Refresh gear" a no-op) and resolves with the profile's real
- * outcome plus the re-normalized armory.
+ * The armory query result, with the network state of the profile it derives from
+ * (`isPending`/`isLoading`/`isFetching`/`isError`/`error` reflect the profile fetch —
+ * the derived query itself never touches the network), plus:
+ * - `isProvisional`: the data on screen is last visit's copy from IndexedDB and no live
+ *   profile has been normalized yet this session. (`isPlaceholderData` is also true
+ *   while a refetch re-derives and the previous LIVE armory is kept on screen — that
+ *   is not provisional, and nothing should be hidden or gated for it.)
+ * - `refetch`: refetches the PROFILE from Bungie (re-deriving from the profile already
+ *   in memory would make "Refresh gear" a no-op) and resolves with its real outcome
+ *   plus the re-normalized armory.
  */
 export type ArmoryQuery = Omit<UseQueryResult<Armory>, "refetch"> & {
+  isProvisional: boolean;
   refetch: () => Promise<RefreshResult>;
 };
 
-/** Run `fn` when the browser is idle (the write is a structured clone of the whole armory). */
-const whenIdle = (fn: () => void): void => {
-  if (typeof requestIdleCallback === "function") requestIdleCallback(() => fn(), { timeout: 5000 });
-  else setTimeout(fn, 1000);
-};
+/**
+ * Superseded derivations (older profile fetches, an older manifest) go inactive when the
+ * observer moves to the new key and are collected after this — only the current armory
+ * needs to live on.
+ */
+const SUPERSEDED_ARMORY_GC_MS = 60_000;
 
 /**
  * The signed-in player's normalized armor, as a query derived from the raw profile and
  * the manifest (both fetched independently) — keyed on the account, the manifest
  * version, and the profile fetch, so a new profile re-derives and everything keyed on
  * the armory follows. The persisted copy from a previous visit is served as
- * `placeholderData` (same manifest version, inside the TTL) until the live profile
- * lands; `isPlaceholderData` is true then, and while a refetch re-derives. Placeholder
- * data never enters the query cache, which is what keeps `peekArmory` live-only.
+ * `placeholderData` (same manifest version, inside the TTL) until the first live
+ * profile lands. Placeholder data never enters the query cache, which is what keeps
+ * `peekArmory` live-only.
  */
 export function useArmory(): ArmoryQuery {
   const { query: profile, membershipId } = useProfile();
+  const queryClient = useQueryClient();
   const manifestStatus = useManifest();
   const manifest = manifestStatus.state === "ready" ? manifestStatus.manifest : undefined;
   const version = manifest?.version;
@@ -53,10 +62,10 @@ export function useArmory(): ArmoryQuery {
     enabled: membershipId !== undefined,
     queryFn: () => readArmoryCache(membershipId as string),
     staleTime: Infinity,
-    gcTime: Infinity,
+    gcTime: SUPERSEDED_ARMORY_GC_MS,
     retry: false,
   });
-  const placeholder =
+  const fromDisk =
     cached.data && cached.data.manifestVersion === version ? cached.data.armory : undefined;
 
   const profileData = profile.data;
@@ -68,20 +77,30 @@ export function useArmory(): ArmoryQuery {
         profileData as DestinyProfileResponse,
         manifest as Manifest,
       );
-      const id = membershipId as string;
-      const manifestVersion = version as string;
-      whenIdle(() => {
-        void writeArmoryCache(id, { manifestVersion, savedAt: Date.now(), armory });
+      persistArmoryWhenIdle(membershipId as string, {
+        manifestVersion: version as string,
+        savedAt: Date.now(),
+        armory,
       });
       return armory;
     },
     // While a refetch re-derives, keep the previous armory on screen; before the first
     // live derivation, last visit's copy.
-    placeholderData: (previous) => previous ?? placeholder,
+    placeholderData: (previous) => previous ?? fromDisk,
     staleTime: Infinity,
-    gcTime: Infinity,
+    gcTime: SUPERSEDED_ARMORY_GC_MS,
     retry: false,
   });
+
+  // Provisional = placeholder AND no live derivation for this account in the cache.
+  // While a refetch re-derives, the previous key's query still holds the last LIVE
+  // armory (it is collected only a minute after going inactive), so the placeholder
+  // shown then is not provisional. Placeholder data itself is never in the cache.
+  const isProvisional =
+    query.isPlaceholderData &&
+    !queryClient
+      .getQueriesData<Armory>({ queryKey: [ARMORY_KEY, membershipId] })
+      .some(([, data]) => data !== undefined);
 
   const profileRefetch = profile.refetch;
   const refetch = useCallback<ArmoryQuery["refetch"]>(async () => {
@@ -90,13 +109,18 @@ export function useArmory(): ArmoryQuery {
     return { data, error: result.error, isSuccess: result.isSuccess };
   }, [profileRefetch, manifest]);
 
-  // The network state is the profile's: the derived query itself never fails or
-  // waits on the network, so a profile error would otherwise read as "still pending".
+  // The derived query is disabled (not pending, not fetching) while the profile is
+  // still on its way; without this the status card would read "idle" for the whole
+  // profile round trip on a cold load.
+  const waitingOnProfile = query.data === undefined && !profile.isError && !profile.data;
   return {
     ...query,
+    isPending: query.isPending || waitingOnProfile,
+    isLoading: query.isLoading || (waitingOnProfile && profile.isFetching),
     isFetching: query.isFetching || profile.isFetching,
     isError: query.isError || profile.isError,
     error: query.error ?? profile.error,
+    isProvisional,
     refetch,
   };
 }

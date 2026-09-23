@@ -124,6 +124,38 @@ describe("loadManifest", () => {
     warn.mockRestore();
   });
 
+  it("two tabs revalidating together download once and both receive the new version", async () => {
+    seedCache(`v1:${REV}`, "cached");
+    getDestinyManifest.mockResolvedValue(info("v2"));
+    // A minimal Web Locks manager: one holder per name, waiters queued in order.
+    const held = new Map<string, Promise<unknown>>();
+    const locks = {
+      request: async (name: string, a: unknown, b?: unknown) => {
+        const opts = (typeof a === "function" ? {} : a) as { ifAvailable?: boolean };
+        const cb = (typeof a === "function" ? a : b) as (lock: object | null) => Promise<unknown>;
+        if (held.has(name)) {
+          if (opts.ifAvailable) return cb(null);
+          await held.get(name);
+        }
+        const run = cb({ name }).finally(() => held.delete(name));
+        held.set(name, run);
+        return run;
+      },
+    };
+    vi.stubGlobal("navigator", { locks });
+    const updates: string[] = [];
+    const updating: boolean[] = [];
+    const [a, b] = await Promise.all([
+      loadManifest({ onUpdate: (m) => updates.push("a:" + m.version), onUpdating: (u) => updating.push(u) }),
+      loadManifest({ onUpdate: (m) => updates.push("b:" + m.version), onUpdating: (u) => updating.push(u) }),
+    ]);
+    expect([a.version, b.version]).toEqual(["v1", "v1"]);
+    await vi.waitFor(() => expect(updates).toHaveLength(2));
+    expect(updates.sort()).toEqual(["a:v2", "b:v2"]);
+    expect(downloads).toHaveLength(MANIFEST_TABLES.length); // one download, not two
+    expect(updating).toEqual([true, true, false, false]);
+  });
+
   it("keeps serving the cache when the version check fails", async () => {
     seedCache(`v1:${REV}`, "cached");
     getDestinyManifest.mockRejectedValue(new Error("bungie down"));
