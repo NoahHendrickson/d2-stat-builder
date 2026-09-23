@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { TooltipLabel } from "@/components/ui/tooltip";
 import { ArmoryDiagnosticsGate } from "@/components/armory/armory-diagnostics-gate";
 import { useArmory } from "@/lib/armory/use-armory";
+import { signOut } from "@/lib/auth/sign-out";
 import { useSession } from "@/lib/auth/use-session";
 import { BUNGIE_IMAGE_BASE } from "@/lib/bungie/constants";
 import { useManifest } from "@/lib/manifest/use-manifest";
@@ -89,7 +90,11 @@ function AccountAvatar({ iconPath }: { iconPath?: string }) {
 }
 
 function manifestCopy(status: ReturnType<typeof useManifest>): string {
-  if (status.state === "ready") return `Manifest ${status.manifest.version} ready.`;
+  if (status.state === "ready") {
+    return status.updating
+      ? `Manifest ${status.manifest.version} — newer version downloading; new gear may be missing until it finishes.`
+      : `Manifest ${status.manifest.version} ready.`;
+  }
   if (status.state === "loading") return status.message;
   if (status.state === "error") return `Couldn't load manifest: ${status.message}`;
   return "Waiting to load the Destiny manifest…";
@@ -114,7 +119,8 @@ function RefreshIcon({
 function useArmoryAccount() {
   const session = useSession();
   const queryClient = useQueryClient();
-  const { data, isLoading, isError, error, isFetching, refetch } = useArmory();
+  const { data, isLoading, isError, error, isFetching, isProvisional, refetch } =
+    useArmory();
   const manifestStatus = useManifest();
   const [refreshSucceeded, setRefreshSucceeded] = useState(false);
   const successTimeoutRef = useRef<ReturnType<typeof setTimeout>>(undefined);
@@ -142,10 +148,7 @@ function useArmoryAccount() {
   };
 
   const handleSignOut = async () => {
-    const res = await fetch("/api/auth/logout", { method: "POST" }).catch(
-      () => null,
-    );
-    if (!res?.ok) {
+    if (!(await signOut(queryClient))) {
       toast.error("Sign out failed. Please try again.");
       return;
     }
@@ -153,11 +156,13 @@ function useArmoryAccount() {
   };
 
   const pieces = data?.pieces ?? [];
-  const refreshLabel = isFetching
-    ? "Refreshing…"
-    : refreshSucceeded
-      ? "Refreshed"
-      : "Refresh gear";
+  const refreshLabel = isProvisional
+    ? "Refreshing from Bungie…"
+    : isFetching
+      ? "Refreshing…"
+      : refreshSucceeded
+        ? "Refreshed"
+        : "Refresh gear";
 
   return {
     authed: session.data?.authenticated ?? false,

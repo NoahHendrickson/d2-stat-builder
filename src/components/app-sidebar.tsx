@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useCallback, type ReactNode } from "react";
+import { Suspense, memo, useCallback, type ReactNode } from "react";
 import dynamic from "next/dynamic";
 import { SidebarSimple } from "@phosphor-icons/react";
 import { useSession } from "@/lib/auth/use-session";
@@ -56,7 +56,7 @@ const LoadoutsList = dynamic(
 );
 
 /** Figma 46:1658: loadouts list, with the account card only in the mobile drawer. */
-export function AppSidebar({
+export const AppSidebar = memo(function AppSidebar({
   onNavigate,
   onToggle,
   showAccount = false,
@@ -109,6 +109,7 @@ export function AppSidebar({
       <Suspense fallback={<LoadoutsListPlaceholder headerAction={collapseButton} />}>
         <LoadoutsList
           armory={armory.data}
+          provisional={armory.isProvisional}
           manifest={manifestStatus.manifest}
           onArmoryChanged={onArmoryChanged}
           onNavigate={onNavigate}
@@ -129,4 +130,4 @@ export function AppSidebar({
       )}
     </div>
   );
-}
+});

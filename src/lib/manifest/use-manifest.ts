@@ -11,7 +11,12 @@ import { loadManifest, type Manifest } from "./load";
 export type ManifestStatus =
   | { state: "idle" }
   | { state: "loading"; message: string; progress: number }
-  | { state: "ready"; manifest: Manifest }
+  | {
+      state: "ready";
+      manifest: Manifest;
+      /** A newer manifest is downloading in the background (gear released with it can't be resolved yet). */
+      updating: boolean;
+    }
   | { state: "error"; message: string };
 
 interface ManifestProgress {
@@ -19,8 +24,9 @@ interface ManifestProgress {
   progress: number;
 }
 
-const MANIFEST_KEY = ["manifest"];
+export const MANIFEST_KEY = ["manifest"];
 const PROGRESS_KEY = ["manifest-progress"];
+const UPDATING_KEY = ["manifest-updating"];
 
 /**
  * Loads the Destiny manifest once per page session via the shared query cache,
@@ -40,6 +46,13 @@ export function useManifest(): ManifestStatus {
     gcTime: Infinity,
   });
 
+  const updating = useQuery<boolean>({
+    queryKey: UPDATING_KEY,
+    queryFn: skipToken,
+    staleTime: Infinity,
+    gcTime: Infinity,
+  });
+
   const manifest = useQuery<Manifest>({
     queryKey: MANIFEST_KEY,
     enabled,
@@ -50,15 +63,28 @@ export function useManifest(): ManifestStatus {
     gcTime: Infinity,
     retry: false,
     queryFn: () =>
-      loadManifest((message, fraction) => {
-        queryClient.setQueryData<ManifestProgress>(PROGRESS_KEY, {
-          message,
-          progress: fraction,
-        });
+      loadManifest({
+        onProgress: (message, fraction) => {
+          queryClient.setQueryData<ManifestProgress>(PROGRESS_KEY, {
+            message,
+            progress: fraction,
+          });
+        },
+        // A newer version landed in the background: swap it in. Everything derived
+        // from the manifest (armory normalization, mod/fragment scans) is keyed on
+        // the manifest instance or version and recomputes from here.
+        onUpdate: (manifest) => {
+          queryClient.setQueryData<Manifest>(MANIFEST_KEY, manifest);
+        },
+        onUpdating: (value) => {
+          queryClient.setQueryData<boolean>(UPDATING_KEY, value);
+        },
       }),
   });
 
-  if (manifest.data) return { state: "ready", manifest: manifest.data };
+  if (manifest.data) {
+    return { state: "ready", manifest: manifest.data, updating: updating.data ?? false };
+  }
   if (manifest.isError) {
     const err = manifest.error;
     return {

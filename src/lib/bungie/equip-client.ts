@@ -3,6 +3,7 @@
 // POST /api/bungie/equip, including the reauth handshake.
 import type { QueryClient } from "@tanstack/react-query";
 import { toast } from "@/lib/toast";
+import { handleSessionExpired } from "@/lib/auth/sign-out";
 import type { ArmorPiece } from "../armory/normalize";
 import type { ArmoryCharacter } from "../armory/fetch";
 import { characterForClass } from "../armory/character-for-class";
@@ -71,11 +72,9 @@ export async function postEquipRequest(
 
   if (!res.ok) {
     toast.error(data.error ?? opts.failureMessage);
-    // The server cleared the stale (pre-scope or expired) session; surfacing
-    // the session query brings back the sign-in card.
-    if (data.reauth) {
-      void opts.queryClient.invalidateQueries({ queryKey: ["session"] });
-    }
+    // The server cleared the stale (pre-scope or expired) session: forget the local
+    // player data and surface the session query so the sign-in card comes back.
+    if (data.reauth) void handleSessionExpired(opts.queryClient);
     return null;
   }
   return data.results ?? [];

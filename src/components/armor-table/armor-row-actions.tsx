@@ -7,6 +7,7 @@ import { CircleNotch } from "@phosphor-icons/react";
 import { toast } from "@/lib/toast";
 import type { ArmorPiece } from "@/lib/armory/normalize";
 import type { ArmoryCharacter } from "@/lib/armory/fetch";
+import { peekArmory } from "@/lib/armory/use-armory";
 import { CLASS_NAMES } from "@/lib/armory/stats";
 import { planSpares } from "@/lib/bungie/equip-plan";
 import {
@@ -55,24 +56,25 @@ export function ArmorRowActions({
   piece,
   characters,
   onDone,
+  provisional = false,
 }: {
   piece: ArmorPiece;
   characters: ArmoryCharacter[];
   onDone: () => void;
+  /** The table shows last visit's gear; nothing may be moved until the live profile lands. */
+  provisional?: boolean;
 }) {
   const queryClient = useQueryClient();
   const [busy, setBusy] = useState<Action | null>(null);
   // Every owned piece, read at click time. Subscribing via useArmory() here would give
   // each virtualized row its own set of query observers just to plan spares.
-  const ownedPieces = (): ArmorPiece[] =>
-    queryClient
-      .getQueriesData<{ pieces: ArmorPiece[] }>({ queryKey: ["armory"] })
-      .find(([, data]) => data)?.[1]?.pieces ?? [];
+  const ownedPieces = (): ArmorPiece[] => peekArmory(queryClient)?.pieces ?? [];
 
   const target = lastPlayedCharacter(characters, piece.classType);
+  const refreshing = provisional ? "Refreshing your gear from Bungie…" : null;
   const reasons: Record<Action, string | null> = {
-    move: moveDisabledReason(piece, target),
-    equip: equipDisabledReason(piece, target),
+    move: refreshing ?? moveDisabledReason(piece, target),
+    equip: refreshing ?? equipDisabledReason(piece, target),
   };
 
   const run = async (action: Action) => {

@@ -1,5 +1,4 @@
 import type {
-  DestinyInventoryItemDefinition,
   DestinyStatDefinition,
   DestinyStatGroupDefinition,
   DestinyEquipableItemSetDefinition,
@@ -11,6 +10,7 @@ import type {
   DestinySeasonDefinition,
   DestinyMaterialRequirementSetDefinition,
 } from "bungie-api-ts/destiny2";
+import type { ItemDef } from "./item-def";
 
 /** The manifest definition tables this app needs for armor optimization. */
 export const MANIFEST_TABLES = [
@@ -35,7 +35,8 @@ export type ManifestTableName = (typeof MANIFEST_TABLES)[number];
 export type DefinitionTable<T> = Record<number, T>;
 
 export interface ManifestTables {
-  DestinyInventoryItemDefinition: DefinitionTable<DestinyInventoryItemDefinition>;
+  /** Projected to the fields the app reads — see item-def.ts. */
+  DestinyInventoryItemDefinition: DefinitionTable<ItemDef>;
   DestinyStatDefinition: DefinitionTable<DestinyStatDefinition>;
   DestinyStatGroupDefinition: DefinitionTable<DestinyStatGroupDefinition>;
   DestinyEquipableItemSetDefinition: DefinitionTable<DestinyEquipableItemSetDefinition>;

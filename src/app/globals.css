@@ -470,16 +470,18 @@ input[type="number"] {
   backdrop-filter: blur(20px) saturate(1.1);
 }
 
-/* Loadouts column: the dropdown's grey-slate fill (--glass) without the
-   floating menu line or shadow. */
+/* Drawers that float over live page content: the dropdown's grey-slate fill
+   (--glass) with a blur, so the builder or table underneath doesn't show through
+   the 20% translucency as readable text. The viewport panes use bg-glass instead —
+   they sit over the pre-blurred backdrop, where a live blur adds nothing visible. */
 @utility d2-sidebar {
   background-color: var(--glass);
   backdrop-filter: blur(20px);
 }
 
 /* The same fill, opaque and unblurred. A sticky table header scrolls rows under
-   itself, so a translucent fill shows those rows through the header — and makes
-   the browser recompute a 20px backdrop blur on every scroll frame. */
+   itself, so a translucent fill would show those rows through the header — and a
+   backdrop blur would be recomputed every scroll frame. */
 @utility d2-sidebar-opaque {
   background-color: var(--glass-opaque);
 }

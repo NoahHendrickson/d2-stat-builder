@@ -2,6 +2,7 @@ import type {
   DestinyColor,
   DestinyProfileResponse,
 } from "bungie-api-ts/destiny2";
+import { takeEarlyResponse } from "@/lib/early-fetch";
 import type { Manifest } from "@/lib/manifest/load";
 import {
   equippedSubclassForCharacter,
@@ -74,9 +75,11 @@ export class ArmoryError extends Error {
   }
 }
 
-/** Fetch the player's profile from our server proxy and normalize the armor. */
-export async function fetchArmory(manifest: Manifest): Promise<Armory> {
-  const res = await fetch("/api/bungie/profile", { cache: "no-store" });
+/** Fetch the player's raw profile from our server proxy (needs no manifest). */
+export async function fetchProfile(): Promise<DestinyProfileResponse> {
+  const res =
+    (await takeEarlyResponse("profile")) ??
+    (await fetch("/api/bungie/profile", { cache: "no-store" }));
   if (!res.ok) {
     const body = (await res.json().catch(() => null)) as { error?: string } | null;
     throw new ArmoryError(
@@ -84,8 +87,38 @@ export async function fetchArmory(manifest: Manifest): Promise<Armory> {
       body?.error ?? `Profile request failed: ${res.status}`,
     );
   }
+  return (await res.json()) as DestinyProfileResponse;
+}
 
-  const profile = (await res.json()) as DestinyProfileResponse;
+const derived = new WeakMap<DestinyProfileResponse, WeakMap<Manifest, Armory>>();
+
+/**
+ * Normalize a profile against a manifest. Memoized on both identities: every
+ * `useArmory` subscriber derives from the same (profile, manifest) pair, and only
+ * the first pays for normalization.
+ */
+export function deriveArmory(
+  profile: DestinyProfileResponse,
+  manifest: Manifest,
+): Armory {
+  let byManifest = derived.get(profile);
+  if (!byManifest) {
+    byManifest = new WeakMap();
+    derived.set(profile, byManifest);
+  }
+  let armory = byManifest.get(manifest);
+  if (!armory) {
+    armory = buildArmory(profile, manifest);
+    byManifest.set(manifest, armory);
+  }
+  return armory;
+}
+
+/** Normalize the armor + characters of a raw profile. */
+export function buildArmory(
+  profile: DestinyProfileResponse,
+  manifest: Manifest,
+): Armory {
   const pieces = normalizeArmory(profile, manifest);
   const characters: ArmoryCharacter[] = Object.values(
     profile.characters?.data ?? {},

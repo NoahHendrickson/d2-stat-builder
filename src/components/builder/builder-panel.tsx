@@ -99,6 +99,8 @@ import {
   SUBCLASS_ITEM_HASHES,
 } from "@/lib/dim/subclasses";
 import { useApplyCurrentFragments } from "@/lib/armory/use-apply-current-fragments";
+import { useAutoSearch } from "@/lib/optimizer/use-auto-search";
+import { useOptimizerWarmup } from "@/lib/optimizer/use-optimizer-warmup";
 import { MAX_SET_BONUSES, type BuilderSnapshot, type QueryOrigin } from "@/lib/loadouts/types";
 
 const MAX_MODS = 5;
@@ -840,16 +842,16 @@ export function BuilderPanel({
   ]);
 
   const authed = session.data?.authenticated ?? false;
+  // Last visit's gear (provisional) drives the controls and lists, but never a search
+  // or a build card: builds are computed only from a live profile.
+  const provisional = armoryQuery.isProvisional;
   const ready = authed && Boolean(armory) && Boolean(manifest);
+  const searchReady = ready && !provisional;
 
-  // Auto-search: rerun the optimizer a beat after any selection changes. `runOptimizer` is
-  // memoized on exactly the build inputs, so its identity changing is the "something
-  // changed" signal; the cleanup cancels the pending run, giving a trailing-edge debounce.
-  useEffect(() => {
-    if (!ready || classType === null) return;
-    const t = window.setTimeout(runOptimizer, 250);
-    return () => window.clearTimeout(t);
-  }, [ready, classType, runOptimizer]);
+  useOptimizerWarmup();
+  // Auto-search (see useAutoSearch): `runOptimizer` is memoized on exactly the build
+  // inputs, so its identity changing is the "something changed" signal.
+  useAutoSearch(searchReady && classType !== null, runOptimizer);
 
   const setTarget = useCallback(
     (i: number, value: number) =>
@@ -922,6 +924,12 @@ export function BuilderPanel({
     [setMap],
   );
 
+  const onMajorChange = useCallback((v: string) => setMajor(Number(v)), []);
+  const onSetQueryChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => setSetQuery(e.target.value),
+    [],
+  );
+
   const togglePin = useCallback((setHash: number) => {
     setPinnedSets((prev) =>
       prev.includes(setHash)
@@ -937,7 +945,8 @@ export function BuilderPanel({
 
   const buildsProps: BuildsColumnContentProps = useMemo(
     () => ({
-      ready,
+      ready: searchReady,
+      provisional,
       showLoading,
       running,
       result,
@@ -960,7 +969,8 @@ export function BuilderPanel({
       onEquipped,
     }),
     [
-      ready,
+      searchReady,
+      provisional,
       showLoading,
       running,
       result,
@@ -1023,10 +1033,7 @@ export function BuilderPanel({
             </Section>
 
             <Section title="Major mods">
-              <Tabs
-                value={String(major)}
-                onValueChange={(v) => setMajor(Number(v))}
-              >
+              <Tabs value={String(major)} onValueChange={onMajorChange}>
                 <TabsList variant="icon" aria-label="Major stat mods">
                   {[0, 1, 2, 3, 4, 5].map((n) => (
                     <TabsTrigger key={n} value={String(n)}>
@@ -1064,7 +1071,7 @@ export function BuilderPanel({
                   <Input
                     type="search"
                     value={setQuery}
-                    onChange={(e) => setSetQuery(e.target.value)}
+                    onChange={onSetQueryChange}
                     placeholder="Search set bonuses"
                     aria-label="Search set bonuses"
                     className="pl-8"

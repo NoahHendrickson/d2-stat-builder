@@ -48,11 +48,14 @@ export const ArmorRow = memo(function ArmorRow({
   onRefresh,
   dataIndex,
   measureRef,
+  provisional = false,
 }: {
   row: Row;
   characters: ArmoryCharacter[];
   onRefresh: () => void;
   dataIndex: number;
+  /** Last visit's gear is on screen; row actions wait for the live profile. */
+  provisional?: boolean;
   measureRef: (el: HTMLTableRowElement | null) => void;
 }) {
   const { piece } = row;
@@ -102,6 +105,7 @@ export const ArmorRow = memo(function ArmorRow({
           piece={piece}
           characters={characters}
           onDone={onRefresh}
+          provisional={provisional}
         />
       </td>
     </tr>

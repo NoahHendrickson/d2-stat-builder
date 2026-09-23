@@ -20,6 +20,28 @@ export interface BuildsMobileBarProps {
   onOpen: () => void;
 }
 
+/**
+ * The bar's fill. Subscribes to the per-frame progress store here so the smoother's
+ * 60 Hz writes re-render only this element, not the whole bar; the width is set
+ * directly (the smoother already eases it — a CSS transition on top restarts every
+ * frame and lags behind).
+ */
+function ProgressFill({ store, className }: { store: ValueStore<number>; className: string }) {
+  const progress = useStoreValue(store);
+  return (
+    <div
+      role="progressbar"
+      aria-label="Search progress"
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-valuenow={Math.round(progress * 100)}
+      className={className}
+    >
+      <div className="bg-foreground h-full rounded-none" style={{ width: `${progress * 100}%` }} />
+    </div>
+  );
+}
+
 export function BuildsMobileBar({
   ready,
   showLoading,
@@ -29,7 +51,6 @@ export function BuildsMobileBar({
   open,
   onOpen,
 }: BuildsMobileBarProps) {
-  const displayedProgress = useStoreValue(progressStore);
   if (!ready) return null;
 
   const state = getBuildsViewState({ ready, showLoading, result });
@@ -43,7 +64,7 @@ export function BuildsMobileBar({
         aria-expanded={open}
         aria-controls="builds-mobile-sheet"
         className={cn(
-          "border-foreground/15 bg-background/95 supports-[backdrop-filter]:bg-panel-strong pointer-events-auto relative flex w-full flex-col gap-2 border-t px-4 py-3 text-left backdrop-blur transition-colors",
+          "border-foreground/15 bg-background/95 pointer-events-auto relative flex w-full flex-col gap-2 border-t px-4 py-3 text-left transition-colors",
           "pb-[calc(0.75rem+env(safe-area-inset-bottom))] hover:bg-muted/40 active:bg-muted/60",
           "fine-pointer:border-t-2 fine-pointer:px-5 fine-pointer:py-4",
           state === "results"
@@ -54,34 +75,16 @@ export function BuildsMobileBar({
         )}
       >
         {state === "searching" && (
-          <div
-            role="progressbar"
-            aria-label="Search progress"
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-valuenow={Math.round(displayedProgress * 100)}
+          <ProgressFill
+            store={progressStore}
             className="bg-black/30 absolute inset-x-0 top-0 hidden h-[2px] overflow-hidden fine-pointer:block"
-          >
-            <div
-              className="bg-foreground h-full transition-[width] duration-150"
-              style={{ width: `${displayedProgress * 100}%` }}
-            />
-          </div>
+          />
         )}
         {state === "searching" && (
-          <div
-            role="progressbar"
-            aria-label="Search progress"
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-valuenow={Math.round(displayedProgress * 100)}
+          <ProgressFill
+            store={progressStore}
             className="bg-black/30 h-0.5 w-full overflow-hidden rounded-none fine-pointer:hidden"
-          >
-            <div
-              className="bg-foreground h-full rounded-none transition-[width] duration-150"
-              style={{ width: `${displayedProgress * 100}%` }}
-            />
-          </div>
+          />
         )}
         <span className="flex items-center gap-3">
           <span className="min-w-0 flex-1">

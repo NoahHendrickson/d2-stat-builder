@@ -64,6 +64,7 @@ export const LoadoutRow = memo(function LoadoutRow({
   open,
   onToggle,
   pieceMap,
+  provisional = false,
   manifest,
   characters,
   statIcons,
@@ -82,6 +83,8 @@ export const LoadoutRow = memo(function LoadoutRow({
   open: boolean;
   onToggle: (id: string) => void;
   pieceMap: ReadonlyMap<string, ArmorPiece>;
+  /** The pieces are last visit's copy; Equip waits for the live profile. */
+  provisional?: boolean;
   manifest: Manifest;
   characters: ArmoryCharacter[];
   statIcons: StatIconMap;
@@ -116,10 +119,10 @@ export const LoadoutRow = memo(function LoadoutRow({
       ? resolved.armor[0]?.piece?.classType
       : loadout.classType,
   );
-  const canApply = resolved.actionable && !!targetCharacter && !applying;
+  const canApply = resolved.actionable && !!targetCharacter && !applying && !provisional;
 
   const applyLoadout = async () => {
-    if (!resolved.actionable || !targetCharacter || applying) return;
+    if (!canApply || !targetCharacter) return;
     setApplying(true);
     try {
       const outcome = await applySavedLoadout({
@@ -177,18 +180,23 @@ export const LoadoutRow = memo(function LoadoutRow({
             </button>
           </TooltipLabel>
           <div className="flex shrink-0 items-center gap-2">
-            <Button
-              variant="emphatic"
-              size="xs"
-              className="h-8 gap-1.5 px-3"
-              onClick={applyLoadout}
-              disabled={!canApply}
+            <TooltipLabel
+              label={provisional ? "Refreshing your gear from Bungie…" : undefined}
+              disabled={!provisional}
             >
-              {applying && (
-                <CircleNotch className="animate-spin" aria-hidden />
-              )}
-              Equip
-            </Button>
+              <Button
+                variant="emphatic"
+                size="xs"
+                className="h-8 gap-1.5 px-3"
+                onClick={applyLoadout}
+                disabled={!canApply}
+              >
+                {applying && (
+                  <CircleNotch className="animate-spin" aria-hidden />
+                )}
+                Equip
+              </Button>
+            </TooltipLabel>
             <DropdownMenu>
               <DropdownMenuTrigger
                 render={<Button size="icon" variant="dashed" />}

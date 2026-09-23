@@ -7,6 +7,11 @@ const isDev = process.env.NODE_ENV === "development";
  * dynamic rendering). Next injects inline bootstrap scripts, so script-src
  * keeps 'unsafe-inline'; the value here is the other directives: framing,
  * object/base/form lockdown, and restricting fetch targets to bungie.net.
+ *
+ * Startup depends on 'unsafe-inline' too: the `beforeInteractive` bootstrap in
+ * layout.tsx (src/lib/early-fetch.ts) starts the session + profile requests before
+ * the bundle loads. Tightening script-src to a nonce would silently block it — the
+ * app still works, just slower — so move that script to a nonced one first.
  */
 const csp = [
   "default-src 'self'",

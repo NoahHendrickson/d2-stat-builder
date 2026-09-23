@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { memo, useEffect, useRef, useState, type CSSProperties } from "react";
 import { useSession } from "@/lib/auth/use-session";
 import { useManifest } from "@/lib/manifest/use-manifest";
 import { useArmory } from "@/lib/armory/use-armory";
@@ -132,6 +132,51 @@ export function LoadingScreen() {
   );
 }
 
+/**
+ * Drifting exotics. Purely decorative; reduced motion pauses them in place. Memoized so
+ * the progress bar's per-frame state updates don't reconcile twelve images each tick.
+ */
+const Tiles = memo(function Tiles() {
+  return (
+    <div aria-hidden className="absolute inset-0">
+      {TILES.map((tile, i) => (
+        <div
+          key={i}
+          className="loading-tile-drift absolute left-0 will-change-transform"
+          style={
+            {
+              top: tile.top,
+              "--drift-duration": `${tile.duration}s`,
+              "--drift-delay": `${tile.delay}s`,
+              "--drift-direction": tile.reverse ? "reverse" : "normal",
+            } as CSSProperties
+          }
+        >
+          <Image
+            src={`/loading-exotics/exotic-${tile.img}.svg`}
+            alt=""
+            width={tile.size}
+            height={tile.size}
+            unoptimized
+            draggable={false}
+            className={cn(
+              "loading-tile-bob select-none",
+              tile.blur && "blur-[1.5px]",
+            )}
+            style={
+              {
+                opacity: tile.opacity,
+                "--bob-duration": `${tile.bob}s`,
+                "--drift-delay": `${tile.delay}s`,
+              } as CSSProperties
+            }
+          />
+        </div>
+      ))}
+    </div>
+  );
+});
+
 /** Presentational overlay: floating pixel-art exotics behind a centered progress card. */
 export function LoadingScreenView({
   progress,
@@ -153,43 +198,7 @@ export function LoadingScreenView({
         fading && "pointer-events-none opacity-0",
       )}
     >
-      {/* Drifting exotics. Purely decorative; reduced motion pauses them in place. */}
-      <div aria-hidden className="absolute inset-0">
-        {TILES.map((tile, i) => (
-          <div
-            key={i}
-            className="loading-tile-drift absolute left-0 will-change-transform"
-            style={
-              {
-                top: tile.top,
-                "--drift-duration": `${tile.duration}s`,
-                "--drift-delay": `${tile.delay}s`,
-                "--drift-direction": tile.reverse ? "reverse" : "normal",
-              } as CSSProperties
-            }
-          >
-            <Image
-              src={`/loading-exotics/exotic-${tile.img}.svg`}
-              alt=""
-              width={tile.size}
-              height={tile.size}
-              unoptimized
-              draggable={false}
-              className={cn(
-                "loading-tile-bob select-none",
-                tile.blur && "blur-[1.5px]",
-              )}
-              style={
-                {
-                  opacity: tile.opacity,
-                  "--bob-duration": `${tile.bob}s`,
-                  "--drift-delay": `${tile.delay}s`,
-                } as CSSProperties
-              }
-            />
-          </div>
-        ))}
-      </div>
+      <Tiles />
 
       <div className="relative z-10 flex h-full flex-col items-center justify-center px-6">
         <div className="d2-panel flex w-full max-w-sm flex-col items-center gap-4 border border-foreground/12 px-8 py-6 shadow-[-2px_2px_8px_0px_rgba(0,0,0,0.3),0_0_12px_0px_rgba(0,0,0,0.25)]">

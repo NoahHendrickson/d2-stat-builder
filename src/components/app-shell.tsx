@@ -136,6 +136,10 @@ export function useDesktopLayout(): boolean {
 export function AppShell({ children }: { children: ReactNode }) {
   const desktop = useMinWidth(SIDEBAR_BREAKPOINT_PX);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  // Stable handlers: AppSidebar is memoized, and a fresh closure here would re-render
+  // the whole loadouts list on every sidebar-resize pointermove.
+  const collapseSidebar = useCallback(() => setSidebarCollapsed(true), []);
+  const closeDrawer = useCallback(() => setDrawerOpen(false), []);
   const sidebarWidth = useSyncExternalStore(
     subscribeSidebarWidth,
     getSidebarWidth,
@@ -261,7 +265,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       >
         <div
           className={cn(
-            // bg-glass, not d2-sidebar: this pane and the main one cover the
+            // bg-glass (no backdrop-filter): this pane and the main one cover the
             // viewport over the pre-blurred backdrop, so a backdrop blur adds
             // nothing visible — and Firefox re-blurs it on every repaint.
             "bg-glass relative flex h-full min-h-0 flex-col",
@@ -273,9 +277,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           }}
         >
           {desktop && (
-            <AppSidebar
-              onToggle={() => setSidebarCollapsed(true)}
-            />
+            <AppSidebar onToggle={collapseSidebar} />
           )}
         </div>
       </aside>
@@ -367,10 +369,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 </DrawerClose>
               </TooltipLabel>
             </div>
-            <AppSidebar
-              onNavigate={() => setDrawerOpen(false)}
-              showAccount
-            />
+            <AppSidebar onNavigate={closeDrawer} showAccount />
           </DrawerContent>
         </Drawer>
       )}

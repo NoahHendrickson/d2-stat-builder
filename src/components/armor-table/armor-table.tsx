@@ -281,29 +281,59 @@ export function ArmorTable() {
     columnValues,
   } = useArmorTableSort(rows);
 
-  // Persist filters + sort together (debounced).
-  useEffect(() => {
-    const t = window.setTimeout(() => {
-      saveTableState({
-        version: TABLE_SCHEMA_VERSION,
-        filters: { ...facets, search },
-        sort,
-      });
-    }, 300);
-    return () => window.clearTimeout(t);
-  }, [facets, search, sort]);
+  // Persist filters + sort together (debounced). A change made right before the view is
+  // hidden (tab switch) or unmounted would otherwise be dropped with its timer, so the
+  // pending write is flushed from the unmount cleanup below.
+  const pendingSaves = useRef<Map<string, { timer: number; save: () => void }> | null>(null);
+  const pending = () => (pendingSaves.current ??= new Map());
+  const schedule = useCallback((key: string, save: () => void) => {
+    const run = () => {
+      pending().delete(key);
+      save();
+    };
+    const timer = window.setTimeout(run, 300);
+    pending().set(key, { timer, save: run });
+    return () => window.clearTimeout(timer);
+  }, []);
+  useEffect(
+    () =>
+      schedule("state", () =>
+        saveTableState({
+          version: TABLE_SCHEMA_VERSION,
+          filters: { ...facets, search },
+          sort,
+        }),
+      ),
+    [facets, search, sort, schedule],
+  );
 
   // Pins persist debounced like the filters above.
+  useEffect(
+    () =>
+      schedule("pins", () =>
+        saveTablePins({
+          version: PINS_SCHEMA_VERSION,
+          sets: pinnedSets,
+          archetypes: pinnedArchetypes,
+        }),
+      ),
+    [pinnedSets, pinnedArchetypes, schedule],
+  );
+  // Flush on unmount / Activity hide, and on pagehide (tab close, navigation away):
+  // a change made inside the debounce window is written, not dropped.
   useEffect(() => {
-    const t = window.setTimeout(() => {
-      saveTablePins({
-        version: PINS_SCHEMA_VERSION,
-        sets: pinnedSets,
-        archetypes: pinnedArchetypes,
-      });
-    }, 300);
-    return () => window.clearTimeout(t);
-  }, [pinnedSets, pinnedArchetypes]);
+    const flush = () => {
+      for (const p of pending().values()) {
+        window.clearTimeout(p.timer);
+        p.save();
+      }
+    };
+    window.addEventListener("pagehide", flush);
+    return () => {
+      window.removeEventListener("pagehide", flush);
+      flush();
+    };
+  }, []);
 
   // Global "F" focuses search (ignored while typing in any field).
   useEffect(() => {
@@ -480,6 +510,7 @@ export function ArmorTable() {
                     row={row}
                     characters={characters}
                     onRefresh={refresh}
+                    provisional={armory.isProvisional}
                     dataIndex={vRow.index}
                     measureRef={rowVirtualizer.measureElement}
                   />

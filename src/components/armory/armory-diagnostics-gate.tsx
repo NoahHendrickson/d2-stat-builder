@@ -13,7 +13,9 @@ const DIAGNOSTICS_COUNTS_KEY = ["armory-diagnostics-counts"];
 function manifestLine(
   status: ReturnType<typeof useManifest>,
 ): string {
-  if (status.state === "ready") return `ready (${status.manifest.version})`;
+  if (status.state === "ready") {
+    return `ready (${status.manifest.version})${status.updating ? ", newer version downloading" : ""}`;
+  }
   if (status.state === "loading") return "loading…";
   if (status.state === "error") return `error: ${status.message}`;
   return "idle";

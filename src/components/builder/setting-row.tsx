@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, type ReactNode } from "react";
+import { memo, useId, type ReactNode } from "react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 
@@ -15,7 +15,7 @@ const idleWell = "border-foreground/8 bg-foreground/[0.02]";
  * rows). Checked rows take the green wash; rows without a checkbox stay idle
  * and hold extra controls in `children`.
  */
-export function SettingRow({
+export const SettingRow = memo(function SettingRow({
   title,
   description,
   checked,
@@ -80,4 +80,4 @@ export function SettingRow({
       </div>
     </div>
   );
-}
+});

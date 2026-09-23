@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { memo, useState } from "react";
 
 import {
   BuildsColumnContent,
@@ -13,7 +13,7 @@ import { useMinWidth } from "@/lib/use-min-width";
 const DESKTOP_BUILDS_MIN_PX = 1024;
 
 /** Places the builds column inline on desktop or in a mobile bottom sheet. */
-export function BuildsSurface(props: BuildsColumnContentProps) {
+export const BuildsSurface = memo(function BuildsSurface(props: BuildsColumnContentProps) {
   const desktop = useMinWidth(DESKTOP_BUILDS_MIN_PX);
   const [sheetOpen, setSheetOpen] = useState(false);
   const { ready, showLoading, running, result, displayedProgress } = props;
@@ -53,4 +53,4 @@ export function BuildsSurface(props: BuildsColumnContentProps) {
       </Drawer>
     </>
   );
-}
+});

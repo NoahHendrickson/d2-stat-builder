@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { memo, useState } from "react";
 import Image from "next/image";
 import { Tabs as TabsPrimitive } from "@base-ui/react/tabs";
 import { cn } from "@/lib/utils";
@@ -109,7 +109,7 @@ function EmblemTab({
  * the player's own characters. Built on the Base UI Tabs primitive (matching the app's
  * shadcn Tabs) so keyboard navigation and tablist semantics come for free.
  */
-export function ClassEmblemTabs({
+export const ClassEmblemTabs = memo(function ClassEmblemTabs({
   characters,
   value,
   onChange,
@@ -133,4 +133,4 @@ export function ClassEmblemTabs({
       </TabsPrimitive.List>
     </TabsPrimitive.Root>
   );
-}
+});

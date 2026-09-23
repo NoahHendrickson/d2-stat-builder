@@ -80,6 +80,8 @@ export function getBuildsStatusLabel({
 
 export interface BuildsColumnContentProps {
   ready: boolean;
+  /** The gear on screen is last visit's copy; builds wait for the live profile. */
+  provisional?: boolean;
   showLoading: boolean;
   running: boolean;
   result: OptimizerOutput | null;
@@ -128,6 +130,7 @@ export function BuildsColumnContent({
   manifest,
   insertablePlugs,
   onEquipped,
+  provisional = false,
 }: BuildsColumnContentProps) {
   const [sort, setSort] = useState<LoadoutSortState>(DEFAULT_LOADOUT_SORT);
   const viewState = getBuildsViewState({ ready, showLoading, result });
@@ -161,7 +164,9 @@ export function BuildsColumnContent({
       </div>
       {!ready ? (
         <p className="text-muted-foreground text-sm">
-          Sign in and load your gear to generate builds.
+          {provisional
+            ? "Refreshing your gear from Bungie — builds will appear in a moment."
+            : "Sign in and load your gear to generate builds."}
         </p>
       ) : (
         <>

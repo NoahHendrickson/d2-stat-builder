@@ -1,9 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { toast } from "@/lib/toast";
-import type { UseQueryResult } from "@tanstack/react-query";
-import type { Armory } from "./fetch";
+import type { ArmoryQuery } from "./use-armory";
 import type { FragmentInfo, Subclass } from "./fragments";
 import { characterForClass } from "./character-for-class";
 import { fragSelFromEquipped } from "./frag-sel-from-equipped";
@@ -22,18 +21,22 @@ export function useApplyCurrentFragments({
   classType,
   fragments,
 }: {
-  armoryQuery: UseQueryResult<Armory>;
+  armoryQuery: ArmoryQuery;
   classType: number | null;
   fragments: Record<Subclass, FragmentInfo[]> | null | undefined;
 }) {
   const [applying, setApplying] = useState(false);
   const canApply = classType !== null && Boolean(armoryQuery.data) && Boolean(fragments);
 
-  const apply = async (): Promise<ApplyCurrentFragmentsResult | null> => {
+  // Memoized: it reaches the (memo'd) FragmentPicker through the panel's click handler,
+  // so a fresh closure per render would re-render the whole fragment grid on every
+  // slider tick.
+  const refetch = armoryQuery.refetch;
+  const apply = useCallback(async (): Promise<ApplyCurrentFragmentsResult | null> => {
     if (classType === null || !fragments) return null;
     setApplying(true);
     try {
-      const result = await armoryQuery.refetch();
+      const result = await refetch();
       if (result.error || !result.data) {
         toast.error("Couldn't refresh profile — try again");
         return null;
@@ -52,7 +55,7 @@ export function useApplyCurrentFragments({
     } finally {
       setApplying(false);
     }
-  };
+  }, [classType, fragments, refetch]);
 
   return { applying, apply, canApply };
 }
