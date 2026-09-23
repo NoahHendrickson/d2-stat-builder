@@ -50,11 +50,19 @@ export function useManifest(): ManifestStatus {
     gcTime: Infinity,
     retry: false,
     queryFn: () =>
-      loadManifest((message, fraction) => {
-        queryClient.setQueryData<ManifestProgress>(PROGRESS_KEY, {
-          message,
-          progress: fraction,
-        });
+      loadManifest({
+        onProgress: (message, fraction) => {
+          queryClient.setQueryData<ManifestProgress>(PROGRESS_KEY, {
+            message,
+            progress: fraction,
+          });
+        },
+        // A newer version landed in the background: swap it in. Everything derived
+        // from the manifest (armory normalization, mod/fragment scans) is keyed on
+        // the manifest instance or version and recomputes from here.
+        onUpdate: (manifest) => {
+          queryClient.setQueryData<Manifest>(MANIFEST_KEY, manifest);
+        },
       }),
   });
 
