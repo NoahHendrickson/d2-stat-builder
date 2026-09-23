@@ -281,29 +281,52 @@ export function ArmorTable() {
     columnValues,
   } = useArmorTableSort(rows);
 
-  // Persist filters + sort together (debounced).
-  useEffect(() => {
-    const t = window.setTimeout(() => {
-      saveTableState({
-        version: TABLE_SCHEMA_VERSION,
-        filters: { ...facets, search },
-        sort,
-      });
-    }, 300);
-    return () => window.clearTimeout(t);
-  }, [facets, search, sort]);
+  // Persist filters + sort together (debounced). A change made right before the view is
+  // hidden (tab switch) or unmounted would otherwise be dropped with its timer, so the
+  // pending write is flushed from the unmount cleanup below.
+  const pendingSaves = useRef(new Map<string, { timer: number; save: () => void }>());
+  const schedule = (key: string, save: () => void) => {
+    const run = () => {
+      pendingSaves.current.delete(key);
+      save();
+    };
+    const timer = window.setTimeout(run, 300);
+    pendingSaves.current.set(key, { timer, save: run });
+    return () => window.clearTimeout(timer);
+  };
+  useEffect(
+    () =>
+      schedule("state", () =>
+        saveTableState({
+          version: TABLE_SCHEMA_VERSION,
+          filters: { ...facets, search },
+          sort,
+        }),
+      ),
+    [facets, search, sort],
+  );
 
   // Pins persist debounced like the filters above.
-  useEffect(() => {
-    const t = window.setTimeout(() => {
-      saveTablePins({
-        version: PINS_SCHEMA_VERSION,
-        sets: pinnedSets,
-        archetypes: pinnedArchetypes,
-      });
-    }, 300);
-    return () => window.clearTimeout(t);
-  }, [pinnedSets, pinnedArchetypes]);
+  useEffect(
+    () =>
+      schedule("pins", () =>
+        saveTablePins({
+          version: PINS_SCHEMA_VERSION,
+          sets: pinnedSets,
+          archetypes: pinnedArchetypes,
+        }),
+      ),
+    [pinnedSets, pinnedArchetypes],
+  );
+  useEffect(
+    () => () => {
+      for (const pending of pendingSaves.current.values()) {
+        window.clearTimeout(pending.timer);
+        pending.save();
+      }
+    },
+    [],
+  );
 
   // Global "F" focuses search (ignored while typing in any field).
   useEffect(() => {

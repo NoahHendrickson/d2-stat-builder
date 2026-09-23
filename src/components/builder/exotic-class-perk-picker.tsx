@@ -1,7 +1,7 @@
 "use client";
 
 import { TooltipLabel } from "@/components/ui/tooltip";
-import type { ReactNode } from "react";
+import { memo, type ReactNode } from "react";
 import Image from "next/image";
 import {
   Select,
@@ -22,7 +22,7 @@ const ANY_VALUE = "any";
  * Left options show the Armor 3.0 archetype icon; right options show the tertiary
  * stat icon.
  */
-export function ExoticClassPerkPicker({
+export const ExoticClassPerkPicker = memo(function ExoticClassPerkPicker({
   left,
   right,
   selected,
@@ -63,7 +63,7 @@ export function ExoticClassPerkPicker({
       </p>
     </div>
   );
-}
+});
 
 function SpiritSelect({
   ariaLabel,

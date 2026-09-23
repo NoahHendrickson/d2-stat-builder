@@ -937,6 +937,12 @@ export function BuilderPanel({
     [setMap],
   );
 
+  const onMajorChange = useCallback((v: string) => setMajor(Number(v)), []);
+  const onSetQueryChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => setSetQuery(e.target.value),
+    [],
+  );
+
   const togglePin = useCallback((setHash: number) => {
     setPinnedSets((prev) =>
       prev.includes(setHash)
@@ -1038,10 +1044,7 @@ export function BuilderPanel({
             </Section>
 
             <Section title="Major mods">
-              <Tabs
-                value={String(major)}
-                onValueChange={(v) => setMajor(Number(v))}
-              >
+              <Tabs value={String(major)} onValueChange={onMajorChange}>
                 <TabsList variant="icon" aria-label="Major stat mods">
                   {[0, 1, 2, 3, 4, 5].map((n) => (
                     <TabsTrigger key={n} value={String(n)}>
@@ -1079,7 +1082,7 @@ export function BuilderPanel({
                   <Input
                     type="search"
                     value={setQuery}
-                    onChange={(e) => setSetQuery(e.target.value)}
+                    onChange={onSetQueryChange}
                     placeholder="Search set bonuses"
                     aria-label="Search set bonuses"
                     className="pl-8"

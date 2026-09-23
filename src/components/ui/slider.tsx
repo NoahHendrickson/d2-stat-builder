@@ -69,10 +69,17 @@ function Slider({
     null
   )
   const [dragging, setDragging] = React.useState(false)
+  // The control's box, measured once per hover/drag (pointerenter / pointerdown)
+  // rather than on every pointermove — a layout read per tick forces synchronous
+  // layout while the thumb is animating.
+  const rectRef = React.useRef<DOMRect | null>(null)
+  const measure = (e: React.PointerEvent<HTMLDivElement>) => {
+    rectRef.current = e.currentTarget.getBoundingClientRect()
+  }
 
   function updateHover(e: React.PointerEvent<HTMLDivElement>) {
     if (!horizontal || max <= min) return
-    const rect = e.currentTarget.getBoundingClientRect()
+    const rect = rectRef.current ?? (rectRef.current = e.currentTarget.getBoundingClientRect())
     const range = rect.width - THUMB_PX
     if (range <= 0) return
     const fraction = clampNumber(
@@ -116,13 +123,16 @@ function Slider({
     >
       <SliderPrimitive.Control
         className="group/slider relative flex w-full touch-none items-center select-none data-disabled:opacity-40 data-horizontal:py-1.5 data-vertical:h-full data-vertical:min-h-40 data-vertical:w-auto data-vertical:flex-col"
+        onPointerEnter={measure}
         onPointerMove={updateHover}
         onPointerDown={(e) => {
+          measure(e)
           setDragging(true)
           updateHover(e)
         }}
         onPointerUp={() => setDragging(false)}
         onPointerLeave={() => {
+          rectRef.current = null
           setDragging(false)
           setHover(null)
         }}

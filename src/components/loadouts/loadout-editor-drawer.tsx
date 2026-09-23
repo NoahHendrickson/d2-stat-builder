@@ -974,7 +974,7 @@ export function LoadoutEditorDrawer({
     >
       <DrawerContent
         aria-label={form.title}
-        className="d2-sidebar d2-line bg-glass rounded-none border-[1.5px] border-transparent shadow-none [--line-width:1.5px] data-[swipe-axis=y]:[--drawer-content-max-height:min(80dvh,60rem)] [--bleed:0px] [--drawer-bleed-background:var(--glass)]"
+        className="d2-line bg-glass rounded-none border-[1.5px] border-transparent shadow-none [--line-width:1.5px] data-[swipe-axis=y]:[--drawer-content-max-height:min(80dvh,60rem)] [--bleed:0px] [--drawer-bleed-background:var(--glass)]"
         // Over the main column only — past the sidebar. `--app-sidebar-width` is 0 below `lg`.
         style={{
           left: "var(--app-sidebar-width, 0px)",

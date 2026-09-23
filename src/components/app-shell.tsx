@@ -136,6 +136,10 @@ export function useDesktopLayout(): boolean {
 export function AppShell({ children }: { children: ReactNode }) {
   const desktop = useMinWidth(SIDEBAR_BREAKPOINT_PX);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  // Stable handlers: AppSidebar is memoized, and a fresh closure here would re-render
+  // the whole loadouts list on every sidebar-resize pointermove.
+  const collapseSidebar = useCallback(() => setSidebarCollapsed(true), []);
+  const closeDrawer = useCallback(() => setDrawerOpen(false), []);
   const sidebarWidth = useSyncExternalStore(
     subscribeSidebarWidth,
     getSidebarWidth,
@@ -273,9 +277,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           }}
         >
           {desktop && (
-            <AppSidebar
-              onToggle={() => setSidebarCollapsed(true)}
-            />
+            <AppSidebar onToggle={collapseSidebar} />
           )}
         </div>
       </aside>
@@ -356,7 +358,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           onOpenChange={setDrawerOpen}
           swipeDirection="left"
         >
-          <DrawerContent aria-label="Loadouts" className="d2-sidebar">
+          <DrawerContent aria-label="Loadouts" className="bg-glass">
             <div className="flex shrink-0 justify-end px-2 pt-2">
               <TooltipLabel label="Close loadouts">
                 <DrawerClose
@@ -367,10 +369,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 </DrawerClose>
               </TooltipLabel>
             </div>
-            <AppSidebar
-              onNavigate={() => setDrawerOpen(false)}
-              showAccount
-            />
+            <AppSidebar onNavigate={closeDrawer} showAccount />
           </DrawerContent>
         </Drawer>
       )}
