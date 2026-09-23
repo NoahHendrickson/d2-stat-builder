@@ -395,6 +395,7 @@ export function solve(
     exact: ceilingsExact,
   } = runCeilings(input, slots, seed, ceilingBudgetMs, {
     upperSeed: opts.ceilingUpperSeed,
+    suffix,
     onCeilings,
     onProbe: () =>
       onProgress?.(

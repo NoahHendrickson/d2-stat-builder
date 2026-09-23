@@ -10,6 +10,7 @@ import {
   computeSuffixBounds,
   makeJointMinCheck,
   nextExoticCount,
+  type SuffixBounds,
 } from "./bounds";
 import { createPowerTracker } from "./power";
 
@@ -125,6 +126,12 @@ export function runCeilings(
     upperSeed?: number[];
     onCeilings?: (ceilings: number[]) => void;
     onProbe?: () => void;
+    /**
+     * The top-N walk's computeSuffixBounds output for these same slots, reused instead of
+     * recomputed. Its top-N option only tightens `suffixTotal`/`tuneCredit`, which the
+     * probes never read; every field used here matches an option-less call.
+     */
+    suffix?: SuffixBounds;
   } = {},
 ): { ceilings: number[]; uppers: number[]; exact: boolean; stats: CeilingStats } {
   const onProgress = opts.onCeilings;
@@ -141,7 +148,7 @@ export function runCeilings(
   // buildSlots pre-filtered constraint-ineligible exotics (see solve()) — reachability
   // is just p.exotic.
   const { suffixStat, setSuffix, exoticSuffix, artSuffix, subsetSuffix } =
-    computeSuffixBounds(slots, reqs, needExotic, (p) => p.exotic);
+    opts.suffix ?? computeSuffixBounds(slots, reqs, needExotic, (p) => p.exotic);
 
   const ceiling = seed.slice(0, NUM_STATS);
   const sum = new Array(NUM_STATS).fill(0);
