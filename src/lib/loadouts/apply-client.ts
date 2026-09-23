@@ -2,6 +2,7 @@
 
 import type { QueryClient } from "@tanstack/react-query";
 import { toast } from "@/lib/toast";
+import { signOutForReauth } from "@/lib/auth/sign-out";
 import type { ArmoryCharacter } from "@/lib/armory/fetch";
 import { isFullyMasterworked } from "@/lib/armory/masterwork";
 import { armorPipTier, type ArmorPiece } from "@/lib/armory/normalize";
@@ -248,15 +249,6 @@ export async function applySavedLoadout({
   return outcome;
 }
 
-/**
- * The apply stream can't clear cookies once it has started (see the route), so a
- * `reauth` error is finished client-side: drop the dead session, then let the session
- * query flip to signed-out so the sign-in card appears.
- */
-async function signOutForReauth(queryClient: QueryClient) {
-  await fetch("/api/auth/logout", { method: "POST" }).catch(() => undefined);
-  await queryClient.invalidateQueries({ queryKey: ["session"] });
-}
 
 function finishFromResults(
   equip: ItemResult[],

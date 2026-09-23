@@ -19,7 +19,7 @@ interface ManifestProgress {
   progress: number;
 }
 
-const MANIFEST_KEY = ["manifest"];
+export const MANIFEST_KEY = ["manifest"];
 const PROGRESS_KEY = ["manifest-progress"];
 
 /**

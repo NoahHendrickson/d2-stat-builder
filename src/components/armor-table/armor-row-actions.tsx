@@ -56,10 +56,13 @@ export function ArmorRowActions({
   piece,
   characters,
   onDone,
+  provisional = false,
 }: {
   piece: ArmorPiece;
   characters: ArmoryCharacter[];
   onDone: () => void;
+  /** The table shows last visit's gear; nothing may be moved until the live profile lands. */
+  provisional?: boolean;
 }) {
   const queryClient = useQueryClient();
   const [busy, setBusy] = useState<Action | null>(null);
@@ -68,9 +71,10 @@ export function ArmorRowActions({
   const ownedPieces = (): ArmorPiece[] => peekArmory(queryClient)?.pieces ?? [];
 
   const target = lastPlayedCharacter(characters, piece.classType);
+  const refreshing = provisional ? "Refreshing your gear from Bungie…" : null;
   const reasons: Record<Action, string | null> = {
-    move: moveDisabledReason(piece, target),
-    equip: equipDisabledReason(piece, target),
+    move: refreshing ?? moveDisabledReason(piece, target),
+    equip: refreshing ?? equipDisabledReason(piece, target),
   };
 
   const run = async (action: Action) => {

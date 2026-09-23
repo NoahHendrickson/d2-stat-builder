@@ -4,7 +4,9 @@ import { useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { DestinyProfileResponse } from "bungie-api-ts/destiny2";
 import { useSession, type SessionState } from "@/lib/auth/use-session";
+import { handleSessionExpired } from "@/lib/auth/sign-out";
 import { ArmoryError, fetchProfile } from "./fetch";
+import { profileKey } from "./keys";
 
 export const isSessionExpired = (error: unknown): boolean =>
   error instanceof ArmoryError && error.status === 401;
@@ -13,9 +15,6 @@ export const isSessionExpired = (error: unknown): boolean =>
 export function sessionMembershipId(session: SessionState | undefined): string | undefined {
   return session?.authenticated ? session.user?.membershipId : undefined;
 }
-
-export const profileKey = (membershipId: string | undefined) =>
-  ["profile", membershipId] as const;
 
 /**
  * The signed-in player's raw Destiny profile, fetched as soon as the session is known —
@@ -39,13 +38,12 @@ export function useProfile() {
     retry: (failureCount, error) => !isSessionExpired(error) && failureCount < 3,
   });
 
-  // On session expiry, refetch the session query: cookies are cleared server-side, so it
-  // flips to unauthenticated and the existing sign-in card becomes the re-auth prompt.
+  // On session expiry the server has already cleared the cookies: drop the local data
+  // and refetch the session query so it flips to unauthenticated and the existing
+  // sign-in card becomes the re-auth prompt.
   const sessionExpired = isSessionExpired(query.error);
   useEffect(() => {
-    if (sessionExpired) {
-      void queryClient.invalidateQueries({ queryKey: ["session"] });
-    }
+    if (sessionExpired) void handleSessionExpired(queryClient);
   }, [sessionExpired, queryClient]);
 
   return { query, membershipId };
