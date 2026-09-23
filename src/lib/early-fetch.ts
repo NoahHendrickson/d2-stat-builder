@@ -3,6 +3,10 @@
  * profile fetch — are started by an inline script in the root layout, before the app
  * bundle has downloaded, parsed, and hydrated. The query functions take the in-flight
  * responses from `window.__d2Early` (once) instead of starting their own.
+ *
+ * It is an inline script, so it relies on `script-src 'unsafe-inline'` in the CSP
+ * (next.config.ts). If that is ever tightened to a nonce, this must become a nonced
+ * script or the requests silently start late (the app keeps working, just slower).
  */
 
 interface EarlyFetches {

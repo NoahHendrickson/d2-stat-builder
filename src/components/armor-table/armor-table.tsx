@@ -284,16 +284,17 @@ export function ArmorTable() {
   // Persist filters + sort together (debounced). A change made right before the view is
   // hidden (tab switch) or unmounted would otherwise be dropped with its timer, so the
   // pending write is flushed from the unmount cleanup below.
-  const pendingSaves = useRef(new Map<string, { timer: number; save: () => void }>());
-  const schedule = (key: string, save: () => void) => {
+  const pendingSaves = useRef<Map<string, { timer: number; save: () => void }> | null>(null);
+  const pending = () => (pendingSaves.current ??= new Map());
+  const schedule = useCallback((key: string, save: () => void) => {
     const run = () => {
-      pendingSaves.current.delete(key);
+      pending().delete(key);
       save();
     };
     const timer = window.setTimeout(run, 300);
-    pendingSaves.current.set(key, { timer, save: run });
+    pending().set(key, { timer, save: run });
     return () => window.clearTimeout(timer);
-  };
+  }, []);
   useEffect(
     () =>
       schedule("state", () =>
@@ -303,7 +304,7 @@ export function ArmorTable() {
           sort,
         }),
       ),
-    [facets, search, sort],
+    [facets, search, sort, schedule],
   );
 
   // Pins persist debounced like the filters above.
@@ -316,17 +317,23 @@ export function ArmorTable() {
           archetypes: pinnedArchetypes,
         }),
       ),
-    [pinnedSets, pinnedArchetypes],
+    [pinnedSets, pinnedArchetypes, schedule],
   );
-  useEffect(
-    () => () => {
-      for (const pending of pendingSaves.current.values()) {
-        window.clearTimeout(pending.timer);
-        pending.save();
+  // Flush on unmount / Activity hide, and on pagehide (tab close, navigation away):
+  // a change made inside the debounce window is written, not dropped.
+  useEffect(() => {
+    const flush = () => {
+      for (const p of pending().values()) {
+        window.clearTimeout(p.timer);
+        p.save();
       }
-    },
-    [],
-  );
+    };
+    window.addEventListener("pagehide", flush);
+    return () => {
+      window.removeEventListener("pagehide", flush);
+      flush();
+    };
+  }, []);
 
   // Global "F" focuses search (ignored while typing in any field).
   useEffect(() => {

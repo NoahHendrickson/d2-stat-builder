@@ -5,8 +5,9 @@
 //   node scripts/startup-bench/fixture.mjs   → scripts/startup-bench/.profile.json (gitignored)
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
-const here = path.dirname(new URL(import.meta.url).pathname);
+const here = path.dirname(fileURLToPath(import.meta.url));
 const env = fs.readFileSync(path.join(here, "../../.env.local"), "utf8");
 const apiKey = /NEXT_PUBLIC_BUNGIE_API_KEY=(\S+)/.exec(env)?.[1]?.replace(/^["']|["']$/g, "");
 if (!apiKey) throw new Error("NEXT_PUBLIC_BUNGIE_API_KEY not found in .env.local");

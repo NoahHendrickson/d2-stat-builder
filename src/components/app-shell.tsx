@@ -265,7 +265,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       >
         <div
           className={cn(
-            // bg-glass, not d2-sidebar: this pane and the main one cover the
+            // bg-glass (no backdrop-filter): this pane and the main one cover the
             // viewport over the pre-blurred backdrop, so a backdrop blur adds
             // nothing visible — and Firefox re-blurs it on every repaint.
             "bg-glass relative flex h-full min-h-0 flex-col",

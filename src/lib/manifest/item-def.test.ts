@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { DestinyInventoryItemDefinition } from "bungie-api-ts/destiny2";
-import { projectItemDef, type ItemDef } from "./item-def";
+import { ITEM_DEF_KEYS, projectItemDef, type ItemDef } from "./item-def";
 
 const armor = {
   hash: 111,
@@ -70,6 +70,13 @@ describe("projectItemDef", () => {
         ],
       },
     } satisfies ItemDef);
+  });
+
+  it("keeps every key of ItemDef when the source has them all", () => {
+    // A def with every block present: the projection's key set must be exactly the
+    // type's key set, so a field added to ItemDef but not to projectItemDef is caught.
+    const full = { ...armor, collectibleHash: 42, plug: { plugCategoryIdentifier: "x", insertionMaterialRequirementHash: 0, isDummyPlug: false, insertionRules: [] } } as unknown as DestinyInventoryItemDefinition;
+    expect(Object.keys(projectItemDef(full)).sort()).toEqual([...ITEM_DEF_KEYS].sort());
   });
 
   it("keeps inline socket plug lists only on subclass items", () => {

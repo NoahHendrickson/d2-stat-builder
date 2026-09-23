@@ -69,13 +69,32 @@ function Slider({
     null
   )
   const [dragging, setDragging] = React.useState(false)
-  // The control's box, measured once per hover/drag (pointerenter / pointerdown)
-  // rather than on every pointermove — a layout read per tick forces synchronous
-  // layout while the thumb is animating.
+  // The control's box, measured on pointerenter / pointerdown rather than on every
+  // pointermove — a layout read per tick forces synchronous layout while the thumb
+  // is animating. The rect is viewport-relative, so any scroll (capture phase: the
+  // builder column scrolls, not the window) or resize while hovered drops it; the
+  // next move re-measures lazily.
   const rectRef = React.useRef<DOMRect | null>(null)
+  const unwatchRef = React.useRef<(() => void) | null>(null)
   const measure = (e: React.PointerEvent<HTMLDivElement>) => {
     rectRef.current = e.currentTarget.getBoundingClientRect()
+    if (unwatchRef.current) return
+    const invalidate = () => {
+      rectRef.current = null
+    }
+    window.addEventListener("scroll", invalidate, { capture: true, passive: true })
+    window.addEventListener("resize", invalidate)
+    unwatchRef.current = () => {
+      window.removeEventListener("scroll", invalidate, { capture: true })
+      window.removeEventListener("resize", invalidate)
+    }
   }
+  const forget = () => {
+    rectRef.current = null
+    unwatchRef.current?.()
+    unwatchRef.current = null
+  }
+  React.useEffect(() => () => unwatchRef.current?.(), [])
 
   function updateHover(e: React.PointerEvent<HTMLDivElement>) {
     if (!horizontal || max <= min) return
@@ -132,11 +151,12 @@ function Slider({
         }}
         onPointerUp={() => setDragging(false)}
         onPointerLeave={() => {
-          rectRef.current = null
+          forget()
           setDragging(false)
           setHover(null)
         }}
         onPointerCancel={() => {
+          forget()
           setDragging(false)
           setHover(null)
         }}

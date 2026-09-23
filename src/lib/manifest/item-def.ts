@@ -23,23 +23,23 @@ import type {
  */
 export interface ItemDef
   extends Pick<
-    DestinyInventoryItemDefinition,
-    | "hash"
-    | "itemType"
-    | "itemCategoryHashes"
-    | "itemTypeDisplayName"
-    | "classType"
-    | "redacted"
-    | "collectibleHash"
-    | "flavorText"
-    | "isFeaturedItem"
-    | "iconWatermark"
-    | "iconWatermarkFeatured"
-  > {
-  readonly displayProperties: Pick<
-    DestinyDisplayPropertiesDefinition,
-    "name" | "icon" | "description"
-  >;
+      DestinyInventoryItemDefinition,
+      | "hash"
+      | "itemType"
+      | "itemCategoryHashes"
+      | "itemTypeDisplayName"
+      | "classType"
+      | "redacted"
+      | "collectibleHash"
+      | "flavorText"
+      | "isFeaturedItem"
+    >,
+    // bungie-api-ts declares these required, but the live table omits them on
+    // thousands of definitions (a census of the kept table: iconWatermark absent on
+    // ~5,100, iconWatermarkFeatured on ~5,500, displayProperties.icon on ~500).
+    Partial<Pick<DestinyInventoryItemDefinition, "iconWatermark" | "iconWatermarkFeatured">> {
+  readonly displayProperties: Pick<DestinyDisplayPropertiesDefinition, "name" | "description"> &
+    Partial<Pick<DestinyDisplayPropertiesDefinition, "icon">>;
   readonly inventory?: Pick<
     DestinyItemInventoryBlockDefinition,
     "bucketTypeHash" | "tierType"
@@ -106,6 +106,19 @@ function pick<T extends object, K extends keyof T>(
   return out;
 }
 
+/** The nested blocks, projected field by field below. */
+const BLOCK_KEYS = [
+  "displayProperties",
+  "inventory",
+  "equippingBlock",
+  "investmentStats",
+  "perks",
+  "plug",
+  "sockets",
+  "quality",
+] as const satisfies readonly (keyof ItemDef)[];
+type BlockKey = (typeof BLOCK_KEYS)[number];
+/** Top-level scalars/arrays copied as-is. */
 const TOP_KEYS = [
   "hash",
   "itemType",
@@ -118,7 +131,16 @@ const TOP_KEYS = [
   "isFeaturedItem",
   "iconWatermark",
   "iconWatermarkFeatured",
-] as const;
+] as const satisfies readonly Exclude<keyof ItemDef, BlockKey>[];
+// Compile-time completeness: a key added to ItemDef must be listed in one of the two
+// (otherwise projectItemDef would silently drop it). A missing key makes this line
+// fail to type-check.
+type UnlistedKey = Exclude<keyof ItemDef, (typeof TOP_KEYS)[number] | BlockKey>;
+const _everyItemDefKeyIsListed: [UnlistedKey] extends [never] ? true : never = true;
+void _everyItemDefKeyIsListed;
+
+/** Every key of `ItemDef`, for tests that check a projection keeps all of them. */
+export const ITEM_DEF_KEYS: readonly (keyof ItemDef)[] = [...TOP_KEYS, ...BLOCK_KEYS];
 
 /**
  * Reduce a full item definition to the fields in `ItemDef`. Array positions are preserved

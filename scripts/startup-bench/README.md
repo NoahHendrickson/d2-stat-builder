@@ -11,7 +11,7 @@ npm run dev                                                   # the server under
 node scripts/startup-bench/run.mjs https://localhost:4321/ /tmp/d2-startup-bench/chrome-profile fresh
 ```
 
-`fresh` wipes the Chrome profile first (cold load: manifest download); omit it to reuse
+Set `CHROME=/path/to/chrome` if Google Chrome isn't at its macOS path. `fresh` wipes the Chrome profile first (cold load: manifest download); omit it to reuse
 the cache (warm load). Each invocation runs one cold/first load and two warm reloads and
 prints, per run: when the loading overlay finished, when the first builds rendered, the
 session/profile/manifest request timings, and main-thread long tasks. A screenshot of the

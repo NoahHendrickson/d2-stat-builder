@@ -2,12 +2,15 @@
 import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 const PORT = 9333, APP = process.argv[2] ?? "https://localhost:4321/", DIR = process.argv[3] ?? "/tmp/d2-startup-bench/chrome-profile";
 if (process.argv[4] === "fresh") fs.rmSync(DIR, { recursive: true, force: true });
-const here = path.dirname(new URL(import.meta.url).pathname);
+const here = path.dirname(fileURLToPath(import.meta.url));
 const profileBody = fs.readFileSync(path.join(here, ".profile.json"), "utf8");
 const sessionBody = JSON.stringify({ authenticated: true, user: { membershipId: "e2e-user", destinyMembershipId: "d1", destinyMembershipType: 3, displayName: "E2E" } });
-const chrome = spawn("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", ["--headless=new", `--remote-debugging-port=${PORT}`, `--user-data-dir=${DIR}`, "--ignore-certificate-errors", "--no-first-run", "--no-default-browser-check", "--window-size=1280,800"], { stdio: "ignore" });
+// Override with CHROME=/path/to/chrome (Linux, or a Playwright/Chromium build).
+const CHROME = process.env.CHROME ?? "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+const chrome = spawn(CHROME, ["--headless=new", `--remote-debugging-port=${PORT}`, `--user-data-dir=${DIR}`, "--ignore-certificate-errors", "--no-first-run", "--no-default-browser-check", "--window-size=1280,800"], { stdio: "ignore" });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let wsUrl; for (let i = 0; i < 50 && !wsUrl; i++) { try { wsUrl = (await (await fetch(`http://localhost:${PORT}/json/version`)).json()).webSocketDebuggerUrl; } catch { await sleep(100); } }
 const ws = new WebSocket(wsUrl); await new Promise((r) => (ws.onopen = r));
