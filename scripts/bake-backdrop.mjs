@@ -22,6 +22,9 @@ const blurred = () => sharp(at("assets/backdrop.jpg")).blur(24);
 // 100 barely improves on that at 3x the size, near-lossless is ~220 KB.
 const WEBP = { quality: 90 };
 
+// The loading screen shows the scene unblurred, at source size.
+await sharp(at("assets/backdrop.jpg")).webp({ quality: 80 }).toFile(at("public/backdrop.webp"));
+
 await blurred().resize(1280).webp(WEBP).toFile(at("public/backdrop-blur.webp"));
 await blurred()
   .recomb(SATURATE_06)
