@@ -161,7 +161,8 @@ const Tiles = memo(function Tiles() {
             draggable={false}
             className={cn(
               "loading-tile-bob select-none",
-              tile.blur && "blur-[1.5px]",
+              // Near tiles cast a soft shadow onto the scene; far ones stay flat.
+              tile.blur ? "blur-[1.5px]" : "shadow-[0_10px_28px_rgb(0_0_0/0.35)]",
             )}
             style={
               {
@@ -177,7 +178,7 @@ const Tiles = memo(function Tiles() {
   );
 });
 
-/** Presentational overlay: floating pixel-art exotics behind a centered progress card. */
+/** Presentational overlay: floating pixel-art exotics over the app's scene, with the progress text centered on it. */
 export function LoadingScreenView({
   progress,
   message,
@@ -193,34 +194,35 @@ export function LoadingScreenView({
     <div
       role="status"
       aria-live="polite"
+      // The unblurred scene, always dark inside: the text sits straight on the
+      // photo, whatever the app theme. Fading out pulls focus to the blurred
+      // copy the app floats over.
       className={cn(
-        "bg-background fixed inset-0 z-[60] overflow-hidden transition-opacity duration-500",
+        "app-backdrop-sharp dark text-foreground fixed inset-0 z-[60] overflow-hidden transition-opacity duration-500",
         fading && "pointer-events-none opacity-0",
       )}
     >
       <Tiles />
 
       <div className="relative z-10 flex h-full flex-col items-center justify-center px-6">
-        <div className="d2-panel flex w-full max-w-sm flex-col items-center gap-4 border border-foreground/12 px-8 py-6 shadow-[-2px_2px_8px_0px_rgba(0,0,0,0.3),0_0_12px_0px_rgba(0,0,0,0.25)]">
-          <h1 className="text-lg font-medium">
-            Loading your armor
-          </h1>
+        <div className="flex w-full max-w-sm flex-col gap-3 [text-shadow:0_1px_8px_rgb(0_0_0/0.6)]">
+          <h1 className="d2-heading text-lg">Loading your armor</h1>
           <div
             role="progressbar"
             aria-label="Loading progress"
             aria-valuemin={0}
             aria-valuemax={100}
             aria-valuenow={pct}
-            className="h-2 w-full max-w-xs overflow-hidden rounded-[3px] border border-input bg-black/35"
+            className="d2-line h-2.5 w-full bg-black/45"
           >
             <div
-              className="bg-foreground h-full"
+              className="d2-line-white d2-fill h-full"
               style={{ width: `${pct}%` }}
             />
           </div>
-          <div className="text-muted-foreground flex w-full max-w-xs items-baseline justify-between gap-4 text-xs">
-            <span className="truncate">{message}</span>
-            <span className="tabular-nums">{pct}%</span>
+          <div className="flex w-full items-baseline justify-between gap-4">
+            <span className="d2-label truncate text-xs text-foreground/90">{message}</span>
+            <span className="d2-label text-xs text-foreground/90 tabular-nums">{pct}%</span>
           </div>
         </div>
       </div>

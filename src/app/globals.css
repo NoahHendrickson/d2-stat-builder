@@ -89,6 +89,8 @@
   --primary-muted: rgb(31 33 36 / 10%);
   /* Figma EQUIP: #378b3f fill, white/24 line. */
   --emphatic: #378b3f;
+  /* The bright stop of the green fill (slider, switch, loading bar). */
+  --emphatic-bright: #54c55f;
   --emphatic-foreground: #fcfcf5;
   --emphatic-dark: #2d7334;
   --emphatic-light: #4aa354;
@@ -262,6 +264,8 @@
   --primary-border: rgb(252 252 245 / 50%);
   --primary-muted: rgb(252 252 245 / 10%);
   --emphatic: #378b3f;
+  /* The bright stop of the green fill (slider, switch, loading bar). */
+  --emphatic-bright: #54c55f;
   --emphatic-foreground: #fcfcf5;
   --emphatic-dark: #2d7334;
   --emphatic-light: #4aa354;
@@ -354,6 +358,19 @@ input[type="number"] {
       linear-gradient(rgb(0 0 0 / 0.35), rgb(0 0 0 / 0.35)),
       url("/backdrop-blur.webp");
   }
+}
+
+/* The same scene unblurred, for the loading screen that covers the app. Always
+   dark; the blurred copy (already cached for app-backdrop) shows until the
+   sharp one loads. Scrim: a dark pool behind centred text over an edge vignette. */
+@utility app-backdrop-sharp {
+  background-image:
+    radial-gradient(ellipse 48% 32% at center, rgb(0 0 0 / 0.75), rgb(0 0 0 / 0.4) 55%, transparent),
+    radial-gradient(ellipse at center, rgb(0 0 0 / 0.1) 40%, rgb(0 0 0 / 0.5) 100%),
+    url("/backdrop.webp"),
+    url("/backdrop-blur.webp");
+  background-size: cover;
+  background-position: center;
 }
 
 /* Small uppercase label: column headers, stat names, section tags, EQUIP. */
@@ -593,6 +610,12 @@ input[type="number"] {
   --line-mid: color-mix(in srgb, var(--foreground) calc(var(--line-alpha, 1) * 24%), transparent);
   border: var(--line-width, 1px) solid transparent;
   border-image: var(--line-image, linear-gradient(to right, var(--line-side), var(--line-mid) 50%, var(--line-side))) 1;
+}
+
+/* Bright-to-deep green fill (Figma 73:1613): slider, switch, loading bar.
+   Runs left to right; set `--fill-to: top` for a vertical fill. */
+@utility d2-fill {
+  background-image: linear-gradient(to var(--fill-to, right), var(--emphatic-bright), var(--emphatic));
 }
 
 /* The line in white, for sitting on a coloured fill (the stat bar's green). */
