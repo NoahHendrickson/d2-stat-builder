@@ -68,7 +68,9 @@ export function getBuildsStatusLabel({
     case "no-matches":
       return "No builds match";
     case "results":
-      return `${Math.min(MAX_SHOWN, result!.loadouts.length).toLocaleString()} / ${result!.combosValid.toLocaleString()}`;
+      // combosValid is exact until the heap fills; after that the walk skips subtrees it
+      // can prove can't enter the list without counting them, so it's a lower bound.
+      return `${Math.min(MAX_SHOWN, result!.loadouts.length).toLocaleString()} / ${result!.combosValid.toLocaleString()}${result!.combosValidExact ? "" : "+"}`;
     default: {
       const _exhaustive: never = state;
       return _exhaustive;

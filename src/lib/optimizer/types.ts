@@ -137,8 +137,17 @@ export interface OptimizerLoadout {
 
 export interface OptimizerOutput {
   loadouts: OptimizerLoadout[];
+  /** Leaves the top-N walk reached (pruned subtrees are not counted). */
   combosTried: number;
+  /**
+   * Leaves the tuner accepted as meeting the minimums. Exact only while the heap has
+   * room: once it is full, subtrees whose admission bound can't beat the worst kept build
+   * are skipped without being tuned, so this becomes a LOWER bound on the valid builds
+   * (see `combosValidExact`). The UI shows it with a "+" in that case.
+   */
   combosValid: number;
+  /** True when no subtree was cut by the admission bound, so `combosValid` is exact. */
+  combosValidExact: boolean;
   /**
    * Max reachable value for each stat, subject to the current minimums on the OTHER
    * five stats only (each stat's own minimum is ignored when maximizing it). Drives the

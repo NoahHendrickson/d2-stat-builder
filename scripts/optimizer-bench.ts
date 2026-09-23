@@ -3,7 +3,7 @@
  *
  *   npx tsx scripts/optimizer-bench.ts time [filter]      full real pool, production budgets:
  *                                                         wall time, leaves, capped, ceilings exact
- *   npx tsx scripts/optimizer-bench.ts verify [filter]    subsampled pool, exhaustive budgets: hash
+ *   npm run bench:verify -- [filter]   (= npx tsx scripts/optimizer-bench.ts verify)    subsampled pool, exhaustive budgets: hash
  *                                                         every query's full output and compare with
  *                                                         scripts/optimizer-bench.snapshot.json
  *   npx tsx scripts/optimizer-bench.ts snapshot           (re)write the snapshot from the current code
@@ -16,7 +16,8 @@
  * exotics in every slot, both fixture set bonuses, artifice/legacy pieces, power ranges.
  */
 import { createHash } from "node:crypto";
-import { readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { pathToFileURL } from "node:url";
 import { resolve } from "node:path";
 import { solve } from "../src/lib/optimizer/solve";
 import { realWarlockSlots } from "../src/lib/optimizer/real-pool.fixture";
@@ -165,7 +166,16 @@ interface SnapshotEntry {
   ceilings: number[];
   uppers: number[];
   exact: boolean;
+  /**
+   * The public counters, outside `hash` so a deliberate change to what a counter means
+   * (e.g. a new prune that skips leaves) shows up as its own line, not as "results changed".
+   * They are still part of the gate: any drift fails `verify`.
+   */
+  counters: { tried: number; valid: number; validExact: boolean; capped: boolean };
 }
+
+const sameCounters = (a: SnapshotEntry["counters"], b: SnapshotEntry["counters"]): boolean =>
+  a.tried === b.tried && a.valid === b.valid && a.validExact === b.validExact && a.capped === b.capped;
 
 function main(): void {
   const mode = process.argv[2] ?? "time";
@@ -205,6 +215,11 @@ function main(): void {
     console.error("usage: optimizer-bench.ts time|verify|snapshot [filter]");
     process.exit(2);
   }
+  if (mode === "snapshot" && filter) {
+    // The snapshot is the whole baseline; a filtered write would silently drop the rest.
+    console.error("snapshot mode takes no filter (it rewrites every query's baseline)");
+    process.exit(2);
+  }
   const pool = subsample(full);
   console.error("subsampled slots:", pool.map((s) => s.length).join("/"));
   const EXHAUSTIVE = { topNBudgetMs: 600_000, ceilingBudgetMs: 300_000 };
@@ -225,6 +240,12 @@ function main(): void {
       ceilings: out.ceilings,
       uppers: out.ceilingUppers,
       exact: out.ceilingsExact,
+      counters: {
+        tried: out.combosTried,
+        valid: out.combosValid,
+        validExact: out.combosValidExact,
+        capped: out.capped,
+      },
     };
     console.error(`${name.padEnd(34)} ${String(ms).padStart(6)} ms  leaves ${out.combosTried}  ${current[name].hash}`);
   }
@@ -235,6 +256,17 @@ function main(): void {
   }
   const expected = JSON.parse(readFileSync(SNAPSHOT_PATH, "utf8")) as Record<string, SnapshotEntry>;
   let failed = 0;
+  // Without a filter the two key sets must match exactly — a snapshot entry with no
+  // current result means a query was dropped (or the snapshot was truncated), and a
+  // green run over fewer queries would be no gate at all.
+  if (!filter) {
+    for (const name of Object.keys(expected)) {
+      if (!(name in current)) {
+        console.error(`MISSING from this run (in snapshot): ${name}`);
+        failed++;
+      }
+    }
+  }
   for (const [name, entry] of Object.entries(current)) {
     const want = expected[name];
     if (!want) {
@@ -242,6 +274,9 @@ function main(): void {
       failed++;
     } else if (want.hash !== entry.hash) {
       console.error(`MISMATCH ${name}: snapshot ${want.hash} (n=${want.n} best=${want.best} ceil=${want.ceilings}) vs now ${entry.hash} (n=${entry.n} best=${entry.best} ceil=${entry.ceilings})`);
+      failed++;
+    } else if (!want.counters || !sameCounters(want.counters, entry.counters)) {
+      console.error(`COUNTERS ${name}: snapshot ${JSON.stringify(want.counters)} vs now ${JSON.stringify(entry.counters)}`);
       failed++;
     }
   }
@@ -252,4 +287,5 @@ function main(): void {
   console.error(`all ${Object.keys(current).length} queries identical to the snapshot`);
 }
 
-if (process.argv[1]?.endsWith("optimizer-bench.ts")) main();
+// Run only when executed directly (not when imported), robust to symlinks and renames.
+if (process.argv[1] && pathToFileURL(realpathSync(process.argv[1])).href === import.meta.url) main();

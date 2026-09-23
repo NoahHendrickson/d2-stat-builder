@@ -158,6 +158,7 @@ export function solve(
       loadouts: [],
       combosTried: 0,
       combosValid: 0,
+      combosValidExact: true,
       ceilings: [0, 0, 0, 0, 0, 0],
       ceilingUppers: [0, 0, 0, 0, 0, 0],
       ceilingsExact: true,
@@ -223,6 +224,8 @@ export function solve(
   const chosenArt = { n: 0 };
   let combosTried = 0;
   let combosValid = 0;
+  // Set once the admission bound cuts any subtree: from then on combosValid undercounts.
+  let boundPruned = false;
   // Time cap for the top-N search: past the deadline it stops and reports `capped`.
   const topNStart = performance.now();
   const topNDeadline = topNStart + topNBudgetMs;
@@ -308,7 +311,9 @@ export function solve(
     const shared = modUpside(k) + (chosenArt.n + artSuffix[k]) * 3;
     const positive = runningTotal + suffixTotal[k] + fragUpside;
     const net = runningNet + suffixNetTotal[k] + fragSum + zeroSlack;
-    return (positive < net ? positive : net) + shared <= heap.worst;
+    if ((positive < net ? positive : net) + shared > heap.worst) return false;
+    boundPruned = true;
+    return true;
   };
 
   const recurse = (k: number, exoticCount: number): void => {
@@ -449,6 +454,7 @@ export function solve(
     loadouts,
     combosTried,
     combosValid,
+    combosValidExact: !boundPruned,
     ceilings,
     ceilingUppers,
     ceilingsExact,
