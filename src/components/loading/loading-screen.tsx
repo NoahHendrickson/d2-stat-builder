@@ -194,25 +194,14 @@ export function LoadingScreenView({
     <div
       role="status"
       aria-live="polite"
-      // Always dark inside: the text sits straight on the photo, whatever the app theme.
+      // The unblurred scene, always dark inside: the text sits straight on the
+      // photo, whatever the app theme. Fading out pulls focus to the blurred
+      // copy the app floats over.
       className={cn(
-        "dark text-foreground fixed inset-0 z-[60] overflow-hidden transition-opacity duration-500",
+        "app-backdrop-sharp dark text-foreground fixed inset-0 z-[60] overflow-hidden transition-opacity duration-500",
         fading && "pointer-events-none opacity-0",
       )}
     >
-      {/* The app's scene, unblurred; fading out pulls focus to the blurred copy
-          the app floats over. The blurred layer (already cached for the app
-          backdrop) shows until the sharp one loads. */}
-      <div
-        aria-hidden
-        className="absolute inset-0 bg-[url(/backdrop.webp),url(/backdrop-blur.webp)] bg-cover bg-center"
-      />
-      {/* Scrim: a dark pool behind the text over a soft edge vignette. */}
-      <div
-        aria-hidden
-        className="absolute inset-0 bg-[radial-gradient(ellipse_48%_32%_at_center,rgb(0_0_0/0.75),rgb(0_0_0/0.4)_55%,transparent),radial-gradient(ellipse_at_center,rgb(0_0_0/0.1)_40%,rgb(0_0_0/0.5)_100%)]"
-      />
-
       <Tiles />
 
       <div className="relative z-10 flex h-full flex-col items-center justify-center px-6">
@@ -227,7 +216,7 @@ export function LoadingScreenView({
             className="d2-line h-2.5 w-full bg-black/45"
           >
             <div
-              className="d2-line-white h-full bg-[linear-gradient(to_right,#54c55f,#378b3f)]"
+              className="d2-line-white d2-fill h-full"
               style={{ width: `${pct}%` }}
             />
           </div>

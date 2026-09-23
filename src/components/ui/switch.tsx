@@ -21,7 +21,7 @@ function Switch({
       data-slot="switch"
       data-size={size}
       className={cn(
-        "peer group/switch relative inline-flex shrink-0 items-center rounded-none border border-foreground/16 bg-foreground/16 p-px outline-none transition-[background-color,border-color,box-shadow] after:absolute after:-inset-x-3 after:-inset-y-2 hover:not-data-checked:bg-foreground/20 focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-outline-strong d2-hover-ring aria-invalid:border-destructive data-[size=default]:h-5 data-[size=default]:w-9 data-[size=sm]:h-4 data-[size=sm]:w-7 data-checked:bg-[linear-gradient(to_right,#54c55f,#378b3f)] data-disabled:cursor-not-allowed data-disabled:opacity-40",
+        "peer group/switch relative inline-flex shrink-0 items-center rounded-none border border-foreground/16 bg-foreground/16 p-px outline-none transition-[background-color,border-color,box-shadow] after:absolute after:-inset-x-3 after:-inset-y-2 hover:not-data-checked:bg-foreground/20 focus-visible:outline-1 focus-visible:outline-offset-2 focus-visible:outline-outline-strong d2-hover-ring aria-invalid:border-destructive data-[size=default]:h-5 data-[size=default]:w-9 data-[size=sm]:h-4 data-[size=sm]:w-7 data-checked:d2-fill data-disabled:cursor-not-allowed data-disabled:opacity-40",
         className
       )}
       {...props}

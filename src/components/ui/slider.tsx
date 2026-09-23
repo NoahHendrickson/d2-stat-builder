@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils"
 // hover/drag value tooltip and `sliderValueLeft` (used by builder-panel ticks),
 // styled to Figma 73:1613: a 10px well inside a frame that sits 2px out
 // (a pseudo-element carrying the app's centre-bright line, so it costs no
-// layout), a bright-to-deep green gradient fill (#54c55f to #378b3f) wearing the same line in white, a
+// layout), the green `d2-fill` wearing the same line in white, a
 // white/12 "achievable" fill behind it, and a 2px white thumb, 16px tall so it spans
 // the frame, on the fill's edge.
 // Re-adding from the registry with --overwrite will drop those features.
@@ -175,7 +175,7 @@ function Slider({
           )}
           <SliderPrimitive.Indicator
             data-slot="slider-range"
-            className="d2-line-white bg-[linear-gradient(to_right,#54c55f,#378b3f)] select-none data-horizontal:h-full data-vertical:w-full data-vertical:bg-[linear-gradient(to_top,#54c55f,#378b3f)]"
+            className="d2-line-white d2-fill select-none data-horizontal:h-full data-vertical:w-full data-vertical:[--fill-to:top]"
           />
         </SliderPrimitive.Track>
         {hover != null && (
