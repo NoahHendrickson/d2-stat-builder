@@ -1,32 +1,21 @@
-import {
-  getDestinyManifest,
-  type DestinyInventoryItemDefinition,
-  type DestinyManifest,
-  type DestinyMaterialRequirementSetDefinition,
-} from "bungie-api-ts/destiny2";
-import { isFestivalMask } from "@/lib/armory/festival-masks";
+import { getDestinyManifest, type DestinyManifest } from "bungie-api-ts/destiny2";
 import { createBungieHttp } from "@/lib/bungie/http";
 import {
   MANIFEST_TABLES,
   type ManifestTableName,
   type ManifestTables,
 } from "./tables";
-import { projectItemDef, type ItemDef } from "./item-def";
+import { getCachedTable, getCachedVersion, setCachedVersion } from "./db";
 import {
-  clearCache,
-  getCachedTable,
-  getCachedVersion,
-  setCachedTable,
-  setCachedVersion,
-} from "./db";
+  downloadTables,
+  type DownloadProgress,
+  type DownloadRequest,
+  type DownloadResponse,
+  type TablePaths,
+} from "./download";
 
-const BUNGIE_ROOT = "https://www.bungie.net";
-
-// DestinyItemType values we keep from the (huge) item table.
-const ITEM_TYPE_ARMOR = 2;
-const ITEM_TYPE_MOD = 19;
-const ITEM_TYPE_SUBCLASS = 16;
-// Bump when the item-table filter changes so IndexedDB isn't stuck without new defs.
+// Bump when the item-table filter or projection changes so IndexedDB isn't stuck
+// without new defs.
 const CACHE_REVISION = "item-def-projection-v1";
 
 export interface Manifest {
@@ -62,59 +51,9 @@ function makeManifest(version: string, tables: ManifestTables): Manifest {
   };
 }
 
-/**
- * Every item any material requirement set charges (Glimmer, Enhancement Cores, …).
- * Materials are itemType None/Currency, so they need keeping by hash to survive the
- * item-table filter and give masterwork costs their names and icons.
- */
-function materialItemHashes(
-  sets: Record<number, DestinyMaterialRequirementSetDefinition>,
-): Set<number> {
-  const out = new Set<number>();
-  for (const key in sets) {
-    for (const m of sets[key].materials ?? []) out.add(m.itemHash);
-  }
-  return out;
-}
-
-/**
- * Keep armor, subclasses, plugs/mods, Festival of the Lost masks, and upgrade materials,
- * projected down to the fields the app reads (`ItemDef`).
- */
-export function filterInventoryItems(
-  all: Record<number, DestinyInventoryItemDefinition>,
-  materials: Set<number>,
-): Record<number, ItemDef> {
-  const out: Record<number, ItemDef> = {};
-  for (const key in all) {
-    const def = all[key];
-    // FotL masks use the helmet bucket but are not itemType Armor — without this
-    // they vanish from the cached item table and never enter the armory.
-    if (
-      def.itemType === ITEM_TYPE_ARMOR ||
-      materials.has(Number(key)) ||
-      def.itemType === ITEM_TYPE_MOD ||
-      def.itemType === ITEM_TYPE_SUBCLASS ||
-      def.plug ||
-      isFestivalMask(Number(key), def)
-    ) {
-      out[key as unknown as number] = projectItemDef(def);
-    }
-  }
-  return out;
-}
-
-async function downloadTable(path: string): Promise<Record<number, unknown>> {
-  const res = await fetch(`${BUNGIE_ROOT}${path}`);
-  if (!res.ok) throw new Error(`Failed to download ${path}: ${res.status}`);
-  return res.json();
-}
-
-type ProgressFn = (message: string, progress: number) => void;
-
 export interface LoadManifestOptions {
   /** Load-stage messages and a 0–1 fraction, for the loading screen. */
-  onProgress?: ProgressFn;
+  onProgress?: DownloadProgress;
   /**
    * A cached manifest is returned immediately and revalidated in the background; when
    * Bungie has published a newer version, it is downloaded, cached, and handed here.
@@ -143,46 +82,46 @@ async function readCache(): Promise<
   return { stamp, tables };
 }
 
+/** Run `downloadTables` in a dedicated worker, relaying its progress. */
+function downloadTablesInWorker(
+  paths: TablePaths,
+  onProgress?: DownloadProgress,
+): Promise<ManifestTables> {
+  return new Promise((resolve, reject) => {
+    const worker = new Worker(new URL("./download-worker.ts", import.meta.url), {
+      type: "module",
+    });
+    const finish = (settle: () => void) => {
+      worker.terminate();
+      settle();
+    };
+    worker.onmessage = (e: MessageEvent<DownloadResponse>) => {
+      const msg = e.data;
+      if (msg.kind === "progress") onProgress?.(msg.message, msg.progress);
+      else if (msg.kind === "done") finish(() => resolve(msg.tables));
+      else finish(() => reject(new Error(msg.message)));
+    };
+    worker.onerror = (e) =>
+      finish(() => reject(new Error(e.message || "Manifest download worker failed")));
+    worker.postMessage({ paths } satisfies DownloadRequest);
+  });
+}
+
 /**
- * Download every table concurrently (filtering + projecting the item table) and cache
- * them. The version stamp is written only after every table lands, so a failed download
- * leaves no stamp and the next load re-downloads cleanly.
+ * Download every table (in a worker when available — the item table alone is 200 MB
+ * of JSON to parse) and cache them. The version stamp is written only after every
+ * table lands, so a failed download leaves no stamp and the next load re-downloads
+ * cleanly.
  */
 async function downloadAll(
   info: DestinyManifest,
-  onProgress?: ProgressFn,
+  onProgress?: DownloadProgress,
 ): Promise<Manifest> {
-  const paths = info.jsonWorldComponentContentPaths.en;
-  await clearCache();
-  const tables = {} as ManifestTables;
-  let done = 0;
-  onProgress?.(`Downloading game data (0/${MANIFEST_TABLES.length})…`, 0);
-  // The item filter needs the (tiny) material table to know which currencies to keep.
-  const materialSets = downloadTable(
-    paths.DestinyMaterialRequirementSetDefinition,
-  ) as Promise<Record<number, DestinyMaterialRequirementSetDefinition>>;
-  await Promise.all(
-    MANIFEST_TABLES.map(async (table) => {
-      const raw =
-        table === "DestinyMaterialRequirementSetDefinition"
-          ? await materialSets
-          : await downloadTable(paths[table]);
-      const data =
-        table === "DestinyInventoryItemDefinition"
-          ? filterInventoryItems(
-              raw as Record<number, DestinyInventoryItemDefinition>,
-              materialItemHashes(await materialSets),
-            )
-          : raw;
-      tables[table] = data as never;
-      await setCachedTable(table, data as Record<number, unknown>);
-      done++;
-      onProgress?.(
-        `Downloading game data (${done}/${MANIFEST_TABLES.length})…`,
-        done / MANIFEST_TABLES.length,
-      );
-    }),
-  );
+  const paths = info.jsonWorldComponentContentPaths.en as TablePaths;
+  const tables =
+    typeof Worker === "undefined"
+      ? await downloadTables(paths, onProgress)
+      : await downloadTablesInWorker(paths, onProgress);
   await setCachedVersion(stampFor(info.version));
   onProgress?.("Manifest ready", 1);
   return makeManifest(info.version, tables);
