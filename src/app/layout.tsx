@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist } from "next/font/google";
 import "./globals.css";
 import { AppShell } from "@/components/app-shell";
 import { LoadingScreen } from "@/components/loading/loading-screen";
@@ -10,11 +10,6 @@ import { EARLY_FETCH_SCRIPT } from "@/lib/early-fetch";
 
 const geistSans = Geist({
   variable: "--font-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-mono",
   subsets: ["latin"],
 });
 
@@ -33,7 +28,7 @@ export default function RootLayout({
     <html
       lang="en"
       suppressHydrationWarning
-      className={`${geistSans.variable} ${geistMono.variable}`}
+      className={geistSans.variable}
     >
       <body className="h-dvh antialiased">
         {/* Start the session + profile requests before the bundle arrives (see early-fetch.ts). */}
