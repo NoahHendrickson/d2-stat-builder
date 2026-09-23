@@ -113,6 +113,7 @@ export function BuilderPanel({
   const manifestStatus = useManifest();
   const {
     run,
+    warm,
     cancel,
     result,
     ceilingsView,
@@ -842,11 +843,25 @@ export function BuilderPanel({
   const authed = session.data?.authenticated ?? false;
   const ready = authed && Boolean(armory) && Boolean(manifest);
 
+  // Spawn the solver worker while the manifest and profile are still loading, so the
+  // first search doesn't also wait on the worker chunk.
+  useEffect(() => {
+    if (authed) warm();
+  }, [authed, warm]);
+
   // Auto-search: rerun the optimizer a beat after any selection changes. `runOptimizer` is
   // memoized on exactly the build inputs, so its identity changing is the "something
   // changed" signal; the cleanup cancels the pending run, giving a trailing-edge debounce.
+  // The very first run (data just became ready) goes out immediately: nothing is being
+  // edited yet, so there is nothing to debounce.
+  const hasRun = useRef(false);
   useEffect(() => {
     if (!ready || classType === null) return;
+    if (!hasRun.current) {
+      hasRun.current = true;
+      runOptimizer();
+      return;
+    }
     const t = window.setTimeout(runOptimizer, 250);
     return () => window.clearTimeout(t);
   }, [ready, classType, runOptimizer]);

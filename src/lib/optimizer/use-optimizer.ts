@@ -18,6 +18,7 @@ export function useOptimizer() {
   const snapshot = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
   return {
     run: store.run,
+    warm: store.warm,
     cancel: store.cancel,
     applyPending: store.applyPending,
     /** Non-subscribing read of the current snapshot, for click-time reads of `shown`. */

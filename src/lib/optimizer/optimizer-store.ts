@@ -74,6 +74,8 @@ export interface OptimizerStore {
    * the same optimizer input is the right one to attach.
    */
   run(input: OptimizerInput, origin: QueryOrigin): void;
+  /** Spawn the worker ahead of the first run so its chunk fetch + module eval is off the first result's path. */
+  warm(): void;
   cancel(): void;
   applyPending(): void;
 }
@@ -317,6 +319,10 @@ export function createOptimizerStore(
       ceilingsView.set({ values: carry?.ceilingSeed ?? null, exact: false });
       setState({ running: true, refinement: IDLE, runId: s });
       getWorker().postMessage({ seq: s, input, carry });
+    },
+
+    warm() {
+      getWorker();
     },
 
     // Abandon the in-flight run: bump the seq (so any late messages are ignored) and tear
