@@ -229,6 +229,12 @@ export function makeInternalPiece(
  * here is worth a full +3 to the maximize dump, while a stat mod left unspent is worth
  * nothing (mods are only ever socketed to cover targets). Returns per-stat mod points,
  * artifice points, and counts, or null if infeasible.
+ *
+ * CONTRACT with the admission bound (bounds.ts, `MAX_MOD_OVERSHOOT` = 9): the stat-mod
+ * points placed on a stat never exceed its deficit by more than 9 — majors first (at most
+ * ⌈d/10⌉, so ≤ 9 over), then minors (≤ 4 over). Reordering minors before majors, or
+ * covering with more points than the deficit needs, would silently make that bound
+ * inadmissible (results change with no type error); tuning.test.ts pins the overshoot.
  */
 export function assignMods(
   deficits: number[],

@@ -13,11 +13,9 @@ import {
 import {
   buildSlots,
   computeSuffixBounds,
-  fragmentCredit,
+  makeAdmissionBound,
   makeJointMinCheck,
-  makeModUpside,
-  tightenTuneTotalUpside,
-  zeroClampSlack,
+  nextExoticCount,
 } from "./bounds";
 import { CEILING_BUDGET_MS, runCeilings } from "./ceilings";
 import { createPowerTracker, loadoutPower } from "./power";
@@ -166,36 +164,15 @@ export function solve(
     };
   }
 
-  // Pool-wide tightening of the per-piece tuning credit in the admission bound (must
-  // precede computeSuffixBounds, which folds it into suffixTotal). The ceiling probes
-  // share `slots` but never read this field.
-  tightenTuneTotalUpside(slots, frag, min);
   // buildSlots pre-filtered constraint-ineligible exotics out of the pool, so every
   // remaining exotic counts toward "require"/"specific" — the reachability predicate
-  // is just p.exotic (one eligibility rule, encoded once, in buildSlots).
-  const {
-    suffixStat,
-    suffixTotal,
-    setSuffix,
-    exoticSuffix,
-    artSuffix,
-    subsetSuffix,
-    suffixMinStat,
-    suffixDownStat,
-    suffixNetTotal,
-  } = computeSuffixBounds(slots, reqs, needExotic, (p) => p.exotic);
-  const fragUpside = fragmentCredit(frag, suffixMinStat);
-  // Second admission bound's constants: fragments counted signed, plus the pool-wide
-  // clamp-at-zero allowance (see zeroClampSlack).
-  const fragSum = frag.reduce((a: number, v: number) => a + v, 0);
-  const zeroSlack = zeroClampSlack(
+  // is just p.exotic (one eligibility rule, encoded once, in buildSlots). The top-N
+  // options tighten the per-piece tuning credit inside suffixTotal for this query.
+  const suffix = computeSuffixBounds(slots, reqs, needExotic, (p) => p.exotic, {
     frag,
-    min,
-    suffixMinStat,
-    suffixDownStat,
-    maxModPoints,
-    artSuffix[0],
-  );
+    mins: min,
+  });
+  const { suffixStat, setSuffix, exoticSuffix, artSuffix, subsetSuffix } = suffix;
 
   const heap = new TopNHeap(maxResults);
   // Pre-seed from a prior pass over the SAME input (see SolveOptions.heapSeed): the
@@ -216,9 +193,6 @@ export function solve(
   const sumTuneDown = new Array(NUM_STATS).fill(0);
   const chosen: InternalPiece[] = new Array(NUM_SLOTS);
   const setCounts = new Array(reqs.length).fill(0);
-  let runningTotal = 0;
-  // runningTotal's twin with each piece's NET tuning credit (second admission bound).
-  let runningNet = 0;
   // Artifice pieces chosen so far — each is a free +3 the bounds must account for.
   // Boxed so the shared joint-min check reads the live count.
   const chosenArt = { n: 0 };
@@ -284,34 +258,22 @@ export function solve(
     }
     return true;
   };
-  // The mod term of the admission bound (see makeModUpside): zero when no stat has a
-  // minimum, never more than the budget.
-  const modUpside = makeModUpside(
+  // Top-N admission bound from slot k (see makeAdmissionBound). A subtree whose bound
+  // can't beat the heap's worst is skipped (admission is strict, so a tie can't enter
+  // either).
+  const admission = makeAdmissionBound(
+    slots,
+    suffix,
     min,
     sum,
     frag,
     sumTuneDown,
-    suffixMinStat,
-    suffixDownStat,
     maxModPoints,
+    chosenArt,
   );
-  // Top-N admission bound from slot k — the tighter of two admissible bounds on any
-  // leaf the tuner can accept, each = pieces' stats + a tuning credit + the best the
-  // remaining slots can add + what mods can still contribute + the free artifice +3s +
-  // a fragment term:
-  //  1. tuning credited by its positive parts per piece (a −5 might be absorbed by a
-  //     clamp), fragments by their unabsorbable part (fragmentCredit);
-  //  2. tuning credited NET per piece (+5/−5 cancel), fragments signed, and every
-  //     clamp-at-zero absorption paid once pool-wide (zeroClampSlack) — tighter when
-  //     negative fragments or many directionals make bound 1 credit −5s as free.
-  // A subtree whose bound can't beat the heap's worst is skipped (admission is strict,
-  // so a tie can't enter either).
   const cannotBeatWorst = (k: number): boolean => {
     if (!heap.full()) return false;
-    const shared = modUpside(k) + (chosenArt.n + artSuffix[k]) * 3;
-    const positive = runningTotal + suffixTotal[k] + fragUpside;
-    const net = runningNet + suffixNetTotal[k] + fragSum + zeroSlack;
-    if ((positive < net ? positive : net) + shared > heap.worst) return false;
+    if (admission.bound(k) > heap.worst) return false;
     boundPruned = true;
     return true;
   };
@@ -374,20 +336,14 @@ export function solve(
         idx1 = i;
         emitTopNProgress();
       }
-      // Exotic-ineligible pieces were pre-filtered from the pool; only the ≤1 rule remains.
-      const nextExotic = exoticCount + (p.exotic ? 1 : 0);
-      if (nextExotic > 1) continue; // ≤1 exotic per loadout
-      // A required exotic that no later slot can supply: this child can only lead to
-      // exotic-less leaves, which the leaf rejects anyway — skip it here (the child's
-      // own reachability check runs AFTER its joint-min work, and a leaf has none).
-      if (needExotic && nextExotic === 0 && exoticSuffix[k + 1] === 0) continue;
+      const nextExotic = nextExoticCount(exoticCount, p, k, needExotic, exoticSuffix);
+      if (nextExotic < 0) continue;
       for (let s = 0; s < NUM_STATS; s++) {
         sum[s] += p.stats[s];
         sumTuneUp[s] += p.tuneStatUpside[s];
         sumTuneDown[s] += p.tuneStatDownside[s];
       }
-      runningTotal += p.total + p.tuneTotalUpside;
-      runningNet += p.total + p.tuneNetUpside;
+      admission.push(k, i);
       if (p.artifice) chosenArt.n++;
       for (let r = 0; r < reqs.length; r++) {
         if (p.setHash === reqs[r].setHash) setCounts[r]++;
@@ -400,8 +356,7 @@ export function solve(
         if (p.setHash === reqs[r].setHash) setCounts[r]--;
       }
       if (p.artifice) chosenArt.n--;
-      runningTotal -= p.total + p.tuneTotalUpside;
-      runningNet -= p.total + p.tuneNetUpside;
+      admission.pop(k, i);
       for (let s = 0; s < NUM_STATS; s++) {
         sum[s] -= p.stats[s];
         sumTuneUp[s] -= p.tuneStatUpside[s];
