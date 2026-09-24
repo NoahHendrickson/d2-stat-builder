@@ -28,6 +28,8 @@ import { Check } from "@phosphor-icons/react";
 export interface DreamBuildDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** Called once the open/close animation finishes. */
+  onOpenChangeComplete?: (open: boolean) => void;
   /** The build to dream on; kept while the modal animates closed. */
   build: OptimizerLoadout | null;
   /** The dream query for a build at a set of targets (other builder settings carried over). */
@@ -44,11 +46,12 @@ export interface DreamBuildDialogProps {
 export function DreamBuildDialog({
   open,
   onOpenChange,
+  onOpenChangeComplete,
   build,
   ...rest
 }: DreamBuildDialogProps) {
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={onOpenChange} onOpenChangeComplete={onOpenChangeComplete}>
       <DialogContent className="flex h-[min(88vh,54rem)] flex-col gap-4 p-5 sm:max-w-7xl">
         {/* Mounted only while the popup is, so each open starts from the build's stats. */}
         {build && <DreamBuildBody key={build.pieceIds.join("|")} build={build} {...rest} />}
@@ -62,11 +65,18 @@ function DreamBuildBody({
   makeInput,
   pieceMap,
   statIcons,
-}: Omit<DreamBuildDialogProps, "open" | "onOpenChange" | "build"> & {
+}: Omit<DreamBuildDialogProps, "open" | "onOpenChange" | "onOpenChangeComplete" | "build"> & {
   build: OptimizerLoadout;
 }) {
   const [targets, setTargets] = useState(build.stats);
-  const input = useMemo(() => makeInput(build, targets), [makeInput, build, targets]);
+  // The builder's settings as of opening: the modal blocks editing them, so the only
+  // thing that could change `makeInput` meanwhile is a background refetch — which must
+  // not restart a long search over the same build.
+  const [makeInputAtOpen] = useState(() => makeInput);
+  const input = useMemo(
+    () => makeInputAtOpen(build, targets),
+    [makeInputAtOpen, build, targets],
+  );
   const state = useDreamBuild(input);
 
   // The sliders' max overlay: how far THIS build reaches on each stat given the others,

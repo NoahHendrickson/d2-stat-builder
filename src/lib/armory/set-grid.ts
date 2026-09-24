@@ -5,7 +5,7 @@
  *
  * Runtime imports are relative (not `@/`) — the vitest runner has no `@/` alias.
  */
-import type { DreamArchetype } from "../optimizer/dream";
+import type { ArmorArchetype } from "./archetypes";
 import type { ArmorPiece } from "./normalize";
 import {
   ARMOR_SLOTS,
@@ -30,7 +30,7 @@ export interface SetGrid {
 type GridPiece = Pick<ArmorPiece, "slot" | "setHash" | "archetype" | "baseStats" | "tunedStat">;
 
 /** The four stats an archetype can roll as tertiary, in the UI's stat order. */
-export function tertiaryColumns(archetype: DreamArchetype): number[] {
+export function tertiaryColumns(archetype: ArmorArchetype): number[] {
   return STAT_DISPLAY_ORDER.map((key) => STAT_ORDER.indexOf(key)).filter(
     (s) => s !== archetype.primary && s !== archetype.secondary,
   );
@@ -43,7 +43,7 @@ export function tertiaryColumns(archetype: DreamArchetype): number[] {
 export function setArchetypeGrid(
   pieces: readonly GridPiece[],
   setHash: number,
-  archetype: DreamArchetype,
+  archetype: ArmorArchetype,
   tuned: number | null = null,
 ): SetGrid {
   const columns = tertiaryColumns(archetype);

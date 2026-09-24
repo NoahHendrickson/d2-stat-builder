@@ -1,14 +1,13 @@
 "use client";
 
 import { Fragment, useMemo, useState } from "react";
-import { GridFour, PushPin } from "@phosphor-icons/react";
+import { PushPin } from "@phosphor-icons/react";
 import {
   Dialog,
   DialogContent,
   DialogDescription,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import {
   Select,
@@ -18,7 +17,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { TooltipLabel } from "@/components/ui/tooltip";
 import { ArmorThumb } from "@/components/armor-thumb";
 import { StatGlyph } from "@/components/stat-glyph";
 import type { ArmorPiece } from "@/lib/armory/normalize";
@@ -40,7 +38,7 @@ import {
   type ArmorSlot,
   type StatIconMap,
 } from "@/lib/armory/stats";
-import type { DreamArchetype } from "@/lib/optimizer/dream";
+import type { ArmorArchetype } from "@/lib/armory/archetypes";
 import { cn } from "@/lib/utils";
 
 const ANY_TUNING = "any";
@@ -56,13 +54,15 @@ const SECOND = { fill: "bg-[#41a6ff]/25", border: "border-[#41a6ff]/60", swatch:
 type SlotLooks = Partial<Record<ArmorSlot, SetSlotIcon>>;
 
 /**
- * The grid button at the end of a set row: opens a modal showing, for one archetype, how
- * many pieces of a set you own per slot × tertiary stat, and their tuned stats —
- * optionally side by side with a second set, with every 2pc + 2pc split the two allow.
- * It opens on the row's set; the set can be switched without closing it.
+ * The roll-grid modal: for one archetype, how many pieces of a set you own per slot ×
+ * tertiary stat, and their tuned stats — optionally side by side with a second set, with
+ * every 2pc + 2pc split the two allow. Opens on `initialSetHash`; the set can be switched
+ * without closing it. One instance serves the whole set list.
  */
 export function SetGridDialog({
-  set,
+  open,
+  onOpenChange,
+  initialSetHash,
   sets,
   pieces,
   archetypes,
@@ -70,32 +70,26 @@ export function SetGridDialog({
   getSlotIcons,
   pinnedSets,
 }: {
-  set: ArmorSetInfo;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  /** The set it opens on (the row whose grid button was pressed). */
+  initialSetHash: number;
   /** Every set in the pool, pinned first then the list's sort — the set pickers' order. */
   sets: readonly ArmorSetInfo[];
   pinnedSets: ReadonlySet<number>;
   /** The optimizer pool's pieces (any set — filtered inside). */
   pieces: readonly ArmorPiece[];
-  archetypes: readonly DreamArchetype[];
+  archetypes: readonly ArmorArchetype[];
   statIcons: StatIconMap;
   /** The set's own thumbnail per slot (row headers). */
   getSlotIcons: (setHash: number) => SlotLooks;
 }) {
-  const label = `${set.name} rolls by archetype`;
   return (
-    <Dialog>
-      <TooltipLabel label={label}>
-        <DialogTrigger
-          aria-label={label}
-          className="text-muted-foreground hover:text-foreground focus-visible:ring-outline-strong flex size-6 cursor-pointer items-center justify-center rounded-none outline-none focus-visible:ring-1"
-        >
-          <GridFour className="size-4" aria-hidden />
-        </DialogTrigger>
-      </TooltipLabel>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[88vh] gap-4 overflow-y-auto p-5 sm:max-w-3xl">
-        {/* Mounted only while open, so each open starts on this row's set. */}
+        {/* Mounted only while open, so each open starts on the pressed row's set. */}
         <SetGridBody
-          initialSetHash={set.setHash}
+          initialSetHash={initialSetHash}
           sets={sets}
           pinnedSets={pinnedSets}
           pieces={pieces}
@@ -139,7 +133,7 @@ function SetGridBody({
   sets: readonly ArmorSetInfo[];
   pinnedSets: ReadonlySet<number>;
   pieces: readonly ArmorPiece[];
-  archetypes: readonly DreamArchetype[];
+  archetypes: readonly ArmorArchetype[];
   statIcons: StatIconMap;
   getSlotIcons: (setHash: number) => SlotLooks;
 }) {
@@ -346,6 +340,7 @@ function SetGridBody({
         role="table"
         aria-label={`${other ? `${set.name} and ${other.name}` : set.name} ${archetype.name} pieces by slot and tertiary stat`}
       >
+        <div role="row" className="col-span-full grid grid-cols-subgrid items-center">
         <span className="text-muted-foreground text-xs" role="columnheader">
           Tertiary
         </span>
@@ -360,6 +355,7 @@ function SetGridBody({
           </span>
         ))}
         {other && <span aria-hidden />}
+        </div>
         {grid.rows.map((row, r) => {
           const slot = ARMOR_SLOTS[r];
           return (

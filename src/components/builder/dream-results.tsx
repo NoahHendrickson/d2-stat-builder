@@ -26,9 +26,6 @@ import type { DreamBuildState } from "@/lib/optimizer/use-dream-build";
 import type { AppliedTuning, OptimizerLoadout } from "@/lib/optimizer/types";
 import { cn } from "@/lib/utils";
 
-/** Every (tertiary, tuned) drop of one archetype: 4 tertiaries × 6 tuned stats. */
-const ROLLS_PER_ARCHETYPE = 24;
-
 function pieces(n: number): string {
   return `${n} new piece${n === 1 ? "" : "s"}`;
 }
@@ -39,8 +36,9 @@ function workingLabel(phase: number | null): string {
   return `Trying ${pieces(phase)}…`;
 }
 
-function statusLabel({ running, phase, result }: DreamBuildState): string {
+function statusLabel({ running, phase, result, failed }: DreamBuildState): string {
   if (running) return workingLabel(phase);
+  if (failed) return "Search failed";
   if (!result) return "";
   if (result.newPieces === null) return "Out of reach";
   if (result.newPieces === 0) return "No farming needed";
@@ -57,7 +55,7 @@ function WorkingBar({ running }: { running: boolean }) {
       className="relative h-1 w-full overflow-hidden bg-foreground/8"
     >
       {running && (
-        <div className="bg-foreground absolute inset-y-0 left-0 w-2/5 animate-[dream-sweep_1.1s_ease-in-out_infinite]" />
+        <div className="bg-foreground absolute inset-y-0 left-0 w-2/5 animate-[dream-sweep_1.1s_ease-in-out_infinite] motion-reduce:w-full motion-reduce:animate-none motion-reduce:opacity-40" />
       )}
     </div>
   );
@@ -70,8 +68,10 @@ function Glyph({ stat, icons }: { stat: number; icons: StatIconMap }) {
 
 /** The tertiary / tuned requirements of one farm piece, as compactly as they allow. */
 function FarmRolls({ farm, icons }: { farm: FarmPiece; icons: StatIconMap }) {
-  if (farmOdds(farm) === ROLLS_PER_ARCHETYPE) {
-    return <span>Any tertiary, any tuning</span>;
+  const { n, of } = farmOdds(farm);
+  if (n === of) {
+    // An exotic's tuning is flexible, so its rolls only ever vary by tertiary.
+    return <span>{farm.exotic ? "Any tertiary" : "Any tertiary, any tuning"}</span>;
   }
   return (
     <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -79,7 +79,7 @@ function FarmRolls({ farm, icons }: { farm: FarmPiece; icons: StatIconMap }) {
         <span key={roll.tertiary} className="inline-flex items-center gap-1">
           <Glyph stat={roll.tertiary} icons={icons} />
           {STAT_LABELS[STAT_ORDER[roll.tertiary]]} tertiary
-          {roll.tuned === null ? (
+          {farm.exotic ? null : roll.tuned === null ? (
             <span className="text-muted-foreground">· any tuning</span>
           ) : (
             <span className="text-muted-foreground inline-flex items-center gap-1">
@@ -106,9 +106,14 @@ function FarmLine({
 }) {
   const slot = SLOT_LABELS[ARMOR_SLOTS[farm.slot]];
   const title = farm.exotic
-    ? `${farm.exoticName ?? `Any exotic ${slot.toLowerCase()}`} · ${farm.archetype}`
+    ? `${farm.exoticName ?? "Exotic"} · ${farm.archetype}`
     : `${farm.archetype} ${slot.toLowerCase()}`;
   const odds = farmOdds(farm);
+  // A truncated roll list is a lower bound: say so on the piece, not just globally.
+  const atLeast = farm.complete ? "" : "≥ ";
+  const oddsTitle = farm.exotic
+    ? `${atLeast}${odds.n} of the ${odds.of} possible tertiaries work (an exotic's tuning is flexible)`
+    : `${atLeast}${odds.n} of the ${odds.of} possible ${farm.archetype} rolls (tertiary × tuned stat) work`;
   return (
     <div className="flex items-start gap-3">
       {farm.exotic && exoticIcon ? (
@@ -123,9 +128,10 @@ function FarmLine({
           <span className="truncate text-sm font-medium">{title}</span>
           <span
             className="text-muted-foreground shrink-0 tabular-nums"
-            title={`${odds} of the ${ROLLS_PER_ARCHETYPE} possible ${farm.archetype} rolls (tertiary × tuned stat) work`}
+            title={oddsTitle + (farm.complete ? "" : " — listing them ran out of time, so more may")}
           >
-            {odds}/{ROLLS_PER_ARCHETYPE} rolls
+            {atLeast}
+            {odds.n}/{odds.of} rolls
           </span>
         </div>
         <span className="text-muted-foreground inline-flex items-center gap-1">
@@ -329,7 +335,9 @@ export function DreamComparison({
   };
 
   let note: string | null = null;
-  if (!result || result.newPieces === 0) {
+  if (state.failed && !running) {
+    note = "The search hit an error. Change a stat to try again.";
+  } else if (!result || result.newPieces === 0) {
     note =
       idleNote ??
       (result
@@ -431,7 +439,7 @@ export function DreamComparison({
                 </div>
               )}
               {v.kind === "pending" && (
-                <span className="bg-foreground/10 h-10 w-full animate-pulse" aria-hidden />
+                <span className="bg-foreground/10 h-10 w-full animate-pulse motion-reduce:animate-none" aria-hidden />
               )}
               {v.kind === "none" && <span className="text-muted-foreground text-xs">—</span>}
             </Fragment>

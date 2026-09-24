@@ -1,10 +1,16 @@
 import { memoByManifest } from "../manifest/memo";
-import type { DreamArchetype } from "../optimizer/dream";
 import {
   ARMOR_ARCHETYPE_PLUG_CATEGORY,
   STAT_LABELS,
   STAT_ORDER,
 } from "./stats";
+
+/** An Armor 3.0 archetype: its fixed primary (30) and secondary (25) stat indices. */
+export interface ArmorArchetype {
+  name: string;
+  primary: number;
+  secondary: number;
+}
 
 const STAT_BY_LABEL = new Map(
   STAT_ORDER.map((key, i) => [STAT_LABELS[key].toLowerCase(), i]),
@@ -32,8 +38,8 @@ export function parseArchetypeDescription(
  * scanned from the archetype plugs so a new archetype needs no code change. Sorted by
  * name; one entry per name (redacted and duplicate plugs skipped).
  */
-export const getArchetypes = memoByManifest((manifest): DreamArchetype[] => {
-  const byName = new Map<string, DreamArchetype>();
+export const getArchetypes = memoByManifest((manifest): ArmorArchetype[] => {
+  const byName = new Map<string, ArmorArchetype>();
   const table = manifest.all("DestinyInventoryItemDefinition");
   for (const key in table) {
     const def = table[key];

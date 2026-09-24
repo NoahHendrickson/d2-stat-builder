@@ -8,24 +8,14 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { MagnifyingGlass } from "@phosphor-icons/react";
+import dynamic from "next/dynamic";
 import { useSession } from "@/lib/auth/use-session";
 import { useArmory } from "@/lib/armory/use-armory";
 import { useManifest } from "@/lib/manifest/use-manifest";
 import { useOptimizer } from "@/lib/optimizer/use-optimizer";
 import { useSmoothedProgress } from "@/lib/use-smoothed-progress";
-import { availableSets, setSlotIcons } from "@/lib/armory/sets";
-import {
-  DEFAULT_SET_FILTERS,
-  hasCustomSetFilters,
-  passesSetFilters,
-  type SetFilters,
-} from "@/lib/armory/set-filters";
-import {
-  DEFAULT_SET_SORT,
-  sortSets,
-  type SetSortKey,
-} from "@/lib/armory/set-sort";
+import { availableSets } from "@/lib/armory/sets";
+import { DEFAULT_SET_FILTERS, type SetFilters } from "@/lib/armory/set-filters";
 import {
   availableFragments,
   SUBCLASSES,
@@ -47,46 +37,39 @@ import {
   inDefaultOptimizerPool,
 } from "@/lib/armory/optimizer-pool";
 import {
-  ARMOR_SLOTS,
   BALANCED_TUNING_PLUG_HASH,
   CLASS_NAMES,
   STAT_DISPLAY_ORDER,
   STAT_HASHES,
   STAT_ORDER,
-  offArchetypeIndices,
   type StatIconMap,
 } from "@/lib/armory/stats";
-import {
-  intrinsicBonus,
-  itemWatermark,
-  type ArmorPiece,
-} from "@/lib/armory/normalize";
+import { itemWatermark } from "@/lib/armory/normalize";
 import { getArchetypes } from "@/lib/armory/archetypes";
-import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { StatTargetRow } from "@/components/builder/stat-target-row";
 import { SectionHeading } from "@/components/section-heading";
-import { SetRow } from "@/components/builder/set-row";
 import { ArmoryStatus } from "@/components/armory/armory-status";
 import { ManifestStatus } from "@/components/manifest/manifest-status";
 import { ExoticPicker } from "@/components/builder/exotic-picker";
 import { ExoticClassPerkPicker } from "@/components/builder/exotic-class-perk-picker";
 import { FragmentPicker } from "@/components/builder/fragment-picker";
-import { SetListControls } from "@/components/builder/set-list-controls";
 import { ClassEmblemTabs } from "@/components/builder/class-emblem-tabs";
 import { SettingRow } from "@/components/builder/setting-row";
 import { PowerRangeControls } from "@/components/builder/power-range-controls";
 import { BuildsSurface } from "@/components/builder/builds-surface";
 import type { BuildsColumnContentProps } from "@/components/builder/builds-column-content";
-import { DreamBuildDialog } from "@/components/builder/dream-build-dialog";
+import { SetBonusesSection } from "@/components/builder/set-bonuses-section";
+import { dreamInputForBuild, type DreamSettings } from "@/lib/optimizer/dream-input";
+import { armorToOptimizerPiece } from "@/lib/optimizer/from-armory";
+
 import type {
   ExoticConstraint,
   OptimizerInput,
   OptimizerLoadout,
-  OptimizerPiece,
 } from "@/lib/optimizer/types";
-import type { DreamExotic, DreamInput } from "@/lib/optimizer/dream";
+import type { DreamInput } from "@/lib/optimizer/dream";
 import {
   DEFAULT_POWER_RANGE,
   forcesDreamersBond,
@@ -117,6 +100,11 @@ import { useOptimizerWarmup } from "@/lib/optimizer/use-optimizer-warmup";
 import { MAX_SET_BONUSES, type BuilderSnapshot, type QueryOrigin } from "@/lib/loadouts/types";
 
 const MAX_MODS = 5;
+// The Dream build modal is opened by few sessions; keep it out of the initial bundle.
+const DreamBuildDialog = dynamic(
+  () => import("@/components/builder/dream-build-dialog").then((m) => m.DreamBuildDialog),
+  { ssr: false },
+);
 
 export function BuilderPanel({
   showInlineStatusCards = true,
@@ -171,19 +159,17 @@ export function BuilderPanel({
   const [pinnedSets, setPinnedSets] = useState<number[]>(
     () => initialSaved?.pinnedSets ?? [],
   );
-  const [setQuery, setSetQuery] = useState("");
   const [setFilters, setSetFilters] = useState<SetFilters>(
     () => initialSaved?.setFilters ?? DEFAULT_SET_FILTERS,
   );
   /**
    * The Dream build modal: which piece of a build to replace with a farmable Tier-5 roll
    * to reach targets past its max. The build outlives `dreamOpen` so the modal can
-   * animate closed with its content.
+   * animate closed with its content, and is dropped once it has. `null` until the first
+   * open, so the (lazy) modal chunk isn't fetched before then.
    */
   const [dreamOpen, setDreamOpen] = useState(false);
   const [dreamBuild, setDreamBuild] = useState<OptimizerLoadout | null>(null);
-  /** Set-list ordering — a view preference, so it's per-session rather than persisted. */
-  const [setSort, setSetSort] = useState<SetSortKey>(DEFAULT_SET_SORT);
   // Held by name, not index: the exotics list is rebuilt (and re-indexed) whenever a
   // pool toggle changes, and an index would slide onto whichever exotic took its place.
   const [selectedExoticName, setSelectedExoticName] = useState<string | null>(
@@ -279,38 +265,6 @@ export function BuilderPanel({
     [sets],
   );
 
-  // Pinned sets float to the top; within each group the chosen sort order is kept.
-  // Pins for sets outside the current list (e.g. another class) simply don't show.
-  // Both groups are narrowed by the search query (case-insensitive substring).
-  const { pinnedList, unpinnedList } = useMemo(() => {
-    const q = setQuery.trim().toLowerCase();
-    const shown = sortSets(
-      sets.filter((s) => {
-        if (q && !s.name.toLowerCase().includes(q)) return false;
-        return passesSetFilters(s.ownedCount, setFilters);
-      }),
-      setSort,
-    );
-    const pinned = new Set(pinnedSets);
-    return {
-      pinnedList: shown.filter((s) => pinned.has(s.setHash)),
-      unpinnedList: shown.filter((s) => !pinned.has(s.setHash)),
-    };
-  }, [sets, pinnedSets, setQuery, setFilters, setSort]);
-
-  const customSetFilters = hasCustomSetFilters(setFilters);
-
-  // The set grid's pickers follow the list's order — pinned first, each group in the
-  // chosen sort — but ignore its search and filters, so every set stays reachable.
-  const pinnedSetHashes = useMemo(() => new Set(pinnedSets), [pinnedSets]);
-  const gridSets = useMemo(() => {
-    const sorted = sortSets(sets, setSort);
-    return [
-      ...sorted.filter((s) => pinnedSetHashes.has(s.setHash)),
-      ...sorted.filter((s) => !pinnedSetHashes.has(s.setHash)),
-    ];
-  }, [sets, setSort, pinnedSetHashes]);
-
   // Set requirements narrowed to sets the player owns for this class: a restored (or
   // class-corrected) requirement for a set they no longer own would make every build
   // infeasible. The optimizer and DIM/export read this pruned view; persistence and
@@ -386,11 +340,6 @@ export function BuilderPanel({
   }, [manifest]);
 
   const archetypes = useMemo(() => (manifest ? getArchetypes(manifest) : []), [manifest]);
-  const getSetSlotIcons = useCallback(
-    (setHash: number) =>
-      manifest && classType !== null ? setSlotIcons(manifest, setHash, classType) : {},
-    [manifest, classType],
-  );
 
   const balancedTuningIcon = useMemo(
     () =>
@@ -818,56 +767,35 @@ export function BuilderPanel({
     return shown.origin;
   }, [getSnapshot]);
 
-  // The search input over owned pieces — shared by the regular search and dream mode.
+  // The builder's search settings (everything but pieces, targets and the exotic) —
+  // shared by the regular search and the dream search.
+  const searchSettings = useMemo(
+    (): DreamSettings => ({
+      mods: { major, minor: MAX_MODS - major },
+      setRequirements,
+      allowTuning: true,
+      allowBalancedTuning: useBalancedTuning,
+      fragmentBonus,
+      powerRange: toOptimizerPowerRange(powerRange),
+    }),
+    [major, setRequirements, useBalancedTuning, fragmentBonus, powerRange],
+  );
+
+  // The regular search input over owned pieces.
   const optimizerInput = useMemo((): OptimizerInput | null => {
     if (classType === null) return null;
-
-    const toOpt = (p: ArmorPiece): OptimizerPiece => ({
-      id: p.instanceId,
-      stats: p.stats,
-      exotic: p.isExotic,
-      hash: p.itemHash,
-      setHash: p.setHash,
-      power: p.power,
-      // Artifice is legacy-only, tuning Tier-5-only; enforce the exclusivity here
-      // (the solver stays general, the results UI shares one column for both).
-      artifice: p.isArtifice && p.tunedStat === undefined,
-      tuning:
-        p.tunedStat !== undefined
-          ? { tuned: p.tunedStat, offStats: offArchetypeIndices(p.baseStats) }
-          : undefined,
-    });
-
-    const slots = slotPieces.map((pieces) => pieces.map(toOpt));
-
     const exotic: ExoticConstraint =
       selectedExotic === null
         ? { mode: "any" }
         : { mode: "specific", hashes: exotics[selectedExotic]?.hashes ?? [] };
     return {
-      slots,
+      ...searchSettings,
+      slots: slotPieces.map((pieces) => pieces.map(armorToOptimizerPiece)),
       minimums: targets,
-      mods: { major, minor: MAX_MODS - major },
-      setRequirements,
       exotic,
-      allowTuning: true,
-      allowBalancedTuning: useBalancedTuning,
-      fragmentBonus,
-      powerRange: toOptimizerPowerRange(powerRange),
       maxResults: 200,
     };
-  }, [
-    slotPieces,
-    classType,
-    targets,
-    major,
-    setRequirements,
-    selectedExotic,
-    exotics,
-    useBalancedTuning,
-    fragmentBonus,
-    powerRange,
-  ]);
+  }, [slotPieces, classType, targets, selectedExotic, exotics, searchSettings]);
 
   const runOptimizer = useCallback(() => {
     if (!optimizerInput) return;
@@ -893,53 +821,28 @@ export function BuilderPanel({
   // inputs, so its identity changing is the "something changed" signal.
   useAutoSearch(searchReady && classType !== null, runOptimizer);
 
-  // The dream query for one build: each slot holds only that build's piece, so k new
-  // pieces = k of its pieces replaced. Every other setting is the builder's. The build's
-  // exotic stays (or is re-rolled in place); a class item that's an exotic (its roll
-  // comes from Spirit perks) or pinned to Dreamer's Bond is never replaced.
+  // The dream query for one build at the modal's targets (see dreamInputForBuild).
   const makeDreamInput = useCallback(
-    (build: OptimizerLoadout, dreamTargets: number[]): DreamInput | null => {
-      if (!optimizerInput || !manifest) return null;
-      const slots = optimizerInput.slots.map((candidates, i) =>
-        candidates.filter((p) => p.id === build.pieceIds[i]),
-      );
-      if (slots.some((s) => s.length === 0)) return null;
-      const classItemSlot = ARMOR_SLOTS.indexOf("classItem");
-      const exoticSlot = build.pieceIds.findIndex((id) => pieceMap.get(id)?.isExotic);
-      const exoticPiece = exoticSlot >= 0 ? pieceMap.get(build.pieceIds[exoticSlot]) : undefined;
-      const exotic: DreamExotic =
-        exoticPiece && exoticSlot !== classItemSlot
-          ? {
-              kind: "specific",
-              slot: exoticSlot,
-              hash: exoticPiece.itemHash,
-              name: exoticPiece.name,
-              intrinsic:
-                exoticPiece.archetype !== undefined
-                  ? intrinsicBonus(exoticPiece)
-                  : [0, 0, 0, 0, 0, 0],
-            }
-          : { kind: "none" };
-      return {
-        base: {
-          ...optimizerInput,
-          slots,
-          minimums: dreamTargets,
-          exotic: exoticPiece
-            ? { mode: "specific", hashes: [exoticPiece.itemHash] }
-            : { mode: "none" },
-        },
-        archetypes: getArchetypes(manifest),
-        exotic,
-        lockedSlots:
-          exoticSlot === classItemSlot || useDreamersBond ? [classItemSlot] : [],
-      };
-    },
-    [optimizerInput, manifest, pieceMap, useDreamersBond],
+    (build: OptimizerLoadout, dreamTargets: number[]): DreamInput | null =>
+      manifest
+        ? dreamInputForBuild({
+            pieces: build.pieceIds.map((id) => pieceMap.get(id)),
+            targets: dreamTargets,
+            settings: searchSettings,
+            archetypes,
+            manifest,
+            classItemPinned: useDreamersBond,
+          })
+        : null,
+    [manifest, pieceMap, searchSettings, archetypes, useDreamersBond],
   );
   const openDream = useCallback((build: OptimizerLoadout) => {
     setDreamBuild(build);
     setDreamOpen(true);
+  }, []);
+  // Drop the build once the modal has finished closing (it pins its pieces otherwise).
+  const onDreamOpenChangeComplete = useCallback((open: boolean) => {
+    if (!open) setDreamBuild(null);
   }, []);
 
   const setTarget = useCallback(
@@ -1014,11 +917,6 @@ export function BuilderPanel({
   );
 
   const onMajorChange = useCallback((v: string) => setMajor(Number(v)), []);
-  const onSetQueryChange = useCallback(
-    (e: React.ChangeEvent<HTMLInputElement>) => setSetQuery(e.target.value),
-    [],
-  );
-
   const togglePin = useCallback((setHash: number) => {
     setPinnedSets((prev) =>
       prev.includes(setHash)
@@ -1153,86 +1051,19 @@ export function BuilderPanel({
             </Section>
 
             <Section title="Set bonuses">
-              <div className="space-y-2">
-                <div className="relative">
-                  <MagnifyingGlass
-                    className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 z-10 size-4 -translate-y-1/2"
-                    aria-hidden
-                  />
-                  <Input
-                    type="search"
-                    value={setQuery}
-                    onChange={onSetQueryChange}
-                    placeholder="Search set bonuses"
-                    aria-label="Search set bonuses"
-                    className="pl-8"
-                  />
-                </div>
-                <SetListControls
-                  count={pinnedList.length + unpinnedList.length}
-                  sort={setSort}
-                  onSortChange={setSetSort}
-                  filters={setFilters}
-                  onFilterChange={setSetFilter}
-                />
-              </div>
-              {sets.length === 0 ? (
-                <p className="text-muted-foreground text-xs">
-                  No set-bonus armor found for this class.
-                </p>
-              ) : pinnedList.length === 0 && unpinnedList.length === 0 ? (
-                <p className="text-muted-foreground text-xs">
-                  {setQuery.trim() && customSetFilters
-                    ? `No sets match "${setQuery.trim()}" with the current settings.`
-                    : setQuery.trim()
-                      ? `No sets match "${setQuery.trim()}".`
-                      : customSetFilters
-                        ? "No sets match the current settings."
-                        : "No sets to show."}
-                </p>
-              ) : (
-                // Figma 17:5731: name · 2pc perk · 4pc perk columns (+ the roll-grid button), 16px row gap
-                <div className="grid grid-cols-[minmax(0,1.4fr)_minmax(0,0.75fr)_minmax(0,1fr)_auto] items-center gap-x-4 gap-y-4">
-                  {pinnedList.map((s) => (
-                    <SetRow
-                      key={s.setHash}
-                      set={s}
-                      pinned
-                      req={setReqs[s.setHash]}
-                      onTogglePin={togglePin}
-                      onToggleSet={toggleSet}
-                      pieces={pool}
-                      archetypes={archetypes}
-                      statIcons={statIcons}
-                      getSlotIcons={getSetSlotIcons}
-                      sets={gridSets}
-                      pinnedSets={pinnedSetHashes}
-                    />
-                  ))}
-                  {pinnedList.length > 0 && unpinnedList.length > 0 && (
-                    <div
-                      className="border-border col-span-full border-t"
-                      aria-hidden
-                    />
-                  )}
-                  {unpinnedList.map((s) => (
-                    <SetRow
-                      key={s.setHash}
-                      set={s}
-                      pinned={false}
-                      req={setReqs[s.setHash]}
-                      onTogglePin={togglePin}
-                      onToggleSet={toggleSet}
-                      pieces={pool}
-                      archetypes={archetypes}
-                      statIcons={statIcons}
-                      getSlotIcons={getSetSlotIcons}
-                      sets={gridSets}
-                      pinnedSets={pinnedSetHashes}
-                    />
-                  ))}
-                </div>
-              )}
+              <SetBonusesSection
+                sets={sets}
+                setReqs={setReqs}
+                onToggleSet={toggleSet}
+                pinnedSets={pinnedSets}
+                onTogglePin={togglePin}
+                setFilters={setFilters}
+                onSetFilterChange={setSetFilter}
+                pieces={pool}
+                manifest={manifest}
+                classType={classType}
+                statIcons={statIcons}
+              />
             </Section>
 
             <Section title="Fragments">
@@ -1301,14 +1132,17 @@ export function BuilderPanel({
       </div>
       </div>
 
-      <DreamBuildDialog
-        open={dreamOpen}
-        onOpenChange={setDreamOpen}
-        build={dreamBuild}
-        makeInput={makeDreamInput}
-        pieceMap={pieceMap}
-        statIcons={statIcons}
-      />
+      {dreamBuild && (
+        <DreamBuildDialog
+          open={dreamOpen}
+          onOpenChange={setDreamOpen}
+          onOpenChangeComplete={onDreamOpenChangeComplete}
+          build={dreamBuild}
+          makeInput={makeDreamInput}
+          pieceMap={pieceMap}
+          statIcons={statIcons}
+        />
+      )}
 
       {/* Builds scroller spans the results column + the right leftover. */}
       <div className="d2-scroll min-h-0 min-w-0 lg:col-start-4 lg:col-end-6 lg:overflow-y-auto lg:overscroll-contain lg:pr-6 lg:pl-2">

@@ -4,16 +4,16 @@ import {
   dreamRolls,
   farmOdds,
   solveDream,
-  type DreamArchetype,
   type DreamInput,
 } from "./dream";
+import type { ArmorArchetype } from "../armory/archetypes";
 import { solve } from "./solve";
 import { realWarlockSlots } from "./real-pool.fixture";
 import type { OptimizerInput, OptimizerPiece } from "./types";
 
 // The 12 Armor 3.0 archetypes as of 2026-09-24 (live manifest), in STAT_ORDER
 // indices: weapons 0, health 1, class 2, grenade 3, super 4, melee 5.
-const ARCHETYPES: DreamArchetype[] = [
+const ARCHETYPES: ArmorArchetype[] = [
   { name: "Gunner", primary: 0, secondary: 3 },
   { name: "Powerhouse", primary: 0, secondary: 4 },
   { name: "Bulwark", primary: 1, secondary: 2 },
@@ -130,7 +130,7 @@ describe("solveDream", () => {
     expect(first.archetype).toBe("Skirmisher");
     expect(first.rolls).toHaveLength(4);
     expect(first.rolls.every((roll) => roll.tuned === null)).toBe(true);
-    expect(farmOdds(first)).toBe(24);
+    expect(farmOdds(first)).toEqual({ n: 24, of: 24 });
   });
 
   it("reports how far farming could push each stat past the owned max", () => {
@@ -182,19 +182,68 @@ describe("solveDream", () => {
     expect(exoticFarm[0].rolls.every((roll) => roll.tuned === null)).toBe(true);
   });
 
-  it("stays inside its budget on a real 496-piece pool", () => {
+  it("finds a one-piece answer on a real 496-piece pool, well inside its budget", () => {
+    // Health 175 is 10 past what the owned pool reaches (165); one farmed piece does it.
     const base: OptimizerInput = {
       slots: realWarlockSlots(),
-      minimums: [200, 0, 0, 160, 0, 0],
+      minimums: [0, 175, 0, 0, 0, 0],
       mods: { major: 3, minor: 2 },
       exotic: { mode: "any" },
       allowTuning: true,
       maxResults: 50,
     };
+    // The deadline is checked between solves, so the worst case overruns it by one
+    // solve plus the two ceiling passes; bound the assertion by all of that.
+    const budgetMs = 8000;
+    const solveBudgetMs = 2000;
     const t0 = performance.now();
-    const r = solveDream(dream(base, { exotic: { kind: "any" } }));
+    const r = solveDream(dream(base), { budgetMs, solveBudgetMs });
     const ms = performance.now() - t0;
-    expect(r.newPieces).not.toBe(0);
-    expect(ms).toBeLessThan(20000);
+    expect(r.capped).toBe(false);
+    expect(r.newPieces).toBe(1);
+    expect(r.options.length).toBeGreaterThan(0);
+    expect(r.ownedCeilings[1]).toBeLessThan(175);
+    expect(ms).toBeLessThan(budgetMs + solveBudgetMs + 2 * 1500 + 300);
   }, 30000);
+});
+
+describe("dreamCandidates exotic branch", () => {
+  const base = input([[], [], [], [], []], [0, 0, 0, 0, 0, 0]);
+  const specific = dream(base, {
+    exotic: { kind: "specific", slot: 1, hash: 42, name: "Gauntlets", intrinsic: [0, 10, 0, 0, 0, 0] },
+  });
+
+  it("offers only re-rolls of the exotic in its own slot, with its intrinsic bonus", () => {
+    const arms = dreamCandidates(1, specific);
+    expect(arms).toHaveLength(48);
+    for (const d of arms) {
+      expect(d.exotic).toBe(true);
+      expect(d.exoticName).toBe("Gauntlets");
+      expect(d.tuned).toBeNull();
+      const roll = dreamRolls(ARCHETYPES).find(
+        (r) => r.archetype.name === d.archetype && r.tertiary === d.tertiary,
+      )!;
+      expect(d.stats).toEqual(roll.stats.map((v, s) => v + (s === 1 ? 10 : 0)));
+    }
+  });
+
+  it("offers only legendaries elsewhere", () => {
+    const helmet = dreamCandidates(0, specific);
+    expect(helmet.length).toBe(48 * 7);
+    expect(helmet.every((d) => !d.exotic)).toBe(true);
+  });
+});
+
+describe("any-tuned dream rolls", () => {
+  it("can still take Balanced Tuning (every Tier 5 can, whatever it rolled)", () => {
+    // Five Gunner rolls with a Super tertiary: health/class/melee are off-stats at 5.
+    // Health 30 needs Balanced's +1 on each — only possible if any-tuned keeps Balanced.
+    const stats = [30, 5, 5, 25, 20, 5];
+    const slots: OptimizerPiece[][] = Array.from({ length: 5 }, (_, i) => [
+      { id: `p${i}`, stats, exotic: false, tuning: { tuned: 0, offStats: [1, 2, 5], directional: false } },
+    ]);
+    const out = solve({ ...input(slots, [0, 30, 0, 0, 0, 0]), allowBalancedTuning: true });
+    expect(out.loadouts).toHaveLength(1);
+    expect(out.loadouts[0].tuning.every((t) => t?.kind === "balanced")).toBe(true);
+  });
 });

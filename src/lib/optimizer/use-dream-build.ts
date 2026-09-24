@@ -15,9 +15,11 @@ export interface DreamBuildState {
   phase: number | null;
   /** The latest result; kept on screen (stale) while a newer search runs. */
   result: DreamResult | null;
+  /** The latest search crashed in the worker (cleared by the next one). */
+  failed: boolean;
 }
 
-const IDLE: DreamBuildState = { running: false, phase: null, result: null };
+const IDLE: DreamBuildState = { running: false, phase: null, result: null, failed: false };
 
 /**
  * Run the dream search for `input` whenever its identity changes (the caller memoizes it
@@ -31,7 +33,8 @@ export function useDreamBuild(input: DreamInput | null): DreamBuildState {
     forInput: DreamInput | null;
     phase: number | null;
     result: DreamResult | null;
-  }>({ forInput: null, phase: null, result: null });
+    failed: boolean;
+  }>({ forInput: null, phase: null, result: null, failed: false });
   const worker = useRef<Worker | null>(null);
   const busy = useRef(false);
   const seq = useRef(0);
@@ -68,8 +71,19 @@ export function useDreamBuild(input: DreamInput | null): DreamBuildState {
             return;
           }
           busy.current = false;
-          setState({ forInput: inFlight.current, phase: null, result: msg.result });
+          setState({ forInput: inFlight.current, phase: null, result: msg.result, failed: false });
         };
+        // A crash in the worker would otherwise leave `running` true forever (the result
+        // never lands). Settle the in-flight input as failed, keep the last result, and
+        // drop the worker so the next search starts a fresh one.
+        const fail = () => {
+          busy.current = false;
+          w.terminate();
+          if (worker.current === w) worker.current = null;
+          setState((prev) => ({ ...prev, forInput: inFlight.current, phase: null, failed: true }));
+        };
+        w.onerror = fail;
+        w.onmessageerror = fail;
         worker.current = w;
       }
       const s = ++seq.current;
@@ -77,9 +91,9 @@ export function useDreamBuild(input: DreamInput | null): DreamBuildState {
       inFlight.current = input;
       if (released.current) {
         released.current = false;
-        setState({ forInput: null, phase: null, result: null });
+        setState({ forInput: null, phase: null, result: null, failed: false });
       } else {
-        setState((prev) => ({ ...prev, phase: null }));
+        setState((prev) => ({ ...prev, phase: null, failed: false }));
       }
       worker.current.postMessage({ seq: s, input } satisfies DreamRequest);
     }, delay);
@@ -99,5 +113,6 @@ export function useDreamBuild(input: DreamInput | null): DreamBuildState {
     running: state.forInput !== input,
     phase: state.phase,
     result: state.result,
+    failed: state.failed,
   };
 }

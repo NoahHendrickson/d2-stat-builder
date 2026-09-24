@@ -17,6 +17,8 @@ function piece(
   tertiary: number,
   opts: { archetype?: string; tuned?: number; setHash?: number } = {},
 ) {
+  // Gunner's primary (0) and secondary (3) can't also be the tertiary.
+  if (tertiary === 0 || tertiary === 3) throw new Error(`tertiary ${tertiary} is a Gunner archetype stat`);
   const baseStats = [0, 0, 0, 0, 0, 0] as StatArray;
   baseStats[0] = 30;
   baseStats[3] = 25;

@@ -45,7 +45,7 @@ function dedupe(
     // out of the key (pieces differing only in offStats become interchangeable).
     const tuneKey =
       allowTuning && p.tuning
-        ? (p.exotic ? "X" : `${p.tuning.tuned}`) +
+        ? (p.exotic ? "X" : p.tuning.directional === false ? "B" : `${p.tuning.tuned}`) +
           (allowBalanced ? `:${p.tuning.offStats.join(".")}` : "")
         : "-";
     // Power only tells pieces apart while a power range is being enforced — without one

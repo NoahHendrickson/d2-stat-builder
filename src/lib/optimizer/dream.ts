@@ -13,6 +13,8 @@
  * Pure — no DOM/React deps, so it runs in a Web Worker and in Node tests.
  */
 import { solve } from "./solve";
+// Type-only (erased): keeps the worker bundle free of the armory/manifest modules.
+import type { ArmorArchetype } from "../armory/archetypes";
 import type {
   OptimizerInput,
   OptimizerLoadout,
@@ -21,7 +23,6 @@ import type {
 
 const NUM_SLOTS = 5;
 const NUM_STATS = 6;
-const CLASS_ITEM_SLOT = 4;
 
 /** Tier-5 archetype stat values: primary, secondary, tertiary. */
 const T5_PRIMARY = 30;
@@ -33,26 +34,35 @@ const T5_MASTERWORKED_OFF_STAT = 5;
 /** Whole dream search wall clock; each solve gets what's left (capped per solve). */
 const DREAM_BUDGET_MS = 15000;
 const DREAM_SOLVE_BUDGET_MS = 3000;
-/** Ceiling refinement for the owned-armor pass (the sliders' "max" in dream mode). */
+/** Ceiling refinement for the owned and possible passes (the sliders' max / reach). */
 const OWNED_CEILING_BUDGET_MS = 1500;
+/** Build-walk budget for the ceilings-only pass (it only seeds the ceiling search). */
+const CEILINGS_ONLY_TOPN_BUDGET_MS = 300;
 /** Distinct farm options to return. */
 const MAX_OPTIONS = 6;
-/** Builds kept per k ≥ 2 subset solve before collapsing them to distinct options. */
+/**
+ * Builds kept per k ≥ 2 subset solve before collapsing them to distinct options. Unlike
+ * k = 1 (a best-first walk over distinct archetypes), k ≥ 2 has no diversity guarantee:
+ * every T5 roll totals the same, so these are often permutations of one or two archetype
+ * pairs and fewer than MAX_OPTIONS distinct options survive. Acceptable while k ≥ 2 is
+ * the rare "far out of reach" case; a per-subset exclusion walk would fix it if not.
+ */
 const MULTI_PIECE_RESULTS = 50;
+/**
+ * Budget for enumerating one option's working rolls (four pieces fixed, one slot of at
+ * most ~28 variants — near-instant). Kept apart from the search deadline so a search
+ * that ran long can't starve it and understate a drop's odds.
+ */
+const ROLLS_SOLVE_BUDGET_MS = 500;
+/** An exotic's possible drops: its four tertiaries (its tuning is flexible). */
+const EXOTIC_ROLLS = 4;
+/** A legendary archetype's possible drops: 4 tertiaries × 6 tuned stats. */
+const LEGENDARY_ROLLS = 4 * NUM_STATS;
 
-/** An Armor 3.0 archetype: its fixed primary (30) and secondary (25) stat indices. */
-export interface DreamArchetype {
-  name: string;
-  primary: number;
-  secondary: number;
-}
-
-/** The exotic a dream build may re-roll: the selected one (in its slot), or any. */
+/** The exotic a dream build may re-roll in its own slot, if any. */
 export type DreamExotic =
   | { kind: "none" }
-  /** Any exotic: a generic Tier-5 exotic roll may fill any non-class-item slot. */
-  | { kind: "any" }
-  /** The selected exotic, re-rolled in its own slot. `intrinsic` = its def stat bonus. */
+  /** The build's exotic, re-rolled in its own slot. `intrinsic` = its def stat bonus. */
   | {
       kind: "specific";
       slot: number;
@@ -64,7 +74,7 @@ export type DreamExotic =
 export interface DreamInput {
   /** The live query over owned pieces — every constraint carries over unchanged. */
   base: OptimizerInput;
-  archetypes: DreamArchetype[];
+  archetypes: ArmorArchetype[];
   exotic: DreamExotic;
   /** Slots that never take a dream piece (e.g. a class item pinned to Dreamer's Bond). */
   lockedSlots?: number[];
@@ -112,13 +122,19 @@ export interface FarmPiece {
    * first: those that work with any tuned stat, then those needing particular ones.
    */
   rolls: FarmRoll[];
+  /** False if enumerating `rolls` ran out of time: more may work than are listed. */
+  complete: boolean;
 }
 
-/** How many of the possible (tertiary, tuned) drops of this archetype would do. */
-export function farmOdds(f: FarmPiece): number {
+/**
+ * How many of this archetype's possible drops would do, out of how many: a legendary's
+ * 4 tertiaries × 6 tuned stats, an exotic's 4 tertiaries (its tuning is flexible).
+ */
+export function farmOdds(f: FarmPiece): { n: number; of: number } {
+  if (f.exotic) return { n: f.rolls.length, of: EXOTIC_ROLLS };
   let n = 0;
   for (const r of f.rolls) n += r.tuned?.length ?? NUM_STATS;
-  return n;
+  return { n, of: LEGENDARY_ROLLS };
 }
 
 /** One way to reach the targets: a build and the new pieces it needs. */
@@ -163,8 +179,8 @@ export interface DreamSolveOptions {
 
 /** Every (archetype, tertiary) roll's masterworked stats. */
 export function dreamRolls(
-  archetypes: DreamArchetype[],
-): { archetype: DreamArchetype; tertiary: number; stats: number[] }[] {
+  archetypes: ArmorArchetype[],
+): { archetype: ArmorArchetype; tertiary: number; stats: number[] }[] {
   const out = [];
   for (const archetype of archetypes) {
     for (let tertiary = 0; tertiary < NUM_STATS; tertiary++) {
@@ -209,7 +225,11 @@ export function dreamCandidates(slot: number, input: DreamInput): DreamPiece[] {
       tertiary,
     };
     const key = `dream:${slot}:${archetype.name}:${tertiary}`;
-    for (const setHash of setOptions) {
+    const ex = input.exotic;
+    // The exotic's own slot must hold the exotic (the query requires it), so legendary
+    // rolls there are infeasible by construction.
+    const exoticSlot = ex.kind === "specific" && ex.slot === slot;
+    for (const setHash of exoticSlot ? [] : setOptions) {
       out.push({ ...roll, id: `${key}:any:${setHash ?? 0}`, tuned: null, exotic: false, setHash, stats });
       for (let tuned = 0; tuned < NUM_STATS; tuned++) {
         out.push({
@@ -223,17 +243,14 @@ export function dreamCandidates(slot: number, input: DreamInput): DreamPiece[] {
       }
     }
 
-    const ex = input.exotic;
-    const exoticHere =
-      ex.kind === "specific" ? ex.slot === slot : ex.kind === "any" && slot !== CLASS_ITEM_SLOT;
-    if (!exoticHere) continue;
+    if (!exoticSlot) continue;
     out.push({
       ...roll,
-      id: `${key}:x:E${ex.kind === "specific" ? ex.hash : 0}`,
+      id: `${key}:x:E${ex.hash}`,
       tuned: null,
       exotic: true,
-      exoticName: ex.kind === "specific" ? ex.name : undefined,
-      stats: ex.kind === "specific" ? stats.map((v, s) => v + (ex.intrinsic[s] ?? 0)) : stats,
+      exoticName: ex.name,
+      stats: stats.map((v, s) => v + (ex.intrinsic[s] ?? 0)),
     });
   }
   return out;
@@ -245,12 +262,14 @@ function anyTuned(d: DreamPiece): boolean {
 }
 
 function toOptimizerPiece(d: DreamPiece, input: DreamInput): OptimizerPiece {
-  // An exotic's tuning socket is flexible (any +5 direction), so its `tuned` is moot;
-  // an any-tuned legendary is searched without tuning at all.
+  // An exotic's tuning socket is flexible (any +5 direction), so its `tuned` is moot.
+  // An any-tuned legendary may take Balanced (every T5 can, whatever it rolled) but no
+  // directional: if a build works with that, it works whatever the tuned stat.
+  const offStats = offStatsOf(d.primary, d.secondary, d.tertiary);
   const tuning =
     d.exotic || d.tuned !== null
-      ? { tuned: d.tuned ?? d.primary, offStats: offStatsOf(d.primary, d.secondary, d.tertiary) }
-      : undefined;
+      ? { tuned: d.tuned ?? d.primary, offStats }
+      : { tuned: d.primary, offStats, directional: false as const };
   const hash = d.exotic && input.exotic.kind === "specific" ? input.exotic.hash : undefined;
   return { id: d.id, stats: d.stats, exotic: d.exotic, hash, setHash: d.setHash, tuning };
 }
@@ -279,6 +298,8 @@ export function solveDream(input: DreamInput, opts: DreamSolveOptions = {}): Dre
     locked.has(slot) ? [] : dreamCandidates(slot, input),
   );
   const byId = new Map(dream.flat().map((d) => [d.id, d]));
+  // (build, slot) pairs whose roll enumeration ran out of time.
+  const incomplete = new Set<string>();
   let capped = false;
   let timedOut = false;
 
@@ -292,8 +313,16 @@ export function solveDream(input: DreamInput, opts: DreamSolveOptions = {}): Dre
       return d ? d.map((p) => toOptimizerPiece(p, input)) : owned(slot);
     });
 
-  /** One solve over `slots`; null once out of time. */
-  const solveOnce = (slots: OptimizerPiece[][], maxResults: number, ceilingBudgetMs = 0) => {
+  /**
+   * One solve over `slots`; null once out of time. `ceilingsOnly`: a pass run just for
+   * its ceilings, whose build list is discarded — a capped build walk there says
+   * nothing about the options, so it doesn't mark the result capped.
+   */
+  const solveOnce = (
+    slots: OptimizerPiece[][],
+    maxResults: number,
+    { ceilingBudgetMs = 0, ceilingsOnly = false } = {},
+  ) => {
     const remaining = deadline - performance.now();
     if (remaining <= 0) {
       timedOut = capped = true;
@@ -301,9 +330,12 @@ export function solveDream(input: DreamInput, opts: DreamSolveOptions = {}): Dre
     }
     const out = solve(
       { ...input.base, slots, maxResults },
-      { topNBudgetMs: Math.min(solveBudget, remaining), ceilingBudgetMs },
+      {
+        topNBudgetMs: Math.min(ceilingsOnly ? CEILINGS_ONLY_TOPN_BUDGET_MS : solveBudget, remaining),
+        ceilingBudgetMs,
+      },
     );
-    if (out.capped) capped = true;
+    if (out.capped && !ceilingsOnly) capped = true;
     return out;
   };
   const run = (slots: OptimizerPiece[][], maxResults: number): OptimizerLoadout[] | null =>
@@ -327,8 +359,13 @@ export function solveDream(input: DreamInput, opts: DreamSolveOptions = {}): Dre
     const slots = slotsWith(fixed, (s) =>
       input.base.slots[s].filter((p) => p.id === lo.pieceIds[s]),
     );
+    const out = solve(
+      { ...input.base, slots, maxResults: variants.length },
+      { topNBudgetMs: ROLLS_SOLVE_BUDGET_MS, ceilingBudgetMs: 0 },
+    );
+    if (out.capped) incomplete.add(`${lo.pieceIds.join("|")}#${slot}`);
     const works = [d];
-    for (const l of run(slots, variants.length) ?? []) works.push(byId.get(l.pieceIds[slot])!);
+    for (const l of out.loadouts) works.push(byId.get(l.pieceIds[slot])!);
     const byTertiary = new Map<number, Set<number> | null>();
     for (const v of works) {
       const prev = byTertiary.get(v.tertiary);
@@ -361,6 +398,7 @@ export function solveDream(input: DreamInput, opts: DreamSolveOptions = {}): Dre
           exotic: d.exotic,
           exoticName: d.exoticName,
           rolls: rollsThatWork(lo, slot),
+          complete: !incomplete.has(`${lo.pieceIds.join("|")}#${slot}`),
         },
       ];
     }),
@@ -368,7 +406,7 @@ export function solveDream(input: DreamInput, opts: DreamSolveOptions = {}): Dre
 
   // k = 0: the owned armor alone — also what the sliders show as each stat's max.
   opts.onPhase?.(0);
-  const owned = solveOnce(input.base.slots, 1, OWNED_CEILING_BUDGET_MS);
+  const owned = solveOnce(input.base.slots, 1, { ceilingBudgetMs: OWNED_CEILING_BUDGET_MS });
   const ownedCeilings = owned?.ceilings ?? new Array(NUM_STATS).fill(0);
   const ownedCeilingsExact = owned?.ceilingsExact ?? false;
   // The same ceilings with every unlocked slot also open to any farmable roll.
@@ -378,7 +416,7 @@ export function solveDream(input: DreamInput, opts: DreamSolveOptions = {}): Dre
       ...dream[slot].map((p) => toOptimizerPiece(p, input)),
     ]),
     1,
-    OWNED_CEILING_BUDGET_MS,
+    { ceilingBudgetMs: OWNED_CEILING_BUDGET_MS, ceilingsOnly: true },
   );
   const possibleCeilings = (possible?.ceilings ?? ownedCeilings).map((v, s) =>
     Math.max(v, ownedCeilings[s]),
@@ -416,7 +454,10 @@ export function solveDream(input: DreamInput, opts: DreamSolveOptions = {}): Dre
   const listedRolls = new Set<string>();
   const perSlot = new Array(NUM_SLOTS).fill(0);
   const rollOf = (o: DreamOption) => `${o.farm[0].archetype}:${o.farm[0].exotic}`;
-  const flexibility = (o: DreamOption) => farmOdds(o.farm[0]);
+  const flexibility = (o: DreamOption) => {
+    const { n, of } = farmOdds(o.farm[0]);
+    return n / of;
+  };
   const beats = (a: DreamOption, sa: number, b: DreamOption, sb: number): boolean => {
     if (a.loadout.total !== b.loadout.total) return a.loadout.total > b.loadout.total;
     const newA = !listedRolls.has(rollOf(a));

@@ -202,15 +202,6 @@ function applyMasterwork(base: StatArray): StatArray {
 }
 
 /**
- * An Armor 3.0 piece's def-level intrinsic bonus (see intrinsicStats): its `stats`
- * less the masterworked roll. Zero on legendaries. Not meaningful on legacy pieces.
- */
-export function intrinsicBonus(piece: Pick<ArmorPiece, "stats" | "baseStats">): StatArray {
-  const mw = applyMasterwork(piece.baseStats);
-  return piece.stats.map((v, i) => v - mw[i]) as StatArray;
-}
-
-/**
  * Assume full legacy (Armor 2.0) masterwork: +2 to all six stats. Legacy pieces have
  * no archetype caps, so the bonus applies flat — using the 3.0 raise-the-lowest model
  * here deflated the three high stats by 2 each (real-world case: legacy Verity's Brow
@@ -270,7 +261,7 @@ function computeTunedStat(
  * bonus is NOT part of the base roll: archetype / off-archetype classification
  * (masterwork + Balanced Tuning targets) must come from the roll alone.
  */
-function intrinsicStats(
+export function intrinsicStats(
   def: { investmentStats?: { statTypeHash: number; value: number; isConditionallyActive?: boolean }[] },
 ): StatArray {
   const out: StatArray = [0, 0, 0, 0, 0, 0];
