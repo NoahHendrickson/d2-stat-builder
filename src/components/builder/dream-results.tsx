@@ -297,6 +297,7 @@ export function DreamComparison({
   pieceMap,
   statIcons,
   exoticIcon,
+  idleNote,
 }: {
   build: OptimizerLoadout;
   state: DreamBuildState;
@@ -304,6 +305,8 @@ export function DreamComparison({
   statIcons: StatIconMap;
   /** Icon of the build's exotic, for its re-roll suggestions. */
   exoticIcon?: string;
+  /** What to say while the build still reaches the targets — the next step to take. */
+  idleNote?: string;
 }) {
   const { running, result } = state;
   // The picked option belongs to the result it was picked from; a new result starts at
@@ -326,9 +329,12 @@ export function DreamComparison({
   };
 
   let note: string | null = null;
-  if (result?.newPieces === 0) {
+  if (!result || result.newPieces === 0) {
     note =
-      "This build already reaches these targets. Push a stat past its max (or lower others to make room) to see what to replace.";
+      idleNote ??
+      (result
+        ? "This build already reaches these targets. Push a stat past its max (or lower others to make room) to see what to replace."
+        : null);
   } else if (result?.newPieces === null) {
     note = result.capped
       ? "The search ran out of time before finding a way there. Try lowering a stat."

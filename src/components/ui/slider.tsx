@@ -48,10 +48,19 @@ function Slider({
   max = 100,
   step = 1,
   ceiling,
+  possible,
+  marker,
   ...props
 }: SliderPrimitive.Root.Props & {
   /** Optional achievable-maximum overlay: a lighter fill from `min` up to this value. */
   ceiling?: number
+  /**
+   * Optional "possible" reach past `ceiling` (e.g. with gear you could farm): a fainter,
+   * striped fill from `min` to this value, drawn behind the ceiling overlay.
+   */
+  possible?: number
+  /** Optional reference value (e.g. where the target started): a thin tick across the track. */
+  marker?: number
 }) {
   const _values = Array.isArray(value)
     ? value
@@ -163,6 +172,16 @@ function Slider({
           // (2px gap + the 1px line).
           className="relative box-content grow rounded-none select-none before:pointer-events-none before:absolute before:-inset-[3px] before:d2-line before:content-[''] data-horizontal:h-2.5 data-horizontal:w-full data-vertical:h-full data-vertical:w-2.5"
         >
+          {possible != null && (
+            <div
+              data-slot="slider-possible"
+              aria-hidden
+              className="absolute top-0 left-0 h-full bg-[repeating-linear-gradient(135deg,color-mix(in_srgb,var(--foreground)_14%,transparent)_0_3px,transparent_3px_6px)] transition-[width] duration-300 ease-out"
+              style={{
+                width: sliderFillWidth(possible, min, max),
+              }}
+            />
+          )}
           {ceiling != null && (
             <div
               data-slot="slider-ceiling"
@@ -177,6 +196,14 @@ function Slider({
             data-slot="slider-range"
             className="d2-line-white d2-fill select-none data-horizontal:h-full data-vertical:w-full data-vertical:[--fill-to:top]"
           />
+          {marker != null && horizontal && (
+            <div
+              data-slot="slider-marker"
+              aria-hidden
+              className="pointer-events-none absolute -inset-y-1 w-0.5 -translate-x-1/2 bg-warning"
+              style={{ left: sliderValueLeft(marker, min, max) }}
+            />
+          )}
         </SliderPrimitive.Track>
         {hover != null && (
           <div

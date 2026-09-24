@@ -133,6 +133,17 @@ describe("solveDream", () => {
     expect(farmOdds(first)).toBe(24);
   });
 
+  it("reports how far farming could push each stat past the owned max", () => {
+    // Owned: melee tops out at 25 alongside weapons 145; a farmed Skirmisher (melee 30)
+    // plus tuning lifts it well past that.
+    const r = solveDream(dream(input(gunners(), [145, 0, 0, 0, 0, 0])));
+    expect(r.ownedCeilings[5]).toBe(25);
+    expect(r.possibleCeilings[5]).toBeGreaterThanOrEqual(45);
+    for (let s = 0; s < 6; s++) {
+      expect(r.possibleCeilings[s]).toBeGreaterThanOrEqual(r.ownedCeilings[s]);
+    }
+  });
+
   it("reports null when not even a full new set reaches the targets", () => {
     const r = solveDream(dream(input(gunners(), [200, 200, 200, 200, 200, 200])), {
       budgetMs: 5000,

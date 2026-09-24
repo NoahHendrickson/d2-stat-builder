@@ -145,6 +145,13 @@ export interface DreamResult {
    */
   ownedCeilings: number[];
   ownedCeilingsExact: boolean;
+  /**
+   * What each stat could reach if any unlocked piece may be replaced by a farmed roll,
+   * given the other five targets — the "possible" reach shown past the owned max. Same
+   * exactness contract as `ownedCeilings`. Never below it (the owned pieces stay in).
+   */
+  possibleCeilings: number[];
+  possibleCeilingsExact: boolean;
 }
 
 export interface DreamSolveOptions {
@@ -364,12 +371,27 @@ export function solveDream(input: DreamInput, opts: DreamSolveOptions = {}): Dre
   const owned = solveOnce(input.base.slots, 1, OWNED_CEILING_BUDGET_MS);
   const ownedCeilings = owned?.ceilings ?? new Array(NUM_STATS).fill(0);
   const ownedCeilingsExact = owned?.ceilingsExact ?? false;
+  // The same ceilings with every unlocked slot also open to any farmable roll.
+  const possible = solveOnce(
+    slotsWith(new Map(), (slot) => [
+      ...input.base.slots[slot],
+      ...dream[slot].map((p) => toOptimizerPiece(p, input)),
+    ]),
+    1,
+    OWNED_CEILING_BUDGET_MS,
+  );
+  const possibleCeilings = (possible?.ceilings ?? ownedCeilings).map((v, s) =>
+    Math.max(v, ownedCeilings[s]),
+  );
+  const possibleCeilingsExact = possible?.ceilingsExact ?? false;
   const done = (newPieces: number | null, options: DreamOption[]): DreamResult => ({
     newPieces,
     options,
     capped,
     ownedCeilings,
     ownedCeilingsExact,
+    possibleCeilings,
+    possibleCeilingsExact,
   });
   if (owned?.loadouts.length) return done(0, []);
   opts.onPhase?.(1);

@@ -22,6 +22,8 @@ import type { CeilingsView } from "@/lib/optimizer/optimizer-store";
 import type { OptimizerLoadout } from "@/lib/optimizer/types";
 import { useDreamBuild } from "@/lib/optimizer/use-dream-build";
 import { createValueStore } from "@/lib/value-store";
+import { cn } from "@/lib/utils";
+import { Check } from "@phosphor-icons/react";
 
 export interface DreamBuildDialogProps {
   open: boolean;
@@ -72,12 +74,15 @@ function DreamBuildBody({
   const [ceilingsView] = useState(() =>
     createValueStore<CeilingsView>({ values: null, exact: false }),
   );
+  // …and past it, striped: how far farming a replacement could take each stat.
+  const [possibleView] = useState(() => createValueStore<number[] | null>(null));
   const result = state.result;
   useEffect(() => {
     if (result) {
       ceilingsView.set({ values: result.ownedCeilings, exact: result.ownedCeilingsExact });
+      possibleView.set(result.possibleCeilings);
     }
-  }, [result, ceilingsView]);
+  }, [result, ceilingsView, possibleView]);
 
   const setTarget = useCallback(
     (i: number, value: number) =>
@@ -85,6 +90,16 @@ function DreamBuildBody({
     [],
   );
   const changed = targets.some((v, i) => v !== build.stats[i]);
+  // The two steps: make room, then ask for more than the build reaches. "Past its max" is
+  // against the latest search's reach for these targets (the build's stats before one).
+  const lowered = targets.some((v, i) => v < build.stats[i]);
+  const reach = result?.ownedCeilings ?? build.stats;
+  const pushedPast = targets.some((v, i) => v > reach[i]);
+  const idleNote = !lowered
+    ? "Start on the left: lower the stats you don't need. That frees up room for the ones you want."
+    : !pushedPast
+      ? "Now push the stats you want into the striped part of their bar (what farming could reach): drag them, or press +."
+      : undefined;
   const exoticIcon = build.pieceIds
     .map((id) => pieceMap.get(id))
     .find((p) => p?.isExotic)?.icon;
@@ -94,12 +109,28 @@ function DreamBuildBody({
       <DialogHeader className="pr-8">
         <DialogTitle>Dream build</DialogTitle>
         <DialogDescription>
-          Raise the stats you want more of (lower others to make room) to see which
-          piece of this build to replace, and with what.
+          Find out which piece of this build to replace, and with what, to get more of
+          the stats you want.
         </DialogDescription>
       </DialogHeader>
-      <div className="grid min-h-0 flex-1 grid-cols-1 gap-6 overflow-y-auto md:grid-cols-[minmax(0,17rem)_minmax(0,1fr)] md:overflow-hidden">
+      <div className="grid min-h-0 flex-1 grid-cols-1 gap-6 overflow-y-auto md:grid-cols-[minmax(0,20rem)_minmax(0,1fr)] md:overflow-hidden">
         <section className="border-foreground/8 flex flex-col gap-4 md:overflow-y-auto md:border-r md:pr-6">
+          <ol className="flex flex-col gap-2">
+            <Step
+              n={1}
+              done={lowered}
+              active={!lowered}
+              title="Lower the stats you don't need"
+              detail="That frees up room for the ones you want."
+            />
+            <Step
+              n={2}
+              done={pushedPast}
+              active={lowered && !pushedPast}
+              title="Raise the stats you want"
+              detail="Push them into the striped part of the bar: what farming a new piece could reach. The amber tick marks where each started."
+            />
+          </ol>
           <div className="flex min-h-5 items-center justify-between">
             <span className="d2-label">Stat targets</span>
             {changed && (
@@ -124,6 +155,9 @@ function DreamBuildBody({
                   value={targets[i]}
                   ceilingsView={ceilingsView}
                   onChange={setTarget}
+                  baseline={build.stats[i]}
+                  stepper
+                  possibleView={possibleView}
                 />
               );
             })}
@@ -137,6 +171,7 @@ function DreamBuildBody({
               pieceMap={pieceMap}
               statIcons={statIcons}
               exoticIcon={exoticIcon}
+              idleNote={idleNote}
             />
           ) : (
             <p className="text-muted-foreground text-sm">
@@ -148,5 +183,52 @@ function DreamBuildBody({
         </section>
       </div>
     </>
+  );
+}
+
+/** One instruction step: numbered, highlighted while it's the next thing to do, checked once done. */
+function Step({
+  n,
+  done,
+  active,
+  title,
+  detail,
+}: {
+  n: number;
+  done: boolean;
+  active: boolean;
+  title: string;
+  detail: string;
+}) {
+  return (
+    <li
+      className={cn(
+        "flex gap-3 border p-2.5 transition-colors",
+        active ? "border-foreground/25 bg-foreground/6" : "border-foreground/8",
+      )}
+      aria-current={active ? "step" : undefined}
+    >
+      <span
+        className={cn(
+          "flex size-5 shrink-0 items-center justify-center rounded-full text-[11px] font-medium",
+          done
+            ? "bg-positive/80 text-background"
+            : active
+              ? "bg-foreground text-background"
+              : "bg-foreground/12 text-muted-foreground",
+        )}
+      >
+        {done ? <Check weight="bold" className="size-3" aria-label="Done" /> : n}
+      </span>
+      <span className="flex min-w-0 flex-col gap-0.5">
+        <span
+          className={cn("truncate text-sm", !active && !done && "text-muted-foreground")}
+          title={title}
+        >
+          {title}
+        </span>
+        <span className="text-muted-foreground text-xs">{detail}</span>
+      </span>
+    </li>
   );
 }
