@@ -278,6 +278,34 @@ function PieceCell({
   );
 }
 
+/**
+ * The stat mods the shown build sockets to reach its targets (they can differ from the
+ * build as it was listed), e.g. "Mods +10 Health · +5 Melee"; "No stat mods" if none.
+ */
+function ModPlan({ loadout, icons }: { loadout: OptimizerLoadout; icons: StatIconMap }) {
+  const parts = STAT_DISPLAY_ORDER.map((key) => STAT_ORDER.indexOf(key)).filter(
+    (s) => loadout.modBonus[s] > 0,
+  );
+  return (
+    <span className="text-muted-foreground flex basis-full flex-wrap items-center gap-x-2 gap-y-1 text-xs font-normal">
+      {parts.length === 0 ? (
+        "No stat mods"
+      ) : (
+        <>
+          Mods
+          {parts.map((s) => (
+            <span key={s} className="text-foreground inline-flex items-center gap-1">
+              +{loadout.modBonus[s]}
+              <Glyph stat={s} icons={icons} />
+              {STAT_LABELS[STAT_ORDER[s]]}
+            </span>
+          ))}
+        </>
+      )}
+    </span>
+  );
+}
+
 /** Short label for an option switcher button: "Helmet → Skirmisher". */
 function optionLabel(option: DreamOption): string {
   return option.farm
@@ -304,11 +332,14 @@ export function DreamComparison({
   statIcons,
   exoticIcon,
   idleNote,
+  setNames,
 }: {
   build: OptimizerLoadout;
   state: DreamBuildState;
   pieceMap: Map<string, ArmorPiece>;
   statIcons: StatIconMap;
+  /** Set names by hash, for replacements that must come from a required set. */
+  setNames: ReadonlyMap<number, string>;
   /** Icon of the build's exotic, for its re-roll suggestions. */
   exoticIcon?: string;
   /** What to say while the build still reaches the targets — the next step to take. */
@@ -432,6 +463,19 @@ export function DreamComparison({
                     Replace
                   </span>
                   <FarmLine farm={v.farm} icons={statIcons} exoticIcon={exoticIcon} />
+                  {v.farm.setHash !== undefined && (
+                    <span className="text-xs">
+                      <span className="text-muted-foreground">From </span>
+                      {setNames.get(v.farm.setHash) ?? "the required set"}
+                    </span>
+                  )}
+                  {option && option.farm.length > 1 && (
+                    <span className="text-muted-foreground text-xs">
+                      {v.farm.fixed
+                        ? "Farm exactly this roll: the other replacement's choices assume it."
+                        : "Any of these works with the other replacement exactly as listed."}
+                    </span>
+                  )}
                   <span className="border-foreground/8 flex flex-wrap items-center gap-1 border-t pt-2 text-xs">
                     Socket:
                     <TuningText tune={v.tune} icons={statIcons} />
@@ -465,6 +509,7 @@ export function DreamComparison({
               </span>
             );
           })}
+          <ModPlan loadout={shown} icons={statIcons} />
         </div>
       )}
     </div>

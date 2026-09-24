@@ -264,6 +264,10 @@ export function BuilderPanel({
     () => new Map(sets.map((s) => [s.setHash, s])),
     [sets],
   );
+  const setNames = useMemo(
+    () => new Map(sets.map((s) => [s.setHash, s.name])),
+    [sets],
+  );
 
   // Set requirements narrowed to sets the player owns for this class: a restored (or
   // class-corrected) requirement for a set they no longer own would make every build
@@ -1141,6 +1145,7 @@ export function BuilderPanel({
           makeInput={makeDreamInput}
           pieceMap={pieceMap}
           statIcons={statIcons}
+          setNames={setNames}
         />
       )}
 

@@ -91,7 +91,10 @@ describe("solveDream", () => {
   it("needs no new pieces when owned armor already reaches the targets", () => {
     const r = solveDream(dream(input(gunners(), [150, 0, 0, 125, 0, 0])));
     expect(r.newPieces).toBe(0);
-    expect(r.options).toHaveLength(0);
+    // The build's own plan for these targets, with nothing to farm.
+    expect(r.options).toHaveLength(1);
+    expect(r.options[0].farm).toEqual([]);
+    expect(r.options[0].loadout.stats[0]).toBeGreaterThanOrEqual(150);
   });
 
   it("finds the single roll that lifts a stat past its owned ceiling", () => {
@@ -131,6 +134,46 @@ describe("solveDream", () => {
     expect(first.rolls).toHaveLength(4);
     expect(first.rolls.every((roll) => roll.tuned === null)).toBe(true);
     expect(farmOdds(first)).toEqual({ n: 24, of: 24 });
+  });
+
+  it("lists alternatives only where every listed combination works (PR #42 repro)", () => {
+    // Reviewer's repro: five Gunners (Super tertiary, Grenade tuned), Balanced on,
+    // 3 major / 2 minor. Two-piece options used to list independent alternatives for
+    // both pieces, and some pairings failed together.
+    const slots = Array.from({ length: 5 }, (_, i) => [t5(`g${i}`, 0, 3, 4, 3)]);
+    const base: OptimizerInput = {
+      ...input(slots, [115, 80, 35, 20, 75, 85]),
+      mods: { major: 3, minor: 2 },
+      allowBalancedTuning: true,
+    };
+    const r = solveDream(dream(base));
+    expect(r.newPieces).not.toBeNull();
+    const pieceFor = (slot: number, f: { archetype: string }, tertiary: number, tuned: number | null) => {
+      const a = ARCHETYPES.find((x) => x.name === f.archetype)!;
+      const p = t5(`alt${slot}`, a.primary, a.secondary, tertiary, tuned ?? a.primary);
+      return tuned === null ? { ...p, tuning: { ...p.tuning!, directional: false as const } } : p;
+    };
+    for (const o of r.options) {
+      // Later pieces are pinned to one roll; only the first lists alternatives.
+      o.farm.slice(1).forEach((f) => {
+        expect(f.fixed).toBe(true);
+        expect(f.rolls).toHaveLength(1);
+      });
+      // Every listed alternative of the first piece, with the others as listed, works.
+      const [first, ...rest] = o.farm;
+      if (!first) continue;
+      for (const roll of first.rolls) {
+        for (const tuned of roll.tuned ?? [null]) {
+          const trial = slots.map((s) => [...s]);
+          trial[first.slot] = [pieceFor(first.slot, first, roll.tertiary, tuned)];
+          for (const f of rest) {
+            const fr = f.rolls[0];
+            trial[f.slot] = [pieceFor(f.slot, f, fr.tertiary, fr.tuned?.[0] ?? null)];
+          }
+          expect(solve({ ...base, slots: trial }).loadouts.length).toBeGreaterThan(0);
+        }
+      }
+    }
   });
 
   it("reports how far farming could push each stat past the owned max", () => {

@@ -117,11 +117,19 @@ export interface FarmPiece {
   secondary: number;
   exotic: boolean;
   exoticName?: string;
+  /** The required set this piece must come from (only when the query requires sets). */
+  setHash?: number;
   /**
-   * Every tertiary that completes this build (its other pieces held as they are), easiest
-   * first: those that work with any tuned stat, then those needing particular ones.
+   * The tertiaries that complete this build, easiest first: those that work with any
+   * tuned stat, then those needing particular ones. Only an option's FIRST farm piece
+   * lists alternatives, checked with every other replacement held at exactly its listed
+   * roll; later pieces list just that roll (`fixed`). Listing alternatives for two
+   * pieces would imply any pairing works, and two individually-valid alternatives can
+   * fail together.
    */
   rolls: FarmRoll[];
+  /** This piece's roll is pinned as listed — the first piece's alternatives assume it. */
+  fixed: boolean;
   /** False if enumerating `rolls` ran out of time: more may work than are listed. */
   complete: boolean;
 }
@@ -150,7 +158,10 @@ export interface DreamResult {
    * null = not even a full set of new rolls does (or the search ran out of time first).
    */
   newPieces: number | null;
-  /** Distinct farm options at that count, best build total first. Empty at 0 and null. */
+  /**
+   * Distinct farm options at that count, best build total first. At 0, one option with no
+   * farm pieces: the owned build's plan for these targets. Empty at null.
+   */
   options: DreamOption[];
   /** True if any solve hit its time budget — "fewest" and the options are best-effort. */
   capped: boolean;
@@ -384,25 +395,34 @@ export function solveDream(input: DreamInput, opts: DreamSolveOptions = {}): Dre
       );
   };
 
-  const optionFor = (lo: OptimizerLoadout): DreamOption => ({
-    loadout: lo,
-    farm: lo.pieceIds.flatMap((id, slot) => {
-      const d = byId.get(id);
-      if (!d) return [];
-      return [
-        {
-          slot,
-          archetype: d.archetype,
-          primary: d.primary,
-          secondary: d.secondary,
-          exotic: d.exotic,
-          exoticName: d.exoticName,
-          rolls: rollsThatWork(lo, slot),
-          complete: !incomplete.has(`${lo.pieceIds.join("|")}#${slot}`),
-        },
-      ];
-    }),
-  });
+  const optionFor = (lo: OptimizerLoadout): DreamOption => {
+    let first = true;
+    return {
+      loadout: lo,
+      farm: lo.pieceIds.flatMap((id, slot) => {
+        const d = byId.get(id);
+        if (!d) return [];
+        const fixed = !first;
+        first = false;
+        return [
+          {
+            slot,
+            archetype: d.archetype,
+            primary: d.primary,
+            secondary: d.secondary,
+            exotic: d.exotic,
+            exoticName: d.exoticName,
+            setHash: d.setHash,
+            rolls: fixed
+              ? [{ tertiary: d.tertiary, tuned: d.tuned === null ? null : [d.tuned] }]
+              : rollsThatWork(lo, slot),
+            fixed,
+            complete: fixed || !incomplete.has(`${lo.pieceIds.join("|")}#${slot}`),
+          },
+        ];
+      }),
+    };
+  };
 
   // k = 0: the owned armor alone — also what the sliders show as each stat's max.
   opts.onPhase?.(0);
@@ -431,7 +451,9 @@ export function solveDream(input: DreamInput, opts: DreamSolveOptions = {}): Dre
     possibleCeilings,
     possibleCeilingsExact,
   });
-  if (owned?.loadouts.length) return done(0, []);
+  // Reachable as is: return the build's own plan (the tuning and mods these targets
+  // need can differ from the build as it was listed).
+  if (owned?.loadouts.length) return done(0, [{ loadout: owned.loadouts[0], farm: [] }]);
   opts.onPhase?.(1);
 
   // k = 1, best-first over distinct archetypes per slot: first those with a roll that

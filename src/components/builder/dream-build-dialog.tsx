@@ -36,6 +36,8 @@ export interface DreamBuildDialogProps {
   makeInput: (build: OptimizerLoadout, targets: number[]) => DreamInput | null;
   pieceMap: Map<string, ArmorPiece>;
   statIcons: StatIconMap;
+  /** Set names by hash, for replacements that must come from a required set. */
+  setNames: ReadonlyMap<number, string>;
 }
 
 /**
@@ -65,6 +67,7 @@ function DreamBuildBody({
   makeInput,
   pieceMap,
   statIcons,
+  setNames,
 }: Omit<DreamBuildDialogProps, "open" | "onOpenChange" | "onOpenChangeComplete" | "build"> & {
   build: OptimizerLoadout;
 }) {
@@ -182,6 +185,7 @@ function DreamBuildBody({
               statIcons={statIcons}
               exoticIcon={exoticIcon}
               idleNote={idleNote}
+              setNames={setNames}
             />
           ) : (
             <p className="text-muted-foreground text-sm">
