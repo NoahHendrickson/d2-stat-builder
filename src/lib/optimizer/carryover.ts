@@ -39,6 +39,7 @@ void HANDLED_PIECE_KEYS;
 const HANDLED_TUNING_KEYS = {
   tuned: true,
   offStats: true,
+  directional: true,
 } satisfies Record<keyof PieceTuning, true>;
 void HANDLED_TUNING_KEYS;
 
@@ -146,6 +147,7 @@ function pieceEqual(a: OptimizerPiece, b: OptimizerPiece): boolean {
   if (at && bt) {
     if (at.tuned !== bt.tuned) return false;
     if (!numArrayEqual(at.offStats, bt.offStats)) return false;
+    if (at.directional !== bt.directional) return false;
   }
   return true;
 }

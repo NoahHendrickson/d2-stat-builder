@@ -9,6 +9,13 @@ export interface PieceTuning {
   tuned: number;
   /** The 3 off-archetype stat indices that Balanced Tuning adds +1 to each. */
   offStats: number[];
+  /**
+   * `false` = Balanced only: the piece may take Balanced Tuning but no directional, and
+   * `tuned` is ignored. Models a roll whose tuned stat is unknown (a dream piece that
+   * must work whatever it rolls) without dropping Balanced, which every Tier-5 piece
+   * can apply regardless of its tuned stat. Omitted = directionals allowed.
+   */
+  directional?: false;
 }
 
 export interface OptimizerPiece {

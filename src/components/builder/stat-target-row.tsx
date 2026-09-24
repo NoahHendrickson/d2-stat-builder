@@ -1,6 +1,7 @@
 "use client";
 
 import { memo } from "react";
+import { Minus, Plus } from "@phosphor-icons/react";
 import Image from "next/image";
 import { TooltipLabel } from "@/components/ui/tooltip";
 import { Input } from "@/components/ui/input";
@@ -12,11 +13,22 @@ import {
   STAT_LABELS,
 } from "@/lib/armory/stats";
 import type { CeilingsView } from "@/lib/optimizer/optimizer-store";
-import { useStoreValue, type ValueStore } from "@/lib/value-store";
+import {
+  createValueStore,
+  useStoreValue,
+  type ValueStore,
+} from "@/lib/value-store";
 
 /** Clickable preset markers under each stat slider. */
 const STAT_TARGET_TICKS = [0, 50, 100, 150, 200] as const;
 const STAT_SLIDER_MAX = STAT_TARGET_TICKS[STAT_TARGET_TICKS.length - 1];
+/** Stand-in store for rows without a "possible" overlay (hooks can't be conditional). */
+const NO_POSSIBLE = createValueStore<CeilingsView>({ values: null, exact: false });
+
+/** What the − / + buttons move a target by. */
+const STAT_STEP = 1;
+
+const clampTarget = (n: number) => Math.max(0, Math.min(STAT_SLIDER_MAX, n));
 
 /**
  * One stat row per Figma 73:1636: a 16px glyph and the stat name (Geist
@@ -24,6 +36,32 @@ const STAT_SLIDER_MAX = STAT_TARGET_TICKS[STAT_TARGET_TICKS.length - 1];
  * beside it on the right, the bar 4px beneath, and the preset numbers under
  * the bar (added on top of the Figma).
  */
+/** A small square − / + button beside a stat's value. */
+function StepButton({
+  label,
+  disabled,
+  onClick,
+  children,
+}: {
+  label: string;
+  disabled: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      disabled={disabled}
+      onClick={onClick}
+      className="text-muted-foreground hover:text-foreground hover:bg-foreground/8 focus-visible:ring-outline-strong flex size-5 cursor-pointer items-center justify-center border border-foreground/12 outline-none focus-visible:ring-1 disabled:cursor-not-allowed disabled:opacity-40 [&_svg]:size-3"
+    >
+      {children}
+    </button>
+  );
+}
+
 export const StatTargetRow = memo(function StatTargetRow({
   statKey,
   index,
@@ -31,6 +69,9 @@ export const StatTargetRow = memo(function StatTargetRow({
   value,
   ceilingsView,
   onChange,
+  baseline,
+  stepper = false,
+  possibleView,
 }: {
   statKey: (typeof STAT_DISPLAY_ORDER)[number];
   index: number;
@@ -38,7 +79,20 @@ export const StatTargetRow = memo(function StatTargetRow({
   value: number;
   ceilingsView: ValueStore<CeilingsView>;
   onChange: (index: number, value: number) => void;
+  /** Where this target started: marked on the bar, with "was n" once it moves. */
+  baseline?: number;
+  /** − / + buttons (±1) beside the value. */
+  stepper?: boolean;
+  /**
+   * Per-stat reach past the max (e.g. with farmed gear), drawn as a striped fill. Not
+   * `exact` = an achievable lower bound (the Max tick then reads "n+").
+   */
+  possibleView?: ValueStore<CeilingsView>;
 }) {
+  const { values: possibleValues, exact: possibleExact } = useStoreValue(
+    possibleView ?? NO_POSSIBLE,
+  );
+  const possible = possibleValues ? possibleValues[index] : undefined;
   const { values: ceilings, exact: ceilingsExact } = useStoreValue(ceilingsView);
   const cap = ceilings ? ceilings[index] : null;
   const label = STAT_LABELS[statKey];
@@ -91,6 +145,20 @@ export const StatTargetRow = memo(function StatTargetRow({
           </span>
         </div>
         <div className="flex shrink-0 items-center gap-2">
+          {baseline !== undefined && value !== baseline && (
+            <span className="text-muted-foreground text-[11px] leading-5 tabular-nums whitespace-nowrap">
+              was {baseline}
+            </span>
+          )}
+          {stepper && (
+            <StepButton
+              label={`Lower ${label} by ${STAT_STEP}`}
+              disabled={value <= 0}
+              onClick={() => onChange(index, clampTarget(value - STAT_STEP))}
+            >
+              <Minus aria-hidden />
+            </StepButton>
+          )}
           <Input
             type="number"
             min={0}
@@ -110,6 +178,15 @@ export const StatTargetRow = memo(function StatTargetRow({
             }}
             className="h-5 w-9 border-foreground/12 bg-foreground/8 px-1 text-center text-[11px] leading-5 font-medium tabular-nums [appearance:textfield] md:text-[11px] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
           />
+          {stepper && (
+            <StepButton
+              label={`Raise ${label} by ${STAT_STEP}`}
+              disabled={value >= STAT_SLIDER_MAX}
+              onClick={() => onChange(index, clampTarget(value + STAT_STEP))}
+            >
+              <Plus aria-hidden />
+            </StepButton>
+          )}
           {capText && <span className="sr-only">{capText.srText}</span>}
           <span
             className="text-[11px] leading-5 font-medium text-foreground/50 tabular-nums whitespace-nowrap"
@@ -128,6 +205,8 @@ export const StatTargetRow = memo(function StatTargetRow({
           value={[value]}
           onValueChange={(v) => onChange(index, Array.isArray(v) ? v[0] : v)}
           ceiling={ceilingValue}
+          marker={baseline}
+          possible={possible}
           aria-label={`${label} target`}
           className="cursor-pointer"
         />
@@ -136,13 +215,23 @@ export const StatTargetRow = memo(function StatTargetRow({
             // Once a ceiling is known, the top tick jumps the target to
             // that achievable value instead of 200 (labels per capText).
             const isCeilingTick = t === STAT_SLIDER_MAX && cap !== null;
-            const tickValue = isCeilingTick ? cap : t;
-            const tickLabel = isCeilingTick
+            // With a "possible" overlay past the max, Max jumps to its end instead.
+            const reachTick = isCeilingTick && possible !== undefined && possible > cap;
+            const tickValue = reachTick ? possible : isCeilingTick ? cap : t;
+            const tickLabel = reachTick
+              ? possibleExact
+                ? "Max"
+                : `${possible}+`
+              : isCeilingTick
               ? capText!.tickLabel
               : t === STAT_SLIDER_MAX
                 ? "Max"
                 : String(t);
-            const tickAria = isCeilingTick
+            const tickAria = reachTick
+              ? possibleExact
+                ? `Set ${label} to what farming could reach (${possible})`
+                : `Set ${label} to what farming could reach: at least ${possible}`
+              : isCeilingTick
               ? capText!.tickAria
               : `Set ${label} to ${t}`;
             return (

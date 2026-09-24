@@ -261,7 +261,7 @@ function computeTunedStat(
  * bonus is NOT part of the base roll: archetype / off-archetype classification
  * (masterwork + Balanced Tuning targets) must come from the roll alone.
  */
-function intrinsicStats(
+export function intrinsicStats(
   def: { investmentStats?: { statTypeHash: number; value: number; isConditionallyActive?: boolean }[] },
 ): StatArray {
   const out: StatArray = [0, 0, 0, 0, 0, 0];

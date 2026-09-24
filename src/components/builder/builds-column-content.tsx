@@ -20,7 +20,11 @@ import {
 } from "@/lib/builder/sort-loadouts";
 import type { StatModHashes } from "@/lib/dim/mod-hashes";
 import type { Manifest } from "@/lib/manifest/load";
-import type { OptimizerOutput, RefinementState } from "@/lib/optimizer/types";
+import type {
+  OptimizerLoadout,
+  OptimizerOutput,
+  RefinementState,
+} from "@/lib/optimizer/types";
 import { useStoreValue, type ValueStore } from "@/lib/value-store";
 
 const LOADING_ROWS = 5;
@@ -106,6 +110,8 @@ export interface BuildsColumnContentProps {
   manifest?: Manifest;
   insertablePlugs?: ReadonlySet<number>;
   onEquipped: () => void;
+  /** Open the Dream build modal on a build. */
+  onDream?: (loadout: OptimizerLoadout) => void;
 }
 
 export function BuildsColumnContent({
@@ -130,6 +136,7 @@ export function BuildsColumnContent({
   manifest,
   insertablePlugs,
   onEquipped,
+  onDream,
   provisional = false,
 }: BuildsColumnContentProps) {
   const [sort, setSort] = useState<LoadoutSortState>(DEFAULT_LOADOUT_SORT);
@@ -195,6 +202,7 @@ export function BuildsColumnContent({
               manifest={manifest}
               insertablePlugs={insertablePlugs}
               onEquipped={onEquipped}
+              onDream={onDream}
               sort={sort}
             />
           ) : !showLoading ? (

@@ -1,7 +1,7 @@
 "use client";
 
 import { memo } from "react";
-import { PushPin } from "@phosphor-icons/react";
+import { GridFour, PushPin } from "@phosphor-icons/react";
 import {
   Tooltip,
   TooltipContent,
@@ -18,12 +18,15 @@ export const SetRow = memo(function SetRow({
   req,
   onTogglePin,
   onToggleSet,
+  onOpenGrid,
 }: {
   set: ArmorSetInfo;
   pinned: boolean;
   req: 2 | 4 | undefined;
   onTogglePin: (setHash: number) => void;
   onToggleSet: (setHash: number, count: 2 | 4) => void;
+  /** Open the roll-grid modal on this set. */
+  onOpenGrid: (setHash: number) => void;
 }) {
   const perk2Info = set.perks.find((p) => p.requiredCount === 2);
   const perk4Info = set.perks.find((p) => p.requiredCount === 4);
@@ -66,6 +69,16 @@ export const SetRow = memo(function SetRow({
         perk={perk4Info}
         onToggle={() => onToggleSet(set.setHash, 4)}
       />
+      <TooltipLabel label={`${set.name} rolls by archetype`}>
+        <button
+          type="button"
+          onClick={() => onOpenGrid(set.setHash)}
+          aria-label={`${set.name} rolls by archetype`}
+          className="text-muted-foreground hover:text-foreground focus-visible:ring-outline-strong flex size-6 cursor-pointer items-center justify-center rounded-none outline-none focus-visible:ring-1"
+        >
+          <GridFour className="size-4" aria-hidden />
+        </button>
+      </TooltipLabel>
     </div>
   );
 });

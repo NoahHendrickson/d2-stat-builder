@@ -146,6 +146,7 @@ export function buildTuneOpts(
   } else {
     opts.push({ vec: [0, 0, 0, 0, 0, 0], applied: null });
   }
+  if (tuning.directional === false) return opts;
   const plusStats = isExotic ? [0, 1, 2, 3, 4, 5] : [tuning.tuned];
   for (const plus of plusStats) {
     for (let j = 0; j < NUM_STATS; j++) {
@@ -176,12 +177,14 @@ export function makeInternalPiece(
   mins?: number[],
 ): InternalPiece {
   const tuneOpts = buildTuneOpts(p.tuning, allowTuning, p.exotic, allowBalanced);
+  // A Balanced-only piece has no directional, so no tuned stat to branch on.
+  const dirTuned = p.tuning && p.tuning.directional !== false ? p.tuning.tuned : -1;
   // Same policy as the searcher's directional branching, evaluated statically: a stat
   // can only ever be short if its minimum is positive. Omitted mins ⇒ conservative
   // (credit every option), which is always admissible.
   const dirReachable =
     mins === undefined ||
-    directionalsBranchable(p.exotic, p.tuning ? p.tuning.tuned : -1, (s) => mins[s] > 0);
+    directionalsBranchable(p.exotic, dirTuned, (s) => mins[s] > 0);
   const tuneStatUpside = new Array(NUM_STATS).fill(0);
   const tuneStatDownside = new Array(NUM_STATS).fill(0);
   let tuneTotalUpside = 0;
@@ -213,7 +216,7 @@ export function makeInternalPiece(
     artifice: p.artifice ?? false,
     power: p.power,
     total: statTotal(p.stats),
-    tuned: allowTuning && p.tuning ? p.tuning.tuned : -1,
+    tuned: allowTuning ? dirTuned : -1,
     tuneOpts,
     tuneStatUpside,
     tuneStatDownside,

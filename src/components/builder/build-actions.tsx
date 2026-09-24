@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import dynamic from "next/dynamic";
-import { ArrowSquareOut, CircleNotch, Copy } from "@phosphor-icons/react";
+import { ArrowSquareOut, CircleNotch, Copy, Sparkle } from "@phosphor-icons/react";
 import { useQueryClient } from "@tanstack/react-query";
 import { TooltipLabel } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
@@ -56,6 +56,8 @@ export interface BuildActionProps {
   insertablePlugs?: ReadonlySet<number>;
   onEquipped?: () => void;
   pieceMap: ReadonlyMap<string, ArmorPiece>;
+  /** Open the Dream build modal on this build (absent = no Dream build button). */
+  onDream?: (loadout: OptimizerLoadout) => void;
 }
 
 const SaveLoadoutDrawer = dynamic(
@@ -86,6 +88,7 @@ export function BuildActions({
   insertablePlugs,
   onEquipped,
   pieceMap,
+  onDream,
 }: {
   loadout: OptimizerLoadout;
   pieces: (ArmorPiece | undefined)[];
@@ -274,6 +277,16 @@ export function BuildActions({
   return (
     // Figma 18:6865 footer: outline actions, then the emphatic "Save as loadout".
     <div className="flex flex-wrap items-center justify-end gap-2 p-4">
+      {onDream && (
+        <Button
+          variant="outline"
+          onClick={() => onDream(loadout)}
+          className="mr-auto"
+        >
+          <Sparkle data-icon="inline-start" aria-hidden />
+          Dream build
+        </Button>
+      )}
       <TooltipLabel
         label={
           missingTitle ??
