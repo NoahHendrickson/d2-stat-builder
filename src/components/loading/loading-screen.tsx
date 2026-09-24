@@ -207,17 +207,20 @@ export function LoadingScreenView({
       <div className="relative z-10 flex h-full flex-col items-center justify-center px-6">
         <div className="flex w-full max-w-sm flex-col gap-3 [text-shadow:0_1px_8px_rgb(0_0_0/0.6)]">
           <h1 className="d2-heading text-lg">Loading your armor</h1>
+          {/* Drawn like the stat slider's track (ui/slider.tsx): a 10px well
+              framed by the line with a 2px gap and the green fill in the white
+              line. The faint white tint echoes the slider's achievable-ceiling fill. */}
           <div
             role="progressbar"
             aria-label="Loading progress"
             aria-valuemin={0}
             aria-valuemax={100}
             aria-valuenow={pct}
-            className="d2-line h-2.5 w-full bg-black/45"
+            className="d2-line bg-foreground/10 p-0.5"
           >
             <div
-              className="d2-line-white d2-fill h-full"
-              style={{ width: `${pct}%` }}
+              className="d2-line-white d2-fill h-2.5"
+              style={{ width: `${progress * 100}%` }}
             />
           </div>
           <div className="flex w-full items-baseline justify-between gap-4">
