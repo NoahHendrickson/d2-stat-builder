@@ -21,7 +21,7 @@ import type { DreamInput } from "@/lib/optimizer/dream";
 import type { CeilingsView } from "@/lib/optimizer/optimizer-store";
 import type { OptimizerLoadout } from "@/lib/optimizer/types";
 import { useDreamBuild } from "@/lib/optimizer/use-dream-build";
-import { createValueStore } from "@/lib/value-store";
+import { createValueStore, useStoreValue } from "@/lib/value-store";
 import { cn } from "@/lib/utils";
 import { Check } from "@phosphor-icons/react";
 
@@ -88,12 +88,22 @@ function DreamBuildBody({
     createValueStore<CeilingsView>({ values: null, exact: false }),
   );
   // …and past it, striped: how far farming a replacement could take each stat.
-  const [possibleView] = useState(() => createValueStore<number[] | null>(null));
+  const [possibleView] = useState(() =>
+    createValueStore<CeilingsView>({ values: null, exact: false }),
+  );
   const result = state.result;
   useEffect(() => {
     if (result) {
-      ceilingsView.set({ values: result.ownedCeilings, exact: result.ownedCeilingsExact });
-      possibleView.set(result.possibleCeilings);
+      // Keep the last FEASIBLE values. Each stat's ceiling holds the other five targets,
+      // so once one target is past what the build reaches (step 2), the owned search is
+      // infeasible for every other stat and reports 0 — which would wipe the max and the
+      // striped band off every other slider. Same for the possible reach past it.
+      if (result.newPieces === 0) {
+        ceilingsView.set({ values: result.ownedCeilings, exact: result.ownedCeilingsExact });
+      }
+      if (result.newPieces !== null) {
+        possibleView.set({ values: result.possibleCeilings, exact: result.possibleCeilingsExact });
+      }
     }
   }, [result, ceilingsView, possibleView]);
 
@@ -106,7 +116,7 @@ function DreamBuildBody({
   // The two steps: make room, then ask for more than the build reaches. "Past its max" is
   // against the latest search's reach for these targets (the build's stats before one).
   const lowered = targets.some((v, i) => v < build.stats[i]);
-  const reach = result?.ownedCeilings ?? build.stats;
+  const reach = useStoreValue(ceilingsView).values ?? build.stats;
   const pushedPast = targets.some((v, i) => v > reach[i]);
   const idleNote = !lowered
     ? "Start on the left: lower the stats you don't need. That frees up room for the ones you want."

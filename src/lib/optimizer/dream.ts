@@ -159,8 +159,10 @@ export interface DreamResult {
    */
   newPieces: number | null;
   /**
-   * Distinct farm options at that count, best build total first. At 0, one option with no
-   * farm pieces: the owned build's plan for these targets. Empty at null.
+   * Distinct farm options at that count. At k = 1, easiest drops first — options that work
+   * with any tuned stat, then the rest — each group best build total first; at k ≥ 2,
+   * best total first. At 0, one option with no farm pieces: the owned build's plan for
+   * these targets. Empty at null.
    */
   options: DreamOption[];
   /** True if any solve hit its time budget — "fewest" and the options are best-effort. */
@@ -215,9 +217,23 @@ function offStatsOf(primary: number, secondary: number, tertiary: number): numbe
   return out;
 }
 
-/** What to farm, ignoring tertiary, tuned stat, and set: what the options are distinct by. */
+/**
+ * What to farm, ignoring tertiary and tuned stat: what the options are distinct by. The
+ * set is part of it — with set requirements, the same archetype from two required sets
+ * is two different farm targets (only one of them may satisfy the build).
+ */
 function rollGroup(d: DreamPiece): string {
-  return `${d.slot}:${d.archetype}:${d.exotic ? "E" : "L"}`;
+  return `${d.slot}:${d.archetype}:${d.exotic ? "E" : "L"}:${d.setHash ?? 0}`;
+}
+
+/**
+ * A slot's rolls minus the Balanced-only (any-tuned) variants: each is dominated by the
+ * same roll's tuned variants (same stats, a superset of tuning options), so it can't
+ * raise a ceiling or win a subset solve. It matters only where "works whatever it
+ * rolled" is the question: the k = 1 flexible pass and each option's roll enumeration.
+ */
+function withoutAnyTuned(pool: DreamPiece[]): DreamPiece[] {
+  return pool.filter((d) => d.exotic || d.tuned !== null);
 }
 
 /** Every dream roll that may fill `slot`, as optimizer pieces plus their descriptions. */
@@ -360,7 +376,7 @@ export function solveDream(input: DreamInput, opts: DreamSolveOptions = {}): Dre
   const rollsThatWork = (lo: OptimizerLoadout, slot: number): FarmRoll[] => {
     const d = byId.get(lo.pieceIds[slot])!;
     const variants = dream[slot].filter(
-      (v) => rollGroup(v) === rollGroup(d) && v.setHash === d.setHash,
+      (v) => rollGroup(v) === rollGroup(d),
     );
     const fixed = new Map<number, DreamPiece[]>([[slot, variants]]);
     lo.pieceIds.forEach((id, s) => {
@@ -433,7 +449,7 @@ export function solveDream(input: DreamInput, opts: DreamSolveOptions = {}): Dre
   const possible = solveOnce(
     slotsWith(new Map(), (slot) => [
       ...input.base.slots[slot],
-      ...dream[slot].map((p) => toOptimizerPiece(p, input)),
+      ...withoutAnyTuned(dream[slot]).map((p) => toOptimizerPiece(p, input)),
     ]),
     1,
     { ceilingBudgetMs: OWNED_CEILING_BUDGET_MS, ceilingsOnly: true },
@@ -515,7 +531,9 @@ export function solveDream(input: DreamInput, opts: DreamSolveOptions = {}): Dre
     for (let mask = 0; mask < 1 << NUM_SLOTS; mask++) {
       if (popcount(mask) !== k) continue;
       const dreamSlots = new Map<number, DreamPiece[]>();
-      for (let s = 0; s < NUM_SLOTS; s++) if (mask & (1 << s)) dreamSlots.set(s, dream[s]);
+      for (let s = 0; s < NUM_SLOTS; s++) {
+        if (mask & (1 << s)) dreamSlots.set(s, withoutAnyTuned(dream[s]));
+      }
       if ([...dreamSlots.values()].some((d) => d.length === 0)) continue;
       const found = run(slotsWith(dreamSlots), MULTI_PIECE_RESULTS);
       if (!found) break;

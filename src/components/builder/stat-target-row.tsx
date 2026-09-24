@@ -23,7 +23,7 @@ import {
 const STAT_TARGET_TICKS = [0, 50, 100, 150, 200] as const;
 const STAT_SLIDER_MAX = STAT_TARGET_TICKS[STAT_TARGET_TICKS.length - 1];
 /** Stand-in store for rows without a "possible" overlay (hooks can't be conditional). */
-const NO_POSSIBLE = createValueStore<number[] | null>(null);
+const NO_POSSIBLE = createValueStore<CeilingsView>({ values: null, exact: false });
 
 /** What the − / + buttons move a target by. */
 const STAT_STEP = 1;
@@ -83,10 +83,15 @@ export const StatTargetRow = memo(function StatTargetRow({
   baseline?: number;
   /** − / + buttons (±1) beside the value. */
   stepper?: boolean;
-  /** Per-stat reach past the max (e.g. with farmed gear), drawn as a striped fill. */
-  possibleView?: ValueStore<number[] | null>;
+  /**
+   * Per-stat reach past the max (e.g. with farmed gear), drawn as a striped fill. Not
+   * `exact` = an achievable lower bound (the Max tick then reads "n+").
+   */
+  possibleView?: ValueStore<CeilingsView>;
 }) {
-  const possibleValues = useStoreValue(possibleView ?? NO_POSSIBLE);
+  const { values: possibleValues, exact: possibleExact } = useStoreValue(
+    possibleView ?? NO_POSSIBLE,
+  );
   const possible = possibleValues ? possibleValues[index] : undefined;
   const { values: ceilings, exact: ceilingsExact } = useStoreValue(ceilingsView);
   const cap = ceilings ? ceilings[index] : null;
@@ -214,14 +219,18 @@ export const StatTargetRow = memo(function StatTargetRow({
             const reachTick = isCeilingTick && possible !== undefined && possible > cap;
             const tickValue = reachTick ? possible : isCeilingTick ? cap : t;
             const tickLabel = reachTick
-              ? "Max"
+              ? possibleExact
+                ? "Max"
+                : `${possible}+`
               : isCeilingTick
               ? capText!.tickLabel
               : t === STAT_SLIDER_MAX
                 ? "Max"
                 : String(t);
             const tickAria = reachTick
-              ? `Set ${label} to what farming could reach (${possible})`
+              ? possibleExact
+                ? `Set ${label} to what farming could reach (${possible})`
+                : `Set ${label} to what farming could reach: at least ${possible}`
               : isCeilingTick
               ? capText!.tickAria
               : `Set ${label} to ${t}`;

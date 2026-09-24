@@ -307,9 +307,13 @@ function ModPlan({ loadout, icons }: { loadout: OptimizerLoadout; icons: StatIco
 }
 
 /** Short label for an option switcher button: "Helmet → Skirmisher". */
-function optionLabel(option: DreamOption): string {
+function optionLabel(option: DreamOption, setNames: ReadonlyMap<number, string>): string {
   return option.farm
-    .map((f) => `${SLOT_LABELS[ARMOR_SLOTS[f.slot]]} → ${f.exotic ? (f.exoticName ?? "Exotic") : f.archetype}`)
+    .map((f) => {
+      const what = f.exotic ? (f.exoticName ?? "Exotic") : f.archetype;
+      const set = f.setHash !== undefined ? setNames.get(f.setHash) : undefined;
+      return `${SLOT_LABELS[ARMOR_SLOTS[f.slot]]} → ${what}${set ? ` (${set})` : ""}`;
+    })
     .join(", ");
 }
 
@@ -322,7 +326,7 @@ type RowVerdict =
 /**
  * The dream build as a side-by-side: each slot's current piece on the left and, on the
  * right, "Keep" or the roll to farm in its place — for the option picked above the
- * table (several ways to get there are usually found; the best is shown first). A status
+ * table (several ways to get there are usually found; the easiest drop first). A status
  * line with a sweeping bar shows while a search runs; a stale result stays up, dimmed.
  */
 export function DreamComparison({
@@ -418,7 +422,7 @@ export function DreamComparison({
               className="aria-pressed:bg-foreground/10 aria-pressed:[--line-alpha:1.8]"
             >
               <span className="text-muted-foreground tabular-nums">{i + 1}</span>
-              {optionLabel(o)}
+              {optionLabel(o, setNames)}
             </Button>
           ))}
         </div>

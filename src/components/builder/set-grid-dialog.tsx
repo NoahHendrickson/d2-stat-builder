@@ -388,6 +388,7 @@ function SetGridBody({
           first={set.name}
           second={other.name}
           archetype={archetype.name}
+          tunedLabel={tuned === null ? undefined : STAT_LABELS[STAT_ORDER[tuned]]}
           coveredFirst={coveredSlots(grid)}
           coveredSecond={coveredSlots(otherGrid)}
         />
@@ -594,12 +595,15 @@ function TwoPlusTwoList({
   first,
   second,
   archetype,
+  tunedLabel,
   coveredFirst,
   coveredSecond,
 }: {
   first: string;
   second: string;
   archetype: string;
+  /** The tuning filter in effect, if any — coverage is counted under it. */
+  tunedLabel?: string;
   coveredFirst: boolean[];
   coveredSecond: boolean[];
 }) {
@@ -618,7 +622,8 @@ function TwoPlusTwoList({
       </div>
       {splits.length === 0 ? (
         <p className="text-muted-foreground text-xs">
-          No 2 + 2 split with {archetype} pieces: {first} covers {nFirst} slot
+          No 2 + 2 split with {archetype} pieces
+          {tunedLabel ? ` tuned to ${tunedLabel}` : ""}: {first} covers {nFirst} slot
           {nFirst === 1 ? "" : "s"} and {second} {nSecond}, and each needs two slots the
           other isn&apos;t using.
         </p>
