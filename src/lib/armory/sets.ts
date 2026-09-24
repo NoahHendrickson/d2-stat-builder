@@ -1,5 +1,6 @@
 import type { Manifest } from "@/lib/manifest/load";
-import type { ArmorPiece } from "./normalize";
+import { itemWatermark, type ArmorPiece } from "./normalize";
+import { ARMOR_BUCKETS, type ArmorSlot } from "./stats";
 
 export interface SetPerkInfo {
   requiredCount: number;
@@ -53,4 +54,34 @@ export function availableSets(
   }
 
   return sets.sort((a, b) => b.ownedCount - a.ownedCount);
+}
+
+/** A set piece's look for one slot: its icon and season watermark. */
+export interface SetSlotIcon {
+  icon: string;
+  watermark?: string;
+}
+
+/**
+ * The set's own item icon per slot for one class, from the set definition's item list
+ * (every class's pieces are listed; the first match per slot wins). Slots the manifest
+ * has no iconned piece for are absent.
+ */
+export function setSlotIcons(
+  manifest: Manifest,
+  setHash: number,
+  classType: number,
+): Partial<Record<ArmorSlot, SetSlotIcon>> {
+  const out: Partial<Record<ArmorSlot, SetSlotIcon>> = {};
+  const set = manifest.def("DestinyEquipableItemSetDefinition", setHash);
+  for (const itemHash of set?.setItems ?? []) {
+    const def = manifest.def("DestinyInventoryItemDefinition", itemHash);
+    if (!def || def.classType !== classType) continue;
+    const slot =
+      ARMOR_BUCKETS[def.inventory?.bucketTypeHash as keyof typeof ARMOR_BUCKETS];
+    const icon = def.displayProperties?.icon;
+    if (!slot || !icon || out[slot]) continue;
+    out[slot] = { icon, watermark: itemWatermark(def) };
+  }
+  return out;
 }

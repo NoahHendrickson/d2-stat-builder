@@ -566,6 +566,15 @@ input[type="number"] {
   inherits: false;
   initial-value: 0deg;
 }
+/* Indeterminate progress: a segment sweeping across its track (dream build search). */
+@keyframes dream-sweep {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(250%);
+  }
+}
 @keyframes line-drift {
   from {
     --line-angle: 0deg;

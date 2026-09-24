@@ -10,7 +10,11 @@ import {
 } from "@/components/ui/tooltip";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
-import type { ArmorSetInfo, SetPerkInfo } from "@/lib/armory/sets";
+import type { ArmorSetInfo, SetPerkInfo, SetSlotIcon } from "@/lib/armory/sets";
+import type { ArmorPiece } from "@/lib/armory/normalize";
+import type { ArmorSlot, StatIconMap } from "@/lib/armory/stats";
+import type { DreamArchetype } from "@/lib/optimizer/dream";
+import { SetGridDialog } from "@/components/builder/set-grid-dialog";
 
 export const SetRow = memo(function SetRow({
   set,
@@ -18,12 +22,27 @@ export const SetRow = memo(function SetRow({
   req,
   onTogglePin,
   onToggleSet,
+  pieces,
+  archetypes,
+  statIcons,
+  getSlotIcons,
+  sets,
+  pinnedSets,
 }: {
   set: ArmorSetInfo;
   pinned: boolean;
   req: 2 | 4 | undefined;
   onTogglePin: (setHash: number) => void;
   onToggleSet: (setHash: number, count: 2 | 4) => void;
+  /** The optimizer pool, for the set's roll grid. */
+  pieces: readonly ArmorPiece[];
+  archetypes: readonly DreamArchetype[];
+  statIcons: StatIconMap;
+  getSlotIcons: (setHash: number) => Partial<Record<ArmorSlot, SetSlotIcon>>;
+  /** Every set in the pool, for the grid's compare picker. */
+  sets: readonly ArmorSetInfo[];
+  /** Pinned set hashes (marked in the grid's set pickers). */
+  pinnedSets: ReadonlySet<number>;
 }) {
   const perk2Info = set.perks.find((p) => p.requiredCount === 2);
   const perk4Info = set.perks.find((p) => p.requiredCount === 4);
@@ -65,6 +84,15 @@ export const SetRow = memo(function SetRow({
         disabled={set.ownedCount < 4}
         perk={perk4Info}
         onToggle={() => onToggleSet(set.setHash, 4)}
+      />
+      <SetGridDialog
+        set={set}
+        pieces={pieces}
+        archetypes={archetypes}
+        statIcons={statIcons}
+        getSlotIcons={getSlotIcons}
+        sets={sets}
+        pinnedSets={pinnedSets}
       />
     </div>
   );

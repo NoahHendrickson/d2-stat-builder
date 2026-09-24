@@ -280,6 +280,7 @@ const BuildRow = memo(function BuildRow({
   manifest,
   insertablePlugs,
   onEquipped,
+  onDream,
 }: {
   loadout: OptimizerLoadout;
   pieceMap: Map<string, ArmorPiece>;
@@ -580,6 +581,7 @@ const BuildRow = memo(function BuildRow({
             insertablePlugs={insertablePlugs}
             onEquipped={onEquipped}
             pieceMap={pieceMap}
+            onDream={onDream}
           />
         </div>
       )}
@@ -770,6 +772,7 @@ export function BuildResults({
   manifest,
   insertablePlugs,
   onEquipped,
+  onDream,
   sort,
 }: {
   result: OptimizerOutput;
@@ -860,6 +863,7 @@ export function BuildResults({
             manifest={manifest}
             insertablePlugs={insertablePlugs}
             onEquipped={onEquipped}
+            onDream={onDream}
           />
         ))}
       </div>
