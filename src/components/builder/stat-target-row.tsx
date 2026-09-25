@@ -22,8 +22,8 @@ import {
 /** Clickable preset markers under each stat slider. */
 const STAT_TARGET_TICKS = [0, 50, 100, 150, 200] as const;
 const STAT_SLIDER_MAX = STAT_TARGET_TICKS[STAT_TARGET_TICKS.length - 1];
-/** Stand-in store for rows without a "possible" overlay (hooks can't be conditional). */
-const NO_POSSIBLE = createValueStore<CeilingsView>({ values: null, exact: false });
+/** Stand-in store for rows without a ceiling overlay (hooks can't be conditional). */
+const NO_CEILINGS = createValueStore<CeilingsView>({ values: null, exact: false });
 
 /** What the − / + buttons move a target by. */
 const STAT_STEP = 1;
@@ -69,42 +69,33 @@ export const StatTargetRow = memo(function StatTargetRow({
   value,
   ceilingsView,
   onChange,
-  baseline,
   stepper = false,
-  possibleView,
 }: {
   statKey: (typeof STAT_DISPLAY_ORDER)[number];
   index: number;
   icon?: string;
   value: number;
-  ceilingsView: ValueStore<CeilingsView>;
+  /** Achievable max per stat, overlaid on the bar; without it the bar runs to 200. */
+  ceilingsView?: ValueStore<CeilingsView>;
   onChange: (index: number, value: number) => void;
-  /** Where this target started: marked on the bar, with "was n" once it moves. */
-  baseline?: number;
   /** − / + buttons (±1) beside the value. */
   stepper?: boolean;
-  /**
-   * Per-stat reach past the max (e.g. with farmed gear), drawn as a striped fill. Not
-   * `exact` = an achievable lower bound (the Max tick then reads "n+").
-   */
-  possibleView?: ValueStore<CeilingsView>;
 }) {
-  const { values: possibleValues, exact: possibleExact } = useStoreValue(
-    possibleView ?? NO_POSSIBLE,
+  const { values: ceilings, exact: ceilingsExact } = useStoreValue(
+    ceilingsView ?? NO_CEILINGS,
   );
-  const possible = possibleValues ? possibleValues[index] : undefined;
-  const { values: ceilings, exact: ceilingsExact } = useStoreValue(ceilingsView);
   const cap = ceilings ? ceilings[index] : null;
   const label = STAT_LABELS[statKey];
   // Achievable ceiling for this stat given the others. Overlay it as a
-  // lighter fill up to that max (full-width at 200); omit only while
-  // unknown (before the first search). Every wording derived from the
-  // proven/unproven distinction lives in this ONE object so the visible
-  // text, tick label, and accessible names can't drift apart: an exact
-  // ceiling is a hard "/ max"; an unproven one is a lower bound ("81+"
-  // — achievable, but possibly more out there, e.g. while a refinement
-  // is still probing or its budget expired). Both render "/ n" inline;
-  // only the tick label and accessible wording mark the difference.
+  // lighter fill up to that max (full-width at 200); omit while unknown
+  // (before the first search) and when no `ceilingsView` is passed (Dream).
+  // Every wording derived from the proven/unproven distinction lives in
+  // this ONE object so the visible text, tick label, and accessible names
+  // can't drift apart: an exact ceiling is a hard "/ max"; an unproven one
+  // is a lower bound ("81+" — achievable, but possibly more out there, e.g.
+  // while a refinement is still probing or its budget expired). Both render
+  // "/ n" inline; only the tick label and accessible wording mark the
+  // difference.
   const ceilingValue = cap ?? undefined;
   const capText =
     cap === null
@@ -145,11 +136,6 @@ export const StatTargetRow = memo(function StatTargetRow({
           </span>
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          {baseline !== undefined && value !== baseline && (
-            <span className="text-muted-foreground text-[11px] leading-5 tabular-nums whitespace-nowrap">
-              was {baseline}
-            </span>
-          )}
           {stepper && (
             <StepButton
               label={`Lower ${label} by ${STAT_STEP}`}
@@ -205,8 +191,6 @@ export const StatTargetRow = memo(function StatTargetRow({
           value={[value]}
           onValueChange={(v) => onChange(index, Array.isArray(v) ? v[0] : v)}
           ceiling={ceilingValue}
-          marker={baseline}
-          possible={possible}
           aria-label={`${label} target`}
           className="cursor-pointer"
         />
@@ -215,23 +199,13 @@ export const StatTargetRow = memo(function StatTargetRow({
             // Once a ceiling is known, the top tick jumps the target to
             // that achievable value instead of 200 (labels per capText).
             const isCeilingTick = t === STAT_SLIDER_MAX && cap !== null;
-            // With a "possible" overlay past the max, Max jumps to its end instead.
-            const reachTick = isCeilingTick && possible !== undefined && possible > cap;
-            const tickValue = reachTick ? possible : isCeilingTick ? cap : t;
-            const tickLabel = reachTick
-              ? possibleExact
-                ? "Max"
-                : `${possible}+`
-              : isCeilingTick
+            const tickValue = isCeilingTick ? cap : t;
+            const tickLabel = isCeilingTick
               ? capText!.tickLabel
-              : t === STAT_SLIDER_MAX
+              : t === STAT_SLIDER_MAX && ceilingsView
                 ? "Max"
                 : String(t);
-            const tickAria = reachTick
-              ? possibleExact
-                ? `Set ${label} to what farming could reach (${possible})`
-                : `Set ${label} to what farming could reach: at least ${possible}`
-              : isCeilingTick
+            const tickAria = isCeilingTick
               ? capText!.tickAria
               : `Set ${label} to ${t}`;
             return (

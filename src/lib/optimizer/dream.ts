@@ -34,10 +34,6 @@ const T5_MASTERWORKED_OFF_STAT = 5;
 /** Whole dream search wall clock; each solve gets what's left (capped per solve). */
 const DREAM_BUDGET_MS = 15000;
 const DREAM_SOLVE_BUDGET_MS = 3000;
-/** Ceiling refinement for the owned and possible passes (the sliders' max / reach). */
-const OWNED_CEILING_BUDGET_MS = 1500;
-/** Build-walk budget for the ceilings-only pass (it only seeds the ceiling search). */
-const CEILINGS_ONLY_TOPN_BUDGET_MS = 300;
 /** Distinct farm options to return. */
 const MAX_OPTIONS = 6;
 /**
@@ -167,20 +163,6 @@ export interface DreamResult {
   options: DreamOption[];
   /** True if any solve hit its time budget — "fewest" and the options are best-effort. */
   capped: boolean;
-  /**
-   * What the owned armor alone reaches per stat, given the other five targets (the
-   * regular search's ceilings, for these targets). Exact unless `ownedCeilingsExact` is
-   * false, in which case they're achievable lower bounds.
-   */
-  ownedCeilings: number[];
-  ownedCeilingsExact: boolean;
-  /**
-   * What each stat could reach if any unlocked piece may be replaced by a farmed roll,
-   * given the other five targets — the "possible" reach shown past the owned max. Same
-   * exactness contract as `ownedCeilings`. Never below it (the owned pieces stay in).
-   */
-  possibleCeilings: number[];
-  possibleCeilingsExact: boolean;
 }
 
 export interface DreamSolveOptions {
@@ -340,16 +322,8 @@ export function solveDream(input: DreamInput, opts: DreamSolveOptions = {}): Dre
       return d ? d.map((p) => toOptimizerPiece(p, input)) : owned(slot);
     });
 
-  /**
-   * One solve over `slots`; null once out of time. `ceilingsOnly`: a pass run just for
-   * its ceilings, whose build list is discarded — a capped build walk there says
-   * nothing about the options, so it doesn't mark the result capped.
-   */
-  const solveOnce = (
-    slots: OptimizerPiece[][],
-    maxResults: number,
-    { ceilingBudgetMs = 0, ceilingsOnly = false } = {},
-  ) => {
+  /** One solve over `slots`; null once out of time. */
+  const run = (slots: OptimizerPiece[][], maxResults: number): OptimizerLoadout[] | null => {
     const remaining = deadline - performance.now();
     if (remaining <= 0) {
       timedOut = capped = true;
@@ -357,16 +331,11 @@ export function solveDream(input: DreamInput, opts: DreamSolveOptions = {}): Dre
     }
     const out = solve(
       { ...input.base, slots, maxResults },
-      {
-        topNBudgetMs: Math.min(ceilingsOnly ? CEILINGS_ONLY_TOPN_BUDGET_MS : solveBudget, remaining),
-        ceilingBudgetMs,
-      },
+      { topNBudgetMs: Math.min(solveBudget, remaining), ceilingBudgetMs: 0 },
     );
-    if (out.capped && !ceilingsOnly) capped = true;
-    return out;
+    if (out.capped) capped = true;
+    return out.loadouts;
   };
-  const run = (slots: OptimizerPiece[][], maxResults: number): OptimizerLoadout[] | null =>
-    solveOnce(slots, maxResults)?.loadouts ?? null;
 
   /**
    * Every roll of `lo`'s archetype at `slot` (same set) that keeps it valid with its
@@ -440,36 +409,17 @@ export function solveDream(input: DreamInput, opts: DreamSolveOptions = {}): Dre
     };
   };
 
-  // k = 0: the owned armor alone — also what the sliders show as each stat's max.
+  // k = 0: the owned armor alone.
   opts.onPhase?.(0);
-  const owned = solveOnce(input.base.slots, 1, { ceilingBudgetMs: OWNED_CEILING_BUDGET_MS });
-  const ownedCeilings = owned?.ceilings ?? new Array(NUM_STATS).fill(0);
-  const ownedCeilingsExact = owned?.ceilingsExact ?? false;
-  // The same ceilings with every unlocked slot also open to any farmable roll.
-  const possible = solveOnce(
-    slotsWith(new Map(), (slot) => [
-      ...input.base.slots[slot],
-      ...withoutAnyTuned(dream[slot]).map((p) => toOptimizerPiece(p, input)),
-    ]),
-    1,
-    { ceilingBudgetMs: OWNED_CEILING_BUDGET_MS, ceilingsOnly: true },
-  );
-  const possibleCeilings = (possible?.ceilings ?? ownedCeilings).map((v, s) =>
-    Math.max(v, ownedCeilings[s]),
-  );
-  const possibleCeilingsExact = possible?.ceilingsExact ?? false;
+  const owned = run(input.base.slots, 1);
   const done = (newPieces: number | null, options: DreamOption[]): DreamResult => ({
     newPieces,
     options,
     capped,
-    ownedCeilings,
-    ownedCeilingsExact,
-    possibleCeilings,
-    possibleCeilingsExact,
   });
   // Reachable as is: return the build's own plan (the tuning and mods these targets
   // need can differ from the build as it was listed).
-  if (owned?.loadouts.length) return done(0, [{ loadout: owned.loadouts[0], farm: [] }]);
+  if (owned?.length) return done(0, [{ loadout: owned[0], farm: [] }]);
   opts.onPhase?.(1);
 
   // k = 1, best-first over distinct archetypes per slot: first those with a roll that
