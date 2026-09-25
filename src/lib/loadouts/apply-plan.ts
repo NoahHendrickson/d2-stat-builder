@@ -7,15 +7,27 @@
 // plus the user's optional socket-by-socket `modPlacement`: explicit placements are
 // honored first, everything left is auto-placed. So it applies equally to loadouts
 // saved from the builder, edited in the mod picker, and imported.
+//
+// The loadout is applied exactly: an energy-costing leftover in a socket the loadout
+// doesn't fill is reset to its empty plug (see `clearsLeftover`), so it neither stays on
+// the armor nor holds the energy the loadout's own mods need — even when some of the
+// loadout's mods can't be placed. The one carve-out: 0-cost plugs (tuning, artifice)
+// stay when the loadout doesn't list them, since they carry stats, not energy. The plan
+// decides each socket's final plug first; the actions are the diff from what's socketed.
 // Runtime imports are relative so the module runs under vitest.
 import type { ArmorSocketKind } from "../armory/stats";
-import { baselineEnergy } from "./energy";
+import { baselineEnergy, clearsLeftover } from "./energy";
 
 export interface PlanSocket {
   index: number;
   kind: ArmorSocketKind;
   /** Currently socketed plug. */
   current?: number;
+  /**
+   * The socket's initial plug from its definition ("Empty Mod Socket" for mod sockets).
+   * Undefined when the definition doesn't name one, so the socket is never cleared.
+   */
+  empty?: number;
   /** Plug hashes this socket accepts (its plug set). Undefined = judge by kind only. */
   accepts?: ReadonlySet<number>;
 }
@@ -64,7 +76,7 @@ export interface ApplyPlan {
    * so a mod that merely doesn't fit the player's CURRENT armor isn't silently dropped.
    */
   unplaced: UnplacedMod[];
-  /** Final plug per (piece, socket) the plan arrives at — for previews. */
+  /** Final plug per (piece, socket) the plan arrives at — for previews. Empty plugs are left out. */
   placement: Record<string, Record<number, number>>;
   /** Only the sockets this plan assigned a loadout mod to (new or already correct). */
   assigned: Record<string, Record<number, number>>;
@@ -103,10 +115,13 @@ export interface PlanInput {
 
 interface PieceState {
   piece: PlanPiece;
-  /** socket index → plug the plan will leave there (current until changed). */
+  /**
+   * socket index → plug the plan leaves there: the loadout's mod where one is assigned,
+   * otherwise the empty plug for a leftover that gets cleared, otherwise what's there now.
+   */
   plugs: Map<number, number | undefined>;
-  /** Sockets already given a plug by this plan (or locked as already correct). */
-  taken: Set<number>;
+  /** Sockets given a loadout mod by this plan (new or already correct) → its action label. */
+  taken: Map<number, string>;
   /** Energy consumed by sockets we don't manage (baseline). */
   baseUsed: number;
 }
@@ -124,15 +139,15 @@ export function planLoadoutPlugs(input: PlanInput): ApplyPlan {
   const unplaced: UnplacedMod[] = [];
   const cost = (h: number | undefined) => (h === undefined ? 0 : (plugInfo(h)?.cost ?? 0));
 
+  // Every socket starts at the plug it ends with if the loadout doesn't fill it.
+  const unfilled = (s: PlanSocket) => (clearsLeftover(s.current, s.empty, cost) ? s.empty : s.current);
   const states = new Map<string, PieceState>();
   for (const piece of input.pieces) {
-    const plugsMap = new Map<number, number | undefined>();
-    for (const s of piece.sockets) plugsMap.set(s.index, s.current);
     states.set(piece.instanceId, {
       piece,
-      plugs: plugsMap,
-      taken: new Set(),
-      baseUsed: baselineEnergy(piece.energy, plugsMap.values(), cost),
+      plugs: new Map(piece.sockets.map((s) => [s.index, unfilled(s)])),
+      taken: new Map(),
+      baseUsed: baselineEnergy(piece.energy, piece.sockets.map((s) => s.current), cost),
     });
   }
 
@@ -156,19 +171,9 @@ export function planLoadoutPlugs(input: PlanInput): ApplyPlan {
     return after <= capacity(st);
   };
 
-  const assigned: Record<string, Record<number, number>> = {};
   const place = (st: PieceState, socket: PlanSocket, hash: number, info: PlugInfo) => {
-    const label = `${info.name} → ${st.piece.name}`;
-    const action = { itemInstanceId: st.piece.instanceId, socketIndex: socket.index, plugItemHash: hash, label };
-    st.taken.add(socket.index);
-    (assigned[st.piece.instanceId] ??= {})[socket.index] = hash;
-    if (st.plugs.get(socket.index) === hash) {
-      alreadyApplied.push(label);
-      inPlace.push(action);
-      return;
-    }
+    st.taken.set(socket.index, `${info.name} → ${st.piece.name}`);
     st.plugs.set(socket.index, hash);
-    plugs.push(action);
   };
 
   // Mods still to place (multiset, in loadout order).
@@ -202,11 +207,12 @@ export function planLoadoutPlugs(input: PlanInput): ApplyPlan {
     }
   }
 
-  // --- Pass 2: lock in mods already sitting in a matching socket.
+  // --- Pass 2: lock in mods already sitting in a matching socket, while they still fit
+  // (explicit placements may have spent the energy); the rest fall through to pass 3.
   for (const entry of [...remaining]) {
     for (const st of states.values()) {
       const socket = st.piece.sockets.find(
-        (s) => !st.taken.has(s.index) && s.current === entry.hash && s.kind === entry.info.kind,
+        (s) => s.current === entry.hash && fits(st, s, entry.hash, entry.info),
       );
       if (socket) {
         takeRemaining(entry.hash);
@@ -267,6 +273,38 @@ export function planLoadoutPlugs(input: PlanInput): ApplyPlan {
     place(candidates[0].st, candidates[0].socket, entry.hash, entry.info);
   }
 
+  // --- Armor actions: diff each socket's current plug against the plan's. Actions that
+  // free energy (clears, cheaper swaps) run before ones that use it, so the piece's live
+  // energy only dips from where it starts and then climbs to where it ends — never over.
+  const freeing: PlugAction[] = [];
+  const using: PlugAction[] = [];
+  const assigned: Record<string, Record<number, number>> = {};
+  const placement: Record<string, Record<number, number>> = {};
+  for (const st of states.values()) {
+    const { instanceId, name } = st.piece;
+    const row: Record<number, number> = (placement[instanceId] = {});
+    for (const socket of st.piece.sockets) {
+      const { current } = socket;
+      const desired = st.plugs.get(socket.index);
+      const label = st.taken.get(socket.index);
+      if (desired !== undefined && desired !== socket.empty) row[socket.index] = desired;
+      if (label !== undefined && desired !== undefined) (assigned[instanceId] ??= {})[socket.index] = desired;
+      if (desired === undefined) continue;
+      const action: PlugAction = {
+        itemInstanceId: instanceId,
+        socketIndex: socket.index,
+        plugItemHash: desired,
+        label: label ?? `Remove ${plugInfo(current!)?.name ?? `mod #${current}`} → ${name}`,
+      };
+      if (desired === current) {
+        if (label === undefined) continue;
+        alreadyApplied.push(label);
+        inPlace.push(action);
+      } else (cost(desired) <= cost(current) ? freeing : using).push(action);
+    }
+  }
+  plugs.push(...freeing, ...using);
+
   // --- Fragments: keep ones already socketed; put the rest into sockets holding
   // fragments the loadout doesn't want (or nothing), lowest index first.
   if (input.subclass) {
@@ -312,13 +350,6 @@ export function planLoadoutPlugs(input: PlanInput): ApplyPlan {
         }
       }
     }
-  }
-
-  const placement: Record<string, Record<number, number>> = {};
-  for (const st of states.values()) {
-    const row: Record<number, number> = {};
-    for (const [idx, hash] of st.plugs) if (hash !== undefined) row[idx] = hash;
-    placement[st.piece.instanceId] = row;
   }
 
   return { plugs, alreadyApplied, inPlace, skipped, unplaced, placement, assigned };

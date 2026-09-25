@@ -16,3 +16,16 @@ export function baselineEnergy(
   for (const h of currentPlugs) if (h) managed += costOf(h);
   return Math.max(0, energy.used - managed);
 }
+
+/**
+ * Does applying a loadout reset this socket to its empty plug when the loadout leaves it
+ * unfilled? Only when the leftover costs energy (the loadout's own mods may need it) and
+ * the socket's empty plug is known. 0-cost tuning / artifice plugs carry stats, so they stay.
+ */
+export function clearsLeftover(
+  current: number | undefined,
+  empty: number | undefined,
+  costOf: (hash: number) => number,
+): boolean {
+  return empty !== undefined && current !== undefined && current !== empty && costOf(current) > 0;
+}

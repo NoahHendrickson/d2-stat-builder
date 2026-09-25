@@ -1,5 +1,26 @@
 import { test, expect, describe } from "vitest";
-import { planLoadoutPlugs, type PlanPiece, type PlanSocket, type PlugInfo } from "./apply-plan";
+import { planLoadoutPlugs as plan, type PlanInput, type PlanPiece, type PlanSocket, type PlugInfo } from "./apply-plan";
+import { clearsLeftover } from "./energy";
+
+// Every plan below is also replayed against live energy the way Bungie applies it —
+// one insert at a time — so an action order that overflows mid-apply fails the test
+// even when the final state fits.
+function planLoadoutPlugs(input: PlanInput) {
+  const result = plan(input);
+  for (const piece of input.pieces) {
+    if (!piece.energy) continue;
+    const socketed = new Map(piece.sockets.map((s) => [s.index, s.current]));
+    let used = piece.energy.used;
+    for (const a of result.plugs) {
+      if (a.itemInstanceId !== piece.instanceId) continue;
+      const cost = (h: number | undefined) => (h === undefined ? 0 : (INFO[h]?.cost ?? 0));
+      used += cost(a.plugItemHash) - cost(socketed.get(a.socketIndex));
+      socketed.set(a.socketIndex, a.plugItemHash);
+      expect(used, `${a.label} overflows ${piece.name}`).toBeLessThanOrEqual(piece.energy.capacity);
+    }
+  }
+  return result;
+}
 
 // Plug catalogue: 10x = major (+10, cost 3), 20x = minor (+5, cost 1), 300 = balanced,
 // 31x = directional (+5 to stat x), 40x = artifice, 50x = fragments, 6xx = slot mods.
@@ -52,8 +73,8 @@ describe("general stat mods", () => {
     expect(plan.alreadyApplied).toEqual(["Major A → has-major"]);
     expect(plan.inPlace.map((p) => [p.plugItemHash, p.itemInstanceId])).toEqual([[101, "has-major"]]);
     expect(plan.plugs.map((p) => [p.plugItemHash, p.itemInstanceId, p.socketIndex])).toEqual([
-      [102, "empty", 1],
       [201, "full", 1],
+      [102, "empty", 1],
     ]);
     expect(plan.skipped).toEqual([]);
     expect(plan.placement).toEqual({
@@ -88,6 +109,170 @@ describe("general stat mods", () => {
       "Unknown mod #7",
       "Major A: no free mod socket with enough energy — remove other mods first",
       "Major B: no free mod socket with enough energy — remove other mods first",
+    ]);
+  });
+});
+
+describe("mods the loadout doesn't list", () => {
+  const clearable = (index: number, current: number): PlanSocket => ({ index, kind: "general", current, empty: EMPTY_GENERAL });
+
+  test("are cleared first, freeing the energy the loadout's mods need", () => {
+    // Two leftover majors (6 of 10 used) leave no room for the loadout's two majors.
+    const plan = planLoadoutPlugs({
+      pieces: [
+        piece({
+          instanceId: "p",
+          sockets: [clearable(1, 101), clearable(2, 101), clearable(3, EMPTY_GENERAL)],
+          energy: { capacity: 10, used: 6 },
+        }),
+      ],
+      modHashes: [102, 201],
+      plugInfo,
+    });
+    expect(plan.skipped).toEqual([]);
+    // The loadout's mods simply replace the leftovers.
+    expect(plan.plugs.map((p) => [p.socketIndex, p.plugItemHash])).toEqual([
+      [1, 102],
+      [2, 201],
+    ]);
+    expect(plan.placement.p).toEqual({ 1: 102, 2: 201 });
+  });
+
+  test("a refill that frees energy runs before an insert that needs it", () => {
+    // 3 of 5 used by a leftover major in socket 2. Placing costliest first puts the new
+    // major into empty socket 1 and the minor over the leftover — only legal in that
+    // final state if the minor goes in first.
+    const plan = planLoadoutPlugs({
+      pieces: [
+        piece({
+          instanceId: "p",
+          sockets: [clearable(1, EMPTY_GENERAL), clearable(2, 101)],
+          energy: { capacity: 5, used: 3 },
+        }),
+      ],
+      modHashes: [102, 201],
+      plugInfo,
+    });
+    expect(plan.skipped).toEqual([]);
+    expect(plan.plugs.map((p) => [p.socketIndex, p.plugItemHash])).toEqual([
+      [2, 201],
+      [1, 102],
+    ]);
+  });
+
+  test("clears run before inserts so a replacement never needs the leftover's energy", () => {
+    // 8 of 10 used: 7 by leftovers in sockets 1–3, 1 by the piece itself. The loadout
+    // wants a major in socket 3.
+    const plan = planLoadoutPlugs({
+      pieces: [
+        piece({
+          instanceId: "p",
+          sockets: [clearable(1, 101), clearable(2, 101), clearable(3, 201)],
+          energy: { capacity: 10, used: 8 },
+        }),
+      ],
+      modHashes: [102],
+      plugInfo,
+      placements: { p: { 3: 102 } },
+    });
+    expect(plan.skipped).toEqual([]);
+    expect(plan.plugs.map((p) => [p.socketIndex, p.plugItemHash, p.label])).toEqual([
+      [1, EMPTY_GENERAL, "Remove Major A → p"],
+      [2, EMPTY_GENERAL, "Remove Major A → p"],
+      [3, 102, "Major B → p"],
+    ]);
+  });
+
+  test("a loadout mod already in place stays; an unclearable socket is left alone", () => {
+    const plan = planLoadoutPlugs({
+      pieces: [
+        piece({
+          instanceId: "p",
+          sockets: [clearable(1, 101), clearable(2, 201), { index: 3, kind: "general", current: 102 }],
+          energy: { capacity: 10, used: 7 },
+        }),
+      ],
+      modHashes: [101],
+      plugInfo,
+    });
+    expect(plan.inPlace.map((p) => p.socketIndex)).toEqual([1]);
+    expect(plan.plugs.map((p) => [p.socketIndex, p.plugItemHash])).toEqual([[2, EMPTY_GENERAL]]);
+    expect(plan.placement.p).toEqual({ 1: 101, 3: 102 });
+    expect(plan.assigned).toEqual({ p: { 1: 101 } });
+  });
+
+  test("a mod already in place is only kept while a pinned placement leaves room for it", () => {
+    // Two 4-cost helmet mods socketed (8 of 10); the loadout pins a 3-cost major into the
+    // empty general socket and lists both helmet mods — only one of them still fits.
+    const slot = (index: number): PlanSocket => ({ ...helmetSlot(601), index, empty: EMPTY_HELMET });
+    const plan = planLoadoutPlugs({
+      pieces: [
+        piece({
+          instanceId: "helmet",
+          sockets: [clearable(1, EMPTY_GENERAL), slot(2), slot(3)],
+          energy: { capacity: 10, used: 8 },
+        }),
+      ],
+      modHashes: [601, 601, 101],
+      plugInfo,
+      placements: { helmet: { 1: 101 } },
+    });
+    expect(plan.skipped).toEqual(["Helmet Mod: no socket on this armor takes it (or not enough energy)"]);
+    expect(plan.inPlace.map((p) => p.socketIndex)).toEqual([2]);
+    expect(plan.plugs.map((p) => [p.socketIndex, p.plugItemHash])).toEqual([
+      [3, EMPTY_HELMET],
+      [1, 101],
+    ]);
+  });
+
+  test("0-cost tuning and artifice plugs stay — they carry stats, not energy", () => {
+    const plan = planLoadoutPlugs({
+      pieces: [
+        piece({
+          instanceId: "p",
+          sockets: [
+            clearable(1, 101),
+            { index: 11, kind: "tuning", current: 311, empty: 300 },
+            { index: 12, kind: "artifice", current: 401, empty: 400 },
+          ],
+          energy: { capacity: 10, used: 3 },
+        }),
+      ],
+      modHashes: [],
+      plugInfo,
+    });
+    expect(plan.plugs.map((p) => p.label)).toEqual(["Remove Major A → p"]);
+    expect(plan.placement.p).toEqual({ 11: 311, 12: 401 });
+  });
+
+  test("a partial apply clears leftovers just the same — the editor's rule, no exceptions", () => {
+    // The shader can't go anywhere, but that doesn't change what happens to the rest:
+    // exactly the sockets `clearsLeftover` flags (what the mod editor labels) are cleared.
+    const sockets = [clearable(1, 101), clearable(2, EMPTY_GENERAL), { index: 11, kind: "tuning" as const, current: 311, empty: 300 }];
+    const plan = planLoadoutPlugs({
+      pieces: [piece({ instanceId: "p", sockets, energy: { capacity: 10, used: 3 } })],
+      modHashes: [201, 999],
+      plugInfo,
+      placements: { p: { 2: 201 } },
+    });
+    expect(plan.skipped).toEqual(["Shader: no socket on this armor takes it (or not enough energy)"]);
+    expect(plan.plugs.map((p) => [p.socketIndex, p.plugItemHash])).toEqual([
+      [1, EMPTY_GENERAL],
+      [2, 201],
+    ]);
+    const cost = (h: number) => INFO[h]?.cost ?? 0;
+    const flagged = sockets.filter((s) => s.index !== 2 && clearsLeftover(s.current, s.empty, cost)).map((s) => s.index);
+    expect(plan.plugs.filter((a) => a.label.startsWith("Remove ")).map((a) => a.socketIndex)).toEqual(flagged);
+  });
+
+  test("a leftover slot mod is cleared too", () => {
+    const plan = planLoadoutPlugs({
+      pieces: [piece({ instanceId: "helmet", sockets: [{ ...helmetSlot(601), empty: EMPTY_HELMET }] })],
+      modHashes: [],
+      plugInfo,
+    });
+    expect(plan.plugs.map((p) => [p.socketIndex, p.plugItemHash, p.label])).toEqual([
+      [2, EMPTY_HELMET, "Remove Helmet Mod → helmet"],
     ]);
   });
 });
