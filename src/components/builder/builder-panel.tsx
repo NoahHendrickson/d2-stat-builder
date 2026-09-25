@@ -849,6 +849,28 @@ export function BuilderPanel({
     if (!open) setDreamBuild(null);
   }, []);
 
+  // Wheeling in the empty space under a short builds list scrolls the
+  // settings pane instead, and leaves the builds pane still (no bounce).
+  // Native non-passive listener: React's onWheel is passive, so it can't
+  // preventDefault.
+  const settingsScrollRef = useRef<HTMLDivElement>(null);
+  const buildsContentRef = useRef<HTMLDivElement>(null);
+  const buildsScrollRef = useCallback((el: HTMLDivElement | null) => {
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      const settings = settingsScrollRef.current;
+      const content = buildsContentRef.current;
+      if (!settings || !content || e.ctrlKey || e.deltaY === 0) return;
+      if (e.clientY <= content.getBoundingClientRect().bottom) return;
+      e.preventDefault();
+      const unit =
+        e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? settings.clientHeight : 1;
+      settings.scrollBy({ top: e.deltaY * unit });
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, []);
+
   const setTarget = useCallback(
     (i: number, value: number) =>
       setTargets((prev) => prev.map((v, idx) => (idx === i ? value : v))),
@@ -994,7 +1016,10 @@ export function BuilderPanel({
           pane. Inner max-width keeps the cards on the 39.74rem track. Mins are
           0 so the two columns share a narrow main pane instead of overflowing
           past `lg:overflow-hidden`. */}
-      <div className="d2-scroll flex min-h-0 min-w-0 flex-col lg:col-start-1 lg:col-end-3 lg:overflow-y-auto lg:overscroll-contain lg:pl-6 lg:pr-2">
+      <div
+        ref={settingsScrollRef}
+        className="d2-scroll flex min-h-0 min-w-0 flex-col lg:col-start-1 lg:col-end-3 lg:overflow-y-auto lg:overscroll-contain lg:pl-6 lg:pr-2"
+      >
         <div className="flex flex-col gap-4 lg:ml-auto lg:w-full lg:max-w-[39.74rem]">
           {ready && (
           <>
@@ -1150,8 +1175,14 @@ export function BuilderPanel({
       )}
 
       {/* Builds scroller spans the results column + the right leftover. */}
-      <div className="d2-scroll min-h-0 min-w-0 lg:col-start-4 lg:col-end-6 lg:overflow-y-auto lg:overscroll-contain lg:pr-6 lg:pl-2">
-        <div className="lg:max-w-[calc((80rem-39.74rem-5rem)*1.15)]">
+      <div
+        className="d2-scroll min-h-0 min-w-0 lg:col-start-4 lg:col-end-6 lg:overflow-y-auto lg:overscroll-contain lg:pr-6 lg:pl-2"
+        ref={buildsScrollRef}
+      >
+        <div
+          ref={buildsContentRef}
+          className="lg:max-w-[calc((80rem-39.74rem-5rem)*1.15)]"
+        >
           <BuildsSurface {...buildsProps} />
         </div>
       </div>
