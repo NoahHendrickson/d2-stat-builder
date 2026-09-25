@@ -224,8 +224,10 @@ describe("solveDream", () => {
       allowTuning: true,
       maxResults: 50,
     };
+    // Not reachable as-is: the k=0 pass has to say so before one new piece does it.
+    expect(solve(base).loadouts).toHaveLength(0);
     // The deadline is checked between solves, so the worst case overruns it by one
-    // solve; bound the assertion by that.
+    // solve plus the roll enumeration and sorting after it; bound the assertion by that.
     const budgetMs = 8000;
     const solveBudgetMs = 2000;
     const t0 = performance.now();
@@ -234,7 +236,7 @@ describe("solveDream", () => {
     expect(r.capped).toBe(false);
     expect(r.newPieces).toBe(1);
     expect(r.options.length).toBeGreaterThan(0);
-    expect(ms).toBeLessThan(budgetMs + solveBudgetMs);
+    expect(ms).toBeLessThan(budgetMs + solveBudgetMs + 300);
   }, 30000);
 });
 

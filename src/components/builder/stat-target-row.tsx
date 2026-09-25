@@ -87,9 +87,9 @@ export const StatTargetRow = memo(function StatTargetRow({
   const cap = ceilings ? ceilings[index] : null;
   const label = STAT_LABELS[statKey];
   // Achievable ceiling for this stat given the others. Overlay it as a
-  // lighter fill up to that max (full-width at 200); omit only while
-  // unknown (before the first search). Every wording derived from the
-  // proven/unproven distinction lives in this ONE object so the visible
+  // lighter fill up to that max (full-width at 200); omit while unknown
+  // (before the first search) and when no `ceilingsView` is passed (Dream).
+  // Every wording derived from the proven/unproven distinction lives in this ONE object so the visible
   // text, tick label, and accessible names can't drift apart: an exact
   // ceiling is a hard "/ max"; an unproven one is a lower bound ("81+"
   // — achievable, but possibly more out there, e.g. while a refinement
@@ -201,7 +201,7 @@ export const StatTargetRow = memo(function StatTargetRow({
             const tickValue = isCeilingTick ? cap : t;
             const tickLabel = isCeilingTick
               ? capText!.tickLabel
-              : t === STAT_SLIDER_MAX
+              : t === STAT_SLIDER_MAX && ceilingsView
                 ? "Max"
                 : String(t);
             const tickAria = isCeilingTick
