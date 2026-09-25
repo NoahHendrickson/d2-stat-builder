@@ -163,8 +163,8 @@ export function BuilderPanel({
     () => initialSaved?.setFilters ?? DEFAULT_SET_FILTERS,
   );
   /**
-   * The Dream build modal: which piece of a build to replace with a farmable Tier-5 roll
-   * to reach targets past its max. The build outlives `dreamOpen` so the modal can
+   * The Dream build modal: which pieces of a build to replace with farmable Tier-5 rolls
+   * to reach the stats the user sets. The build outlives `dreamOpen` so the modal can
    * animate closed with its content, and is dropped once it has. `null` until the first
    * open, so the (lazy) modal chunk isn't fetched before then.
    */
