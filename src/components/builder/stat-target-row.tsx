@@ -89,12 +89,13 @@ export const StatTargetRow = memo(function StatTargetRow({
   // Achievable ceiling for this stat given the others. Overlay it as a
   // lighter fill up to that max (full-width at 200); omit while unknown
   // (before the first search) and when no `ceilingsView` is passed (Dream).
-  // Every wording derived from the proven/unproven distinction lives in this ONE object so the visible
-  // text, tick label, and accessible names can't drift apart: an exact
-  // ceiling is a hard "/ max"; an unproven one is a lower bound ("81+"
-  // — achievable, but possibly more out there, e.g. while a refinement
-  // is still probing or its budget expired). Both render "/ n" inline;
-  // only the tick label and accessible wording mark the difference.
+  // Every wording derived from the proven/unproven distinction lives in
+  // this ONE object so the visible text, tick label, and accessible names
+  // can't drift apart: an exact ceiling is a hard "/ max"; an unproven one
+  // is a lower bound ("81+" — achievable, but possibly more out there, e.g.
+  // while a refinement is still probing or its budget expired). Both render
+  // "/ n" inline; only the tick label and accessible wording mark the
+  // difference.
   const ceilingValue = cap ?? undefined;
   const capText =
     cap === null
