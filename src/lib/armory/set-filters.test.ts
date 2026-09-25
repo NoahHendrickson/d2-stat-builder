@@ -2,9 +2,7 @@ import { describe, expect, test } from "vitest";
 import {
   DEFAULT_SET_FILTERS,
   countActiveSetFilters,
-  countNonDefaultSetFilters,
   hasActiveSetFilters,
-  hasCustomSetFilters,
   passesSetFilters,
 } from "./set-filters";
 
@@ -54,21 +52,6 @@ describe("countActiveSetFilters", () => {
   });
 });
 
-describe("countNonDefaultSetFilters", () => {
-  test("returns zero for default settings", () => {
-    expect(countNonDefaultSetFilters(DEFAULT_SET_FILTERS)).toBe(0);
-  });
-
-  test("counts settings that differ from defaults", () => {
-    expect(
-      countNonDefaultSetFilters({
-        ...DEFAULT_SET_FILTERS,
-        hideZero: false,
-      }),
-    ).toBe(1);
-  });
-});
-
 describe("hasActiveSetFilters", () => {
   test("returns true for defaults", () => {
     expect(hasActiveSetFilters(DEFAULT_SET_FILTERS)).toBe(true);
@@ -81,17 +64,5 @@ describe("hasActiveSetFilters", () => {
         hideZero: false,
       }),
     ).toBe(false);
-  });
-});
-
-describe("hasCustomSetFilters", () => {
-  test("returns false for defaults", () => {
-    expect(hasCustomSetFilters(DEFAULT_SET_FILTERS)).toBe(false);
-  });
-
-  test("returns true when a setting differs from default", () => {
-    expect(
-      hasCustomSetFilters({ ...DEFAULT_SET_FILTERS, hideZero: false }),
-    ).toBe(true);
   });
 });

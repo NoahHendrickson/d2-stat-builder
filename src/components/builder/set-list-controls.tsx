@@ -19,7 +19,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import {
-  hasCustomSetFilters,
+  hasActiveSetFilters,
   type SetFilters,
 } from "@/lib/armory/set-filters";
 import {
@@ -32,8 +32,8 @@ import { cn } from "@/lib/utils";
 /**
  * Figma 17:5663 — the line under the set-bonus search: "<n> Set bonuses" on the
  * left, two 24px icon buttons on the right: sort (ArrowsDownUp) and the list
- * settings (FunnelSimple). The settings button is tinted while a filter is
- * off its default so a narrowed list is never a surprise.
+ * settings (FunnelSimple). The settings button is tinted while any filter is
+ * on — i.e. while sets are being hidden — so a narrowed list is never a surprise.
  */
 export const SetListControls = memo(function SetListControls({
   count,
@@ -48,7 +48,7 @@ export const SetListControls = memo(function SetListControls({
   filters: SetFilters;
   onFilterChange: (key: keyof SetFilters, value: boolean) => void;
 }) {
-  const customFilters = hasCustomSetFilters(filters);
+  const activeFilters = hasActiveSetFilters(filters);
   return (
     <div className="flex items-center justify-between gap-2 pl-1">
       <span className="text-sm tabular-nums" aria-live="polite">
@@ -88,14 +88,14 @@ export const SetListControls = memo(function SetListControls({
           <TooltipLabel label="Armor set list settings">
             <PopoverTrigger
               aria-label="Armor set list settings"
-              data-active={customFilters || undefined}
+              data-active={activeFilters || undefined}
               render={
                 <Button
                   variant="ghost"
                   size="icon-xs"
                   className={cn(
                     "text-foreground/90 hover:text-foreground [&_svg:not([class*='size-'])]:size-4",
-                    customFilters && "text-power hover:text-power",
+                    activeFilters && "text-power hover:text-power",
                   )}
                 />
               }

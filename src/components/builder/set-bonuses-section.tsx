@@ -9,7 +9,7 @@ import { SetListControls } from "@/components/builder/set-list-controls";
 import { getArchetypes } from "@/lib/armory/archetypes";
 import type { ArmorPiece } from "@/lib/armory/normalize";
 import {
-  hasCustomSetFilters,
+  hasActiveSetFilters,
   passesSetFilters,
   type SetFilters,
 } from "@/lib/armory/set-filters";
@@ -76,7 +76,7 @@ export function SetBonusesSection({
       unpinnedList: shown.filter((s) => !pinned.has(s.setHash)),
     };
   }, [sets, pinned, query, setFilters, sort]);
-  const customFilters = hasCustomSetFilters(setFilters);
+  const activeFilters = hasActiveSetFilters(setFilters);
 
   // The grid's set pickers follow the list's order — pinned first, each group in the
   // chosen sort — but ignore its search and filters, so every set stays reachable.
@@ -145,11 +145,11 @@ export function SetBonusesSection({
         </p>
       ) : pinnedList.length === 0 && unpinnedList.length === 0 ? (
         <p className="text-muted-foreground text-xs">
-          {query.trim() && customFilters
+          {query.trim() && activeFilters
             ? `No sets match "${query.trim()}" with the current settings.`
             : query.trim()
               ? `No sets match "${query.trim()}".`
-              : customFilters
+              : activeFilters
                 ? "No sets match the current settings."
                 : "No sets to show."}
         </p>

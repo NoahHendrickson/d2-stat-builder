@@ -17,19 +17,8 @@ export function countActiveSetFilters(filters: SetFilters): number {
   return SET_FILTER_KEYS.reduce((count, key) => count + Number(filters[key]), 0);
 }
 
-export function countNonDefaultSetFilters(filters: SetFilters): number {
-  return SET_FILTER_KEYS.reduce(
-    (count, key) => count + Number(filters[key] !== DEFAULT_SET_FILTERS[key]),
-    0,
-  );
-}
-
 export function hasActiveSetFilters(filters: SetFilters): boolean {
   return countActiveSetFilters(filters) > 0;
-}
-
-export function hasCustomSetFilters(filters: SetFilters): boolean {
-  return countNonDefaultSetFilters(filters) > 0;
 }
 
 /** Returns whether a set with `ownedCount` pieces passes the active list settings. */
