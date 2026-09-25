@@ -26,6 +26,7 @@ import {
 import { StatGlyph } from "@/components/stat-glyph";
 import { statIconsFromManifest } from "@/lib/manifest/stat-icons";
 import { sumEditorStats } from "@/lib/loadouts/editor-stats";
+import { clearsLeftover } from "@/lib/loadouts/energy";
 import { BUNGIE_IMAGE_BASE } from "@/lib/bungie/constants";
 import { ArmorThumb } from "@/components/armor-thumb";
 import { PowerValue } from "@/components/power-value";
@@ -383,10 +384,12 @@ function KindGrid({
   const fits = (o: ModOption) =>
     (exclusive || !full) && (energyLeft === undefined || o.cost <= energyLeft + credit);
   const heading = sockets.length > 1 ? `${KIND_LABEL[kind]}s` : KIND_LABEL[kind];
-  // Sockets nothing was chosen for keep their current plug on apply.
-  const keeping = sockets.filter(
+  // Sockets nothing was chosen for: apply clears an energy-costing leftover, keeps the rest.
+  const unchosen = sockets.filter(
     (s) => chosen?.[s.index] === undefined && s.plugHash && s.plugHash !== s.emptyPlugHash,
-  ).length;
+  );
+  const removing = unchosen.filter((s) => clearsLeftover(s.plugHash, s.emptyPlugHash, costOf)).length;
+  const keeping = unchosen.length - removing;
 
   const tooltipHandle = useMemo(() => BaseTooltip.createHandle<string>(), []);
 
@@ -416,7 +419,7 @@ function KindGrid({
       <div className="flex flex-wrap items-baseline justify-between gap-x-2">
         <span className="d2-label text-[10px]">{heading}</span>
         <span className="text-muted-foreground flex items-baseline gap-1.5 tabular-nums">
-          {sockets.length > 1 ? `${used}/${sockets.length} sockets` : used ? "1/1" : "Keeps current"}
+          {sockets.length > 1 ? `${used}/${sockets.length} sockets` : used ? "1/1" : removing ? "Removes current" : "Keeps current"}
           {keeping > 0 && sockets.length > 1 && ` · ${keeping} kept`}
           {used > 0 && (
             <button
