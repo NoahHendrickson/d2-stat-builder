@@ -7,6 +7,10 @@
 // plus the user's optional socket-by-socket `modPlacement`: explicit placements are
 // honored first, everything left is auto-placed. So it applies equally to loadouts
 // saved from the builder, edited in the mod picker, and imported.
+//
+// The loadout is applied exactly: a managed socket the loadout doesn't fill is reset to
+// its empty plug, so leftover mods neither stay on the armor nor hold the energy the
+// loadout's own mods need. Those clears run before any insert.
 // Runtime imports are relative so the module runs under vitest.
 import type { ArmorSocketKind } from "../armory/stats";
 import { baselineEnergy } from "./energy";
@@ -16,6 +20,8 @@ export interface PlanSocket {
   kind: ArmorSocketKind;
   /** Currently socketed plug. */
   current?: number;
+  /** The socket's "Empty … Socket" plug. Undefined = can't be cleared, so it keeps `current`. */
+  empty?: number;
   /** Plug hashes this socket accepts (its plug set). Undefined = judge by kind only. */
   accepts?: ReadonlySet<number>;
 }
@@ -126,13 +132,14 @@ export function planLoadoutPlugs(input: PlanInput): ApplyPlan {
 
   const states = new Map<string, PieceState>();
   for (const piece of input.pieces) {
+    // Every clearable socket starts out empty: whatever the loadout doesn't put back is cleared.
     const plugsMap = new Map<number, number | undefined>();
-    for (const s of piece.sockets) plugsMap.set(s.index, s.current);
+    for (const s of piece.sockets) plugsMap.set(s.index, s.empty ?? s.current);
     states.set(piece.instanceId, {
       piece,
       plugs: plugsMap,
       taken: new Set(),
-      baseUsed: baselineEnergy(piece.energy, plugsMap.values(), cost),
+      baseUsed: baselineEnergy(piece.energy, piece.sockets.map((s) => s.current), cost),
     });
   }
 
@@ -162,7 +169,8 @@ export function planLoadoutPlugs(input: PlanInput): ApplyPlan {
     const action = { itemInstanceId: st.piece.instanceId, socketIndex: socket.index, plugItemHash: hash, label };
     st.taken.add(socket.index);
     (assigned[st.piece.instanceId] ??= {})[socket.index] = hash;
-    if (st.plugs.get(socket.index) === hash) {
+    if (socket.current === hash) {
+      st.plugs.set(socket.index, hash);
       alreadyApplied.push(label);
       inPlace.push(action);
       return;
@@ -266,6 +274,23 @@ export function planLoadoutPlugs(input: PlanInput): ApplyPlan {
     candidates.sort((a, b) => flex(a) - flex(b) || freeEnergy(b.st) - freeEnergy(a.st));
     place(candidates[0].st, candidates[0].socket, entry.hash, entry.info);
   }
+
+  // --- Clear every managed socket still holding something the loadout doesn't list.
+  // Queued first, so the energy they free is there for the inserts.
+  const clears: PlugAction[] = [];
+  for (const st of states.values()) {
+    for (const socket of st.piece.sockets) {
+      const { current, empty } = socket;
+      if (st.taken.has(socket.index) || empty === undefined || current === undefined || current === empty) continue;
+      clears.push({
+        itemInstanceId: st.piece.instanceId,
+        socketIndex: socket.index,
+        plugItemHash: empty,
+        label: `Remove ${plugInfo(current)?.name ?? `mod #${current}`} → ${st.piece.name}`,
+      });
+    }
+  }
+  plugs.unshift(...clears);
 
   // --- Fragments: keep ones already socketed; put the rest into sockets holding
   // fragments the loadout doesn't want (or nothing), lowest index first.

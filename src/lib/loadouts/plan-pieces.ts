@@ -12,6 +12,7 @@ export function planPiecesFromArmor(pieces: ArmorPiece[], manifest: Manifest): P
       index: s.index,
       kind: s.kind,
       current: s.plugHash,
+      empty: s.emptyPlugHash,
       // Tuning / artifice are judged by roll + kind; other sockets by their plug set.
       ...(s.kind === "other" || s.kind === "general"
         ? { accepts: s.plugSetHash ? plugSetHashes(manifest, s.plugSetHash) : undefined }
