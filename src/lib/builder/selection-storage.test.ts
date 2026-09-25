@@ -65,7 +65,7 @@ function sampleSelections(): PersistedSelections {
     major: 3,
     setReqs: { 987654: 4, 123456: 2 },
     pinnedSets: [123456, 555],
-    setFilters: { ...DEFAULT_SET_FILTERS, hideZero: false },
+    setFilters: { hideLessThan2: false },
     exoticName: "Gyrfalcon's Hauberk",
     exoticPerks: [null, null],
     allowTuning: true,
@@ -257,19 +257,16 @@ test("load upgrades legacy all-false hide toggles to new defaults", () => {
   expect(loadSelections()?.setFilters).toEqual(DEFAULT_SET_FILTERS);
 });
 
-test("load preserves explicit hide choices in the new two-toggle schema", () => {
+test("load keeps hideLessThan2 and drops hideZero from the old two-toggle schema", () => {
   const old = sampleSelections();
   localStorage.setItem(
     SELECTIONS_KEY,
     JSON.stringify({
       ...old,
-      setFilters: { hideZero: false, hideLessThan2: true },
+      setFilters: { hideZero: true, hideLessThan2: false },
     }),
   );
-  expect(loadSelections()?.setFilters).toEqual({
-    hideZero: false,
-    hideLessThan2: true,
-  });
+  expect(loadSelections()?.setFilters).toEqual({ hideLessThan2: false });
 });
 
 test("load returns null when the shape is malformed (targets wrong length)", () => {

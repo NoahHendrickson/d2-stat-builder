@@ -11,7 +11,7 @@ const existing: PersistedSelections = {
   major: 5,
   setReqs: { 1: 2 },
   pinnedSets: [1, 2],
-  setFilters: { hideLessThan2: true, hideZero: false },
+  setFilters: { hideLessThan2: false },
   exoticName: "Old",
   exoticPerks: [1, 2],
   allowTuning: false,

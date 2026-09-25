@@ -109,24 +109,16 @@ export const SetListControls = memo(function SetListControls({
             className="w-58 gap-0 overflow-hidden p-0"
           >
             <PopoverTitle className="text-text-secondary border-b border-foreground/10 px-3 py-2 text-sm font-medium">
-              Hide sets
+              Filter sets
             </PopoverTitle>
             <div className="flex flex-col gap-3 p-3">
               <SetListSettingRow
-                checked={filters.hideZero}
+                checked={!filters.hideLessThan2}
                 onCheckedChange={(checked) =>
-                  onFilterChange("hideZero", checked)
+                  onFilterChange("hideLessThan2", !checked)
                 }
               >
-                Hide sets I have 0 pieces of
-              </SetListSettingRow>
-              <SetListSettingRow
-                checked={filters.hideLessThan2}
-                onCheckedChange={(checked) =>
-                  onFilterChange("hideLessThan2", checked)
-                }
-              >
-                Hide sets I have less than 2 pieces of
+                Show sets I have less than 2 pieces of
               </SetListSettingRow>
             </div>
           </PopoverContent>
