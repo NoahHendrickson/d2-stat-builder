@@ -200,6 +200,30 @@ describe("mods the loadout doesn't list", () => {
     expect(plan.assigned).toEqual({ p: { 1: 101 } });
   });
 
+  test("a mod already in place is only kept while a pinned placement leaves room for it", () => {
+    // Two 4-cost helmet mods socketed (8 of 10); the loadout pins a 3-cost major into the
+    // empty general socket and lists both helmet mods — only one of them still fits.
+    const slot = (index: number): PlanSocket => ({ ...helmetSlot(601), index, empty: EMPTY_HELMET });
+    const plan = planLoadoutPlugs({
+      pieces: [
+        piece({
+          instanceId: "helmet",
+          sockets: [clearable(1, EMPTY_GENERAL), slot(2), slot(3)],
+          energy: { capacity: 10, used: 8 },
+        }),
+      ],
+      modHashes: [601, 601, 101],
+      plugInfo,
+      placements: { helmet: { 1: 101 } },
+    });
+    expect(plan.skipped).toEqual(["Helmet Mod: no socket on this armor takes it (or not enough energy)"]);
+    expect(plan.inPlace.map((p) => p.socketIndex)).toEqual([2]);
+    expect(plan.plugs.map((p) => [p.socketIndex, p.plugItemHash])).toEqual([
+      [3, EMPTY_HELMET],
+      [1, 101],
+    ]);
+  });
+
   test("0-cost tuning and artifice plugs stay — they carry stats, not energy", () => {
     const plan = planLoadoutPlugs({
       pieces: [

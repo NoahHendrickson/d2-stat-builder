@@ -205,11 +205,12 @@ export function planLoadoutPlugs(input: PlanInput): ApplyPlan {
     }
   }
 
-  // --- Pass 2: lock in mods already sitting in a matching socket.
+  // --- Pass 2: lock in mods already sitting in a matching socket, while they still fit
+  // (explicit placements may have spent the energy); the rest fall through to pass 3.
   for (const entry of [...remaining]) {
     for (const st of states.values()) {
       const socket = st.piece.sockets.find(
-        (s) => !st.taken.has(s.index) && s.current === entry.hash && s.kind === entry.info.kind,
+        (s) => s.current === entry.hash && fits(st, s, entry.hash, entry.info),
       );
       if (socket) {
         takeRemaining(entry.hash);
