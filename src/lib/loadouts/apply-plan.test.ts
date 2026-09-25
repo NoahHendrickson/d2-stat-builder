@@ -1,5 +1,6 @@
 import { test, expect, describe } from "vitest";
 import { planLoadoutPlugs as plan, type PlanInput, type PlanPiece, type PlanSocket, type PlugInfo } from "./apply-plan";
+import { clearsLeftover } from "./energy";
 
 // Every plan below is also replayed against live energy the way Bungie applies it —
 // one insert at a time — so an action order that overflows mid-apply fails the test
@@ -244,28 +245,24 @@ describe("mods the loadout doesn't list", () => {
     expect(plan.placement.p).toEqual({ 11: 311, 12: 401 });
   });
 
-  test("a partial apply keeps leftovers the placed mods don't need the room of", () => {
+  test("a partial apply clears leftovers just the same — the editor's rule, no exceptions", () => {
+    // The shader can't go anywhere, but that doesn't change what happens to the rest:
+    // exactly the sockets `clearsLeftover` flags (what the mod editor labels) are cleared.
+    const sockets = [clearable(1, 101), clearable(2, EMPTY_GENERAL), { index: 11, kind: "tuning" as const, current: 311, empty: 300 }];
     const plan = planLoadoutPlugs({
-      pieces: [piece({ instanceId: "p", sockets: [clearable(1, 101), clearable(2, EMPTY_GENERAL)], energy: { capacity: 10, used: 3 } })],
+      pieces: [piece({ instanceId: "p", sockets, energy: { capacity: 10, used: 3 } })],
       modHashes: [201, 999],
       plugInfo,
       placements: { p: { 2: 201 } },
     });
     expect(plan.skipped).toEqual(["Shader: no socket on this armor takes it (or not enough energy)"]);
-    expect(plan.plugs.map((p) => [p.socketIndex, p.plugItemHash])).toEqual([[2, 201]]);
-  });
-
-  test("a partial apply still clears a leftover whose energy a placed mod needs", () => {
-    const plan = planLoadoutPlugs({
-      pieces: [piece({ instanceId: "p", sockets: [clearable(1, 101), clearable(2, EMPTY_GENERAL)], energy: { capacity: 5, used: 3 } })],
-      modHashes: [102, 999],
-      plugInfo,
-      placements: { p: { 2: 102 } },
-    });
     expect(plan.plugs.map((p) => [p.socketIndex, p.plugItemHash])).toEqual([
       [1, EMPTY_GENERAL],
-      [2, 102],
+      [2, 201],
     ]);
+    const cost = (h: number) => INFO[h]?.cost ?? 0;
+    const flagged = sockets.filter((s) => s.index !== 2 && clearsLeftover(s.current, s.empty, cost)).map((s) => s.index);
+    expect(plan.plugs.filter((a) => a.label.startsWith("Remove ")).map((a) => a.socketIndex)).toEqual(flagged);
   });
 
   test("a leftover slot mod is cleared too", () => {

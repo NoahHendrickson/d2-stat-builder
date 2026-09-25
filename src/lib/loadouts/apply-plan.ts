@@ -10,8 +10,10 @@
 //
 // The loadout is applied exactly: an energy-costing leftover in a socket the loadout
 // doesn't fill is reset to its empty plug (see `clearsLeftover`), so it neither stays on
-// the armor nor holds the energy the loadout's own mods need. The plan decides each
-// socket's final plug first; the actions are the diff from what's socketed now.
+// the armor nor holds the energy the loadout's own mods need — even when some of the
+// loadout's mods can't be placed. The one carve-out: 0-cost plugs (tuning, artifice)
+// stay when the loadout doesn't list them, since they carry stats, not energy. The plan
+// decides each socket's final plug first; the actions are the diff from what's socketed.
 // Runtime imports are relative so the module runs under vitest.
 import type { ArmorSocketKind } from "../armory/stats";
 import { baselineEnergy, clearsLeftover } from "./energy";
@@ -149,9 +151,9 @@ export function planLoadoutPlugs(input: PlanInput): ApplyPlan {
     });
   }
 
-  const energyUsed = (st: PieceState, plugsMap = st.plugs) => {
+  const energyUsed = (st: PieceState) => {
     let used = st.baseUsed;
-    for (const h of plugsMap.values()) used += cost(h);
+    for (const h of st.plugs.values()) used += cost(h);
     return used;
   };
   const capacity = (st: PieceState) => st.piece.energy?.capacity ?? Number.POSITIVE_INFINITY;
@@ -269,16 +271,6 @@ export function planLoadoutPlugs(input: PlanInput): ApplyPlan {
       entry.info.kind === "tuning" && c.st.piece.flexibleTuning ? 1 : 0;
     candidates.sort((a, b) => flex(a) - flex(b) || freeEnergy(b.st) - freeEnergy(a.st));
     place(candidates[0].st, candidates[0].socket, entry.hash, entry.info);
-  }
-
-  // A loadout that doesn't fully place is a partial apply already; don't also strip a
-  // piece's leftovers unless the mods placed on it need their energy.
-  if (unplaced.length > 0) {
-    for (const st of states.values()) {
-      const kept = new Map(st.plugs);
-      for (const s of st.piece.sockets) if (!st.taken.has(s.index)) kept.set(s.index, s.current);
-      if (energyUsed(st, kept) <= capacity(st)) st.plugs = kept;
-    }
   }
 
   // --- Armor actions: diff each socket's current plug against the plan's. Actions that
