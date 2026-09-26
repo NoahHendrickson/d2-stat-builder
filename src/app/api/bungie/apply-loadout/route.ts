@@ -15,9 +15,11 @@ import { MAX_MODS } from "@/lib/loadouts/types";
 import { ABILITY_SOCKET_COUNT, ASPECT_SOCKET_COUNT } from "@/lib/dim/subclasses";
 
 /**
- * A full apply is long: up to 6 items × (2 vault hops + 3 spares vaulted) transfers at
- * 150 ms spacing, then every plug at 600 ms spacing — 30 s+ of deliberate pacing before
- * Bungie's own latency. The default serverless limit (10 s) would cut the stream
+ * A full apply is long: up to 6 items × (2 vault hops + up to 3 spares vaulted, each
+ * followed by a retry) transfers at 150 ms spacing, plus a character-inventory read
+ * when the live fallback runs (repeated only after a failed read), then every plug at
+ * 600 ms spacing —
+ * 30 s+ of deliberate pacing before Bungie's own latency. The default serverless limit (10 s) would cut the stream
  * mid-flight and leave the character half-applied.
  */
 export const maxDuration = 60;
@@ -106,6 +108,7 @@ export async function POST(request: Request) {
 
   const http = createBungieHttp(token);
   const membershipType = user.destinyMembershipType;
+  const membershipId = user.destinyMembershipId;
   const { characterId, items, plugs: requestedPlugs, spares } = body;
   const encoder = new TextEncoder();
 
@@ -132,6 +135,7 @@ export async function POST(request: Request) {
             ? await stageAndEquip({
                 http,
                 membershipType,
+                membershipId,
                 characterId,
                 items,
                 spares,

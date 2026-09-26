@@ -46,6 +46,7 @@ export async function POST(request: Request) {
     const results = await stageAndEquip({
       http: createBungieHttp(token),
       membershipType: user.destinyMembershipType,
+      membershipId: user.destinyMembershipId,
       characterId: body.characterId,
       items: body.items,
       spares: body.spares,

@@ -1,5 +1,11 @@
 import { test, expect, describe } from "vitest";
-import { planEquipBatches, planSpares, planTransfers, type EquipItemState } from "./equip-plan";
+import {
+  pickLiveSpares,
+  planEquipBatches,
+  planSpares,
+  planTransfers,
+  type EquipItemState,
+} from "./equip-plan";
 
 const TARGET = "char-A";
 
@@ -119,5 +125,48 @@ describe("planSpares", () => {
     expect(
       planSpares(pieces, [onTarget, subclass, fromVault, item({ itemInstanceId: "also-staged", location: "inventory", characterId: TARGET })], TARGET),
     ).toEqual({});
+  });
+});
+
+describe("pickLiveSpares", () => {
+  const HELMET_BUCKET = 3448274439;
+  const live = (id: string, extra: { bucketHash?: number; state?: number; transferStatus?: number } = {}) => ({
+    itemHash: 1,
+    itemInstanceId: id,
+    bucketHash: HELMET_BUCKET,
+    state: 0,
+    transferStatus: 0,
+    ...extra,
+  });
+  const ids = (picked: EquipItemState[]) => picked.map((p) => p.itemInstanceId);
+
+  test("keeps unlocked pieces ahead of locked ones even when Bungie lists them last", () => {
+    const items = [
+      live("locked-1", { state: 1 }),
+      live("locked-2", { state: 1 | 4 }), // locked + masterworked
+      live("locked-3", { state: 1 }),
+      live("unlocked-1"),
+      live("unlocked-2", { state: 4 }), // masterworked, not locked
+    ];
+    expect(ids(pickLiveSpares(items, HELMET_BUCKET, TARGET, new Set(), 3))).toEqual([
+      "unlocked-1",
+      "unlocked-2",
+      "locked-1",
+    ]);
+  });
+
+  test("offers only transferable, unexcluded pieces in the slot's bucket, up to the limit", () => {
+    const items = [
+      live("arms", { bucketHash: 3551918588 }), // wrong slot
+      live("mail", { bucketHash: 215593132 }), // postmaster (Lost Items) — can't be transferred
+      live("untransferable", { transferStatus: 2 }),
+      { ...live("no-instance"), itemInstanceId: undefined },
+      live("tried"),
+      live("a"),
+      live("b"),
+    ];
+    expect(pickLiveSpares(items, HELMET_BUCKET, TARGET, new Set(["tried"]), 1)).toEqual([
+      { itemInstanceId: "a", itemHash: 1, location: "inventory", characterId: TARGET },
+    ]);
   });
 });
