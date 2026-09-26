@@ -5,12 +5,8 @@
 import { NextResponse } from "next/server";
 import { BungieHttpError } from "./http";
 import { clearSession } from "./session";
-import {
-  MAX_SPARES_PER_ITEM,
-  SLOT_BUCKETS,
-  type EquipItemState,
-  type SpareItems,
-} from "./equip-plan";
+import { ARMOR_SLOTS } from "@/lib/armory/stats";
+import { MAX_SPARES_PER_ITEM, type EquipItemState, type SpareItems } from "./equip-plan";
 
 /** Validate a client-supplied item list; null if malformed or outside `min`–`max` items. */
 export function parseEquipItems(
@@ -25,7 +21,7 @@ export function parseEquipItems(
       typeof i.itemHash !== "number" ||
       (i.characterId !== undefined && typeof i.characterId !== "string") ||
       (i.isExotic !== undefined && typeof i.isExotic !== "boolean") ||
-      (i.slot !== undefined && !Object.hasOwn(SLOT_BUCKETS, i.slot))
+      (i.slot !== undefined && !ARMOR_SLOTS.includes(i.slot))
     )
       return null;
   }

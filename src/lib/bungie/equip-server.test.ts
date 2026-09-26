@@ -195,4 +195,55 @@ describe("stageAndEquip make-room from the live inventory", () => {
       { itemInstanceId: "helm", ok: false, message: "No room on that character — free up inventory space" },
     ]);
   });
+
+  test("a failed live read isn't kept — the next slot reads again", async () => {
+    const legs = { itemInstanceId: "legs", itemHash: 8, location: "vault" as const, slot: "legs" as const };
+    getCharacter
+      .mockRejectedValueOnce(new BungieHttpError(500, "boom"))
+      .mockResolvedValueOnce({ Response: { inventory: { data: { items: [live("new-legs", { bucketHash: 20886954 })] } } } });
+    transferItem
+      .mockRejectedValueOnce(noRoom()) // helm → character: full, live read fails
+      .mockRejectedValueOnce(noRoom()) // legs → character: full, live read succeeds
+      .mockResolvedValueOnce({}) // new-legs → vault
+      .mockResolvedValueOnce({}); // legs → character
+    const results = await run({ http, membershipType: 3, membershipId: "m", characterId: TARGET, items: [slottedHelm, legs], mode: "move" });
+    expect(getCharacter).toHaveBeenCalledTimes(2);
+    expect(moved()).toEqual([["helm", false], ["legs", false], ["new-legs", true], ["legs", false]]);
+    expect(results).toEqual([
+      { itemInstanceId: "legs", ok: true, vaulted: ["new-legs"] },
+      { itemInstanceId: "helm", ok: false, message: "No room on that character — free up inventory space" },
+    ]);
+  });
+
+  test("one live read serves every slot", async () => {
+    const legs = { itemInstanceId: "legs", itemHash: 8, location: "vault" as const, slot: "legs" as const };
+    liveInventory(live("new-helm"), live("new-legs", { bucketHash: 20886954 }));
+    transferItem
+      .mockRejectedValueOnce(noRoom())
+      .mockResolvedValueOnce({}) // new-helm → vault
+      .mockResolvedValueOnce({}) // helm → character
+      .mockRejectedValueOnce(noRoom())
+      .mockResolvedValueOnce({}) // new-legs → vault
+      .mockResolvedValueOnce({}); // legs → character
+    const results = await run({ http, membershipType: 3, membershipId: "m", characterId: TARGET, items: [slottedHelm, legs], mode: "move" });
+    expect(getCharacter).toHaveBeenCalledTimes(1);
+    expect(moved()).toEqual([
+      ["helm", false], ["new-helm", true], ["helm", false],
+      ["legs", false], ["new-legs", true], ["legs", false],
+    ]);
+    expect(results.every((r) => r.ok)).toBe(true);
+  });
+
+  test("the per-item cap spans the client's spares and the live ones", async () => {
+    liveInventory(live("live-1"), live("live-2"));
+    const cantMove = () => new BungieHttpError(200, "raw", 1660);
+    transferItem
+      .mockRejectedValueOnce(noRoom())
+      .mockRejectedValueOnce(cantMove()) // spare-1
+      .mockRejectedValueOnce(cantMove()) // spare-2
+      .mockRejectedValueOnce(cantMove()); // live-1 — the third try; live-2 is never attempted
+    const results = await run({ http, membershipType: 3, membershipId: "m", characterId: TARGET, items: [slottedHelm], spares });
+    expect(moved()).toEqual([["helm", false], ["spare-1", true], ["spare-2", true], ["live-1", true]]);
+    expect(results[0]).toEqual({ itemInstanceId: "helm", ok: false, message: "Couldn't make room: That item can't be transferred" });
+  });
 });

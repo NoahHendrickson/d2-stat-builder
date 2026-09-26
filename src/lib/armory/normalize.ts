@@ -101,7 +101,10 @@ export interface ArmorPiece {
   exoticPerkHashes?: [number, number];
   location: ArmorLocation;
   characterId?: string;
-  /** Locked in-game (ItemState.Locked) — never vaulted automatically to make room. */
+  /**
+   * Locked in-game (ItemState.Locked). The client never offers it as a make-room spare;
+   * the server's live fallback vaults one only as a last resort (see LockedSpares).
+   */
   locked?: boolean;
   /** Sitting in the character's postmaster: listed under `inventory`, but not transferable. */
   postmaster?: boolean;

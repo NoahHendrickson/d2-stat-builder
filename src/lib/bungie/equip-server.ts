@@ -11,12 +11,13 @@ import {
   type DestinyComponentType,
   type DestinyItemComponent,
 } from "bungie-api-ts/destiny2";
+import { SLOT_BUCKETS } from "@/lib/armory/stats";
 import { BungieHttpError } from "./http";
 import {
+  MAX_SPARES_PER_ITEM,
   pickLiveSpares,
   planEquipBatches,
   planTransfers,
-  SLOT_BUCKETS,
   type EquipItemState,
   type SpareItems,
   type TransferAction,
@@ -128,6 +129,43 @@ function transferBlockReason(item: EquipItemState, targetId: string): string | n
 }
 
 /**
+ * Make-room spares for one staged item: the client's list first, then — once — the
+ * character's live inventory. At most MAX_SPARES_PER_ITEM tries across both; `close()`
+ * ends it early (after a full vault nothing else will fit either). `tried` is shared
+ * across items, so no piece is offered twice in one request.
+ */
+function spareSource(
+  client: EquipItemState[],
+  live: (limit: number) => Promise<EquipItemState[]>,
+  tried: Set<string>,
+) {
+  const queue = [...client];
+  let budget = MAX_SPARES_PER_ITEM;
+  let refilled = false;
+  return {
+    async next(): Promise<EquipItemState | undefined> {
+      while (budget > 0) {
+        const spare = queue.shift();
+        if (!spare) {
+          if (refilled) return undefined;
+          refilled = true;
+          queue.push(...(await live(budget)));
+          continue;
+        }
+        if (tried.has(spare.itemInstanceId)) continue;
+        tried.add(spare.itemInstanceId);
+        budget--;
+        return spare;
+      }
+      return undefined;
+    },
+    close() {
+      budget = 0;
+    },
+  };
+}
+
+/**
  * Stage every item on `characterId` (vault hops as needed), then bulk-equip them
  * (or stop after staging when `mode` is "move"). A Bungie 401 is re-thrown so the
  * route can clear the session; every other failure becomes a per-item result.
@@ -197,9 +235,12 @@ export async function stageAndEquip({
   const slotOf = new Map(items.map((i) => [i.itemInstanceId, i.slot]));
   /** Staged items plus every spare we've tried to vault — never offered again. */
   const tried = new Set(items.map((i) => i.itemInstanceId));
-  /** The target's unequipped inventory, read once on the first slot the spares can't clear. */
+  /**
+   * The target's unequipped inventory, read on the first slot the client's spares can't
+   * clear and shared by later ones. A failed read isn't kept, so the next slot retries.
+   */
   let liveInventory: DestinyItemComponent[] | undefined;
-  const liveSpares = async (itemId: string): Promise<EquipItemState[]> => {
+  const liveSpares = async (itemId: string, limit: number): Promise<EquipItemState[]> => {
     const slot = slotOf.get(itemId);
     if (!slot) return [];
     if (!liveInventory) {
@@ -213,10 +254,10 @@ export async function stageAndEquip({
         liveInventory = res.Response?.inventory?.data?.items ?? [];
       } catch (err) {
         if (err instanceof BungieHttpError && err.status === 401) throw err;
-        liveInventory = [];
+        return [];
       }
     }
-    return pickLiveSpares(liveInventory, SLOT_BUCKETS[slot], characterId, tried);
+    return pickLiveSpares(liveInventory, SLOT_BUCKETS[slot], characterId, tried, limit);
   };
 
   /** Attach the spares vaulted for this item — on failures too, so nothing moves unreported. */
@@ -228,14 +269,18 @@ export async function stageAndEquip({
   for (const action of actions) {
     if (failed.has(action.itemId)) continue; // earlier hop failed
     start(action.itemId);
-    // A hop onto the target can hit a full bucket (9 unequipped per slot). Vault one of
-    // the client's same-slot spares and retry, until the spares run out — then once more
-    // from the character's live inventory, which catches drops the client hasn't seen
-    // and locked pieces. A spare Bungie won't move (e.g. it turned out to be
-    // untransferable) is skipped for the next one; a full vault (or any other error on
-    // the piece itself) ends the attempt.
-    const pool = action.transferToVault ? [] : [...(spares?.[action.itemId] ?? [])];
-    let checkedLive = action.transferToVault;
+    // A hop onto the target can hit a full bucket (9 unequipped per slot). Vault a
+    // same-slot spare (see spareSource) and retry, until the spares run out. A spare
+    // Bungie won't move (e.g. it turned out to be untransferable) is skipped for the next
+    // one; a full vault (or any other error on the piece itself) ends the attempt. Hops
+    // into the vault never make room.
+    const source = action.transferToVault
+      ? undefined
+      : spareSource(
+          spares?.[action.itemId] ?? [],
+          (limit) => liveSpares(action.itemId, limit),
+          tried,
+        );
     let message: string | undefined;
     for (;;) {
       try {
@@ -245,18 +290,12 @@ export async function stageAndEquip({
       } catch (err) {
         if (err instanceof BungieHttpError && err.status === 401) throw err;
         message = transferMessage(err, action.transferToVault);
-        if (!isNoRoom(err)) break;
+        if (!source || !isNoRoom(err)) break;
       }
       let madeRoom = false;
       while (!madeRoom) {
-        if (pool.length === 0 && !checkedLive) {
-          checkedLive = true;
-          pool.push(...(await liveSpares(action.itemId)));
-        }
-        const spare = pool.shift();
+        const spare = await source.next();
         if (!spare) break;
-        if (tried.has(spare.itemInstanceId)) continue;
-        tried.add(spare.itemInstanceId);
         await sleep(ACTION_SPACING_MS);
         try {
           await transfer({
@@ -271,8 +310,7 @@ export async function stageAndEquip({
           if (err instanceof BungieHttpError && err.status === 401) throw err;
           if (isNoRoom(err)) {
             message = VAULT_FULL_MESSAGE;
-            pool.length = 0; // nothing else will fit either
-            checkedLive = true;
+            source.close();
           } else {
             message = `Couldn't make room: ${transferMessage(err, true)}`;
           }

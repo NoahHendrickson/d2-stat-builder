@@ -1,5 +1,5 @@
 import type { ArmorLocation } from "@/lib/armory/normalize";
-import { ARMOR_BUCKETS, type ArmorSlot } from "@/lib/armory/stats";
+import type { ArmorSlot } from "@/lib/armory/stats";
 
 /** What the client knows about a piece's whereabouts when it asks to equip. */
 export interface EquipItemState {
@@ -74,8 +74,34 @@ export function planEquipBatches(
   return { first, second };
 }
 
-/** How many pieces we'll vault per slot before giving up on making room. */
+/** How many pieces we'll try to vault per slot before giving up on making room. */
 export const MAX_SPARES_PER_ITEM = 3;
+
+/**
+ * Whether a make-room pick may take locked pieces. The client's plan never does — a lock
+ * is the player's "keep this". The server's live fallback takes one as a last resort:
+ * vaulting leaves the lock on, and a moved piece beats a failed equip.
+ */
+export type LockedSpares = "never" | "last-resort";
+
+/**
+ * The make-room order both spare pickers share: unlocked before locked (locked dropped
+ * entirely under "never"), legendaries before exotics, at most `limit`. Live inventory
+ * items carry no tier without the manifest, so on that path exotics aren't held back.
+ */
+function rankSpares<T extends { locked?: boolean; isExotic?: boolean }>(
+  candidates: T[],
+  locked: LockedSpares,
+  limit: number,
+): T[] {
+  return candidates
+    .filter((c) => locked === "last-resort" || !c.locked)
+    .sort(
+      (a, b) =>
+        Number(!!a.locked) - Number(!!b.locked) || Number(!!a.isExotic) - Number(!!b.isExotic),
+    )
+    .slice(0, limit);
+}
 
 /**
  * Pieces the server may vault to make room, keyed by the staged item they make room
@@ -91,7 +117,7 @@ interface SparePiece {
   location: ArmorLocation;
   characterId?: string;
   isExotic: boolean;
-  /** Locked in-game — the player's "keep this"; never vault it on their behalf. */
+  /** Locked in-game — the player's "keep this"; the client never offers it (LockedSpares). */
   locked?: boolean;
   /** In the postmaster — reports as inventory but TransferItem can't move it. */
   postmaster?: boolean;
@@ -123,16 +149,15 @@ export function planSpares(
         p.slot === piece.slot &&
         p.location === "inventory" &&
         p.characterId === targetCharacterId &&
-        !p.locked &&
         !p.postmaster &&
         !staged.has(p.instanceId)
       ) {
         candidates.push(p);
       }
     }
-    candidates.sort((a, b) => Number(a.isExotic) - Number(b.isExotic));
-    if (candidates.length === 0) continue;
-    spares[item.itemInstanceId] = candidates.slice(0, MAX_SPARES_PER_ITEM).map((p) => ({
+    const picked = rankSpares(candidates, "never", MAX_SPARES_PER_ITEM);
+    if (picked.length === 0) continue;
+    spares[item.itemInstanceId] = picked.map((p) => ({
       itemInstanceId: p.instanceId,
       itemHash: p.itemHash,
       location: p.location,
@@ -141,11 +166,6 @@ export function planSpares(
   }
   return spares;
 }
-
-/** Slot → the character inventory bucket that holds it (inverse of ARMOR_BUCKETS). */
-export const SLOT_BUCKETS = Object.fromEntries(
-  Object.entries(ARMOR_BUCKETS).map(([hash, slot]) => [slot, Number(hash)]),
-) as Record<ArmorSlot, number>;
 
 /** The slice of a live DestinyItemComponent that pickLiveSpares reads. */
 interface LiveItem {
@@ -165,17 +185,18 @@ const NOT_TRANSFERRABLE = 2;
  * Make-room candidates from the character's live (unequipped) inventory, for when the
  * client's spares ran out. The client's gear list can be minutes old — drops picked up
  * mid-activity aren't in it — and it never offers locked pieces. Here: anything Bungie
- * can transfer out of `bucketHash`, unlocked first and locked only as a last resort
- * (vaulting doesn't touch the lock, the piece just moves). `exclude` holds staged and
- * already-tried ids.
+ * can transfer out of `bucketHash`, ranked by rankSpares with locked pieces as a last
+ * resort. Postmaster items sit in the Lost Items bucket rather than an armor bucket, so
+ * the bucket match leaves them out. `exclude` holds staged and already-tried ids.
  */
 export function pickLiveSpares(
   items: Iterable<LiveItem>,
   bucketHash: number,
   characterId: string,
   exclude: ReadonlySet<string>,
+  limit: number,
 ): EquipItemState[] {
-  const candidates: (LiveItem & { itemInstanceId: string })[] = [];
+  const candidates: { itemInstanceId: string; itemHash: number; locked: boolean }[] = [];
   for (const item of items) {
     if (
       item.bucketHash === bucketHash &&
@@ -183,11 +204,14 @@ export function pickLiveSpares(
       !exclude.has(item.itemInstanceId) &&
       !(item.transferStatus & NOT_TRANSFERRABLE)
     ) {
-      candidates.push(item as LiveItem & { itemInstanceId: string });
+      candidates.push({
+        itemInstanceId: item.itemInstanceId,
+        itemHash: item.itemHash,
+        locked: (item.state & ITEM_LOCKED) !== 0,
+      });
     }
   }
-  candidates.sort((a, b) => (a.state & ITEM_LOCKED) - (b.state & ITEM_LOCKED));
-  return candidates.slice(0, MAX_SPARES_PER_ITEM).map((item) => ({
+  return rankSpares(candidates, "last-resort", limit).map((item) => ({
     itemInstanceId: item.itemInstanceId,
     itemHash: item.itemHash,
     location: "inventory",
