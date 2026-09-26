@@ -151,18 +151,20 @@ function ManifestIcon({
   showTooltip?: boolean;
   icon?: string;
   label: string;
-  size: 12 | 16 | 24 | 32;
+  size: 12 | 16 | 22 | 24 | 32;
   className?: string;
   element?: Subclass;
 }) {
   const sizeClass =
     size === 12
       ? "size-3"
-      : size === 24
-        ? "size-6"
-        : size === 32
-          ? "size-8"
-          : "size-4";
+      : size === 22
+        ? "size-[22px]"
+        : size === 24
+          ? "size-6"
+          : size === 32
+            ? "size-8"
+            : "size-4";
   const tileClass = element ? "d2-tile-element" : undefined;
   const tileStyle = element
     ? ({ "--element-line": SUBCLASS_LINE[element] } as CSSProperties)
