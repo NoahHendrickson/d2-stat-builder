@@ -106,6 +106,7 @@ export async function POST(request: Request) {
 
   const http = createBungieHttp(token);
   const membershipType = user.destinyMembershipType;
+  const membershipId = user.destinyMembershipId;
   const { characterId, items, plugs: requestedPlugs, spares } = body;
   const encoder = new TextEncoder();
 
@@ -132,6 +133,7 @@ export async function POST(request: Request) {
             ? await stageAndEquip({
                 http,
                 membershipType,
+                membershipId,
                 characterId,
                 items,
                 spares,

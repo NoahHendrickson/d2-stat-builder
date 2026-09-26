@@ -40,6 +40,7 @@ export function equipItemRef(piece: ArmorPiece) {
     location: piece.location,
     characterId: piece.characterId,
     isExotic: piece.isExotic,
+    slot: piece.slot,
   };
 }
 

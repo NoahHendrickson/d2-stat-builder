@@ -4,14 +4,19 @@
 import type { HttpClient } from "bungie-api-ts/http";
 import {
   equipItems,
+  getCharacter,
   insertSocketPlugFree,
   transferItem,
   type BungieMembershipType,
+  type DestinyComponentType,
+  type DestinyItemComponent,
 } from "bungie-api-ts/destiny2";
 import { BungieHttpError } from "./http";
 import {
+  pickLiveSpares,
   planEquipBatches,
   planTransfers,
+  SLOT_BUCKETS,
   type EquipItemState,
   type SpareItems,
   type TransferAction,
@@ -130,6 +135,7 @@ function transferBlockReason(item: EquipItemState, targetId: string): string | n
 export async function stageAndEquip({
   http,
   membershipType,
+  membershipId,
   characterId,
   items,
   spares,
@@ -138,6 +144,8 @@ export async function stageAndEquip({
 }: {
   http: HttpClient;
   membershipType: BungieMembershipType;
+  /** Destiny membership id — reads the character's live inventory when spares run out. */
+  membershipId: string;
   characterId: string;
   items: EquipItemState[];
   /** Per staged item: same-slot pieces on the character we may vault to make room. */
@@ -186,6 +194,31 @@ export async function stageAndEquip({
     });
   const isNoRoom = (err: unknown) => err instanceof BungieHttpError && err.code === NO_ROOM;
 
+  const slotOf = new Map(items.map((i) => [i.itemInstanceId, i.slot]));
+  /** Staged items plus every spare we've tried to vault — never offered again. */
+  const tried = new Set(items.map((i) => i.itemInstanceId));
+  /** The target's unequipped inventory, read once on the first slot the spares can't clear. */
+  let liveInventory: DestinyItemComponent[] | undefined;
+  const liveSpares = async (itemId: string): Promise<EquipItemState[]> => {
+    const slot = slotOf.get(itemId);
+    if (!slot) return [];
+    if (!liveInventory) {
+      try {
+        const res = await getCharacter(http, {
+          destinyMembershipId: membershipId,
+          membershipType,
+          characterId,
+          components: [201 as DestinyComponentType], // CharacterInventories
+        });
+        liveInventory = res.Response?.inventory?.data?.items ?? [];
+      } catch (err) {
+        if (err instanceof BungieHttpError && err.status === 401) throw err;
+        liveInventory = [];
+      }
+    }
+    return pickLiveSpares(liveInventory, SLOT_BUCKETS[slot], characterId, tried);
+  };
+
   /** Attach the spares vaulted for this item — on failures too, so nothing moves unreported. */
   const withVaulted = (result: ItemResult): ItemResult => {
     const ids = vaulted.get(result.itemInstanceId);
@@ -196,10 +229,13 @@ export async function stageAndEquip({
     if (failed.has(action.itemId)) continue; // earlier hop failed
     start(action.itemId);
     // A hop onto the target can hit a full bucket (9 unequipped per slot). Vault one of
-    // the client's same-slot spares and retry, until the spares run out. A spare Bungie
-    // won't move (e.g. it turned out to be untransferable) is skipped for the next one;
-    // a full vault (or any other error on the piece itself) ends the attempt.
+    // the client's same-slot spares and retry, until the spares run out — then once more
+    // from the character's live inventory, which catches drops the client hasn't seen
+    // and locked pieces. A spare Bungie won't move (e.g. it turned out to be
+    // untransferable) is skipped for the next one; a full vault (or any other error on
+    // the piece itself) ends the attempt.
     const pool = action.transferToVault ? [] : [...(spares?.[action.itemId] ?? [])];
+    let checkedLive = action.transferToVault;
     let message: string | undefined;
     for (;;) {
       try {
@@ -213,8 +249,14 @@ export async function stageAndEquip({
       }
       let madeRoom = false;
       while (!madeRoom) {
+        if (pool.length === 0 && !checkedLive) {
+          checkedLive = true;
+          pool.push(...(await liveSpares(action.itemId)));
+        }
         const spare = pool.shift();
         if (!spare) break;
+        if (tried.has(spare.itemInstanceId)) continue;
+        tried.add(spare.itemInstanceId);
         await sleep(ACTION_SPACING_MS);
         try {
           await transfer({
@@ -230,6 +272,7 @@ export async function stageAndEquip({
           if (isNoRoom(err)) {
             message = VAULT_FULL_MESSAGE;
             pool.length = 0; // nothing else will fit either
+            checkedLive = true;
           } else {
             message = `Couldn't make room: ${transferMessage(err, true)}`;
           }

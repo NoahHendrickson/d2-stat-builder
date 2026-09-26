@@ -1,4 +1,5 @@
 import type { ArmorLocation } from "@/lib/armory/normalize";
+import { ARMOR_BUCKETS, type ArmorSlot } from "@/lib/armory/stats";
 
 /** What the client knows about a piece's whereabouts when it asks to equip. */
 export interface EquipItemState {
@@ -11,6 +12,11 @@ export interface EquipItemState {
    * different slot, so we equip legendaries first to swap that piece off.
    */
   isExotic?: boolean;
+  /**
+   * Armor slot. Lets the server look in the character's live inventory for a piece to
+   * vault when the client's spares run out (see pickLiveSpares). Absent for the subclass.
+   */
+  slot?: ArmorSlot;
 }
 
 /** One TransferItem call: move `itemId` to/from the vault for `characterId`. */
@@ -134,4 +140,57 @@ export function planSpares(
     }));
   }
   return spares;
+}
+
+/** Slot → the character inventory bucket that holds it (inverse of ARMOR_BUCKETS). */
+export const SLOT_BUCKETS = Object.fromEntries(
+  Object.entries(ARMOR_BUCKETS).map(([hash, slot]) => [slot, Number(hash)]),
+) as Record<ArmorSlot, number>;
+
+/** The slice of a live DestinyItemComponent that pickLiveSpares reads. */
+interface LiveItem {
+  itemHash: number;
+  itemInstanceId?: string;
+  bucketHash: number;
+  state: number;
+  transferStatus: number;
+}
+
+/** ItemState.Locked */
+const ITEM_LOCKED = 1;
+/** TransferStatuses.NotTransferrable */
+const NOT_TRANSFERRABLE = 2;
+
+/**
+ * Make-room candidates from the character's live (unequipped) inventory, for when the
+ * client's spares ran out. The client's gear list can be minutes old — drops picked up
+ * mid-activity aren't in it — and it never offers locked pieces. Here: anything Bungie
+ * can transfer out of `bucketHash`, unlocked first and locked only as a last resort
+ * (vaulting doesn't touch the lock, the piece just moves). `exclude` holds staged and
+ * already-tried ids.
+ */
+export function pickLiveSpares(
+  items: Iterable<LiveItem>,
+  bucketHash: number,
+  characterId: string,
+  exclude: ReadonlySet<string>,
+): EquipItemState[] {
+  const candidates: (LiveItem & { itemInstanceId: string })[] = [];
+  for (const item of items) {
+    if (
+      item.bucketHash === bucketHash &&
+      item.itemInstanceId &&
+      !exclude.has(item.itemInstanceId) &&
+      !(item.transferStatus & NOT_TRANSFERRABLE)
+    ) {
+      candidates.push(item as LiveItem & { itemInstanceId: string });
+    }
+  }
+  candidates.sort((a, b) => (a.state & ITEM_LOCKED) - (b.state & ITEM_LOCKED));
+  return candidates.slice(0, MAX_SPARES_PER_ITEM).map((item) => ({
+    itemInstanceId: item.itemInstanceId,
+    itemHash: item.itemHash,
+    location: "inventory",
+    characterId,
+  }));
 }
