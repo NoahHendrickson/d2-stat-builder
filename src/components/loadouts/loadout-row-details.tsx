@@ -10,14 +10,13 @@ import { Fragment, type CSSProperties } from "react";
 import Image from "next/image";
 import type { ArmoryCharacter } from "@/lib/armory/fetch";
 import { buildFragmentStats, formatFragmentStats, SUBCLASS_LINE, subclassFromPlugCategory, type Subclass } from "@/lib/armory/fragments";
-import { ABILITY_KINDS, ABILITY_LABELS, isStrandSharedAbilityIcon } from "@/lib/dim/subclasses";
+import { isStrandSharedAbilityIcon } from "@/lib/dim/subclasses";
 import {
   STRAND_ABILITY_PLATE_FILTER,
   StrandAbilityRecolor,
 } from "@/components/loadouts/strand-ability-recolor";
 import type { Manifest } from "@/lib/manifest/load";
 import {
-  CLASS_NAMES,
   SLOT_LABELS,
   STAT_DISPLAY_ORDER,
   STAT_LABELS,
@@ -26,26 +25,23 @@ import {
 } from "@/lib/armory/stats";
 import { BUNGIE_IMAGE_BASE } from "@/lib/bungie/constants";
 import { lastPlayedCharacter } from "@/lib/bungie/equip-client";
-import { formatRelativeTime } from "@/lib/armor-table/relative-time";
-import { superSocketIndex } from "@/lib/loadouts/subclass";
 import type { ResolvedLoadout } from "@/lib/loadouts/resolve";
-import { loadoutHashtags, type SavedLoadout } from "@/lib/loadouts/types";
+import type { SavedLoadout } from "@/lib/loadouts/types";
 import { StatGlyph } from "@/components/stat-glyph";
-import { Badge } from "@/components/ui/badge";
 import { ArmorThumb } from "@/components/armor-thumb";
 import { isFullyMasterworked } from "@/lib/armory/masterwork";
 import { cn } from "@/lib/utils";
-import { armorPipTier, itemWatermark } from "@/lib/armory/normalize";
+import { armorPipTier } from "@/lib/armory/normalize";
 
 const STAT_COLS = STAT_DISPLAY_ORDER.map((key) => ({
   key,
   i: STAT_ORDER.indexOf(key),
 }));
-/** Name column takes the slack; the six stat columns and Tuned stay fixed so names keep room in the 307px card. */
+/** Name column takes the slack; the six stat columns and Tuned stay fixed. */
 const DETAIL_COLS = "minmax(0,1fr) repeat(6, 1.75rem) 2.5rem";
 
 /** Icon + name for a plug/mod hash, from the manifest; falls back to the hash. */
-function PlugIcon({
+export function PlugIcon({
   hash,
   manifest,
   dim = false,
@@ -140,7 +136,7 @@ function PlugIcon({
 }
 
 /** A Bungie-hosted icon at a fixed square size, or a muted square when absent. */
-function ManifestIcon({
+export function ManifestIcon({
   icon,
   label,
   size,
@@ -151,7 +147,7 @@ function ManifestIcon({
   showTooltip?: boolean;
   icon?: string;
   label: string;
-  size: 12 | 16 | 22 | 24 | 32;
+  size: 12 | 16 | 22 | 24 | 32 | 40;
   className?: string;
   element?: Subclass;
 }) {
@@ -164,7 +160,9 @@ function ManifestIcon({
           ? "size-6"
           : size === 32
             ? "size-8"
-            : "size-4";
+            : size === 40
+              ? "size-10"
+              : "size-4";
   const tileClass = element ? "d2-tile-element" : undefined;
   const tileStyle = element
     ? ({ "--element-line": SUBCLASS_LINE[element] } as CSSProperties)
@@ -193,9 +191,6 @@ function ManifestIcon({
   );
 }
 
-function ChipDivider() {
-  return <span className="h-8 w-px shrink-0 bg-foreground/8" aria-hidden />;
-}
 
 function DetailRow({
   label,
@@ -221,45 +216,19 @@ function DetailRow({
   );
 }
 
-/**
- * Chips (exotic / sets / subclass) and the expanded piece-by-piece breakdown.
- * The card chrome — name, Equip, actions menu, collapsed stat line — stays on LoadoutRow.
- */
-export function LoadoutRowDetails({
-  saved,
-  open,
-  resolved,
-  manifest,
-  characters,
-  statIcons,
-  balancedTuningIcon,
-  now,
-  part,
-}: {
-  saved: SavedLoadout;
-  open?: boolean;
-  resolved: ResolvedLoadout;
-  manifest: Manifest;
-  characters: ArmoryCharacter[];
-  statIcons: StatIconMap;
-  balancedTuningIcon?: string;
-  now: number;
-  /** Chips sit under the title; the expanded breakdown sits below the collapsed stats. */
-  part: "chips" | "expanded";
-}) {
-  const { loadout, optimizer } = saved;
-  const exoticHash =
-    loadout.parameters.exoticArmorHash ??
-    resolved.armor.find((a) => a.piece?.isExotic)?.ref.hash;
-  const exoticDef = manifest.def("DestinyInventoryItemDefinition", exoticHash);
-  const exoticIcon = exoticDef?.displayProperties?.icon;
-  const exoticName = exoticDef?.displayProperties?.name ?? "Exotic";
-  const exoticPiece = resolved.armor.find((a) => a.piece?.isExotic)?.piece;
-  const exoticWatermark =
-    exoticPiece?.watermark ?? itemWatermark(exoticDef);
+export interface SetBonus {
+  hash: number;
+  count: number;
+  icon?: string;
+  label: string;
+}
 
-  // Set bonuses → the perk each piece count unlocks (its icon is the set's glyph).
-  const setBonuses = Object.entries(loadout.parameters.setBonuses ?? {}).map(
+/** Set bonuses → the perk each piece count unlocks (its icon is the set's glyph). */
+export function loadoutSetBonuses(
+  saved: SavedLoadout,
+  manifest: Manifest,
+): SetBonus[] {
+  return Object.entries(saved.loadout.parameters.setBonuses ?? {}).map(
     ([hash, count]) => {
       const setDef = manifest.def(
         "DestinyEquipableItemSetDefinition",
@@ -278,59 +247,68 @@ export function LoadoutRowDetails({
       };
     },
   );
+}
 
-  const subclass = resolved.subclass;
-  const subclassDef = manifest.def(
-    "DestinyInventoryItemDefinition",
-    subclass?.itemHash,
+/** Every active set bonus's perk glyph in one bordered 32px well; names in the tooltip. */
+export function SetBonusChip({ bonuses }: { bonuses: SetBonus[] }) {
+  if (bonuses.length === 0) return null;
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        delay={100}
+        render={
+          <span
+            tabIndex={0}
+            aria-label={bonuses.map((b) => b.label).join(", ")}
+            className="bg-lifted flex h-8 min-w-8 shrink-0 items-center justify-center gap-1.5 rounded-none border border-foreground/8 px-1 outline-none focus-visible:border-outline-strong"
+          />
+        }
+      >
+        {bonuses.map((b) => (
+          <ManifestIcon
+            key={b.hash}
+            icon={b.icon}
+            label={b.label}
+            size={22}
+            showTooltip={false}
+          />
+        ))}
+      </TooltipTrigger>
+      <TooltipContent className="grid gap-2 px-3 py-2.5 text-sm leading-6">
+        {bonuses.map((b) => (
+          <div key={b.hash}>{b.label}</div>
+        ))}
+      </TooltipContent>
+    </Tooltip>
   );
-  const subclassLabel =
-    subclassDef?.displayProperties?.name ?? subclass?.subclass ?? "Subclass";
-  const superStart = subclass
-    ? superSocketIndex(manifest, subclass.itemHash)
-    : undefined;
-  const initialSuperHash =
-    superStart !== undefined
-      ? subclassDef?.sockets?.socketEntries[superStart]?.singleInitialItemHash
-      : undefined;
-  const superDef = manifest.def(
-    "DestinyInventoryItemDefinition",
-    subclass?.superHash ?? (initialSuperHash || undefined),
-  );
-  const superIcon =
-    superDef?.displayProperties?.icon ?? subclassDef?.displayProperties?.icon;
-  const superLabel = superDef?.displayProperties?.name
-    ? `${superDef.displayProperties.name} · ${subclassLabel}`
-    : subclassLabel;
-  // Pinned abilities besides the Super, in socket order (class ability, jump, melee, grenade).
-  const abilityChips = subclass
-    ? ABILITY_KINDS.filter((kind) => kind !== "super").flatMap((kind) => {
-        const hash = subclass.abilityHashes[kind];
-        return hash === undefined ? [] : [{ kind, hash }];
-      })
-    : [];
+}
 
-  const className =
-    loadout.classType === 3 ? "Any class" : CLASS_NAMES[loadout.classType];
+/**
+ * The stat breakdown a card expands into: each piece's stats with its tuning / artifice
+ * pick, the Armor / Mods / Artifice / Tuning / Total rows, and the artifact perks.
+ */
+export function LoadoutRowDetails({
+  saved,
+  resolved,
+  manifest,
+  characters,
+  statIcons,
+  balancedTuningIcon,
+}: {
+  saved: SavedLoadout;
+  resolved: ResolvedLoadout;
+  manifest: Manifest;
+  characters: ArmoryCharacter[];
+  statIcons: StatIconMap;
+  balancedTuningIcon?: string;
+}) {
+  const { loadout, optimizer } = saved;
   const targetCharacter = lastPlayedCharacter(
     characters,
     loadout.classType === 3
       ? resolved.armor[0]?.piece?.classType
       : loadout.classType,
   );
-  const hashtags = loadoutHashtags(loadout);
-  // Piece each mod is placed on (from the saved placement) for the Mods line tooltips.
-  const modPieceNames = new Map<number, string[]>();
-  for (const [instanceId, sockets] of Object.entries(
-    saved.modPlacement ?? {},
-  )) {
-    const name = resolved.armor.find((a) => a.ref.id === instanceId)?.name;
-    if (!name) continue;
-    for (const hash of Object.values(sockets)) {
-      modPieceNames.set(hash, [...(modPieceNames.get(hash) ?? []), name]);
-    }
-  }
-
   // Artifact perks: which of the saved unlocks the target character currently has active.
   const artifact = loadout.parameters.artifactUnlocks;
   const currentUnlocks = new Set(
@@ -340,338 +318,165 @@ export function LoadoutRowDetails({
     ? artifact.unlockedItemHashes.filter((h) => currentUnlocks.has(h)).length
     : 0;
 
-  const hasChips = !!exoticIcon || setBonuses.length > 0 || !!subclass;
-
-  if (part === "chips") {
-    if (!hasChips) return null;
-    return (
-          <div className="flex h-8 items-center gap-2 overflow-hidden">
-            {exoticIcon && (
-              <TooltipLabel label={exoticName} delay={100}>
-                <span tabIndex={0} className="inline-flex outline-none">
-                  <ArmorThumb
-                    icon={exoticIcon}
-                    watermark={exoticWatermark}
-                    alt={exoticName}
-                    size={32}
-                    masterworked={isFullyMasterworked(exoticPiece)}
-                    gearTier={armorPipTier(exoticPiece)}
-                  />
-                </span>
-              </TooltipLabel>
-            )}
-            {exoticIcon && setBonuses.length > 0 && <ChipDivider />}
-            {setBonuses.length > 0 && (
-              <Tooltip>
-                <TooltipTrigger
-                  delay={100}
-                  render={
-                    <span
-                      tabIndex={0}
-                      aria-label={setBonuses.map((b) => b.label).join(", ")}
-                      className="bg-lifted flex h-8 min-w-8 shrink-0 items-center justify-center gap-1.5 rounded-none border border-foreground/8 px-1 outline-none focus-visible:border-outline-strong"
-                    />
-                  }
-                >
-                  {setBonuses.map((b) => (
-                    <ManifestIcon
-                      key={b.hash}
-                      icon={b.icon}
-                      label={b.label}
-                      size={22}
-                      showTooltip={false}
-                    />
-                  ))}
-                </TooltipTrigger>
-                <TooltipContent className="grid gap-2 px-3 py-2.5 text-sm leading-6">
-                  {setBonuses.map((b) => (
-                    <div key={b.hash}>{b.label}</div>
-                  ))}
-                </TooltipContent>
-              </Tooltip>
-            )}
-            {(exoticIcon || setBonuses.length > 0) && subclass && (
-              <ChipDivider />
-            )}
-            {subclass && (
-              <span
-                aria-label={superLabel}
-                className="flex min-w-0 items-center gap-2"
-              >
-                <ManifestIcon
-                  icon={superIcon}
-                  label={superLabel}
-                  size={32}
-                  className="rounded-none"
-                  element={
-                    subclassFromPlugCategory(superDef?.plug?.plugCategoryIdentifier) ??
-                    subclass.subclass
-                  }
-                />
-                {abilityChips.map(({ kind, hash }) => (
-                  <PlugIcon
-                    key={kind}
-                    hash={hash}
-                    manifest={manifest}
-                    suffix={ABILITY_LABELS[kind]}
-                    size={32}
-                    className="rounded-none"
-                    element={subclass.subclass}
-                  />
-                ))}
-                {subclass.aspectHashes.map((hash) => (
-                  <PlugIcon
-                    key={hash}
-                    hash={hash}
-                    manifest={manifest}
-                    size={32}
-                    className="rounded-none"
-                    element={subclass.subclass}
-                  />
-                ))}
-                {subclass.fragmentHashes.map((hash, i) => (
-                  <PlugIcon
-                    key={`${hash}-${i}`}
-                    hash={hash}
-                    manifest={manifest}
-                    size={32}
-                    className="rounded-none"
-                    classType={loadout.classType}
-                    element={subclass.subclass}
-                  />
-                ))}
-              </span>
-            )}
-          </div>
-    );
-  }
-
-  if (!open) return null;
   return (
-        <div className="space-y-3 border-t border-foreground/15 pt-2 text-xs">
-          {loadout.notes && (
-            <p className="text-muted-foreground whitespace-pre-wrap">
-              {loadout.notes}
-            </p>
-          )}
-          {hashtags.length > 0 && (
-            <div className="flex flex-wrap gap-1">
-              {hashtags.map((t) => (
-                <Badge
-                  key={t}
-                  variant="outline"
-                  className="normal-case tracking-normal"
-                >
-                  #{t}
-                </Badge>
-              ))}
-            </div>
-          )}
+    <div className="grid gap-4 border-t border-foreground/15 pt-3 text-xs @3xl:grid-cols-[minmax(0,34rem)_minmax(0,1fr)]">
+      <div
+        className="grid items-center gap-x-1 gap-y-1"
+        style={{ gridTemplateColumns: DETAIL_COLS }}
+      >
+        <div />
+        {STAT_COLS.map(({ key }) => (
+          <div key={key} className="flex justify-center pb-0.5">
+            <StatGlyph src={statIcons[key]} label={STAT_LABELS[key]} />
+          </div>
+        ))}
+        <div className="d2-label pb-0.5 text-center text-[9px]">Tuned</div>
 
-          <div
-            className="grid items-center gap-x-1 gap-y-1"
-            style={{ gridTemplateColumns: DETAIL_COLS }}
-          >
-            <div />
-            {STAT_COLS.map(({ key }) => (
-              <div key={key} className="flex justify-center pb-0.5">
-                <StatGlyph src={statIcons[key]} label={STAT_LABELS[key]} />
-              </div>
-            ))}
-            <div className="d2-label pb-0.5 text-center text-[9px]">
-              Tuned
-            </div>
-
-            {resolved.armor.map((a, idx) => {
-              const slotIndex =
-                optimizer?.pieceIds.indexOf(a.ref.id ?? "") ?? -1;
-              const tune = slotIndex >= 0 ? optimizer!.tuning[slotIndex] : null;
-              const artificePick =
-                slotIndex >= 0 ? optimizer!.artifice[slotIndex] : null;
-              return (
-                <Fragment key={`${a.ref.id ?? a.ref.hash}-${idx}`}>
-                  <div className="flex min-w-0 items-center gap-1.5">
-                    {a.icon ? (
-                      <ArmorThumb
-                        icon={a.icon}
-                        watermark={a.piece?.watermark}
-                        size={20}
-                        masterworked={isFullyMasterworked(a.piece)}
-                        gearTier={armorPipTier(a.piece)}
-                        className={a.missing ? "opacity-50" : undefined}
-                      />
-                    ) : (
-                      <span
-                        className="d2-brackets bg-black/25 size-5 shrink-0"
-                        aria-hidden
-                      />
-                    )}
-                    <TooltipLabel
-                      label={
-                        a.slot ? `${a.name} · ${SLOT_LABELS[a.slot]}` : a.name
-                      }
-                    >
-                      <span
-                        className={cn(
-                          "truncate",
-                          a.missing && "text-muted-foreground",
-                        )}
-                        tabIndex={0}
-                      >
-                        {a.name}
-                      </span>
-                    </TooltipLabel>
-                    {a.missing && (
-                      <Badge
-                        variant="outline"
-                        className="shrink-0 border-warning/60 text-warning"
-                      >
-                        missing
-                      </Badge>
-                    )}
-                  </div>
-                  {STAT_COLS.map(({ key, i }) => (
-                    <div
-                      key={key}
-                      className="text-muted-foreground text-center tabular-nums"
-                    >
-                      {a.piece ? a.piece.stats[i] || "" : ""}
-                    </div>
-                  ))}
-                  <div className="flex justify-center">
-                    {tune?.kind === "balanced" ? (
-                      <StatGlyph
-                        src={balancedTuningIcon}
-                        label="Balanced Tuning"
-                        invert={false}
-                      />
-                    ) : tune?.kind === "directional" ? (
-                      <StatGlyph
-                        src={statIcons[STAT_ORDER[tune.plus]]}
-                        label={`Tuned +5 ${STAT_LABELS[STAT_ORDER[tune.plus]]}`}
-                      />
-                    ) : artificePick !== null && artificePick !== undefined ? (
-                      <span className="flex items-center gap-0.5 text-[10px] text-positive/90 tabular-nums">
-                        <StatGlyph
-                          src={statIcons[STAT_ORDER[artificePick]]}
-                          label={`Artifice +3 ${STAT_LABELS[STAT_ORDER[artificePick]]}`}
-                        />
-                        +3
-                      </span>
-                    ) : null}
-                  </div>
-                </Fragment>
-              );
-            })}
-
-            {optimizer && (
-              <>
-                <div className="col-span-full my-0.5 border-t border-foreground/15" />
-                <DetailRow
-                  label="Armor"
-                  render={(i) => optimizer.baseStats[i] || ""}
-                />
-                <DetailRow
-                  label="Mods"
-                  render={(i) =>
-                    optimizer.modBonus[i] ? (
-                      <span className="text-positive/90">
-                        +{optimizer.modBonus[i]}
-                      </span>
-                    ) : (
-                      ""
-                    )
-                  }
-                />
-                {optimizer.artificeBonus.some((v) => v > 0) && (
-                  <DetailRow
-                    label="Artifice"
-                    render={(i) =>
-                      optimizer.artificeBonus[i] ? (
-                        <span className="text-positive/90">
-                          +{optimizer.artificeBonus[i]}
-                        </span>
-                      ) : (
-                        ""
-                      )
-                    }
+        {resolved.armor.map((a, idx) => {
+          const slotIndex = optimizer?.pieceIds.indexOf(a.ref.id ?? "") ?? -1;
+          const tune = slotIndex >= 0 ? optimizer!.tuning[slotIndex] : null;
+          const artificePick =
+            slotIndex >= 0 ? optimizer!.artifice[slotIndex] : null;
+          return (
+            <Fragment key={`${a.ref.id ?? a.ref.hash}-${idx}`}>
+              <div className="flex min-w-0 items-center gap-1.5">
+                {a.icon ? (
+                  <ArmorThumb
+                    icon={a.icon}
+                    watermark={a.piece?.watermark}
+                    size={20}
+                    masterworked={isFullyMasterworked(a.piece)}
+                    gearTier={armorPipTier(a.piece)}
+                    className={a.missing ? "opacity-50" : undefined}
+                  />
+                ) : (
+                  <span
+                    className="d2-brackets bg-black/25 size-5 shrink-0"
+                    aria-hidden
                   />
                 )}
-                <DetailRow
-                  label="Tuning"
-                  render={(i) => {
-                    const v = optimizer.tuningBonus[i];
-                    if (!v) return "";
-                    return (
-                      <span
-                        className={v < 0 ? "text-destructive" : "text-positive/90"}
-                      >
-                        {v > 0 ? `+${v}` : v}
-                      </span>
-                    );
-                  }}
-                />
-                <div className="col-span-full my-0.5 border-t border-foreground/15" />
-                <DetailRow
-                  label="Total"
-                  labelClass="text-foreground font-medium"
-                  render={(i) => (
-                    <span className="text-foreground font-medium">
-                      {optimizer.stats[i]}
+                <TooltipLabel
+                  label={a.slot ? `${a.name} · ${SLOT_LABELS[a.slot]}` : a.name}
+                >
+                  <span
+                    className={cn("truncate", a.missing && "text-muted-foreground")}
+                    tabIndex={0}
+                  >
+                    {a.name}
+                  </span>
+                </TooltipLabel>
+              </div>
+              {STAT_COLS.map(({ key, i }) => (
+                <div
+                  key={key}
+                  className="text-muted-foreground text-center tabular-nums"
+                >
+                  {a.piece ? a.piece.stats[i] || "" : ""}
+                </div>
+              ))}
+              <div className="flex justify-center">
+                {tune?.kind === "balanced" ? (
+                  <StatGlyph
+                    src={balancedTuningIcon}
+                    label="Balanced Tuning"
+                    invert={false}
+                  />
+                ) : tune?.kind === "directional" ? (
+                  <StatGlyph
+                    src={statIcons[STAT_ORDER[tune.plus]]}
+                    label={`Tuned +5 ${STAT_LABELS[STAT_ORDER[tune.plus]]}`}
+                  />
+                ) : artificePick !== null && artificePick !== undefined ? (
+                  <span className="flex items-center gap-0.5 text-[10px] text-positive/90 tabular-nums">
+                    <StatGlyph
+                      src={statIcons[STAT_ORDER[artificePick]]}
+                      label={`Artifice +3 ${STAT_LABELS[STAT_ORDER[artificePick]]}`}
+                    />
+                    +3
+                  </span>
+                ) : null}
+              </div>
+            </Fragment>
+          );
+        })}
+
+        {optimizer && (
+          <>
+            <div className="col-span-full my-0.5 border-t border-foreground/15" />
+            <DetailRow label="Armor" render={(i) => optimizer.baseStats[i] || ""} />
+            <DetailRow
+              label="Mods"
+              render={(i) =>
+                optimizer.modBonus[i] ? (
+                  <span className="text-positive/90">+{optimizer.modBonus[i]}</span>
+                ) : (
+                  ""
+                )
+              }
+            />
+            {optimizer.artificeBonus.some((v) => v > 0) && (
+              <DetailRow
+                label="Artifice"
+                render={(i) =>
+                  optimizer.artificeBonus[i] ? (
+                    <span className="text-positive/90">
+                      +{optimizer.artificeBonus[i]}
                     </span>
-                  )}
-                />
-              </>
+                  ) : (
+                    ""
+                  )
+                }
+              />
             )}
-          </div>
-
-          {loadout.parameters.mods.length > 0 && (
-            <div className="flex items-center gap-2">
-              <span className="text-muted-foreground w-16 shrink-0">Mods</span>
-              <div className="flex flex-wrap gap-1">
-                {loadout.parameters.mods.map((hash, i) => (
-                  <PlugIcon
-                    key={`${hash}-${i}`}
-                    hash={hash}
-                    manifest={manifest}
-                    suffix={modPieceNames.get(hash)?.shift()}
-                  />
-                ))}
-              </div>
-            </div>
-          )}
-
-          {artifact && artifact.unlockedItemHashes.length > 0 && (
-            <div className="flex items-start gap-2">
-              <span className="text-muted-foreground w-16 shrink-0 pt-1">
-                Artifact
-                <span className="block text-[10px] tabular-nums">
-                  {artifactActive}/{artifact.unlockedItemHashes.length} active
+            <DetailRow
+              label="Tuning"
+              render={(i) => {
+                const v = optimizer.tuningBonus[i];
+                if (!v) return "";
+                return (
+                  <span className={v < 0 ? "text-destructive" : "text-positive/90"}>
+                    {v > 0 ? `+${v}` : v}
+                  </span>
+                );
+              }}
+            />
+            <div className="col-span-full my-0.5 border-t border-foreground/15" />
+            <DetailRow
+              label="Total"
+              labelClass="text-foreground font-medium"
+              render={(i) => (
+                <span className="text-foreground font-medium">
+                  {optimizer.stats[i]}
                 </span>
-              </span>
-              <div className="flex flex-wrap gap-1">
-                {artifact.unlockedItemHashes.map((hash, i) => (
-                  <PlugIcon
-                    key={`${hash}-${i}`}
-                    hash={hash}
-                    manifest={manifest}
-                    dim={!currentUnlocks.has(hash)}
-                    suffix={
-                      currentUnlocks.has(hash)
-                        ? undefined
-                        : "not currently unlocked"
-                    }
-                  />
-                ))}
-              </div>
-            </div>
-          )}
+              )}
+            />
+          </>
+        )}
+      </div>
 
-          <p className="text-muted-foreground">
-            {className}
-            {subclass?.subclass ? ` · ${subclass.subclass}` : ""} · edited{" "}
-            {formatRelativeTime(saved.updatedAt, now)}
-          </p>
+      {artifact && artifact.unlockedItemHashes.length > 0 && (
+        <div className="flex items-start gap-2">
+          <span className="text-muted-foreground w-16 shrink-0 pt-1">
+            Artifact
+            <span className="block text-[10px] tabular-nums">
+              {artifactActive}/{artifact.unlockedItemHashes.length} active
+            </span>
+          </span>
+          <div className="flex flex-wrap gap-1">
+            {artifact.unlockedItemHashes.map((hash, i) => (
+              <PlugIcon
+                key={`${hash}-${i}`}
+                hash={hash}
+                manifest={manifest}
+                dim={!currentUnlocks.has(hash)}
+                suffix={
+                  currentUnlocks.has(hash) ? undefined : "not currently unlocked"
+                }
+              />
+            ))}
+          </div>
         </div>
+      )}
+    </div>
   );
 }

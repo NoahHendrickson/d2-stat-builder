@@ -6,6 +6,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLineDown,
   ArrowSquareOut,
+  CaretDown,
   CircleNotch,
   Copy,
   DotsThreeVertical,
@@ -43,7 +44,12 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
-import { LoadoutRowDetails } from "@/components/loadouts/loadout-row-details";
+import {
+  LoadoutRowDetails,
+  loadoutSetBonuses,
+  SetBonusChip,
+} from "@/components/loadouts/loadout-row-details";
+import { LoadoutCardBody } from "@/components/loadouts/loadout-card-body";
 
 const STAT_COLS = STAT_DISPLAY_ORDER.map((key) => ({
   key,
@@ -51,9 +57,9 @@ const STAT_COLS = STAT_DISPLAY_ORDER.map((key) => ({
 }));
 
 /**
- * One saved loadout as a sidebar card (Figma "Attachment", 1:1209): name with Equip and
- * the actions menu, a row of chips, and the stat line. Clicking the name expands the
- * piece-by-piece breakdown (see LoadoutRowDetails).
+ * One saved loadout as a large card on the loadouts page: name, set bonuses, the stat
+ * line (which toggles the stat breakdown), Equip and the actions menu across the top,
+ * then the body laid out like the editor drawer (see LoadoutCardBody).
  *
  * Memoized: the list renders (virtualized) rows with stable, loadout-taking callbacks,
  * so a keystroke in the search box or one row's expansion doesn't re-render every other
@@ -156,162 +162,169 @@ export const LoadoutRow = memo(function LoadoutRow({
     window.open(buildDimLoadoutUrl(loadout), "_blank", "noopener,noreferrer");
   };
 
+  const setBonuses = useMemo(
+    () => loadoutSetBonuses(saved, manifest),
+    [saved, manifest],
+  );
+  const meta = `${className}${resolved.subclass?.subclass ? ` · ${resolved.subclass.subclass}` : ""} · edited ${formatRelativeTime(saved.updatedAt, now)}`;
+
   return (
-    <div className="d2-card-frame mx-2 flex flex-col gap-3 p-3 [--card-line-width:1.5px] hover:[--line-alpha:1.6]">
-      <div className="flex flex-col gap-2">
-        <div className="flex h-8 items-center justify-between gap-2">
-          <TooltipLabel
-            label={`${className}${resolved.subclass?.subclass ? ` · ${resolved.subclass.subclass}` : ""} · edited ${formatRelativeTime(saved.updatedAt, now)}`}
-          >
-            <button
-              type="button"
-              onClick={() => onToggle(saved.id)}
-              aria-expanded={open}
-              className="hover:text-foreground/80 flex min-w-0 flex-1 items-center gap-1.5 text-left text-base leading-6 transition-colors"
-            >
-              <span className="truncate">{loadout.name}</span>
-              {resolved.missing && (
+    <article
+      aria-label={loadout.name}
+      className="@container d2-card-frame flex flex-col gap-4 p-4 [--card-line-width:1.5px] hover:[--line-alpha:1.6]"
+    >
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <div className="flex min-w-0 flex-1 basis-48 flex-col">
+          <h3 className="flex min-w-0 items-center gap-1.5 text-base leading-6 font-medium">
+            <span className="truncate">{loadout.name}</span>
+            {resolved.missing && (
+              <TooltipLabel label="Some pieces aren't in your inventory">
                 <Warning
                   weight="fill"
+                  tabIndex={0}
                   className="size-4 shrink-0 text-warning"
                   aria-label="Missing items"
                 />
-              )}
-            </button>
-          </TooltipLabel>
-          <div className="flex shrink-0 items-center gap-2">
-            <TooltipLabel
-              label={provisional ? "Refreshing your gear from Bungie…" : undefined}
-              disabled={!provisional}
-            >
-              <Button
-                variant="emphatic"
-                size="xs"
-                className="h-8 gap-1.5 px-3"
-                onClick={applyLoadout}
-                disabled={!canApply}
-              >
-                {applying && (
-                  <CircleNotch className="animate-spin" aria-hidden />
-                )}
-                Equip
-              </Button>
-            </TooltipLabel>
-            <DropdownMenu>
-              <DropdownMenuTrigger
-                render={<Button size="icon" variant="dashed" />}
-                aria-label={`Actions for ${loadout.name}`}
-              >
-                <DotsThreeVertical
-                  weight="bold"
-                  className="size-4"
-                  aria-hidden
-                />
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-50">
-                <DropdownMenuItem onClick={() => onOptimize(saved)}>
-                  <SlidersHorizontal weight="duotone" aria-hidden />
-                  Optimize
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={applyLoadout} disabled={!canApply}>
-                  <ArrowLineDown weight="duotone" aria-hidden />
-                  Equip
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => onEdit(saved)}>
-                  <PencilSimple weight="duotone" aria-hidden />
-                  Edit
-                </DropdownMenuItem>
-                <LoadoutTagAssignSubmenu
-                  assigned={loadoutHashtags(loadout)}
-                  tags={allTags}
-                  onToggle={(tag, checked) => onSetTag(saved, tag, checked)}
-                  onCreate={(tag) => onSetTag(saved, tag, true)}
-                />
-                <DropdownMenuItem onClick={() => onShare(saved)}>
-                  <ShareFat weight="duotone" aria-hidden />
-                  Share
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => onDuplicate(saved)}>
-                  <Copy weight="duotone" aria-hidden />
-                  Duplicate
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={copyItemIds}
-                  disabled={!resolved.actionable}
-                >
-                  <Copy weight="duotone" aria-hidden />
-                  Copy item IDs
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={openInDim}>
-                  <ArrowSquareOut weight="duotone" aria-hidden />
-                  Open in DIM
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  variant="destructive"
-                  onClick={() => onDelete(saved)}
-                >
-                  <Trash weight="duotone" aria-hidden />
-                  Delete
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
+              </TooltipLabel>
+            )}
+          </h3>
+          <p className="text-muted-foreground truncate text-xs leading-4">{meta}</p>
         </div>
 
+        <SetBonusChip bonuses={setBonuses} />
+
+        <button
+          type="button"
+          onClick={() => onToggle(saved.id)}
+          aria-expanded={open}
+          aria-label={open ? "Hide stat breakdown" : "Show stat breakdown"}
+          className="text-foreground hover:bg-foreground/6 flex h-8 items-center gap-3 rounded-none px-2 text-xs leading-4 tabular-nums outline-none transition-colors focus-visible:ring-1 focus-visible:ring-outline-strong"
+        >
+          {optimizer ? (
+            <>
+              <span className="font-medium">{optimizer.total}</span>
+              {STAT_COLS.map(({ key, i }) => {
+                const value = optimizer.stats[i];
+                return (
+                  <span key={key} className="flex items-center gap-0.5">
+                    <StatGlyph
+                      src={statIcons[key]}
+                      label={STAT_LABELS[key]}
+                      className="size-3 opacity-65"
+                    />
+                    <span className={cn(value === 0 && "text-muted-foreground")}>
+                      {value}
+                    </span>
+                  </span>
+                );
+              })}
+            </>
+          ) : (
+            <span className="text-muted-foreground">Details</span>
+          )}
+          <CaretDown
+            weight="bold"
+            className={cn(
+              "text-muted-foreground size-3 transition-transform",
+              open && "rotate-180",
+            )}
+            aria-hidden
+          />
+        </button>
+
+        <div className="flex shrink-0 items-center gap-2">
+          <TooltipLabel
+            label={provisional ? "Refreshing your gear from Bungie…" : undefined}
+            disabled={!provisional}
+          >
+            <Button
+              variant="emphatic"
+              size="xs"
+              className="h-8 gap-1.5 px-4"
+              onClick={applyLoadout}
+              disabled={!canApply}
+            >
+              {applying && <CircleNotch className="animate-spin" aria-hidden />}
+              Equip
+            </Button>
+          </TooltipLabel>
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={<Button size="icon" variant="dashed" />}
+              aria-label={`Actions for ${loadout.name}`}
+            >
+              <DotsThreeVertical weight="bold" className="size-4" aria-hidden />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-50">
+              <DropdownMenuItem onClick={() => onOptimize(saved)}>
+                <SlidersHorizontal weight="duotone" aria-hidden />
+                Optimize
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={applyLoadout} disabled={!canApply}>
+                <ArrowLineDown weight="duotone" aria-hidden />
+                Equip
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onEdit(saved)}>
+                <PencilSimple weight="duotone" aria-hidden />
+                Edit
+              </DropdownMenuItem>
+              <LoadoutTagAssignSubmenu
+                assigned={loadoutHashtags(loadout)}
+                tags={allTags}
+                onToggle={(tag, checked) => onSetTag(saved, tag, checked)}
+                onCreate={(tag) => onSetTag(saved, tag, true)}
+              />
+              <DropdownMenuItem onClick={() => onShare(saved)}>
+                <ShareFat weight="duotone" aria-hidden />
+                Share
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => onDuplicate(saved)}>
+                <Copy weight="duotone" aria-hidden />
+                Duplicate
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={copyItemIds} disabled={!resolved.actionable}>
+                <Copy weight="duotone" aria-hidden />
+                Copy item IDs
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={openInDim}>
+                <ArrowSquareOut weight="duotone" aria-hidden />
+                Open in DIM
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem variant="destructive" onClick={() => onDelete(saved)}>
+                <Trash weight="duotone" aria-hidden />
+                Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </div>
+
+      {loadout.notes && (
+        <p className="text-muted-foreground -mt-2 line-clamp-2 text-sm whitespace-pre-wrap">
+          {loadout.notes}
+        </p>
+      )}
+
+      <LoadoutCardBody
+        saved={saved}
+        resolved={resolved}
+        manifest={manifest}
+        statIcons={statIcons}
+        balancedTuningIcon={balancedTuningIcon}
+      />
+
+      {open && (
         <LoadoutRowDetails
-          part="chips"
           saved={saved}
           resolved={resolved}
           manifest={manifest}
           characters={characters}
           statIcons={statIcons}
           balancedTuningIcon={balancedTuningIcon}
-          now={now}
         />
-      </div>
-
-      {optimizer ? (
-        <div className="flex items-start justify-between gap-1 text-xs leading-4 tabular-nums">
-          <TooltipLabel label="Total stats">
-            <span tabIndex={0} className="text-foreground">{optimizer.total}</span>
-          </TooltipLabel>
-          {STAT_COLS.map(({ key, i }) => {
-            const value = optimizer.stats[i];
-            return (
-              <span key={key} className="flex items-center gap-0.5">
-                <StatGlyph
-                  src={statIcons[key]}
-                  label={STAT_LABELS[key]}
-                  className="size-3 opacity-65"
-                />
-                <span className={cn(value === 0 && "text-muted-foreground")}>
-                  {value}
-                </span>
-              </span>
-            );
-          })}
-        </div>
-      ) : (
-        <p className="text-muted-foreground text-xs leading-4">
-          {className}
-          {resolved.subclass?.subclass ? ` · ${resolved.subclass.subclass}` : ""}{" "}
-          · edited {formatRelativeTime(saved.updatedAt, now)}
-        </p>
       )}
-
-      <LoadoutRowDetails
-        part="expanded"
-        open={open}
-        saved={saved}
-        resolved={resolved}
-        manifest={manifest}
-        characters={characters}
-        statIcons={statIcons}
-        balancedTuningIcon={balancedTuningIcon}
-        now={now}
-      />
-    </div>
+    </article>
   );
 });

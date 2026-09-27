@@ -10,7 +10,7 @@ import { useManifest } from "@/lib/manifest/use-manifest";
 /** Stand-in for LoadoutsList while its chunk loads: the same pending copy it shows. */
 function LoadoutsListPlaceholder() {
   return (
-    <p className="text-muted-foreground px-2 text-sm" aria-busy>
+    <p className="text-muted-foreground text-sm" aria-busy>
       Loading your loadouts…
     </p>
   );
@@ -49,10 +49,10 @@ export function LoadoutsPageShell() {
     );
   }
 
-  // The card list keeps its sidebar-era width: rows are laid out for a narrow
-  // column, and a centred reading width keeps expanded details scannable.
+  // Cards lay out like the editor drawer (subclass + five piece columns), so they take
+  // the main column's width, capped so columns don't sprawl on very wide screens.
   return (
-    <main className="mx-auto flex h-full min-h-0 w-full max-w-2xl flex-col px-4 py-6">
+    <main className="mx-auto flex h-full min-h-0 w-full max-w-[100rem] flex-col px-4 py-6 lg:px-6">
       {!armory.data || manifestStatus.state !== "ready" ? (
         // Rows resolve items against the live armory and read icons from the manifest.
         <LoadoutsListPlaceholder />

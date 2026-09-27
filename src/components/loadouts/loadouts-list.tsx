@@ -133,10 +133,10 @@ function FilterCascade({
   );
 }
 
-/** Collapsed card height (Figma "Attachment", 1:1209); expanded cards are remeasured. */
-const ESTIMATED_ROW_HEIGHT_PX = 104;
+/** Card height with the breakdown closed (wide layout); every card is remeasured. */
+const ESTIMATED_ROW_HEIGHT_PX = 300;
 /** Vertical gap between cards. */
-const ROW_GAP_PX = 10;
+const ROW_GAP_PX = 12;
 
 /**
  * The loadouts page body (Figma 69:865): search, then the count with sort / filter
@@ -484,204 +484,200 @@ export function LoadoutsList({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
-      <div className="flex flex-col gap-2 px-2">
-        <div className="flex items-start gap-2">
-          <div className="relative min-w-0 flex-1">
-            <MagnifyingGlass
-              className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 z-10 size-4 -translate-y-1/2"
-              aria-hidden
-            />
-            <Input
-              type="search"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search your loadouts"
-              aria-label="Search loadouts (names, notes, set bonuses, or #hashtags)"
-              className="pl-8 pr-8 [&::-webkit-search-cancel-button]:hidden"
-            />
-            {query.length > 0 && (
-              <button
-                type="button"
-                aria-label="Clear search"
-                onClick={() => setQuery("")}
-                className="text-muted-foreground hover:text-foreground absolute top-1/2 right-1.5 flex size-5 -translate-y-1/2 cursor-pointer items-center justify-center rounded-none outline-none focus-visible:ring-1 focus-visible:ring-outline-strong"
-              >
-                <X weight="bold" className="size-3.5" aria-hidden />
-              </button>
-            )}
-          </div>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <div className="relative min-w-0 flex-1 basis-60 sm:max-w-sm">
+          <MagnifyingGlass
+            className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 z-10 size-4 -translate-y-1/2"
+            aria-hidden
+          />
+          <Input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search your loadouts"
+            aria-label="Search loadouts (names, notes, set bonuses, or #hashtags)"
+            className="pl-8 pr-8 [&::-webkit-search-cancel-button]:hidden"
+          />
+          {query.length > 0 && (
+            <button
+              type="button"
+              aria-label="Clear search"
+              onClick={() => setQuery("")}
+              className="text-muted-foreground hover:text-foreground absolute top-1/2 right-1.5 flex size-5 -translate-y-1/2 cursor-pointer items-center justify-center rounded-none outline-none focus-visible:ring-1 focus-visible:ring-outline-strong"
+            >
+              <X weight="bold" className="size-3.5" aria-hidden />
+            </button>
+          )}
         </div>
 
-        <div className="flex items-center justify-between pl-1">
-          <span className="text-sm tabular-nums" aria-live="polite">
-            {countLabel}
-          </span>
-          <div className="flex items-center gap-2">
-            <DropdownMenu>
-              <TooltipLabel label={`Sort by ${sortLabel}`}>
-                <DropdownMenuTrigger
-                  render={<Button variant="default" size="icon" />}
-                  aria-label={`Sort by ${sortLabel}`}
-                >
-                  <ArrowsDownUp aria-hidden />
-                </DropdownMenuTrigger>
-              </TooltipLabel>
-              <DropdownMenuContent align="end" className="w-48">
-                <DropdownMenuGroup>
-                  <DropdownMenuLabel>Sort by</DropdownMenuLabel>
-                  {LOADOUT_LIST_SORT_OPTIONS.map((o) => (
-                    <DropdownMenuCheckboxItem
-                      key={o.key}
-                      checked={sortKey === o.key}
-                      onCheckedChange={() => setSortKey(o.key)}
-                    >
-                      {o.label}
-                    </DropdownMenuCheckboxItem>
-                  ))}
-                </DropdownMenuGroup>
-              </DropdownMenuContent>
-            </DropdownMenu>
+        <span className="text-muted-foreground text-sm tabular-nums" aria-live="polite">
+          {countLabel}
+        </span>
+        <div className="ml-auto flex items-center gap-2">
+          <DropdownMenu>
+            <TooltipLabel label={`Sort by ${sortLabel}`}>
+              <DropdownMenuTrigger
+                render={<Button variant="default" size="icon" />}
+                aria-label={`Sort by ${sortLabel}`}
+              >
+                <ArrowsDownUp aria-hidden />
+              </DropdownMenuTrigger>
+            </TooltipLabel>
+            <DropdownMenuContent align="end" className="w-48">
+              <DropdownMenuGroup>
+                <DropdownMenuLabel>Sort by</DropdownMenuLabel>
+                {LOADOUT_LIST_SORT_OPTIONS.map((o) => (
+                  <DropdownMenuCheckboxItem
+                    key={o.key}
+                    checked={sortKey === o.key}
+                    onCheckedChange={() => setSortKey(o.key)}
+                  >
+                    {o.label}
+                  </DropdownMenuCheckboxItem>
+                ))}
+              </DropdownMenuGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
 
-            <DropdownMenu>
-              <TooltipLabel label="Filter loadouts">
-                <DropdownMenuTrigger
-                  render={
-                    <Button variant="default" size="icon" className="relative" />
-                  }
-                  aria-label={
-                    filterCount > 0
-                      ? `Filter loadouts, ${filterCount} active`
-                      : "Filter loadouts"
-                  }
-                >
-                  <FunnelSimple aria-hidden />
-                  {filterCount > 0 && (
-                    <Badge
-                      variant="emphatic"
-                      className="absolute top-0 right-0 h-3.5 min-w-3.5 px-1 text-[9px] leading-none tracking-normal"
-                    >
-                      {filterCount}
-                    </Badge>
-                  )}
-                </DropdownMenuTrigger>
-              </TooltipLabel>
-              <DropdownMenuContent align="end" className="w-44">
-                <FilterCascade
-                  label="Class"
-                  summary={filterSummary(classFilter.map((c) => CLASS_NAMES[c]))}
-                  empty={
-                    ownedClasses.length === 0 ? "No classes to filter" : undefined
-                  }
-                >
-                  {ownedClasses.map((c) => (
-                    <DropdownMenuCheckboxItem
-                      key={c}
-                      indicator="start"
-                      closeOnClick={false}
-                      checked={classFilter.includes(c)}
-                      onCheckedChange={() =>
-                        setClassFilter((prev) => toggleIn(prev, c))
-                      }
-                    >
-                      {CLASS_NAMES[c]}
-                    </DropdownMenuCheckboxItem>
-                  ))}
-                </FilterCascade>
-                <FilterCascade
-                  label="Subclass"
-                  summary={filterSummary(subclassFilter)}
-                >
-                  {SUBCLASSES.map((sc) => (
-                    <DropdownMenuCheckboxItem
-                      key={sc}
-                      indicator="start"
-                      closeOnClick={false}
-                      checked={subclassFilter.includes(sc)}
-                      onCheckedChange={() =>
-                        setSubclassFilter((prev) => toggleIn(prev, sc))
-                      }
-                    >
-                      {sc}
-                    </DropdownMenuCheckboxItem>
-                  ))}
-                </FilterCascade>
-                <FilterCascade
-                  label="Set bonuses"
-                  summary={filterSummary(
-                    setFilter.map(
-                      (hash) =>
-                        setBonusOptions.find((s) => s.hash === hash)?.name ??
-                        `Set ${hash}`,
-                    ),
-                  )}
-                  empty={
-                    setBonusOptions.length === 0
-                      ? "No loadouts with set bonuses"
-                      : undefined
-                  }
-                >
-                  {setBonusOptions.map((s) => (
-                    <DropdownMenuCheckboxItem
-                      key={s.hash}
-                      indicator="start"
-                      closeOnClick={false}
-                      checked={setFilter.includes(s.hash)}
-                      onCheckedChange={() =>
-                        setSetFilter((prev) => toggleIn(prev, s.hash))
-                      }
-                    >
-                      {s.name}
-                    </DropdownMenuCheckboxItem>
-                  ))}
-                </FilterCascade>
-                <LoadoutTagFilterSubmenu
-                  tags={hashtags}
-                  selected={tagFilter}
-                  onToggle={(tag, checked) =>
-                    setTagFilter((prev) =>
-                      checked ? [...new Set([...prev, tag])] : prev.filter((t) => t !== tag),
-                    )
-                  }
-                />
+          <DropdownMenu>
+            <TooltipLabel label="Filter loadouts">
+              <DropdownMenuTrigger
+                render={
+                  <Button variant="default" size="icon" className="relative" />
+                }
+                aria-label={
+                  filterCount > 0
+                    ? `Filter loadouts, ${filterCount} active`
+                    : "Filter loadouts"
+                }
+              >
+                <FunnelSimple aria-hidden />
                 {filterCount > 0 && (
-                  <>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem
-                      onClick={() => {
-                        setClassFilter([]);
-                        setSubclassFilter([]);
-                        setSetFilter([]);
-                        setTagFilter([]);
-                        if (activeTag !== null) setQuery("");
-                      }}
-                    >
-                      Clear filters
-                    </DropdownMenuItem>
-                  </>
+                  <Badge
+                    variant="emphatic"
+                    className="absolute top-0 right-0 h-3.5 min-w-3.5 px-1 text-[9px] leading-none tracking-normal"
+                  >
+                    {filterCount}
+                  </Badge>
                 )}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
+              </DropdownMenuTrigger>
+            </TooltipLabel>
+            <DropdownMenuContent align="end" className="w-44">
+              <FilterCascade
+                label="Class"
+                summary={filterSummary(classFilter.map((c) => CLASS_NAMES[c]))}
+                empty={
+                  ownedClasses.length === 0 ? "No classes to filter" : undefined
+                }
+              >
+                {ownedClasses.map((c) => (
+                  <DropdownMenuCheckboxItem
+                    key={c}
+                    indicator="start"
+                    closeOnClick={false}
+                    checked={classFilter.includes(c)}
+                    onCheckedChange={() =>
+                      setClassFilter((prev) => toggleIn(prev, c))
+                    }
+                  >
+                    {CLASS_NAMES[c]}
+                  </DropdownMenuCheckboxItem>
+                ))}
+              </FilterCascade>
+              <FilterCascade
+                label="Subclass"
+                summary={filterSummary(subclassFilter)}
+              >
+                {SUBCLASSES.map((sc) => (
+                  <DropdownMenuCheckboxItem
+                    key={sc}
+                    indicator="start"
+                    closeOnClick={false}
+                    checked={subclassFilter.includes(sc)}
+                    onCheckedChange={() =>
+                      setSubclassFilter((prev) => toggleIn(prev, sc))
+                    }
+                  >
+                    {sc}
+                  </DropdownMenuCheckboxItem>
+                ))}
+              </FilterCascade>
+              <FilterCascade
+                label="Set bonuses"
+                summary={filterSummary(
+                  setFilter.map(
+                    (hash) =>
+                      setBonusOptions.find((s) => s.hash === hash)?.name ??
+                      `Set ${hash}`,
+                  ),
+                )}
+                empty={
+                  setBonusOptions.length === 0
+                    ? "No loadouts with set bonuses"
+                    : undefined
+                }
+              >
+                {setBonusOptions.map((s) => (
+                  <DropdownMenuCheckboxItem
+                    key={s.hash}
+                    indicator="start"
+                    closeOnClick={false}
+                    checked={setFilter.includes(s.hash)}
+                    onCheckedChange={() =>
+                      setSetFilter((prev) => toggleIn(prev, s.hash))
+                    }
+                  >
+                    {s.name}
+                  </DropdownMenuCheckboxItem>
+                ))}
+              </FilterCascade>
+              <LoadoutTagFilterSubmenu
+                tags={hashtags}
+                selected={tagFilter}
+                onToggle={(tag, checked) =>
+                  setTagFilter((prev) =>
+                    checked ? [...new Set([...prev, tag])] : prev.filter((t) => t !== tag),
+                  )
+                }
+              />
+              {filterCount > 0 && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={() => {
+                      setClassFilter([]);
+                      setSubclassFilter([]);
+                      setSetFilter([]);
+                      setTagFilter([]);
+                      if (activeTag !== null) setQuery("");
+                    }}
+                  >
+                    Clear filters
+                  </DropdownMenuItem>
+                </>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
       {loadouts.isError ? (
-        <p className="text-muted-foreground px-4 text-sm">
+        <p className="text-muted-foreground text-sm">
           {loadouts.error.notConfigured
             ? "Loadout storage isn't configured on this deployment yet — set DATABASE_URL (see .env.example)."
             : `Couldn't load your loadouts — ${loadouts.error.message}`}
         </p>
       ) : loadouts.isPending ? (
-        <p className="text-muted-foreground px-4 text-sm">
+        <p className="text-muted-foreground text-sm">
           Loading your loadouts…
         </p>
       ) : all.length === 0 ? (
-        <p className="text-muted-foreground px-4 text-sm">
+        <p className="text-muted-foreground text-sm">
           No saved loadouts yet. Expand a build in the optimizer and choose
           Save.
         </p>
       ) : shown.length === 0 ? (
-        <p className="text-muted-foreground px-4 text-sm">No loadouts match.</p>
+        <p className="text-muted-foreground text-sm">No loadouts match.</p>
       ) : (
         <div
           ref={setScrollEl}
