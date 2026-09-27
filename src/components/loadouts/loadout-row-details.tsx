@@ -47,6 +47,7 @@ export function PlugIcon({
   dim = false,
   suffix,
   size = 24,
+  sizeClassName,
   className,
   classType,
   element,
@@ -55,7 +56,9 @@ export function PlugIcon({
   manifest: Manifest;
   dim?: boolean;
   suffix?: string;
-  size?: 16 | 20 | 24 | 32;
+  size?: 16 | 20 | 24 | 32 | 40;
+  /** Overrides the size classes (e.g. a container-query step); `size` still sets the image's pixels. */
+  sizeClassName?: string;
   className?: string;
   /** When set, append armor-stat bonuses (fragments' +10 / −10). */
   classType?: number;
@@ -77,13 +80,16 @@ export function PlugIcon({
   const plugElement =
     subclassFromPlugCategory(def?.plug?.plugCategoryIdentifier) ?? element;
   const sizeClass =
-    size === 16
+    sizeClassName ??
+    (size === 16
       ? "size-4"
       : size === 20
         ? "size-5"
         : size === 32
           ? "size-8"
-          : "size-6";
+          : size === 40
+            ? "size-10"
+            : "size-6");
   const tileClass = plugElement ? "d2-tile-element" : undefined;
   const tileStyle = plugElement
     ? ({ "--element-line": SUBCLASS_LINE[plugElement] } as CSSProperties)

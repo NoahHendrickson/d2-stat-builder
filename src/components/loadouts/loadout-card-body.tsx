@@ -4,7 +4,7 @@ import type { CSSProperties, ReactNode } from "react";
 import { subclassFromPlugCategory } from "@/lib/armory/fragments";
 import { isFullyMasterworked } from "@/lib/armory/masterwork";
 import { armorPipTier } from "@/lib/armory/normalize";
-import { SLOT_LABELS, STAT_LABELS, STAT_ORDER, type StatIconMap } from "@/lib/armory/stats";
+import { SLOT_LABELS } from "@/lib/armory/stats";
 import { ABILITY_KINDS, ABILITY_LABELS } from "@/lib/dim/subclasses";
 import type { Manifest } from "@/lib/manifest/load";
 import type { ResolvedArmorItem, ResolvedLoadout, ResolvedSubclass } from "@/lib/loadouts/resolve";
@@ -12,13 +12,39 @@ import { superSocketIndex } from "@/lib/loadouts/subclass";
 import type { SavedLoadout } from "@/lib/loadouts/types";
 import { ArmorThumb } from "@/components/armor-thumb";
 import { PowerValue } from "@/components/power-value";
-import { StatGlyph } from "@/components/stat-glyph";
 import { ManifestIcon, PlugIcon } from "@/components/loadouts/loadout-row-details";
 import { cn } from "@/lib/utils";
 
+/** Mod tiles: 40px on the wide card, 32px in the compact icon columns. */
+const MOD_SIZE_CLASS = "size-8 @3xl:size-10";
+
 /** An unfilled mod socket: the game's empty-slot bracket corners. */
 function EmptySocket() {
-  return <span className="d2-brackets size-8 shrink-0 bg-black/20" aria-hidden />;
+  return <span className={cn("d2-brackets shrink-0 bg-black/20", MOD_SIZE_CLASS)} aria-hidden />;
+}
+
+type SocketTile = { index: number; hash?: number };
+
+function ModRow({ sockets, manifest }: { sockets: SocketTile[]; manifest: Manifest }) {
+  if (sockets.length === 0) return null;
+  return (
+    <div className="flex flex-wrap gap-1">
+      {sockets.map(({ index, hash }) =>
+        hash === undefined ? (
+          <EmptySocket key={index} />
+        ) : (
+          <PlugIcon
+            key={index}
+            hash={hash}
+            manifest={manifest}
+            size={40}
+            sizeClassName={MOD_SIZE_CLASS}
+            className="rounded-none"
+          />
+        ),
+      )}
+    </div>
+  );
 }
 
 function ColumnGroup({ label, children }: { label: string; children: ReactNode }) {
@@ -137,28 +163,32 @@ function SubclassColumn({
 
 /**
  * One armor piece: art, name, power, then its mod sockets in socket order (the saved
- * placement where there is one, an empty bracket where there isn't), then the
- * optimizer's tuning / artifice pick for the slot.
+ * placement where there is one, an empty bracket where there isn't) in two rows: the
+ * stat mod with the tuning / artifice socket on top, the armor mods underneath.
  */
 function PieceColumn({
   item,
   placement,
-  tuning,
   manifest,
 }: {
   item: ResolvedArmorItem;
   placement: Record<number, number> | undefined;
-  /** The slot's tuning / artifice line (see TuningLine). */
-  tuning: ReactNode;
   manifest: Manifest;
 }) {
   const { piece } = item;
-  // Socket order from the live piece; without it (missing piece) the placement's own order.
-  const sockets: { index: number; hash?: number }[] = piece?.armorSockets
-    ? piece.armorSockets.map((s) => ({ index: s.index, hash: placement?.[s.index] }))
-    : Object.entries(placement ?? {})
-        .map(([index, hash]) => ({ index: Number(index), hash }))
-        .sort((a, b) => a.index - b.index);
+  const top: SocketTile[] = [];
+  const bottom: SocketTile[] = [];
+  if (piece?.armorSockets) {
+    for (const s of piece.armorSockets) {
+      (s.kind === "other" ? bottom : top).push({ index: s.index, hash: placement?.[s.index] });
+    }
+  } else {
+    // Missing piece: no socket kinds to sort by, so the placement in socket order.
+    for (const [index, hash] of Object.entries(placement ?? {})) {
+      top.push({ index: Number(index), hash });
+    }
+    top.sort((a, b) => a.index - b.index);
+  }
   const slotLabel = item.slot ? SLOT_LABELS[item.slot] : "Armor";
 
   return (
@@ -209,66 +239,13 @@ function PieceColumn({
           </span>
         </div>
       </div>
-      {sockets.length > 0 && (
-        <div className="flex flex-wrap gap-1" aria-label="Mods">
-          {sockets.map(({ index, hash }) =>
-            hash === undefined ? (
-              <EmptySocket key={index} />
-            ) : (
-              <PlugIcon
-                key={index}
-                hash={hash}
-                manifest={manifest}
-                size={32}
-                className="rounded-none"
-              />
-            ),
-          )}
+      {top.length + bottom.length > 0 && (
+        <div className="flex flex-col gap-1" aria-label="Mods">
+          <ModRow sockets={top} manifest={manifest} />
+          <ModRow sockets={bottom} manifest={manifest} />
         </div>
       )}
-      {tuning}
     </section>
-  );
-}
-
-/** The optimizer's tuning or artifice pick for one armor slot, as a glyph and a short label. */
-function TuningLine({
-  saved,
-  pieceId,
-  statIcons,
-  balancedTuningIcon,
-}: {
-  saved: SavedLoadout;
-  pieceId: string | undefined;
-  statIcons: StatIconMap;
-  balancedTuningIcon?: string;
-}) {
-  const { optimizer } = saved;
-  const slotIndex = optimizer && pieceId ? optimizer.pieceIds.indexOf(pieceId) : -1;
-  if (!optimizer || slotIndex < 0) return null;
-  const tune = optimizer.tuning[slotIndex];
-  const artifice = optimizer.artifice[slotIndex];
-  let glyph: ReactNode;
-  let text: string;
-  if (tune?.kind === "balanced") {
-    glyph = <StatGlyph src={balancedTuningIcon} label="Balanced Tuning" invert={false} />;
-    text = "Balanced";
-  } else if (tune?.kind === "directional") {
-    const stat = STAT_ORDER[tune.plus];
-    glyph = <StatGlyph src={statIcons[stat]} label={`Tuned +5 ${STAT_LABELS[stat]}`} />;
-    text = "+5 tuned";
-  } else if (artifice !== null && artifice !== undefined) {
-    const stat = STAT_ORDER[artifice];
-    glyph = <StatGlyph src={statIcons[stat]} label={`Artifice +3 ${STAT_LABELS[stat]}`} />;
-    text = "+3 artifice";
-  } else {
-    return null;
-  }
-  return (
-    <span className="text-muted-foreground flex items-center gap-1 text-xs leading-4">
-      {glyph}
-      <span className="hidden @3xl:inline">{text}</span>
-    </span>
   );
 }
 
@@ -281,14 +258,10 @@ export function LoadoutCardBody({
   saved,
   resolved,
   manifest,
-  statIcons,
-  balancedTuningIcon,
 }: {
   saved: SavedLoadout;
   resolved: ResolvedLoadout;
   manifest: Manifest;
-  statIcons: StatIconMap;
-  balancedTuningIcon?: string;
 }) {
   const { loadout, modPlacement } = saved;
   const pieceCols = Math.max(resolved.armor.length, 1);
@@ -310,14 +283,6 @@ export function LoadoutCardBody({
             key={`${item.ref.id ?? item.ref.hash}-${i}`}
             item={item}
             placement={item.ref.id ? modPlacement?.[item.ref.id] : undefined}
-            tuning={
-              <TuningLine
-                saved={saved}
-                pieceId={item.ref.id}
-                statIcons={statIcons}
-                balancedTuningIcon={balancedTuningIcon}
-              />
-            }
             manifest={manifest}
           />
         ))}
@@ -328,7 +293,13 @@ export function LoadoutCardBody({
           <span className="d2-label text-[10px]">Mods</span>
           <div className="flex flex-wrap gap-1">
             {loadout.parameters.mods.map((hash, i) => (
-              <PlugIcon key={`${hash}-${i}`} hash={hash} manifest={manifest} size={32} />
+              <PlugIcon
+                key={`${hash}-${i}`}
+                hash={hash}
+                manifest={manifest}
+                size={40}
+                sizeClassName={MOD_SIZE_CLASS}
+              />
             ))}
           </div>
         </div>

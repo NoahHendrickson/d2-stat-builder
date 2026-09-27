@@ -307,13 +307,7 @@ export const LoadoutRow = memo(function LoadoutRow({
         </p>
       )}
 
-      <LoadoutCardBody
-        saved={saved}
-        resolved={resolved}
-        manifest={manifest}
-        statIcons={statIcons}
-        balancedTuningIcon={balancedTuningIcon}
-      />
+      <LoadoutCardBody saved={saved} resolved={resolved} manifest={manifest} />
 
       {open && (
         <LoadoutRowDetails
