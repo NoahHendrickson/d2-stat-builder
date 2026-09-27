@@ -52,6 +52,11 @@ type FilterMultiselectPanelProps<V extends string | number> = {
   pinnable?: boolean;
   pinned?: V[];
   onTogglePin?: (value: V) => void;
+  /**
+   * Cap the unsearched list at this many rows (selected options first). Long
+   * option lists (hundreds of perks) otherwise mount every row on open.
+   */
+  maxVisible?: number;
 };
 
 /** Checkbox list body shared by FilterMultiselect and FilterCascadeMenu submenus. */
@@ -66,9 +71,19 @@ export function FilterMultiselectPanel<V extends string | number>({
   pinnable = false,
   pinned = [],
   onTogglePin,
+  maxVisible,
 }: FilterMultiselectPanelProps<V>) {
   const active = value.length > 0;
   const partition = partitionByPin(options, pinnable ? pinned : [], query);
+  const capped =
+    maxVisible != null && !query.trim() && partition.rest.length > maxVisible;
+  const rest = capped
+    ? [
+        ...partition.rest.filter((opt) => value.includes(opt.value)),
+        ...partition.rest.filter((opt) => !value.includes(opt.value)),
+      ].slice(0, maxVisible)
+    : partition.rest;
+  const hiddenCount = partition.rest.length - rest.length;
 
   const toggle = (v: V) =>
     onChange(
@@ -152,7 +167,12 @@ export function FilterMultiselectPanel<V extends string | number>({
           <DropdownMenuSeparator />
         </>
       )}
-      {partition.rest.map(renderOption)}
+      {rest.map(renderOption)}
+      {hiddenCount > 0 && (
+        <p className="text-muted-foreground px-1.5 py-2 text-xs">
+          {hiddenCount.toLocaleString()} more. Type to search.
+        </p>
+      )}
       {partition.pinned.length === 0 && partition.rest.length === 0 && (
         <p className="text-muted-foreground px-1.5 py-2 text-center text-xs">
           No matches.
@@ -184,6 +204,7 @@ export function FilterMultiselect<V extends string | number>({
   pinnable = false,
   pinned = [],
   onTogglePin,
+  maxVisible,
   className,
 }: {
   label: string;
@@ -195,6 +216,8 @@ export function FilterMultiselect<V extends string | number>({
   pinnable?: boolean;
   pinned?: V[];
   onTogglePin?: (value: V) => void;
+  /** See {@link FilterMultiselectPanel}. */
+  maxVisible?: number;
   className?: string;
 }) {
   const [query, setQuery] = useState("");
@@ -293,6 +316,7 @@ export function FilterMultiselect<V extends string | number>({
             pinnable={pinnable}
             pinned={pinned}
             onTogglePin={onTogglePin}
+            maxVisible={maxVisible}
           />
         </DropdownMenuContent>
       </DropdownMenu>

@@ -7,7 +7,6 @@ import {
   createWeaponSearcher,
   filterWeaponNames,
   rankWeaponResults,
-  suggestWeaponNames,
   weaponsMatchingTextQuery,
 } from "./search";
 
@@ -39,6 +38,7 @@ describe("name search parity with/without prebuilt index", () => {
     for (const q of queries) {
       expect(filterWeaponNames(weapons, q, nameIndex)).toEqual(filterWeaponNames(weapons, q));
     }
+    expect(filterWeaponNames(weapons, "", nameIndex)).toEqual([]);
   });
 
   test("weaponsMatchingTextQuery returns identical results either way", () => {
@@ -52,35 +52,9 @@ describe("name search parity with/without prebuilt index", () => {
 
   test("rankWeaponResults returns identical order either way", () => {
     for (const q of queries) {
-      const withIndex = rankWeaponResults(weapons, q, "name", undefined, nameIndex).map((w) => w.hash);
+      const withIndex = rankWeaponResults(weapons, q, "name", nameIndex).map((w) => w.hash);
       const without = rankWeaponResults(weapons, q, "name").map((w) => w.hash);
       expect(withIndex).toEqual(without);
-    }
-  });
-});
-
-describe("popularity tiebreak", () => {
-  test("suggestWeaponNames promotes a popular name on equal match rank", () => {
-    // Two distinct single-char-prefix names sharing rank; popularity should reorder.
-    const matches = filterWeaponNames(weapons, "", nameIndex);
-    expect(matches).toEqual([]); // empty query yields nothing
-
-    const all = suggestWeaponNames(weapons, weapons[0]!.name.slice(0, 1), 50, nameIndex);
-    expect(all.length).toBeGreaterThan(0);
-
-    // Pick two names with the same search rank for the prefix, then boost the second.
-    const prefix = weapons[0]!.name.slice(0, 1).toLowerCase();
-    const sameRank = filterWeaponNames(weapons, prefix, nameIndex)
-      .filter((m) => m.searchRank === 1)
-      .map((m) => m.value);
-    if (sameRank.length >= 2) {
-      const boosted = sameRank[1]!;
-      const popularity = new Map<string, number>([[boosted.toLowerCase(), 999]]);
-      const ranked = suggestWeaponNames(weapons, prefix, 50, nameIndex, popularity).map((o) => o.value);
-      const others = sameRank.filter((n) => n !== boosted);
-      for (const other of others) {
-        expect(ranked.indexOf(boosted)).toBeLessThan(ranked.indexOf(other));
-      }
     }
   });
 });

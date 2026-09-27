@@ -51,13 +51,7 @@ function original(query: string, filters: WeaponFilters) {
     raw.perks,
   );
   return collapseWeaponVersions(
-    rankWeaponResults(
-      filtered,
-      plan.searchText,
-      "season-desc",
-      undefined,
-      names,
-    ),
+    rankWeaponResults(filtered, plan.searchText, "season-desc", names),
     names.byName,
   );
 }

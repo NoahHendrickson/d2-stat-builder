@@ -9,7 +9,9 @@ import type {
   WeaponIndex,
   WeaponSummary,
 } from "./types";
-import { AMMO_GENERATION_STAT_HASH } from "./weapon-stats";
+
+/** Bungie stat hash for the Ammo Generation weapon stat. */
+export const AMMO_GENERATION_STAT_HASH = 1_931_675_084;
 
 const lower = (s: string) => s.toLowerCase();
 
@@ -19,15 +21,6 @@ function withPerksLower(summary: WeaponSummary): WeaponSummary {
   return { ...summary, perksLower: summary.perks.map(lower) };
 }
 
-/**
- * `JSON.stringify` replacer that omits the re-derivable `perksLower` field from the
- * serialized index — it's a lowercased duplicate of `perks`, rebuilt at load by
- * {@link normalizeWeaponIndex}. Shared by `generate.ts`, `write-sample-indexes.ts`,
- * and the round-trip tests so every on-disk producer emits the same shape.
- */
-export const stripPerksLowerReplacer = (key: string, value: unknown): unknown =>
-  key === "perksLower" ? undefined : value;
-
 function isLegacyColumn(
   column: InternedPerkColumn | PerkColumn,
 ): column is PerkColumn {
@@ -35,60 +28,9 @@ function isLegacyColumn(
 }
 
 /** True when weapons still embed full PerkRef objects in columns (pre-interning format). */
-export function isLegacyWeaponDoc(weapon: WeaponSummary | WeaponDoc): weapon is WeaponDoc {
+function isLegacyWeaponDoc(weapon: WeaponSummary | WeaponDoc): weapon is WeaponDoc {
   const first = weapon.columns[0];
   return first != null && isLegacyColumn(first);
-}
-
-/** Resolve interned columns to full perk objects. */
-export function resolveInternedColumns(
-  columns: InternedPerkColumn[],
-  perks: PerkRef[],
-): PerkColumn[] {
-  return columns.map((column) => ({
-    kind: column.kind,
-    perks: column.perkIndices
-      .map((index) => perks[index])
-      .filter((perk): perk is PerkRef => perk != null),
-  }));
-}
-
-/** Merge a browse summary with optional detail fields into a full WeaponDoc. */
-export function expandWeapon(
-  summary: WeaponSummary,
-  detail: WeaponDetailFields | undefined,
-  perks: PerkRef[],
-): WeaponDoc {
-  const { columns, perksLower: _perksLower, ...rest } = summary;
-  void _perksLower;
-  return {
-    ...rest,
-    screenshot: detail?.screenshot,
-    flavor: detail?.flavor,
-    stats: detail?.stats ?? [],
-    investmentStats: detail?.investmentStats,
-    statGroupHash: detail?.statGroupHash,
-    masterworkOptions: detail?.masterworkOptions,
-    columns: resolveInternedColumns(columns, perks),
-  };
-}
-
-/** Merge browse summaries with Ammo Generation values from loaded detail records. */
-export function enrichAmmoGenerationFromDetails(
-  weapons: WeaponSummary[],
-  details: ReadonlyMap<number, WeaponDetailFields>,
-): WeaponSummary[] {
-  let changed = false;
-  const enriched = weapons.map((weapon) => {
-    if (weapon.ammoGeneration != null) return weapon;
-    const value = details
-      .get(weapon.hash)
-      ?.stats.find((stat) => stat.hash === AMMO_GENERATION_STAT_HASH)?.value;
-    if (value == null) return weapon;
-    changed = true;
-    return { ...weapon, ammoGeneration: value };
-  });
-  return changed ? enriched : weapons;
 }
 
 /** Map every perk plug hash to its PerkRef from the global catalog. */
@@ -274,37 +216,4 @@ export function normalizeWeaponIndex(raw: {
     weaponTypes: raw.weaponTypes ?? [],
     ammoTypes: raw.ammoTypes ?? [],
   };
-}
-
-/** Build a detail index from legacy full weapon docs (for sample fallback). */
-export function buildDetailIndexFromDocs(
-  weapons: WeaponDoc[],
-  version: string,
-  statGroups?: WeaponDetailIndex["statGroups"],
-): WeaponDetailIndex {
-  const details: Record<string, WeaponDetailFields> = {};
-  for (const weapon of weapons) {
-    details[String(weapon.hash)] = {
-      hash: weapon.hash,
-      screenshot: weapon.screenshot,
-      flavor: weapon.flavor,
-      stats: weapon.stats,
-      investmentStats: weapon.investmentStats,
-      statGroupHash: weapon.statGroupHash,
-      ...(weapon.masterworkOptions?.length ? { masterworkOptions: weapon.masterworkOptions } : {}),
-    };
-  }
-  return { version, details, statGroups };
-}
-
-/** Resolve weapon summaries from a precomputed weaponsByPerkName record. */
-export function summariesForPerkName(
-  name: string,
-  weaponsByPerkName: Record<string, number[]>,
-  byHash: Map<number, WeaponSummary>,
-): WeaponSummary[] {
-  const hashes = weaponsByPerkName[lower(name)] ?? [];
-  return hashes
-    .map((hash) => byHash.get(hash))
-    .filter((weapon): weapon is WeaponSummary => weapon != null);
 }

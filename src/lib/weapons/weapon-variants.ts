@@ -21,15 +21,6 @@ export function weaponVersionFamilyName(name: string): string {
   return name.replace(ADEPT_NAME_SUFFIX_RE, "").trim();
 }
 
-/** Every catalog summary sharing a weapon's version family (base + adept tiers). */
-export function weaponsInVersionFamily<T extends { name: string }>(
-  weapons: readonly T[],
-  name: string,
-): T[] {
-  const family = weaponVersionFamilyName(name);
-  return weapons.filter((weapon) => weaponVersionFamilyName(weapon.name) === family);
-}
-
 export interface CurrentWeaponPerkPoolVersion<T extends WeaponPerkPoolVersionCandidate> {
   weapon: T;
   label: string;
@@ -239,19 +230,6 @@ export function primaryWeaponVersion<T extends WeaponVersionCandidate>(
   return sortWeaponVersions(weapons)[0];
 }
 
-/** Primary catalog version for a stored/raw weapon hash. */
-export function primaryCatalogWeaponForHash<T extends WeaponVersionCandidate>(
-  hash: number,
-  byHash: ReadonlyMap<number, T>,
-  byName?: ReadonlyMap<string, readonly T[]>,
-): T | undefined {
-  const weapon = byHash.get(hash);
-  if (!weapon) return undefined;
-
-  const versions = byName?.get(weapon.name) ?? [weapon];
-  return primaryWeaponVersion(versions);
-}
-
 /** Collapse a ranked list to one visible row per current same-name perk pool. */
 export function collapseWeaponVersions<T extends WeaponPerkPoolVersionCandidate>(
   weapons: readonly T[],
@@ -343,10 +321,9 @@ function sortTierVersions<T extends WeaponPerkPoolVersionCandidate>(versions: re
 }
 
 function versionLabel<T extends WeaponPerkPoolVersionCandidate>(versions: readonly T[]): string {
-  const rep = versions.find((weapon) => !weapon.adept) ?? versions[0]!;
   const source = versions.find((weapon) => weapon.source)?.source;
   const seasonName = versions.find((weapon) => weapon.seasonName)?.seasonName;
-  return source ?? seasonName ?? `Hash ${rep.hash}`;
+  return source ?? seasonName ?? "Unknown source";
 }
 
 function weaponWithPoolSource<T extends WeaponPerkPoolVersionCandidate>(versions: readonly T[]): T {
@@ -394,52 +371,4 @@ export function weaponPerkPoolVersionForHash<T extends WeaponPerkPoolVersionCand
   hash: number,
 ): CurrentWeaponPerkPoolVersion<T> | undefined {
   return versions.find((version) => version.hashes.includes(hash));
-}
-
-function addUniqueName(target: string[], seen: Set<string>, name: string): void {
-  const key = name.toLowerCase();
-  if (seen.has(key)) return;
-  seen.add(key);
-  target.push(name);
-}
-
-/** Origin Trait options for one weapon, supporting both full and interned columns. */
-export function originTraitNamesForWeapon(
-  weapon: WeaponWithColumns,
-  perks: readonly PerkRef[] = [],
-): string[] {
-  const origin = weapon.columns.find((column) => column.kind === "Origin Trait");
-  if (!origin) return [];
-
-  const names: string[] = [];
-  const seen = new Set<string>();
-
-  if (resolvedColumn(origin)) {
-    for (const perk of origin.perks) addUniqueName(names, seen, perk.name);
-    return names;
-  }
-
-  for (const index of origin.perkIndices) {
-    const perk = perks[index];
-    if (perk) addUniqueName(names, seen, perk.name);
-  }
-  return names;
-}
-
-/** Distinct Origin Trait options across catalog-visible versions, preserving input order. */
-export function originTraitNamesForWeapons<T extends WeaponWithColumns & { superseded?: boolean }>(
-  weapons: readonly T[],
-  perks: readonly PerkRef[] = [],
-): string[] {
-  const names: string[] = [];
-  const seen = new Set<string>();
-
-  for (const weapon of weapons) {
-    if (!isCatalogWeapon(weapon)) continue;
-    for (const name of originTraitNamesForWeapon(weapon, perks)) {
-      addUniqueName(names, seen, name);
-    }
-  }
-
-  return names;
 }

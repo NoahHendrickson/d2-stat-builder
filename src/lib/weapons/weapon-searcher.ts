@@ -24,22 +24,28 @@ function fuzzyMatchIndices(haystack: string[], needle: string): number[] {
   return [...idxs];
 }
 
-/** Per-field haystacks, in search priority order: name, type, perk text, combined. */
+/** Per-field haystacks, in search priority order: name, attributes, perk text, combined. */
 type SearchFields = [string[], string[], string[], string[]];
+
+/** Element, type, and rarity — the words players type ("solar hand cannon", "exotic"). */
+function attributeText(weapon: WeaponSummary): string {
+  return `${weapon.element} ${weapon.type} ${weapon.rarity}`;
+}
 
 function buildSearchFields(catalog: WeaponSummary[]): SearchFields {
   const names: string[] = [];
-  const types: string[] = [];
+  const attributes: string[] = [];
   const perkText: string[] = [];
   const combined: string[] = [];
   for (const weapon of catalog) {
     const perks = weapon.perks.join(" ");
+    const attrs = attributeText(weapon);
     names.push(weapon.name);
-    types.push(weapon.type);
+    attributes.push(attrs);
     perkText.push(perks);
-    combined.push(`${weapon.name} ${weapon.type} ${perks}`);
+    combined.push(`${weapon.name} ${attrs} ${perks}`);
   }
-  return [names, types, perkText, combined];
+  return [names, attributes, perkText, combined];
 }
 
 /**
@@ -52,7 +58,15 @@ function sameSearchText(prev: WeaponSummary[], next: WeaponSummary[]): boolean {
   for (let i = 0; i < prev.length; i++) {
     const a = prev[i]!;
     const b = next[i]!;
-    if (a.name !== b.name || a.type !== b.type || a.perks !== b.perks) return false;
+    if (
+      a.name !== b.name ||
+      a.type !== b.type ||
+      a.element !== b.element ||
+      a.rarity !== b.rarity ||
+      a.perks !== b.perks
+    ) {
+      return false;
+    }
   }
   return true;
 }
@@ -85,8 +99,8 @@ class CatalogWeaponSearcher implements WeaponSearcher {
 /**
  * Build a reusable fuzzy searcher for weapon name/type/perk text.
  *
- * Fields are searched in priority order — name, then type, then perk text,
- * then all three combined (so multi-term queries can span fields) — mirroring
+ * Fields are searched in priority order — name, then element/type/rarity, then
+ * perk text, then all three combined (so multi-term queries can span fields) — mirroring
  * the old fuse.js key weights (name 3×) as tiered buckets. Superseded legacy
  * twins are excluded, matching the catalog-only index that used to be shipped.
  *

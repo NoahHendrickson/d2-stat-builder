@@ -5,14 +5,11 @@ import {
   collapseWeaponVersions,
   currentWeaponPerkPoolVersions,
   isCatalogWeapon,
-  originTraitNamesForWeapons,
-  primaryCatalogWeaponForHash,
   primaryWeaponVersion,
   reconcileAdeptTierPools,
   reconcileCraftableTwins,
   sortWeaponVersions,
   weaponPerkPoolVersionForHash,
-  weaponsInVersionFamily,
   weaponVersionFamilyName,
 } from "./weapon-variants";
 
@@ -353,11 +350,10 @@ describe("weapon version grouping", () => {
         { kind: "Trait", perks: [perk("Chaos Reshaped")] },
       ],
     });
-    const family = weaponsInVersionFamily([kingsFall, harrowed, pantheon], harrowed.name);
+    const family = [kingsFall, harrowed, pantheon];
     const versions = currentWeaponPerkPoolVersions(family);
 
     expect(weaponVersionFamilyName(harrowed.name)).toBe("Zaouli's Bane");
-    expect(family.map((entry) => entry.hash).sort()).toEqual([291092617, 3066945855, 431721920]);
     expect(versions.map((version) => version.label)).toEqual(["Pantheon", "Standard", "Harrowed"]);
     expect(versions.map((version) => version.weapon.hash)).toEqual([3066945855, 431721920, 291092617]);
     expect(versions.map((version) => version.hashes)).toEqual([[3066945855], [431721920], [291092617]]);
@@ -383,8 +379,7 @@ describe("weapon version grouping", () => {
         { kind: "Trait", perks: [perk("Opening Shot"), perk("Frenzy")] },
       ],
     });
-    const family = weaponsInVersionFamily([fatebringer, timelost], timelost.name);
-    const versions = currentWeaponPerkPoolVersions(family);
+    const versions = currentWeaponPerkPoolVersions([fatebringer, timelost]);
 
     expect(versions.map((version) => version.label)).toEqual(["Standard", "Timelost"]);
     expect(versions.map((version) => version.weapon.hash)).toEqual([1, 2]);
@@ -610,27 +605,7 @@ describe("weapon version grouping", () => {
     expect(collapsed.map((w) => w.source)).toEqual(["Pantheon", "Garden of Salvation"]);
   });
 
-  it("maps a raw legacy hash to the primary catalog version for saved hash surfaces", () => {
-    const legacy = weapon(1664372054, "Threat Level", {
-      superseded: true,
-      seasonNumber: 5,
-      releaseIndex: 29_444,
-      columns: [{ kind: "Trait", perks: [perk("Rampage")] }],
-    });
-    const primary = weapon(950894542, "Threat Level", {
-      releaseIndex: 35_285,
-      columns: [{ kind: "Trait", perks: [perk("Bewildering Burst")] }],
-    });
-    const byHash = new Map([
-      [legacy.hash, legacy],
-      [primary.hash, primary],
-    ]);
-    const byName = new Map([["Threat Level", [legacy, primary]]]);
-
-    expect(primaryCatalogWeaponForHash(1664372054, byHash, byName)?.hash).toBe(950894542);
-  });
-
-  it("excludes superseded versions and aggregates origin trait options", () => {
+  it("excludes superseded versions when collapsing same-name pools", () => {
     const legacy = weapon(1, "Cynosure", {
       superseded: true,
       releaseIndex: 100,
@@ -646,9 +621,23 @@ describe("weapon version grouping", () => {
     });
 
     expect(collapseWeaponVersions([legacy, middle, latest]).map((w) => w.hash)).toEqual([3, 2]);
-    expect(originTraitNamesForWeapons(sortWeaponVersions([legacy, middle, latest]))).toEqual([
-      "Air-Cooled Core",
-      "Accelerated Assault",
+    expect(sortWeaponVersions([legacy, middle, latest]).map((w) => w.hash)).toEqual([3, 2]);
+  });
+
+  it("labels a pool with neither source nor season as unknown", () => {
+    const sourced = weapon(1, "Forbearance", {
+      source: "Vow of the Disciple",
+      releaseIndex: 100,
+      columns: [{ kind: "Trait", perks: [perk("Chain Reaction")] }],
+    });
+    const sourceless = weapon(2, "Forbearance", {
+      releaseIndex: 200,
+      columns: [{ kind: "Trait", perks: [perk("Demolitionist")] }],
+    });
+
+    expect(currentWeaponPerkPoolVersions([sourced, sourceless]).map((v) => v.label)).toEqual([
+      "Unknown source",
+      "Vow of the Disciple",
     ]);
   });
 });

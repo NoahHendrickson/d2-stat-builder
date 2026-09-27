@@ -50,6 +50,50 @@ describe("weapon browser integration", () => {
     ).toBe(true);
   });
 
+  it("lists only source options that the source filter can match", () => {
+    const catalog = createWeaponCatalog(index);
+    expect(catalog.facets.source!.length).toBeGreaterThan(0);
+    for (const { value } of catalog.facets.source!) {
+      expect(catalog.search("", { source: [value] }, "name").length).toBeGreaterThan(0);
+    }
+  });
+
+  it("labels same-name results only when the name has several current perk pools", () => {
+    const catalog = createWeaponCatalog(index);
+    for (const weapon of catalog.search("", {}, "name")) {
+      expect(catalog.poolLabel(weapon.hash)).toBeUndefined();
+    }
+
+    const fatebringer = sampleWeapons.find((w) => w.name === "Fatebringer")!;
+    const reprise = {
+      ...fatebringer,
+      hash: 9_001,
+      source: "Pantheon",
+      releaseIndex: fatebringer.releaseIndex + 1_000,
+      columns: [{ kind: "Trait", perks: [{ hash: 9_002, name: "Kinetic Tremors", currentlyCanRoll: true }] }],
+      perks: ["Kinetic Tremors"],
+      perkHashes: [9_002],
+    };
+    const twoPools = createWeaponCatalog(
+      internWeaponCatalog([...sampleWeapons, reprise], "test").index,
+    );
+    const rows = twoPools.search("fatebringer", {}, "name");
+    expect(rows.map((w) => twoPools.poolLabel(w.hash)).sort()).toEqual([
+      "Pantheon",
+      "Vault of Glass",
+    ]);
+  });
+
+  it("matches element and rarity words typed as free text", () => {
+    const catalog = createWeaponCatalog(index);
+    expect(catalog.search("solar fusion", {}, "name").map((w) => w.name)).toEqual([
+      "Sunlit Fusion",
+    ]);
+    const legendary = catalog.search("legendary", {}, "name");
+    expect(legendary.length).toBeGreaterThan(0);
+    expect(legendary.every((w) => w.rarity === "Legendary")).toBe(true);
+  });
+
   it("preserves damage flags and perk combinations when merging filters", () => {
     expect(
       mergeWeaponFilters(

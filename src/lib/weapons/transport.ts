@@ -1,4 +1,4 @@
-import type { WeaponIndex, WeaponSummary } from "./types";
+import type { PerkRef, WeaponIndex, WeaponSummary } from "./types";
 import { isCatalogWeapon } from "./weapon-variants";
 
 type CompactWeapon = Omit<WeaponSummary, "perks" | "perksLower" | "perkHashes">;
@@ -10,13 +10,20 @@ export type CompactWeaponIndex = Omit<
   weapons: CompactWeapon[];
 };
 
+/** The browser never reads a perk's stat modifiers; keep them out of the snapshot. */
+function compactPerk(perk: PerkRef): PerkRef {
+  const { statMods, ...compact } = perk;
+  void statMods;
+  return compact;
+}
+
 /** Ship each perk once. Names, hashes, and reverse lookups duplicate the column indices. */
 export function compactWeaponIndex(index: WeaponIndex): CompactWeaponIndex {
   return {
     schema: 1,
     version: index.version,
     generatedAt: index.generatedAt,
-    perks: index.perks,
+    perks: index.perks.map(compactPerk),
     damageTypes: index.damageTypes,
     weaponTypes: index.weaponTypes,
     ammoTypes: index.ammoTypes,
@@ -30,6 +37,10 @@ export function compactWeaponIndex(index: WeaponIndex): CompactWeaponIndex {
   };
 }
 
+/**
+ * Rebuild the per-weapon search fields from the shared perk table. Perk hashes
+ * are not restored: nothing in the browser looks weapons up by plug hash.
+ */
 export function expandWeaponIndex(index: CompactWeaponIndex): WeaponIndex {
   if (
     index.schema !== 1 ||
@@ -45,29 +56,22 @@ export function expandWeaponIndex(index: CompactWeaponIndex): WeaponIndex {
     ...index,
     weaponsByPerkName: {},
     weapons: index.weapons.map((weapon) => {
-      const refs = weapon.columns.flatMap((column) =>
-        column.perkIndices.map((i) => {
+      const perks = new Set<string>();
+      for (const column of weapon.columns) {
+        for (const i of column.perkIndices) {
           const perk = index.perks[i];
           if (!perk)
             throw new Error(
               "The weapon catalog contains an invalid perk reference.",
             );
-          return perk;
-        }),
-      );
-      const perks = [...new Set(refs.map((perk) => perk.name))];
+          perks.add(perk.name);
+        }
+      }
+      const names = [...perks];
       return {
         ...weapon,
-        perks,
-        perksLower: perks.map((name) => name.toLowerCase()),
-        perkHashes: [
-          ...new Set(
-            refs.flatMap((perk) => [
-              perk.hash,
-              ...(perk.alternateHashes ?? []),
-            ]),
-          ),
-        ],
+        perks: names,
+        perksLower: names.map((name) => name.toLowerCase()),
       };
     }),
   };

@@ -59,3 +59,21 @@ export function readSearchState(params: URLSearchParams) {
     SORTS.find(([value]) => value === params.get("sort"))?.[0] ?? "season-desc";
   return { query: params.get("q") ?? "", filters, sort };
 }
+
+export type WeaponSearchState = ReturnType<typeof readSearchState>;
+
+/** Human-readable one-liner for a saved search: query, then each filter with its label. */
+export function describeSearchState(state: WeaponSearchState): string {
+  const parts: string[] = [];
+  if (state.query) parts.push(state.query);
+  for (const [key, label] of FILTERS) {
+    for (const value of state.filters[key] ?? []) parts.push(`${label}: ${value}`);
+  }
+  if (state.filters.adept != null) parts.push(state.filters.adept ? "Adept" : "Standard");
+  if (state.filters.trait1DamagePerks) parts.push("Trait 1: damage perks");
+  if (state.filters.trait2DamagePerks) parts.push("Trait 2: damage perks");
+  for (const group of state.filters.customPerkGroups ?? []) {
+    parts.push(`Any: ${group.join(" / ")}`);
+  }
+  return parts.join(" · ") || "All weapons";
+}

@@ -65,6 +65,17 @@ const nextConfig: NextConfig = {
           { key: "X-Frame-Options", value: "DENY" },
         ],
       },
+      {
+        // The weapon catalog snapshot changes only when it is regenerated and
+        // committed; let repeat visits reuse it for an hour instead of revalidating.
+        source: "/data/:path*",
+        headers: [
+          {
+            key: "Cache-Control",
+            value: "public, max-age=3600, stale-while-revalidate=86400",
+          },
+        ],
+      },
     ];
   },
 };

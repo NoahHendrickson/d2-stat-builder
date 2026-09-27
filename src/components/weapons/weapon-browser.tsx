@@ -28,12 +28,19 @@ import {
 } from "@/components/ui/dialog";
 import { FilterMultiselect } from "@/components/armor-table/filter-multiselect";
 import { useWeaponCatalog } from "@/lib/weapons/use-weapon-catalog";
-import { FILTERS, SORTS, readSearchState } from "@/lib/weapons/search-state";
+import {
+  FILTERS,
+  SORTS,
+  describeSearchState,
+  readSearchState,
+} from "@/lib/weapons/search-state";
 import type { WeaponCatalog } from "@/lib/weapons/catalog";
 import type { WeaponSummary } from "@/lib/weapons/types";
 import { cn } from "@/lib/utils";
 
 const SAVED_KEY = "d2.weapon-search.saved.v1";
+/** Perk lists run to ~900 rows; mount a page of them until the user types. */
+const MAX_VISIBLE_OPTIONS = 100;
 function subscribeSaved(notify: () => void) {
   window.addEventListener("storage", notify);
   window.addEventListener(SAVED_KEY, notify);
@@ -112,6 +119,7 @@ function WeaponDetails({
   catalog: WeaponCatalog;
   onPerk: (name: string) => void;
 }) {
+  const poolLabel = catalog.poolLabel(weapon.hash);
   return (
     <>
       <div className="flex items-center gap-3 pr-8">
@@ -124,7 +132,12 @@ function WeaponDetails({
         </div>
       </div>
       <p className="text-muted-foreground">
-        {[weapon.frame, weapon.source, weapon.seasonName]
+        {[
+          weapon.frame,
+          weapon.source,
+          poolLabel !== weapon.source ? poolLabel : undefined,
+          weapon.seasonName,
+        ]
           .filter(Boolean)
           .join(" · ")}
       </p>
@@ -291,6 +304,7 @@ export function WeaponBrowser() {
               onChange={(values) =>
                 update(key, key === "perkCombo" ? values.slice(-2) : values)
               }
+              maxVisible={MAX_VISIBLE_OPTIONS}
               className="max-w-64"
             />
           ))}
@@ -342,6 +356,7 @@ export function WeaponBrowser() {
               options={options.perks ?? []}
               value={perkGroup}
               onChange={setPerkGroup}
+              maxVisible={MAX_VISIBLE_OPTIONS}
               className="max-w-80"
             />
             <Button
@@ -386,11 +401,9 @@ export function WeaponBrowser() {
               shared.
             </p>
             {saved.map((value) => {
-              const search = readSearchState(new URLSearchParams(value));
-              const label =
-                search.query ||
-                Object.values(search.filters).flat().join(" · ") ||
-                "All weapons";
+              const label = describeSearchState(
+                readSearchState(new URLSearchParams(value)),
+              );
               return (
                 <div key={value} className="flex items-center gap-2">
                   <button
@@ -541,6 +554,7 @@ export function WeaponBrowser() {
           >
             {virtualizer.getVirtualItems().map((row) => {
               const weapon = results[row.index];
+              const poolLabel = data?.poolLabel(weapon.hash);
               return (
                 <div
                   key={row.key}
@@ -568,6 +582,14 @@ export function WeaponBrowser() {
                         )}
                       >
                         {weapon.name}
+                        {poolLabel && (
+                          <>
+                            {" "}
+                            <span className="ml-1 font-normal text-muted-foreground">
+                              {poolLabel}
+                            </span>
+                          </>
+                        )}
                       </p>
                       <p className="mt-1 truncate text-xs text-muted-foreground">
                         {weapon.element} · {weapon.type}

@@ -3,32 +3,22 @@ import { describe, expect, test } from "vitest";
 import { sampleWeapons } from "./fixtures/sample-weapons";
 import {
   buildPerkMapFromCatalog,
-  enrichAmmoGenerationFromDetails,
   internWeaponCatalog,
   normalizeWeaponIndex,
-  stripPerksLowerReplacer,
 } from "./intern-weapons";
-import type { PerkRef, WeaponDetailFields, WeaponDoc } from "./types";
+import type { PerkRef, WeaponDoc } from "./types";
 import {
-  collectActivitySourceFacets,
   collectColumnPerks,
   collectFacets,
-  collectRaidSourceFacets,
   collectPerks,
   filterWeaponNames,
   filterWeapons,
-  fuzzySearchWeapons,
-  hasStrongWeaponNameMatch,
   rankWeaponResults,
   sortWeapons,
-  suggestWeaponNames,
   sortFilteredWeaponNames,
   weaponsMatchingTextQuery,
-  weaponsWithPerk,
   createWeaponSearcher,
 } from "./search";
-import { AMMO_GENERATION_STAT_HASH } from "./weapon-stats";
-import { buildWeaponIndexLookups, refreshWeaponSummaries } from "./weapon-index-lookups";
 
 const { index: sampleIndex } = internWeaponCatalog(sampleWeapons, "sample");
 const sampleSummaries = sampleIndex.weapons;
@@ -37,9 +27,13 @@ const samplePerks = sampleIndex.perks;
 const names = (ws: { name: string }[]) => ws.map((w) => w.name).sort();
 const orderedNames = (ws: { name: string }[]) => ws.map((w) => w.name);
 
+/** Mirrors an on-disk index: `perksLower` is a lowercased duplicate of `perks`, rebuilt at load. */
+const stripPerksLowerReplacer = (key: string, value: unknown): unknown =>
+  key === "perksLower" ? undefined : value;
+
 describe("on-disk perksLower round-trip", () => {
-  // generate.ts strips `perksLower` from the serialized index; normalizeWeaponIndex
-  // (via buildWeaponIndexLookups) must re-derive it so search functions keep working.
+  // Serialized indexes omit `perksLower`; normalizeWeaponIndex must re-derive it so
+  // search functions keep working.
   const onDisk = JSON.parse(
     JSON.stringify(sampleIndex, stripPerksLowerReplacer),
   ) as typeof sampleIndex;
@@ -49,14 +43,14 @@ describe("on-disk perksLower round-trip", () => {
   });
 
   test("normalizeWeaponIndex re-derives perksLower from perks", () => {
-    const { weapons } = buildWeaponIndexLookups(onDisk);
+    const { weapons } = normalizeWeaponIndex(onDisk);
     for (const w of weapons) {
       expect(w.perksLower).toEqual(w.perks.map((p) => p.toLowerCase()));
     }
   });
 
   test("required-perk filtering still works after the round-trip", () => {
-    const { weapons, perks } = buildWeaponIndexLookups(onDisk);
+    const { weapons, perks } = normalizeWeaponIndex(onDisk);
     const sample = sampleSummaries.find((w) => w.perks.length > 0)!;
     const perkName = sample.perks[0]!;
     const result = filterWeapons(weapons, { perks: [perkName] }, perks);
@@ -238,20 +232,7 @@ describe("filterWeapons", () => {
   });
 });
 
-describe("weaponsWithPerk", () => {
-  test("reverse search by perk name (everything that can roll Surrounded)", () => {
-    expect(names(weaponsWithPerk(sampleSummaries, "surrounded"))).toEqual([
-      "Fatebringer",
-      "Sunlit Fusion",
-    ]);
-  });
-
-  test("reverse search by perk hash", () => {
-    expect(names(weaponsWithPerk(sampleSummaries, 110))).toEqual(["Fatebringer"]);
-  });
-});
-
-describe("buildWeaponsByPerkName", () => {
+describe("weaponsByPerkName", () => {
   test("precomputed map on interned index matches runtime lookup", () => {
     expect(
       names(
@@ -260,17 +241,6 @@ describe("buildWeaponsByPerkName", () => {
           .filter((w): w is (typeof sampleSummaries)[number] => w != null),
       ),
     ).toEqual(["Fatebringer", "Sunlit Fusion"]);
-  });
-});
-
-describe("fuzzySearchWeapons", () => {
-  test("finds a weapon by partial name", () => {
-    const result = fuzzySearchWeapons(sampleSummaries, "fate");
-    expect(result[0]?.name).toBe("Fatebringer");
-  });
-
-  test("empty query returns everything", () => {
-    expect(fuzzySearchWeapons(sampleSummaries, "")).toHaveLength(sampleSummaries.length);
   });
 });
 
@@ -288,49 +258,6 @@ describe("facets + perks", () => {
     const seasons = Object.fromEntries(facets.season!.map((f) => [f.value, f.count]));
     expect(sources).toMatchObject({ "Root of Nightmares": 1, "Vault of Glass": 1 });
     expect(seasons).toMatchObject({ "Season of the Splicer": 1, "Season of the Wish": 1 });
-  });
-
-  test("collectRaidSourceFacets keeps only raid sources", () => {
-    const raids = Object.fromEntries(
-      collectRaidSourceFacets(sampleSummaries).map((facet) => [facet.value, facet.count]),
-    );
-    expect(raids).toEqual({ "Root of Nightmares": 1, "Vault of Glass": 1 });
-    expect(raids).not.toHaveProperty("Solstice");
-  });
-
-  test("collectActivitySourceFacets includes curated dungeons and Ops sources", () => {
-    const sources = Object.fromEntries(
-      collectActivitySourceFacets([
-        ...sampleSummaries,
-        { source: "Prophecy" },
-        { source: "Dreaming City", sources: ["Dreaming City", "The Shattered Throne"] },
-        { source: "Source: Fireteam Ops" },
-        { source: "Solo Ops" },
-        { source: "Pantheon" },
-        { source: "Source: Sparrow Racing League" },
-        { source: "Solstice" },
-      ]).map((facet) => [facet.value, facet.count]),
-    );
-
-    expect(sources).toMatchObject({
-      "Root of Nightmares": 1,
-      "Vault of Glass": 1,
-      Prophecy: 1,
-      "The Shattered Throne": 1,
-      "Fireteam Ops": 1,
-      "Solo Ops": 1,
-      Pantheon: 1,
-      "Sparrow Racing League": 1,
-    });
-    expect(sources).not.toHaveProperty("Solstice");
-  });
-
-  test("collectActivitySourceFacets can list every known curated source label", () => {
-    const sources = collectActivitySourceFacets([], { includeAllKnownLabels: true });
-    expect(sources.length).toBeGreaterThan(20);
-    expect(sources.every((facet) => facet.count === 0)).toBe(true);
-    expect(sources.some((facet) => facet.value === "Prophecy")).toBe(true);
-    expect(sources.some((facet) => facet.value === "Fireteam Ops")).toBe(true);
   });
 
   test("collectPerks counts weapons per perk", () => {
@@ -486,25 +413,6 @@ describe("filterWeaponNames", () => {
   });
 });
 
-describe("hasStrongWeaponNameMatch", () => {
-  test("detects prefix and word-boundary weapon names", () => {
-    const summaries = [
-      ...sampleSummaries,
-      { ...sampleSummaries[0]!, hash: 9001, name: "The Beacon" },
-    ];
-    expect(hasStrongWeaponNameMatch(summaries, "fate")).toBe(true);
-    expect(hasStrongWeaponNameMatch(summaries, "beacon")).toBe(true);
-  });
-
-  test("returns false when the query is too short", () => {
-    expect(hasStrongWeaponNameMatch(sampleSummaries, "f")).toBe(false);
-  });
-
-  test("returns false for perk-only substring matches", () => {
-    expect(hasStrongWeaponNameMatch(sampleSummaries, "round")).toBe(false);
-  });
-});
-
 describe("weaponsMatchingTextQuery", () => {
   test("includes exact name matches before fuzzy-only matches", () => {
     const searcher = createWeaponSearcher(sampleSummaries);
@@ -558,61 +466,6 @@ describe("rankWeaponResults", () => {
         .filter((weapon) => expectedNameOrder.includes(weapon.name))
         .map((weapon) => weapon.name),
     ).toEqual(expectedNameOrder);
-  });
-});
-
-describe("enrichAmmoGenerationFromDetails", () => {
-  test("returns the same summaries array when nothing changes", () => {
-    const details = new Map<number, WeaponDetailFields>([
-      [
-        1,
-        {
-          hash: 1,
-          stats: [{ hash: AMMO_GENERATION_STAT_HASH, name: "Ammo Generation", value: 42 }],
-        },
-      ],
-    ]);
-
-    const enriched = sampleSummaries.map((weapon) =>
-      weapon.name === "Fatebringer" ? { ...weapon, ammoGeneration: 42 } : weapon,
-    );
-
-    expect(enrichAmmoGenerationFromDetails(enriched, details)).toBe(enriched);
-  });
-});
-
-describe("refreshWeaponSummaries", () => {
-  test("rebuilds byHash after enriching summaries", () => {
-    const lookups = buildWeaponIndexLookups(sampleIndex);
-    const enriched = sampleSummaries.map((weapon) =>
-      weapon.name === "Fatebringer" ? { ...weapon, ammoGeneration: 42 } : weapon,
-    );
-
-    const refreshed = refreshWeaponSummaries(lookups, enriched);
-
-    expect(refreshed.weapons.find((w) => w.name === "Fatebringer")?.ammoGeneration).toBe(42);
-    expect(refreshed.byHash.get(1)?.ammoGeneration).toBe(42);
-    expect(refreshed).not.toBe(lookups);
-  });
-
-  test("returns the same lookups object when weapons are unchanged", () => {
-    const lookups = buildWeaponIndexLookups(sampleIndex);
-    expect(refreshWeaponSummaries(lookups, lookups.weapons)).toBe(lookups);
-  });
-});
-
-describe("suggestWeaponNames", () => {
-  test("ranks partial name matches with Fatebringer first", () => {
-    const suggestions = suggestWeaponNames(sampleSummaries, "fate");
-    expect(suggestions[0]?.value).toBe("Fatebringer");
-  });
-
-  test("returns empty for no matches", () => {
-    expect(suggestWeaponNames(sampleSummaries, "xyz")).toEqual([]);
-  });
-
-  test("returns empty for blank query", () => {
-    expect(suggestWeaponNames(sampleSummaries, "  ")).toEqual([]);
   });
 });
 
@@ -820,20 +673,6 @@ describe("sortWeapons", () => {
       "Sunshot Scout",
       "Fatebringer",
       "Stormcharge",
-    ]);
-  });
-
-  test("highest DPS first, weapons without DPS last", () => {
-    const dpsByName = new Map([
-      ["Fatebringer", { dps: 3000, totalDamage: 30_000, buildPerks: [], buildDescription: "" }],
-      ["Stormcharge", { dps: 5000, totalDamage: 50_000, buildPerks: [], buildDescription: "" }],
-    ]);
-
-    expect(orderedNames(sortWeapons(sampleSummaries, "dps-desc", dpsByName))).toEqual([
-      "Stormcharge",
-      "Fatebringer",
-      "Sunlit Fusion",
-      "Sunshot Scout",
     ]);
   });
 

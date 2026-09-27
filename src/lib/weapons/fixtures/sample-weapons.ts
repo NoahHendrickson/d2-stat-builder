@@ -1,5 +1,6 @@
 import type { PerkRef, WeaponDoc } from "../types";
-import { SAMPLE_STAT_GROUP_HASH } from "../weapon-stats";
+/** Linear 1:1 stat group used by sample fixtures and unit tests. */
+const SAMPLE_STAT_GROUP_HASH = 99_999;
 
 const p = (
   hash: number,

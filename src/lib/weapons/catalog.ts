@@ -2,6 +2,7 @@ import { normalizeWeaponIndex } from "./intern-weapons";
 import { expandWeaponQueryAliases } from "./aliases";
 import { mergeWeaponFilters, planWeaponTextSearch } from "./query-language";
 import { buildWeaponNameIndex } from "./weapon-name-index";
+import { canonicalActivitySource, sourceLabels } from "./weapon-provenance";
 import { createWeaponSearcher } from "./weapon-searcher";
 import {
   currentWeaponPerkPoolVersions,
@@ -19,6 +20,8 @@ import {
 } from "./search";
 import type { WeaponIndex, WeaponSummary } from "./types";
 
+const collator = new Intl.Collator();
+
 /** Built once per downloaded catalog, independent of React renders. */
 export function createWeaponCatalog(raw: WeaponIndex) {
   const index = normalizeWeaponIndex(raw);
@@ -26,21 +29,31 @@ export function createWeaponCatalog(raw: WeaponIndex) {
   const names = buildWeaponNameIndex(weapons);
   const searcher = createWeaponSearcher(weapons);
   const representative = new Map<number, WeaponSummary>();
+  // Names with several current perk pools show one row per pool; the label tells
+  // them apart (usually the activity that drops that version).
+  const poolLabels = new Map<number, string>();
   // Perk-pool fingerprints and version grouping do not depend on the query.
   // The old browser rebuilt these on every keystroke (and every facet preview).
   for (const versions of names.byName.values()) {
-    for (const pool of currentWeaponPerkPoolVersions(versions)) {
+    const pools = currentWeaponPerkPoolVersions(versions);
+    for (const pool of pools) {
       for (const hash of pool.hashes) representative.set(hash, pool.weapon);
+      if (pools.length > 1) poolLabels.set(pool.weapon.hash, pool.label);
     }
   }
   const textCache = new Map<string, WeaponSummary[]>();
   const facets = collectFacets(weapons);
-  facets.source = [
-    ...new Set(
-      weapons.flatMap((w) => w.sources ?? (w.source ? [w.source] : [])),
-    ),
-  ]
-    .sort()
+  // Offer the same canonical activity labels the source filter matches against,
+  // so every option in the list yields results.
+  const sources = new Set<string>();
+  for (const weapon of weapons) {
+    for (const label of sourceLabels(weapon)) {
+      const canonical = canonicalActivitySource(label);
+      if (canonical) sources.add(canonical);
+    }
+  }
+  facets.source = [...sources]
+    .sort(collator.compare)
     .map((value) => ({ value, count: 0 }));
   const columns = collectColumnPerks(weapons, index.perks);
   for (const key of ["trait1", "trait2", "originTrait"] as const) {
@@ -53,7 +66,7 @@ export function createWeaponCatalog(raw: WeaponIndex) {
   facets.perkCombo = [
     ...new Set([...columns.trait1, ...columns.trait2].map((p) => p.name)),
   ]
-    .sort()
+    .sort(collator.compare)
     .map((value) => ({ value, count: 0 }));
 
   function search(query: string, filters: WeaponFilters, sort: WeaponSort) {
@@ -83,16 +96,15 @@ export function createWeaponCatalog(raw: WeaponIndex) {
       const primary = representative.get(weapon.hash) ?? weapon;
       unique.set(primary.hash, primary);
     }
-    return rankWeaponResults(
-      [...unique.values()],
-      text,
-      sort,
-      undefined,
-      names,
-    );
+    return rankWeaponResults([...unique.values()], text, sort, names);
   }
 
-  return { ...index, weapons, facets, search };
+  /** Version label for a result row whose name has more than one current perk pool. */
+  function poolLabel(hash: number): string | undefined {
+    return poolLabels.get(hash);
+  }
+
+  return { ...index, weapons, facets, search, poolLabel };
 }
 
 export type WeaponCatalog = ReturnType<typeof createWeaponCatalog>;

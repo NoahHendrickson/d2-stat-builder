@@ -34,6 +34,14 @@ describe("createWeaponSearcher", () => {
     expect(hits.indexOf("Sunlit Fusion")).toBeLessThan(hits.indexOf("Stormcharge"));
   });
 
+  test("matches element and rarity words alongside the type", () => {
+    // Element and rarity are facets, but players type them as plain words.
+    expect(names("solar fusion")).toEqual(["Sunlit Fusion"]);
+    expect(names("arc hand cannon")).toContain("Fatebringer");
+    expect(names("arc hand cannon")).not.toContain("Sunshot Scout");
+    expect(names("legendary").length).toBe(weapons.filter((w) => w.rarity === "Legendary").length);
+  });
+
   test("matches perk text", () => {
     const hits = names("firefly");
     expect(hits).toContain("Fatebringer");

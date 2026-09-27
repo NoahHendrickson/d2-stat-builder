@@ -2,35 +2,19 @@ import { matchRank } from "./rank";
 
 import type { InternedPerkColumn, PerkRef, WeaponSummary } from "./types";
 import { damagePerkIndexSet } from "./damage-perks";
-import type { WeaponDpsLookup } from "./weapon-dps";
 import type { WeaponNameIndex } from "./weapon-name-index";
-import {
-  canonicalActivitySource,
-  canonicalRaidSource,
-  CURATED_SOURCE_LABELS,
-  isCuratedActivitySource,
-  isRaidSource,
-  matchesWeaponSourceLowered,
-  sourceLabels,
-} from "./weapon-provenance";
-import { createWeaponSearcher, type WeaponSearcher } from "./weapon-searcher";
+import { matchesWeaponSourceLowered } from "./weapon-provenance";
+import type { WeaponSearcher } from "./weapon-searcher";
 import { isCatalogWeapon } from "./weapon-variants";
 
 export type { WeaponNameIndex } from "./weapon-name-index";
 export { buildWeaponNameIndex } from "./weapon-name-index";
 
-/** Optional name→popularity score (higher = more sought-after) used as a ranking tiebreak. */
-export type PopularityLookup = ReadonlyMap<string, number>;
-
 /** Shared default-locale collator — far cheaper than String#localeCompare in hot sorts. */
 const collator = new Intl.Collator();
 const compareStrings = (a: string, b: string): number => collator.compare(a, b);
 
-function popularityOf(name: string, popularity?: PopularityLookup): number {
-  return popularity?.get(name.toLowerCase()) ?? 0;
-}
-
-export type WeaponSort = "name" | "season-desc" | "season-asc" | "dps-desc" | "ammo-gen-desc";
+export type WeaponSort = "name" | "season-desc" | "season-asc" | "ammo-gen-desc";
 
 /** Composite key for season ordering: season number dominates, release index breaks ties. */
 function seasonSortKey(weapon: WeaponSummary): number {
@@ -38,25 +22,10 @@ function seasonSortKey(weapon: WeaponSummary): number {
 }
 
 /** Sort weapon results — does not mutate the input array. */
-export function sortWeapons(
-  weapons: WeaponSummary[],
-  order: WeaponSort,
-  dpsByName?: WeaponDpsLookup,
-): WeaponSummary[] {
+export function sortWeapons(weapons: WeaponSummary[], order: WeaponSort): WeaponSummary[] {
   const sorted = [...weapons];
   if (order === "name") {
     sorted.sort((a, b) => compareStrings(a.name, b.name));
-    return sorted;
-  }
-  if (order === "dps-desc") {
-    sorted.sort((a, b) => {
-      const aDps = dpsByName?.get(a.name)?.dps;
-      const bDps = dpsByName?.get(b.name)?.dps;
-      if (aDps == null && bDps == null) return compareStrings(a.name, b.name);
-      if (aDps == null) return 1;
-      if (bDps == null) return -1;
-      return bDps - aDps || compareStrings(a.name, b.name);
-    });
     return sorted;
   }
   if (order === "ammo-gen-desc") {
@@ -143,9 +112,8 @@ function seasonAliases(weapon: WeaponSummary): string[] {
 
 /**
  * Per-weapon rollable-perk set, memoized for the session — `filterWeapons` runs
- * per keystroke (and ~20× per keystroke for palette previews), so don't rebuild
- * the Set per weapon per call. Refreshed summaries are new objects, so stale
- * entries simply fall out of the WeakMap.
+ * per keystroke, so don't rebuild the Set per weapon per call. Refreshed
+ * summaries are new objects, so stale entries simply fall out of the WeakMap.
  */
 const perksLowerSets = new WeakMap<WeaponSummary, Set<string>>();
 
@@ -343,28 +311,6 @@ export function filterWeapons(
   });
 }
 
-/** Lowercase perk name → weapons that can roll it. */
-export function buildWeaponsByPerkName(weapons: WeaponSummary[]): Map<string, WeaponSummary[]> {
-  const map = new Map<string, WeaponSummary[]>();
-  for (const weapon of weapons) {
-    for (const key of weapon.perksLower) {
-      const list = map.get(key);
-      if (list) list.push(weapon);
-      else map.set(key, [weapon]);
-    }
-  }
-  return map;
-}
-
-/** Every weapon that can roll a given perk (by name or hash). */
-export function weaponsWithPerk(weapons: WeaponSummary[], perk: string | number): WeaponSummary[] {
-  if (typeof perk === "number") {
-    return weapons.filter((w) => isCatalogWeapon(w) && w.perkHashes.includes(perk));
-  }
-  const target = lower(perk);
-  return weapons.filter((w) => isCatalogWeapon(w) && w.perksLower.includes(target));
-}
-
 function weaponNameRank(nameLower: string, queryLower: string): number | null {
   const rank = matchRank(nameLower, queryLower);
   // Weapon names: treat word-boundary same as contains for backward compat
@@ -395,7 +341,7 @@ function rankNames(
 }
 
 /**
- * Flat weapon-name matches for palette ranking — no sort (caller ranks).
+ * Flat weapon-name matches — no sort (caller ranks).
  *
  * Pass a prebuilt {@link WeaponNameIndex} (recommended for keystroke-rate calls)
  * to skip rebuilding the name→count map and re-lowercasing every name. Without
@@ -423,39 +369,11 @@ export function filterWeaponNames(
 /** Minimum query length before text search and name-match pinning apply. */
 export const MIN_WEAPON_TEXT_QUERY_LENGTH = 2;
 
-/** Same band as palette inline chip suggestions (`scanValueSuggestions` `maxRank: 2`). */
-const STRONG_WEAPON_NAME_MATCH_RANK = 2;
-
-/**
- * True when the query matches a catalog weapon name at prefix quality or better.
- * Used to prefer live name/fuzzy preview over hypothetical perk-filter previews.
- */
-export function hasStrongWeaponNameMatch(
-  weapons: WeaponSummary[],
-  query: string,
-  index?: WeaponNameIndex,
-): boolean {
-  const q = query.trim();
-  if (q.length < MIN_WEAPON_TEXT_QUERY_LENGTH) return false;
-  return filterWeaponNames(weapons, q, index).some(
-    (match) => match.searchRank <= STRONG_WEAPON_NAME_MATCH_RANK,
-  );
-}
-
-/**
- * Canonical tie-break order for `filterWeaponNames` results across search surfaces.
- * With a {@link PopularityLookup}, popularity breaks ties before the catalog count.
- */
-export function sortFilteredWeaponNames(
-  matches: FilteredWeaponName[],
-  popularity?: PopularityLookup,
-): FilteredWeaponName[] {
+/** Canonical tie-break order for `filterWeaponNames` results: rank, catalog count, alpha. */
+export function sortFilteredWeaponNames(matches: FilteredWeaponName[]): FilteredWeaponName[] {
   return [...matches].sort(
     (a, b) =>
-      a.searchRank - b.searchRank ||
-      popularityOf(b.value, popularity) - popularityOf(a.value, popularity) ||
-      b.count - a.count ||
-      compareStrings(a.value, b.value),
+      a.searchRank - b.searchRank || b.count - a.count || compareStrings(a.value, b.value),
   );
 }
 
@@ -504,36 +422,28 @@ function sortNameMatchedWeapons(
   weapons: WeaponSummary[],
   matches: FilteredWeaponName[],
   sort: WeaponSort,
-  dpsByName?: WeaponDpsLookup,
-  popularity?: PopularityLookup,
 ): WeaponSummary[] {
-  if (sort !== "name") return sortWeapons(weapons, sort, dpsByName);
+  if (sort !== "name") return sortWeapons(weapons, sort);
 
   const rankByName = new Map(matches.map((match) => [match.value, match.searchRank]));
   return [...weapons].sort(
     (a, b) =>
       (rankByName.get(a.name) ?? Number.MAX_SAFE_INTEGER) -
         (rankByName.get(b.name) ?? Number.MAX_SAFE_INTEGER) ||
-      popularityOf(b.name, popularity) - popularityOf(a.name, popularity) ||
       compareStrings(a.name, b.name),
   );
 }
 
-/**
- * Sort weapons with exact name matches pinned above the rest; both groups respect `sort`.
- * An optional {@link PopularityLookup} breaks ties so more sought-after weapons surface first.
- */
+/** Sort weapons with exact name matches pinned above the rest; both groups respect `sort`. */
 export function rankWeaponResults(
   weapons: WeaponSummary[],
   query: string,
   sort: WeaponSort,
-  dpsByName?: WeaponDpsLookup,
   index?: WeaponNameIndex,
-  popularity?: PopularityLookup,
 ): WeaponSummary[] {
   const q = query.trim();
   if (q.length < MIN_WEAPON_TEXT_QUERY_LENGTH) {
-    return sortWeapons(weapons, sort, dpsByName);
+    return sortWeapons(weapons, sort);
   }
 
   // Compute the ranked name matches once and thread them through — the
@@ -546,43 +456,11 @@ export function rankWeaponResults(
     (nameMatches.has(weapon.name) ? nameMatched : rest).push(weapon);
   }
 
-  return [
-    ...sortNameMatchedWeapons(nameMatched, matches, sort, dpsByName, popularity),
-    ...sortWeapons(rest, sort, dpsByName),
-  ];
-}
-
-/**
- * Predict weapon names from a partial query — name-only, ranked best-first.
- * Ties (same match rank) prefer higher popularity, then more catalog copies, then alpha.
- */
-export function suggestWeaponNames(
-  weapons: WeaponSummary[],
-  query: string,
-  limit = 20,
-  index?: WeaponNameIndex,
-  popularity?: PopularityLookup,
-): FacetOption[] {
-  const ql = query.trim().toLowerCase();
-  if (!ql) return [];
-
-  return sortFilteredWeaponNames(filterWeaponNames(weapons, query, index), popularity)
-    .slice(0, limit)
-    .map(({ value, count }) => ({ value, count }));
+  return [...sortNameMatchedWeapons(nameMatched, matches, sort), ...sortWeapons(rest, sort)];
 }
 
 /** Typo-tolerant fuzzy search over weapon name/type/perk text — see weapon-searcher.ts. */
 export { createWeaponSearcher, type WeaponSearcher } from "./weapon-searcher";
-
-/** Convenience fuzzy search (rebuilds the searcher each call — prefer createWeaponSearcher for UIs). */
-export function fuzzySearchWeapons(
-  weapons: WeaponSummary[],
-  query: string,
-  limit = 50,
-): WeaponSummary[] {
-  if (!query.trim()) return weapons;
-  return createWeaponSearcher(weapons).search(query, limit);
-}
 
 export interface FacetOption {
   value: string;
@@ -593,51 +471,6 @@ function sortFacetCounts(counts: Map<string, number>): FacetOption[] {
   return [...counts.entries()]
     .map(([value, count]) => ({ value, count }))
     .sort((a, b) => b.count - a.count || compareStrings(a.value, b.value));
-}
-
-export interface CollectActivitySourceFacetsOptions {
-  /** List every known curated activity even when the count is zero. */
-  includeAllKnownLabels?: boolean;
-}
-
-/** Curated source facets for the Source filter palette category. */
-export function collectActivitySourceFacets(
-  items: ReadonlyArray<{ source?: string; sources?: readonly string[] }>,
-  options?: CollectActivitySourceFacetsOptions,
-): FacetOption[] {
-  const source = new Map<string, number>();
-  if (options?.includeAllKnownLabels) {
-    for (const label of CURATED_SOURCE_LABELS) source.set(label, 0);
-  }
-  for (const item of items) {
-    const seen = new Set<string>();
-    for (const label of sourceLabels(item)) {
-      if (!isCuratedActivitySource(label)) continue;
-      const canonical = canonicalActivitySource(label);
-      if (!canonical || seen.has(canonical)) continue;
-      seen.add(canonical);
-      source.set(canonical, (source.get(canonical) ?? 0) + 1);
-    }
-  }
-  return sortFacetCounts(source);
-}
-
-/** Raid-only source facets for the Source filter palette category. */
-export function collectRaidSourceFacets(
-  items: ReadonlyArray<{ source?: string; sources?: readonly string[] }>,
-): FacetOption[] {
-  const source = new Map<string, number>();
-  for (const item of items) {
-    const seen = new Set<string>();
-    for (const label of sourceLabels(item)) {
-      if (!isRaidSource(label)) continue;
-      const canonical = canonicalRaidSource(label);
-      if (!canonical || seen.has(canonical)) continue;
-      seen.add(canonical);
-      source.set(canonical, (source.get(canonical) ?? 0) + 1);
-    }
-  }
-  return sortFacetCounts(source);
 }
 
 /** Distinct facet values (with counts) for building filter UIs. */
@@ -759,20 +592,4 @@ export function collectColumnPerks(weapons: WeaponSummary[], perks: PerkRef[]): 
   const sort = (m: Map<string, PerkOption>) =>
     [...m.values()].sort((a, b) => b.count - a.count || compareStrings(a.name, b.name));
   return { trait1: sort(trait1), trait2: sort(trait2), originTrait: sort(originTrait) };
-}
-
-/** @deprecated Prefer buildPerkMapFromCatalog when using an interned index. */
-export function buildPerkMap(weapons: { columns: { perks: PerkRef[] }[] }[]): Map<number, PerkRef> {
-  const map = new Map<number, PerkRef>();
-  for (const weapon of weapons) {
-    for (const column of weapon.columns) {
-      for (const perk of column.perks) {
-        if (!map.has(perk.hash)) map.set(perk.hash, perk);
-        for (const alt of perk.alternateHashes ?? []) {
-          if (!map.has(alt)) map.set(alt, perk);
-        }
-      }
-    }
-  }
-  return map;
 }
