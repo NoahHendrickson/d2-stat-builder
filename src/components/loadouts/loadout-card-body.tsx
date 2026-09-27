@@ -18,7 +18,7 @@ import { cn } from "@/lib/utils";
 
 /** An unfilled mod socket: the game's empty-slot bracket corners. */
 function EmptySocket() {
-  return <span className="d2-brackets size-6 shrink-0 bg-black/20" aria-hidden />;
+  return <span className="d2-brackets size-8 shrink-0 bg-black/20" aria-hidden />;
 }
 
 function ColumnGroup({ label, children }: { label: string; children: ReactNode }) {
@@ -215,7 +215,13 @@ function PieceColumn({
             hash === undefined ? (
               <EmptySocket key={index} />
             ) : (
-              <PlugIcon key={index} hash={hash} manifest={manifest} className="rounded-none" />
+              <PlugIcon
+                key={index}
+                hash={hash}
+                manifest={manifest}
+                size={32}
+                className="rounded-none"
+              />
             ),
           )}
         </div>
@@ -259,7 +265,7 @@ function TuningLine({
     return null;
   }
   return (
-    <span className="text-muted-foreground flex items-center gap-1 text-[11px] leading-4">
+    <span className="text-muted-foreground flex items-center gap-1 text-xs leading-4">
       {glyph}
       <span className="hidden @3xl:inline">{text}</span>
     </span>
@@ -322,7 +328,7 @@ export function LoadoutCardBody({
           <span className="d2-label text-[10px]">Mods</span>
           <div className="flex flex-wrap gap-1">
             {loadout.parameters.mods.map((hash, i) => (
-              <PlugIcon key={`${hash}-${i}`} hash={hash} manifest={manifest} />
+              <PlugIcon key={`${hash}-${i}`} hash={hash} manifest={manifest} size={32} />
             ))}
           </div>
         </div>

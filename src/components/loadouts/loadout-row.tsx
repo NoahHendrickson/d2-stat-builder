@@ -198,19 +198,19 @@ export const LoadoutRow = memo(function LoadoutRow({
           onClick={() => onToggle(saved.id)}
           aria-expanded={open}
           aria-label={open ? "Hide stat breakdown" : "Show stat breakdown"}
-          className="text-foreground hover:bg-foreground/6 flex h-8 items-center gap-3 rounded-none px-2 text-xs leading-4 tabular-nums outline-none transition-colors focus-visible:ring-1 focus-visible:ring-outline-strong"
+          className="text-foreground hover:bg-foreground/6 flex h-9 items-center gap-4 rounded-none px-2 text-sm leading-5 tabular-nums outline-none transition-colors focus-visible:ring-1 focus-visible:ring-outline-strong"
         >
           {optimizer ? (
             <>
-              <span className="font-medium">{optimizer.total}</span>
+              <span className="text-base font-medium">{optimizer.total}</span>
               {STAT_COLS.map(({ key, i }) => {
                 const value = optimizer.stats[i];
                 return (
-                  <span key={key} className="flex items-center gap-0.5">
+                  <span key={key} className="flex items-center gap-1">
                     <StatGlyph
                       src={statIcons[key]}
                       label={STAT_LABELS[key]}
-                      className="size-3 opacity-65"
+                      className="size-4 opacity-75"
                     />
                     <span className={cn(value === 0 && "text-muted-foreground")}>
                       {value}

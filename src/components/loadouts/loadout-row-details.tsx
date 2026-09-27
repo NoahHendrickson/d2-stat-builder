@@ -38,7 +38,7 @@ const STAT_COLS = STAT_DISPLAY_ORDER.map((key) => ({
   i: STAT_ORDER.indexOf(key),
 }));
 /** Name column takes the slack; the six stat columns and Tuned stay fixed. */
-const DETAIL_COLS = "minmax(0,1fr) repeat(6, 1.75rem) 2.5rem";
+const DETAIL_COLS = "minmax(0,1fr) repeat(6, 2.25rem) 3rem";
 
 /** Icon + name for a plug/mod hash, from the manifest; falls back to the hash. */
 export function PlugIcon({
@@ -319,7 +319,7 @@ export function LoadoutRowDetails({
     : 0;
 
   return (
-    <div className="grid gap-4 border-t border-foreground/15 pt-3 text-xs @3xl:grid-cols-[minmax(0,34rem)_minmax(0,1fr)]">
+    <div className="grid gap-4 border-t border-foreground/15 pt-3 text-sm @3xl:grid-cols-[minmax(0,40rem)_minmax(0,1fr)]">
       <div
         className="grid items-center gap-x-1 gap-y-1"
         style={{ gridTemplateColumns: DETAIL_COLS }}
@@ -330,7 +330,7 @@ export function LoadoutRowDetails({
             <StatGlyph src={statIcons[key]} label={STAT_LABELS[key]} />
           </div>
         ))}
-        <div className="d2-label pb-0.5 text-center text-[9px]">Tuned</div>
+        <div className="d2-label pb-0.5 text-center text-[10px]">Tuned</div>
 
         {resolved.armor.map((a, idx) => {
           const slotIndex = optimizer?.pieceIds.indexOf(a.ref.id ?? "") ?? -1;
