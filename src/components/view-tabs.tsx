@@ -3,16 +3,17 @@
 import { TooltipLabel } from "@/components/ui/tooltip";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { SlidersHorizontal, Table } from "@phosphor-icons/react";
+import { SlidersHorizontal, Table, Crosshair } from "@phosphor-icons/react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const VIEWS = [
   { href: "/", label: "Optimizer", Icon: SlidersHorizontal },
   { href: "/armor", label: "Armor table", Icon: Table },
+  { href: "/weapons", label: "Weapon search", Icon: Crosshair },
 ] as const;
 
 /**
- * Two-way icon switch between the optimizer and the armor table. Route-based
+ * Icon switch between the optimizer, armor table, and weapons. Route-based
  * so each view keeps its own URL.
  */
 export function ViewTabs({

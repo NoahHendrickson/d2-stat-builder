@@ -11,10 +11,13 @@
     "bench:time": "tsx scripts/optimizer-bench.ts time",
     "bench:verify": "tsx scripts/optimizer-bench.ts verify",
     "bench:snapshot": "tsx scripts/optimizer-bench.ts snapshot",
-    "bake:backdrop": "node scripts/bake-backdrop.mjs"
+    "bake:backdrop": "node scripts/bake-backdrop.mjs",
+    "generate:weapons": "tsx scripts/generate-weapons.ts",
+    "bench:weapons": "tsx scripts/weapon-search-bench.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",
+    "@leeoniya/ufuzzy": "^1.0.19",
     "@neondatabase/serverless": "^1.1.0",
     "@phosphor-icons/react": "^2.1.10",
     "@tanstack/react-query": "^5.101.2",

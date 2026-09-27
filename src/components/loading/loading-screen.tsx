@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { usePathname } from "next/navigation";
 import { memo, useEffect, useRef, useState, type CSSProperties } from "react";
 import { useSession } from "@/lib/auth/use-session";
 import { useManifest } from "@/lib/manifest/use-manifest";
@@ -96,6 +97,7 @@ const TILES: TileSpec[] = [
  * for signed-out visitors and on errors (the inline status cards own those).
  */
 export function LoadingScreen() {
+  const pathname = usePathname();
   const session = useSession();
   const manifestStatus = useManifest();
   const armory = useArmory();
@@ -125,7 +127,8 @@ export function LoadingScreen() {
     };
   }, [done]);
 
-  if (dismissed || view.phase === "hidden") return null;
+  // The public weapon catalog loads independently of a player's armor/manifest.
+  if (pathname === "/weapons" || dismissed || view.phase === "hidden") return null;
 
   return (
     <LoadingScreenView progress={progress} message={view.message} fading={fading} />
