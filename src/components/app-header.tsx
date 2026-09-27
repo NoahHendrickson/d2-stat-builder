@@ -1,58 +1,24 @@
 "use client";
 
-import Image from "next/image";
-import { SidebarSimple } from "@phosphor-icons/react";
-import { ViewTabs } from "@/components/view-tabs";
+import { APP_HEADER_HEIGHT } from "@/components/app-sidebar";
 import { ArmoryStatus } from "@/components/armory/armory-status";
-import { Button } from "@/components/ui/button";
-import { TooltipLabel } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 /**
- * Figma 69:968 — a 76px strip over the backdrop: 28px logo + icon view switch
- * on the left, the armor / game-data / account cluster on the right. Lives on
- * the main column, not the loadouts sidebar.
+ * The main column's header strip: the current page's title on the left, the
+ * armor / game-data / account cluster on the right (Figma 46:2947). Its height
+ * matches the sidebar's brand row.
  */
-export function AppHeader({
-  collapsed,
-  onExpand,
-  className,
-}: {
-  collapsed?: boolean;
-  onExpand?: () => void;
-  className?: string;
-}) {
+export function AppHeader({ title, className }: { title: string; className?: string }) {
   return (
     <header
       className={cn(
-        "flex h-[76px] shrink-0 items-center justify-between gap-4 px-4",
+        APP_HEADER_HEIGHT,
+        "flex shrink-0 items-center justify-between gap-4 border-b border-foreground/8 px-6",
         className,
       )}
     >
-      <div className="flex min-w-0 items-center gap-4">
-        {collapsed && onExpand && (
-          <TooltipLabel label="Show loadouts">
-            <Button
-              variant="default"
-              size="icon"
-              aria-label="Show loadouts"
-              onClick={onExpand}
-            >
-              <SidebarSimple aria-hidden />
-            </Button>
-          </TooltipLabel>
-        )}
-        <Image
-          src="/sidebar-logo.svg"
-          alt=""
-          width={28}
-          height={28}
-          className="size-7 shrink-0 rounded-none"
-          unoptimized
-          aria-hidden
-        />
-        <ViewTabs />
-      </div>
+      <h1 className="min-w-0 truncate text-base font-medium">{title}</h1>
       <ArmoryStatus variant="toolbar" />
     </header>
   );

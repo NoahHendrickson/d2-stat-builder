@@ -34,16 +34,25 @@ const nextConfig: NextConfig = {
   // <Activity> in "hidden" mode) instead of unmounting them, so switching between the
   // optimizer and the armor table is a show/hide, not a rebuild of the whole view.
   cacheComponents: true,
+  // The default bottom-left badge sits on the sidebar's collapse toggle.
+  devIndicators: { position: "bottom-right" },
   images: {
     remotePatterns: [
       { protocol: "https", hostname: "www.bungie.net", pathname: "/common/**" },
       { protocol: "https", hostname: "www.bungie.net", pathname: "/img/**" },
     ],
   },
-  // Loadouts live in the sidebar now; old links (including share links, whose query
-  // string is carried over) forward to the optimizer.
+  // Share links used to point at the optimizer while loadouts lived in its sidebar;
+  // forward them to the loadouts page (the query string is carried over).
   async redirects() {
-    return [{ source: "/loadouts", destination: "/", permanent: false }];
+    return [
+      {
+        source: "/",
+        has: [{ type: "query", key: "import" }],
+        destination: "/loadouts",
+        permanent: false,
+      },
+    ];
   },
   async headers() {
     return [

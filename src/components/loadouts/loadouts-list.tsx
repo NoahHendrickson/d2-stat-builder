@@ -4,9 +4,7 @@ import { TooltipLabel } from "@/components/ui/tooltip";
 import {
   useCallback,
   useDeferredValue,
-  useLayoutEffect,
   useMemo,
-  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -82,8 +80,8 @@ import {
   type LoadoutDetailsValues,
 } from "@/components/loadouts/loadout-editor-drawer";
 
-// Survives the list remounting (the sidebar moves between the desktop column and the
-// mobile drawer at the breakpoint) so a dismissed share-link import stays dismissed.
+// Survives the list remounting (leaving the page and coming back) so a dismissed
+// share-link import stays dismissed.
 let dismissedImportParam: string | null = null;
 
 type DialogState =
@@ -141,37 +139,24 @@ const ESTIMATED_ROW_HEIGHT_PX = 104;
 const ROW_GAP_PX = 10;
 
 /**
- * The sidebar's loadouts section (Figma 69:865): collapse + search, then the count
- * with sort / filter menus, and the virtualized card list. Rows scroll inside this
- * section — the sidebar itself never scrolls, so the armor summary stays pinned below.
+ * The loadouts page body (Figma 69:865): search, then the count with sort / filter
+ * menus, and the virtualized card list. Rows scroll inside this section, so the
+ * search and filters stay pinned above them.
  */
 export function LoadoutsList({
   armory,
   provisional = false,
   manifest,
   onArmoryChanged,
-  onNavigate,
-  headerAction,
 }: {
   armory: Armory;
   /** `armory` is last visit's copy; applying a loadout waits for the live profile. */
   provisional?: boolean;
   manifest: Manifest;
   onArmoryChanged: () => void;
-  /** Called after an action that switches views (the mobile drawer closes itself). */
-  onNavigate?: () => void;
-  /** Desktop collapse control — sits left of the search field (Figma 69:865). */
-  headerAction?: ReactNode;
 }) {
   const router = useRouter();
   const pathname = usePathname();
-  // Read at click time only, via a ref, so a route change doesn't change
-  // optimizeLoadout's identity and re-render every visible row. Written in a layout
-  // effect rather than during render so a discarded render can't leave it stale.
-  const pathnameRef = useRef(pathname);
-  useLayoutEffect(() => {
-    pathnameRef.current = pathname;
-  });
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const loadouts = useLoadouts();
@@ -459,10 +444,9 @@ export function LoadoutsList({
           ),
         }),
       );
-      if (pathnameRef.current !== "/") router.push("/");
-      onNavigate?.();
+      router.push("/");
     },
-    [manifest, pieceMap, router, onNavigate],
+    [manifest, pieceMap, router],
   );
 
   const editorLoadout = dialog.kind === "edit" ? dialog.loadout : undefined;
@@ -502,7 +486,6 @@ export function LoadoutsList({
     <div className="flex min-h-0 flex-1 flex-col gap-4">
       <div className="flex flex-col gap-2 px-2">
         <div className="flex items-start gap-2">
-          {headerAction}
           <div className="relative min-w-0 flex-1">
             <MagnifyingGlass
               className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 z-10 size-4 -translate-y-1/2"
