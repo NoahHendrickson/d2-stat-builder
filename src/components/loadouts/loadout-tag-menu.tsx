@@ -173,38 +173,3 @@ export function LoadoutTagAssignSubmenu({
     </TagSubmenu>
   );
 }
-
-/** Filter the loadouts list by tags that already exist. */
-export function LoadoutTagFilterSubmenu({
-  tags,
-  selected,
-  onToggle,
-}: {
-  tags: readonly string[];
-  selected: readonly string[];
-  onToggle: (tag: string, checked: boolean) => void;
-}) {
-  const [query, setQuery] = useState("");
-  const empty = tags.length === 0 && selected.length === 0;
-  return (
-    <TagSubmenu
-      label="Tag"
-      summary={filterSummary(selected)}
-      onClose={() => setQuery("")}
-    >
-      {empty ? (
-        <p className="text-muted-foreground px-2 py-2.5 text-sm leading-5">
-          No loadouts with tags
-        </p>
-      ) : (
-        <TagPanel
-          tags={tags}
-          selected={selected}
-          query={query}
-          onQueryChange={setQuery}
-          onToggle={onToggle}
-        />
-      )}
-    </TagSubmenu>
-  );
-}

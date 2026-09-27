@@ -6,11 +6,10 @@ import {
   useDeferredValue,
   useMemo,
   useState,
-  type ReactNode,
 } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { ArrowsDownUp, FunnelSimple, MagnifyingGlass, X } from "@phosphor-icons/react";
+import { ArrowsDownUp, MagnifyingGlass, X } from "@phosphor-icons/react";
 import { toast } from "@/lib/toast";
 import type { Armory } from "@/lib/armory/fetch";
 import type { Manifest } from "@/lib/manifest/load";
@@ -53,8 +52,7 @@ import {
   type SavedLoadout,
   type SavedLoadoutData,
 } from "@/lib/loadouts/types";
-import { LoadoutTagFilterSubmenu } from "@/components/loadouts/loadout-tag-menu";
-import { Badge } from "@/components/ui/badge";
+import { FilterMultiselect } from "@/components/armor-table/filter-multiselect";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -62,12 +60,7 @@ import {
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuGroup,
-  DropdownMenuItem,
   DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ConfirmDialog } from "@/components/loadouts/confirm-dialog";
@@ -89,49 +82,7 @@ type DialogState =
   | { kind: "edit"; loadout: SavedLoadout; mods?: ModsSection }
   | { kind: "delete"; loadout: SavedLoadout };
 
-function toggleIn<T>(list: readonly T[], value: T): T[] {
-  return list.includes(value) ? list.filter((x) => x !== value) : [...list, value];
-}
-
-function filterSummary(labels: string[]): string | undefined {
-  if (labels.length === 0) return undefined;
-  return labels.length === 1 ? labels[0] : `${labels[0]} +${labels.length - 1}`;
-}
-
-function FilterCascade({
-  label,
-  summary,
-  empty,
-  children,
-}: {
-  label: string;
-  summary?: string;
-  /** Shown in the submenu when there is nothing to pick. */
-  empty?: string;
-  children: ReactNode;
-}) {
-  return (
-    <DropdownMenuSub>
-      <DropdownMenuSubTrigger openOnHover>
-        <span className="min-w-0 flex-1 truncate">{label}</span>
-        {summary ? (
-          <span className="text-muted-foreground max-w-24 truncate text-xs">
-            {summary}
-          </span>
-        ) : null}
-      </DropdownMenuSubTrigger>
-      <DropdownMenuSubContent className="min-w-52">
-        {empty ? (
-          <p className="text-muted-foreground px-2 py-2.5 text-sm leading-5">
-            {empty}
-          </p>
-        ) : (
-          children
-        )}
-      </DropdownMenuSubContent>
-    </DropdownMenuSub>
-  );
-}
+const SUBCLASS_OPTIONS = SUBCLASSES.map((sc) => ({ value: sc, label: sc }));
 
 /** Card height with the breakdown closed (wide layout); every card is remeasured. */
 const ESTIMATED_ROW_HEIGHT_PX = 300;
@@ -248,9 +199,6 @@ export function LoadoutsList({
       ),
     [all, deferredQuery, classFilter, subclassFilter, setFilter, tagFilter, sortKey, manifest],
   );
-  const activeTag = query.trim().toLowerCase().startsWith("#")
-    ? query.trim().toLowerCase().slice(1)
-    : null;
 
   // Rows are virtualized against the section's own scroller: only the visible slice
   // (plus overscan) resolves items and renders, however long the list gets.
@@ -470,12 +418,12 @@ export function LoadoutsList({
 
   const sortLabel =
     LOADOUT_LIST_SORT_OPTIONS.find((o) => o.key === sortKey)?.label ?? "Sort";
-  const filterCount =
-    classFilter.length +
-    subclassFilter.length +
-    setFilter.length +
-    tagFilter.length +
-    (activeTag !== null ? 1 : 0);
+  const classOptions = ownedClasses.map((c) => ({ value: c, label: CLASS_NAMES[c] }));
+  const setOptions = setBonusOptions.map((o) => ({ value: o.hash, label: o.name }));
+  const tagOptions = [...new Set([...hashtags, ...tagFilter])].map((t) => ({
+    value: t,
+    label: `#${t}`,
+  }));
   const countLabel = loadouts.isPending
     ? "Loading…"
     : shown.length === all.length
@@ -484,7 +432,7 @@ export function LoadoutsList({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+      <div className="flex flex-wrap items-center gap-2">
         <div className="relative min-w-0 flex-1 basis-60 sm:max-w-sm">
           <MagnifyingGlass
             className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 z-10 size-4 -translate-y-1/2"
@@ -510,10 +458,49 @@ export function LoadoutsList({
           )}
         </div>
 
-        <span className="text-muted-foreground text-sm tabular-nums" aria-live="polite">
-          {countLabel}
-        </span>
-        <div className="ml-auto flex items-center gap-2">
+        <FilterMultiselect
+          label="Class"
+          allLabel="All classes"
+          options={classOptions}
+          value={classFilter}
+          onChange={setClassFilter}
+          className="max-w-56"
+        />
+        <FilterMultiselect
+          label="Subclass"
+          allLabel="All subclasses"
+          options={SUBCLASS_OPTIONS}
+          value={subclassFilter}
+          onChange={setSubclassFilter}
+          className="max-w-56"
+        />
+        {(setBonusOptions.length > 0 || setFilter.length > 0) && (
+          <FilterMultiselect
+            label="Set bonus"
+            allLabel="All set bonuses"
+            searchable
+            options={setOptions}
+            value={setFilter}
+            onChange={setSetFilter}
+            className="max-w-64"
+          />
+        )}
+        {(hashtags.length > 0 || tagFilter.length > 0) && (
+          <FilterMultiselect
+            label="Tag"
+            allLabel="All tags"
+            searchable
+            options={tagOptions}
+            value={tagFilter}
+            onChange={setTagFilter}
+            className="max-w-56"
+          />
+        )}
+
+        <div className="ml-auto flex items-center gap-3">
+          <span className="text-muted-foreground text-sm tabular-nums" aria-live="polite">
+            {countLabel}
+          </span>
           <DropdownMenu>
             <TooltipLabel label={`Sort by ${sortLabel}`}>
               <DropdownMenuTrigger
@@ -539,125 +526,6 @@ export function LoadoutsList({
             </DropdownMenuContent>
           </DropdownMenu>
 
-          <DropdownMenu>
-            <TooltipLabel label="Filter loadouts">
-              <DropdownMenuTrigger
-                render={
-                  <Button variant="default" size="icon" className="relative" />
-                }
-                aria-label={
-                  filterCount > 0
-                    ? `Filter loadouts, ${filterCount} active`
-                    : "Filter loadouts"
-                }
-              >
-                <FunnelSimple aria-hidden />
-                {filterCount > 0 && (
-                  <Badge
-                    variant="emphatic"
-                    className="absolute top-0 right-0 h-3.5 min-w-3.5 px-1 text-[9px] leading-none tracking-normal"
-                  >
-                    {filterCount}
-                  </Badge>
-                )}
-              </DropdownMenuTrigger>
-            </TooltipLabel>
-            <DropdownMenuContent align="end" className="w-44">
-              <FilterCascade
-                label="Class"
-                summary={filterSummary(classFilter.map((c) => CLASS_NAMES[c]))}
-                empty={
-                  ownedClasses.length === 0 ? "No classes to filter" : undefined
-                }
-              >
-                {ownedClasses.map((c) => (
-                  <DropdownMenuCheckboxItem
-                    key={c}
-                    indicator="start"
-                    closeOnClick={false}
-                    checked={classFilter.includes(c)}
-                    onCheckedChange={() =>
-                      setClassFilter((prev) => toggleIn(prev, c))
-                    }
-                  >
-                    {CLASS_NAMES[c]}
-                  </DropdownMenuCheckboxItem>
-                ))}
-              </FilterCascade>
-              <FilterCascade
-                label="Subclass"
-                summary={filterSummary(subclassFilter)}
-              >
-                {SUBCLASSES.map((sc) => (
-                  <DropdownMenuCheckboxItem
-                    key={sc}
-                    indicator="start"
-                    closeOnClick={false}
-                    checked={subclassFilter.includes(sc)}
-                    onCheckedChange={() =>
-                      setSubclassFilter((prev) => toggleIn(prev, sc))
-                    }
-                  >
-                    {sc}
-                  </DropdownMenuCheckboxItem>
-                ))}
-              </FilterCascade>
-              <FilterCascade
-                label="Set bonuses"
-                summary={filterSummary(
-                  setFilter.map(
-                    (hash) =>
-                      setBonusOptions.find((s) => s.hash === hash)?.name ??
-                      `Set ${hash}`,
-                  ),
-                )}
-                empty={
-                  setBonusOptions.length === 0
-                    ? "No loadouts with set bonuses"
-                    : undefined
-                }
-              >
-                {setBonusOptions.map((s) => (
-                  <DropdownMenuCheckboxItem
-                    key={s.hash}
-                    indicator="start"
-                    closeOnClick={false}
-                    checked={setFilter.includes(s.hash)}
-                    onCheckedChange={() =>
-                      setSetFilter((prev) => toggleIn(prev, s.hash))
-                    }
-                  >
-                    {s.name}
-                  </DropdownMenuCheckboxItem>
-                ))}
-              </FilterCascade>
-              <LoadoutTagFilterSubmenu
-                tags={hashtags}
-                selected={tagFilter}
-                onToggle={(tag, checked) =>
-                  setTagFilter((prev) =>
-                    checked ? [...new Set([...prev, tag])] : prev.filter((t) => t !== tag),
-                  )
-                }
-              />
-              {filterCount > 0 && (
-                <>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem
-                    onClick={() => {
-                      setClassFilter([]);
-                      setSubclassFilter([]);
-                      setSetFilter([]);
-                      setTagFilter([]);
-                      if (activeTag !== null) setQuery("");
-                    }}
-                  >
-                    Clear filters
-                  </DropdownMenuItem>
-                </>
-              )}
-            </DropdownMenuContent>
-          </DropdownMenu>
         </div>
       </div>
 
