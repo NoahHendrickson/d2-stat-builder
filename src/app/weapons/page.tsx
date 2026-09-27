@@ -1,17 +1,20 @@
-import { Crosshair } from "@phosphor-icons/react/dist/ssr";
+import { Suspense } from "react";
+import { WeaponBrowser } from "@/components/weapons/weapon-browser";
 
-// Placeholder until weapon search is built; the sidebar marks it "Soon".
+export const metadata = {
+  title: "Weapon search — D2 stat builder",
+  description:
+    "Search the Destiny 2 weapon catalog by name, perks, element, frame, and source.",
+};
+
 export default function WeaponsPage() {
   return (
-    <main className="flex h-full min-h-0 flex-col items-center justify-center gap-3 px-6 py-6 text-center">
-      <div className="d2-corner-well flex size-12 items-center justify-center">
-        <Crosshair weight="duotone" className="text-muted-foreground size-6" aria-hidden />
-      </div>
-      <h2 className="text-base font-medium">Weapon search is on the way</h2>
-      <p className="text-muted-foreground max-w-sm text-sm">
-        Search and filter the weapons across your characters and vault. It isn&apos;t
-        built yet.
-      </p>
-    </main>
+    <Suspense
+      fallback={
+        <p className="p-6 text-muted-foreground">Loading weapon search…</p>
+      }
+    >
+      <WeaponBrowser />
+    </Suspense>
   );
 }

@@ -38,7 +38,7 @@ export const NAV_ITEMS: readonly {
 }[] = [
   { href: "/", label: "Stat optimizer", Icon: SlidersHorizontal },
   { href: "/armor", label: "Armor table", Icon: Table },
-  { href: "/weapons", label: "Weapon search", Icon: Crosshair, soon: true },
+  { href: "/weapons", label: "Weapon search", Icon: Crosshair },
   { href: "/loadouts", label: "Loadouts", Icon: Stack },
 ];
 
