@@ -16,7 +16,7 @@ import {
 
 // Bump when the item-table filter or projection changes so IndexedDB isn't stuck
 // without new defs.
-const CACHE_REVISION = "item-def-projection-v1";
+const CACHE_REVISION = "item-def-projection-v3";
 
 export interface Manifest {
   version: string;

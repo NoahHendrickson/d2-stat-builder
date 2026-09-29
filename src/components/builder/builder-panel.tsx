@@ -1203,7 +1203,7 @@ function Section({
   return (
     <section
       className={cn(
-        "d2-card-frame relative flex flex-col gap-3 rounded-none p-3 [--card-line-width:1.5px] hover:[--line-alpha:1.6]",
+        "d2-card-frame relative flex flex-col gap-3 rounded-none p-3 hover:[--line-alpha:1.6]",
         className,
       )}
     >

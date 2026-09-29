@@ -5,7 +5,8 @@ import { Menu as MenuPrimitive } from "@base-ui/react/menu"
 
 import { cn } from "@/lib/utils"
 import { CheckboxCheckIcon } from "@/components/ui/checkbox-check-icon"
-import { CaretRightIcon, CheckIcon } from "@phosphor-icons/react"
+import { HugeiconsIcon } from "@hugeicons/react"
+import { ArrowRight01Icon, Tick02Icon } from "@hugeicons/core-free-icons"
 
 function DropdownMenu({ ...props }: MenuPrimitive.Root.Props) {
   return <MenuPrimitive.Root data-slot="dropdown-menu" {...props} />
@@ -24,12 +25,13 @@ function DropdownMenuContent({
   alignOffset = 0,
   side = "bottom",
   sideOffset = 4,
+  anchor,
   className,
   ...props
 }: MenuPrimitive.Popup.Props &
   Pick<
     MenuPrimitive.Positioner.Props,
-    "align" | "alignOffset" | "side" | "sideOffset"
+    "align" | "alignOffset" | "side" | "sideOffset" | "anchor"
   >) {
   return (
     <MenuPrimitive.Portal>
@@ -39,6 +41,7 @@ function DropdownMenuContent({
         alignOffset={alignOffset}
         side={side}
         sideOffset={sideOffset}
+        anchor={anchor}
       >
         <MenuPrimitive.Popup
           data-slot="dropdown-menu-content"
@@ -120,7 +123,7 @@ function DropdownMenuSubTrigger({
       {...props}
     >
       {children}
-      <CaretRightIcon className="ml-auto" />
+      <HugeiconsIcon icon={ArrowRight01Icon} className="ml-auto" />
     </MenuPrimitive.SubmenuTrigger>
   )
 }
@@ -183,7 +186,7 @@ function DropdownMenuCheckboxItem({
       >
         <MenuPrimitive.CheckboxItemIndicator className="grid place-content-center">
           {indicator === "end" ? (
-            <CheckIcon className="text-foreground!" />
+            <HugeiconsIcon icon={Tick02Icon} className="text-foreground!" />
           ) : (
             <CheckboxCheckIcon className="text-emphatic-foreground!" />
           )}
@@ -226,7 +229,7 @@ function DropdownMenuRadioItem({
         data-slot="dropdown-menu-radio-item-indicator"
       >
         <MenuPrimitive.RadioItemIndicator>
-          <CheckIcon className="text-foreground!" />
+          <HugeiconsIcon icon={Tick02Icon} className="text-foreground!" />
         </MenuPrimitive.RadioItemIndicator>
       </span>
       {children}

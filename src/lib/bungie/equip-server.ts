@@ -24,7 +24,7 @@ import {
 } from "./equip-plan";
 
 /** Bungie asks for ≥100ms between item actions; stay comfortably above it. */
-const ACTION_SPACING_MS = 150;
+export const ACTION_SPACING_MS = 150;
 /** …and ≥500ms between socket-plug actions. */
 const PLUG_SPACING_MS = 600;
 
@@ -52,7 +52,7 @@ const TRANSFER_MESSAGES: Record<number, string> = {
 const VAULT_FULL_MESSAGE = "Vault is full — free up vault space";
 const CHARACTER_FULL_MESSAGE = "No room on that character — free up inventory space";
 
-function transferMessage(err: unknown, toVault: boolean): string {
+export function transferMessage(err: unknown, toVault: boolean): string {
   const code = err instanceof BungieHttpError ? err.code : undefined;
   if (code === NO_ROOM) return toVault ? VAULT_FULL_MESSAGE : CHARACTER_FULL_MESSAGE;
   return (

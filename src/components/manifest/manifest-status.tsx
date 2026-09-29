@@ -1,6 +1,7 @@
 "use client";
 
-import { CheckCircle, CircleNotch, XCircle } from "@phosphor-icons/react";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { CancelCircleIcon, CheckmarkCircle02Icon, Loading03Icon } from "@hugeicons/core-free-icons";
 import { useManifest } from "@/lib/manifest/use-manifest";
 import {
   Card,
@@ -18,13 +19,13 @@ export function ManifestStatus() {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           {status.state === "loading" && (
-            <CircleNotch weight="duotone" className="size-4 animate-spin" />
+            <HugeiconsIcon icon={Loading03Icon} className="size-4 animate-spin" />
           )}
           {status.state === "ready" && (
-            <CheckCircle weight="duotone" className="size-4 text-positive" />
+            <HugeiconsIcon icon={CheckmarkCircle02Icon} className="size-4 text-positive" />
           )}
           {status.state === "error" && (
-            <XCircle weight="duotone" className="text-destructive size-4" />
+            <HugeiconsIcon icon={CancelCircleIcon} className="text-destructive size-4" />
           )}
           Game data
         </CardTitle>

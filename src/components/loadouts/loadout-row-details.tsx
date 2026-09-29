@@ -266,7 +266,7 @@ export function SetBonusChip({ bonuses }: { bonuses: SetBonus[] }) {
           <span
             tabIndex={0}
             aria-label={bonuses.map((b) => b.label).join(", ")}
-            className="bg-lifted flex h-8 min-w-8 shrink-0 items-center justify-center gap-1.5 rounded-none border border-foreground/8 px-1 outline-none focus-visible:border-outline-strong"
+            className="bg-[#41a6ff] flex h-8 min-w-8 shrink-0 items-center justify-center gap-1.5 rounded-none border border-foreground/8 px-1 outline-none focus-visible:border-outline-strong"
           />
         }
       >

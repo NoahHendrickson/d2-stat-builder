@@ -83,12 +83,14 @@ describe("buildWeaponMasterworkOptions", () => {
     );
     expect(options).toEqual([
       {
+        plugHash: 5003,
         statHash: RANGE_HASH,
         statName: "Range",
         icon: `/icons/mw-${RANGE_HASH}.png`,
         statMods: [{ hash: RANGE_HASH, value: 10 }],
       },
       {
+        plugHash: 5002,
         statHash: STABILITY_HASH,
         statName: "Stability",
         icon: `/icons/mw-${STABILITY_HASH}.png`,

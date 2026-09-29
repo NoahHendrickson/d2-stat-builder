@@ -59,11 +59,14 @@
   --panel: rgb(255 255 255 / 55%);
   --panel-strong: rgb(236 234 230 / 72%);
   --lifted: rgb(0 0 0 / 4%);
-  /* Figma "Select Menu": the glass a dropdown floats on. */
+  /* Pane glass; floating menus use the lighter --glass-raised. */
   --glass: rgb(236 234 230 / 82%);
   /* Same hue at full alpha, for surfaces that must not show what scrolls under
      them (sticky table headers). */
   --glass-opaque: rgb(236 234 230);
+  /* Menus, popovers and tooltips: a step off --glass so they don't melt into
+     the panes behind them, which also sit on --glass. */
+  --glass-raised: rgb(248 247 245 / 90%);
   /* Rarity plates. */
   --exotic: #ceae33;
   --exotic-line: #e2c04b;
@@ -71,6 +74,11 @@
   --exotic-ring-inner: #3f3f3f;
   --exotic-ring-outer: #ffffff;
   --exotic-ring-glow: rgb(255 255 255 / 0.45);
+  /* Inventory tile frame + label bar (Figma 127:5757 plain, 127:5737 masterworked). */
+  --item-frame: #fcfcfc;
+  --item-frame-masterwork: #ffeb67;
+  /* Behind the icon, so transparent ones (engrams) sit on the game's dark tile, not the frame. */
+  --item-backing: #262626;
   --legendary: #522f65;
   --rare: #5076a3;
   --uncommon: #366f42;
@@ -161,11 +169,15 @@
   --color-lifted: var(--lifted);
   --color-glass: var(--glass);
   --color-glass-opaque: var(--glass-opaque);
+  --color-glass-raised: var(--glass-raised);
   --color-exotic: var(--exotic);
   --color-exotic-line: var(--exotic-line);
   --color-exotic-lip: var(--exotic-lip);
   --color-exotic-ring-inner: var(--exotic-ring-inner);
   --color-exotic-ring-outer: var(--exotic-ring-outer);
+  --color-item-frame: var(--item-frame);
+  --color-item-frame-masterwork: var(--item-frame-masterwork);
+  --color-item-backing: var(--item-backing);
   --color-legendary: var(--legendary);
   --color-rare: var(--rare);
   --color-uncommon: var(--uncommon);
@@ -255,9 +267,12 @@
   /* Frosted, not opaque: the scene stays readable through the sidebar. */
   --panel-strong: rgb(44 47 56 / 70%);
   --lifted: rgb(255 255 255 / 4%);
-  /* Menus frost like the sidebar but a step lighter: grey-slate at 78% under the 20px blur. */
+  /* Panes frost like the sidebar but a step lighter: grey-slate at 78%. */
   --glass: rgb(62 66 76 / 78%);
   --glass-opaque: rgb(62 66 76);
+  /* Neutral slate, not blue, and translucent enough that the scene tint
+     under the menu carries through the blur. */
+  --glass-raised: rgb(88 94 100 / 70%);
   --text-primary: #fcfcf5;
   --text-secondary: rgb(255 255 255 / 0.7);
   --text-muted: rgb(255 255 255 / 0.7);
@@ -470,7 +485,7 @@ input[type="number"] {
    The line sits a step brighter than the default field/button stops so the
    floating frame reads against the scene. */
 @utility d2-glass {
-  background-color: var(--glass);
+  background-color: var(--glass-raised);
   backdrop-filter: blur(20px);
   --line-side: color-mix(in srgb, var(--foreground) calc(var(--line-alpha, 1) * 12%), transparent);
   --line-mid: color-mix(in srgb, var(--foreground) calc(var(--line-alpha, 1) * 40%), transparent);
@@ -610,14 +625,13 @@ input[type="number"] {
      --line-image  the gradient itself; d2-line-drift swaps in the conic
      --line-side   edge stop   (default foreground 6%)
      --line-mid    centre stop (default foreground 24%)
-     --line-width  border thickness (default 1px; cards/drawer use 1.5px)
    Corners must be square (border-image ignores border-radius). Focus keeps
    the gradient and just raises --line-alpha; only a state that wants a solid
    line (the active blue chip) sets [border-image:none] and a border-color. */
 @utility d2-line {
   --line-side: color-mix(in srgb, var(--foreground) calc(var(--line-alpha, 1) * 6%), transparent);
   --line-mid: color-mix(in srgb, var(--foreground) calc(var(--line-alpha, 1) * 24%), transparent);
-  border: var(--line-width, 1px) solid transparent;
+  border: 1px solid transparent;
   border-image: var(--line-image, linear-gradient(to right, var(--line-side), var(--line-mid) 50%, var(--line-side))) 1;
 }
 
@@ -670,12 +684,11 @@ input[type="number"] {
 }
 
 /* Card frame (loadouts + builds): the line over the lifted fill. Left/right
-   stops sit a bit brighter than the default d2-line so the verticals read.
-   `--card-line-width` thickens the line (loadout cards use 1.5px). */
+   stops sit a bit brighter than the default d2-line so the verticals read. */
 @utility d2-card-frame {
   --line-side: color-mix(in srgb, var(--foreground) calc(var(--line-alpha, 1) * 14%), transparent);
   --line-mid: color-mix(in srgb, var(--foreground) calc(var(--line-alpha, 1) * 28%), transparent);
-  border: var(--card-line-width, 1px) solid transparent;
+  border: 1px solid transparent;
   border-image: var(--line-image, linear-gradient(to right, var(--line-side), var(--line-mid) 50%, var(--line-side))) 1;
   background-color: var(--lifted);
 }

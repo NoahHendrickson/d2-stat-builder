@@ -1,0 +1,761 @@
+"use client";
+
+import { useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import Image from "next/image";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { Cancel01Icon, GitCompareIcon, SquareLock02Icon, SquareUnlock02Icon } from "@hugeicons/core-free-icons";
+import { PerkTooltip } from "@/components/weapons/perk-tooltip";
+import { PowerValue } from "@/components/power-value";
+import { StatGlyph } from "@/components/stat-glyph";
+import { Button } from "@/components/ui/button";
+import { Popover, PopoverContent } from "@/components/ui/popover";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { STAT_LABELS } from "@/lib/armory/stats";
+import { useProfile } from "@/lib/armory/use-profile";
+import { applyPerks, type PerkChange } from "@/lib/inventory/apply-perks";
+import { armorDetails } from "@/lib/inventory/armor-details";
+import { BUNGIE_IMAGE_BASE } from "@/lib/bungie/constants";
+import { ITEM_TAGS, TAG_LABELS, setTag, useAnnotation } from "@/lib/inventory/annotations";
+import { BREAKER_NAMES, type InventoryItem, type ManagerInventory } from "@/lib/inventory/build";
+import { locate } from "@/lib/inventory/moves";
+import { weaponCopies } from "@/lib/inventory/search";
+import {
+  weaponRoll,
+  weaponStats,
+  type DetailPlug,
+  type ItemStat,
+  type PerkColumn,
+  type WeaponRoll,
+} from "@/lib/inventory/weapon-details";
+import { statIconsFromManifest } from "@/lib/manifest/stat-icons";
+import { useManifest } from "@/lib/manifest/use-manifest";
+import { clarityLines, type ClarityMap } from "@/lib/weapons/clarity";
+import { weaponDisplayStats } from "@/lib/weapons/display-stats";
+import { WEAPON_STAT_NUMBERS } from "@/lib/weapons/stat-order";
+import type { PerkRef } from "@/lib/weapons/types";
+import { useClarity } from "@/lib/weapons/use-clarity";
+import { useWeaponCatalog } from "@/lib/weapons/use-weapon-catalog";
+import { cn } from "@/lib/utils";
+import { TAG_ICONS } from "./tag-icons";
+
+const ITEM_TYPE_ARMOR = 2;
+const ITEM_TYPE_WEAPON = 3;
+
+/** Header plate per TierType, like the game's item header. */
+const TIER_HEADER: Record<number, string> = {
+  6: "bg-exotic text-black",
+  5: "bg-legendary text-white",
+  4: "bg-rare text-white",
+  3: "bg-uncommon text-white",
+  2: "bg-common text-black",
+};
+
+export interface ItemDetailsTarget {
+  key: string;
+  anchor: HTMLElement;
+}
+
+/**
+ * The panel a tile opens (DIM's item popup, styled after Figma 128:5799): a rarity
+ * header with the season watermark and tier pips, then for weapons the perk grid (click
+ * a perk it rolled to preview it, then apply) and live stats, for armor its stats, set
+ * bonus, and mods, and at the bottom the item's tag.
+ */
+export function ItemDetails({
+  inventory,
+  target,
+  onClose,
+  onLock,
+  onCompare,
+}: {
+  inventory: ManagerInventory;
+  target: ItemDetailsTarget | null;
+  onClose: () => void;
+  onLock: (item: InventoryItem, locked: boolean) => void;
+  /** Open Compare for every copy of this weapon. */
+  onCompare: (item: InventoryItem) => void;
+}) {
+  const found = target ? locate(inventory, target.key) : undefined;
+  const copies =
+    found?.item.itemType === ITEM_TYPE_WEAPON ? weaponCopies(inventory, found.item.name).length : 0;
+  return (
+    <Popover open={Boolean(found)} onOpenChange={(open) => !open && onClose()}>
+      <PopoverContent
+        anchor={target?.anchor}
+        side="right"
+        align="start"
+        sideOffset={8}
+        className="max-h-(--available-height) w-[300px] gap-0 overflow-y-auto p-0"
+      >
+        {found && (
+          <>
+            <Header item={found.item} onLock={onLock} />
+            {found.item.itemType === ITEM_TYPE_WEAPON && found.item.instanceId ? (
+              <WeaponRollView
+                key={found.item.instanceId}
+                item={found.item}
+                instanceId={found.item.instanceId}
+                characterId={found.place.kind === "character" ? found.place.characterId : undefined}
+              />
+            ) : found.item.itemType === ITEM_TYPE_ARMOR && found.item.instanceId ? (
+              <ArmorView instanceId={found.item.instanceId} itemHash={found.item.itemHash} />
+            ) : (
+              <ItemDescription itemHash={found.item.itemHash} />
+            )}
+            {copies > 1 && (
+              <div className={SECTION}>
+                <Button size="sm" variant="default" className="self-start" onClick={() => onCompare(found.item)}>
+                  <HugeiconsIcon icon={GitCompareIcon} aria-hidden />
+                  Compare {copies} copies
+                </Button>
+              </div>
+            )}
+            {found.item.instanceId && <Tags instanceId={found.item.instanceId} />}
+          </>
+        )}
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+/** A section of the panel: 12px in, a faint rule under it. */
+const SECTION = "border-foreground/24 flex flex-col gap-2 border-b p-3 last:border-b-0";
+
+/** Watermark box in the header's top-left corner, as in the game's inspect screen. */
+const WATERMARK_PX = 64;
+const LOWER_TIER_OVERLAY: Record<number, string> = {
+  2: "/img/destiny_content/items/inventory-item-tier2.png",
+  3: "/img/destiny_content/items/inventory-item-tier3.png",
+  4: "/img/destiny_content/items/inventory-item-tier4.png",
+};
+
+/**
+ * The rarity plate: name, then element and type. A gold frame when masterworked; the
+ * season watermark and tier pips in the corner; Power and the lock on the right.
+ */
+function Header({
+  item,
+  onLock,
+}: {
+  item: InventoryItem;
+  onLock: (item: InventoryItem, locked: boolean) => void;
+}) {
+  const lockLabel = item.locked ? "Unlock" : "Lock";
+  const dark = item.tierType === 6 || item.tierType === 2;
+  return (
+    <div
+      className={cn(
+        "relative flex flex-col gap-1 overflow-hidden border-2 py-2 pr-2.5 pl-6",
+        TIER_HEADER[item.tierType] ?? "bg-foreground/10",
+        item.masterworked ? "border-item-frame-masterwork" : "border-transparent",
+      )}
+    >
+      {(item.watermark || item.gearTier) && (
+        <span
+          aria-hidden
+          className="pointer-events-none absolute -top-0.5 -left-0.5"
+          style={{ width: WATERMARK_PX, height: WATERMARK_PX }}
+        >
+          {item.watermark && (
+            <Image
+              src={`${BUNGIE_IMAGE_BASE}${item.watermark}`}
+              alt=""
+              width={WATERMARK_PX}
+              height={WATERMARK_PX}
+              className="absolute inset-0 size-full max-w-none"
+              unoptimized
+            />
+          )}
+          {item.gearTier === 5 ? (
+            <Image
+              src="/loadout/tier-5-pips.svg"
+              alt=""
+              width={WATERMARK_PX}
+              height={WATERMARK_PX}
+              className="absolute top-[29.5%] left-[9.1%] h-[67.5%] w-[11.4%] max-w-none"
+            />
+          ) : item.gearTier && LOWER_TIER_OVERLAY[item.gearTier] ? (
+            <Image
+              src={`${BUNGIE_IMAGE_BASE}${LOWER_TIER_OVERLAY[item.gearTier]}`}
+              alt=""
+              width={WATERMARK_PX}
+              height={WATERMARK_PX}
+              className="absolute inset-0 size-full max-w-none"
+              unoptimized
+            />
+          ) : null}
+        </span>
+      )}
+      <div className="relative flex items-start justify-between gap-3">
+        <p className="text-[15px] leading-tight font-medium">{item.name}</p>
+        {item.instanceId && (
+          <button
+            type="button"
+            title={`${lockLabel} (in game too)`}
+            aria-label={lockLabel}
+            aria-pressed={item.locked}
+            onClick={() => onLock(item, !item.locked)}
+            className="-m-1 shrink-0 p-1 opacity-75 outline-none hover:opacity-100 focus-visible:d2-tile-selected"
+          >
+            <HugeiconsIcon
+              icon={item.locked ? SquareLock02Icon : SquareUnlock02Icon}
+              className="size-3.5"
+              aria-hidden
+            />
+          </button>
+        )}
+      </div>
+      <div className="relative flex items-center justify-between gap-3">
+        <span className={cn("flex items-center gap-1.5 text-[13px]", dark ? "text-black/65" : "text-white/65")}>
+          {item.damageIcon && (
+            <Image
+              src={`${BUNGIE_IMAGE_BASE}${item.damageIcon}`}
+              alt=""
+              width={16}
+              height={16}
+              className="size-3.5"
+              unoptimized
+            />
+          )}
+          {item.typeName}
+          {item.breakerIcon && (
+            <span className="ml-1.5 flex items-center gap-1" title={`Stuns ${BREAKER_NAMES[item.breakerType ?? 0] ?? "champions"}`}>
+              <Image
+                src={`${BUNGIE_IMAGE_BASE}${item.breakerIcon}`}
+                alt=""
+                width={14}
+                height={14}
+                className={cn("size-3.5", dark && "brightness-0")}
+                unoptimized
+              />
+              {BREAKER_NAMES[item.breakerType ?? 0]}
+            </span>
+          )}
+        </span>
+        {item.power !== undefined && (
+          <PowerValue value={item.power} size="xs" className="text-inherit" />
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** DIM-style tag buttons: one tag per item, click the active one again to clear it. */
+function Tags({ instanceId }: { instanceId: string }) {
+  const tag = useAnnotation(instanceId)?.tag;
+  return (
+    <div className={cn(SECTION, "flex-row items-center gap-1")} role="group" aria-label="Tag">
+      {ITEM_TAGS.map((t) => (
+        <button
+          key={t}
+          type="button"
+          title={TAG_LABELS[t]}
+          aria-label={TAG_LABELS[t]}
+          aria-pressed={tag === t}
+          onClick={() => setTag([instanceId], tag === t ? undefined : t)}
+          className={cn(
+            "d2-hover-ring flex h-6 items-center gap-1 border px-1.5 text-[11px] outline-none focus-visible:d2-tile-selected",
+            tag === t
+              ? "border-transparent bg-foreground text-background"
+              : "border-foreground/12 bg-foreground/4",
+          )}
+        >
+          <HugeiconsIcon icon={TAG_ICONS[t]} className="size-3" aria-hidden />
+          {tag === t && TAG_LABELS[t]}
+        </button>
+      ))}
+      {tag && (
+        <button
+          type="button"
+          title="Clear tag"
+          aria-label="Clear tag"
+          onClick={() => setTag([instanceId], undefined)}
+          className="text-muted-foreground hover:text-foreground ml-auto p-1 outline-none focus-visible:d2-tile-selected"
+        >
+          <HugeiconsIcon icon={Cancel01Icon} className="size-3" aria-hidden />
+        </button>
+      )}
+    </div>
+  );
+}
+
+/** Reads the weapon's live roll and stats from the profile for `WeaponRollPanel`. */
+function WeaponRollView({
+  item,
+  instanceId,
+  characterId,
+}: {
+  item: InventoryItem;
+  instanceId: string;
+  /** The character holding it; perks can't be changed on vault items. */
+  characterId: string | undefined;
+}) {
+  const { query: profile, membershipId } = useProfile();
+  const queryClient = useQueryClient();
+  const manifestStatus = useManifest();
+  const manifest = manifestStatus.state === "ready" ? manifestStatus.manifest : undefined;
+  const roll = useMemo(
+    () => (profile.data && manifest ? weaponRoll(profile.data, manifest, instanceId) : undefined),
+    [profile.data, manifest, instanceId],
+  );
+  const stats = useMemo(
+    () => (profile.data && manifest ? weaponStats(profile.data, manifest, instanceId) : []),
+    [profile.data, manifest, instanceId],
+  );
+  if (!roll) return null;
+  return (
+    <WeaponRollPanel
+      item={item}
+      roll={roll}
+      stats={stats}
+      onApply={
+        characterId
+          ? (plugs) => applyPerks(item, characterId, plugs, { queryClient, membershipId })
+          : undefined
+      }
+    />
+  );
+}
+
+/**
+ * The weapon's live roll: stats, frame, perks, mods. Hovering a perk the weapon rolled
+ * previews its stat change; clicking picks it (several columns at once), and Apply
+ * perks swaps them in-game.
+ */
+export function WeaponRollPanel({
+  item,
+  roll,
+  stats,
+  onApply,
+}: {
+  item: InventoryItem;
+  roll: WeaponRoll;
+  stats: ItemStat[];
+  /** Swap in the picked perks; resolves true when all went in. Absent: can't apply here. */
+  onApply?: (plugs: PerkChange[]) => Promise<boolean>;
+}) {
+  const catalog = useWeaponCatalog().data;
+  const clarity = useClarity();
+  const [hovered, setHovered] = useState<{ socketIndex: number; hash: number } | null>(null);
+  /** Picked perk per socket index (only where it differs from what's in the socket). */
+  const [picked, setPicked] = useState<Record<number, number>>({});
+  const [applying, setApplying] = useState(false);
+
+  // The weapon search catalog knows each perk's stat bonuses, enhanced text, and the
+  // weapon's stat curves; without it (or for weapons it lacks) there's no preview.
+  const perkRefs = useMemo(() => {
+    const map = new Map<number, PerkRef>();
+    for (const perk of catalog?.perks ?? []) {
+      map.set(perk.hash, perk);
+      for (const alt of perk.alternateHashes ?? []) map.set(alt, perk);
+    }
+    return map;
+  }, [catalog]);
+  // Owned copies are often an older or reissued version the catalog lists under another
+  // hash; a same-name version shares the stat curves and perk bonuses the preview needs.
+  const catalogWeapon = useMemo(
+    () =>
+      catalog?.weapons.find((w) => w.hash === item.itemHash) ??
+      catalog?.weapons.find((w) => w.name === item.name),
+    [catalog, item.itemHash, item.name],
+  );
+
+  const refFor = (plug: DetailPlug): PerkRef =>
+    perkRefs.get(plug.hash) ?? {
+      hash: plug.hash,
+      name: plug.name,
+      icon: plug.icon,
+      description: plug.description,
+      currentlyCanRoll: true,
+    };
+
+  // What each column would hold: the hovered perk, else the picked one, else the current.
+  const chosen = (c: PerkColumn): DetailPlug => {
+    const hash =
+      hovered?.socketIndex === c.socketIndex ? hovered.hash : (picked[c.socketIndex] ?? c.current.hash);
+    return c.options.find((o) => o.hash === hash) ?? c.current;
+  };
+  const changes: PerkChange[] = roll.columns.flatMap((c) => {
+    const hash = picked[c.socketIndex];
+    return hash !== undefined && hash !== c.current.hash ? [{ socketIndex: c.socketIndex, plugItemHash: hash }] : [];
+  });
+
+  // The change the catalog computes for the chosen perks, added to the live stats.
+  let preview: Record<string, number> | undefined;
+  const previewing = hovered !== null || changes.length > 0;
+  if (previewing && catalogWeapon && catalog) {
+    const before = weaponDisplayStats(catalogWeapon, catalog.statCurves, roll.columns.map((c) => refFor(c.current)));
+    const after = weaponDisplayStats(catalogWeapon, catalog.statCurves, roll.columns.map((c) => refFor(chosen(c))));
+    preview = {};
+    for (const s of stats) {
+      const value = s.value + ((after[s.name] ?? 0) - (before[s.name] ?? 0));
+      // Bar stats cap at 100 in-game; counts (RPM, magazine) don't.
+      preview[s.name] = WEAPON_STAT_NUMBERS.includes(s.name) ? value : clamp(value);
+    }
+  }
+
+  const pick = (c: PerkColumn, hash: number) =>
+    setPicked((prev) => {
+      const next = { ...prev };
+      if (hash === c.current.hash || prev[c.socketIndex] === hash) delete next[c.socketIndex];
+      else next[c.socketIndex] = hash;
+      return next;
+    });
+
+  const apply = async () => {
+    if (!onApply || changes.length === 0) return;
+    setApplying(true);
+    const ok = await onApply(changes);
+    setApplying(false);
+    if (ok) setPicked({});
+  };
+
+  const masterwork = roll.mods.find((m) => m.kind === "masterwork");
+  const otherMods = roll.mods.filter((m) => m.kind !== "masterwork");
+
+  return (
+    <>
+      {(roll.frame || roll.columns.length > 0) && (
+        <div className={SECTION}>
+          <div className="flex gap-1.5 overflow-x-auto" aria-label="Perks">
+            {(roll.frame || masterwork) && (
+              <div className="flex flex-col gap-1.5">
+                {roll.frame && <PlainPlug plug={roll.frame} />}
+                {masterwork && <PlainPlug plug={masterwork} />}
+              </div>
+            )}
+            {roll.columns.map((column) =>
+              column.origin && column.options.length <= 1 ? (
+                <div key={column.socketIndex} className="flex flex-col gap-1.5">
+                  <PlainPlug plug={column.current} refFor={refFor} clarity={clarity} />
+                </div>
+              ) : (
+                <PerkColumnView
+                  key={column.socketIndex}
+                  column={column}
+                  selected={picked[column.socketIndex] ?? column.current.hash}
+                  refFor={refFor}
+                  clarity={clarity}
+                  onHover={(hash) =>
+                    setHovered(hash === null ? null : { socketIndex: column.socketIndex, hash })
+                  }
+                  onPick={(hash) => pick(column, hash)}
+                />
+              ),
+            )}
+          </div>
+          {changes.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2">
+              <Button size="xs" disabled={!onApply || applying} onClick={() => void apply()}>
+                {applying ? "Applying…" : `Apply ${changes.length === 1 ? "perk" : `${changes.length} perks`}`}
+              </Button>
+              <Button size="xs" variant="ghost" disabled={applying} onClick={() => setPicked({})}>
+                Reset
+              </Button>
+              {!onApply && (
+                <span className="text-muted-foreground text-xs">Move it to a character to change perks</span>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+      {(stats.length > 0 || otherMods.length > 0) && (
+        <div className={SECTION}>
+          {stats.length > 0 && <StatRows stats={stats} preview={preview} />}
+          {otherMods.length > 0 && (
+            <div className="flex gap-1.5" aria-label="Mods">
+              {otherMods.map((mod, i) => (
+                <PlugBadge key={`${mod.kind}:${i}`} plug={mod} />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </>
+  );
+}
+
+/** Perk cells: 40px squares with a 30px icon (Figma 128:5799's 56/40, scaled down). */
+const PERK_CELL = "relative flex size-10 shrink-0 items-center justify-center";
+
+/**
+ * A plug shown without a cell (the frame, masterwork, a lone origin trait), with its
+ * perk tooltip on hover.
+ */
+function PlainPlug({
+  plug,
+  refFor,
+  clarity,
+}: {
+  plug: DetailPlug;
+  refFor?: (plug: DetailPlug) => PerkRef;
+  clarity?: ClarityMap;
+}) {
+  const ref = refFor?.(plug);
+  return (
+    <Tooltip>
+      <TooltipTrigger delay={0} render={<span className={PERK_CELL} aria-label={plug.name} />}>
+        <PlugIcon plug={plug} size={30} />
+      </TooltipTrigger>
+      <TooltipContent side="right" align="start" className="max-w-sm">
+        {ref ? (
+          <PerkTooltip perk={ref} insight={clarityLines(clarity, ref)} />
+        ) : (
+          <>
+            <p className="font-medium">{plug.name}</p>
+            {plug.description && <p className="text-muted-foreground">{plug.description}</p>}
+          </>
+        )}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+/** A socketed plug's icon with its name and description on hover. */
+function PlugBadge({ plug, size = 26 }: { plug: DetailPlug; size?: number }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger delay={0} render={<span className="d2-line block" />}>
+        <PlugIcon plug={plug} size={size} />
+      </TooltipTrigger>
+      <TooltipContent side="bottom" className="max-w-xs">
+        <p className="font-medium">{plug.name}</p>
+        {plug.description && <p className="text-muted-foreground">{plug.description}</p>}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+/** Armor 3.0 stats scale: a single piece tops out in the 40s. */
+const ARMOR_STAT_BAR_MAX = 45;
+
+/** Reads an armor piece's details from the profile for its panel. */
+function ArmorView({ instanceId, itemHash }: { instanceId: string; itemHash: number }) {
+  const { query: profile } = useProfile();
+  const manifestStatus = useManifest();
+  const manifest = manifestStatus.state === "ready" ? manifestStatus.manifest : undefined;
+  const details = useMemo(
+    () => (profile.data && manifest ? armorDetails(profile.data, manifest, instanceId, itemHash) : undefined),
+    [profile.data, manifest, instanceId, itemHash],
+  );
+  const icons = useMemo(() => statIconsFromManifest(manifest), [manifest]);
+  if (!details) return null;
+  return (
+    <div className={SECTION}>
+      <dl className="grid grid-cols-[auto_auto_1.75rem_1fr] items-center gap-x-2 gap-y-0.5 text-[11px]">
+        {details.stats.map(({ key, value }) => (
+          <div key={key} className="contents">
+            <dt className="contents">
+              <StatGlyph src={icons[key]} label={STAT_LABELS[key]} className="size-3.5" plain />
+              <span className="text-muted-foreground">{STAT_LABELS[key]}</span>
+            </dt>
+            <dd className="tabular-nums">{value}</dd>
+            <dd aria-hidden className="bg-foreground/10 relative h-1.5">
+              <span
+                className="bg-foreground/80 absolute inset-y-0 left-0"
+                style={{ width: `${Math.min(100, (value / ARMOR_STAT_BAR_MAX) * 100)}%` }}
+              />
+            </dd>
+          </div>
+        ))}
+        <div className="contents">
+          <dt className="col-span-2 text-right font-medium">Total</dt>
+          <dd className="font-medium tabular-nums">{details.total}</dd>
+        </div>
+      </dl>
+      {(details.archetype || details.energy) && (
+        <div className="flex items-center justify-between gap-3 text-xs">
+          {details.archetype ? (
+            <span className="flex items-center gap-2">
+              <PlugIcon plug={details.archetype} size={18} />
+              {details.archetype.name}
+            </span>
+          ) : (
+            <span />
+          )}
+          {details.energy && (
+            <span className="text-muted-foreground text-xs tabular-nums">
+              Energy {details.energy.used} / {details.energy.capacity}
+            </span>
+          )}
+        </div>
+      )}
+      {details.intrinsic && (
+        <div className="flex items-start gap-2.5">
+          <PlugIcon plug={details.intrinsic} size={24} />
+          <div className="flex flex-col gap-0.5 text-xs">
+            <span className="font-medium">{details.intrinsic.name}</span>
+            {details.intrinsic.description && (
+              <span className="text-muted-foreground text-xs">{details.intrinsic.description}</span>
+            )}
+          </div>
+        </div>
+      )}
+      {details.set && (
+        <div className="flex flex-col gap-1 text-xs">
+          <span className="d2-label">{details.set.name}</span>
+          {details.set.perks.map((perk) => (
+            <p key={perk.count}>
+              <span className="font-medium">
+                {perk.count}-piece {perk.name}
+              </span>
+              {perk.description && <span className="text-muted-foreground">: {perk.description}</span>}
+            </p>
+          ))}
+        </div>
+      )}
+      {details.plugs.length > 0 && (
+        <div className="flex flex-wrap gap-1.5" aria-label="Mods">
+          {details.plugs.map((plug, i) => (
+            <PlugBadge key={`${plug.hash}:${i}`} plug={plug} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** The definition's description, for gear without a stats panel (ghosts, ships, …). */
+function ItemDescription({ itemHash }: { itemHash: number }) {
+  const manifestStatus = useManifest();
+  const description =
+    manifestStatus.state === "ready"
+      ? manifestStatus.manifest.def("DestinyInventoryItemDefinition", itemHash)?.displayProperties
+          ?.description
+      : undefined;
+  if (!description) return null;
+  return (
+    <p className={cn(SECTION, "text-muted-foreground block text-[11px] whitespace-pre-line")}>
+      {description}
+    </p>
+  );
+}
+
+const clamp = (value: number) => Math.min(Math.max(value, 0), 100);
+
+/** Name, value, and bar per stat on one line; a previewed change shows green or red. */
+function StatRows({ stats, preview }: { stats: ItemStat[]; preview?: Record<string, number> }) {
+  return (
+    <dl className="grid grid-cols-[auto_1.75rem_1fr] items-center gap-x-2 gap-y-0.5 text-[11px]">
+      {stats.map(({ name, value: base }) => {
+        const value = preview?.[name] ?? base;
+        const bar = !WEAPON_STAT_NUMBERS.includes(name);
+        const low = clamp(Math.min(value, base));
+        const high = clamp(Math.max(value, base));
+        return (
+          <div key={name} className="contents">
+            <dt className="text-muted-foreground text-right">{name}</dt>
+            <dd
+              className={cn(
+                "tabular-nums",
+                value > base && "text-positive",
+                value < base && "text-destructive",
+              )}
+            >
+              {value}
+            </dd>
+            <dd aria-hidden className={cn("relative h-1.5", bar && "bg-foreground/10")}>
+              {bar && (
+                <>
+                  <span className="bg-foreground/80 absolute inset-y-0 left-0" style={{ width: `${low}%` }} />
+                  {value !== base && (
+                    <span
+                      className={cn("absolute inset-y-0", value > base ? "bg-positive" : "bg-destructive")}
+                      style={{ left: `${low}%`, width: `${high - low}%` }}
+                    />
+                  )}
+                </>
+              )}
+            </dd>
+          </div>
+        );
+      })}
+    </dl>
+  );
+}
+
+function PlugIcon({ plug, size }: { plug: DetailPlug; size: number }) {
+  return plug.icon ? (
+    <Image
+      src={`${BUNGIE_IMAGE_BASE}${plug.icon}`}
+      alt=""
+      width={size}
+      height={size}
+      style={{ width: size, height: size }}
+      unoptimized
+    />
+  ) : (
+    <span className="bg-muted block" style={{ width: size, height: size }} />
+  );
+}
+
+/**
+ * One perk column: every option it rolled. The perk it will have is filled blue; when
+ * another one is picked, the one in the socket now keeps a faint blue fill.
+ */
+function PerkColumnView({
+  column,
+  selected,
+  refFor,
+  clarity,
+  onHover,
+  onPick,
+}: {
+  column: PerkColumn;
+  selected: number;
+  refFor: (plug: DetailPlug) => PerkRef;
+  clarity: ClarityMap | undefined;
+  onHover: (hash: number | null) => void;
+  onPick: (hash: number) => void;
+}) {
+  return (
+    <div className="flex flex-col gap-1.5">
+      {column.options.map((option) => {
+        const isSelected = option.hash === selected;
+        const isCurrent = option.hash === column.current.hash;
+        const ref = refFor(option);
+        return (
+          <Tooltip key={option.hash}>
+            <TooltipTrigger
+              delay={0}
+              render={
+                <button
+                  type="button"
+                  aria-label={isCurrent ? `${option.name} (equipped)` : option.name}
+                  aria-pressed={isSelected}
+                  onClick={() => onPick(option.hash)}
+                  onPointerEnter={() => !isSelected && onHover(option.hash)}
+                  onPointerLeave={() => onHover(null)}
+                  className={cn(
+                    PERK_CELL,
+                    "border-foreground/12 border outline-none focus-visible:d2-tile-selected",
+                    isSelected
+                      ? "bg-[#305f8e]"
+                      : isCurrent
+                        ? "bg-[#305f8e]/35"
+                        : "bg-foreground/4 hover:bg-foreground/10",
+                  )}
+                />
+              }
+            >
+              <PlugIcon plug={option} size={30} />
+              {option.enhanced && (
+                <Image
+                  src="/manager/perk-enhanced.svg"
+                  alt=""
+                  width={8}
+                  height={8}
+                  className="absolute top-0.5 left-0.5"
+                />
+              )}
+            </TooltipTrigger>
+            <TooltipContent side="right" align="start" className="max-w-sm">
+              <PerkTooltip perk={ref} insight={clarityLines(clarity, ref)} />
+            </TooltipContent>
+          </Tooltip>
+        );
+      })}
+    </div>
+  );
+}

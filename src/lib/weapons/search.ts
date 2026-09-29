@@ -14,7 +14,7 @@ export { buildWeaponNameIndex } from "./weapon-name-index";
 const collator = new Intl.Collator();
 const compareStrings = (a: string, b: string): number => collator.compare(a, b);
 
-export type WeaponSort = "name" | "season-desc" | "season-asc" | "ammo-gen-desc";
+export type WeaponSort = "name" | "season-desc" | "season-asc";
 
 /** Composite key for season ordering: season number dominates, release index breaks ties. */
 function seasonSortKey(weapon: WeaponSummary): number {
@@ -26,17 +26,6 @@ export function sortWeapons(weapons: WeaponSummary[], order: WeaponSort): Weapon
   const sorted = [...weapons];
   if (order === "name") {
     sorted.sort((a, b) => compareStrings(a.name, b.name));
-    return sorted;
-  }
-  if (order === "ammo-gen-desc") {
-    sorted.sort((a, b) => {
-      const aAmmoGen = a.ammoGeneration;
-      const bAmmoGen = b.ammoGeneration;
-      if (aAmmoGen == null && bAmmoGen == null) return compareStrings(a.name, b.name);
-      if (aAmmoGen == null) return 1;
-      if (bAmmoGen == null) return -1;
-      return bAmmoGen - aAmmoGen || compareStrings(a.name, b.name);
-    });
     return sorted;
   }
   if (order === "season-desc") {
@@ -84,6 +73,8 @@ export interface WeaponFilters {
   name?: string[];
   /** When set, keep only adept (`true`) or non-adept (`false`) weapons. */
   adept?: boolean;
+  /** Keep weapons whose base Ammo Generation is strictly above this; weapons without the stat drop out. */
+  ammoGenAbove?: number;
 }
 
 const lower = (s: string) => s.toLowerCase();
@@ -271,6 +262,9 @@ export function filterWeapons(
     }
     if (craftableActive && !(w.craftable ? craftableYes : craftableNo)) return false;
     if (filters.adept != null && w.adept !== filters.adept) return false;
+    if (filters.ammoGenAbove != null && !((w.ammoGeneration ?? -1) > filters.ammoGenAbove)) {
+      return false;
+    }
     if (
       trait1Wanted.size ||
       trait2Wanted.size ||
@@ -548,13 +542,46 @@ export function collectPerks(weapons: WeaponSummary[], perks: PerkRef[]): PerkOp
 }
 
 export interface ColumnPerkOptions {
+  /** Either trait column, counted once per weapon. */
+  trait: PerkOption[];
   trait1: PerkOption[];
   trait2: PerkOption[];
   originTrait: PerkOption[];
 }
 
+/** Trait perks that roll in the column opposite `first` on some weapon, most weapons first. */
+export function collectComboPartners(
+  weapons: WeaponSummary[],
+  perks: PerkRef[],
+  first: string,
+): PerkOption[] {
+  const wanted = lower(first);
+  const byName = new Map<string, PerkOption>();
+  for (const w of weapons) {
+    if (!isCatalogWeapon(w)) continue;
+    const [a, b] = traitColumns(w.columns);
+    const opposite = [
+      ...(columnRollsName(a, wanted, perks) ? columnPerks(b, perks) : []),
+      ...(columnRollsName(b, wanted, perks) ? columnPerks(a, perks) : []),
+    ];
+    const seen = new Set<string>();
+    for (const perk of opposite) {
+      const key = lower(perk.name);
+      if (!key || key === wanted || seen.has(key)) continue;
+      seen.add(key);
+      const existing = byName.get(key);
+      if (existing) existing.count += 1;
+      else byName.set(key, { name: perk.name, hash: perk.hash, count: 1 });
+    }
+  }
+  return [...byName.values()].sort(
+    (a, b) => b.count - a.count || compareStrings(a.name, b.name),
+  );
+}
+
 /** Distinct perks per position-aware column for filter palette categories. */
 export function collectColumnPerks(weapons: WeaponSummary[], perks: PerkRef[]): ColumnPerkOptions {
+  const trait = new Map<string, PerkOption>();
   const trait1 = new Map<string, PerkOption>();
   const trait2 = new Map<string, PerkOption>();
   const originTrait = new Map<string, PerkOption>();
@@ -585,11 +612,17 @@ export function collectColumnPerks(weapons: WeaponSummary[], perks: PerkRef[]): 
     const traits = traitColumns(w.columns);
     if (traits[0]) add(trait1, columnPerks(traits[0], perks));
     if (traits[1]) add(trait2, columnPerks(traits[1], perks));
+    add(trait, [...columnPerks(traits[0], perks), ...columnPerks(traits[1], perks)]);
     const origin = w.columns.find((c) => c.kind === "Origin Trait");
     if (origin) add(originTrait, columnPerks(origin, perks));
   }
 
   const sort = (m: Map<string, PerkOption>) =>
     [...m.values()].sort((a, b) => b.count - a.count || compareStrings(a.name, b.name));
-  return { trait1: sort(trait1), trait2: sort(trait2), originTrait: sort(originTrait) };
+  return {
+    trait: sort(trait),
+    trait1: sort(trait1),
+    trait2: sort(trait2),
+    originTrait: sort(originTrait),
+  };
 }

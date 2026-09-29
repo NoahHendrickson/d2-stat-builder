@@ -23,7 +23,7 @@ export const fieldFilterControlShellClasses = cn(
   fieldControlHeightClasses,
   "d2-line relative box-border overflow-hidden rounded-none bg-lifted transition-colors",
   "hover:[--line-alpha:1.6] has-data-popup-open:[--line-alpha:2.6] focus-within:[--line-alpha:2.6]",
-  "data-active:[border-image:none] data-active:border-white/70 data-active:bg-brand data-active:text-white data-active:shadow-[0_0_2px_1px_rgb(25_25_25/0.4)] data-active:hover:bg-brand data-active:has-data-popup-open:border-white data-active:focus-within:border-white",
+  "data-active:[border-image:none] data-active:border-white/70 data-active:bg-emphatic data-active:text-white data-active:hover:bg-emphatic data-active:has-data-popup-open:border-white data-active:focus-within:border-white",
 );
 
 /** Active filter chips are a plain white plate; no extra rim. */

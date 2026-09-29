@@ -9,15 +9,15 @@ import {
   type ReactNode,
 } from "react";
 import { usePathname } from "next/navigation";
-import { List, XIcon } from "@phosphor-icons/react";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { Cancel01Icon, Menu01Icon } from "@hugeicons/core-free-icons";
 import { AppSidebar, pageTitle } from "@/components/app-sidebar";
-import { AppHeader } from "@/components/app-header";
-import { ArmoryStatus } from "@/components/armory/armory-status";
 import { ArmoryDiagnosticsGate } from "@/components/armory/armory-diagnostics-gate";
 import { ApplyProgressSection } from "@/components/loadouts/apply-progress-card";
 import { Button } from "@/components/ui/button";
 import { Drawer, DrawerClose, DrawerContent } from "@/components/ui/drawer";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { useLoadouts } from "@/lib/loadouts/use-loadouts";
 import { useMinWidth } from "@/lib/use-min-width";
 import { cn } from "@/lib/utils";
 
@@ -64,7 +64,7 @@ function setSidebarCollapsed(collapsed: boolean): void {
 
 /**
  * Whether the viewport is at the desktop sidebar breakpoint. Pages use this to
- * skip inline status cards — the header toolbar already shows them on desktop.
+ * skip inline status cards — the sidebar's foot already shows them on desktop.
  */
 export function useDesktopLayout(): boolean {
   return useMinWidth(SIDEBAR_BREAKPOINT_PX);
@@ -73,10 +73,13 @@ export function useDesktopLayout(): boolean {
 /**
  * App frame: a navigation sidebar (views + saved links) beside the active page.
  * The sidebar collapses to an icon rail on desktop; on narrow viewports it becomes
- * a left drawer behind a top bar. The main column's header carries the page title
- * and the armor / game-data / account cluster.
+ * a left drawer behind a top bar. The armor / game-data / account cluster lives at
+ * the sidebar's foot, so on desktop the page starts at the top of the main column.
  */
 export function AppShell({ children }: { children: ReactNode }) {
+  // Start the signed-in query alongside game data so /loadouts opens with its
+  // list ready; LoadoutsList shares and revalidates this same query.
+  useLoadouts();
   const desktop = useMinWidth(SIDEBAR_BREAKPOINT_PX);
   const pathname = usePathname();
   const title = pageTitle(pathname);
@@ -140,7 +143,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 aria-label="Open menu"
                 onClick={() => setDrawerOpen(true)}
               >
-                <List weight="bold" aria-hidden />
+                <HugeiconsIcon icon={Menu01Icon} strokeWidth={2} aria-hidden />
               </Button>
             </TooltipLabel>
           </div>
@@ -151,7 +154,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             <ThemeToggle />
           </div>
         </header>
-        {desktop && <AppHeader title={title} />}
+        {desktop && <h1 className="sr-only">{title}</h1>}
         <div className="min-h-0 flex-1 overflow-y-auto">
           {desktop && (
             <div className="px-6 pt-6 empty:hidden">
@@ -176,18 +179,11 @@ export function AppShell({ children }: { children: ReactNode }) {
                   aria-label="Close menu"
                   render={<Button variant="ghost" size="icon-sm" />}
                 >
-                  <XIcon />
+                  <HugeiconsIcon icon={Cancel01Icon} />
                 </DrawerClose>
               </TooltipLabel>
             </div>
-            <AppSidebar
-              onNavigate={closeDrawer}
-              footer={
-                <div className="shrink-0 p-2">
-                  <ArmoryStatus />
-                </div>
-              }
-            />
+            <AppSidebar onNavigate={closeDrawer} />
           </DrawerContent>
         </Drawer>
       )}

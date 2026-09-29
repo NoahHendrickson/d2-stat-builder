@@ -2,7 +2,8 @@
 
 import { TooltipLabel } from "@/components/ui/tooltip";
 import { useState, type DragEvent } from "react";
-import { CaretDown, CaretUp, DotsSixVertical } from "@phosphor-icons/react";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { ArrowDown01Icon, ArrowUp01Icon, DragDropVerticalIcon } from "@hugeicons/core-free-icons";
 import { cn } from "@/lib/utils";
 
 /**
@@ -93,8 +94,8 @@ export function CustomOrderList({
               dragFrom === i && "bg-accent opacity-60",
             )}
           >
-            <DotsSixVertical
-              weight="bold"
+            <HugeiconsIcon icon={DragDropVerticalIcon}
+              strokeWidth={2}
               className="text-muted-foreground size-3.5 shrink-0"
               aria-hidden
             />
@@ -111,7 +112,7 @@ export function CustomOrderList({
                   onClick={() => onMove(i, i - 1)}
                   className="text-muted-foreground hover:text-foreground flex size-6 cursor-pointer items-center justify-center rounded-none outline-none focus-visible:ring-1 focus-visible:ring-outline-strong disabled:pointer-events-none disabled:opacity-30"
                 >
-                  <CaretUp weight="bold" className="size-3.5" aria-hidden />
+                  <HugeiconsIcon icon={ArrowUp01Icon} strokeWidth={2} className="size-3.5" aria-hidden />
                 </button>
               </TooltipLabel>
               <TooltipLabel label={`Move ${value} down`}>
@@ -122,7 +123,7 @@ export function CustomOrderList({
                   onClick={() => onMove(i, i + 1)}
                   className="text-muted-foreground hover:text-foreground flex size-6 cursor-pointer items-center justify-center rounded-none outline-none focus-visible:ring-1 focus-visible:ring-outline-strong disabled:pointer-events-none disabled:opacity-30"
                 >
-                  <CaretDown weight="bold" className="size-3.5" aria-hidden />
+                  <HugeiconsIcon icon={ArrowDown01Icon} strokeWidth={2} className="size-3.5" aria-hidden />
                 </button>
               </TooltipLabel>
             </span>

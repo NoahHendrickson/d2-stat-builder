@@ -18,6 +18,7 @@ import type {
   PerkColumn,
   PerkRef,
   StatMod,
+  StatCurve,
   StatGroupRef,
   WeaponDoc,
   WeaponIndex,
@@ -241,6 +242,29 @@ export function buildStatGroupCatalog(
   return catalog;
 }
 
+/** Stat groups as the browser uses them: stat name → investment → display curve. */
+export function buildStatCurves(
+  defs: ManifestDefs,
+  statGroupHashes: Iterable<number>,
+): Record<string, Record<string, StatCurve>> {
+  const curves: Record<string, Record<string, StatCurve>> = {};
+  for (const hash of statGroupHashes) {
+    const group = defs.DestinyStatGroupDefinition[hash];
+    if (!group) continue;
+    const byName: Record<string, StatCurve> = {};
+    for (const scaled of group.scaledStats ?? []) {
+      const name = defs.DestinyStatDefinition[scaled.statHash]?.displayProperties?.name;
+      if (!name || !scaled.displayInterpolation?.length) continue;
+      byName[name] = {
+        max: scaled.maximumValue,
+        points: scaled.displayInterpolation.map((p) => [p.value, p.weight]),
+      };
+    }
+    curves[String(hash)] = byName;
+  }
+  return curves;
+}
+
 const ATTUNEMENT_VENDOR_SUFFIX = " Attunement";
 const ATTUNEMENT_DESCRIPTION_PATTERN =
   /attune to an item to increase its drop chance from this activity/i;
@@ -415,6 +439,10 @@ export function buildWeaponIndex(
       damageTypes: buildDamageTypeCatalog(defs),
       weaponTypes: buildWeaponTypeCatalog(defs),
       ammoTypes,
+      statCurves: buildStatCurves(
+        defs,
+        new Set(index.weapons.flatMap((w) => (w.statGroupHash != null ? [w.statGroupHash] : []))),
+      ),
     },
     detailIndex: {
       ...detailIndex,

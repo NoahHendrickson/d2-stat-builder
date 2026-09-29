@@ -1,7 +1,8 @@
 "use client";
 
 import { memo } from "react";
-import { GridFour, PushPin } from "@phosphor-icons/react";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { GridViewIcon, Pin02Icon } from "@hugeicons/core-free-icons";
 import {
   Tooltip,
   TooltipContent,
@@ -47,8 +48,8 @@ export const SetRow = memo(function SetRow({
               : "text-muted-foreground opacity-0 group-hover/set-row:opacity-100 group-focus-within/set-row:opacity-100 hover:text-foreground",
           )}
         >
-          <PushPin
-            weight={pinned ? "fill" : "regular"}
+          <HugeiconsIcon icon={Pin02Icon}
+            fill={pinned ? "currentColor" : "none"}
             className="size-4"
             aria-hidden
           />
@@ -76,7 +77,7 @@ export const SetRow = memo(function SetRow({
           aria-label={`${set.name} rolls by archetype`}
           className="text-muted-foreground hover:text-foreground focus-visible:ring-outline-strong flex size-6 cursor-pointer items-center justify-center rounded-none outline-none focus-visible:ring-1"
         >
-          <GridFour className="size-4" aria-hidden />
+          <HugeiconsIcon icon={GridViewIcon} className="size-4" aria-hidden />
         </button>
       </TooltipLabel>
     </div>

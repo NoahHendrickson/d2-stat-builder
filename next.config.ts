@@ -15,13 +15,15 @@ const isDev = process.env.NODE_ENV === "development";
  */
 const csp = [
   "default-src 'self'",
-  `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ""}`,
+  // Dev also loads Figma's html-to-design capture script (Send to Figma).
+  `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval' https://mcp.figma.com" : ""}`,
   "style-src 'self' 'unsafe-inline'",
   // Icons render via next/image (same-origin proxy) but allow bungie.net directly too.
   "img-src 'self' https://www.bungie.net data: blob:",
   "font-src 'self'",
-  // Client fetches the manifest straight from bungie.net; dev needs the HMR websocket.
-  `connect-src 'self' https://www.bungie.net${isDev ? " ws: wss:" : ""}`,
+  // Client fetches the manifest straight from bungie.net and weapon perk insights
+  // from Clarity's GitHub Pages feed; dev needs the HMR websocket.
+  `connect-src 'self' https://www.bungie.net https://database-clarity.github.io${isDev ? " ws: wss: https://mcp.figma.com" : ""}`,
   "worker-src 'self' blob:",
   "object-src 'none'",
   "base-uri 'self'",
@@ -65,17 +67,22 @@ const nextConfig: NextConfig = {
           { key: "X-Frame-Options", value: "DENY" },
         ],
       },
-      {
-        // The weapon catalog snapshot changes only when it is regenerated and
-        // committed; let repeat visits reuse it for an hour instead of revalidating.
-        source: "/data/:path*",
-        headers: [
-          {
-            key: "Cache-Control",
-            value: "public, max-age=3600, stale-while-revalidate=86400",
-          },
-        ],
-      },
+      // The weapon catalog snapshot changes only when it is regenerated and
+      // committed; let repeat visits reuse it for an hour instead of revalidating.
+      // Not in dev, where a regenerated snapshot should show on the next reload.
+      ...(isDev
+        ? []
+        : [
+            {
+              source: "/data/:path*",
+              headers: [
+                {
+                  key: "Cache-Control",
+                  value: "public, max-age=3600, stale-while-revalidate=86400",
+                },
+              ],
+            },
+          ]),
     ];
   },
 };

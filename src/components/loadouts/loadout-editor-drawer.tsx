@@ -14,7 +14,8 @@ import {
 } from "react";
 import { Tooltip as BaseTooltip } from "@base-ui/react/tooltip";
 import Image from "next/image";
-import { CircleNotch, Check, X } from "@phosphor-icons/react";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { Cancel01Icon, Loading03Icon, Tick02Icon } from "@hugeicons/core-free-icons";
 import { armorPipTier, type ArmorPiece, type ArmorSocket } from "@/lib/armory/normalize";
 import { isFullyMasterworked } from "@/lib/armory/masterwork";
 import {
@@ -226,9 +227,9 @@ function StatModChip({
           aria-hidden
         >
           {slotted ? (
-            <Check weight="bold" className="size-2.5" />
+            <HugeiconsIcon icon={Tick02Icon} strokeWidth={2} className="size-2.5" />
           ) : (
-            <X weight="bold" className="size-2.5" />
+            <HugeiconsIcon icon={Cancel01Icon} strokeWidth={2} className="size-2.5" />
           )}
         </span>
       </button>
@@ -870,7 +871,7 @@ function EditorForm({
             Cancel
           </Button>
           <Button type="submit" variant="emphatic" disabled={!canSubmit}>
-            {busy ? <CircleNotch className="animate-spin" aria-hidden /> : null}
+            {busy ? <HugeiconsIcon icon={Loading03Icon} className="animate-spin" aria-hidden /> : null}
             {submitLabel}
           </Button>
         </div>
@@ -977,7 +978,7 @@ export function LoadoutEditorDrawer({
     >
       <DrawerContent
         aria-label={form.title}
-        className="d2-sidebar d2-line bg-glass rounded-none border-[1.5px] border-transparent shadow-none [--line-width:1.5px] data-[swipe-axis=y]:[--drawer-content-max-height:min(80dvh,60rem)] [--bleed:0px] [--drawer-bleed-background:var(--glass)]"
+        className="d2-sidebar d2-line bg-glass rounded-none border border-transparent shadow-none data-[swipe-axis=y]:[--drawer-content-max-height:min(80dvh,60rem)] [--bleed:0px] [--drawer-bleed-background:var(--glass)]"
         // Over the main column only — past the sidebar. `--app-sidebar-width` is 0 below `lg`.
         style={{
           left: "var(--app-sidebar-width, 0px)",

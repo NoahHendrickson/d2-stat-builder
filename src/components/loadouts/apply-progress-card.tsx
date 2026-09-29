@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useSyncExternalStore } from "react";
-import { Check, CircleNotch, X } from "@phosphor-icons/react";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { Cancel01Icon, Loading03Icon, Tick02Icon } from "@hugeicons/core-free-icons";
 import { Button } from "@/components/ui/button";
 import { TooltipLabel } from "@/components/ui/tooltip";
 import { ArmorThumb } from "@/components/armor-thumb";
@@ -54,17 +55,17 @@ function Cell({ step }: { step: ApplyStep }) {
         )}
         {step.status === "active" && (
           <span className="absolute inset-0 flex items-center justify-center bg-black/40">
-            <CircleNotch className="size-3 animate-spin text-white" aria-hidden />
+            <HugeiconsIcon icon={Loading03Icon} className="size-3 animate-spin text-white" aria-hidden />
           </span>
         )}
         {step.status === "ok" && (
           <span className="absolute -top-0.5 -right-1 flex size-3 items-center justify-center rounded-none bg-positive text-black">
-            <Check weight="bold" className="size-2" aria-hidden />
+            <HugeiconsIcon icon={Tick02Icon} strokeWidth={2} className="size-2" aria-hidden />
           </span>
         )}
         {step.status === "fail" && (
           <span className="bg-destructive absolute -top-0.5 -right-1 flex size-3 items-center justify-center rounded-none text-white">
-            <X weight="bold" className="size-2" aria-hidden />
+            <HugeiconsIcon icon={Cancel01Icon} strokeWidth={2} className="size-2" aria-hidden />
           </span>
         )}
       </span>
@@ -115,7 +116,7 @@ export function ApplyProgressSection() {
           aria-label="Dismiss"
           onClick={dismissApplyProgress}
         >
-          <X aria-hidden />
+          <HugeiconsIcon icon={Cancel01Icon} aria-hidden />
         </Button>
       </div>
       <div role="list" className="grid grid-cols-[repeat(auto-fill,minmax(2rem,1fr))] gap-1.5">

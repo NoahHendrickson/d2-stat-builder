@@ -1,7 +1,8 @@
 "use client";
 
 import { Fragment, useState } from "react";
-import { ArrowRight } from "@phosphor-icons/react";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { ArrowRight02Icon } from "@hugeicons/core-free-icons";
 import { Button } from "@/components/ui/button";
 import { ArmorThumb } from "@/components/armor-thumb";
 import { StatGlyph } from "@/components/stat-glyph";
@@ -444,7 +445,7 @@ export function DreamComparison({
                 icons={statIcons}
               />
               <span className="text-muted-foreground flex justify-center" aria-hidden>
-                {v.kind === "replace" && <ArrowRight className="text-foreground size-4" />}
+                {v.kind === "replace" && <HugeiconsIcon icon={ArrowRight02Icon} className="text-foreground size-4" />}
               </span>
               {v.kind === "keep" && (
                 <div className="flex items-center gap-3">

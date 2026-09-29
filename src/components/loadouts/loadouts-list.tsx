@@ -9,7 +9,8 @@ import {
 } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { ArrowsDownUp, MagnifyingGlass, X } from "@phosphor-icons/react";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { ArrowUpDownIcon, Cancel01Icon, Search01Icon } from "@hugeicons/core-free-icons";
 import { toast } from "@/lib/toast";
 import type { Armory } from "@/lib/armory/fetch";
 import type { Manifest } from "@/lib/manifest/load";
@@ -120,7 +121,7 @@ export function LoadoutsList({
   const [subclassFilter, setSubclassFilter] = useState<Subclass[]>([]);
   const [setFilter, setSetFilter] = useState<number[]>([]);
   const [tagFilter, setTagFilter] = useState<string[]>([]);
-  const [sortKey, setSortKey] = useState<LoadoutListSortKey>("edited");
+  const [sortKey, setSortKey] = useState<LoadoutListSortKey>("created");
   const [dialog, setDialog] = useState<DialogState>({ kind: "none" });
   // Expanded rows, by id — kept here (not in the row) so it survives virtualization.
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(
@@ -434,7 +435,7 @@ export function LoadoutsList({
     <div className="flex min-h-0 flex-1 flex-col gap-4">
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative min-w-0 flex-1 basis-60 sm:max-w-sm">
-          <MagnifyingGlass
+          <HugeiconsIcon icon={Search01Icon}
             className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 z-10 size-4 -translate-y-1/2"
             aria-hidden
           />
@@ -453,7 +454,7 @@ export function LoadoutsList({
               onClick={() => setQuery("")}
               className="text-muted-foreground hover:text-foreground absolute top-1/2 right-1.5 flex size-5 -translate-y-1/2 cursor-pointer items-center justify-center rounded-none outline-none focus-visible:ring-1 focus-visible:ring-outline-strong"
             >
-              <X weight="bold" className="size-3.5" aria-hidden />
+              <HugeiconsIcon icon={Cancel01Icon} strokeWidth={2} className="size-3.5" aria-hidden />
             </button>
           )}
         </div>
@@ -507,7 +508,7 @@ export function LoadoutsList({
                 render={<Button variant="default" size="icon" />}
                 aria-label={`Sort by ${sortLabel}`}
               >
-                <ArrowsDownUp aria-hidden />
+                <HugeiconsIcon icon={ArrowUpDownIcon} aria-hidden />
               </DropdownMenuTrigger>
             </TooltipLabel>
             <DropdownMenuContent align="end" className="w-48">

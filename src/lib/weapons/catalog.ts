@@ -10,8 +10,8 @@ import {
 } from "./weapon-variants";
 import {
   collectColumnPerks,
+  collectComboPartners,
   collectFacets,
-  collectPerks,
   filterWeapons,
   rankWeaponResults,
   weaponsMatchingTextQuery,
@@ -56,13 +56,9 @@ export function createWeaponCatalog(raw: WeaponIndex) {
     .sort(collator.compare)
     .map((value) => ({ value, count: 0 }));
   const columns = collectColumnPerks(weapons, index.perks);
-  for (const key of ["trait1", "trait2", "originTrait"] as const) {
+  for (const key of ["trait", "trait1", "trait2", "originTrait"] as const) {
     facets[key] = columns[key].map((p) => ({ value: p.name, count: p.count }));
   }
-  facets.perks = collectPerks(weapons, index.perks).map((p) => ({
-    value: p.name,
-    count: p.count,
-  }));
   facets.perkCombo = [
     ...new Set([...columns.trait1, ...columns.trait2].map((p) => p.name)),
   ]
@@ -104,7 +100,15 @@ export function createWeaponCatalog(raw: WeaponIndex) {
     return poolLabels.get(hash);
   }
 
-  return { ...index, weapons, facets, search, poolLabel };
+  /** Perk combo values once `first` is picked: only perks that roll opposite it. */
+  function comboPartners(first: string) {
+    return collectComboPartners(weapons, index.perks, first).map((p) => ({
+      value: p.name,
+      count: p.count,
+    }));
+  }
+
+  return { ...index, weapons, facets, search, poolLabel, comboPartners };
 }
 
 export type WeaponCatalog = ReturnType<typeof createWeaponCatalog>;

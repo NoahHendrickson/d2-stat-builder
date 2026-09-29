@@ -54,7 +54,9 @@ describe("weapon browser integration", () => {
     const catalog = createWeaponCatalog(index);
     expect(catalog.facets.source!.length).toBeGreaterThan(0);
     for (const { value } of catalog.facets.source!) {
-      expect(catalog.search("", { source: [value] }, "name").length).toBeGreaterThan(0);
+      expect(
+        catalog.search("", { source: [value] }, "name").length,
+      ).toBeGreaterThan(0);
     }
   });
 
@@ -70,7 +72,14 @@ describe("weapon browser integration", () => {
       hash: 9_001,
       source: "Pantheon",
       releaseIndex: fatebringer.releaseIndex + 1_000,
-      columns: [{ kind: "Trait", perks: [{ hash: 9_002, name: "Kinetic Tremors", currentlyCanRoll: true }] }],
+      columns: [
+        {
+          kind: "Trait",
+          perks: [
+            { hash: 9_002, name: "Kinetic Tremors", currentlyCanRoll: true },
+          ],
+        },
+      ],
       perks: ["Kinetic Tremors"],
       perkHashes: [9_002],
     };
@@ -86,9 +95,9 @@ describe("weapon browser integration", () => {
 
   it("matches element and rarity words typed as free text", () => {
     const catalog = createWeaponCatalog(index);
-    expect(catalog.search("solar fusion", {}, "name").map((w) => w.name)).toEqual([
-      "Sunlit Fusion",
-    ]);
+    expect(
+      catalog.search("solar fusion", {}, "name").map((w) => w.name),
+    ).toEqual(["Sunlit Fusion"]);
     const legendary = catalog.search("legendary", {}, "name");
     expect(legendary.length).toBeGreaterThan(0);
     expect(legendary.every((w) => w.rarity === "Legendary")).toBe(true);
@@ -145,6 +154,37 @@ describe("weapon browser integration", () => {
     params.append("group", "null");
     expect(readSearchState(params).filters.customPerkGroups).toEqual([
       ["Firefly", "Frenzy"],
+    ]);
+  });
+});
+
+describe("perk stats in the shipped catalog", () => {
+  it("ships masterworks as perks with name-keyed stats, and keeps them through transport", () => {
+    const restored = expandWeaponIndex(
+      JSON.parse(JSON.stringify(compactWeaponIndex(index))),
+    );
+    const fatebringer = restored.weapons.find((w) => w.name === "Fatebringer")!;
+    const masterworks = fatebringer.masterworks!.map((i) => restored.perks[i]!);
+    expect(
+      masterworks.map(({ name, description, stats, statMods }) => ({
+        name,
+        description,
+        stats,
+        statMods,
+      })),
+    ).toEqual([
+      {
+        name: "Range Masterwork",
+        description: "+10 Range",
+        stats: { Range: 10 },
+        statMods: undefined,
+      },
+      {
+        name: "Stability Masterwork",
+        description: "+10 Stability",
+        stats: { Stability: 10 },
+        statMods: undefined,
+      },
     ]);
   });
 });

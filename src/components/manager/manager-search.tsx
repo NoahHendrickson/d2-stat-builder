@@ -1,0 +1,292 @@
+"use client";
+
+import { useDeferredValue, useEffect, useMemo, useState } from "react";
+import { HugeiconsIcon } from "@hugeicons/react";
+import {
+  Cancel01Icon,
+  HelpCircleIcon,
+  MoreHorizontalIcon,
+  Search01Icon,
+  SquareLock02Icon,
+  SquareUnlock02Icon,
+} from "@hugeicons/core-free-icons";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Input } from "@/components/ui/input";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { TooltipLabel } from "@/components/ui/tooltip";
+import { useProfile } from "@/lib/armory/use-profile";
+import {
+  ITEM_TAGS,
+  TAG_LABELS,
+  annotationsStore,
+  setTag,
+  type ItemTag,
+} from "@/lib/inventory/annotations";
+import type { InventoryItem, ManagerInventory } from "@/lib/inventory/build";
+import {
+  applyMoves,
+  characterName,
+  locate,
+  type Landing,
+  type Place,
+} from "@/lib/inventory/moves";
+import { recentlyMoved } from "@/lib/inventory/move-queue";
+import { createPerkLookup } from "@/lib/inventory/perk-index";
+import { planSmartMove } from "@/lib/inventory/smart-moves";
+import { dupeHashes, forEachItem, matchItems, parseSearch } from "@/lib/inventory/search";
+import { useManifest } from "@/lib/manifest/use-manifest";
+import { toast } from "@/lib/toast";
+import { cn } from "@/lib/utils";
+import { useStoreValue } from "@/lib/value-store";
+import { useManagerActions } from "./manager-context";
+import { searchMatches } from "./search-store";
+import { TAG_ICONS } from "./tag-icons";
+import { ViewMenu } from "./view-menu";
+
+const NO_PERKS = () => [] as const;
+
+/**
+ * The manager's search box (DIM's query language, see lib/inventory/search.ts): items
+ * it doesn't match are dimmed, and the menu beside it tags, locks, or moves every match.
+ */
+export function ManagerSearch({ inventory }: { inventory: ManagerInventory }) {
+  const [query, setQuery] = useState("");
+  const deferred = useDeferredValue(query);
+  const parsed = useMemo(() => parseSearch(deferred), [deferred]);
+  const annotations = useStoreValue(annotationsStore);
+  const { query: profile } = useProfile();
+  const manifestStatus = useManifest();
+  const manifest = manifestStatus.state === "ready" ? manifestStatus.manifest : undefined;
+  const perks = useMemo(
+    () => (profile.data && manifest ? createPerkLookup(profile.data, manifest) : NO_PERKS),
+    [profile.data, manifest],
+  );
+  const dupes = useMemo(() => dupeHashes(inventory), [inventory]);
+  const matches = useMemo(
+    () =>
+      parsed?.ok
+        ? matchItems(inventory, parsed.predicate, { annotations, perks, dupes })
+        : null,
+    [inventory, parsed, annotations, perks, dupes],
+  );
+
+  useEffect(() => {
+    searchMatches.set(matches);
+  }, [matches]);
+  useEffect(() => () => searchMatches.set(null), []);
+
+  const error = parsed && !parsed.ok ? parsed.error : undefined;
+
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <div className="relative min-w-0 flex-1 basis-72 sm:max-w-xl">
+        <HugeiconsIcon
+          icon={Search01Icon}
+          className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 z-10 size-4 -translate-y-1/2"
+          aria-hidden
+        />
+        <Input
+          type="search"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={(e) => e.key === "Escape" && setQuery("")}
+          placeholder="Search items — is:weapon tag:junk power:>=400 perk:&quot;kill clip&quot;"
+          aria-label="Search items"
+          aria-invalid={error ? true : undefined}
+          aria-describedby={error ? "manager-search-error" : undefined}
+          className="pl-8 pr-8 [&::-webkit-search-cancel-button]:hidden"
+        />
+        {query.length > 0 && (
+          <button
+            type="button"
+            aria-label="Clear search"
+            onClick={() => setQuery("")}
+            className="text-muted-foreground hover:text-foreground absolute top-1/2 right-1.5 flex size-5 -translate-y-1/2 cursor-pointer items-center justify-center rounded-none outline-none focus-visible:ring-1 focus-visible:ring-outline-strong"
+          >
+            <HugeiconsIcon icon={Cancel01Icon} strokeWidth={2} className="size-3.5" aria-hidden />
+          </button>
+        )}
+      </div>
+      <SearchHelp />
+      <span
+        id="manager-search-error"
+        className={cn("text-sm tabular-nums", error ? "text-destructive" : "text-muted-foreground")}
+        aria-live="polite"
+      >
+        {error ?? (matches ? `${matches.size.toLocaleString()} ${matches.size === 1 ? "item" : "items"}` : "")}
+      </span>
+      {matches && matches.size > 0 && <BulkActions inventory={inventory} matches={matches} />}
+      <div className="ml-auto">
+        <ViewMenu />
+      </div>
+    </div>
+  );
+}
+
+const HELP: [string, string][] = [
+  ["fatebringer", "Name or perk contains it"],
+  ["is:weapon  is:armor  is:exotic", "Kind and rarity"],
+  ["is:crafted  is:deepsight  is:masterwork", "Item state"],
+  ["is:locked  is:dupe  is:equipped  is:invault", "Lock, duplicates, where it is"],
+  ["tag:junk  tag:none  is:tagged", "Your tags"],
+  ["is:solar  is:heavy  is:overload", "Element, ammo, champion"],
+  ["is:hunter  is:helmet  is:powerslot", "Class and slot"],
+  ["power:>=400  tier:5", "Power and gear tier"],
+  ["stat:total:>=60  stat:range:>50", "Any stat by name"],
+  ['perk:"kill clip"  type:"hand cannon"', "Perks and weapon type"],
+  ["a or b   -is:exotic   (a or b) c", "Combine, negate, group"],
+];
+
+function SearchHelp() {
+  return (
+    <Popover>
+      <TooltipLabel label="Search help">
+        <PopoverTrigger render={<Button variant="ghost" size="icon" aria-label="Search help" />}>
+          <HugeiconsIcon icon={HelpCircleIcon} aria-hidden />
+        </PopoverTrigger>
+      </TooltipLabel>
+      <PopoverContent align="start" className="w-[28rem] gap-2 p-3 text-xs">
+        <p className="d2-label">Search</p>
+        <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5">
+          {HELP.map(([example, meaning]) => (
+            <div key={example} className="contents">
+              <dt className="font-mono whitespace-pre">{example}</dt>
+              <dd className="text-muted-foreground">{meaning}</dd>
+            </div>
+          ))}
+        </dl>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+/** Tag, lock, or move every item the search matches. */
+function BulkActions({ inventory, matches }: { inventory: ManagerInventory; matches: ReadonlySet<string> }) {
+  const actions = useManagerActions();
+  const found = useMemo(() => {
+    const out: { item: InventoryItem; place: Place }[] = [];
+    forEachItem(inventory, (item, place) => {
+      if (matches.has(item.key)) out.push({ item, place });
+    });
+    return out;
+  }, [inventory, matches]);
+  const instanced = found.filter((f) => f.item.instanceId);
+  const ids = instanced.map((f) => f.item.instanceId!);
+  const count = `${found.length.toLocaleString()} ${found.length === 1 ? "item" : "items"}`;
+
+  const tag = (t: ItemTag | undefined) => {
+    setTag(ids, t);
+    toast.success(t ? `Tagged ${ids.length} as ${TAG_LABELS[t]}` : `Cleared tags on ${ids.length}`);
+  };
+
+  /**
+   * Move each match that can go, making room as needed. Each plan is made against the
+   * moves already planned, and never moves an earlier match back out to make room.
+   */
+  const moveAll = (to: Landing) => {
+    if (!actions) return;
+    let sim = actions.inventory();
+    const placed = new Set<string>();
+    let moved = 0;
+    let skipped = 0;
+    for (const { item } of found) {
+      const at = locate(sim, item.key)?.place;
+      if (!at || isThere(at, to)) {
+        placed.add(item.key);
+        continue;
+      }
+      const plan = planSmartMove(sim, item, at, to, {
+        annotations: annotationsStore.get(),
+        recent: recentlyMoved(),
+        pinned: placed,
+      });
+      if (!plan.ok) {
+        skipped++;
+        continue;
+      }
+      actions.runSteps(plan.steps);
+      sim = applyMoves(
+        sim,
+        plan.steps.map((s) => ({ id: -1, itemKey: s.item.key, to: s.to, status: "pending" as const, at: 0 })),
+      );
+      placed.add(item.key);
+      moved++;
+    }
+    if (moved === 0 && skipped === 0) toast.info("Everything is already there");
+    else if (skipped > 0) {
+      toast.warning(`Moving ${moved}, skipped ${skipped}`, "No room could be made, or they can't go there");
+    } else toast.success(`Moving ${moved} ${moved === 1 ? "item" : "items"}`);
+  };
+
+  return (
+    <DropdownMenu>
+      <TooltipLabel label={`Act on ${count}`}>
+        <DropdownMenuTrigger render={<Button variant="default" size="icon" />} aria-label={`Act on ${count}`}>
+          <HugeiconsIcon icon={MoreHorizontalIcon} aria-hidden />
+        </DropdownMenuTrigger>
+      </TooltipLabel>
+      <DropdownMenuContent align="start" className="w-52">
+        <DropdownMenuGroup>
+          <DropdownMenuLabel>{count}</DropdownMenuLabel>
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger disabled={ids.length === 0}>Tag as</DropdownMenuSubTrigger>
+            <DropdownMenuSubContent className="w-44">
+              {ITEM_TAGS.map((t) => (
+                <DropdownMenuItem key={t} onClick={() => tag(t)}>
+                  <HugeiconsIcon icon={TAG_ICONS[t]} aria-hidden />
+                  {TAG_LABELS[t]}
+                </DropdownMenuItem>
+              ))}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => tag(undefined)}>
+                <HugeiconsIcon icon={Cancel01Icon} aria-hidden />
+                Clear tag
+              </DropdownMenuItem>
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
+          <DropdownMenuItem
+            disabled={instanced.length === 0}
+            onClick={() => actions?.lock(instanced.map((f) => f.item), true)}
+          >
+            <HugeiconsIcon icon={SquareLock02Icon} aria-hidden />
+            Lock
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            disabled={instanced.length === 0}
+            onClick={() => actions?.lock(instanced.map((f) => f.item), false)}
+          >
+            <HugeiconsIcon icon={SquareUnlock02Icon} aria-hidden />
+            Unlock
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuLabel>Move to</DropdownMenuLabel>
+          {inventory.characters.map((c) => (
+            <DropdownMenuItem key={c.id} onClick={() => moveAll({ kind: "character", characterId: c.id })}>
+              {characterName(c)}
+            </DropdownMenuItem>
+          ))}
+          <DropdownMenuItem onClick={() => moveAll({ kind: "vault" })}>Vault</DropdownMenuItem>
+        </DropdownMenuGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+/** Already on that character (equipped or not) or in the vault. */
+function isThere(at: Place, to: Landing): boolean {
+  return to.kind === "vault"
+    ? at.kind === "vault"
+    : at.kind === "character" && at.characterId === to.characterId;
+}

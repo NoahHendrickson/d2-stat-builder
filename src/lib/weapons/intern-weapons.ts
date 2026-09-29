@@ -65,6 +65,19 @@ export function internWeaponCatalog(
 ): { index: WeaponIndex; detailIndex: WeaponDetailIndex } {
   const perks: PerkRef[] = [];
   const hashToIndex = new Map<number, number>();
+  const statNames = new Map<number, string>();
+  for (const weapon of weapons) {
+    for (const stat of weapon.stats) statNames.set(stat.hash, stat.name);
+  }
+  /** Perk stat modifiers by name; stats no weapon shows are dropped. */
+  const namedStats = (mods: PerkRef["statMods"], names = statNames) => {
+    const named: [string, number][] = [];
+    for (const mod of mods ?? []) {
+      const name = names.get(mod.hash);
+      if (name) named.push([name, mod.value]);
+    }
+    return named.length ? Object.fromEntries(named) : undefined;
+  };
 
   const internPerk = (perk: PerkRef): number => {
     const existing = hashToIndex.get(perk.hash);
@@ -84,6 +97,7 @@ export function internWeaponCatalog(
       }
       if (perk.statMods?.length && !entry.statMods?.length) {
         entry.statMods = perk.statMods;
+        entry.stats = perk.stats ?? namedStats(perk.statMods);
       }
       return existing;
     }
@@ -98,6 +112,7 @@ export function internWeaponCatalog(
       enhancedDescription: perk.enhancedDescription,
       alternateHashes: perk.alternateHashes,
       statMods: perk.statMods,
+      stats: perk.stats ?? namedStats(perk.statMods),
     });
     hashToIndex.set(perk.hash, index);
     for (const alt of perk.alternateHashes ?? []) {
@@ -112,7 +127,30 @@ export function internWeaponCatalog(
       perkIndices: column.perks.map((perk) => internPerk(perk)),
     }));
     const perkNames = [...new Set(weapon.perks)];
+    // Masterworks share the perk table so the grid treats them like any plug.
+    // They belong to this weapon, so its own stats name their modifiers.
+    const ownStatNames = new Map(weapon.stats.map((s) => [s.hash, s.name]));
+    const masterworks = (weapon.masterworkOptions ?? []).map((option) => {
+      const stats = namedStats(option.statMods, ownStatNames);
+      return internPerk({
+        hash: option.plugHash,
+        name: `${option.statName} Masterwork`,
+        icon: option.icon,
+        currentlyCanRoll: true,
+        description: Object.entries(stats ?? {})
+          .map(([name, value]) => `+${value} ${name}`)
+          .join(", "),
+        statMods: option.statMods,
+        stats,
+      });
+    });
     const ammoGeneration = weapon.stats.find((s) => s.hash === AMMO_GENERATION_STAT_HASH)?.value;
+    const shown = new Set(weapon.stats.filter((s) => s.value > 0).map((s) => s.hash));
+    const statInvestment = Object.fromEntries(
+      (weapon.investmentStats ?? [])
+        .filter((s) => shown.has(s.hash))
+        .map((s) => [s.name, s.value]),
+    );
     return {
       hash: weapon.hash,
       name: weapon.name,
@@ -133,6 +171,10 @@ export function internWeaponCatalog(
       releaseIndex: weapon.releaseIndex,
       ...(weapon.superseded ? { superseded: true } : {}),
       ...(ammoGeneration != null ? { ammoGeneration } : {}),
+      ...(Object.keys(statInvestment).length
+        ? { statInvestment, statGroupHash: weapon.statGroupHash }
+        : {}),
+      ...(masterworks.length ? { masterworks } : {}),
       columns,
       perks: perkNames,
       perksLower: perkNames.map(lower),
@@ -176,6 +218,7 @@ export function normalizeWeaponIndex(raw: {
   damageTypes?: WeaponIndex["damageTypes"];
   weaponTypes?: WeaponIndex["weaponTypes"];
   ammoTypes?: WeaponIndex["ammoTypes"];
+  statCurves?: WeaponIndex["statCurves"];
   perks?: PerkRef[];
   weaponsByPerkName?: Record<string, number[]>;
 }): WeaponIndex {
@@ -190,6 +233,7 @@ export function normalizeWeaponIndex(raw: {
       damageTypes: raw.damageTypes ?? [],
       weaponTypes: raw.weaponTypes ?? [],
       ammoTypes: raw.ammoTypes ?? [],
+      statCurves: raw.statCurves,
     };
   }
 
@@ -206,6 +250,7 @@ export function normalizeWeaponIndex(raw: {
       damageTypes: raw.damageTypes ?? [],
       weaponTypes: raw.weaponTypes ?? [],
       ammoTypes: raw.ammoTypes ?? [],
+      statCurves: raw.statCurves,
     };
   }
 
@@ -215,5 +260,6 @@ export function normalizeWeaponIndex(raw: {
     damageTypes: raw.damageTypes ?? [],
     weaponTypes: raw.weaponTypes ?? [],
     ammoTypes: raw.ammoTypes ?? [],
+    statCurves: raw.statCurves,
   };
 }

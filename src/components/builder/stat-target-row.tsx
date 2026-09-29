@@ -1,7 +1,8 @@
 "use client";
 
 import { memo } from "react";
-import { Minus, Plus } from "@phosphor-icons/react";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { Add01Icon, MinusSignIcon } from "@hugeicons/core-free-icons";
 import Image from "next/image";
 import { TooltipLabel } from "@/components/ui/tooltip";
 import { Input } from "@/components/ui/input";
@@ -142,7 +143,7 @@ export const StatTargetRow = memo(function StatTargetRow({
               disabled={value <= 0}
               onClick={() => onChange(index, clampTarget(value - STAT_STEP))}
             >
-              <Minus aria-hidden />
+              <HugeiconsIcon icon={MinusSignIcon} aria-hidden />
             </StepButton>
           )}
           <Input
@@ -170,7 +171,7 @@ export const StatTargetRow = memo(function StatTargetRow({
               disabled={value >= STAT_SLIDER_MAX}
               onClick={() => onChange(index, clampTarget(value + STAT_STEP))}
             >
-              <Plus aria-hidden />
+              <HugeiconsIcon icon={Add01Icon} aria-hidden />
             </StepButton>
           )}
           {capText && <span className="sr-only">{capText.srText}</span>}

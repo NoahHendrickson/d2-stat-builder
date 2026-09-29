@@ -9,6 +9,7 @@ import {
 import type { PerkRef, WeaponDoc } from "./types";
 import {
   collectColumnPerks,
+  collectComboPartners,
   collectFacets,
   collectPerks,
   filterWeaponNames,
@@ -91,6 +92,22 @@ describe("filterWeapons", () => {
   test("single element facet (all solar weapons)", () => {
     const result = filterWeapons(sampleSummaries, { element: ["Solar"] }, samplePerks);
     expect(names(result)).toEqual(["Sunlit Fusion", "Sunshot Scout"]);
+  });
+
+  test("ammo generation is strictly above the bound; weapons without the stat drop out", () => {
+    const summaries = sampleSummaries.map((weapon) => {
+      if (weapon.name === "Fatebringer") return { ...weapon, ammoGeneration: 50 };
+      if (weapon.name === "Stormcharge") return { ...weapon, ammoGeneration: 72 };
+      if (weapon.name === "Sunshot Scout") return { ...weapon, ammoGeneration: 49 };
+      return weapon;
+    });
+    expect(names(filterWeapons(summaries, { ammoGenAbove: 49 }, samplePerks)).sort()).toEqual([
+      "Fatebringer",
+      "Stormcharge",
+    ]);
+    expect(names(filterWeapons(summaries, { ammoGenAbove: 50 }, samplePerks))).toEqual([
+      "Stormcharge",
+    ]);
   });
 
   test("requires all selected perks (AND semantics)", () => {
@@ -435,17 +452,15 @@ describe("weaponsMatchingTextQuery", () => {
 
 describe("rankWeaponResults", () => {
   test("pins exact name matches above other hits while respecting sort", () => {
-    const summaries = sampleSummaries.map((weapon) => {
-      if (weapon.name === "Fatebringer") return { ...weapon, ammoGeneration: 50 };
-      if (weapon.name === "Sunshot Scout") return { ...weapon, ammoGeneration: 99 };
-      return weapon;
-    });
-    const searcher = createWeaponSearcher(summaries);
-    const candidates = weaponsMatchingTextQuery(summaries, searcher, "sun", 20);
+    const searcher = createWeaponSearcher(sampleSummaries);
+    const candidates = weaponsMatchingTextQuery(sampleSummaries, searcher, "sun", 20);
 
     expect(
-      rankWeaponResults(candidates, "sun", "ammo-gen-desc").map((weapon) => weapon.name),
+      rankWeaponResults(candidates, "sun", "season-desc").map((weapon) => weapon.name),
     ).toEqual(["Sunshot Scout", "Sunlit Fusion"]);
+    expect(
+      rankWeaponResults(candidates, "sun", "season-asc").map((weapon) => weapon.name),
+    ).toEqual(["Sunlit Fusion", "Sunshot Scout"]);
   });
 
   test("falls back to sort-only when the query is too short", () => {
@@ -479,6 +494,27 @@ describe("collectColumnPerks", () => {
     expect(t1).toContain("Surrounded");
     expect(t1).toContain("Explosive Payload");
     expect(originTrait.map((p) => p.name)).toEqual(["Vault of Glass"]);
+  });
+
+  test("trait merges both columns, counting each weapon once", () => {
+    const { trait, trait1, trait2 } = collectColumnPerks(sampleSummaries, samplePerks);
+    const names = trait.map((p) => p.name);
+    expect(names).toContain("Frenzy");
+    expect(names).toContain("Explosive Payload");
+    for (const perk of trait) {
+      const t1 = trait1.find((p) => p.name === perk.name)?.count ?? 0;
+      const t2 = trait2.find((p) => p.name === perk.name)?.count ?? 0;
+      expect(perk.count).toBeGreaterThanOrEqual(Math.max(t1, t2));
+      expect(perk.count).toBeLessThanOrEqual(t1 + t2);
+    }
+  });
+
+  test("combo partners are the perks rolling opposite the first pick", () => {
+    const names = (first: string) =>
+      collectComboPartners(sampleSummaries, samplePerks, first).map((p) => p.name);
+    expect(names("Frenzy")).toEqual(["Explosive Payload", "Firefly", "Surrounded"]);
+    // Same-column perks never pair, and matching ignores case.
+    expect(names("firefly")).toEqual(["Eye of the Storm", "Frenzy"]);
   });
 
   test("counts weapons per trait1 perk", () => {
@@ -676,20 +712,6 @@ describe("sortWeapons", () => {
     ]);
   });
 
-  test("highest Ammo Generation first, weapons without the stat last", () => {
-    const summaries = sampleSummaries.map((weapon) => {
-      if (weapon.name === "Fatebringer") return { ...weapon, ammoGeneration: 80 };
-      if (weapon.name === "Stormcharge") return { ...weapon, ammoGeneration: 95 };
-      return weapon;
-    });
-
-    expect(orderedNames(sortWeapons(summaries, "ammo-gen-desc"))).toEqual([
-      "Stormcharge",
-      "Fatebringer",
-      "Sunlit Fusion",
-      "Sunshot Scout",
-    ]);
-  });
 });
 
 describe("buildPerkMapFromCatalog", () => {

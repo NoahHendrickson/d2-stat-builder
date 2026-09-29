@@ -2,7 +2,8 @@
 
 import { useCallback, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
-import { MagnifyingGlass } from "@phosphor-icons/react";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { Search01Icon } from "@hugeicons/core-free-icons";
 import { Input } from "@/components/ui/input";
 import { SetRow } from "@/components/builder/set-row";
 import { SetListControls } from "@/components/builder/set-list-controls";
@@ -118,7 +119,7 @@ export function SetBonusesSection({
     <>
       <div className="space-y-2">
         <div className="relative">
-          <MagnifyingGlass
+          <HugeiconsIcon icon={Search01Icon}
             className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 z-10 size-4 -translate-y-1/2"
             aria-hidden
           />

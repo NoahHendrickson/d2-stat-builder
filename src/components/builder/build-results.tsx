@@ -9,7 +9,13 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { CaretDown, CheckCircle, CircleNotch, X } from "@phosphor-icons/react";
+import { HugeiconsIcon } from "@hugeicons/react";
+import {
+  ArrowDown01Icon,
+  Cancel01Icon,
+  CheckmarkCircle02Icon,
+  Loading03Icon,
+} from "@hugeicons/core-free-icons";
 import { armorPipTier, type ArmorPiece } from "@/lib/armory/normalize";
 import {
   isFullyMasterworked,
@@ -56,7 +62,7 @@ export { MAX_SHOWN };
 
 /** A build card: lifted face with the EQUIP centre-bright stroke. */
 export const BUILD_CARD_LIFT_CLASS =
-  "d2-card-frame relative rounded-none [--card-line-width:1.5px]";
+  "d2-card-frame relative rounded-none";
 
 /** Stack of build cards — no well; they sit on the main column. */
 export const BUILD_LIST_WELL_CLASS = "flex flex-col gap-3";
@@ -367,7 +373,7 @@ const BuildRow = memo(function BuildRow({
           className="text-foreground flex size-8 shrink-0 items-center justify-center rounded-none"
           aria-hidden
         >
-          <CaretDown
+          <HugeiconsIcon icon={ArrowDown01Icon}
             className={cn(
               "size-4 transition-transform",
               open && "rotate-180",
@@ -601,8 +607,8 @@ function ImprovedMaximaAlert() {
       className="flex items-center gap-2.5 rounded-md border border-positive/30 bg-positive/10 px-3 py-2.5"
       aria-live="polite"
     >
-      <CheckCircle
-        weight="fill"
+      <HugeiconsIcon icon={CheckmarkCircle02Icon}
+        strokeWidth={2}
         className="size-4 shrink-0 text-positive"
         aria-hidden
       />
@@ -619,7 +625,7 @@ function ImprovedMaximaAlert() {
           onClick={() => setDismissed(true)}
           className="text-muted-foreground hover:text-foreground shrink-0"
         >
-          <X weight="bold" className="size-3.5" aria-hidden />
+          <HugeiconsIcon icon={Cancel01Icon} strokeWidth={2} className="size-3.5" aria-hidden />
         </Button>
       </TooltipLabel>
     </div>
@@ -662,7 +668,7 @@ function SearchStatus({
           className="flex items-center gap-2.5 rounded-md border border-foreground/15 bg-lifted px-3 py-2.5"
           aria-live="polite"
         >
-          <CircleNotch
+          <HugeiconsIcon icon={Loading03Icon}
             className="size-4 shrink-0 animate-spin text-primary"
             aria-hidden
           />

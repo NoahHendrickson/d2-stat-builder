@@ -3,7 +3,8 @@
 import { TooltipLabel } from "@/components/ui/tooltip";
 import { memo, useState, type ReactNode } from "react";
 import Image from "next/image";
-import { ArrowDown, ArrowUp } from "@phosphor-icons/react";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { ArrowDown02Icon, ArrowUp02Icon } from "@hugeicons/core-free-icons";
 import { cn } from "@/lib/utils";
 import {
   DropdownMenu,
@@ -34,15 +35,14 @@ import {
 import { CustomOrderList } from "@/components/armor-table/custom-order-list";
 
 /**
- * Same grey-slate fill as dropdown menus (`d2-glass` / `--glass`), without the
- * floating line or shadow — and opaque: translucent fills show rows through
- * sticky headers, and a backdrop blur here re-runs on every scroll frame.
+ * A faint foreground tint over the pane, so the toolbar and column headers pick
+ * up the same backdrop as the rest of the page. The sticky thead adds a blur on
+ * top so rows scrolling under it smear instead of reading through.
  */
-export const TABLE_HEADER_BG = "d2-sidebar-opaque";
+export const TABLE_HEADER_BG = "bg-foreground/8";
 
 const TABLE_HEAD_CELL =
-  "d2-label border-b border-foreground/15 py-2.5 pr-3 whitespace-nowrap first:pl-3 " +
-  TABLE_HEADER_BG;
+  "border-b border-foreground/15 py-2.5 pr-3 text-sm font-normal whitespace-nowrap first:pl-3";
 
 /**
  * Sortable column header: owns the `<th>` chrome and a dropdown for
@@ -94,7 +94,7 @@ export const SortMenu = memo(function SortMenu({
   const customized = level?.kind === "custom";
   const mode = activeSortMode(sort, sortKey);
   const asc = active ? sortLevelAsc(level!) : preferredAsc(sortKey);
-  const Arrow = asc ? ArrowUp : ArrowDown;
+  const arrow = asc ? ArrowUp02Icon : ArrowDown02Icon;
   const numeric = isStatSortKey(sortKey);
   const canCustom = isCustomOrderColumn(sortKey);
   const primary = sort[0];
@@ -164,8 +164,9 @@ export const SortMenu = memo(function SortMenu({
                   : "top-1/2 right-0 -translate-y-1/2",
               )}
             >
-              <Arrow
-                weight="bold"
+              <HugeiconsIcon
+                icon={arrow}
+                strokeWidth={2}
                 className={cn(
                   "size-3 transition-opacity",
                   active

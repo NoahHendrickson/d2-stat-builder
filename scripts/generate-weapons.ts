@@ -1,8 +1,14 @@
 import { loadEnvConfig } from "@next/env";
 import { mkdir, rename, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
-import { buildWeaponIndex } from "../src/lib/weapons/build-index";
-import { downloadManifest } from "../src/lib/weapons/manifest";
+import {
+  buildAmmoTypeCatalog,
+  buildWeaponIndex,
+} from "../src/lib/weapons/build-index";
+import {
+  downloadDestinyIconDefinitions,
+  downloadManifest,
+} from "../src/lib/weapons/manifest";
 import { compactWeaponIndex } from "../src/lib/weapons/transport";
 
 async function main() {
@@ -14,8 +20,15 @@ async function main() {
       "Set NEXT_PUBLIC_BUNGIE_API_KEY in .env.local to refresh the weapon catalog.",
     );
   console.log("Downloading the Destiny manifest…");
-  const { version, defs } = await downloadManifest(apiKey);
-  const { index } = buildWeaponIndex(defs, version);
+  const [{ version, defs }, icons] = await Promise.all([
+    downloadManifest(apiKey),
+    downloadDestinyIconDefinitions(apiKey),
+  ]);
+  const { index } = buildWeaponIndex(
+    defs,
+    version,
+    buildAmmoTypeCatalog(icons),
+  );
   const compact = compactWeaponIndex(index);
   if (compact.weapons.length < 100)
     throw new Error(

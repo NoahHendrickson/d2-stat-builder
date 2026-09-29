@@ -1,7 +1,8 @@
 "use client";
 
 import { Fragment, useMemo, useState } from "react";
-import { PushPin } from "@phosphor-icons/react";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { Pin02Icon } from "@hugeicons/core-free-icons";
 import {
   Dialog,
   DialogContent,
@@ -415,7 +416,7 @@ function SetOptions({
         <span className="flex items-center gap-2">
           <span className="flex size-4 shrink-0 items-center justify-center">
             {pinnedSets.has(s.setHash) && (
-              <PushPin weight="fill" className="text-muted-foreground size-3.5" aria-label="Pinned" />
+              <HugeiconsIcon icon={Pin02Icon} fill="currentColor" className="text-muted-foreground size-3.5" aria-label="Pinned" />
             )}
           </span>
           {label(s)}

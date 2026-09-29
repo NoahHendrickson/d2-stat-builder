@@ -52,6 +52,7 @@ export function buildWeaponMasterworkOptions(
     const statName = stats[primaryMod.hash]?.displayProperties?.name ?? `Stat ${primaryMod.hash}`;
 
     byStatHash.set(primaryMod.hash, {
+      plugHash: hash,
       statHash: primaryMod.hash,
       statName,
       icon: def.displayProperties?.icon || undefined,

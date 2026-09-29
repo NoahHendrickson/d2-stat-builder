@@ -3,7 +3,8 @@
 import { TooltipLabel } from "@/components/ui/tooltip";
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { CircleNotch } from "@phosphor-icons/react";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { Loading03Icon } from "@hugeicons/core-free-icons";
 import { toast } from "@/lib/toast";
 import type { ArmorPiece } from "@/lib/armory/normalize";
 import type { ArmoryCharacter } from "@/lib/armory/fetch";
@@ -136,7 +137,7 @@ export function ArmorRowActions({
             onClick={() => void run(action)}
           >
             {busy === action && (
-              <CircleNotch className="animate-spin" aria-hidden />
+              <HugeiconsIcon icon={Loading03Icon} className="animate-spin" aria-hidden />
             )}
             {action === "move" ? "Move" : "Equip"}
           </Button>

@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import Image from "next/image";
-import { Globe } from "@phosphor-icons/react";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { Globe02Icon } from "@hugeicons/core-free-icons";
 import { faviconSrc } from "@/lib/links/links";
 import { cn } from "@/lib/utils";
 
@@ -12,8 +13,7 @@ export function LinkFavicon({ url, className }: { url: string; className?: strin
   const [failedUrl, setFailedUrl] = useState<string | null>(null);
   if (failedUrl === url) {
     return (
-      <Globe
-        weight="duotone"
+      <HugeiconsIcon icon={Globe02Icon}
         className={cn("text-muted-foreground size-4 shrink-0", className)}
         aria-hidden
       />

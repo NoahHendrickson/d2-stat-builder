@@ -1,21 +1,21 @@
 "use client";
 
-import { memo, useState, type ReactNode } from "react";
+import { memo, useState, type ComponentType } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
 import {
-  Crosshair,
-  DotsThree,
-  PencilSimple,
-  Plus,
-  SidebarSimple,
-  SlidersHorizontal,
-  Stack,
-  Table,
-  Trash,
-  type Icon,
-} from "@phosphor-icons/react";
+  Add01Icon,
+  Backpack01Icon,
+  Delete02Icon,
+  Layers01Icon,
+  LayoutTable01Icon,
+  MoreHorizontalIcon,
+  PanelLeftIcon,
+  PencilEdit02Icon,
+  SlidersHorizontalIcon,
+} from "@hugeicons/core-free-icons";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -24,22 +24,49 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { TooltipLabel } from "@/components/ui/tooltip";
+import { SidebarStatus } from "@/components/armory/armory-status";
 import { LinkDialog } from "@/components/links/link-dialog";
 import { LinkFavicon } from "@/components/links/link-favicon";
 import { addLink, removeLink, updateLink, useLinks } from "@/lib/links/use-links";
 import type { SavedLink } from "@/lib/links/links";
 import { cn } from "@/lib/utils";
+import { GENERIC_WEAPON_TYPE_ICONS } from "@/lib/weapons/weapon-type-icon-paths";
+
+type NavIconProps = { className?: string; strokeWidth?: number };
+
+function navIcon(icon: IconSvgElement): ComponentType<NavIconProps> {
+  return function NavIcon(props) {
+    return <HugeiconsIcon icon={icon} aria-hidden {...props} />;
+  };
+}
+
+function HandCannonIcon({ className }: NavIconProps) {
+  return (
+    <span
+      aria-hidden
+      className={className}
+      style={{
+        backgroundColor: "currentColor",
+        maskImage: `url("${GENERIC_WEAPON_TYPE_ICONS["Hand Cannon"]}")`,
+        maskSize: "contain",
+        maskPosition: "center",
+        maskRepeat: "no-repeat",
+      }}
+    />
+  );
+}
 
 export const NAV_ITEMS: readonly {
   href: string;
   label: string;
-  Icon: Icon;
+  Icon: ComponentType<NavIconProps>;
   soon?: boolean;
 }[] = [
-  { href: "/", label: "Stat optimizer", Icon: SlidersHorizontal },
-  { href: "/armor", label: "Armor table", Icon: Table },
-  { href: "/weapons", label: "Weapon search", Icon: Crosshair },
-  { href: "/loadouts", label: "Loadouts", Icon: Stack },
+  { href: "/", label: "Stat optimizer", Icon: navIcon(SlidersHorizontalIcon) },
+  { href: "/armor", label: "Armor table", Icon: navIcon(LayoutTable01Icon) },
+  { href: "/weapons", label: "Weapon search", Icon: HandCannonIcon },
+  { href: "/loadouts", label: "Loadouts", Icon: navIcon(Layers01Icon) },
+  { href: "/manager", label: "Manager", Icon: navIcon(Backpack01Icon) },
 ];
 
 /** Title for the header strip: the nav label of the current route. */
@@ -47,48 +74,85 @@ export function pageTitle(pathname: string): string {
   return NAV_ITEMS.find((n) => n.href === pathname)?.label ?? "";
 }
 
-/** Height of the sidebar's brand row and the main column's header, so they line up. */
-export const APP_HEADER_HEIGHT = "h-16";
-
 /**
- * The app's navigation column: logo, the four views, and the person's own saved links
- * (usually Google Sheets) that open in a new tab. `collapsed` is the icon rail.
+ * The app's navigation column: logo, the five views, the person's own saved links
+ * (usually Google Sheets) that open in a new tab, and at the foot their armor, game
+ * data, and account. `collapsed` is the icon rail.
  */
 export const AppSidebar = memo(function AppSidebar({
   collapsed = false,
   onToggle,
   onNavigate,
-  footer,
 }: {
   collapsed?: boolean;
   /** Desktop collapse / expand. Omitted in the mobile drawer. */
   onToggle?: () => void;
   /** Called after a nav click (the mobile drawer closes itself). */
   onNavigate?: () => void;
-  footer?: ReactNode;
 }) {
   const pathname = usePathname();
+  const toggleLabel = collapsed ? "Expand sidebar" : "Collapse sidebar";
+  const logo = (
+    <Image
+      src="/sidebar-logo.svg"
+      alt=""
+      width={28}
+      height={28}
+      className="size-7 shrink-0 rounded-none"
+      unoptimized
+      aria-hidden
+    />
+  );
 
   return (
     <nav aria-label="Main" className="flex h-full min-h-0 flex-col">
       <div
         className={cn(
-          APP_HEADER_HEIGHT,
-          "flex shrink-0 items-center gap-3",
-          collapsed ? "justify-center" : "px-4",
+          "flex h-16 shrink-0 items-center gap-3",
+          collapsed ? "justify-center" : "pr-2 pl-4",
         )}
       >
-        <Image
-          src="/sidebar-logo.svg"
-          alt=""
-          width={28}
-          height={28}
-          className="size-7 shrink-0 rounded-none"
-          unoptimized
-          aria-hidden
-        />
+        {collapsed && onToggle ? (
+          // The rail has no room for both: the logo turns into the expand control on hover.
+          <TooltipLabel label={toggleLabel}>
+            <Button
+              variant="ghost"
+              size="icon-lg"
+              aria-label={toggleLabel}
+              aria-expanded={false}
+              onClick={onToggle}
+              className="group/brand text-muted-foreground hover:text-foreground"
+            >
+              <span className="grid place-items-center *:col-start-1 *:row-start-1">
+                <span className="transition-opacity group-hover/brand:opacity-0 group-focus-visible/brand:opacity-0">
+                  {logo}
+                </span>
+                <HugeiconsIcon icon={PanelLeftIcon}
+                  className="size-4 opacity-0 transition-opacity group-hover/brand:opacity-100 group-focus-visible/brand:opacity-100"
+                  aria-hidden
+                />
+              </span>
+            </Button>
+          </TooltipLabel>
+        ) : (
+          logo
+        )}
         {!collapsed && (
-          <span className="min-w-0 truncate text-sm font-medium">D2 Stat Builder</span>
+          <span className="min-w-0 flex-1 truncate text-sm font-medium">D2 Stat Builder</span>
+        )}
+        {!collapsed && onToggle && (
+          <TooltipLabel label={toggleLabel}>
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label={toggleLabel}
+              aria-expanded
+              onClick={onToggle}
+              className="text-muted-foreground hover:text-foreground aria-expanded:bg-transparent aria-expanded:hover:bg-foreground/8"
+            >
+              <HugeiconsIcon icon={PanelLeftIcon} aria-hidden />
+            </Button>
+          </TooltipLabel>
         )}
       </div>
 
@@ -109,24 +173,7 @@ export const AppSidebar = memo(function AppSidebar({
 
       <LinksSection collapsed={collapsed} />
 
-      {footer}
-
-      {onToggle && (
-        <div className={cn("shrink-0 py-3", collapsed ? "flex justify-center" : "px-2")}>
-          <TooltipLabel label={collapsed ? "Expand sidebar" : "Collapse sidebar"}>
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-              aria-expanded={!collapsed}
-              onClick={onToggle}
-              className="text-muted-foreground hover:text-foreground aria-expanded:bg-transparent aria-expanded:hover:bg-foreground/8"
-            >
-              <SidebarSimple aria-hidden />
-            </Button>
-          </TooltipLabel>
-        </div>
-      )}
+      <SidebarStatus collapsed={collapsed} />
     </nav>
   );
 });
@@ -146,7 +193,7 @@ function NavItem({
 }: {
   href: string;
   label: string;
-  Icon: Icon;
+  Icon: ComponentType<NavIconProps>;
   soon?: boolean;
   active: boolean;
   collapsed: boolean;
@@ -162,15 +209,11 @@ function NavItem({
         rowClass,
         collapsed ? "w-9 justify-center" : "px-2.5",
         active
-          ? "bg-foreground/8 text-foreground shadow-[inset_0_0_0_1px] shadow-foreground/8"
+          ? "bg-foreground/8 text-foreground"
           : "text-muted-foreground hover:bg-foreground/5 hover:text-foreground",
       )}
     >
-      {/* The active marker: a short bar on the leading edge, like the game's selected tab. */}
-      {active && (
-        <span aria-hidden className="bg-foreground absolute top-2 bottom-2 left-0 w-0.5" />
-      )}
-      <Icon weight={active ? "fill" : "duotone"} className="size-4 shrink-0" aria-hidden />
+      <Icon strokeWidth={active ? 2 : 1.5} className="size-4 shrink-0" />
       {!collapsed && (
         <>
           <span className="min-w-0 flex-1 truncate">{label}</span>
@@ -204,7 +247,7 @@ function LinksSection({ collapsed }: { collapsed: boolean }) {
         onClick={() => setDialog({ kind: "add" })}
         className="text-muted-foreground hover:text-foreground"
       >
-        <Plus weight="bold" aria-hidden />
+        <HugeiconsIcon icon={Add01Icon} strokeWidth={2} aria-hidden />
       </Button>
     </TooltipLabel>
   );
@@ -246,7 +289,7 @@ function LinksSection({ collapsed }: { collapsed: boolean }) {
           onClick={() => setDialog({ kind: "add" })}
           className="text-muted-foreground hover:text-foreground mx-2 flex items-start gap-3 rounded-none px-2.5 py-2 text-left text-sm leading-5 outline-none transition-colors hover:bg-foreground/5 focus-visible:ring-1 focus-visible:ring-outline-strong"
         >
-          <Plus className="mt-0.5 size-4 shrink-0" aria-hidden />
+          <HugeiconsIcon icon={Add01Icon} className="mt-0.5 size-4 shrink-0" aria-hidden />
           <span>Pin a spreadsheet or site you use alongside the app</span>
         </button>
       )}
@@ -310,15 +353,15 @@ function LinkRow({
           }
           aria-label={`Options for ${link.name}`}
         >
-          <DotsThree weight="bold" aria-hidden />
+          <HugeiconsIcon icon={MoreHorizontalIcon} strokeWidth={2} aria-hidden />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-36">
           <DropdownMenuItem onClick={onEdit}>
-            <PencilSimple aria-hidden />
+            <HugeiconsIcon icon={PencilEdit02Icon} aria-hidden />
             Edit
           </DropdownMenuItem>
           <DropdownMenuItem variant="destructive" onClick={() => removeLink(link.id)}>
-            <Trash aria-hidden />
+            <HugeiconsIcon icon={Delete02Icon} aria-hidden />
             Remove
           </DropdownMenuItem>
         </DropdownMenuContent>

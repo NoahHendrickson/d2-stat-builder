@@ -10,7 +10,7 @@ export type CompactWeaponIndex = Omit<
   weapons: CompactWeapon[];
 };
 
-/** The browser never reads a perk's stat modifiers; keep them out of the snapshot. */
+/** The browser reads stat modifiers by name (`stats`); drop the hash-keyed copy. */
 function compactPerk(perk: PerkRef): PerkRef {
   const { statMods, ...compact } = perk;
   void statMods;
@@ -27,6 +27,7 @@ export function compactWeaponIndex(index: WeaponIndex): CompactWeaponIndex {
     damageTypes: index.damageTypes,
     weaponTypes: index.weaponTypes,
     ammoTypes: index.ammoTypes,
+    statCurves: index.statCurves,
     weapons: index.weapons.filter(isCatalogWeapon).map((weapon) => {
       const { perks, perksLower, perkHashes, ...compact } = weapon;
       void perks;

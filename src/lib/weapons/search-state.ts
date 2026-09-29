@@ -1,6 +1,7 @@
 import type { WeaponFilters } from "./search";
 
 export const FILTERS = [
+  ["trait", "Trait"],
   ["type", "Weapon type"],
   ["element", "Element"],
   ["ammo", "Ammo"],
@@ -8,7 +9,6 @@ export const FILTERS = [
   ["trait2", "Trait 2"],
   ["perkCombo", "Perk combo"],
   ["originTrait", "Origin trait"],
-  ["perks", "Required perks"],
   ["frame", "Frame"],
   ["slot", "Slot"],
   ["rarity", "Rarity"],
@@ -20,8 +20,13 @@ export const SORTS = [
   ["season-desc", "Newest"],
   ["season-asc", "Oldest"],
   ["name", "A–Z"],
-  ["ammo-gen-desc", "Ammo generation"],
 ] as const;
+
+/** An `ammoGen` URL value as a whole number, or null when it isn't one. */
+export function readAmmoGen(raw: string | null): number | null {
+  if (!raw || !/^\d{1,3}$/.test(raw.trim())) return null;
+  return Number(raw.trim());
+}
 
 export function readSearchState(params: URLSearchParams) {
   const filters: WeaponFilters = {};
@@ -32,6 +37,8 @@ export function readSearchState(params: URLSearchParams) {
   }
   if (params.get("adept") === "true") filters.adept = true;
   if (params.get("adept") === "false") filters.adept = false;
+  const ammoGen = readAmmoGen(params.get("ammoGen"));
+  if (ammoGen != null) filters.ammoGenAbove = ammoGen;
   if (params.get("trait1DamagePerks") === "true")
     filters.trait1DamagePerks = true;
   if (params.get("trait2DamagePerks") === "true")
@@ -61,19 +68,3 @@ export function readSearchState(params: URLSearchParams) {
 }
 
 export type WeaponSearchState = ReturnType<typeof readSearchState>;
-
-/** Human-readable one-liner for a saved search: query, then each filter with its label. */
-export function describeSearchState(state: WeaponSearchState): string {
-  const parts: string[] = [];
-  if (state.query) parts.push(state.query);
-  for (const [key, label] of FILTERS) {
-    for (const value of state.filters[key] ?? []) parts.push(`${label}: ${value}`);
-  }
-  if (state.filters.adept != null) parts.push(state.filters.adept ? "Adept" : "Standard");
-  if (state.filters.trait1DamagePerks) parts.push("Trait 1: damage perks");
-  if (state.filters.trait2DamagePerks) parts.push("Trait 2: damage perks");
-  for (const group of state.filters.customPerkGroups ?? []) {
-    parts.push(`Any: ${group.join(" / ")}`);
-  }
-  return parts.join(" · ") || "All weapons";
-}

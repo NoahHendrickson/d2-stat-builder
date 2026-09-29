@@ -6,14 +6,15 @@ import { Toast as ToastPrimitive } from "@base-ui/react/toast";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { HugeiconsIcon } from "@hugeicons/react";
 import {
-  XIcon,
-  CheckCircleIcon,
-  InfoIcon,
-  WarningIcon,
-  XCircleIcon,
-  SpinnerIcon,
-} from "@phosphor-icons/react";
+  Alert02Icon,
+  Cancel01Icon,
+  CancelCircleIcon,
+  CheckmarkCircle02Icon,
+  InformationCircleIcon,
+  Loading03Icon,
+} from "@hugeicons/core-free-icons";
 
 const toast = ToastPrimitive.createToastManager();
 
@@ -134,7 +135,7 @@ function ToastClose({
         )}
         {...props}
       >
-        {children ?? <XIcon aria-hidden="true" />}
+        {children ?? <HugeiconsIcon icon={Cancel01Icon} aria-hidden="true" />}
       </ToastPrimitive.Close>
     </TooltipLabel>
   );
@@ -144,23 +145,23 @@ function ToastIcon({ type }: { type: string | undefined }) {
   let icon: React.ReactNode = null;
 
   if (type === "success") {
-    icon = <CheckCircleIcon className="text-positive" aria-hidden="true" />;
+    icon = <HugeiconsIcon icon={CheckmarkCircle02Icon} className="text-positive" aria-hidden="true" />;
   }
 
   if (type === "info") {
-    icon = <InfoIcon aria-hidden="true" />;
+    icon = <HugeiconsIcon icon={InformationCircleIcon} aria-hidden="true" />;
   }
 
   if (type === "warning") {
-    icon = <WarningIcon className="text-warning" aria-hidden="true" />;
+    icon = <HugeiconsIcon icon={Alert02Icon} className="text-warning" aria-hidden="true" />;
   }
 
   if (type === "error") {
-    icon = <XCircleIcon className="text-destructive" aria-hidden="true" />;
+    icon = <HugeiconsIcon icon={CancelCircleIcon} className="text-destructive" aria-hidden="true" />;
   }
 
   if (type === "loading") {
-    icon = <SpinnerIcon className="animate-spin" aria-hidden="true" />;
+    icon = <HugeiconsIcon icon={Loading03Icon} className="animate-spin" aria-hidden="true" />;
   }
 
   if (!icon) {

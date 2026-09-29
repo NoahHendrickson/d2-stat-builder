@@ -49,12 +49,14 @@ export const sampleWeapons: WeaponDoc[] = [
     ],
     masterworkOptions: [
       {
+        plugHash: 9002,
         statHash: 2,
         statName: "Range",
         icon: "/common/destiny2_content/icons/mw-range.png",
         statMods: [{ hash: 2, value: 10 }],
       },
       {
+        plugHash: 9003,
         statHash: 3,
         statName: "Stability",
         icon: "/common/destiny2_content/icons/mw-stability.png",

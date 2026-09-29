@@ -2,7 +2,8 @@
 
 import { TooltipLabel } from "@/components/ui/tooltip";
 import { useRef, useState } from "react";
-import { CaretUpDown, MagnifyingGlass, PushPin, X } from "@phosphor-icons/react";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { Cancel01Icon, Pin02Icon, Search01Icon, UnfoldMoreIcon } from "@hugeicons/core-free-icons";
 import { partitionByPin, type FilterOption } from "@/lib/armor-table/pinned";
 import {
   fieldControlInnerTriggerClasses,
@@ -121,8 +122,8 @@ export function FilterMultiselectPanel<V extends string | number>({
                   : "text-muted-foreground hover:text-foreground opacity-0 group-hover/dropdown-menu-checkbox-item:opacity-100",
               )}
             >
-              <PushPin
-                weight={isPinned ? "fill" : "duotone"}
+              <HugeiconsIcon icon={Pin02Icon}
+                fill={isPinned ? "currentColor" : "none"}
                 className="size-3.5"
                 aria-hidden
               />
@@ -141,7 +142,7 @@ export function FilterMultiselectPanel<V extends string | number>({
           onPointerDown={(e) => e.stopPropagation()}
         >
           <div className="relative">
-            <MagnifyingGlass
+            <HugeiconsIcon icon={Search01Icon}
               className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 z-10 size-4 -translate-y-1/2"
               aria-hidden
             />
@@ -276,7 +277,7 @@ export function FilterMultiselect<V extends string | number>({
                   {allLabel}
                 </span>
               )}
-              <CaretUpDown
+              <HugeiconsIcon icon={UnfoldMoreIcon}
                 className={cn(
                   "pointer-events-none size-4 shrink-0",
                   active ? "text-white" : "text-foreground/70",
@@ -297,7 +298,7 @@ export function FilterMultiselect<V extends string | number>({
               }}
               className="absolute top-1/2 right-8 flex size-4 -translate-y-1/2 items-center justify-center rounded-none text-current outline-none focus-visible:ring-1 focus-visible:ring-outline-strong"
             >
-              <X className="size-4" aria-hidden />
+              <HugeiconsIcon icon={Cancel01Icon} className="size-4" aria-hidden />
             </button>
           </TooltipLabel>
         )}

@@ -63,8 +63,7 @@ import { useArmorTableSort } from "@/components/armor-table/use-armor-table-sort
 const ESTIMATED_ROW_HEIGHT_PX = 48;
 
 const TABLE_HEAD_CELL =
-  "d2-label border-b border-foreground/15 py-2.5 pr-3 whitespace-nowrap first:pl-3 " +
-  TABLE_HEADER_BG;
+  "border-b border-foreground/15 py-2.5 pr-3 text-sm font-normal whitespace-nowrap first:pl-3";
 
 /** Header-cell order → sort key; `undefined` marks unsortable columns (Actions). */
 const COLUMN_SORT_KEYS: readonly (SortKey | undefined)[] = [
@@ -125,7 +124,7 @@ const HeaderRow = memo(function HeaderRow({
     hoveredCol !== null ? COLUMN_SORT_KEYS[hoveredCol] : undefined;
 
   return (
-    <thead className={cn("sticky top-0 z-10", TABLE_HEADER_BG)}>
+    <thead className={cn("sticky top-0 z-10 backdrop-blur-[20px]", TABLE_HEADER_BG)}>
       <tr className="text-muted-foreground text-left">
         <SortMenu
           label="Name"

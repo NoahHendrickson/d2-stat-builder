@@ -4,7 +4,7 @@ import type {
 } from "bungie-api-ts/destiny2";
 import { isFestivalMask } from "@/lib/armory/festival-masks";
 import { setCachedTable } from "./db";
-import { projectItemDef, type ItemDef } from "./item-def";
+import { projectItemDef, projectItemDefLean, type ItemDef } from "./item-def";
 import { MANIFEST_TABLES, type ManifestTableName, type ManifestTables } from "./tables";
 
 /**
@@ -20,6 +20,7 @@ const BUNGIE_ROOT = "https://www.bungie.net";
 const ITEM_TYPE_ARMOR = 2;
 const ITEM_TYPE_MOD = 19;
 const ITEM_TYPE_SUBCLASS = 16;
+const ITEM_TYPE_CURRENCY = 1;
 
 /** `jsonWorldComponentContentPaths.en` from the manifest info: table name → path. */
 export type TablePaths = Record<ManifestTableName, string>;
@@ -49,8 +50,28 @@ export function materialItemHashes(
 }
 
 /**
+ * Item buckets the inventory manager draws (weapons, ghosts, vehicles, ships, emblems,
+ * consumables, mods, engrams, quests). Their items are kept with the lean projection
+ * unless the filter below already keeps them in full.
+ */
+const MANAGER_BUCKETS = new Set([
+  1498876634, // Kinetic Weapons
+  2465295065, // Energy Weapons
+  953998645, // Power Weapons
+  4023194814, // Ghost
+  2025709351, // Vehicle
+  284967655, // Ships
+  4274335291, // Emblems
+  1469714392, // Consumables
+  3313201758, // Modifications
+  375726501, // Engrams
+  1345459588, // Quests
+]);
+
+/**
  * Keep armor, subclasses, plugs/mods, Festival of the Lost masks, and upgrade materials,
- * projected down to the fields the app reads (`ItemDef`).
+ * projected down to the fields the app reads (`ItemDef`), plus a lean copy of anything
+ * else the inventory manager can show.
  */
 export function filterInventoryItems(
   all: Record<number, DestinyInventoryItemDefinition>,
@@ -70,6 +91,13 @@ export function filterInventoryItems(
       isFestivalMask(Number(key), def)
     ) {
       out[key as unknown as number] = projectItemDef(def);
+    } else if (
+      !def.redacted &&
+      (MANAGER_BUCKETS.has(def.inventory?.bucketTypeHash as number) ||
+        // The vault header lists the profile currencies (Bright Dust, …).
+        def.itemType === ITEM_TYPE_CURRENCY)
+    ) {
+      out[key as unknown as number] = projectItemDefLean(def);
     }
   }
   return out;

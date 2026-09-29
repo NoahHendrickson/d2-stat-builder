@@ -3,19 +3,20 @@
 import { TooltipLabel } from "@/components/ui/tooltip";
 import { memo, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { HugeiconsIcon } from "@hugeicons/react";
 import {
-  ArrowLineDown,
-  ArrowSquareOut,
-  CaretDown,
-  CircleNotch,
-  Copy,
-  DotsThreeVertical,
-  PencilSimple,
-  ShareFat,
-  SlidersHorizontal,
-  Trash,
-  Warning,
-} from "@phosphor-icons/react";
+  Alert02Icon,
+  ArrowDown01Icon,
+  Copy01Icon,
+  Delete02Icon,
+  Download04Icon,
+  LinkSquare02Icon,
+  Loading03Icon,
+  MoreVerticalIcon,
+  PencilEdit02Icon,
+  Share08Icon,
+  SlidersHorizontalIcon,
+} from "@hugeicons/core-free-icons";
 import { toast } from "@/lib/toast";
 import type { ArmorPiece } from "@/lib/armory/normalize";
 import type { ArmoryCharacter } from "@/lib/armory/fetch";
@@ -171,7 +172,7 @@ export const LoadoutRow = memo(function LoadoutRow({
   return (
     <article
       aria-label={loadout.name}
-      className="@container d2-card-frame flex flex-col gap-4 p-4 [--card-line-width:1.5px] hover:[--line-alpha:1.6]"
+      className="@container d2-card-frame flex flex-col gap-4 p-4 hover:[--line-alpha:1.6]"
     >
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
         <div className="flex min-w-0 flex-1 basis-48 flex-col">
@@ -179,8 +180,8 @@ export const LoadoutRow = memo(function LoadoutRow({
             <span className="truncate">{loadout.name}</span>
             {resolved.missing && (
               <TooltipLabel label="Some pieces aren't in your inventory">
-                <Warning
-                  weight="fill"
+                <HugeiconsIcon icon={Alert02Icon}
+                  strokeWidth={2}
                   tabIndex={0}
                   className="size-4 shrink-0 text-warning"
                   aria-label="Missing items"
@@ -222,8 +223,8 @@ export const LoadoutRow = memo(function LoadoutRow({
           ) : (
             <span className="text-muted-foreground">Details</span>
           )}
-          <CaretDown
-            weight="bold"
+          <HugeiconsIcon icon={ArrowDown01Icon}
+            strokeWidth={2}
             className={cn(
               "text-muted-foreground size-3 transition-transform",
               open && "rotate-180",
@@ -244,7 +245,7 @@ export const LoadoutRow = memo(function LoadoutRow({
               onClick={applyLoadout}
               disabled={!canApply}
             >
-              {applying && <CircleNotch className="animate-spin" aria-hidden />}
+              {applying && <HugeiconsIcon icon={Loading03Icon} className="animate-spin" aria-hidden />}
               Equip
             </Button>
           </TooltipLabel>
@@ -253,19 +254,19 @@ export const LoadoutRow = memo(function LoadoutRow({
               render={<Button size="icon" variant="dashed" />}
               aria-label={`Actions for ${loadout.name}`}
             >
-              <DotsThreeVertical weight="bold" className="size-4" aria-hidden />
+              <HugeiconsIcon icon={MoreVerticalIcon} strokeWidth={2} className="size-4" aria-hidden />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-50">
               <DropdownMenuItem onClick={() => onOptimize(saved)}>
-                <SlidersHorizontal weight="duotone" aria-hidden />
+                <HugeiconsIcon icon={SlidersHorizontalIcon} aria-hidden />
                 Optimize
               </DropdownMenuItem>
               <DropdownMenuItem onClick={applyLoadout} disabled={!canApply}>
-                <ArrowLineDown weight="duotone" aria-hidden />
+                <HugeiconsIcon icon={Download04Icon} aria-hidden />
                 Equip
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => onEdit(saved)}>
-                <PencilSimple weight="duotone" aria-hidden />
+                <HugeiconsIcon icon={PencilEdit02Icon} aria-hidden />
                 Edit
               </DropdownMenuItem>
               <LoadoutTagAssignSubmenu
@@ -275,25 +276,25 @@ export const LoadoutRow = memo(function LoadoutRow({
                 onCreate={(tag) => onSetTag(saved, tag, true)}
               />
               <DropdownMenuItem onClick={() => onShare(saved)}>
-                <ShareFat weight="duotone" aria-hidden />
+                <HugeiconsIcon icon={Share08Icon} aria-hidden />
                 Share
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={() => onDuplicate(saved)}>
-                <Copy weight="duotone" aria-hidden />
+                <HugeiconsIcon icon={Copy01Icon} aria-hidden />
                 Duplicate
               </DropdownMenuItem>
               <DropdownMenuItem onClick={copyItemIds} disabled={!resolved.actionable}>
-                <Copy weight="duotone" aria-hidden />
+                <HugeiconsIcon icon={Copy01Icon} aria-hidden />
                 Copy item IDs
               </DropdownMenuItem>
               <DropdownMenuItem onClick={openInDim}>
-                <ArrowSquareOut weight="duotone" aria-hidden />
+                <HugeiconsIcon icon={LinkSquare02Icon} aria-hidden />
                 Open in DIM
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem variant="destructive" onClick={() => onDelete(saved)}>
-                <Trash weight="duotone" aria-hidden />
+                <HugeiconsIcon icon={Delete02Icon} aria-hidden />
                 Delete
               </DropdownMenuItem>
             </DropdownMenuContent>

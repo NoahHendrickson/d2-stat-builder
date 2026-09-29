@@ -20,6 +20,8 @@ export interface PerkRef {
   alternateHashes?: number[];
   /** Non-conditional investment stat modifiers when this plug is selected. */
   statMods?: StatMod[];
+  /** `statMods` keyed by stat name ("Handling": 10); what the browser ships. */
+  stats?: Record<string, number>;
 }
 
 /** One perk column on a weapon (barrel, magazine, a trait slot, origin, …). */
@@ -75,6 +77,12 @@ export interface WeaponSummary {
   superseded?: boolean;
   /** Base Ammo Generation display value (0–100); omitted when the weapon has no such stat. */
   ammoGeneration?: number;
+  /** Base investment stats by name, for the stats the game displays (nonzero); see `statCurves`. */
+  statInvestment?: Record<string, number>;
+  /** Keys `WeaponIndex.statCurves`, which turn investment values into displayed ones. */
+  statGroupHash?: number;
+  /** Full-tier masterwork choices as indices into `WeaponIndex.perks`. */
+  masterworks?: number[];
   columns: InternedPerkColumn[];
   /** Every perk name across all columns (deduped) — powers reverse perk search. */
   perks: string[];
@@ -97,6 +105,13 @@ export interface StatGroupScaledStat {
   displayInterpolation: StatInterpolationPoint[];
 }
 
+/** One stat's investment → display curve from a stat group, as [investment, display] points. */
+export interface StatCurve {
+  /** Investment values are clamped to this before interpolating. */
+  max: number;
+  points: [number, number][];
+}
+
 /** Compact stat-group definition shipped alongside weapon details. */
 export interface StatGroupRef {
   hash: number;
@@ -106,6 +121,8 @@ export interface StatGroupRef {
 
 /** One selectable masterwork stat option (full tier / +10 investment). */
 export interface MasterworkOption {
+  /** The completed masterwork plug. */
+  plugHash: number;
   statHash: number;
   statName: string;
   /** Bungie icon path from the completed masterwork plug. */
@@ -127,7 +144,7 @@ export interface WeaponDetailFields {
 }
 
 /** Full weapon with resolved columns — merged from summary + detail at runtime. */
-export interface WeaponDoc extends Omit<WeaponSummary, "columns" | "perksLower"> {
+export interface WeaponDoc extends Omit<WeaponSummary, "columns" | "perksLower" | "masterworks"> {
   screenshot?: string;
   flavor?: string;
   stats: WeaponStat[];
@@ -171,6 +188,8 @@ export interface WeaponIndex {
   weaponTypes?: WeaponTypeRef[];
   /** Ammo type catalog from DestinyIconDefinition HUD icons (Primary / Special / Heavy). */
   ammoTypes?: AmmoTypeRef[];
+  /** Stat group hash → stat name → curve; stats without a curve display their investment value. */
+  statCurves?: Record<string, Record<string, StatCurve>>;
 }
 
 export interface WeaponDetailIndex {

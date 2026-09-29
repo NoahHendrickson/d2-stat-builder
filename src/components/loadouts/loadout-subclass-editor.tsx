@@ -3,7 +3,8 @@
 import { TooltipLabel } from "@/components/ui/tooltip";
 import { useEffect, useId, useMemo, useState, type CSSProperties } from "react";
 import Image from "next/image";
-import { CaretDown } from "@phosphor-icons/react";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { ArrowDown01Icon } from "@hugeicons/core-free-icons";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -315,7 +316,7 @@ export function LoadoutSubclassEditor({
             <span className="truncate">
               {active ? `${active} · ${catalog[active].name}` : "No subclass"}
             </span>
-            <CaretDown className="size-4 shrink-0 text-muted-foreground" aria-hidden />
+            <HugeiconsIcon icon={ArrowDown01Icon} className="size-4 shrink-0 text-muted-foreground" aria-hidden />
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start">
             <DropdownMenuRadioGroup

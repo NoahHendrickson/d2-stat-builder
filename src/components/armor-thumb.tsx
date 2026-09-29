@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import Image from "next/image";
 import { cn } from "@/lib/utils";
 import { BUNGIE_IMAGE_BASE } from "@/lib/bungie/constants";
@@ -11,6 +12,7 @@ const SIZE_CLASS = {
   40: "size-10",
   44: "size-11",
   48: "size-12",
+  52: "size-13",
   56: "size-14",
   64: "size-16",
 } as const;
@@ -38,6 +40,7 @@ export function ArmorThumb({
   masterworked = false,
   gearTier,
   className,
+  children,
 }: {
   icon?: string;
   watermark?: string;
@@ -47,6 +50,8 @@ export function ArmorThumb({
   /** Armor 3.0 gear tier (1–5). 2–4 get the in-game pip overlay; 5 gets the gold rail. */
   gearTier?: number;
   className?: string;
+  /** Extra overlays (e.g. a tile frame): over the watermark, under the tier pips and masterwork frame. */
+  children?: ReactNode;
 }) {
   return (
     <span
@@ -78,6 +83,7 @@ export function ArmorThumb({
           unoptimized
         />
       )}
+      {children}
       {gearTier === 5 && (
         <Image
           src="/loadout/tier-5-pips.svg"

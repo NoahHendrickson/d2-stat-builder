@@ -2,7 +2,13 @@
 
 import { useState } from "react";
 import dynamic from "next/dynamic";
-import { ArrowSquareOut, CircleNotch, Copy, Sparkle } from "@phosphor-icons/react";
+import { HugeiconsIcon } from "@hugeicons/react";
+import {
+  Copy01Icon,
+  LinkSquare02Icon,
+  Loading03Icon,
+  SparklesIcon,
+} from "@hugeicons/core-free-icons";
 import { useQueryClient } from "@tanstack/react-query";
 import { TooltipLabel } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
@@ -283,7 +289,7 @@ export function BuildActions({
           onClick={() => onDream(loadout)}
           className="mr-auto"
         >
-          <Sparkle data-icon="inline-start" aria-hidden />
+          <HugeiconsIcon icon={SparklesIcon} data-icon="inline-start" aria-hidden />
           Dream build
         </Button>
       )}
@@ -302,7 +308,7 @@ export function BuildActions({
           disabled={!canActOnItems || !targetCharacter || equipping}
         >
           {equipping ? (
-            <CircleNotch className="animate-spin" aria-hidden />
+            <HugeiconsIcon icon={Loading03Icon} className="animate-spin" aria-hidden />
           ) : null}
           Equip items
         </Button>
@@ -313,7 +319,7 @@ export function BuildActions({
           onClick={copyItemIds}
           disabled={!canActOnItems}
         >
-          <Copy data-icon="inline-start" aria-hidden />
+          <HugeiconsIcon icon={Copy01Icon} data-icon="inline-start" aria-hidden />
           Copy item IDs
         </Button>
       </TooltipLabel>
@@ -327,7 +333,7 @@ export function BuildActions({
           disabled={!canActOnItems || !hasModHashes}
         >
           Open in DIM
-          <ArrowSquareOut data-icon="inline-end" aria-hidden />
+          <HugeiconsIcon icon={LinkSquare02Icon} data-icon="inline-end" aria-hidden />
         </Button>
       </TooltipLabel>
       <TooltipLabel

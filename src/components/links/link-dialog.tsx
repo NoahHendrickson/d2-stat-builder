@@ -1,6 +1,6 @@
 "use client";
 
-import { useDeferredValue, useId, useState, type FormEvent } from "react";
+import { useId, useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -11,7 +11,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { LinkFavicon } from "@/components/links/link-favicon";
 import {
   defaultLinkName,
   MAX_LINK_NAME_LENGTH,
@@ -67,8 +66,6 @@ function LinkForm({
   const [url, setUrl] = useState(link?.url ?? "");
   const [showError, setShowError] = useState(false);
   const normalized = normalizeLinkUrl(url);
-  // The preview fetches a favicon; let typing settle before it swaps.
-  const previewUrl = useDeferredValue(normalized);
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
@@ -97,29 +94,19 @@ function LinkForm({
         <label htmlFor={urlId} className="text-sm font-medium">
           URL
         </label>
-        <div className="relative">
-          <span className="pointer-events-none absolute top-1/2 left-2.5 z-10 flex -translate-y-1/2">
-            {previewUrl ? (
-              <LinkFavicon url={previewUrl} />
-            ) : (
-              <span className="size-4" aria-hidden />
-            )}
-          </span>
-          <Input
-            id={urlId}
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-            onBlur={() => setShowError(url.trim().length > 0)}
-            placeholder="docs.google.com/spreadsheets/…"
-            inputMode="url"
-            autoComplete="off"
-            spellCheck={false}
-            autoFocus={!link}
-            aria-invalid={invalid || undefined}
-            aria-describedby={invalid ? errorId : undefined}
-            className="pl-8"
-          />
-        </div>
+        <Input
+          id={urlId}
+          value={url}
+          onChange={(e) => setUrl(e.target.value)}
+          onBlur={() => setShowError(url.trim().length > 0)}
+          placeholder="docs.google.com/spreadsheets/…"
+          inputMode="url"
+          autoComplete="off"
+          spellCheck={false}
+          autoFocus={!link}
+          aria-invalid={invalid || undefined}
+          aria-describedby={invalid ? errorId : undefined}
+        />
         {invalid && (
           <p id={errorId} className="text-destructive text-xs">
             Enter a web address, like docs.google.com/spreadsheets/…

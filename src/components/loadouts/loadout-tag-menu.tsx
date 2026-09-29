@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import { Plus, TagSimple } from "@phosphor-icons/react";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { Add01Icon, Tag01Icon } from "@hugeicons/core-free-icons";
 import { normalizeTag } from "@/lib/loadouts/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -76,7 +77,7 @@ function TagPanel({
             aria-label={draft ? `Create tag ${draft}` : "Create tag"}
             onClick={create}
           >
-            <Plus weight="bold" aria-hidden />
+            <HugeiconsIcon icon={Add01Icon} strokeWidth={2} aria-hidden />
           </Button>
         )}
       </div>
@@ -127,7 +128,7 @@ function TagSubmenu({
       }}
     >
       <DropdownMenuSubTrigger openOnHover>
-        {showIcon ? <TagSimple weight="duotone" aria-hidden /> : null}
+        {showIcon ? <HugeiconsIcon icon={Tag01Icon} aria-hidden /> : null}
         <span className="min-w-0 flex-1 truncate">{label}</span>
         {summary ? (
           <span className="text-muted-foreground max-w-24 truncate text-xs">

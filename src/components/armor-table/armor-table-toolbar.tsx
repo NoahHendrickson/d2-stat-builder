@@ -1,7 +1,8 @@
 "use client";
 
 import { memo, type RefObject } from "react";
-import { MagnifyingGlass, X } from "@phosphor-icons/react";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { Cancel01Icon, Search01Icon } from "@hugeicons/core-free-icons";
 import type { FilterOption } from "@/lib/armor-table/pinned";
 import type { ArmorVersion, FacetFilters } from "@/lib/armor-table/filters";
 import { CLASS_NAMES } from "@/lib/armory/stats";
@@ -90,7 +91,7 @@ export const ArmorTableToolbar = memo(function ArmorTableToolbar({
         {filteredCount} {filteredCount === 1 ? "piece" : "pieces"}
       </span>
       <div className="relative h-8 min-w-0 flex-1 @[58rem]/toolbar:w-[272px] @[58rem]/toolbar:flex-none">
-        <MagnifyingGlass
+        <HugeiconsIcon icon={Search01Icon}
           className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 z-10 size-4 -translate-y-1/2"
           aria-hidden
         />
@@ -180,7 +181,7 @@ export const ArmorTableToolbar = memo(function ArmorTableToolbar({
           className="ml-auto h-8 shrink-0 gap-1.5 px-2.5 pr-3"
           onClick={onClearFilters}
         >
-          <X className="size-4" aria-hidden />
+          <HugeiconsIcon icon={Cancel01Icon} className="size-4" aria-hidden />
           Clear all
         </Button>
       )}

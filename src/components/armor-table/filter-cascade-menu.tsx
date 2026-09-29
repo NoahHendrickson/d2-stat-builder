@@ -2,7 +2,8 @@
 
 import { TooltipLabel } from "@/components/ui/tooltip";
 import { useState } from "react";
-import { CaretUpDown } from "@phosphor-icons/react";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { UnfoldMoreIcon } from "@hugeicons/core-free-icons";
 import type { FilterOption } from "@/lib/armor-table/pinned";
 import type {
   ArmorVersion,
@@ -213,7 +214,7 @@ export function FilterCascadeMenu({
                 {totalSelected}
               </Badge>
             )}
-            <CaretUpDown
+            <HugeiconsIcon icon={UnfoldMoreIcon}
               className={cn(
                 "pointer-events-none size-4 shrink-0",
                 active ? "text-white" : "text-foreground/70",
