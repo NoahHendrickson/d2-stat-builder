@@ -196,7 +196,7 @@ export function PerkFinder({
 
   return (
     <section className="border-foreground/12 flex flex-col gap-3 border-b px-4 py-3" aria-label="Find a roll">
-      <div className="flex flex-wrap items-center justify-between gap-2">
+      <div className="flex flex-col items-start gap-2">
         <p className="text-sm">Pick the perks you want, then we&apos;ll find the fewest copies to keep.</p>
         <div className="flex flex-wrap items-center gap-1.5">
           <div className="flex gap-1" role="radiogroup" aria-label="Match">
@@ -245,10 +245,11 @@ export function PerkFinder({
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-x-8 gap-y-3">
+      {/* One grid for both sections, so their help text and perk columns share rows and the column headers line up. */}
+      <div className="grid gap-x-8 gap-y-2 lg:grid-cols-[auto_auto] lg:justify-start">
         {/* Masterwork, barrel, and magazine first, then perks, like the game's perk grid. */}
         {orderColumns.length > 0 && (
-          <div className="flex flex-col gap-2">
+          <div className="row-span-2 grid grid-rows-subgrid">
             {promotedNames.length > 0 ? (
               <p className="flex max-w-xl items-start gap-1.5 text-xs">
                 <HugeiconsIcon icon={InformationCircleIcon} className="mt-px size-3.5 shrink-0" aria-hidden />
@@ -266,7 +267,7 @@ export function PerkFinder({
             <div className="flex gap-2">{orderColumns.map(renderColumn)}</div>
           </div>
         )}
-        <div className="flex flex-col gap-2">
+        <div className="row-span-2 grid grid-rows-subgrid">
           <p className="text-muted-foreground max-w-xl text-xs">
             {comboMode
               ? "Pick a left perk and a right perk to make a combo. Pick a perk again to use it in another combo."

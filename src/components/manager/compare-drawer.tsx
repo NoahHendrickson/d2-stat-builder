@@ -168,7 +168,7 @@ export function CompareView({
     return LOWER_IS_BETTER.has(stat) ? min : max;
   };
 
-  const grid = { gridTemplateColumns: `8.5rem repeat(${ordered.length}, minmax(10.5rem, 1fr))` };
+  const grid = { gridTemplateColumns: `8.5rem repeat(${ordered.length}, minmax(9rem, max-content))` };
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -177,21 +177,19 @@ export function CompareView({
         <span className="text-muted-foreground text-sm">
           {copies.length} {copies.length === 1 ? "copy" : "copies"}
         </span>
-        <div className="ml-auto flex items-center gap-1.5">
-          <Button
-            size="sm"
-            variant="default"
-            aria-pressed={showFinder}
-            className={cn(showFinder && "bg-foreground text-background")}
-            onClick={() => setShowFinder((s) => !s)}
-          >
-            <HugeiconsIcon icon={Search01Icon} aria-hidden />
-            Find a roll
-          </Button>
-          <Button size="icon-sm" variant="ghost" aria-label="Close compare" onClick={onClose}>
-            <HugeiconsIcon icon={Cancel01Icon} aria-hidden />
-          </Button>
-        </div>
+        <Button
+          size="sm"
+          variant="default"
+          aria-pressed={showFinder}
+          className={cn(showFinder && "bg-foreground text-background")}
+          onClick={() => setShowFinder((s) => !s)}
+        >
+          <HugeiconsIcon icon={Search01Icon} aria-hidden />
+          Find a roll
+        </Button>
+        <Button size="icon-sm" variant="ghost" className="ml-auto" aria-label="Close compare" onClick={onClose}>
+          <HugeiconsIcon icon={Cancel01Icon} aria-hidden />
+        </Button>
       </div>
 
       <div className="d2-scroll min-h-0 flex-1 overflow-auto">
@@ -220,7 +218,7 @@ export function CompareView({
         {copies.length === 0 ? (
           <p className="text-muted-foreground p-4 text-sm">Loading your copies…</p>
         ) : (
-          <div className="grid w-max min-w-full px-4 py-3 text-[13px]" style={grid}>
+          <div className="grid w-max px-4 py-3 text-[13px]" style={grid}>
             {/* Header: each copy's tile, where it is, and how it fares against the picks. */}
             <div />
             {ordered.map((copy) => (
@@ -318,7 +316,7 @@ function Row({ children, last = false }: { children: React.ReactNode; last?: boo
 }
 
 function Cell({ dim, children }: { dim: boolean; children: React.ReactNode }) {
-  return <div className={cn("px-2 transition-opacity", dim && "opacity-40")}>{children}</div>;
+  return <div className={cn("px-3 transition-opacity", dim && "opacity-40")}>{children}</div>;
 }
 
 function placeLabel(inventory: ManagerInventory, place: Place) {
@@ -342,7 +340,7 @@ function CopyHeader({
   return (
     <div
       className={cn(
-        "border-foreground/8 flex items-start gap-2.5 border-b px-2 pb-3",
+        "border-foreground/8 flex items-start gap-2.5 border-b px-3 pb-3",
         status?.matched === 0 && "opacity-40",
       )}
     >
@@ -397,7 +395,7 @@ function CopyPerks({
                   key={plug.hash}
                   title={current ? `${plug.name} (equipped)` : plug.name}
                   className={cn(
-                    "relative flex size-7 items-center justify-center",
+                    "relative flex size-[34px] items-center justify-center",
                     // Picked: gold, brighter when it's the perk in the socket now.
                     picked
                       ? current
@@ -412,20 +410,20 @@ function CopyPerks({
                     <Image
                       src={`${BUNGIE_IMAGE_BASE}${plug.icon}`}
                       alt={plug.name}
-                      width={22}
-                      height={22}
-                      className="size-[22px]"
+                      width={28}
+                      height={28}
+                      className="size-[28px]"
                       unoptimized
                     />
                   ) : (
-                    <span className="bg-muted size-[22px]" />
+                    <span className="bg-muted size-[28px]" />
                   )}
                   {plug.enhanced && (
                     <Image
                       src="/manager/perk-enhanced.svg"
                       alt=""
-                      width={6}
-                      height={6}
+                      width={7}
+                      height={7}
                       className="absolute top-0.5 left-0.5"
                     />
                   )}
