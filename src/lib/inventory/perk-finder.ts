@@ -311,6 +311,15 @@ export interface PerkFinderItem {
   keepable?: boolean;
 }
 
+/** Everything findPerkFinderResult reads, as one value (for the worker and memoizing). */
+export interface PerkFinderArgs {
+  items: PerkFinderItem[];
+  priority: PerkPriority;
+  mode: PerkMatchMode;
+  customOrder: boolean;
+  combos: PerkCombo[];
+}
+
 /**
  * Find the smallest set of copies that together fulfill every pool pick (loose), every
  * combination of them (strict), or every combo the user made (combos). Pool picks are
@@ -393,7 +402,9 @@ export function comparePerkFinderItems(result: PerkFinderResult) {
     const keepB = result.keep.has(b);
     if (keepA !== keepB) return keepA ? -1 : 1;
     const [first, second] = keepA ? [result.orderScore, result.poolScore] : [result.poolScore, result.orderScore];
-    return compareScores(first.get(b)!, first.get(a)!) || compareScores(second.get(b)!, second.get(a)!);
+    // A result still showing while a newer one is worked out may not know every copy.
+    const score = (scores: Map<string, PerkScore>, id: string) => scores.get(id) ?? [];
+    return compareScores(score(first, b), score(first, a)) || compareScores(score(second, b), score(second, a));
   };
 }
 

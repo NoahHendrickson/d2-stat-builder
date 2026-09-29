@@ -35,12 +35,16 @@ await s("Page.addScriptToEvaluateOnNewDocument", { source: "window.__lt=[];new P
 const evalJs = async (expression) => (await s("Runtime.evaluate", { expression, awaitPromise: true, returnByValue: true })).result.value;
 async function run(label) {
   await s("Page.navigate", { url: APP });
-  let ready = false, state = "", readyMs = 0, resultMs = 0;
+  // Before hydration the page can have text but no overlay yet, so "no overlay" only
+  // means ready once the overlay has been up (or "Armor ready" is showing). innerText
+  // is text-transformed (the overlay is uppercase), hence the case-insensitive tests.
+  let ready = false, sawOverlay = false, state = "", readyMs = 0, resultMs = 0;
   for (let i = 0; i < 1200 && !(ready && resultMs); i++) {
     await sleep(20);
-    state = await evalJs(`(() => { const t = document.body?.innerText ?? ""; return JSON.stringify({ now: Math.round(performance.now()), overlay: t.includes("Loading your armor"), done: t.includes("Armor ready"), result: /Builds\\s+\\d[\\d,]* \\/ \\d/.test(t), signin: t.includes("SIGN IN WITH BUNGIE"), text: t.slice(0, 120) }); })()`).catch(() => "{}");
+    state = await evalJs(`(() => { const t = document.body?.innerText ?? ""; return JSON.stringify({ now: Math.round(performance.now()), overlay: /loading your armor/i.test(t), done: /armor ready/i.test(t), result: /Builds\\s+\\d[\\d,]* \\/ \\d/.test(t), signin: t.includes("SIGN IN WITH BUNGIE"), text: t.slice(0, 120) }); })()`).catch(() => "{}");
     const st = JSON.parse(state || "{}");
-    if (!ready && st.signin === false && st.text?.length > 0 && (st.done === true || st.overlay === false)) { ready = true; readyMs = st.now; }
+    if (st.overlay) sawOverlay = true;
+    if (!ready && st.signin === false && st.text?.length > 0 && (st.done === true || (sawOverlay && st.overlay === false))) { ready = true; readyMs = st.now; }
     if (!resultMs && st.result) resultMs = st.now;
   }
   console.log(`\n=== ${label}: ready at ${readyMs} ms, first results at ${resultMs} ms (page clock)`);

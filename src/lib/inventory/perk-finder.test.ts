@@ -532,3 +532,8 @@ describe("perkFinderInput", () => {
     expect(columns.flatMap((c) => c.options.map((o) => o.name))).not.toContain("Veist Stinger");
   });
 });
+
+test("sorting by an older result tolerates copies it doesn't know", () => {
+  const result = findPerkFinderResult([gun("1", [leftA], [rightX]), gun("2", [leftB], [rightY])], [left(leftA)], "loose");
+  expect(sortedIds(result, ["new", "2", "1"])).toEqual(["1", "new", "2"]);
+});

@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { memo, useEffect, useRef, useState, type CSSProperties } from "react";
+import { memo, useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import { useSession } from "@/lib/auth/use-session";
 import { useManifest } from "@/lib/manifest/use-manifest";
 import { useArmory } from "@/lib/armory/use-armory";
@@ -101,8 +101,8 @@ export function LoadingScreen() {
   const session = useSession();
   const manifestStatus = useManifest();
   const armory = useArmory();
-  const [fading, setFading] = useState(false);
   const [dismissed, setDismissed] = useState(false);
+  const dismiss = useCallback(() => setDismissed(true), []);
 
   const view = loadingView({
     sessionPending: session.isPending,
@@ -112,27 +112,52 @@ export function LoadingScreen() {
     armoryPending: armory.isPending,
     armoryError: armory.isError,
   });
-  const done = view.phase === "done";
-  const progress = useEasedProgress(view.target, done);
-
-  // Once everything is ready, let the sweep land (~250ms), then fade out and
-  // unmount. Cancelled if `done` flips back (e.g. session expiry mid-sweep).
-  useEffect(() => {
-    if (!done) return;
-    const fadeTimer = setTimeout(() => setFading(true), 400);
-    const goneTimer = setTimeout(() => setDismissed(true), 1100);
-    return () => {
-      clearTimeout(fadeTimer);
-      clearTimeout(goneTimer);
-    };
-  }, [done]);
 
   // The public weapon catalog loads independently of a player's armor/manifest.
   if (pathname === "/weapons" || dismissed || view.phase === "hidden") return null;
 
   return (
-    <LoadingScreenView progress={progress} message={view.message} fading={fading} />
+    <ActiveLoadingScreen
+      target={view.target}
+      message={view.message}
+      done={view.phase === "done"}
+      onGone={dismiss}
+    />
   );
+}
+
+/**
+ * The overlay while it's up. Split out so the progress loop only runs while there is
+ * an overlay to draw: once it's hidden (signed out, errors) or dismissed, nothing ticks.
+ */
+function ActiveLoadingScreen({
+  target,
+  message,
+  done,
+  onGone,
+}: {
+  target: number;
+  message: string;
+  done: boolean;
+  onGone: () => void;
+}) {
+  const progress = useEasedProgress(target, done);
+  const [fading, setFading] = useState(false);
+
+  // Once everything is ready the app takes clicks at once (`released`) while the sweep
+  // lands (~150ms), then the overlay fades out and unmounts. Cancelled if `done` flips
+  // back (e.g. session expiry mid-sweep).
+  useEffect(() => {
+    if (!done) return;
+    const fadeTimer = setTimeout(() => setFading(true), 150);
+    const goneTimer = setTimeout(onGone, 650);
+    return () => {
+      clearTimeout(fadeTimer);
+      clearTimeout(goneTimer);
+    };
+  }, [done, onGone]);
+
+  return <LoadingScreenView progress={progress} message={message} fading={fading} released={done} />;
 }
 
 /**
@@ -186,10 +211,13 @@ export function LoadingScreenView({
   progress,
   message,
   fading,
+  released = fading,
 }: {
   progress: number;
   message: string;
   fading: boolean;
+  /** Let clicks through to the app (it's ready; the overlay is only finishing its sweep). */
+  released?: boolean;
 }) {
   const pct = Math.round(progress * 100);
 
@@ -202,7 +230,8 @@ export function LoadingScreenView({
       // copy the app floats over.
       className={cn(
         "app-backdrop-sharp dark text-foreground fixed inset-0 z-[60] overflow-hidden transition-opacity duration-500",
-        fading && "pointer-events-none opacity-0",
+        released && "pointer-events-none",
+        fading && "opacity-0",
       )}
     >
       <Tiles />

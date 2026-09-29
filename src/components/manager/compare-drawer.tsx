@@ -21,12 +21,14 @@ import {
   perkFinderInput,
   togglePick,
   type PerkCombo,
+  type PerkFinderArgs,
   type PerkFinderResult,
   type PerkMatchMode,
   type PerkPick,
   type PerkPriority,
 } from "@/lib/inventory/perk-finder";
 import { weaponCopies } from "@/lib/inventory/search";
+import { usePerkFinder } from "@/lib/inventory/use-perk-finder";
 import { weaponRoll, weaponStats, type ItemStat, type WeaponRoll } from "@/lib/inventory/weapon-details";
 import { useManifest } from "@/lib/manifest/use-manifest";
 import { cn } from "@/lib/utils";
@@ -36,6 +38,7 @@ import { PerkFinder } from "./perk-finder";
 /** Stats where less is better (DIM highlights the lowest). */
 const LOWER_IS_BETTER = new Set(["Charge Time", "Draw Time"]);
 const NO_ANNOTATIONS: Annotations = {};
+const NO_RESULT = findPerkFinderResult([], [], "strict");
 
 /**
  * DIM's Compare for weapons: every copy you own side by side (stats, masterwork, perks),
@@ -127,15 +130,24 @@ export function CompareView({
     [copies],
   );
   // Only count picks (and combos) the copies still offer, e.g. after one is dismantled.
-  const isOffered = (pick: PerkPick) =>
-    finderInput.columns.some((c) => c.index === pick.column && c.options.some((o) => o.hash === pick.hash));
-  const activePriority = priority.filter(isOffered);
-  const activeCombos = combos.filter((combo) => combo.every(isOffered));
-  const result = findPerkFinderResult(finderInput.items, activePriority, mode, rankingEnabled, activeCombos);
+  const { activePriority, activeCombos } = useMemo(() => {
+    const isOffered = (pick: PerkPick) =>
+      finderInput.columns.some((c) => c.index === pick.column && c.options.some((o) => o.hash === pick.hash));
+    return { activePriority: priority.filter(isOffered), activeCombos: combos.filter((combo) => combo.every(isOffered)) };
+  }, [finderInput, priority, combos]);
+  // Exactly what the solver reads, so tags, sorting, and re-renders don't search again.
+  const finderArgs = useMemo<PerkFinderArgs>(
+    () => ({ items: finderInput.items, priority: activePriority, mode, customOrder: rankingEnabled, combos: activeCombos }),
+    [finderInput, activePriority, mode, rankingEnabled, activeCombos],
+  );
+  // Nothing searches while the finder is hidden.
+  const finder = usePerkFinder(showFinder ? finderArgs : null);
+  const result = finder.result ?? NO_RESULT;
   const finderActive = showFinder && result.pickedCount > 0;
-  const picks = finderActive ? activePicks(activePriority, mode, activeCombos) : [];
+  const picks = showFinder ? activePicks(activePriority, mode, activeCombos) : [];
 
   // Copies not needed for the picks; skip ones already tagged Favorite, Keep, or Junk.
+  // While a newer search runs this still counts from the last result, but tagging waits.
   const junk = finderActive
     ? copies.filter((c) => {
         const tag = annotations[c.item.instanceId!]?.tag;
@@ -203,6 +215,7 @@ export function CompareView({
             onRankingEnabledChange={setRankingEnabled}
             mode={mode}
             result={result}
+            slow={finder.slow}
             onTogglePerk={(pick) => setPriority((p) => togglePick(p, pick))}
             onPriorityChange={setPriority}
             onModeChange={setMode}
@@ -211,7 +224,9 @@ export function CompareView({
               setCombos([]);
             }}
             junkCount={junk.length}
-            onTagJunk={() => setTag(junk.map((c) => c.item.instanceId!), "junk")}
+            onTagJunk={() => {
+              if (!finder.pending) setTag(junk.map((c) => c.item.instanceId!), "junk");
+            }}
           />
         )}
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useCallback } from "react";
+import { Suspense, useCallback, useEffect } from "react";
 import dynamic from "next/dynamic";
 import { SignInCard } from "@/components/auth/sign-in-card";
 import { useSession } from "@/lib/auth/use-session";
@@ -18,7 +18,7 @@ function LoadoutsListPlaceholder() {
 
 /**
  * The loadouts UI (rows, editor drawer, apply flow — thousands of lines) is fetched
- * once the armory and manifest are ready rather than shipped with the root layout.
+ * on this page (for signed-in players) rather than shipped with the root layout.
  * Client-only: it never renders on the server (it needs both of those loaded).
  */
 const LoadoutsList = dynamic(
@@ -31,6 +31,12 @@ export function LoadoutsPageShell() {
   const armory = useArmory();
   const manifestStatus = useManifest();
   const authed = session.data?.authenticated ?? false;
+
+  // Start fetching the list's chunk while the armory and manifest are still loading
+  // (direct entry), rather than only once they're ready. Importing has no side effects.
+  useEffect(() => {
+    if (authed) void import("@/components/loadouts/loadouts-list");
+  }, [authed]);
 
   // Stable identity: this reaches every memoized row, so a fresh closure per render
   // would re-render the whole visible list each time an observer notifies the page.

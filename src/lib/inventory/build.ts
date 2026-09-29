@@ -288,6 +288,31 @@ function sortAll(map: Record<number, InventoryItem[]>, compare = compareItems) {
   for (const list of Object.values(map)) list.sort(compare);
 }
 
+const derived = new WeakMap<DestinyProfileResponse, WeakMap<Manifest, ManagerInventory>>();
+
+/**
+ * buildInventory, memoized on both identities (like deriveArmory): the Manager page
+ * remounts after the router drops it from its recent routes, and an unchanged profile
+ * and manifest shouldn't be laid out, sorted, and power-ranked again. A refetch brings
+ * a new profile object, so it always gets a fresh build.
+ */
+export function deriveInventory(
+  profile: DestinyProfileResponse,
+  manifest: Manifest,
+): ManagerInventory {
+  let byManifest = derived.get(profile);
+  if (!byManifest) {
+    byManifest = new WeakMap();
+    derived.set(profile, byManifest);
+  }
+  let inventory = byManifest.get(manifest);
+  if (!inventory) {
+    inventory = buildInventory(profile, manifest);
+    byManifest.set(manifest, inventory);
+  }
+  return inventory;
+}
+
 /** Lay a GetProfile response out as the manager draws it: characters, vault, account. */
 export function buildInventory(
   profile: DestinyProfileResponse,

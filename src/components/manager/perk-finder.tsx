@@ -72,6 +72,7 @@ export function PerkFinder({
   onRankingEnabledChange,
   mode,
   result,
+  slow,
   onTogglePerk,
   onPriorityChange,
   onModeChange,
@@ -90,6 +91,8 @@ export function PerkFinder({
   onRankingEnabledChange: (enabled: boolean) => void;
   mode: PerkMatchMode;
   result: PerkFinderResult;
+  /** A search for the latest picks has been running a while; `result` is for earlier ones. */
+  slow: boolean;
   onTogglePerk: (pick: PerkPick) => void;
   onPriorityChange: (priority: PerkPriority) => void;
   onModeChange: (mode: PerkMatchMode) => void;
@@ -231,7 +234,7 @@ export function PerkFinder({
               )}
               {junkCount > 0 && (
                 <TooltipLabel label="Tags every copy you don't need to keep as Junk. Copies tagged Favorite or Keep are skipped.">
-                  <Button size="sm" variant="default" onClick={onTagJunk}>
+                  <Button size="sm" variant="default" disabled={slow} onClick={onTagJunk}>
                     <HugeiconsIcon icon={TAG_ICONS.junk} aria-hidden />
                     Tag {junkCount} other {plural(junkCount, "copy", "copies")} as Junk
                   </Button>
@@ -322,10 +325,11 @@ export function PerkFinder({
         </ul>
       )}
 
-      {result.pickedCount > 0 && (
+      {(result.pickedCount > 0 || slow) && (
         <div className="bg-foreground/5 flex items-start gap-2 px-3 py-2 text-[13px]" role="status">
           <HugeiconsIcon icon={InformationCircleIcon} className="mt-0.5 size-4 shrink-0" aria-hidden />
           <div className="flex flex-col gap-0.5">
+            {slow && <span>Finding the fewest copies for your picks…</span>}
             {result.poolPickCount === 0 && (
               <span>
                 {comboMode

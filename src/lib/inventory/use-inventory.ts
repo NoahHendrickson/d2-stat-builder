@@ -5,7 +5,7 @@ import { useProfile } from "@/lib/armory/use-profile";
 import { useManifest } from "@/lib/manifest/use-manifest";
 import { useStoreValue } from "@/lib/value-store";
 import { loadAnnotations } from "./annotations";
-import { buildInventory, type ManagerInventory } from "./build";
+import { deriveInventory, type ManagerInventory } from "./build";
 import { applyLocks, lockOps, settledLocks } from "./lock-queue";
 import { moveOps } from "./move-queue";
 import { applyMoves, settledOps } from "./moves";
@@ -22,7 +22,7 @@ export function useInventory() {
   const manifestStatus = useManifest();
   const manifest = manifestStatus.state === "ready" ? manifestStatus.manifest : undefined;
   const base = useMemo<ManagerInventory | undefined>(
-    () => (profile.data && manifest ? buildInventory(profile.data, manifest) : undefined),
+    () => (profile.data && manifest ? deriveInventory(profile.data, manifest) : undefined),
     [profile.data, manifest],
   );
 

@@ -2,7 +2,7 @@ import { expect, test } from "vitest";
 import type { DestinyProfileResponse } from "bungie-api-ts/destiny2";
 import type { Manifest } from "@/lib/manifest/load";
 import { BUCKETS } from "./buckets";
-import { OTHER_BUCKET, buildInventory } from "./build";
+import { OTHER_BUCKET, buildInventory, deriveInventory } from "./build";
 
 const MATERIAL_BUCKET = 999;
 
@@ -204,4 +204,12 @@ test("reads the champion a frame or exotic perk grants through its hidden sandbo
   const byId = Object.fromEntries(Object.values(inv.vault).flat().map((i) => [i.instanceId, i]));
   expect(byId.gl).toMatchObject({ breakerType: 2, breakerIcon: "/overload.png" });
   expect(byId.plain.breakerType).toBeUndefined();
+});
+
+test("derives once per profile and manifest pair", () => {
+  const first = deriveInventory(profile, manifest);
+  expect(deriveInventory(profile, manifest)).toBe(first);
+  expect(deriveInventory({ ...profile }, manifest)).not.toBe(first);
+  expect(deriveInventory(profile, { ...manifest })).not.toBe(first);
+  expect(first).toEqual(buildInventory(profile, manifest));
 });

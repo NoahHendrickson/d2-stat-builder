@@ -579,7 +579,9 @@ export function WeaponBrowser() {
         aria-label="Weapon details"
         className="hidden min-w-0 flex-1 overflow-y-auto border-l border-foreground/8 pl-6 lg:block"
       >
-        {shown && data ? (
+        {/* Below the split the dialog shows the details instead; this pane is hidden,
+            so don't build a second copy of them (perks, stats, Clarity) behind it. */}
+        {!split ? null : shown && data ? (
           <div className="grid gap-4 text-sm">
             <WeaponDetails key={shown.hash} weapon={shown} catalog={data} />
           </div>
