@@ -2,26 +2,30 @@
 
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
+  ArrowDown01Icon,
   CancelCircleIcon,
   CheckmarkCircle02Icon,
   CloudSavingDone01Icon,
   Loading03Icon,
   Logout01Icon,
-  Moon02Icon,
   RefreshIcon as RefreshGlyph,
-  Sun03Icon,
+  Settings01Icon,
 } from "@hugeicons/core-free-icons";
 import { useTheme } from "next-themes";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
@@ -33,7 +37,8 @@ import { useSession } from "@/lib/auth/use-session";
 import { BUNGIE_IMAGE_BASE } from "@/lib/bungie/constants";
 import { useManifest } from "@/lib/manifest/use-manifest";
 import { toast } from "@/lib/toast";
-import { ThemeToggle } from "@/components/theme-toggle";
+import { THEME_OPTIONS } from "@/lib/theme-options";
+import { cn } from "@/lib/utils";
 
 const REFRESH_SUCCESS_MS = 2500;
 
@@ -314,10 +319,17 @@ export function ArmoryStatus() {
 
 /**
  * The sidebar's foot: your armor (with refresh) above game data above the account
- * row. `collapsed` is the icon rail, where each block is one icon with a tooltip
- * and the account row folds into an avatar menu.
+ * row — the profile opens a menu (appearance, sign out) and the gear opens Settings.
+ * `collapsed` is the icon rail, where each block is one icon with a tooltip.
  */
-export function SidebarStatus({ collapsed = false }: { collapsed?: boolean }) {
+export function SidebarStatus({
+  collapsed = false,
+  onNavigate,
+}: {
+  collapsed?: boolean;
+  /** Called after following the Settings link (the mobile drawer closes itself). */
+  onNavigate?: () => void;
+}) {
   const account = useArmoryAccount();
   const gameData = manifestCopy(account.manifestStatus);
 
@@ -341,9 +353,10 @@ export function SidebarStatus({ collapsed = false }: { collapsed?: boolean }) {
                 <StatusIcon state={account.manifestStatus.state} />
               </span>
             </TooltipLabel>
+            <AccountMenu account={account} collapsed />
           </>
         )}
-        {account.authed ? <AccountMenu account={account} /> : <ThemeToggle />}
+        <SettingsLink onNavigate={onNavigate} />
       </div>
     );
   }
@@ -375,47 +388,98 @@ export function SidebarStatus({ collapsed = false }: { collapsed?: boolean }) {
           <div className="mx-4 h-px bg-foreground/8" />
         </>
       )}
-      <div className="flex h-16 items-center gap-2 px-3">
-        {account.authed && (
-          <>
-            <AccountAvatar iconPath={account.iconPath} />
-            <p className="min-w-0 flex-1 truncate text-sm font-medium">
-              {account.displayName}
-            </p>
-          </>
+      <div className="flex h-16 items-center gap-1 px-2">
+        {account.authed ? (
+          <AccountMenu account={account} collapsed={false} />
+        ) : (
+          <div className="flex-1" />
         )}
-        <div className="ml-auto flex shrink-0 items-center">
-          <ThemeToggle />
-          {account.authed && <SignOutButton account={account} />}
-        </div>
+        <SettingsLink onNavigate={onNavigate} />
       </div>
     </div>
   );
 }
 
-/** Rail-only account control: the avatar opens name, theme, and sign out. */
-function AccountMenu({ account }: { account: ArmoryAccount }) {
-  const { resolvedTheme, setTheme } = useTheme();
-  const isDark = resolvedTheme === "dark";
+function SettingsLink({ onNavigate }: { onNavigate?: () => void }) {
+  const active = usePathname() === "/settings";
+  return (
+    <TooltipLabel label="Settings">
+      <Link
+        href="/settings"
+        onClick={onNavigate}
+        aria-label="Settings"
+        aria-current={active ? "page" : undefined}
+        className={cn(
+          buttonVariants({ variant: "ghost", size: "icon" }),
+          "shrink-0",
+          active ? "bg-foreground/8 text-foreground" : "text-muted-foreground hover:text-foreground",
+        )}
+      >
+        <HugeiconsIcon icon={Settings01Icon} strokeWidth={active ? 2 : 1.5} className="size-5" aria-hidden />
+      </Link>
+    </TooltipLabel>
+  );
+}
+
+/**
+ * The profile: avatar, name, and a down arrow that opens appearance and sign out.
+ * On the rail it is just the avatar, and the menu leads with the name.
+ */
+function AccountMenu({ account, collapsed }: { account: ArmoryAccount; collapsed: boolean }) {
+  const { theme, setTheme } = useTheme();
+  const trigger = collapsed ? (
+    <TooltipLabel label={account.displayName}>
+      <DropdownMenuTrigger
+        render={<Button variant="ghost" size="icon" className="size-9" />}
+        aria-label={`Account: ${account.displayName}`}
+      >
+        <AccountAvatar iconPath={account.iconPath} />
+      </DropdownMenuTrigger>
+    </TooltipLabel>
+  ) : (
+    <DropdownMenuTrigger
+      aria-label={`Account: ${account.displayName}`}
+      className="group/profile flex h-11 min-w-0 flex-1 items-center gap-2 rounded-none px-1.5 text-left outline-none transition-colors hover:bg-foreground/5 focus-visible:ring-1 focus-visible:ring-outline-strong aria-expanded:bg-foreground/8"
+    >
+      <AccountAvatar iconPath={account.iconPath} />
+      <span className="min-w-0 flex-1 truncate text-sm font-medium">{account.displayName}</span>
+      <HugeiconsIcon
+        icon={ArrowDown01Icon}
+        className="text-muted-foreground size-4 shrink-0 transition-transform group-aria-expanded/profile:rotate-180"
+        aria-hidden
+      />
+    </DropdownMenuTrigger>
+  );
+
   return (
     <DropdownMenu>
-      <TooltipLabel label={account.displayName}>
-        <DropdownMenuTrigger
-          render={<Button variant="ghost" size="icon" className="size-9" />}
-          aria-label={`Account: ${account.displayName}`}
-        >
-          <AccountAvatar iconPath={account.iconPath} />
-        </DropdownMenuTrigger>
-      </TooltipLabel>
-      <DropdownMenuContent side="right" align="end" sideOffset={8} className="w-52">
+      {trigger}
+      <DropdownMenuContent
+        side={collapsed ? "right" : "top"}
+        align={collapsed ? "end" : "start"}
+        sideOffset={8}
+        className="w-52"
+      >
+        {collapsed && (
+          <>
+            <DropdownMenuGroup>
+              <DropdownMenuLabel className="truncate">{account.displayName}</DropdownMenuLabel>
+            </DropdownMenuGroup>
+            <DropdownMenuSeparator />
+          </>
+        )}
         <DropdownMenuGroup>
-          <DropdownMenuLabel className="truncate">{account.displayName}</DropdownMenuLabel>
+          <DropdownMenuLabel>Appearance</DropdownMenuLabel>
+          <DropdownMenuRadioGroup value={theme ?? "dark"} onValueChange={(v) => setTheme(String(v))}>
+            {THEME_OPTIONS.map((o) => (
+              <DropdownMenuRadioItem key={o.value} value={o.value}>
+                <HugeiconsIcon icon={o.icon} aria-hidden />
+                {o.label}
+              </DropdownMenuRadioItem>
+            ))}
+          </DropdownMenuRadioGroup>
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
-        <DropdownMenuItem onClick={() => setTheme(isDark ? "light" : "dark")}>
-          {isDark ? <HugeiconsIcon icon={Sun03Icon} aria-hidden /> : <HugeiconsIcon icon={Moon02Icon} aria-hidden />}
-          {isDark ? "Light mode" : "Dark mode"}
-        </DropdownMenuItem>
         <DropdownMenuItem variant="destructive" onClick={() => void account.handleSignOut()}>
           <HugeiconsIcon icon={Logout01Icon} aria-hidden />
           Sign out

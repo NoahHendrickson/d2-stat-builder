@@ -4,6 +4,8 @@ import { TooltipLabel } from "@/components/ui/tooltip";
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
+  useRef,
   useState,
   useSyncExternalStore,
   type ReactNode,
@@ -16,6 +18,7 @@ import { ArmoryDiagnosticsGate } from "@/components/armory/armory-diagnostics-ga
 import { ApplyProgressSection } from "@/components/loadouts/apply-progress-card";
 import { Button } from "@/components/ui/button";
 import { Drawer, DrawerClose, DrawerContent } from "@/components/ui/drawer";
+import { SiteIconSync } from "@/components/site-icon-sync";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useLoadouts } from "@/lib/loadouts/use-loadouts";
 import { useMinWidth } from "@/lib/use-min-width";
@@ -105,6 +108,20 @@ export function AppShell({ children }: { children: ReactNode }) {
   );
   const sidebarWidth = collapsed ? SIDEBAR_RAIL_PX : SIDEBAR_EXPANDED_PX;
 
+  // Fade the page in when the view changes. Opacity only: a transform here would
+  // become the containing block for fixed children (the mobile builds bar).
+  const mainRef = useRef<HTMLDivElement>(null);
+  const shownPath = useRef(pathname);
+  useLayoutEffect(() => {
+    if (shownPath.current === pathname) return;
+    shownPath.current = pathname;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+    mainRef.current?.animate([{ opacity: 0 }, { opacity: 1 }], {
+      duration: 200,
+      easing: "ease-out",
+    });
+  }, [pathname]);
+
   // Portaled surfaces (the loadout editor drawer) sit over the main column,
   // not the sidebar. Publish the width so anything under <html> can inset.
   useEffect(() => {
@@ -155,7 +172,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         </header>
         {desktop && <h1 className="sr-only">{title}</h1>}
-        <div className="min-h-0 flex-1 overflow-y-auto">
+        <div ref={mainRef} className="min-h-0 flex-1 overflow-y-auto">
           {desktop && (
             <div className="px-6 pt-6 empty:hidden">
               <ArmoryDiagnosticsGate />
@@ -165,6 +182,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </div>
         <ApplyProgressSection />
       </div>
+      <SiteIconSync />
 
       {!desktop && (
         <Drawer

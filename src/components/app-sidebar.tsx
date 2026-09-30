@@ -14,6 +14,7 @@ import {
   MoreHorizontalIcon,
   PanelLeftIcon,
   PencilEdit02Icon,
+  Search01Icon,
   SlidersHorizontalIcon,
 } from "@hugeicons/core-free-icons";
 import { Button } from "@/components/ui/button";
@@ -28,9 +29,9 @@ import { SidebarStatus } from "@/components/armory/armory-status";
 import { LinkDialog } from "@/components/links/link-dialog";
 import { LinkFavicon } from "@/components/links/link-favicon";
 import { addLink, removeLink, updateLink, useLinks } from "@/lib/links/use-links";
+import { useSiteIcon } from "@/lib/site-icon";
 import type { SavedLink } from "@/lib/links/links";
 import { cn } from "@/lib/utils";
-import { GENERIC_WEAPON_TYPE_ICONS } from "@/lib/weapons/weapon-type-icon-paths";
 
 type NavIconProps = { className?: string; strokeWidth?: number };
 
@@ -38,22 +39,6 @@ function navIcon(icon: IconSvgElement): ComponentType<NavIconProps> {
   return function NavIcon(props) {
     return <HugeiconsIcon icon={icon} aria-hidden {...props} />;
   };
-}
-
-function HandCannonIcon({ className }: NavIconProps) {
-  return (
-    <span
-      aria-hidden
-      className={className}
-      style={{
-        backgroundColor: "currentColor",
-        maskImage: `url("${GENERIC_WEAPON_TYPE_ICONS["Hand Cannon"]}")`,
-        maskSize: "contain",
-        maskPosition: "center",
-        maskRepeat: "no-repeat",
-      }}
-    />
-  );
 }
 
 export const NAV_ITEMS: readonly {
@@ -64,13 +49,14 @@ export const NAV_ITEMS: readonly {
 }[] = [
   { href: "/", label: "Stat optimizer", Icon: navIcon(SlidersHorizontalIcon) },
   { href: "/armor", label: "Armor table", Icon: navIcon(LayoutTable01Icon) },
-  { href: "/weapons", label: "Weapon search", Icon: HandCannonIcon },
+  { href: "/weapons", label: "Weapon search", Icon: navIcon(Search01Icon) },
   { href: "/loadouts", label: "Loadouts", Icon: navIcon(Layers01Icon) },
   { href: "/manager", label: "Items", Icon: navIcon(GarageIcon) },
 ];
 
 /** Title for the header strip: the nav label of the current route. */
 export function pageTitle(pathname: string): string {
+  if (pathname === "/settings") return "Settings";
   return NAV_ITEMS.find((n) => n.href === pathname)?.label ?? "";
 }
 
@@ -91,10 +77,12 @@ export const AppSidebar = memo(function AppSidebar({
   onNavigate?: () => void;
 }) {
   const pathname = usePathname();
+  const activeIndex = NAV_ITEMS.findIndex((n) => n.href === pathname);
   const toggleLabel = collapsed ? "Expand sidebar" : "Collapse sidebar";
+  const siteIcon = useSiteIcon();
   const logo = (
     <Image
-      src="/sidebar-logo.svg"
+      src={siteIcon.src}
       alt=""
       width={28}
       height={28}
@@ -156,7 +144,20 @@ export const AppSidebar = memo(function AppSidebar({
         )}
       </div>
 
-      <ul className={cn("flex shrink-0 flex-col gap-0.5 pb-4", collapsed ? "px-2.5" : "px-2")}>
+      <ul
+        className={cn("relative flex shrink-0 flex-col gap-0.5 pb-4", collapsed ? "px-2.5" : "px-2")}
+      >
+        {/* One highlight that slides between rows (36px + 2px gap) instead of each
+            row painting its own, so switching views reads as a move. */}
+        <span
+          aria-hidden
+          className={cn(
+            "bg-foreground/8 pointer-events-none absolute top-0 h-9 transition-[transform,opacity] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none",
+            collapsed ? "left-2.5 w-9" : "inset-x-2",
+            activeIndex < 0 && "opacity-0",
+          )}
+          style={{ transform: `translateY(${Math.max(activeIndex, 0) * 38}px)` }}
+        />
         {NAV_ITEMS.map((item) => (
           <li key={item.href}>
             <NavItem
@@ -173,12 +174,12 @@ export const AppSidebar = memo(function AppSidebar({
 
       <LinksSection collapsed={collapsed} />
 
-      <SidebarStatus collapsed={collapsed} />
+      <SidebarStatus collapsed={collapsed} onNavigate={onNavigate} />
     </nav>
   );
 });
 
-/** Shared row look for nav items and links: square, 36px, white/8 when active. */
+/** Shared row look for nav items and links: square, 36px (the nav list draws the active highlight). */
 const rowClass =
   "group/row relative flex h-9 items-center gap-3 rounded-none text-sm outline-none transition-colors focus-visible:ring-1 focus-visible:ring-outline-strong";
 
@@ -209,7 +210,7 @@ function NavItem({
         rowClass,
         collapsed ? "w-9 justify-center" : "px-2.5",
         active
-          ? "bg-foreground/8 text-foreground"
+          ? "text-foreground"
           : "text-muted-foreground hover:bg-foreground/5 hover:text-foreground",
       )}
     >
