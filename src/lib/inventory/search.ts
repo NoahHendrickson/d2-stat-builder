@@ -5,7 +5,7 @@
 //   tag:<tag>          favorite, keep, junk, infuse, archive, none
 //   power:>=400        also >, <, <=, =; the same for tier: and stat:<name>:
 //   stat:total:>=60    armor stat total; any live stat by name (stat:range:>50)
-//   perk: name: notes: type: element: breaker: class: ammo:
+//   perk: origin: name: notes: type: element: breaker: class: ammo:
 // Terms are ANDed; "or" between terms ORs them; "-term" negates; ( ) group.
 import type { Annotations, ItemTag } from "./annotations";
 import { ITEM_TAGS } from "./annotations";
@@ -17,6 +17,8 @@ export interface SearchContext {
   annotations: Annotations;
   /** Lower-case perk names on the item (plugged and rolled options). */
   perks(item: InventoryItem): readonly string[];
+  /** Lower-case origin trait names on a weapon. */
+  origins(item: InventoryItem): readonly string[];
   /** Item hashes the account owns more than one of. */
   dupes: ReadonlySet<number>;
 }
@@ -182,6 +184,9 @@ function filterTerm(key: string, raw: string): { predicate: Predicate; usesPerks
     case "perk":
     case "perkname":
       return { predicate: (i, _, c) => c.perks(i).some((p) => normalize(p).includes(value)), usesPerks: true };
+    case "origin":
+    case "origintrait":
+      return { predicate: (i, _, c) => c.origins(i).some((p) => normalize(p).includes(value)), usesPerks: true };
     case "type":
       return { predicate: (i) => normalize(i.typeName).includes(value) };
     case "element":

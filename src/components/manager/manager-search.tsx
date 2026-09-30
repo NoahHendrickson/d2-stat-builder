@@ -43,7 +43,7 @@ import {
   type Place,
 } from "@/lib/inventory/moves";
 import { recentlyMoved } from "@/lib/inventory/move-queue";
-import { createPerkLookup } from "@/lib/inventory/perk-index";
+import { NO_PERKS, createPerkLookup } from "@/lib/inventory/perk-index";
 import { planSmartMove } from "@/lib/inventory/smart-moves";
 import { dupeHashes, forEachItem, matchItems, parseSearch } from "@/lib/inventory/search";
 import { useManifest } from "@/lib/manifest/use-manifest";
@@ -54,8 +54,6 @@ import { useManagerActions } from "./manager-context";
 import { searchMatches } from "./search-store";
 import { TAG_ICONS } from "./tag-icons";
 import { ViewMenu } from "./view-menu";
-
-const NO_PERKS = () => [] as const;
 
 /**
  * The manager's search box (DIM's query language, see lib/inventory/search.ts): items
@@ -77,7 +75,7 @@ export function ManagerSearch({ inventory }: { inventory: ManagerInventory }) {
   const matches = useMemo(
     () =>
       parsed?.ok
-        ? matchItems(inventory, parsed.predicate, { annotations, perks, dupes })
+        ? matchItems(inventory, parsed.predicate, { annotations, ...perks, dupes })
         : null,
     [inventory, parsed, annotations, perks, dupes],
   );
@@ -146,6 +144,7 @@ const HELP: [string, string][] = [
   ["power:>=400  tier:5", "Power and gear tier"],
   ["stat:total:>=60  stat:range:>50", "Any stat by name"],
   ['perk:"kill clip"  type:"hand cannon"', "Perks and weapon type"],
+  ['origin:"veist stinger"', "Origin trait"],
   ["a or b   -is:exotic   (a or b) c", "Combine, negate, group"],
 ];
 

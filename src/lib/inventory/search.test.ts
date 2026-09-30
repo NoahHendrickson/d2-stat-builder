@@ -54,7 +54,8 @@ const inv: ManagerInventory = {
 
 const ctx: SearchContext = {
   annotations: { "Helm B": { tag: "junk", notes: "Great for #pvp" }, "Calus Mini-Tool": { tag: "keep" } },
-  perks: (i) => (i.key === "Calus Mini-Tool" ? ["incandescent", "grave robber"] : []),
+  perks: (i) => (i.key === "Calus Mini-Tool" ? ["incandescent", "grave robber", "nano-munitions"] : []),
+  origins: (i) => (i.key === "Calus Mini-Tool" ? ["nano-munitions"] : []),
   dupes: dupeHashes(inv),
 };
 
@@ -88,6 +89,13 @@ test("free text matches names, perks, and notes; #tags match notes", () => {
   expect(search("perk:incandescent")).toEqual(["Calus Mini-Tool"]);
   expect(search("#pvp")).toEqual(["Helm B"]);
   expect(search("great")).toEqual(["Helm B"]);
+});
+
+test("origin: matches only the origin trait", () => {
+  expect(search('origin:"nano munitions"')).toEqual(["Calus Mini-Tool"]);
+  expect(search("origintrait:nano")).toEqual(["Calus Mini-Tool"]);
+  expect(search("origin:incandescent")).toEqual([]);
+  expect(search("nano-munitions")).toEqual(["Calus Mini-Tool"]);
 });
 
 test("supports or, negation, and grouping", () => {
