@@ -9,7 +9,11 @@ import {
   buildWeaponTypeCatalog,
 } from "./build-index";
 import type { ManifestDefs } from "./manifest";
-import { collectSocketPlugCandidates, plugSetEntryCanRoll } from "./socket-plug-candidates";
+import {
+  collectSocketPlugCandidates,
+  pairedPoolPlugs,
+  plugSetEntryCanRoll,
+} from "./socket-plug-candidates";
 function traitPlug(
   hash: number,
   name: string,
@@ -235,6 +239,72 @@ describe("collectSocketPlugCandidates", () => {
     );
     expect(perks).toEqual([
       expect.objectContaining({ hash: 99, name: "Runneth Over", currentlyCanRoll: true }),
+    ]);
+  });
+});
+
+describe("pairedPoolPlugs", () => {
+  const plug = (hash: number, name: string, tierType: 2 | 3, category = "magazines_gl") =>
+    ({
+      hash,
+      displayProperties: { name, icon: "" },
+      inventory: { tierType },
+      plug: { plugCategoryIdentifier: category },
+    }) as DestinyInventoryItemDefinition;
+
+  // Heavy GL magazines: Sticky is a base perk with no partner in the first
+  // enhanced run; Implosion (and Sticky's enhanced plug) come after it.
+  const items: Record<number, DestinyInventoryItemDefinition> = {
+    1: plug(1, "Spike Grenades", 2),
+    2: plug(2, "Mini Frags", 2),
+    3: plug(3, "Sticky Grenades", 2),
+    11: plug(11, "Spike Grenades", 3),
+    12: plug(12, "Mini Frags", 3),
+    4: plug(4, "Implosion Rounds", 2),
+    14: plug(14, "Implosion Rounds", 3),
+    13: plug(13, "Sticky Grenades", 3),
+  };
+  const pool = [1, 2, 3, 11, 12, 4, 14, 13];
+
+  it("keeps base perks paired in the first enhanced run and drops later additions", () => {
+    expect(pairedPoolPlugs(pool, items)).toEqual(new Set([1, 2, 11, 12]));
+  });
+
+  it("returns undefined for pools without enhanced plugs", () => {
+    expect(pairedPoolPlugs([1, 2, 3], items)).toBeUndefined();
+  });
+
+  it("leaves trait pools alone", () => {
+    const traits = {
+      1: traitPlug(1, "Outlaw", "", 2),
+      11: traitPlug(11, "Outlaw", "", 3),
+      2: traitPlug(2, "Rampage", "", 2),
+      12: traitPlug(12, "Rampage", "", 3),
+    };
+    expect(pairedPoolPlugs([1, 11, 2, 12], traits)).toBeUndefined();
+  });
+
+  it("pairs '<name> Enhanced' plugs and skips empty sockets inside a run", () => {
+    const tricorn = {
+      1: plug(1, "Harmony", 2, "barrels"),
+      2: plug(2, "Golden Tricorn", 2, "barrels"),
+      11: plug(11, "Harmony", 3, "barrels"),
+      9: plug(9, "Empty Traits Socket", 2, "crafting.recipes.empty_socket"),
+      12: plug(12, "Golden Tricorn Enhanced", 3, "barrels"),
+    };
+    expect(pairedPoolPlugs([1, 2, 11, 9, 12], tricorn)).toEqual(new Set([1, 2, 11, 12]));
+  });
+
+  it("drops unpaired pool entries, including a curated default", () => {
+    const plugSets = {
+      100: { reusablePlugItems: pool.map((plugItemHash) => ({ plugItemHash, currentlyCanRoll: true })) },
+    };
+    const socket = { randomizedPlugSetHash: 100, singleInitialItemHash: 3 };
+    const { perks } = buildColumnPerks(collectSocketPlugCandidates(socket, plugSets, items), items);
+
+    expect(perks.map((p) => [p.name, p.currentlyCanRoll])).toEqual([
+      ["Spike Grenades", true],
+      ["Mini Frags", true],
     ]);
   });
 });

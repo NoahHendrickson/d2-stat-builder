@@ -350,7 +350,7 @@ export function buildWeaponIndex(
       if (!entry) continue;
       const isIntrinsic = intrinsicIdx.has(idx);
 
-      const candidates = collectSocketPlugCandidates(entry, plugSets);
+      const candidates = collectSocketPlugCandidates(entry, plugSets, items);
       if (!candidates.length) continue;
 
       const { perks, identifier } = buildColumnPerks(candidates, items);
