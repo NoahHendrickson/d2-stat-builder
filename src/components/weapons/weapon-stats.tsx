@@ -16,7 +16,7 @@ const clamp = (value: number) => Math.min(Math.max(value, 0), 100);
 /**
  * A weapon's stats, compact enough to sit beside the perk grid: name and value
  * over a bar. What `stats` adds to `base` shows green, what it takes away
- * red.
+ * red, with the signed change beside the value.
  */
 export function WeaponStats({
   base,
@@ -31,18 +31,24 @@ export function WeaponStats({
       {rows.map((name) => {
         const from = base[name]!;
         const value = stats[name] ?? from;
+        const delta = value - from;
         return (
           <div key={name}>
             <div className="flex justify-between gap-2">
               <dt className="truncate text-muted-foreground">{name}</dt>
               <dd
                 className={cn(
-                  "tabular-nums",
-                  value > from && "text-positive",
-                  value < from && "text-destructive",
+                  "flex shrink-0 gap-1.5 tabular-nums",
+                  delta > 0 && "text-positive",
+                  delta < 0 && "text-destructive",
                 )}
               >
-                {value}
+                {delta !== 0 && (
+                  <span className="opacity-80">
+                    {delta > 0 ? `+${delta}` : `−${-delta}`}
+                  </span>
+                )}
+                <span>{value}</span>
               </dd>
             </div>
             {!NUMBERS.includes(name) && (
