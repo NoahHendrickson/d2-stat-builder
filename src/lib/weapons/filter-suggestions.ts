@@ -17,7 +17,7 @@ export interface FilterCategory {
   pair?: boolean;
   /** Takes a typed whole number as a lower bound ("Ammo gen > 50") instead of listed values. */
   numeric?: boolean;
-  /** Other names typed before a number ("ammo generation 50"). */
+  /** Other names for the category: typed before a number ("ammo generation 50"), or to browse it ("archetype"). */
   aliases?: string[];
 }
 
@@ -54,6 +54,8 @@ export const FILTER_CATEGORIES: readonly FilterCategory[] = [
   { param: "trait2", label: LABELS.trait2 },
   { param: "perkCombo", label: LABELS.perkCombo, pair: true },
   { param: "originTrait", label: LABELS.originTrait },
+  { param: "gear", label: LABELS.gear, aliases: ["barrel", "magazine"] },
+  { param: "champion", label: LABELS.champion, aliases: ["anti-champion"] },
   { param: "type", label: LABELS.type },
   { param: "element", label: LABELS.element },
   { param: "ammo", label: LABELS.ammo },
@@ -67,7 +69,7 @@ export const FILTER_CATEGORIES: readonly FilterCategory[] = [
   { param: "slot", label: LABELS.slot },
   { param: "source", label: LABELS.source, maxRank: 3 },
   { param: "season", label: LABELS.season },
-  { param: "frame", label: LABELS.frame, prefixOnly: true },
+  { param: "frame", label: LABELS.frame, prefixOnly: true, aliases: ["archetype"] },
   { param: "rarity", label: LABELS.rarity },
   { param: "craftable", label: LABELS.craftable, max: 1 },
   { param: "adept", label: "Adept", max: 1 },
@@ -222,10 +224,12 @@ export function matchingCategories(
 ): FilterIndexEntry[] {
   const q = query.trim();
   if (!q) return [...index];
-  return index.filter(({ category }) => {
-    const rank = matchRank(category.label, q);
-    return rank != null && rank <= 2;
-  });
+  return index.filter(({ category }) =>
+    [category.label, ...(category.aliases ?? [])].some((name) => {
+      const rank = matchRank(name, q);
+      return rank != null && rank <= 2;
+    }),
+  );
 }
 
 /** One category's unapplied values narrowed by typed text, capped for rendering. */

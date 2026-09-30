@@ -61,6 +61,10 @@ export interface WeaponFilters {
   trait2DamagePerks?: boolean;
   /** Perk rollable in the origin-trait column (OR within). */
   originTrait?: string[];
+  /** Perk rollable in a barrel, magazine, or other gear column; every selected perk must match. */
+  gear?: string[];
+  /** Champion the weapon stuns intrinsically: "Barrier" | "Overload" | "Unstoppable" (OR within). */
+  champion?: string[];
   /** Up to two trait perks that must roll together in separate trait columns, order-agnostic. */
   perkCombo?: string[];
   /** Weapon must be able to roll ALL of these perks in ANY column (case-insensitive). */
@@ -119,6 +123,11 @@ function perksLowerSet(weapon: WeaponSummary): Set<string> {
 
 function traitColumns(columns: InternedPerkColumn[]): InternedPerkColumn[] {
   return columns.filter((c) => c.kind === "Trait");
+}
+
+/** Barrel, magazine, and their sword/bow/fusion counterparts: every column but frame, traits, origin. */
+function isGearColumn(column: InternedPerkColumn): boolean {
+  return column.kind !== "Intrinsic" && column.kind !== "Trait" && column.kind !== "Origin Trait";
 }
 
 function columnPerks(column: InternedPerkColumn | undefined, perks: PerkRef[]): PerkRef[] {
@@ -227,6 +236,8 @@ export function filterWeapons(
   const trait2Wanted = loweredSet(filters.trait2);
   const traitWanted = loweredSet(filters.trait);
   const originWanted = loweredSet(filters.originTrait);
+  const gearWanted = loweredSet(filters.gear);
+  const championWanted = loweredSet(filters.champion);
   const damageIndices =
     filters.trait1DamagePerks || filters.trait2DamagePerks ? damagePerkIndexSet(perks) : null;
   const craftableActive = (filters.craftable?.length ?? 0) > 0;
@@ -247,6 +258,9 @@ export function filterWeapons(
     if (!facetMatches(w.rarity, rarityWanted)) return false;
     if (!facetMatches(w.slot, slotWanted)) return false;
     if (frameWanted.size && !frameWanted.has(lower(w.frame ?? ""))) return false;
+    if (championWanted.size && !w.champions?.some((c) => championWanted.has(lower(c)))) {
+      return false;
+    }
     if (sourceActive && !matchesWeaponSourceLowered(w.source, sourceWanted, w.sources)) {
       return false;
     }
@@ -295,6 +309,12 @@ export function filterWeapons(
       )
     ) {
       return false;
+    }
+    if (gearWanted.size) {
+      const gear = w.columns.filter(isGearColumn);
+      for (const name of gearWanted) {
+        if (!gear.some((column) => columnRollsName(column, name, perks))) return false;
+      }
     }
     if (needsOwned) {
       const owned = perksLowerSet(w);
@@ -477,6 +497,7 @@ export function collectFacets(weapons: WeaponSummary[]): Record<string, FacetOpt
   const frame = new Map<string, number>();
   const source = new Map<string, number>();
   const season = new Map<string, number>();
+  const champion = new Map<string, number>();
 
   let craftableYes = 0;
   let craftableNo = 0;
@@ -489,6 +510,7 @@ export function collectFacets(weapons: WeaponSummary[]): Record<string, FacetOpt
     if (w.rarity) rarity.set(w.rarity, (rarity.get(w.rarity) ?? 0) + 1);
     if (w.slot) slot.set(w.slot, (slot.get(w.slot) ?? 0) + 1);
     if (w.frame) frame.set(w.frame, (frame.get(w.frame) ?? 0) + 1);
+    for (const c of w.champions ?? []) champion.set(c, (champion.get(c) ?? 0) + 1);
     if (w.source) source.set(w.source, (source.get(w.source) ?? 0) + 1);
     const seasonValue = seasonFacetValue(w);
     if (seasonValue) season.set(seasonValue, (season.get(seasonValue) ?? 0) + 1);
@@ -505,6 +527,7 @@ export function collectFacets(weapons: WeaponSummary[]): Record<string, FacetOpt
     frame: sortFacetCounts(frame),
     source: sortFacetCounts(source),
     season: sortFacetCounts(season),
+    champion: sortFacetCounts(champion),
     craftable: [
       { value: "Yes", count: craftableYes },
       { value: "No", count: craftableNo },
@@ -547,6 +570,8 @@ export interface ColumnPerkOptions {
   trait1: PerkOption[];
   trait2: PerkOption[];
   originTrait: PerkOption[];
+  /** Barrel, magazine, and other gear columns, counted once per weapon. */
+  gear: PerkOption[];
 }
 
 /** Trait perks that roll in the column opposite `first` on some weapon, most weapons first. */
@@ -585,6 +610,7 @@ export function collectColumnPerks(weapons: WeaponSummary[], perks: PerkRef[]): 
   const trait1 = new Map<string, PerkOption>();
   const trait2 = new Map<string, PerkOption>();
   const originTrait = new Map<string, PerkOption>();
+  const gear = new Map<string, PerkOption>();
 
   const add = (bucket: Map<string, PerkOption>, columnPerks: PerkRef[]) => {
     const seen = new Set<string>();
@@ -615,6 +641,7 @@ export function collectColumnPerks(weapons: WeaponSummary[], perks: PerkRef[]): 
     add(trait, [...columnPerks(traits[0], perks), ...columnPerks(traits[1], perks)]);
     const origin = w.columns.find((c) => c.kind === "Origin Trait");
     if (origin) add(originTrait, columnPerks(origin, perks));
+    add(gear, w.columns.filter(isGearColumn).flatMap((c) => columnPerks(c, perks)));
   }
 
   const sort = (m: Map<string, PerkOption>) =>
@@ -624,5 +651,6 @@ export function collectColumnPerks(weapons: WeaponSummary[], perks: PerkRef[]): 
     trait1: sort(trait1),
     trait2: sort(trait2),
     originTrait: sort(originTrait),
+    gear: sort(gear),
   };
 }

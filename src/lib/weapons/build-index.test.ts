@@ -7,6 +7,7 @@ import {
   deriveAttunementSourceOverrides,
   buildDamageTypeCatalog,
   buildWeaponTypeCatalog,
+  weaponChampions,
 } from "./build-index";
 import type { ManifestDefs } from "./manifest";
 import {
@@ -27,6 +28,38 @@ function traitPlug(
     plug: { plugCategoryIdentifier: "frames" },
   } as DestinyInventoryItemDefinition;
 }
+
+describe("weaponChampions", () => {
+  const column = (description: string) => ({
+    kind: "Intrinsic",
+    perks: [{ hash: 1, name: "Perk", currentlyCanRoll: true, description }],
+  });
+
+  it("reads the champion from perk text", () => {
+    expect(
+      weaponChampions(
+        [column("Fires a large ball of energy. Strong against [Stagger] Unstoppable Champions.")],
+        undefined,
+      ),
+    ).toEqual(["Unstoppable"]);
+    expect(weaponChampions([column("Adds [Shield-Piercing] shield piercing.")], 0)).toEqual([
+      "Barrier",
+    ]);
+  });
+
+  it("prefers perk text over breakerType and falls back to it", () => {
+    expect(
+      weaponChampions([column("Strong against [Stagger] Unstoppable Champions.")], 2),
+    ).toEqual(["Unstoppable"]);
+    expect(weaponChampions([column("Rapid hits slow targets.")], 2)).toEqual(["Overload"]);
+  });
+
+  it("ignores perks that only mention champions", () => {
+    expect(weaponChampions([column("Stunning a Champion refills your magazine.")], 0)).toEqual(
+      [],
+    );
+  });
+});
 
 describe("buildAmmoTypeCatalog", () => {
   it("maps DestinyIconDefinition HUD ammo icons to Primary / Special / Heavy", () => {

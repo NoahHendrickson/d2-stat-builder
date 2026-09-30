@@ -28,6 +28,8 @@ const index = buildFilterIndex({
     { value: "High-Impact Frame", count: 60 },
   ],
   source: [{ value: "Solar Wind Strike", count: 0 }],
+  gear: [{ value: "Sticky Grenades", count: 10 }],
+  champion: [{ value: "Overload", count: 8 }],
 });
 
 const labels = (query: string, params = new URLSearchParams()) =>
@@ -49,6 +51,11 @@ describe("suggestFilters", () => {
       "Trait 1: Kill Clip",
       "Trait 2: Kill Clip",
     ]);
+  });
+
+  it("finds barrel/mag perks and champions by name", () => {
+    expect(labels("sticky")).toEqual(["Barrel / Mag: Sticky Grenades"]);
+    expect(labels("overload")).toEqual(["Champion: Overload"]);
   });
 
   it("expands shorthand like hc", () => {
@@ -91,6 +98,15 @@ describe("matchingCategories", () => {
     expect(
       matchingCategories(index, "fra").map((e) => e.category.label),
     ).toEqual(["Frame"]);
+  });
+
+  it("matches categories by alias", () => {
+    expect(
+      matchingCategories(index, "archetype").map((e) => e.category.label),
+    ).toEqual(["Frame"]);
+    expect(
+      matchingCategories(index, "magazine").map((e) => e.category.label),
+    ).toEqual(["Barrel / Mag"]);
   });
 });
 

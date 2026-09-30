@@ -161,6 +161,45 @@ function columnKind(isIntrinsic: boolean, identifier: string): string {
   return "Trait";
 }
 
+/** Champion names by DestinyBreakerType, and by the icon token perk text uses. */
+const BREAKER_CHAMPIONS: Record<number, string> = {
+  1: "Barrier",
+  2: "Overload",
+  3: "Unstoppable",
+};
+const CHAMPION_TOKENS: Record<string, string> = {
+  "shield-piercing": "Barrier",
+  disruption: "Overload",
+  stagger: "Unstoppable",
+};
+
+/**
+ * Champions a weapon stuns intrinsically. Perk text ("Strong against [Stagger]
+ * Unstoppable Champions") is what the game shows and covers exotics Bungie left
+ * `breakerType` unset on (Heirloom, Winterbite, …); `breakerType` fills in when
+ * no perk says.
+ */
+export function weaponChampions(
+  columns: PerkColumn[],
+  breakerType: number | undefined,
+): string[] {
+  const found = new Set<string>();
+  for (const column of columns) {
+    for (const perk of column.perks) {
+      const text = `${perk.description ?? ""} ${perk.enhancedDescription ?? ""}`;
+      for (const [, token] of text.matchAll(/\[(Shield-Piercing|Disruption|Stagger)\]/gi)) {
+        found.add(CHAMPION_TOKENS[token!.toLowerCase()]!);
+      }
+      for (const [, name] of text.matchAll(/\b(Barrier|Overload|Unstoppable) Champion/g)) {
+        found.add(name!);
+      }
+    }
+  }
+  const fallback = breakerType != null ? BREAKER_CHAMPIONS[breakerType] : undefined;
+  if (!found.size && fallback) found.add(fallback);
+  return [...found].sort();
+}
+
 /** Build the weapon-type catalog (Hand Cannon, Fusion Rifle, …) for filter chip icons. */
 export function buildWeaponTypeCatalog(defs: ManifestDefs): WeaponTypeRef[] {
   const items = defs.DestinyInventoryItemDefinition;
@@ -409,6 +448,7 @@ export function buildWeaponIndex(
       rarity: item.inventory?.tierTypeName ?? "Legendary",
       slot: BUCKET_SLOT[item.inventory?.bucketTypeHash ?? 0] ?? "",
       frame: columns.find((c) => c.kind === "Intrinsic")?.perks[0]?.name,
+      champions: weaponChampions(columns, item.breakerType),
       craftable: item.inventory?.recipeItemHash != null,
       adept: /\((Adept|Timelost|Harrowed)\)/.test(name),
       seasonNumber: season?.seasonNumber,

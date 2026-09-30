@@ -357,6 +357,48 @@ describe("position-aware trait, slot + origin filters", () => {
   });
 });
 
+describe("barrel / mag and champion filters", () => {
+  test("gear matches barrel, magazine, and other non-trait columns", () => {
+    expect(names(filterWeapons(sampleSummaries, { gear: ["Accurized Rounds"] }, samplePerks))).toEqual([
+      "Fatebringer",
+    ]);
+    expect(names(filterWeapons(sampleSummaries, { gear: ["ionized battery"] }, samplePerks))).toEqual([
+      "Sunlit Fusion",
+    ]);
+  });
+
+  test("gear requires every selected perk and ignores trait columns", () => {
+    expect(
+      names(
+        filterWeapons(sampleSummaries, { gear: ["Fluted Barrel", "Accurized Rounds"] }, samplePerks),
+      ),
+    ).toEqual(["Fatebringer"]);
+    expect(
+      filterWeapons(sampleSummaries, { gear: ["Fluted Barrel", "Ionized Battery"] }, samplePerks),
+    ).toEqual([]);
+    expect(filterWeapons(sampleSummaries, { gear: ["Surrounded"] }, samplePerks)).toEqual([]);
+  });
+
+  test("champion matches any selected champion", () => {
+    const weapons = sampleSummaries.map((w) =>
+      w.name === "Stormcharge" ? { ...w, champions: ["Overload"] } : w,
+    );
+    expect(names(filterWeapons(weapons, { champion: ["overload"] }, samplePerks))).toEqual([
+      "Stormcharge",
+    ]);
+    expect(filterWeapons(weapons, { champion: ["Barrier"] }, samplePerks)).toEqual([]);
+    expect(collectFacets(weapons).champion).toEqual([{ value: "Overload", count: 1 }]);
+  });
+
+  test("gear facet lists gear perks only", () => {
+    const gear = collectColumnPerks(sampleSummaries, samplePerks).gear.map((p) => p.name);
+    expect(gear).toContain("Fluted Barrel");
+    expect(gear).toContain("Ionized Battery");
+    expect(gear).not.toContain("Surrounded");
+    expect(gear).not.toContain("Adaptive Frame");
+  });
+});
+
 describe("damage perk trait filters", () => {
   const dp = (hash: number, name: string, description: string): PerkRef => ({
     hash,

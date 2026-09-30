@@ -162,6 +162,7 @@ export function internWeaponCatalog(
       rarity: weapon.rarity,
       slot: weapon.slot,
       frame: weapon.frame,
+      ...(weapon.champions?.length ? { champions: weapon.champions } : {}),
       craftable: weapon.craftable,
       adept: weapon.adept,
       seasonNumber: weapon.seasonNumber,

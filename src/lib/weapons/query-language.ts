@@ -22,6 +22,8 @@ export const ARRAY_FACET_KEYS = [
   "trait2",
   "trait",
   "originTrait",
+  "gear",
+  "champion",
   "perks",
   "craftable",
   "name",
@@ -29,7 +31,10 @@ export const ARRAY_FACET_KEYS = [
 
 /** `key:` tokens that map straight onto an OR-within facet array. */
 const FACET_KEYS: Readonly<
-  Record<string, "element" | "type" | "ammo" | "slot" | "rarity" | "frame" | "source" | "season">
+  Record<
+    string,
+    "element" | "type" | "ammo" | "slot" | "rarity" | "frame" | "source" | "season" | "gear" | "champion"
+  >
 > = {
   element: "element",
   damage: "element",
@@ -44,6 +49,11 @@ const FACET_KEYS: Readonly<
   source: "source",
   activity: "source",
   season: "season",
+  gear: "gear",
+  barrel: "gear",
+  mag: "gear",
+  magazine: "gear",
+  champion: "champion",
 };
 
 const RARITY_WORDS: ReadonlySet<string> = new Set([
@@ -100,7 +110,7 @@ function craftableValue(raw: string): string | null {
  * Parse a raw search string into structured {@link WeaponFilters} plus residual
  * free text. Supports `key:value` filters (`perk:`, `trait:`, `trait1:`, `trait2:`,
  * `origin:`, `element:`, `type:`, `ammo:`, `slot:`, `rarity:`, `frame:`,
- * `source:`, `season:`, `name:`, `craftable:`) and `is:` flags (`is:adept`, `is:craftable`,
+ * `source:`, `season:`, `gear:`/`barrel:`/`mag:`, `champion:`, `name:`, `craftable:`) and `is:` flags (`is:adept`, `is:craftable`,
  * `is:exotic`, …). Community shorthands (`hc`, `smg`) are alias-expanded for
  * `type:` values. Unknown tokens fall through to `text`.
  */

@@ -290,6 +290,7 @@ function WeaponDetails({
       <p className="flex flex-wrap gap-x-4 gap-y-1 text-muted-foreground">
         {[
           weapon.frame,
+          ...(weapon.champions ?? []).map((champion) => `Anti-${champion}`),
           weapon.source,
           poolLabel !== weapon.source ? poolLabel : undefined,
           weapon.seasonName,

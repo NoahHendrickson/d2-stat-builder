@@ -61,6 +61,8 @@ export interface WeaponSummary {
   slot: string;
   /** Intrinsic archetype name, e.g. "Adaptive Frame". */
   frame?: string;
+  /** Champions the weapon stuns on its own: "Barrier" | "Overload" | "Unstoppable". */
+  champions?: string[];
   craftable: boolean;
   adept: boolean;
   /** Destiny season number when introduced (from manifest seasonHash). */

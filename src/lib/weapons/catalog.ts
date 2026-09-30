@@ -56,7 +56,7 @@ export function createWeaponCatalog(raw: WeaponIndex) {
     .sort(collator.compare)
     .map((value) => ({ value, count: 0 }));
   const columns = collectColumnPerks(weapons, index.perks);
-  for (const key of ["trait", "trait1", "trait2", "originTrait"] as const) {
+  for (const key of ["trait", "trait1", "trait2", "originTrait", "gear"] as const) {
     facets[key] = columns[key].map((p) => ({ value: p.name, count: p.count }));
   }
   facets.perkCombo = [

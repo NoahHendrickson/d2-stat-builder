@@ -32,6 +32,7 @@ const CHIP_TONE: Record<string, string> = {
   perkCombo: TRAIT_CHIP,
   group: TRAIT_CHIP,
   frame: TRAIT_CHIP,
+  gear: TRAIT_CHIP,
 };
 const ELEMENT_CHIP: Record<string, string> = {
   Solar: "bg-[rgb(255_120_40/0.85)] text-white",

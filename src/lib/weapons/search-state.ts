@@ -9,6 +9,8 @@ export const FILTERS = [
   ["trait2", "Trait 2"],
   ["perkCombo", "Perk combo"],
   ["originTrait", "Origin trait"],
+  ["gear", "Barrel / Mag"],
+  ["champion", "Champion"],
   ["frame", "Frame"],
   ["slot", "Slot"],
   ["rarity", "Rarity"],
