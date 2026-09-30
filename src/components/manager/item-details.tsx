@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import Image from "next/image";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { Cancel01Icon, GitCompareIcon, SquareLock02Icon, SquareUnlock02Icon } from "@hugeicons/core-free-icons";
+import { GitCompareIcon, SquareLock02Icon, SquareUnlock02Icon } from "@hugeicons/core-free-icons";
 import { PerkTooltip } from "@/components/weapons/perk-tooltip";
 import { PowerValue } from "@/components/power-value";
 import { StatGlyph } from "@/components/stat-glyph";
@@ -16,7 +16,7 @@ import { useProfile } from "@/lib/armory/use-profile";
 import { applyPerks, type PerkChange } from "@/lib/inventory/apply-perks";
 import { armorDetails } from "@/lib/inventory/armor-details";
 import { BUNGIE_IMAGE_BASE } from "@/lib/bungie/constants";
-import { ITEM_TAGS, TAG_LABELS, setTag, useAnnotation } from "@/lib/inventory/annotations";
+import { TAG_LABELS, setTag, useAnnotation, type ItemTag } from "@/lib/inventory/annotations";
 import { BREAKER_NAMES, type InventoryItem, type ManagerInventory } from "@/lib/inventory/build";
 import { locate } from "@/lib/inventory/moves";
 import { weaponCopies } from "@/lib/inventory/search";
@@ -86,7 +86,10 @@ export function ItemDetails({
         side="right"
         align="start"
         sideOffset={8}
-        className="max-h-(--available-height) w-[300px] gap-0 overflow-y-auto p-0"
+        // At least 300px, wider when the header's type line needs it (that line never
+        // wraps); w-min lets everything else wrap rather than widen the panel.
+        className="max-h-(--available-height) w-min max-w-[calc(100vw-1rem)] min-w-[300px] gap-0 overflow-y-auto p-0"
+        style={PANEL_FRAME}
       >
         {found && (
           <>
@@ -103,21 +106,33 @@ export function ItemDetails({
             ) : (
               <ItemDescription itemHash={found.item.itemHash} />
             )}
-            {copies > 1 && (
-              <div className={SECTION}>
-                <Button size="sm" variant="default" className="self-start" onClick={() => onCompare(found.item)}>
-                  <HugeiconsIcon icon={GitCompareIcon} aria-hidden />
-                  Compare {copies} copies
-                </Button>
+            {(found.item.instanceId || copies > 1) && (
+              <div className={cn(SECTION, "flex-row flex-wrap items-center gap-1")}>
+                {found.item.instanceId && <Tags instanceId={found.item.instanceId} />}
+                {copies > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => onCompare(found.item)}
+                    className={cn(TAG_BUTTON, "border-foreground/12 bg-foreground/4 shrink-0 gap-1 px-3 text-[0.8rem] font-medium")}
+                  >
+                    <HugeiconsIcon icon={GitCompareIcon} className="size-3.5" aria-hidden />
+                    Compare {copies} copies
+                  </button>
+                )}
               </div>
             )}
-            {found.item.instanceId && <Tags instanceId={found.item.instanceId} />}
           </>
         )}
       </PopoverContent>
     </Popover>
   );
 }
+
+/**
+ * The panel's frame: plain white at 32%. d2-glass draws its line with border-image,
+ * which would hide a plain border colour.
+ */
+const PANEL_FRAME: React.CSSProperties = { borderImage: "none", borderColor: "rgb(255 255 255 / 0.32)" };
 
 /** A section of the panel: 12px in, a faint rule under it. */
 const SECTION = "border-foreground/24 flex flex-col gap-2 border-b p-3 last:border-b-0";
@@ -131,8 +146,9 @@ const LOWER_TIER_OVERLAY: Record<number, string> = {
 };
 
 /**
- * The rarity plate: name, then element and type. A gold frame when masterworked; the
- * season watermark and tier pips in the corner; Power and the lock on the right.
+ * The rarity plate: name, then element and type; the season watermark and tier pips in
+ * the corner; Power and the lock on the right. Masterworked: a gold rule along the
+ * bottom with a faint gold glow rising from it (Figma 134:143).
  */
 function Header({
   item,
@@ -146,15 +162,16 @@ function Header({
   return (
     <div
       className={cn(
-        "relative flex flex-col gap-1 overflow-hidden border-2 py-2 pr-2.5 pl-6",
+        // min-h: the 64px watermark box and its tier pips fit with room below.
+        "relative flex min-h-17 flex-col justify-center gap-1 overflow-hidden py-2.5 pr-3 pl-[26px]",
         TIER_HEADER[item.tierType] ?? "bg-foreground/10",
-        item.masterworked ? "border-item-frame-masterwork" : "border-transparent",
+        item.masterworked && "border-b-2 border-[#ffcf11] shadow-[inset_0_-6px_8px_rgb(255_207_17/0.13)]",
       )}
     >
       {(item.watermark || item.gearTier) && (
         <span
           aria-hidden
-          className="pointer-events-none absolute -top-0.5 -left-0.5"
+          className="pointer-events-none absolute top-0 left-0"
           style={{ width: WATERMARK_PX, height: WATERMARK_PX }}
         >
           {item.watermark && (
@@ -207,7 +224,12 @@ function Header({
         )}
       </div>
       <div className="relative flex items-center justify-between gap-3">
-        <span className={cn("flex items-center gap-1.5 text-[13px]", dark ? "text-black/65" : "text-white/65")}>
+        <span
+          className={cn(
+            "flex shrink-0 items-center gap-1.5 text-[13px] whitespace-nowrap",
+            dark ? "text-black/65" : "text-white/65",
+          )}
+        >
           {item.damageIcon && (
             <Image
               src={`${BUNGIE_IMAGE_BASE}${item.damageIcon}`}
@@ -241,12 +263,23 @@ function Header({
   );
 }
 
-/** DIM-style tag buttons: one tag per item, click the active one again to clear it. */
+/** The bottom row's 32px buttons: the tags, and Compare beside them. */
+const TAG_BUTTON =
+  "d2-hover-ring flex h-8 min-w-8 items-center justify-center border outline-none focus-visible:d2-tile-selected";
+
+/** The tags the panel offers; an item already tagged Infuse or Archive still shows that one. */
+const PANEL_TAGS: readonly ItemTag[] = ["favorite", "keep", "junk"];
+
+/**
+ * DIM-style tag buttons, icon only (the active one is filled): one tag per item, click
+ * the active one again to clear it.
+ */
 function Tags({ instanceId }: { instanceId: string }) {
   const tag = useAnnotation(instanceId)?.tag;
+  const shown = tag && !PANEL_TAGS.includes(tag) ? [...PANEL_TAGS, tag] : PANEL_TAGS;
   return (
-    <div className={cn(SECTION, "flex-row items-center gap-1")} role="group" aria-label="Tag">
-      {ITEM_TAGS.map((t) => (
+    <div className="contents" role="group" aria-label="Tag">
+      {shown.map((t) => (
         <button
           key={t}
           type="button"
@@ -255,27 +288,16 @@ function Tags({ instanceId }: { instanceId: string }) {
           aria-pressed={tag === t}
           onClick={() => setTag([instanceId], tag === t ? undefined : t)}
           className={cn(
-            "d2-hover-ring flex h-6 items-center gap-1 border px-1.5 text-[11px] outline-none focus-visible:d2-tile-selected",
+            TAG_BUTTON,
+            "shrink-0",
             tag === t
               ? "border-transparent bg-foreground text-background"
               : "border-foreground/12 bg-foreground/4",
           )}
         >
           <HugeiconsIcon icon={TAG_ICONS[t]} className="size-3" aria-hidden />
-          {tag === t && TAG_LABELS[t]}
         </button>
       ))}
-      {tag && (
-        <button
-          type="button"
-          title="Clear tag"
-          aria-label="Clear tag"
-          onClick={() => setTag([instanceId], undefined)}
-          className="text-muted-foreground hover:text-foreground ml-auto p-1 outline-none focus-visible:d2-tile-selected"
-        >
-          <HugeiconsIcon icon={Cancel01Icon} className="size-3" aria-hidden />
-        </button>
-      )}
     </div>
   );
 }
@@ -412,19 +434,16 @@ export function WeaponRollPanel({
   };
 
   const masterwork = roll.mods.find((m) => m.kind === "masterwork");
-  const otherMods = roll.mods.filter((m) => m.kind !== "masterwork");
+  // Masterwork and weapon mod on the left, the cosmetics (shader, ornament) past a rule.
+  const gearMods = roll.mods.filter((m) => m.kind === "mod");
+  const cosmetics = roll.mods.filter((m) => m.kind === "shader" || m.kind === "ornament");
 
   return (
     <>
-      {(roll.frame || roll.columns.length > 0) && (
-        <div className={SECTION}>
-          <div className="flex gap-1.5 overflow-x-auto" aria-label="Perks">
-            {(roll.frame || masterwork) && (
-              <div className="flex flex-col gap-1.5">
-                {roll.frame && <PlainPlug plug={roll.frame} />}
-                {masterwork && <PlainPlug plug={masterwork} />}
-              </div>
-            )}
+      {roll.frame && <FrameRow plug={roll.frame} />}
+      {(roll.columns.length > 0 || roll.mods.length > 0) && (
+        <div className={cn(SECTION, "gap-4")}>
+          <div className="flex gap-2 overflow-x-auto" aria-label="Perks">
             {roll.columns.map((column) =>
               column.origin && column.options.length <= 1 ? (
                 <div key={column.socketIndex} className="flex flex-col gap-1.5">
@@ -445,6 +464,28 @@ export function WeaponRollPanel({
               ),
             )}
           </div>
+          {(masterwork || gearMods.length > 0 || cosmetics.length > 0) && (
+            <div className="flex items-center gap-4" aria-label="Mods">
+              {(masterwork || gearMods.length > 0) && (
+                <div className="flex items-center gap-1.5">
+                  {masterwork && <PlainPlug plug={masterwork} size={MOD_PX} />}
+                  {gearMods.map((mod, i) => (
+                    <PlugBadge key={`mod:${i}`} plug={mod} size={MOD_PX - 2} />
+                  ))}
+                </div>
+              )}
+              {(masterwork || gearMods.length > 0) && cosmetics.length > 0 && (
+                <span aria-hidden className="bg-foreground/12 h-6 w-px" />
+              )}
+              {cosmetics.length > 0 && (
+                <div className="flex items-center gap-1.5">
+                  {cosmetics.map((mod, i) => (
+                    <PlugBadge key={`${mod.kind}:${i}`} plug={mod} size={MOD_PX - 2} />
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
           {changes.length > 0 && (
             <div className="flex flex-wrap items-center gap-2">
               <Button size="xs" disabled={!onApply || applying} onClick={() => void apply()}>
@@ -460,43 +501,64 @@ export function WeaponRollPanel({
           )}
         </div>
       )}
-      {(stats.length > 0 || otherMods.length > 0) && (
+      {stats.length > 0 && (
         <div className={SECTION}>
-          {stats.length > 0 && <StatRows stats={stats} preview={preview} />}
-          {otherMods.length > 0 && (
-            <div className="flex gap-1.5" aria-label="Mods">
-              {otherMods.map((mod, i) => (
-                <PlugBadge key={`${mod.kind}:${i}`} plug={mod} />
-              ))}
-            </div>
-          )}
+          <StatRows stats={stats} preview={preview} />
         </div>
       )}
     </>
   );
 }
 
-/** Perk cells: 40px squares with a 30px icon (Figma 128:5799's 56/40, scaled down). */
+/** Perk cells: 40px with a 30px icon (Figma 128:5799's 56/40, scaled down). */
 const PERK_CELL = "relative flex size-10 shrink-0 items-center justify-center";
 
+/** Masterwork and mod icons, including the mods' 1px line. */
+const MOD_PX = 36;
+
+/** The frame (intrinsic) on its own row under the header: icon and name. */
+function FrameRow({ plug }: { plug: DetailPlug }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        delay={0}
+        render={<div className="bg-foreground/4 flex items-center gap-2 px-4 py-2 text-xs" />}
+      >
+        <PlugIcon plug={plug} size={24} />
+        {plug.name}
+      </TooltipTrigger>
+      <TooltipContent side="right" align="start" className="max-w-sm">
+        <p className="font-medium">{plug.name}</p>
+        {plug.description && <p className="text-muted-foreground">{plug.description}</p>}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
 /**
- * A plug shown without a cell (the frame, masterwork, a lone origin trait), with its
- * perk tooltip on hover.
+ * A plug shown without a cell (the masterwork, a lone origin trait), with its perk
+ * tooltip on hover.
  */
 function PlainPlug({
   plug,
   refFor,
   clarity,
+  size,
 }: {
   plug: DetailPlug;
   refFor?: (plug: DetailPlug) => PerkRef;
   clarity?: ClarityMap;
+  /** Icon size; default is the perk cell's 30px icon centred in its 40px. */
+  size?: number;
 }) {
   const ref = refFor?.(plug);
   return (
     <Tooltip>
-      <TooltipTrigger delay={0} render={<span className={PERK_CELL} aria-label={plug.name} />}>
-        <PlugIcon plug={plug} size={30} />
+      <TooltipTrigger
+        delay={0}
+        render={<span className={size ? "block" : PERK_CELL} aria-label={plug.name} />}
+      >
+        <PlugIcon plug={plug} size={size ?? 30} />
       </TooltipTrigger>
       <TooltipContent side="right" align="start" className="max-w-sm">
         {ref ? (
@@ -729,7 +791,7 @@ function PerkColumnView({
                   onPointerLeave={() => onHover(null)}
                   className={cn(
                     PERK_CELL,
-                    "border-foreground/12 border outline-none focus-visible:d2-tile-selected",
+                    "border-foreground/12 rounded-full border outline-none focus-visible:d2-tile-selected",
                     isSelected
                       ? "bg-[#305f8e]"
                       : isCurrent
