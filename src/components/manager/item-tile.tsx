@@ -14,14 +14,14 @@ import { useSearchState } from "./search-store";
 import { TAG_ICONS } from "./tag-icons";
 
 /** Height of the label bar under the icon (Figma: 12px on a 44px tile, scaled up). */
-const FOOTER_PX = 14;
+const FOOTER_PX = 16;
 /** Full-tile overlays Bungie draws on crafted and enhanced weapons. */
 const CRAFTED_OVERLAY = "/img/destiny_content/items/crafted-icon-overlay.png";
 const ENHANCED_OVERLAY = "/img/destiny_content/items/enhanced-item-overlay.png";
 /** The icon sits inside a 1px frame, so it is 2px narrower than the tile. */
 const INNER_SIZE_CLASS: Partial<Record<ArmorThumbSize, string>> = {
-  40: "size-[38px]",
-  52: "size-[50px]",
+  44: "size-[42px]",
+  56: "size-[54px]",
 };
 
 /**
@@ -34,7 +34,7 @@ const INNER_SIZE_CLASS: Partial<Record<ArmorThumbSize, string>> = {
  */
 export const ItemTile = memo(function ItemTile({
   item,
-  size = 52,
+  size = 56,
 }: {
   item: InventoryItem;
   size?: ArmorThumbSize;
@@ -125,19 +125,19 @@ export const ItemTile = memo(function ItemTile({
         )}
       </ArmorThumb>
       <span
-        className="flex items-center gap-0.5 px-0.5 text-[10px] leading-none font-medium text-black tabular-nums"
+        className="flex items-center gap-0.5 px-0.5 text-[11px] leading-none font-medium text-black tabular-nums"
         style={{ height: FOOTER_PX }}
       >
-        {tag && <HugeiconsIcon icon={TAG_ICONS[tag]} className="size-2.5" strokeWidth={2.2} aria-hidden />}
+        {tag && <HugeiconsIcon icon={TAG_ICONS[tag]} className="size-3" strokeWidth={2.2} aria-hidden />}
         <span className="flex-1" />
         {/* The champion it stuns, beside the element; Bungie's icon is white, so blacken it. */}
         {item.breakerIcon && (
           <Image
             src={`${BUNGIE_IMAGE_BASE}${item.breakerIcon}`}
             alt=""
-            width={10}
-            height={10}
-            className="size-2.5 brightness-0"
+            width={12}
+            height={12}
+            className="size-3 brightness-0"
             unoptimized
           />
         )}
@@ -145,9 +145,10 @@ export const ItemTile = memo(function ItemTile({
           <Image
             src={`${BUNGIE_IMAGE_BASE}${item.damageIcon}`}
             alt=""
-            width={8}
-            height={8}
-            className="size-2"
+            width={12}
+            height={12}
+            // Kinetic's glyph is uncoloured; grey it so it reads as "no element".
+            className={cn("size-3", item.element === "kinetic" && "opacity-50 brightness-0")}
             unoptimized
           />
         )}
@@ -158,7 +159,7 @@ export const ItemTile = memo(function ItemTile({
 });
 
 /** An empty cell, drawn as the game's bracket corners, the same size as a tile. */
-export function EmptyTile({ size = 52 }: { size?: ArmorThumbSize }) {
+export function EmptyTile({ size = 56 }: { size?: ArmorThumbSize }) {
   return (
     <span
       aria-hidden

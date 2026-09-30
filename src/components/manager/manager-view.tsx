@@ -328,7 +328,12 @@ function CharacterGrid({ inventory }: { inventory: ManagerInventory }) {
   return (
     <section
       aria-label="Characters"
-      className="d2-scroll shrink-0 overflow-x-auto xl:min-h-0 xl:overflow-y-auto"
+      className="d2-scroll group/grid shrink-0 overflow-x-auto xl:min-h-0 xl:overflow-y-auto"
+      // The pinned nameplates only need a fill once rows scroll under them; at rest the
+      // pane shows through. Set directly so scrolling never re-renders the grid.
+      onScroll={(e) =>
+        e.currentTarget.toggleAttribute("data-scrolled", e.currentTarget.scrollTop > 0)
+      }
     >
       <div className="grid" style={columns}>
         {characters.map((c) => (
@@ -386,7 +391,7 @@ function CharacterHeader({
     : undefined;
 
   return (
-    <div className="d2-sidebar-opaque sticky top-0 z-10 pb-1">
+    <div className="group-data-scrolled/grid:bg-glass-opaque sticky top-0 z-10 pb-1">
         <DropdownMenu>
           <DropdownMenuTrigger
             render={
@@ -510,7 +515,7 @@ function CharacterCell({
       <DropZone
         to={{ kind: "character", characterId: character.id }}
         bucket={row.hash}
-        className="grid grid-cols-[repeat(3,52px)] content-start gap-1.5 p-1"
+        className="grid grid-cols-[repeat(3,56px)] content-start gap-1.5 p-1"
       >
         {items.map((item) => (
           <ItemTile key={item.key} item={item} />
@@ -541,9 +546,9 @@ function PostmasterCell({ items, capacity }: { items: InventoryItem[]; capacity:
           </span>
         </div>
         {items.length > 0 && (
-          <div className="grid grid-cols-[repeat(5,40px)] gap-1.5">
+          <div className="grid grid-cols-[repeat(5,44px)] gap-1.5">
             {items.map((item) => (
-              <ItemTile key={item.key} item={item} size={40} />
+              <ItemTile key={item.key} item={item} size={44} />
             ))}
           </div>
         )}
