@@ -6,6 +6,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type ReactNode,
 } from "react";
 import Image from "next/image";
@@ -42,8 +43,8 @@ import {
 import { requestLock } from "@/lib/inventory/lock-queue";
 import { annotationsStore } from "@/lib/inventory/annotations";
 import { recentlyMoved, requestMoves } from "@/lib/inventory/move-queue";
-import { planSmartMove, type SmartPlan } from "@/lib/inventory/smart-moves";
-import { toast } from "@/lib/toast";
+import { planSmartMove, type MoveStep, type SmartPlan } from "@/lib/inventory/smart-moves";
+import { toast, type PendingToast } from "@/lib/toast";
 import { groupItems, loadViewSettings, useViewSettings } from "@/lib/inventory/view-settings";
 import { statIconsFromManifest } from "@/lib/manifest/stat-icons";
 import { useManifest } from "@/lib/manifest/use-manifest";
@@ -55,7 +56,7 @@ import {
   type Place,
 } from "@/lib/inventory/moves";
 import { cn } from "@/lib/utils";
-import { useStoreValue } from "@/lib/value-store";
+import { createValueStore, useStoreValue } from "@/lib/value-store";
 import { EmptyTile, ItemTile } from "./item-tile";
 import { CompareDrawer } from "./compare-drawer";
 import { ItemDetails, type ItemDetailsTarget } from "./item-details";
@@ -66,6 +67,7 @@ import {
   ManagerActionsContext,
   dragStore,
   useManagerActions,
+  type DragInfo,
   type ManagerActions,
 } from "./manager-context";
 
@@ -95,8 +97,15 @@ export function ManagerView({
   const [comparing, setComparing] = useState<string | null>(null);
   useEffect(loadViewSettings, []);
 
-  const actions = useMemo<ManagerActions>(
-    () => ({
+  const actions = useMemo<ManagerActions>(() => {
+    /** Queue a plan, naming where it goes in its toast. */
+    const run = (steps: readonly MoveStep[], notify?: PendingToast | false) =>
+      requestMoves(
+        steps,
+        { queryClient, membershipId },
+        { where: landingName(latest.current, steps[steps.length - 1]?.to), notify },
+      );
+    return {
       inventory: () => latest.current,
       open: (item, anchor) => setMenu({ key: item.key, anchor }),
       dragStart: (item) => {
@@ -106,7 +115,10 @@ export function ManagerView({
         dragStore.set(found);
         return true;
       },
-      dragEnd: () => dragStore.set(null),
+      dragEnd: () => {
+        dragStore.set(null);
+        characterDropStore.set(null);
+      },
       problem: (item, place, to) => {
         const plan = smartPlan(latest.current, item, place, to);
         return plan.ok ? null : plan.problem;
@@ -117,9 +129,9 @@ export function ManagerView({
           toast.error(`Can't move ${item.name}`, plan.problem);
           return;
         }
-        requestMoves(plan.steps, { queryClient, membershipId });
+        void run(plan.steps);
       },
-      runSteps: (steps) => requestMoves(steps, { queryClient, membershipId }),
+      runSteps: (steps, notify) => run(steps, notify),
       quickEquip: (item) => {
         // Double-click: equip on the character played last (DIM's shortcut).
         setMenu(null);
@@ -134,7 +146,7 @@ export function ManagerView({
           toast.error(`Can't equip ${item.name}`, plan.problem);
           return;
         }
-        requestMoves(plan.steps, { queryClient, membershipId });
+        void run(plan.steps);
       },
       lock: (items, locked) =>
         requestLock(latest.current, items, locked, { queryClient, membershipId }),
@@ -142,9 +154,8 @@ export function ManagerView({
         setMenu(null);
         setComparing(item.name);
       },
-    }),
-    [queryClient, membershipId],
-  );
+    };
+  }, [queryClient, membershipId]);
 
   return (
     <ManagerActionsContext.Provider value={actions}>
@@ -169,6 +180,14 @@ export function ManagerView({
   );
 }
 
+/** "your Warlock" or "the vault", for toasts. */
+function landingName(inventory: ManagerInventory, to: Landing | undefined): string | undefined {
+  if (!to) return undefined;
+  if (to.kind === "vault") return "the vault";
+  const character = inventory.characters.find((c) => c.id === to.characterId);
+  return `your ${character ? (CLASS_NAMES[character.classType] ?? "Guardian") : "character"}`;
+}
+
 /** Account-wide and non-gear items don't drag (postmaster items always can). */
 function canDrag(item: InventoryItem, place: Place): boolean {
   if (place.kind === "postmaster") return true;
@@ -190,61 +209,105 @@ function smartPlan(
 }
 
 /**
+ * The character whose column a drop would go through (the pointer is on its column but
+ * not on a slot that takes the item): the item's slot row there lights up as the landing.
+ */
+const characterDropStore = createValueStore<string | null>(null);
+
+/**
+ * Whether the dragged item can land at `to`, planned once per drag and landing: every
+ * slot row of a character is a zone for the same landing, and they all re-render as the
+ * lit character changes.
+ */
+const acceptCache = new WeakMap<DragInfo, Map<string, boolean>>();
+function canLand(actions: ManagerActions, drag: DragInfo, to: Landing): boolean {
+  const key = to.kind === "vault" ? "vault" : `${to.characterId}:${to.equipped ? "e" : ""}`;
+  let byLanding = acceptCache.get(drag);
+  if (!byLanding) acceptCache.set(drag, (byLanding = new Map()));
+  let ok = byLanding.get(key);
+  if (ok === undefined) {
+    ok = actions.problem(drag.item, drag.place, to) === null;
+    byLanding.set(key, ok);
+  }
+  return ok;
+}
+
+/**
  * A place an item can be dropped. While a drag is on, zones the item could go to get a
  * faint fill and the one under the pointer a stronger one; the rest stay as they are.
+ * Zones nest: a slot row that takes the item handles the drop, otherwise it falls
+ * through to the character's column around it.
  */
 function DropZone({
   to,
   bucket,
-  overlay = false,
+  column = false,
+  label,
   className,
+  style,
   children,
 }: {
   to: Landing;
   /** Only items of this bucket (a slot row); omit to take any movable item. */
   bucket?: number;
-  /** Tint over the content instead of filling behind it (for opaque content like a nameplate). */
-  overlay?: boolean;
+  /** A character's whole column: tinted over its content, only while under the pointer. */
+  column?: boolean;
+  label?: string;
   className?: string;
+  style?: CSSProperties;
   children: ReactNode;
 }) {
   const actions = useManagerActions();
   const drag = useStoreValue(dragStore);
+  const dropCharacter = useStoreValue(characterDropStore);
   const [over, setOver] = useState(false);
   const accepts =
     drag !== null &&
     actions !== null &&
     (bucket === undefined || drag.item.bucketHash === bucket) &&
-    actions.problem(drag.item, drag.place, to) === null;
+    canLand(actions, drag, to);
+  const inventoryOf = to.kind === "character" && !to.equipped ? to.characterId : undefined;
+  // The item's own slot row on the character whose column it's being dropped on.
+  const landing = accepts && bucket !== undefined && inventoryOf === dropCharacter;
 
-  const tint = accepts ? (over ? "bg-foreground/15" : "bg-foreground/5") : undefined;
+  const tint = !accepts
+    ? undefined
+    : column
+      ? over && "bg-foreground/10"
+      : over || landing
+        ? "bg-foreground/15"
+        : "bg-foreground/5";
   return (
     <div
-      className={cn(
-        "transition-colors duration-100",
-        overlay ? "relative" : tint,
-        className,
-      )}
+      aria-label={label}
+      className={cn("transition-colors duration-100", column ? "relative" : tint, className)}
+      style={style}
       onDragOver={(e) => {
         if (!accepts) return;
+        setOver(true);
+        // A slot row inside already took it: the column only shows it's the target.
+        const direct = e.defaultPrevented;
+        if (column) characterDropStore.set(direct ? null : (inventoryOf ?? null));
+        if (direct) return;
         e.preventDefault();
         e.dataTransfer.dropEffect = "move";
-        setOver(true);
       }}
       onDragLeave={(e) => {
-        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setOver(false);
+        if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
+        setOver(false);
+        if (column && characterDropStore.get() === inventoryOf) characterDropStore.set(null);
       }}
       onDrop={(e) => {
         setOver(false);
-        if (!accepts || !actions) return;
+        if (!accepts || !actions || e.defaultPrevented) return;
         e.preventDefault();
         actions.move(drag.item, drag.place, to);
         actions.dragEnd();
       }}
     >
       {children}
-      {overlay && tint && (
-        <span aria-hidden className={cn("pointer-events-none absolute inset-0", tint)} />
+      {column && tint && (
+        <span aria-hidden className={cn("pointer-events-none absolute inset-0 z-20", tint)} />
       )}
     </div>
   );
@@ -254,6 +317,9 @@ function CharacterGrid({ inventory }: { inventory: ManagerInventory }) {
   const { characters } = inventory;
   const postmasterCapacity = inventory.postmasterCapacity ?? POSTMASTER_FALLBACK_CAPACITY;
   const columns = { gridTemplateColumns: `repeat(${characters.length}, max-content)` };
+  // Nameplate, postmaster, then every slot row: each column spans them all on a subgrid,
+  // so rows still line up across characters.
+  const rowCount = 2 + CHARACTER_GROUPS.reduce((n, group) => n + group.rows.length, 0);
   const manifestStatus = useManifest();
   const manifest = manifestStatus.state === "ready" ? manifestStatus.manifest : undefined;
   const statIcons = useMemo(() => statIconsFromManifest(manifest), [manifest]);
@@ -264,29 +330,34 @@ function CharacterGrid({ inventory }: { inventory: ManagerInventory }) {
       aria-label="Characters"
       className="d2-scroll shrink-0 overflow-x-auto xl:min-h-0 xl:overflow-y-auto"
     >
-      <div className="grid gap-x-6" style={columns}>
+      <div className="grid" style={columns}>
         {characters.map((c) => (
-          <CharacterHeader key={c.id} character={c} statIcons={statIcons} />
+          // The whole column is one target (padding splits the gap between columns), so a
+          // drop anywhere on a character sends the item there.
+          <DropZone
+            key={c.id}
+            to={{ kind: "character", characterId: c.id }}
+            column
+            label={CLASS_NAMES[c.classType] ?? "Guardian"}
+            className="grid grid-rows-subgrid px-3 first:pl-0 last:pr-0"
+            style={{ gridRow: `span ${rowCount}` }}
+          >
+            <CharacterHeader character={c} statIcons={statIcons} />
+            <PostmasterCell items={c.postmaster} capacity={postmasterCapacity} />
+            {/* Weapons, armor, general: no headings, just a wider gap before each group. */}
+            {CHARACTER_GROUPS.map((group) =>
+              group.rows.map((row, i) => (
+                <CharacterCell
+                  key={row.hash}
+                  character={c}
+                  row={row}
+                  groupStart={i === 0}
+                  compare={compare}
+                />
+              )),
+            )}
+          </DropZone>
         ))}
-
-        {characters.map((c) => (
-          <PostmasterCell key={c.id} items={c.postmaster} capacity={postmasterCapacity} />
-        ))}
-
-        {/* Weapons, armor, general: no headings, just a wider gap before each group. */}
-        {CHARACTER_GROUPS.map((group) =>
-          group.rows.map((row, i) =>
-            characters.map((c) => (
-              <CharacterCell
-                key={`${row.hash}:${c.id}`}
-                character={c}
-                row={row}
-                groupStart={i === 0}
-                compare={compare}
-              />
-            )),
-          ),
-        )}
       </div>
     </section>
   );
@@ -316,7 +387,6 @@ function CharacterHeader({
 
   return (
     <div className="d2-sidebar-opaque sticky top-0 z-10 pb-1">
-      <DropZone to={{ kind: "character", characterId: character.id }} overlay>
         <DropdownMenu>
           <DropdownMenuTrigger
             render={
@@ -379,7 +449,6 @@ function CharacterHeader({
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
-      </DropZone>
       <CharacterStats stats={character.stats} icons={statIcons} />
     </div>
   );
@@ -395,9 +464,9 @@ function CharacterStats({
 }) {
   if (Object.keys(stats).length === 0) return null;
   return (
-    <dl className="grid grid-cols-6 gap-1 pt-1.5 text-xs">
+    <dl className="flex justify-between pt-1.5 text-xs">
       {STAT_DISPLAY_ORDER.map((key) => (
-        <div key={key} className="flex items-center gap-1">
+        <div key={key} className="flex items-center gap-0.5">
           <dt>
             <StatGlyph src={icons[key]} label={STAT_LABELS[key]} className="size-3.5" />
           </dt>

@@ -4,6 +4,8 @@ import { createContext, useContext } from "react";
 import type { InventoryItem, ManagerInventory } from "@/lib/inventory/build";
 import type { Landing, Place } from "@/lib/inventory/moves";
 import type { MoveStep } from "@/lib/inventory/smart-moves";
+import type { MoveOutcome } from "@/lib/inventory/move-queue";
+import type { PendingToast } from "@/lib/toast";
 import { createValueStore } from "@/lib/value-store";
 
 /** The item being dragged and where it came from; drop zones subscribe to this. */
@@ -28,8 +30,11 @@ export interface ManagerActions {
   problem(item: InventoryItem, place: Place, to: Landing): string | null;
   /** Move it, making room first when needed (smart moves). */
   move(item: InventoryItem, place: Place, to: Landing): void;
-  /** Queue already-planned steps (bulk moves plan against their own running state). */
-  runSteps(steps: readonly MoveStep[]): void;
+  /**
+   * Queue already-planned steps (bulk moves plan against their own running state). They
+   * get their own toast unless `notify` says otherwise.
+   */
+  runSteps(steps: readonly MoveStep[], notify?: PendingToast | false): Promise<MoveOutcome>;
   /** Equip on the character played last (double-click). */
   quickEquip(item: InventoryItem): void;
   /** Lock or unlock items (those already in that state are skipped). */

@@ -42,7 +42,7 @@ import {
   type Landing,
   type Place,
 } from "@/lib/inventory/moves";
-import { recentlyMoved } from "@/lib/inventory/move-queue";
+import { recentlyMoved, type MoveOutcome } from "@/lib/inventory/move-queue";
 import { NO_PERKS, createPerkLookup } from "@/lib/inventory/perk-index";
 import { planSmartMove } from "@/lib/inventory/smart-moves";
 import { dupeHashes, forEachItem, matchItems, parseSearch } from "@/lib/inventory/search";
@@ -104,20 +104,23 @@ export function ManagerSearch({ inventory }: { inventory: ManagerInventory }) {
           aria-label="Search items"
           aria-invalid={error ? true : undefined}
           aria-describedby={error ? "manager-search-error" : undefined}
-          className="pl-8 pr-8 [&::-webkit-search-cancel-button]:hidden"
+          className={cn(
+            "pl-8 [&::-webkit-search-cancel-button]:hidden",
+            query.length > 0 ? "pr-14" : "pr-8",
+          )}
         />
         {query.length > 0 && (
           <button
             type="button"
             aria-label="Clear search"
             onClick={() => setQuery("")}
-            className="text-muted-foreground hover:text-foreground absolute top-1/2 right-1.5 flex size-5 -translate-y-1/2 cursor-pointer items-center justify-center rounded-none outline-none focus-visible:ring-1 focus-visible:ring-outline-strong"
+            className="text-muted-foreground hover:text-foreground absolute top-1/2 right-7 flex size-5 -translate-y-1/2 cursor-pointer items-center justify-center rounded-none outline-none focus-visible:ring-1 focus-visible:ring-outline-strong"
           >
             <HugeiconsIcon icon={Cancel01Icon} strokeWidth={2} className="size-3.5" aria-hidden />
           </button>
         )}
+        <SearchHelp />
       </div>
-      <SearchHelp />
       <span
         id="manager-search-error"
         className={cn("text-sm tabular-nums", error ? "text-destructive" : "text-muted-foreground")}
@@ -152,11 +155,14 @@ function SearchHelp() {
   return (
     <Popover>
       <TooltipLabel label="Search help">
-        <PopoverTrigger render={<Button variant="ghost" size="icon" aria-label="Search help" />}>
-          <HugeiconsIcon icon={HelpCircleIcon} aria-hidden />
+        <PopoverTrigger
+          aria-label="Search help"
+          className="text-muted-foreground hover:text-foreground data-[popup-open]:text-foreground absolute top-1/2 right-1.5 flex size-5 -translate-y-1/2 cursor-pointer items-center justify-center rounded-none outline-none focus-visible:ring-1 focus-visible:ring-outline-strong"
+        >
+          <HugeiconsIcon icon={HelpCircleIcon} className="size-4" aria-hidden />
         </PopoverTrigger>
       </TooltipLabel>
-      <PopoverContent align="start" className="w-[28rem] gap-2 p-3 text-xs">
+      <PopoverContent align="end" className="w-[28rem] gap-2 p-3 text-xs">
         <p className="d2-label">Search</p>
         <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1.5">
           {HELP.map(([example, meaning]) => (
@@ -183,7 +189,8 @@ function BulkActions({ inventory, matches }: { inventory: ManagerInventory; matc
   }, [inventory, matches]);
   const instanced = found.filter((f) => f.item.instanceId);
   const ids = instanced.map((f) => f.item.instanceId!);
-  const count = `${found.length.toLocaleString()} ${found.length === 1 ? "item" : "items"}`;
+  const plural = (n: number) => `${n.toLocaleString()} ${n === 1 ? "item" : "items"}`;
+  const count = plural(found.length);
 
   const tag = (t: ItemTag | undefined) => {
     setTag(ids, t);
@@ -198,7 +205,7 @@ function BulkActions({ inventory, matches }: { inventory: ManagerInventory; matc
     if (!actions) return;
     let sim = actions.inventory();
     const placed = new Set<string>();
-    let moved = 0;
+    const runs: Promise<MoveOutcome>[] = [];
     let skipped = 0;
     for (const { item } of found) {
       const at = locate(sim, item.key)?.place;
@@ -215,18 +222,29 @@ function BulkActions({ inventory, matches }: { inventory: ManagerInventory; matc
         skipped++;
         continue;
       }
-      actions.runSteps(plan.steps);
+      runs.push(actions.runSteps(plan.steps, false));
       sim = applyMoves(
         sim,
         plan.steps.map((s) => ({ id: -1, itemKey: s.item.key, to: s.to, status: "pending" as const, at: 0 })),
       );
       placed.add(item.key);
-      moved++;
     }
-    if (moved === 0 && skipped === 0) toast.info("Everything is already there");
-    else if (skipped > 0) {
-      toast.warning(`Moving ${moved}, skipped ${skipped}`, "No room could be made, or they can't go there");
-    } else toast.success(`Moving ${moved} ${moved === 1 ? "item" : "items"}`);
+    const noRoom = "No room could be made, or they can't go there";
+    if (runs.length === 0) {
+      if (skipped === 0) toast.info("Everything is already there");
+      else toast.error(`Couldn't move ${plural(skipped)}`, noRoom);
+      return;
+    }
+    // One toast for the batch: a spinner until every move is done, then the tally.
+    const pending = toast.loading(`Moving ${plural(runs.length)}`);
+    void Promise.all(runs).then((outcomes) => {
+      const failed = outcomes.filter((o) => !o.ok);
+      const why = failed[0] && !failed[0].ok ? failed[0].message : noRoom;
+      const moved = outcomes.length - failed.length;
+      if (moved === 0) pending.error(`Couldn't move ${plural(failed.length + skipped)}`, why);
+      else if (failed.length + skipped === 0) pending.success(`Moved ${plural(moved)}`);
+      else pending.warning(`Moved ${moved} of ${plural(outcomes.length + skipped)}`, why);
+    });
   };
 
   return (

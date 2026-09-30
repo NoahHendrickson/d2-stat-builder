@@ -202,6 +202,7 @@ export function BuildActions({
         : item,
     );
     const { builderSnapshot } = getBuilderState();
+    const pending = toast.loading("Saving loadout");
     createLoadout.mutate(
       commitLoadout(
         {
@@ -216,10 +217,10 @@ export function BuildActions({
       {
         onSuccess: () => {
           setSaveOpen(false);
-          toast.success("Loadout saved", "Find it under the Loadouts tab");
+          pending.success("Loadout saved", "Find it under the Loadouts tab");
         },
         onError: (err) => {
-          toast.error(
+          pending.error(
             err.notConfigured
               ? "Saving needs loadout storage — set DATABASE_URL (see .env.example)"
               : err.message,
@@ -243,6 +244,8 @@ export function BuildActions({
   const equip = async () => {
     if (!canActOnItems || !targetCharacter || equipping) return;
     setEquipping(true);
+    const where = `your ${CLASS_NAMES[buildClass ?? -1] ?? "character"}`;
+    const pending = toast.loading(`Equipping build on ${where}`);
     try {
       const items = livePieces.map(equipItemRef);
       const results = await postEquipRequest(
@@ -251,15 +254,15 @@ export function BuildActions({
           items,
           spares: planSpares(pieceMap.values(), items, targetCharacter.id),
         },
-        { queryClient, failureMessage: "Equip failed" },
+        { queryClient, failureMessage: "Equip failed", notify: pending },
       );
       if (!results) return;
 
       const failed = results.filter((r) => !r.ok);
       const vaultedIds = results.flatMap((r) => r.vaulted ?? []);
       if (failed.length === 0) {
-        toast.success(
-          `Equipped on your ${CLASS_NAMES[buildClass ?? -1] ?? "character"}`,
+        pending.success(
+          `Equipped on ${where}`,
           vaultedIds.length
             ? vaultedNote(vaultedIds, (id) => pieceMap.get(id)?.name ?? "a piece")
             : undefined,
@@ -270,11 +273,11 @@ export function BuildActions({
           const piece = resolved.find((p) => p.instanceId === f.itemInstanceId);
           return `${piece?.name ?? "Unknown piece"}: ${f.message ?? "failed"}`;
         });
-        toast.warning(`Some items didn't equip — ${names.join("; ")}`);
+        pending.warning(`Some items didn't equip — ${names.join("; ")}`);
         onEquipped?.();
       }
     } catch {
-      toast.error("Equip failed — check your connection and try again");
+      pending.error("Equip failed — check your connection and try again");
     } finally {
       setEquipping(false);
     }

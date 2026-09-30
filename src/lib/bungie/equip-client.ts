@@ -2,7 +2,7 @@
 // and the armor table's per-row Move/Equip: one request/response contract for
 // POST /api/bungie/equip, including the reauth handshake.
 import type { QueryClient } from "@tanstack/react-query";
-import { toast } from "@/lib/toast";
+import { toast, type Notifier } from "@/lib/toast";
 import { handleSessionExpired } from "@/lib/auth/sign-out";
 import type { ArmorPiece } from "../armory/normalize";
 import type { ArmoryCharacter } from "../armory/fetch";
@@ -45,9 +45,9 @@ export function equipItemRef(piece: ArmorPiece) {
 }
 
 /**
- * POST to /api/bungie/equip. On a non-OK response, toasts the server's error
- * (falling back to `failureMessage`) and returns null; success/partial-failure
- * toasts stay with the caller, which knows the items involved.
+ * POST to /api/bungie/equip. On a non-OK response, toasts the server's error (falling
+ * back to `failureMessage`) on `notify` (the caller's spinner) and returns null;
+ * success/partial-failure toasts stay with the caller, which knows the items involved.
  */
 export async function postEquipRequest(
   body: {
@@ -58,7 +58,7 @@ export async function postEquipRequest(
     /** Same-slot pieces the server may vault when the character's slot is full (see planSpares). */
     spares?: SpareItems;
   },
-  opts: { queryClient: QueryClient; failureMessage: string },
+  opts: { queryClient: QueryClient; failureMessage: string; notify?: Notifier },
 ): Promise<EquipResult[] | null> {
   const res = await fetch("/api/bungie/equip", {
     method: "POST",
@@ -72,7 +72,7 @@ export async function postEquipRequest(
   };
 
   if (!res.ok) {
-    toast.error(data.error ?? opts.failureMessage);
+    (opts.notify ?? toast).error(data.error ?? opts.failureMessage);
     // The server cleared the stale (pre-scope or expired) session: forget the local
     // player data and surface the session query so the sign-in card comes back.
     if (data.reauth) void handleSessionExpired(opts.queryClient);

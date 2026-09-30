@@ -81,6 +81,11 @@ export function ArmorRowActions({
   const run = async (action: Action) => {
     if (!target || busy) return;
     setBusy(action);
+    const className = CLASS_NAMES[piece.classType] ?? "character";
+    const pending = toast.loading(
+      `${action === "move" ? "Moving" : "Equipping"} ${piece.name}`,
+      `${action === "move" ? "to" : "on"} your ${className}`,
+    );
     try {
       const items = [equipItemRef(piece)];
       const owned = ownedPieces();
@@ -94,16 +99,16 @@ export function ArmorRowActions({
         {
           queryClient,
           failureMessage: `${action === "move" ? "Move" : "Equip"} failed`,
+          notify: pending,
         },
       );
       if (!results) return;
 
       const result = results[0];
-      const className = CLASS_NAMES[piece.classType] ?? "character";
       if (result?.ok) {
         const nameOf = (id: string) =>
           owned.find((p) => p.instanceId === id)?.name ?? "a piece";
-        toast.success(
+        pending.success(
           action === "move"
             ? `Moved ${piece.name} to your ${className}`
             : `Equipped ${piece.name} on your ${className}`,
@@ -111,10 +116,10 @@ export function ArmorRowActions({
         );
         onDone();
       } else {
-        toast.error(`${piece.name}: ${result?.message ?? "action failed"}`);
+        pending.error(`${piece.name}: ${result?.message ?? "action failed"}`);
       }
     } catch {
-      toast.error("Request failed — check your connection and try again");
+      pending.error("Request failed — check your connection and try again");
     } finally {
       setBusy(null);
     }

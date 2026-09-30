@@ -2,7 +2,7 @@
 
 // Locking and unlocking items from the manager: the new state shows at once (an op laid
 // over the profile, like moves), requests go to Bungie one at a time, and a failure
-// puts the old state back with a toast.
+// puts the old state back. One toast follows each request, spinner to outcome.
 import { toast } from "@/lib/toast";
 import { handleSessionExpired } from "@/lib/auth/sign-out";
 import { createValueStore } from "@/lib/value-store";
@@ -52,7 +52,7 @@ export function settledLocks(base: ManagerInventory, ops: readonly LockOp[], now
   return out;
 }
 
-/** Lock (or unlock) each item that isn't already in that state. */
+/** Lock (or unlock) each item that isn't already in that state, under one toast. */
 export function requestLock(
   inventory: ManagerInventory,
   items: readonly InventoryItem[],
@@ -62,19 +62,36 @@ export function requestLock(
   // Bungie wants a character with the request; any of the account's will do.
   const characterId = inventory.characters[0]?.id;
   if (!characterId) return;
-  for (const item of items) {
-    if (!item.instanceId || item.locked === locked) continue;
+  const todo = items.filter((item) => item.instanceId && item.locked !== locked);
+  if (todo.length === 0) return;
+  const verb = locked ? "lock" : "unlock";
+  const what = todo.length === 1 ? todo[0]!.name : `${todo.length} items`;
+  const pending = toast.loading(`${locked ? "Locking" : "Unlocking"} ${what}`);
+  const sends = todo.map((item) => {
     const id = nextId++;
-    const instanceId = item.instanceId;
+    const instanceId = item.instanceId!;
     lockOps.set([...lockOps.get(), { id, instanceId, locked, status: "pending", at: Date.now() }]);
     inFlight++;
-    queue = queue
-      .then(() => send(id, item, { itemId: instanceId, characterId, locked }, ctx))
+    const sent = queue.then(() => send(id, { itemId: instanceId, characterId, locked }, ctx));
+    queue = sent
+      .then(() => undefined)
       .finally(() => {
         inFlight--;
         if (inFlight === 0) scheduleProfileRefetch(ctx);
       });
-  }
+    return sent;
+  });
+  void Promise.all(sends).then((errors) => {
+    const failed = errors.flatMap((error, i) => (error ? [{ item: todo[i]!, error }] : []));
+    if (failed.length === 0) pending.success(`${locked ? "Locked" : "Unlocked"} ${what}`);
+    else if (failed.length === todo.length) pending.error(`Couldn't ${verb} ${what}`, failed[0]!.error);
+    else {
+      pending.warning(
+        `Couldn't ${verb} ${failed.length} of ${todo.length} items`,
+        `${failed[0]!.item.name}: ${failed[0]!.error}`,
+      );
+    }
+  });
 }
 
 function updateOp(id: number, patch: Partial<LockOp> | null) {
@@ -85,8 +102,8 @@ function updateOp(id: number, patch: Partial<LockOp> | null) {
   );
 }
 
-async function send(id: number, item: InventoryItem, body: object, ctx: MoveContext) {
-  const verb = (body as { locked: boolean }).locked ? "lock" : "unlock";
+/** Send one lock change; null when it went through, else why not. */
+async function send(id: number, body: object, ctx: MoveContext): Promise<string | null> {
   try {
     const res = await fetch("/api/bungie/lock", {
       method: "POST",
@@ -96,13 +113,13 @@ async function send(id: number, item: InventoryItem, body: object, ctx: MoveCont
     const data = (await res.json()) as { ok?: boolean; error?: string; reauth?: boolean };
     if (res.ok && data.ok) {
       updateOp(id, { status: "done", at: Date.now() });
-      return;
+      return null;
     }
     updateOp(id, null);
-    toast.error(`Couldn't ${verb} ${item.name}`, data.error ?? "Bungie refused");
     if (data.reauth) void handleSessionExpired(ctx.queryClient);
+    return data.error ?? "Bungie refused";
   } catch {
     updateOp(id, null);
-    toast.error(`Couldn't ${verb} ${item.name}`, "Network error — check your connection");
+    return "Network error — check your connection";
   }
 }

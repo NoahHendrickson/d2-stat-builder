@@ -57,7 +57,7 @@ export function FarmingRunner({
       annotations: annotationsStore.get(),
       recent: recentlyMoved(),
     });
-    for (const steps of plans) actions.runSteps(steps);
+    for (const steps of plans) void actions.runSteps(steps);
   }, [inventory, characterId, actions]);
 
   return null;

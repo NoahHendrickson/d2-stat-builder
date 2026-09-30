@@ -11,7 +11,7 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { ArrowUpDownIcon, Cancel01Icon, Search01Icon } from "@hugeicons/core-free-icons";
-import { toast } from "@/lib/toast";
+import { toast, type Notifier } from "@/lib/toast";
 import type { Armory } from "@/lib/armory/fetch";
 import type { Manifest } from "@/lib/manifest/load";
 import { SUBCLASSES, type Subclass } from "@/lib/armory/fragments";
@@ -213,8 +213,9 @@ export function LoadoutsList({
     getItemKey: (index) => shown[index].id,
   });
 
-  const onMutationError = (err: { notConfigured: boolean; message: string }) =>
-    toast.error(
+  /** Reports a failed save on the action's spinner toast. */
+  const mutationError = (pending: Notifier) => (err: { notConfigured: boolean; message: string }) =>
+    pending.error(
       err.notConfigured
         ? "Loadout storage isn't configured — set DATABASE_URL"
         : err.message,
@@ -270,6 +271,7 @@ export function LoadoutsList({
         ? { modPlacement }
         : {}),
     };
+    const pending = toast.loading("Saving loadout");
     update.mutate(
       {
         id,
@@ -283,21 +285,22 @@ export function LoadoutsList({
       {
         onSuccess: () => {
           setDialog({ kind: "none" });
-          toast.success("Loadout updated");
+          pending.success("Loadout updated");
         },
-        onError: onMutationError,
+        onError: mutationError(pending),
       },
     );
   };
 
   const deleteLoadout = () => {
     if (dialog.kind !== "delete") return;
+    const pending = toast.loading("Deleting loadout");
     remove.mutate(dialog.loadout.id, {
       onSuccess: () => {
         setDialog({ kind: "none" });
-        toast.success("Loadout deleted");
+        pending.success("Loadout deleted");
       },
-      onError: onMutationError,
+      onError: mutationError(pending),
     });
   };
 
@@ -319,9 +322,10 @@ export function LoadoutsList({
         ...(saved.builder ? { builder: saved.builder } : {}),
         ...(saved.modPlacement ? { modPlacement: saved.modPlacement } : {}),
       };
+      const pending = toast.loading("Duplicating loadout");
       createMutate(data, {
-        onSuccess: () => toast.success("Loadout duplicated"),
-        onError: onMutationError,
+        onSuccess: () => pending.success("Loadout duplicated"),
+        onError: mutationError(pending),
       });
     },
     [createMutate, queryClient],
@@ -337,12 +341,13 @@ export function LoadoutsList({
         ...(notes ? { notes } : { notes: undefined }),
       },
     };
+    const pending = toast.loading("Importing loadout");
     create.mutate(withLoadoutSubclass(data, subclass, manifest), {
       onSuccess: () => {
         clearImportParam();
-        toast.success("Loadout imported");
+        pending.success("Loadout imported");
       },
-      onError: onMutationError,
+      onError: mutationError(pending),
     });
   };
 

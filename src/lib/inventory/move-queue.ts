@@ -6,7 +6,7 @@
 // Bungie's profile cache can hand back the old layout for a while after a move.
 import { useSyncExternalStore } from "react";
 import type { QueryClient } from "@tanstack/react-query";
-import { toast } from "@/lib/toast";
+import { toast, type PendingToast } from "@/lib/toast";
 import { handleSessionExpired } from "@/lib/auth/sign-out";
 import { profileKey } from "@/lib/armory/keys";
 import type { MoveDestination, MoveSource } from "@/lib/bungie/move-plan";
@@ -77,7 +77,20 @@ export function requestMove(
     toast.error(`Can't move ${item.name}`, problem);
     return;
   }
-  requestMoves([{ item, place, to }], ctx);
+  void requestMoves([{ item, place, to }], ctx);
+}
+
+/** How a queued move went: `title` and `message` say what failed. */
+export type MoveOutcome = { ok: true } | { ok: false; title: string; message: string };
+
+export interface MoveToastOptions {
+  /** Where it's going, for the toast ("your Warlock", "the vault"). */
+  where?: string;
+  /**
+   * The toast that reports it: omitted, the move gets its own spinner that turns into
+   * the outcome; false, it reports nothing (the caller toasts a batch as a whole).
+   */
+  notify?: PendingToast | false;
 }
 
 /**
@@ -88,9 +101,15 @@ export function requestMove(
 export function requestMoves(
   steps: readonly { item: InventoryItem; place: Place; to: Landing }[],
   ctx: MoveContext,
-): void {
-  if (steps.length === 0) return;
-  const main = steps[steps.length - 1]!.item;
+  { where, notify }: MoveToastOptions = {},
+): Promise<MoveOutcome> {
+  if (steps.length === 0) return Promise.resolve({ ok: true });
+  const last = steps[steps.length - 1]!;
+  const main = last.item;
+  const equip = last.to.kind === "character" && Boolean(last.to.equipped);
+  const heading = where && (equip ? `on ${where}` : `to ${where}`);
+  const pending =
+    notify ?? toast.loading(`${equip ? "Equipping" : "Moving"} ${main.name}`, heading);
   recent.set(main.key, Date.now());
   const now = Date.now();
   const queued = steps.map((step) => ({ ...step, id: nextId++ }));
@@ -101,31 +120,45 @@ export function requestMoves(
   inFlight++;
   clearTimeout(refetchTimer);
 
-  queue = queue
-    .then(async () => {
-      for (const [i, step] of queued.entries()) {
-        const body = {
-          itemId: step.item.instanceId ?? "0",
-          itemHash: step.item.itemHash,
-          stackSize: step.item.instanceId ? 1 : step.item.quantity,
-          from: source(step.place),
-          to: destination(step.to),
-        };
-        const title =
-          step.item === main ? `Couldn't move ${main.name}` : `Couldn't make room for ${main.name}`;
-        const ok = await send(step.id, step.item, body, ctx, title);
-        if (!ok) {
-          // The moves after it counted on this one: drop them.
-          const rest = new Set(queued.slice(i + 1).map((q) => q.id));
-          if (rest.size > 0) moveOps.set(moveOps.get().filter((o) => !rest.has(o.id)));
-          return;
-        }
+  const run = queue.then(async (): Promise<MoveOutcome> => {
+    for (const [i, step] of queued.entries()) {
+      const isMain = step.item === main;
+      if (pending && queued.length > 1) {
+        pending.progress(
+          `${equip ? "Equipping" : "Moving"} ${main.name}`,
+          isMain ? heading : `Making room: ${step.item.name}`,
+        );
       }
-    })
+      const body = {
+        itemId: step.item.instanceId ?? "0",
+        itemHash: step.item.itemHash,
+        stackSize: step.item.instanceId ? 1 : step.item.quantity,
+        from: source(step.place),
+        to: destination(step.to),
+      };
+      const sent = await send(step.id, body, ctx);
+      if (!sent.ok) {
+        // The moves after it counted on this one: drop them.
+        const rest = new Set(queued.slice(i + 1).map((q) => q.id));
+        if (rest.size > 0) moveOps.set(moveOps.get().filter((o) => !rest.has(o.id)));
+        const title = isMain
+          ? `Couldn't ${equip ? "equip" : "move"} ${main.name}`
+          : `Couldn't make room for ${main.name}`;
+        const message = isMain ? sent.message : `${step.item.name}: ${sent.message}`;
+        if (pending) pending.error(title, message);
+        return { ok: false, title, message };
+      }
+    }
+    if (pending) pending.success(`${equip ? "Equipped" : "Moved"} ${main.name}`, heading);
+    return { ok: true };
+  });
+  queue = run
+    .then(() => undefined)
     .finally(() => {
       inFlight--;
       if (inFlight === 0) scheduleProfileRefetch(ctx);
     });
+  return run;
 }
 
 /** Refetch the profile shortly, once a burst of actions (moves, locks) has gone quiet. */
@@ -136,14 +169,12 @@ export function scheduleProfileRefetch(ctx: MoveContext) {
   }, REFETCH_DELAY_MS);
 }
 
-/** Send one move; true when it went all the way. */
+/** Send one move: ok when it went all the way, else why not. */
 async function send(
   id: number,
-  item: InventoryItem,
   body: object,
   ctx: MoveContext,
-  title: string,
-): Promise<boolean> {
+): Promise<{ ok: true } | { ok: false; message: string }> {
   try {
     const res = await fetch("/api/bungie/move", {
       method: "POST",
@@ -154,24 +185,21 @@ async function send(
 
     if (!res.ok) {
       updateOp(id, null);
-      toast.error(title, `${item.name}: ${data.error ?? "Move failed"}`);
       if (data.reauth) void handleSessionExpired(ctx.queryClient);
-      return false;
+      return { ok: false, message: data.error ?? "Move failed" };
     }
     if (data.ok) {
       updateOp(id, { status: "done", at: Date.now() });
-      return true;
+      return { ok: true };
     }
-    toast.error(title, `${item.name}: ${data.error ?? "Move failed"}`);
     // Part of a hop went through (e.g. it reached the vault but the target was full):
     // show it where it actually is.
     if (data.landed) updateOp(id, { status: "done", to: data.landed, at: Date.now() });
     else updateOp(id, null);
-    return false;
+    return { ok: false, message: data.error ?? "Move failed" };
   } catch {
     updateOp(id, null);
-    toast.error(title, `${item.name}: network error — check your connection`);
-    return false;
+    return { ok: false, message: "Network error — check your connection" };
   }
 }
 

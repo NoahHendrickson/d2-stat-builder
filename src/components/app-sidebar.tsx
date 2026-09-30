@@ -7,8 +7,8 @@ import { usePathname } from "next/navigation";
 import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
 import {
   Add01Icon,
-  Backpack01Icon,
   Delete02Icon,
+  GarageIcon,
   Layers01Icon,
   LayoutTable01Icon,
   MoreHorizontalIcon,
@@ -66,7 +66,7 @@ export const NAV_ITEMS: readonly {
   { href: "/armor", label: "Armor table", Icon: navIcon(LayoutTable01Icon) },
   { href: "/weapons", label: "Weapon search", Icon: HandCannonIcon },
   { href: "/loadouts", label: "Loadouts", Icon: navIcon(Layers01Icon) },
-  { href: "/manager", label: "Manager", Icon: navIcon(Backpack01Icon) },
+  { href: "/manager", label: "Items", Icon: navIcon(GarageIcon) },
 ];
 
 /** Title for the header strip: the nav label of the current route. */
@@ -213,7 +213,7 @@ function NavItem({
           : "text-muted-foreground hover:bg-foreground/5 hover:text-foreground",
       )}
     >
-      <Icon strokeWidth={active ? 2 : 1.5} className="size-4 shrink-0" />
+      <Icon strokeWidth={active ? 2 : 1.5} className="size-5 shrink-0" />
       {!collapsed && (
         <>
           <span className="min-w-0 flex-1 truncate">{label}</span>
