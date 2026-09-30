@@ -40,7 +40,7 @@ export type GroupKey = (typeof GROUP_KEYS)[number];
 export const GROUP_LABELS: Record<GroupKey, string> = {
   none: "No grouping",
   class: "Class",
-  type: "Weapon or armor type",
+  type: "Type",
   rarity: "Rarity",
   element: "Element",
   ammo: "Ammo",
@@ -50,11 +50,17 @@ export const GROUP_LABELS: Record<GroupKey, string> = {
 export interface ViewSettings {
   /** Sort keys in priority order; name always breaks the last tie. */
   sort: SortKey[];
-  /** How each vault row splits into groups. */
-  vaultGroup: GroupKey;
+  /** How each vault weapon row splits into groups. */
+  weaponGroup: GroupKey;
+  /** How each vault armor row splits into groups. */
+  armorGroup: GroupKey;
 }
 
-export const DEFAULT_VIEW: ViewSettings = { sort: ["rarity", "power", "name"], vaultGroup: "class" };
+export const DEFAULT_VIEW: ViewSettings = {
+  sort: ["rarity", "power", "name"],
+  weaponGroup: "type",
+  armorGroup: "class",
+};
 
 const STORAGE_KEY = "stat-builder:manager-view:v1";
 const TAG_ORDER: Record<ItemTag | "none", number> = {
@@ -72,14 +78,18 @@ const AMMO_NAMES: Record<number, string> = { 1: "Primary", 2: "Special", 3: "Hea
 export function parseViewSettings(raw: string | null): ViewSettings {
   if (!raw) return DEFAULT_VIEW;
   try {
-    const v = JSON.parse(raw) as Partial<Record<keyof ViewSettings, unknown>>;
+    // vaultGroup: the one setting for every row, before weapons and armor split.
+    const v = JSON.parse(raw) as Partial<Record<keyof ViewSettings | "vaultGroup", unknown>>;
     const sort = Array.isArray(v.sort)
       ? [...new Set(v.sort.filter((k): k is SortKey => (SORT_KEYS as readonly unknown[]).includes(k)))]
       : DEFAULT_VIEW.sort;
-    const vaultGroup = (GROUP_KEYS as readonly unknown[]).includes(v.vaultGroup)
-      ? (v.vaultGroup as GroupKey)
-      : DEFAULT_VIEW.vaultGroup;
-    return { sort, vaultGroup };
+    const group = (value: unknown, fallback: GroupKey) =>
+      (GROUP_KEYS as readonly unknown[]).includes(value) ? (value as GroupKey) : fallback;
+    return {
+      sort,
+      weaponGroup: group(v.weaponGroup, DEFAULT_VIEW.weaponGroup),
+      armorGroup: group(v.armorGroup, group(v.vaultGroup, DEFAULT_VIEW.armorGroup)),
+    };
   } catch {
     return DEFAULT_VIEW;
   }

@@ -19,6 +19,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useQueryClient } from "@tanstack/react-query";
+import { ClassGlyph } from "@/components/class-glyph";
 import { PowerValue } from "@/components/power-value";
 import { StatGlyph } from "@/components/stat-glyph";
 import {
@@ -45,7 +46,12 @@ import { annotationsStore } from "@/lib/inventory/annotations";
 import { recentlyMoved, requestMoves } from "@/lib/inventory/move-queue";
 import { planSmartMove, type MoveStep, type SmartPlan } from "@/lib/inventory/smart-moves";
 import { toast, type PendingToast } from "@/lib/toast";
-import { groupItems, loadViewSettings, useViewSettings } from "@/lib/inventory/view-settings";
+import {
+  groupItems,
+  loadViewSettings,
+  useViewSettings,
+  type GroupKey,
+} from "@/lib/inventory/view-settings";
 import { statIconsFromManifest } from "@/lib/manifest/stat-icons";
 import { useManifest } from "@/lib/manifest/use-manifest";
 import {
@@ -56,6 +62,7 @@ import {
   type Place,
 } from "@/lib/inventory/moves";
 import { cn } from "@/lib/utils";
+import { weaponTypeIcon } from "@/lib/weapons/weapon-type-icon-paths";
 import { createValueStore, useStoreValue } from "@/lib/value-store";
 import { EmptyTile, ItemTile } from "./item-tile";
 import { CompareDrawer } from "./compare-drawer";
@@ -161,8 +168,8 @@ export function ManagerView({
     <ManagerActionsContext.Provider value={actions}>
       <FarmingRunner inventory={inventory} membershipId={membershipId} />
       <div className="flex min-h-0 flex-1 flex-col gap-4">
-        <FarmingBanner inventory={inventory} />
         <ManagerSearch inventory={inventory} />
+        <FarmingBanner inventory={inventory} />
         <div className="flex min-h-0 flex-1 flex-col gap-6 xl:flex-row">
           <CharacterGrid inventory={inventory} />
           <VaultPane inventory={inventory} />
@@ -561,29 +568,38 @@ function PostmasterCell({ items, capacity }: { items: InventoryItem[]; capacity:
 function VaultPane({ inventory }: { inventory: ManagerInventory }) {
   const { vault, account } = inventory;
   const other = vault[OTHER_BUCKET] ?? [];
+  const { weaponGroup, armorGroup } = useViewSettings();
+  // Weapons and armor each follow their own grouping; the rest isn't grouped.
+  const groupFor = (label: string): GroupKey =>
+    label === "Weapons" ? weaponGroup : label === "Armor" ? armorGroup : "none";
 
   return (
     <DropZone to={{ kind: "vault" }} className="flex min-w-0 flex-1 flex-col xl:min-h-0">
-      <section aria-label="Vault" className="d2-card-frame flex flex-1 flex-col xl:min-h-0">
+      <section aria-label="Vault" className="flex flex-1 flex-col xl:min-h-0">
         <VaultHeader inventory={inventory} />
-        <div className="d2-scroll flex flex-col px-4 pb-4 xl:min-h-0 xl:flex-1 xl:overflow-y-auto">
+        <div className="d2-scroll flex flex-col pb-4 xl:min-h-0 xl:flex-1 xl:overflow-y-auto">
           {VAULT_GROUPS.map((group) => (
             <Fragment key={group.label}>
               <GroupHeading>{group.label}</GroupHeading>
               {group.rows.map((row) => (
-                <VaultRow key={row.hash} label={row.label} items={vault[row.hash] ?? []} />
+                <VaultRow
+                  key={row.hash}
+                  label={row.label}
+                  items={vault[row.hash] ?? []}
+                  groupBy={groupFor(group.label)}
+                />
               ))}
             </Fragment>
           ))}
           {other.length > 0 && (
             <>
               <GroupHeading>Other</GroupHeading>
-              <VaultRow items={other} />
+              <VaultRow items={other} groupBy="none" />
             </>
           )}
           <GroupHeading>Account</GroupHeading>
           {ACCOUNT_ROWS.map((row) => (
-            <VaultRow key={row.hash} label={row.label} items={account[row.hash] ?? []} />
+            <VaultRow key={row.hash} label={row.label} items={account[row.hash] ?? []} groupBy="none" />
           ))}
         </div>
       </section>
@@ -616,7 +632,7 @@ function VaultHeader({ inventory }: { inventory: ManagerInventory }) {
   const fill = vaultCapacity ? Math.min(100, (vaultCount / vaultCapacity) * 100) : undefined;
 
   return (
-    <header className="flex flex-col gap-2 px-4 pt-3 pb-2">
+    <header className="flex flex-col gap-2 pb-2">
       <div className="flex items-baseline justify-between gap-3">
         <h2 className="d2-heading text-sm">Vault</h2>
         <span className={cn("text-xs tabular-nums", full ? "text-destructive" : "text-muted-foreground")}>
@@ -668,39 +684,66 @@ function VaultHeader({ inventory }: { inventory: ManagerInventory }) {
   );
 }
 
-/** One vault row, sorted and split into groups by the view settings. */
-function VaultRow({ label, items }: { label?: string; items: InventoryItem[] }) {
+/** One vault row, sorted by the view settings and split into groups. */
+function VaultRow({ label, items, groupBy }: { label?: string; items: InventoryItem[]; groupBy: GroupKey }) {
   const compare = useItemComparator();
-  const { vaultGroup } = useViewSettings();
   const groups = useMemo(
-    () => groupItems([...items].sort(compare), vaultGroup),
-    [items, compare, vaultGroup],
+    () => groupItems([...items].sort(compare), groupBy),
+    [items, compare, groupBy],
   );
+  if (items.length === 0) return null;
+  // No text labels: groups sit side by side, except types, which get a line each.
   return (
-    <div className="flex flex-col gap-1.5 py-1.5 [content-visibility:auto]">
-      {label && (
-        <span className="text-muted-foreground text-xs">
-          {label} <span className="tabular-nums">{items.length}</span>
-        </span>
+    <div
+      role="group"
+      aria-label={label}
+      className={cn(
+        "flex items-start py-2.5 [content-visibility:auto]",
+        groupBy === "type" ? "flex-col gap-4" : "flex-wrap gap-x-5 gap-y-4",
       )}
-      {items.length > 0 && (
-        <div className="flex flex-wrap items-start gap-x-5 gap-y-2">
-          {groups.map((group) => (
-            <div key={group.key} className="flex max-w-full flex-col gap-1">
-              {group.label && (
-                <span className="text-muted-foreground text-[11px]">
-                  {group.label} <span className="tabular-nums">{group.items.length}</span>
-                </span>
-              )}
-              <div className="flex flex-wrap gap-1.5">
-                {group.items.map((item) => (
-                  <ItemTile key={item.key} item={item} />
-                ))}
-              </div>
-            </div>
-          ))}
+    >
+      {groups.map((group) => (
+        <div key={group.key} className="flex max-w-full items-start gap-3">
+          <GroupMarker groupBy={groupBy} item={group.items[0]!} />
+          <div className="flex flex-wrap gap-1.5">
+            {group.items.map((item) => (
+              <ItemTile key={item.key} item={item} />
+            ))}
+          </div>
         </div>
-      )}
+      ))}
     </div>
+  );
+}
+
+/**
+ * What a vault group is, as a picture beside its tiles: the weapon type's silhouette
+ * or the class sigil. Nothing for other groupings, armor types, or any-class items.
+ */
+function GroupMarker({ groupBy, item }: { groupBy: GroupKey; item: InventoryItem }) {
+  if (groupBy === "class") {
+    // Centred on the tile's icon (56px), above its footer bar.
+    return item.classType === 3 ? null : (
+      <span className="flex h-14 shrink-0 items-center">
+        <ClassGlyph classType={item.classType} className="text-muted-foreground h-8 w-auto" />
+      </span>
+    );
+  }
+  // Only weapons have an ammo type; a type without a silhouette keeps its column.
+  if (groupBy !== "type" || item.ammoType === undefined) return null;
+  const icon = weaponTypeIcon(item.typeName, item.ammoType);
+  const mask = icon && `url("${icon}") left center / contain no-repeat`;
+  return (
+    <span className="flex h-14 w-14 shrink-0 items-center">
+      {mask && (
+        <span
+          role="img"
+          aria-label={item.typeName}
+          title={item.typeName}
+          className="bg-muted-foreground h-5 w-full"
+          style={{ mask, WebkitMask: mask }}
+        />
+      )}
+    </span>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useDeferredValue, useEffect, useMemo, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
   Cancel01Icon,
@@ -23,7 +23,6 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { TooltipLabel } from "@/components/ui/tooltip";
 import { useProfile } from "@/lib/armory/use-profile";
@@ -86,52 +85,87 @@ export function ManagerSearch({ inventory }: { inventory: ManagerInventory }) {
   useEffect(() => () => searchMatches.set(null), []);
 
   const error = parsed && !parsed.ok ? parsed.error : undefined;
+  const inputRef = useRef<HTMLInputElement>(null);
 
+  // Global "F" focuses search (ignored while typing in any field).
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "f" && e.key !== "F") return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const t = e.target as HTMLElement | null;
+      if (
+        t &&
+        (t.tagName === "INPUT" ||
+          t.tagName === "TEXTAREA" ||
+          t.tagName === "SELECT" ||
+          t.isContentEditable)
+      )
+        return;
+      e.preventDefault();
+      inputRef.current?.focus();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  // A full-bleed header band (the page's padding cancelled on the top and sides): a
+  // click anywhere on it that isn't a control lands in the input.
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <div className="relative min-w-0 flex-1 basis-72 sm:max-w-xl">
-        <HugeiconsIcon
-          icon={Search01Icon}
-          className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 z-10 size-4 -translate-y-1/2"
+    <div
+      className="-mx-4 -mt-6 flex min-h-14 shrink-0 cursor-text items-center gap-2 border-b border-foreground/15 bg-foreground/10 px-4 transition-colors hover:bg-foreground/12 focus-within:border-foreground/35 focus-within:bg-foreground/12 lg:-mx-6 lg:px-6"
+      onMouseDown={(e) => {
+        // contains() skips clicks bubbling up (through React) from portalled popovers.
+        const target = e.target as HTMLElement;
+        if (!e.currentTarget.contains(target) || target.closest("button, input")) return;
+        e.preventDefault();
+        inputRef.current?.focus();
+      }}
+    >
+      <HugeiconsIcon icon={Search01Icon} className="text-muted-foreground size-4 shrink-0" aria-hidden />
+      <input
+        ref={inputRef}
+        type="search"
+        value={query}
+        onChange={(e) => setQuery(e.target.value)}
+        onKeyDown={(e) => e.key === "Escape" && setQuery("")}
+        placeholder="Find items"
+        aria-label="Search items"
+        aria-keyshortcuts="F"
+        aria-invalid={error ? true : undefined}
+        aria-describedby={error ? "manager-search-error" : undefined}
+        className="peer placeholder:text-muted-foreground h-14 min-w-24 flex-1 bg-transparent text-base outline-none [&::-webkit-search-cancel-button]:hidden"
+      />
+      {query.length === 0 && (
+        <kbd
           aria-hidden
-        />
-        <Input
-          type="search"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          onKeyDown={(e) => e.key === "Escape" && setQuery("")}
-          placeholder="Search items — is:weapon tag:junk power:>=400 perk:&quot;kill clip&quot;"
-          aria-label="Search items"
-          aria-invalid={error ? true : undefined}
-          aria-describedby={error ? "manager-search-error" : undefined}
-          className={cn(
-            "pl-8 [&::-webkit-search-cancel-button]:hidden",
-            query.length > 0 ? "pr-14" : "pr-8",
-          )}
-        />
-        {query.length > 0 && (
-          <button
-            type="button"
-            aria-label="Clear search"
-            onClick={() => setQuery("")}
-            className="text-muted-foreground hover:text-foreground absolute top-1/2 right-7 flex size-5 -translate-y-1/2 cursor-pointer items-center justify-center rounded-none outline-none focus-visible:ring-1 focus-visible:ring-outline-strong"
-          >
-            <HugeiconsIcon icon={Cancel01Icon} strokeWidth={2} className="size-3.5" aria-hidden />
-          </button>
-        )}
-        <SearchHelp />
-      </div>
+          className="text-muted-foreground border-foreground/20 flex h-5 min-w-5 shrink-0 items-center justify-center border px-1 font-sans text-xs peer-focus:hidden"
+        >
+          F
+        </kbd>
+      )}
+      {query.length > 0 && (
+        <button
+          type="button"
+          aria-label="Clear search"
+          onClick={() => setQuery("")}
+          className="text-muted-foreground hover:text-foreground flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-none outline-none focus-visible:ring-1 focus-visible:ring-outline-strong"
+        >
+          <HugeiconsIcon icon={Cancel01Icon} strokeWidth={2} className="size-3.5" aria-hidden />
+        </button>
+      )}
       <span
         id="manager-search-error"
-        className={cn("text-sm tabular-nums", error ? "text-destructive" : "text-muted-foreground")}
+        className={cn(
+          "min-w-0 truncate text-sm tabular-nums",
+          error ? "text-destructive" : "text-muted-foreground",
+        )}
         aria-live="polite"
       >
         {error ?? (matches ? `${matches.size.toLocaleString()} ${matches.size === 1 ? "item" : "items"}` : "")}
       </span>
       {matches && matches.size > 0 && <BulkActions inventory={inventory} matches={matches} />}
-      <div className="ml-auto">
-        <ViewMenu />
-      </div>
+      <SearchHelp />
+      <ViewMenu />
     </div>
   );
 }
@@ -157,7 +191,7 @@ function SearchHelp() {
       <TooltipLabel label="Search help">
         <PopoverTrigger
           aria-label="Search help"
-          className="text-muted-foreground hover:text-foreground data-[popup-open]:text-foreground absolute top-1/2 right-1.5 flex size-5 -translate-y-1/2 cursor-pointer items-center justify-center rounded-none outline-none focus-visible:ring-1 focus-visible:ring-outline-strong"
+          className="text-muted-foreground hover:text-foreground data-[popup-open]:text-foreground flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-none outline-none focus-visible:ring-1 focus-visible:ring-outline-strong"
         >
           <HugeiconsIcon icon={HelpCircleIcon} className="size-4" aria-hidden />
         </PopoverTrigger>
@@ -250,7 +284,7 @@ function BulkActions({ inventory, matches }: { inventory: ManagerInventory; matc
   return (
     <DropdownMenu>
       <TooltipLabel label={`Act on ${count}`}>
-        <DropdownMenuTrigger render={<Button variant="default" size="icon" />} aria-label={`Act on ${count}`}>
+        <DropdownMenuTrigger render={<Button variant="ghost" size="icon" />} aria-label={`Act on ${count}`}>
           <HugeiconsIcon icon={MoreHorizontalIcon} aria-hidden />
         </DropdownMenuTrigger>
       </TooltipLabel>

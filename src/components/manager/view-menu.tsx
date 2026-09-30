@@ -23,6 +23,7 @@ import {
   itemComparator,
   setViewSettings,
   useViewSettings,
+  type GroupKey,
   type SortKey,
 } from "@/lib/inventory/view-settings";
 import { cn } from "@/lib/utils";
@@ -44,6 +45,39 @@ export function useItemComparator(): (a: InventoryItem, b: InventoryItem) => num
   return useMemo(() => itemComparator(sort, annotations), [sort, annotations]);
 }
 
+function GroupPicker({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: GroupKey;
+  onChange: (key: GroupKey) => void;
+}) {
+  return (
+    <section className="flex flex-col gap-2" aria-label={label}>
+      <p className="d2-label">{label}</p>
+      <div className="flex flex-wrap gap-1.5" role="radiogroup">
+        {GROUP_KEYS.map((key) => (
+          <button
+            key={key}
+            type="button"
+            role="radio"
+            aria-checked={value === key}
+            onClick={() => onChange(key)}
+            className={cn(
+              "d2-hover-ring h-7 px-2.5 text-xs outline-none focus-visible:d2-tile-selected",
+              value === key ? "bg-foreground text-background" : "bg-foreground/10",
+            )}
+          >
+            {GROUP_LABELS[key]}
+          </button>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 /** Sort order (a chain of keys) and vault grouping, like DIM's item display settings. */
 export function ViewMenu() {
   const view = useViewSettings();
@@ -60,7 +94,7 @@ export function ViewMenu() {
   return (
     <Popover>
       <TooltipLabel label="Sort and group">
-        <PopoverTrigger render={<Button variant="default" size="icon" aria-label="Sort and group" />}>
+        <PopoverTrigger render={<Button variant="ghost" size="icon" aria-label="Sort and group" />}>
           <HugeiconsIcon icon={ArrowUpDownIcon} aria-hidden />
         </PopoverTrigger>
       </TooltipLabel>
@@ -116,26 +150,16 @@ export function ViewMenu() {
           )}
         </section>
 
-        <section className="flex flex-col gap-2" aria-label="Group vault rows by">
-          <p className="d2-label">Group vault rows by</p>
-          <div className="flex flex-wrap gap-1.5" role="radiogroup">
-            {GROUP_KEYS.map((key) => (
-              <button
-                key={key}
-                type="button"
-                role="radio"
-                aria-checked={view.vaultGroup === key}
-                onClick={() => setViewSettings({ ...view, vaultGroup: key })}
-                className={cn(
-                  "d2-hover-ring h-7 px-2.5 text-xs outline-none focus-visible:d2-tile-selected",
-                  view.vaultGroup === key ? "bg-foreground text-background" : "bg-foreground/10",
-                )}
-              >
-                {GROUP_LABELS[key]}
-              </button>
-            ))}
-          </div>
-        </section>
+        <GroupPicker
+          label="Group vault weapons by"
+          value={view.weaponGroup}
+          onChange={(weaponGroup) => setViewSettings({ ...view, weaponGroup })}
+        />
+        <GroupPicker
+          label="Group vault armor by"
+          value={view.armorGroup}
+          onChange={(armorGroup) => setViewSettings({ ...view, armorGroup })}
+        />
 
         <Button
           variant="ghost"

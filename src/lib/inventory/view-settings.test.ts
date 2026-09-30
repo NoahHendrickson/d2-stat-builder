@@ -24,11 +24,14 @@ const item = (name: string, extra: Partial<InventoryItem> = {}): InventoryItem =
 });
 
 test("parseViewSettings drops unknown keys and falls back to defaults", () => {
-  expect(parseViewSettings(JSON.stringify({ sort: ["power", "bogus", "power", "tag"], vaultGroup: "type" }))).toEqual({
-    sort: ["power", "tag"],
-    vaultGroup: "type",
-  });
-  expect(parseViewSettings(JSON.stringify({ vaultGroup: "nope" }))).toEqual(DEFAULT_VIEW);
+  expect(
+    parseViewSettings(
+      JSON.stringify({ sort: ["power", "bogus", "power", "tag"], weaponGroup: "ammo", armorGroup: "rarity" }),
+    ),
+  ).toEqual({ sort: ["power", "tag"], weaponGroup: "ammo", armorGroup: "rarity" });
+  // The old single setting carries over to armor; weapons take their default.
+  expect(parseViewSettings(JSON.stringify({ vaultGroup: "tier" }))).toEqual({ ...DEFAULT_VIEW, armorGroup: "tier" });
+  expect(parseViewSettings(JSON.stringify({ weaponGroup: "nope", vaultGroup: "nope" }))).toEqual(DEFAULT_VIEW);
   expect(parseViewSettings("{")).toEqual(DEFAULT_VIEW);
 });
 

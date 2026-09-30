@@ -30,3 +30,9 @@ const WEAPON_TYPE_ICON_SLUG: Readonly<Record<string, string>> = {
 export const GENERIC_WEAPON_TYPE_ICONS: Readonly<Record<string, string>> = Object.fromEntries(
   Object.entries(WEAPON_TYPE_ICON_SLUG).map(([name, slug]) => [name, `/weapon-types/${slug}.svg`]),
 );
+
+/** The silhouette for a weapon type; heavy grenade launchers get the drum-fed one. */
+export function weaponTypeIcon(typeName: string, ammoType?: number): string | undefined {
+  if (typeName === "Grenade Launcher" && ammoType === 3) return "/weapon-types/grenade_launcher_heavy.svg";
+  return GENERIC_WEAPON_TYPE_ICONS[typeName];
+}
