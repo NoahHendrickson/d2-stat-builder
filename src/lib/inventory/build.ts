@@ -4,7 +4,6 @@ import type {
   DestinyProfileResponse,
 } from "bungie-api-ts/destiny2";
 import type { Manifest } from "@/lib/manifest/load";
-import { parseArchetypeDescription } from "@/lib/armory/archetypes";
 import { itemWatermark } from "@/lib/armory/normalize";
 import {
   ARMOR_ARCHETYPE_PLUG_CATEGORY,
@@ -52,7 +51,7 @@ export interface InventoryItem {
   breakerType?: number;
   /** Icon of that champion type (relative Bungie image path). */
   breakerIcon?: string;
-  /** Armor 3.0 archetype plug ("Gunner", …) and its primary stat's icon (no shield frame). */
+  /** Armor 3.0 archetype plug ("Gunner", …) and its icon: the primary stat in a shield. */
   archetype?: { name: string; icon?: string };
   locked: boolean;
   masterworked: boolean;
@@ -201,14 +200,7 @@ function archetype(
     if (def?.plug?.plugCategoryIdentifier !== ARMOR_ARCHETYPE_PLUG_CATEGORY) continue;
     const name = def.displayProperties?.name;
     if (!name) return undefined;
-    // Bungie's archetype icon is the primary stat's glyph inside a shield; the stat's
-    // own icon is the same glyph without the frame.
-    const primary = parseArchetypeDescription(def.displayProperties.description ?? "")?.primary;
-    const icon =
-      (primary !== undefined
-        ? manifest.def("DestinyStatDefinition", STAT_HASHES[STAT_ORDER[primary]])?.displayProperties?.icon
-        : undefined) || def.displayProperties.icon;
-    return { name, ...(icon ? { icon } : {}) };
+    return { name, ...(def.displayProperties?.icon ? { icon: def.displayProperties.icon } : {}) };
   }
   return undefined;
 }

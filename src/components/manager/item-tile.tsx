@@ -120,7 +120,7 @@ export const ItemTile = memo(function ItemTile({
             unoptimized
           />
         )}
-        {/* Armor archetype, top-right: its primary stat's glyph, whitened and shadowed to read over the art. */}
+        {/* Armor archetype, top-right: Bungie's white glyph, shadowed to read over the art. */}
         {item.archetype?.icon && (
           <Image
             src={`${BUNGIE_IMAGE_BASE}${item.archetype.icon}`}
@@ -128,8 +128,7 @@ export const ItemTile = memo(function ItemTile({
             width={16}
             height={16}
             className={cn(
-              // Without the shield it needs a firmer outline to hold up on light armor.
-              "absolute top-0.5 right-0.5 max-w-none [filter:brightness(2)_drop-shadow(0_0_1px_#000)_drop-shadow(0_0_1px_#000)]",
+              "absolute top-0.5 right-0.5 max-w-none drop-shadow-[0_0_1px_rgba(0,0,0,0.9)]",
               size >= 56 ? "size-4" : "size-3.5",
             )}
             unoptimized
