@@ -412,7 +412,9 @@ export function WeaponBrowser() {
           <HugeiconsIcon icon={CrosshairIcon} className="size-5 text-muted-foreground" /> Weapon search
         </h1>
 
-        <div className="flex shrink-0 items-start">
+        {/* Full-bleed band: from the sidebar's edge to the details divider (the page's
+            padding on the left, the gap before the divider on the right). */}
+        <div className="-mx-4 flex shrink-0 items-start md:-mx-6">
           <WeaponSearchBox
             index={filterIndex}
             query={state.query}

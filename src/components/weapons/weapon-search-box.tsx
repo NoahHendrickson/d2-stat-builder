@@ -293,7 +293,7 @@ export function WeaponSearchBox({
       }}
     >
       <div
-        className="d2-line flex min-h-10 cursor-text flex-wrap items-center gap-1.5 bg-lifted py-1.5 pr-2 pl-9 focus-within:[--line-alpha:2.6] hover:[--line-alpha:1.6]"
+        className="flex min-h-[42px] cursor-text flex-wrap items-center gap-1.5 border-y border-foreground/12 bg-foreground/8 px-4 py-1.5 transition-colors hover:border-foreground/20 focus-within:border-foreground/30"
         onMouseDown={(event) => {
           if (event.target === event.currentTarget) {
             event.preventDefault();
@@ -302,7 +302,7 @@ export function WeaponSearchBox({
           }
         }}
       >
-        <HugeiconsIcon icon={Search01Icon} className="pointer-events-none absolute top-3 left-3 size-4 text-muted-foreground" />
+        <HugeiconsIcon icon={Search01Icon} className="pointer-events-none size-4 shrink-0" />
         {shownChips.map((chip) => {
           const icon = chipIcon(chip, damageTypes, ammoTypes);
           return (
@@ -354,7 +354,7 @@ export function WeaponSearchBox({
                   ? `Search ${drill.category.label.toLowerCase()}…`
                   : chips.length
                     ? "Add a filter or search…"
-                    : "Search weapons, perks, frames…"
+                    : "Search"
           }
           value={text}
           onChange={(event) => {
