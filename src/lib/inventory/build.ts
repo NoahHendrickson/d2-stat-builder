@@ -5,7 +5,12 @@ import type {
 } from "bungie-api-ts/destiny2";
 import type { Manifest } from "@/lib/manifest/load";
 import { itemWatermark } from "@/lib/armory/normalize";
-import { STAT_HASHES, STAT_ORDER, type StatKey } from "@/lib/armory/stats";
+import {
+  ARMOR_ARCHETYPE_PLUG_CATEGORY,
+  STAT_HASHES,
+  STAT_ORDER,
+  type StatKey,
+} from "@/lib/armory/stats";
 import { ACCOUNT_ROWS, BUCKETS, VAULT_ROW_HASHES } from "./buckets";
 import { maxPower } from "./max-power";
 
@@ -46,6 +51,8 @@ export interface InventoryItem {
   breakerType?: number;
   /** Icon of that champion type (relative Bungie image path). */
   breakerIcon?: string;
+  /** Armor 3.0 archetype plug ("Gunner", …) and its icon: the primary stat in a shield. */
+  archetype?: { name: string; icon?: string };
   locked: boolean;
   masterworked: boolean;
   crafted: boolean;
@@ -106,6 +113,7 @@ export const BREAKER_NAMES: Record<number, string> = { 1: "Anti-Barrier", 2: "Ov
 /** Vault items whose bucket has no row of its own (materials, emblems, …). */
 export const OTHER_BUCKET = 0;
 
+const ITEM_TYPE_ARMOR = 2;
 const ITEM_TYPE_WEAPON = 3;
 /** ItemState flags. */
 const ITEM_STATE_LOCKED = 1;
@@ -180,6 +188,23 @@ function breakerHash(
   return undefined;
 }
 
+/** The archetype plugged into an Armor 3.0 piece, if it has one. */
+function archetype(
+  profile: DestinyProfileResponse,
+  manifest: Manifest,
+  instanceId: string,
+): InventoryItem["archetype"] {
+  for (const socket of profile.itemComponents?.sockets?.data?.[instanceId]?.sockets ?? []) {
+    if (!socket.plugHash) continue;
+    const def = manifest.def("DestinyInventoryItemDefinition", socket.plugHash);
+    if (def?.plug?.plugCategoryIdentifier !== ARMOR_ARCHETYPE_PLUG_CATEGORY) continue;
+    const name = def.displayProperties?.name;
+    if (!name) return undefined;
+    return { name, ...(def.displayProperties?.icon ? { icon: def.displayProperties.icon } : {}) };
+  }
+  return undefined;
+}
+
 function buildItem(
   item: DestinyItemComponent,
   key: string,
@@ -209,6 +234,10 @@ function buildItem(
       )
     : undefined;
   const ammoType = isWeapon ? def?.equippingBlock?.ammoType : undefined;
+  const armorArchetype =
+    def?.itemType === ITEM_TYPE_ARMOR && item.itemInstanceId
+      ? archetype(profile, manifest, item.itemInstanceId)
+      : undefined;
 
   return {
     key,
@@ -235,6 +264,7 @@ function buildItem(
           ...(breaker.displayProperties?.icon ? { breakerIcon: breaker.displayProperties.icon } : {}),
         }
       : {}),
+    ...(armorArchetype ? { archetype: armorArchetype } : {}),
     locked: (state & ITEM_STATE_LOCKED) !== 0,
     masterworked: (state & ITEM_STATE_MASTERWORK) !== 0,
     crafted: (state & ITEM_STATE_CRAFTED) !== 0,
@@ -244,7 +274,6 @@ function buildItem(
   };
 }
 
-const ITEM_TYPE_ARMOR = 2;
 
 /** An instance's stats by search name; armor adds "total" (the six Armor 3.0 stats). */
 function itemStats(

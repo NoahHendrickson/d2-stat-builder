@@ -46,6 +46,7 @@ export const ItemTile = memo(function ItemTile({
   const label = [
     item.name,
     item.typeName,
+    item.archetype?.name,
     item.power ? `Power ${item.power}` : undefined,
     item.breakerType ? BREAKER_NAMES[item.breakerType] : undefined,
     item.crafted ? "Crafted" : item.enhanced ? "Enhanced" : undefined,
@@ -116,6 +117,20 @@ export const ItemTile = memo(function ItemTile({
             width={size}
             height={size}
             className="absolute inset-0 size-full max-w-none"
+            unoptimized
+          />
+        )}
+        {/* Armor archetype, top-right: Bungie's white glyph, shadowed to read over the art. */}
+        {item.archetype?.icon && (
+          <Image
+            src={`${BUNGIE_IMAGE_BASE}${item.archetype.icon}`}
+            alt=""
+            width={16}
+            height={16}
+            className={cn(
+              "absolute top-0.5 right-0.5 max-w-none drop-shadow-[0_0_1px_rgba(0,0,0,0.9)]",
+              size >= 56 ? "size-4" : "size-3.5",
+            )}
             unoptimized
           />
         )}
