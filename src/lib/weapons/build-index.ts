@@ -161,7 +161,7 @@ function columnKind(isIntrinsic: boolean, identifier: string): string {
   return "Trait";
 }
 
-/** Champion names by DestinyBreakerType, and by the icon token perk text uses. */
+/** Champion names by DestinyBreakerType, and by the icon token perk names and text use. */
 const BREAKER_CHAMPIONS: Record<number, string> = {
   1: "Barrier",
   2: "Overload",
@@ -174,29 +174,57 @@ const CHAMPION_TOKENS: Record<string, string> = {
 };
 
 /**
- * Champions a weapon stuns intrinsically. Perk text ("Strong against [Stagger]
- * Unstoppable Champions") is what the game shows and covers exotics Bungie left
- * `breakerType` unset on (Heirloom, Winterbite, …); `breakerType` fills in when
- * no perk says.
+ * The champion a plug makes its weapon stun. Since Monument of Triumph (2026) every
+ * frame and exotic intrinsic carries one, as a hidden sandbox perk named
+ * "[Disruption] Overload" and so on; some plugs set `breakerType` instead.
+ */
+export function plugChampion(
+  plug: DestinyInventoryItemDefinition | undefined,
+  sandboxPerks: ManifestDefs["DestinySandboxPerkDefinition"],
+): string | undefined {
+  if (!plug) return undefined;
+  if (plug.breakerType) return BREAKER_CHAMPIONS[plug.breakerType];
+  for (const { perkHash } of plug.perks ?? []) {
+    const name = sandboxPerks[perkHash]?.displayProperties?.name ?? "";
+    const token = /^\[(Shield-Piercing|Disruption|Stagger)\]/.exec(name)?.[1];
+    if (token) return CHAMPION_TOKENS[token.toLowerCase()];
+  }
+  return undefined;
+}
+
+/**
+ * Champions a weapon stuns: whatever its plugs grant (several when it rolls more than
+ * one frame, like Corrective Measure), else the weapon's own `breakerType`, else the
+ * perk text ("Strong against [Stagger] Unstoppable Champions"). Artifact stuns aren't
+ * on the item.
  */
 export function weaponChampions(
   columns: PerkColumn[],
   breakerType: number | undefined,
+  champion: (plugHash: number) => string | undefined,
 ): string[] {
   const found = new Set<string>();
   for (const column of columns) {
     for (const perk of column.perks) {
-      const text = `${perk.description ?? ""} ${perk.enhancedDescription ?? ""}`;
-      for (const [, token] of text.matchAll(/\[(Shield-Piercing|Disruption|Stagger)\]/gi)) {
-        found.add(CHAMPION_TOKENS[token!.toLowerCase()]!);
-      }
-      for (const [, name] of text.matchAll(/\b(Barrier|Overload|Unstoppable) Champion/g)) {
-        found.add(name!);
+      const granted = champion(perk.hash);
+      if (granted) found.add(granted);
+    }
+  }
+  const own = breakerType != null ? BREAKER_CHAMPIONS[breakerType] : undefined;
+  if (!found.size && own) found.add(own);
+  if (!found.size) {
+    for (const column of columns) {
+      for (const perk of column.perks) {
+        const text = `${perk.description ?? ""} ${perk.enhancedDescription ?? ""}`;
+        for (const [, token] of text.matchAll(/\[(Shield-Piercing|Disruption|Stagger)\]/gi)) {
+          found.add(CHAMPION_TOKENS[token!.toLowerCase()]!);
+        }
+        for (const [, name] of text.matchAll(/\b(Barrier|Overload|Unstoppable) Champion/g)) {
+          found.add(name!);
+        }
       }
     }
   }
-  const fallback = breakerType != null ? BREAKER_CHAMPIONS[breakerType] : undefined;
-  if (!found.size && fallback) found.add(fallback);
   return [...found].sort();
 }
 
@@ -359,6 +387,7 @@ export function buildWeaponIndex(
   const items = defs.DestinyInventoryItemDefinition;
   const plugSets = defs.DestinyPlugSetDefinition;
   const stats = defs.DestinyStatDefinition;
+  const sandboxPerks = defs.DestinySandboxPerkDefinition ?? {};
   const damageTypes = defs.DestinyDamageTypeDefinition;
   const collectibles = defs.DestinyCollectibleDefinition;
   const presentationNodes = defs.DestinyPresentationNodeDefinition;
@@ -448,7 +477,6 @@ export function buildWeaponIndex(
       rarity: item.inventory?.tierTypeName ?? "Legendary",
       slot: BUCKET_SLOT[item.inventory?.bucketTypeHash ?? 0] ?? "",
       frame: columns.find((c) => c.kind === "Intrinsic")?.perks[0]?.name,
-      champions: weaponChampions(columns, item.breakerType),
       craftable: item.inventory?.recipeItemHash != null,
       adept: /\((Adept|Timelost|Harrowed)\)/.test(name),
       seasonNumber: season?.seasonNumber,
@@ -467,7 +495,13 @@ export function buildWeaponIndex(
   }
 
   weapons.sort((a, b) => a.name.localeCompare(b.name));
-  const reconciled = reconcileAdeptTierPools(reconcileCraftableTwins(weapons));
+  // After reconciling: merged pools can add frames, and each frame brings its champion.
+  const reconciled = reconcileAdeptTierPools(reconcileCraftableTwins(weapons)).map((weapon) => ({
+    ...weapon,
+    champions: weaponChampions(weapon.columns, items[weapon.hash]?.breakerType, (hash) =>
+      plugChampion(items[hash], sandboxPerks),
+    ),
+  }));
   const { index, detailIndex } = internWeaponCatalog(reconciled, version);
   const statGroupHashes = new Set<number>();
   for (const weapon of weapons) {

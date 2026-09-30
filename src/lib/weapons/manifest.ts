@@ -16,6 +16,7 @@ export const MANIFEST_SLICES = [
   "DestinyCollectibleDefinition",
   "DestinyPresentationNodeDefinition",
   "DestinyVendorDefinition",
+  "DestinySandboxPerkDefinition",
 ] as const;
 
 export type ManifestDefs = DestinyManifestSlice<typeof MANIFEST_SLICES>;

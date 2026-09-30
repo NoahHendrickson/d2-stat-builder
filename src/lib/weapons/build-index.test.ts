@@ -7,6 +7,7 @@ import {
   deriveAttunementSourceOverrides,
   buildDamageTypeCatalog,
   buildWeaponTypeCatalog,
+  plugChampion,
   weaponChampions,
 } from "./build-index";
 import type { ManifestDefs } from "./manifest";
@@ -30,34 +31,56 @@ function traitPlug(
 }
 
 describe("weaponChampions", () => {
-  const column = (description: string) => ({
+  const column = (description: string, hash = 1) => ({
     kind: "Intrinsic",
-    perks: [{ hash: 1, name: "Perk", currentlyCanRoll: true, description }],
+    perks: [{ hash, name: "Perk", currentlyCanRoll: true, description }],
+  });
+  const none = () => undefined;
+
+  it("takes the champion each plug grants, several for multi-frame weapons", () => {
+    const grants: Record<number, string> = { 1: "Barrier", 2: "Unstoppable" };
+    expect(
+      weaponChampions([column("", 1), column("", 2)], undefined, (hash) => grants[hash]),
+    ).toEqual(["Barrier", "Unstoppable"]);
+    // A plug's grant beats the weapon's own breakerType (Salvation's Grip).
+    expect(weaponChampions([column("", 2)], 2, (hash) => grants[hash])).toEqual(["Unstoppable"]);
   });
 
-  it("reads the champion from perk text", () => {
+  it("falls back to breakerType, then perk text", () => {
+    expect(weaponChampions([column("Rapid hits slow targets.")], 2, none)).toEqual(["Overload"]);
     expect(
       weaponChampions(
         [column("Fires a large ball of energy. Strong against [Stagger] Unstoppable Champions.")],
         undefined,
+        none,
       ),
     ).toEqual(["Unstoppable"]);
-    expect(weaponChampions([column("Adds [Shield-Piercing] shield piercing.")], 0)).toEqual([
+    expect(weaponChampions([column("Adds [Shield-Piercing] shield piercing.")], 0, none)).toEqual([
       "Barrier",
     ]);
   });
 
-  it("prefers perk text over breakerType and falls back to it", () => {
-    expect(
-      weaponChampions([column("Strong against [Stagger] Unstoppable Champions.")], 2),
-    ).toEqual(["Unstoppable"]);
-    expect(weaponChampions([column("Rapid hits slow targets.")], 2)).toEqual(["Overload"]);
-  });
-
   it("ignores perks that only mention champions", () => {
-    expect(weaponChampions([column("Stunning a Champion refills your magazine.")], 0)).toEqual(
-      [],
+    expect(
+      weaponChampions([column("Stunning a Champion refills your magazine.")], 0, none),
+    ).toEqual([]);
+  });
+});
+
+describe("plugChampion", () => {
+  const sandbox = {
+    7: { displayProperties: { name: "[Disruption] Overload" } },
+    8: { displayProperties: { name: "Faster reload" } },
+  } as unknown as ManifestDefs["DestinySandboxPerkDefinition"];
+  const plug = (extra: object) => ({ hash: 1, ...extra }) as DestinyInventoryItemDefinition;
+
+  it("reads the hidden champion perk or the plug's breakerType", () => {
+    expect(plugChampion(plug({ perks: [{ perkHash: 8 }, { perkHash: 7 }] }), sandbox)).toBe(
+      "Overload",
     );
+    expect(plugChampion(plug({ breakerType: 1 }), sandbox)).toBe("Barrier");
+    expect(plugChampion(plug({ perks: [{ perkHash: 8 }] }), sandbox)).toBeUndefined();
+    expect(plugChampion(undefined, sandbox)).toBeUndefined();
   });
 });
 
