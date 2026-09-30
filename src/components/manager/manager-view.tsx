@@ -22,6 +22,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { ClassGlyph } from "@/components/class-glyph";
 import { PowerValue } from "@/components/power-value";
 import { StatGlyph } from "@/components/stat-glyph";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   CLASS_NAMES,
   STAT_DISPLAY_ORDER,
@@ -49,8 +50,12 @@ import { toast, type PendingToast } from "@/lib/toast";
 import {
   groupItems,
   loadViewSettings,
+  setViewSettings,
   useViewSettings,
+  VAULT_TAB_LABELS,
+  VAULT_TABS,
   type GroupKey,
+  type VaultTab,
 } from "@/lib/inventory/view-settings";
 import { statIconsFromManifest } from "@/lib/manifest/stat-icons";
 import { useManifest } from "@/lib/manifest/use-manifest";
@@ -568,7 +573,11 @@ function PostmasterCell({ items, capacity }: { items: InventoryItem[]; capacity:
 function VaultPane({ inventory }: { inventory: ManagerInventory }) {
   const { vault, account } = inventory;
   const other = vault[OTHER_BUCKET] ?? [];
-  const { weaponGroup, armorGroup } = useViewSettings();
+  const view = useViewSettings();
+  const { weaponGroup, armorGroup, vaultTab } = view;
+  // The Weapons and Armor tabs show just that section; All shows every one.
+  const groups =
+    vaultTab === "all" ? VAULT_GROUPS : VAULT_GROUPS.filter((g) => g.label === VAULT_TAB_LABELS[vaultTab]);
   // Weapons and armor each follow their own grouping; the rest isn't grouped.
   const groupFor = (label: string): GroupKey =>
     label === "Weapons" ? weaponGroup : label === "Armor" ? armorGroup : "none";
@@ -576,9 +585,22 @@ function VaultPane({ inventory }: { inventory: ManagerInventory }) {
   return (
     <DropZone to={{ kind: "vault" }} className="flex min-w-0 flex-1 flex-col xl:min-h-0">
       <section aria-label="Vault" className="flex flex-1 flex-col xl:min-h-0">
+        <Tabs
+          value={vaultTab}
+          onValueChange={(tab) => setViewSettings({ ...view, vaultTab: tab as VaultTab })}
+          className="pb-3"
+        >
+          <TabsList variant="line" aria-label="Vault sections" className="w-full justify-start">
+            {VAULT_TABS.map((tab) => (
+              <TabsTrigger key={tab} value={tab} className="flex-none">
+                {VAULT_TAB_LABELS[tab]}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </Tabs>
         <VaultHeader inventory={inventory} />
         <div className="d2-scroll flex flex-col pb-4 xl:min-h-0 xl:flex-1 xl:overflow-y-auto">
-          {VAULT_GROUPS.map((group) => (
+          {groups.map((group) => (
             <Fragment key={group.label}>
               <GroupHeading>{group.label}</GroupHeading>
               {group.rows.map((row) => (
@@ -591,16 +613,20 @@ function VaultPane({ inventory }: { inventory: ManagerInventory }) {
               ))}
             </Fragment>
           ))}
-          {other.length > 0 && (
+          {vaultTab === "all" && (
             <>
-              <GroupHeading>Other</GroupHeading>
-              <VaultRow items={other} groupBy="none" />
+              {other.length > 0 && (
+                <>
+                  <GroupHeading>Other</GroupHeading>
+                  <VaultRow items={other} groupBy="none" />
+                </>
+              )}
+              <GroupHeading>Account</GroupHeading>
+              {ACCOUNT_ROWS.map((row) => (
+                <VaultRow key={row.hash} label={row.label} items={account[row.hash] ?? []} groupBy="none" />
+              ))}
             </>
           )}
-          <GroupHeading>Account</GroupHeading>
-          {ACCOUNT_ROWS.map((row) => (
-            <VaultRow key={row.hash} label={row.label} items={account[row.hash] ?? []} groupBy="none" />
-          ))}
         </div>
       </section>
     </DropZone>

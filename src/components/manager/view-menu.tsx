@@ -165,7 +165,8 @@ export function ViewMenu() {
           variant="ghost"
           size="sm"
           className="self-start"
-          onClick={() => setViewSettings(DEFAULT_VIEW)}
+          // The vault tab isn't part of the sort and grouping this resets.
+          onClick={() => setViewSettings({ ...DEFAULT_VIEW, vaultTab: view.vaultTab })}
         >
           Reset to defaults
         </Button>

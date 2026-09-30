@@ -47,6 +47,12 @@ export const GROUP_LABELS: Record<GroupKey, string> = {
   tier: "Gear tier",
 };
 
+/** Which part of the vault is shown: everything, or only its weapons or armor. */
+export const VAULT_TABS = ["all", "weapons", "armor"] as const;
+export type VaultTab = (typeof VAULT_TABS)[number];
+
+export const VAULT_TAB_LABELS: Record<VaultTab, string> = { all: "All", weapons: "Weapons", armor: "Armor" };
+
 export interface ViewSettings {
   /** Sort keys in priority order; name always breaks the last tie. */
   sort: SortKey[];
@@ -54,12 +60,14 @@ export interface ViewSettings {
   weaponGroup: GroupKey;
   /** How each vault armor row splits into groups. */
   armorGroup: GroupKey;
+  vaultTab: VaultTab;
 }
 
 export const DEFAULT_VIEW: ViewSettings = {
   sort: ["rarity", "power", "name"],
   weaponGroup: "type",
   armorGroup: "class",
+  vaultTab: "all",
 };
 
 const STORAGE_KEY = "stat-builder:manager-view:v1";
@@ -89,6 +97,9 @@ export function parseViewSettings(raw: string | null): ViewSettings {
       sort,
       weaponGroup: group(v.weaponGroup, DEFAULT_VIEW.weaponGroup),
       armorGroup: group(v.armorGroup, group(v.vaultGroup, DEFAULT_VIEW.armorGroup)),
+      vaultTab: (VAULT_TABS as readonly unknown[]).includes(v.vaultTab)
+        ? (v.vaultTab as VaultTab)
+        : DEFAULT_VIEW.vaultTab,
     };
   } catch {
     return DEFAULT_VIEW;
