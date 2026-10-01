@@ -120,20 +120,6 @@ export const ItemTile = memo(function ItemTile({
             unoptimized
           />
         )}
-        {/* Armor archetype, top-right: Bungie's white glyph, shadowed to read over the art. */}
-        {item.archetype?.icon && (
-          <Image
-            src={`${BUNGIE_IMAGE_BASE}${item.archetype.icon}`}
-            alt=""
-            width={16}
-            height={16}
-            className={cn(
-              "absolute top-0.5 right-0.5 max-w-none drop-shadow-[0_0_1px_rgba(0,0,0,0.9)]",
-              size >= 56 ? "size-4" : "size-3.5",
-            )}
-            unoptimized
-          />
-        )}
         {/* Deepsight: the game's orange-red border. */}
         {item.deepsight && (
           <span aria-hidden className="pointer-events-none absolute inset-0 shadow-[inset_0_0_0_2px_#d25336]" />
@@ -145,6 +131,21 @@ export const ItemTile = memo(function ItemTile({
       >
         {tag && <HugeiconsIcon icon={TAG_ICONS[tag]} className="size-3" strokeWidth={2.2} aria-hidden />}
         <span className="flex-1" />
+        {/* Armor archetype beside the Power: its primary stat's glyph, blackened like the
+            others. The 51px stat icons pad their glyphs by 4px or more a side, so crop to
+            the middle 43px to keep the glyph legible at this size. */}
+        {item.archetype?.icon && (
+          <span className="relative size-3.5 shrink-0 overflow-hidden">
+            <Image
+              src={`${BUNGIE_IMAGE_BASE}${item.archetype.icon}`}
+              alt=""
+              width={51}
+              height={51}
+              className="absolute -top-[9.302%] -left-[9.302%] h-auto w-[118.605%] max-w-none brightness-0"
+              unoptimized
+            />
+          </span>
+        )}
         {/* The champion it stuns, beside the element; Bungie's icon is white, so blacken it. */}
         {item.breakerIcon && (
           <Image
