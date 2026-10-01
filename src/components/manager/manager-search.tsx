@@ -148,7 +148,7 @@ export function ManagerSearch({ inventory }: { inventory: ManagerInventory }) {
           type="button"
           aria-label="Clear search"
           onClick={() => setQuery("")}
-          className="text-muted-foreground hover:text-foreground flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-none outline-none focus-visible:ring-1 focus-visible:ring-outline-strong"
+          className="text-muted-foreground hover:text-foreground flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-none normal:rounded-[6px] outline-none focus-visible:ring-1 focus-visible:ring-outline-strong"
         >
           <HugeiconsIcon icon={Cancel01Icon} strokeWidth={2} className="size-3.5" aria-hidden />
         </button>
@@ -191,7 +191,7 @@ function SearchHelp() {
       <TooltipLabel label="Search help">
         <PopoverTrigger
           aria-label="Search help"
-          className="text-muted-foreground hover:text-foreground data-[popup-open]:text-foreground flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-none outline-none focus-visible:ring-1 focus-visible:ring-outline-strong"
+          className="text-muted-foreground hover:text-foreground data-[popup-open]:text-foreground flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-none normal:rounded-[10px] outline-none focus-visible:ring-1 focus-visible:ring-outline-strong"
         >
           <HugeiconsIcon icon={HelpCircleIcon} className="size-4" aria-hidden />
         </PopoverTrigger>

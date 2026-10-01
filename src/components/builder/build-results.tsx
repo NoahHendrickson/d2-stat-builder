@@ -315,15 +315,15 @@ const BuildRow = memo(function BuildRow({
 
   return (
     <div className={cn(BUILD_CARD_LIFT_CLASS, "d2-hover-ring", "@container/build")}>
-      <div className="overflow-hidden rounded-none">
+      <div className="overflow-hidden rounded-none normal:rounded-[19px]">
       {/* Figma 86:862 — 56px exotic, total + six stats, then set pills / light / materials */}
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
         className={cn(
-          "flex w-full items-center justify-between gap-4 p-2 text-left transition-colors",
-          !open && "hover:bg-foreground/4",
+          "flex w-full items-center justify-between gap-4 p-2 text-left transition-colors normal:bg-popover normal:p-3",
+          !open && "hover:bg-foreground/4 normal:hover:bg-[color-mix(in_srgb,var(--popover),var(--foreground)_4%)]",
         )}
       >
         <div className="flex min-w-0 flex-1 items-center gap-4">
@@ -335,10 +335,11 @@ const BuildRow = memo(function BuildRow({
               size={56}
               masterworked={isFullyMasterworked(exotic)}
               gearTier={armorPipTier(exotic)}
+              className="normal:rounded-[8px]"
             />
           ) : (
             <span
-              className="d2-brackets size-14 shrink-0 rounded-none bg-black/25"
+              className="d2-brackets size-14 shrink-0 rounded-none normal:rounded-[8px] bg-black/25"
               aria-hidden
             />
           )}
@@ -370,7 +371,7 @@ const BuildRow = memo(function BuildRow({
           </div>
         </div>
         <span
-          className="text-foreground flex size-8 shrink-0 items-center justify-center rounded-none"
+          className="text-foreground flex size-8 shrink-0 items-center justify-center rounded-none normal:rounded-[10px]"
           aria-hidden
         >
           <HugeiconsIcon icon={ArrowDown01Icon}

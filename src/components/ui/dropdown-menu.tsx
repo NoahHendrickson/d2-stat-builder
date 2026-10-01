@@ -92,7 +92,7 @@ function DropdownMenuItem({
       data-inset={inset}
       data-variant={variant}
       className={cn(
-        "group/dropdown-menu-item relative flex h-8 cursor-default items-center gap-1.5 rounded-[4px] border border-transparent pr-2 pl-1.5 text-sm outline-hidden select-none focus:rounded-none focus:border-foreground/8 focus:bg-foreground/6 focus:text-accent-foreground not-data-[variant=destructive]:focus:**:text-accent-foreground data-inset:pl-7 data-[variant=destructive]:text-destructive data-[variant=destructive]:focus:bg-destructive/10 data-[variant=destructive]:focus:text-destructive dark:data-[variant=destructive]:focus:bg-destructive/20 data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 data-[variant=destructive]:*:[svg]:text-destructive",
+        "group/dropdown-menu-item relative flex h-8 cursor-default items-center gap-1.5 rounded-[4px] border border-transparent pr-2 pl-1.5 text-sm outline-hidden select-none focus:rounded-none focus:border-foreground/8 focus:bg-foreground/6 normal:rounded-[6px] normal:focus:rounded-[6px] normal:focus:border-transparent focus:text-accent-foreground not-data-[variant=destructive]:focus:**:text-accent-foreground data-inset:pl-7 data-[variant=destructive]:text-destructive data-[variant=destructive]:focus:bg-destructive/10 data-[variant=destructive]:focus:text-destructive dark:data-[variant=destructive]:focus:bg-destructive/20 data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 data-[variant=destructive]:*:[svg]:text-destructive",
         className
       )}
       {...props}
@@ -117,7 +117,7 @@ function DropdownMenuSubTrigger({
       data-slot="dropdown-menu-sub-trigger"
       data-inset={inset}
       className={cn(
-        "flex h-8 cursor-default items-center gap-1.5 rounded-[4px] border border-transparent pr-2 pl-1.5 text-sm outline-hidden select-none focus:rounded-none focus:border-foreground/8 focus:bg-foreground/6 focus:text-accent-foreground not-data-[variant=destructive]:focus:**:text-accent-foreground data-inset:pl-7 data-popup-open:rounded-none data-popup-open:border-foreground/8 data-popup-open:bg-foreground/6 data-popup-open:text-accent-foreground data-open:bg-foreground/6 data-open:text-accent-foreground [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+        "flex h-8 cursor-default items-center gap-1.5 rounded-[4px] border border-transparent pr-2 pl-1.5 text-sm outline-hidden select-none focus:rounded-none focus:border-foreground/8 focus:bg-foreground/6 normal:rounded-[6px] normal:focus:rounded-[6px] normal:focus:border-transparent focus:text-accent-foreground not-data-[variant=destructive]:focus:**:text-accent-foreground data-inset:pl-7 data-popup-open:rounded-none normal:data-popup-open:rounded-[6px] data-popup-open:border-foreground/8 data-popup-open:bg-foreground/6 data-popup-open:text-accent-foreground data-open:bg-foreground/6 data-open:text-accent-foreground [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
         className
       )}
       {...props}
@@ -167,7 +167,7 @@ function DropdownMenuCheckboxItem({
       data-inset={inset}
       data-indicator={indicator}
       className={cn(
-        "group/dropdown-menu-checkbox-item relative flex h-8 cursor-default items-center gap-1.5 rounded-[4px] border border-transparent text-sm outline-hidden select-none focus:rounded-none focus:border-foreground/8 focus:bg-foreground/6 focus:text-accent-foreground focus:**:text-accent-foreground data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+        "group/dropdown-menu-checkbox-item relative flex h-8 cursor-default items-center gap-1.5 rounded-[4px] border border-transparent text-sm outline-hidden select-none focus:rounded-none focus:border-foreground/8 focus:bg-foreground/6 normal:rounded-[6px] normal:focus:rounded-[6px] normal:focus:border-transparent focus:text-accent-foreground focus:**:text-accent-foreground data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
         indicator === "end" ? "pr-8 pl-1.5" : "pr-1.5 pl-8",
         inset && "pl-7",
         className
@@ -180,7 +180,7 @@ function DropdownMenuCheckboxItem({
           "pointer-events-none absolute flex items-center justify-center",
           indicator === "end"
             ? "right-2"
-            : "left-2 size-4 rounded-none d2-line bg-lifted group-data-checked/dropdown-menu-checkbox-item:text-emphatic-foreground",
+            : "left-2 size-4 rounded-none normal:rounded-[4px] d2-line bg-lifted group-data-checked/dropdown-menu-checkbox-item:text-emphatic-foreground",
         )}
         data-slot="dropdown-menu-checkbox-item-indicator"
       >
@@ -219,7 +219,7 @@ function DropdownMenuRadioItem({
       data-slot="dropdown-menu-radio-item"
       data-inset={inset}
       className={cn(
-        "relative flex h-8 cursor-default items-center gap-1.5 rounded-[4px] border border-transparent pr-8 pl-1.5 text-sm outline-hidden select-none focus:rounded-none focus:border-foreground/8 focus:bg-foreground/6 focus:text-accent-foreground focus:**:text-accent-foreground data-inset:pl-7 data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
+        "relative flex h-8 cursor-default items-center gap-1.5 rounded-[4px] border border-transparent pr-8 pl-1.5 text-sm outline-hidden select-none focus:rounded-none focus:border-foreground/8 focus:bg-foreground/6 normal:rounded-[6px] normal:focus:rounded-[6px] normal:focus:border-transparent focus:text-accent-foreground focus:**:text-accent-foreground data-inset:pl-7 data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
         className
       )}
       {...props}

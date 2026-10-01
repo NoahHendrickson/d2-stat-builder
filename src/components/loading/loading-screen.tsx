@@ -91,6 +91,15 @@ const TILES: TileSpec[] = [
 ];
 
 /**
+ * Views that don't wait for the player's gear: the public weapon catalog loads on its
+ * own, and Settings only reads this device's preferences.
+ */
+const UNGATED_PATHS: ReadonlySet<string> = new Set(["/weapons", "/settings"]);
+
+/** The overlay's fade-out once everything is ready; it unmounts when the fade ends. */
+const FADE_MS = 200;
+
+/**
  * Full-screen "Loading your armor" overlay for first load / refresh. Covers the
  * app while the session, manifest, and armory resolve, drives the progress bar
  * from real load stages, then sweeps to 100% and fades out. Hides immediately
@@ -101,8 +110,6 @@ export function LoadingScreen() {
   const session = useSession();
   const manifestStatus = useManifest();
   const armory = useArmory();
-  const [dismissed, setDismissed] = useState(false);
-  const dismiss = useCallback(() => setDismissed(true), []);
 
   const view = loadingView({
     sessionPending: session.isPending,
@@ -113,8 +120,23 @@ export function LoadingScreen() {
     armoryError: armory.isError,
   });
 
-  // The public weapon catalog loads independently of a player's armor/manifest.
-  if (pathname === "/weapons" || dismissed || view.phase === "hidden") return null;
+  // "up" while the overlay covers a load, "gone" once that load is over (for good:
+  // later refetches never bring it back). The finish (sweep and fade) only plays for an
+  // overlay that was up: when the data lands while the player is on an ungated view, or
+  // behind an error card, showing it then would flash the loader over a ready app.
+  const gated = !UNGATED_PATHS.has(pathname);
+  const [stage, setStage] = useState<"idle" | "up" | "gone">(
+    gated && view.phase === "loading" ? "up" : "idle",
+  );
+  let next = stage;
+  if (stage !== "gone") {
+    if (view.phase === "done") next = gated && stage === "up" ? "up" : "gone";
+    else next = gated && view.phase === "loading" ? "up" : "idle";
+  }
+  if (next !== stage) setStage(next);
+  const dismiss = useCallback(() => setStage("gone"), []);
+
+  if (next !== "up") return null;
 
   return (
     <ActiveLoadingScreen
@@ -142,22 +164,17 @@ function ActiveLoadingScreen({
   onGone: () => void;
 }) {
   const progress = useEasedProgress(target, done);
-  const [fading, setFading] = useState(false);
 
-  // Once everything is ready the app takes clicks at once (`released`) while the sweep
-  // lands (~150ms), then the overlay fades out and unmounts. Cancelled if `done` flips
-  // back (e.g. session expiry mid-sweep).
+  // Once everything is ready the app takes clicks and the overlay fades straight away,
+  // the bar sweeping to 100% as it goes: holding the app covered to finish the bar first
+  // only delayed it. Cancelled if `done` flips back (e.g. session expiry mid-fade).
   useEffect(() => {
     if (!done) return;
-    const fadeTimer = setTimeout(() => setFading(true), 150);
-    const goneTimer = setTimeout(onGone, 650);
-    return () => {
-      clearTimeout(fadeTimer);
-      clearTimeout(goneTimer);
-    };
+    const goneTimer = setTimeout(onGone, FADE_MS);
+    return () => clearTimeout(goneTimer);
   }, [done, onGone]);
 
-  return <LoadingScreenView progress={progress} message={message} fading={fading} released={done} />;
+  return <LoadingScreenView progress={progress} message={message} fading={done} />;
 }
 
 /**
@@ -211,13 +228,11 @@ export function LoadingScreenView({
   progress,
   message,
   fading,
-  released = fading,
 }: {
   progress: number;
   message: string;
+  /** The app is ready: fade out and let clicks through to it. */
   fading: boolean;
-  /** Let clicks through to the app (it's ready; the overlay is only finishing its sweep). */
-  released?: boolean;
 }) {
   const pct = Math.round(progress * 100);
 
@@ -229,10 +244,10 @@ export function LoadingScreenView({
       // photo, whatever the app theme. Fading out pulls focus to the blurred
       // copy the app floats over.
       className={cn(
-        "app-backdrop-sharp dark text-foreground fixed inset-0 z-[60] overflow-hidden transition-opacity duration-500",
-        released && "pointer-events-none",
-        fading && "opacity-0",
+        "app-backdrop-sharp dark text-foreground fixed inset-0 z-[60] overflow-hidden transition-opacity ease-out",
+        fading && "pointer-events-none opacity-0",
       )}
+      style={{ transitionDuration: `${FADE_MS}ms` }}
     >
       <Tiles />
 

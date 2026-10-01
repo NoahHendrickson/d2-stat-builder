@@ -15,13 +15,13 @@ export function SectionHeading({
 }) {
   if (trailing == null) {
     return (
-      <Tag className={cn("text-sm font-medium", className)}>{children}</Tag>
+      <Tag className={cn("text-sm font-medium normal:font-normal", className)}>{children}</Tag>
     );
   }
 
   return (
     <div className={cn("flex items-center gap-3", className)}>
-      <Tag className="text-sm font-medium">{children}</Tag>
+      <Tag className="text-sm font-medium normal:font-normal">{children}</Tag>
       <span className="flex shrink-0 items-center">{trailing}</span>
     </div>
   );

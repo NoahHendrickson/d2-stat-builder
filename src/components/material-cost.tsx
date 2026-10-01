@@ -105,7 +105,7 @@ export function MaterialCost({
                 )}
               />
             ) : (
-              <span className="text-[10px] uppercase">{name}</span>
+              <span className="text-[10px] uppercase normal:normal-case normal:tracking-normal">{name}</span>
             )}
             {formatCount(count, abbreviate)}
           </span>

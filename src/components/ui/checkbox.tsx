@@ -18,7 +18,7 @@ function Checkbox({
       data-slot="checkbox"
       data-size={size}
       className={cn(
-        "peer group/checkbox relative flex shrink-0 items-center justify-center rounded-none d2-line d2-hover-ring bg-lifted transition-[background-color,border-color,color,box-shadow] outline-none group-has-disabled/field:opacity-40 after:absolute after:-inset-x-3 after:-inset-y-2 hover:[--line-alpha:1.6] hover:not-data-checked:bg-foreground/8 focus-visible:[--line-alpha:2.6] disabled:cursor-not-allowed disabled:opacity-40 aria-invalid:border-destructive data-[size=default]:size-4 data-[size=lg]:size-5",
+        "peer group/checkbox relative flex shrink-0 items-center justify-center rounded-none normal:rounded-[4px] d2-line d2-hover-ring bg-lifted transition-[background-color,border-color,color,box-shadow] outline-none group-has-disabled/field:opacity-40 after:absolute after:-inset-x-3 after:-inset-y-2 hover:[--line-alpha:1.6] hover:not-data-checked:bg-foreground/8 focus-visible:[--line-alpha:2.6] disabled:cursor-not-allowed disabled:opacity-40 aria-invalid:border-destructive data-[size=default]:size-4 data-[size=lg]:size-5",
         className
       )}
       {...props}

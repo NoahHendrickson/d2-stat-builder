@@ -36,7 +36,7 @@ export function LoadoutSortControls({
       <TooltipLabel label={`Sort by ${triggerLabel}, ${directionLabel}`}>
         <DropdownMenuTrigger
           aria-label={`Sort by ${triggerLabel}, ${directionLabel}`}
-          className="inline-flex h-8 w-fit shrink-0 cursor-pointer d2-line items-center gap-1.5 rounded-none bg-lifted pr-2 pl-2.5 text-sm whitespace-nowrap transition-colors outline-none select-none hover:[--line-alpha:1.6] focus-visible:[--line-alpha:2.6] data-popup-open:[--line-alpha:2.6]"
+          className="inline-flex h-8 w-fit shrink-0 cursor-pointer d2-line items-center gap-1.5 rounded-none normal:rounded-[10px] bg-lifted pr-2 pl-2.5 text-sm whitespace-nowrap transition-colors outline-none select-none hover:[--line-alpha:1.6] focus-visible:[--line-alpha:2.6] data-popup-open:[--line-alpha:2.6]"
         >
           <span className="text-muted-foreground">Sort:</span>
           <span className="truncate">{triggerLabel}</span>

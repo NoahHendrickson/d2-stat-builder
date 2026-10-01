@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils"
 
 /** Small 4px tags in the display face — "2PC", "ARTIFICE", "MISSING". */
 const badgeVariants = cva(
-  "group/badge inline-flex h-5 w-fit shrink-0 items-center justify-center gap-1 overflow-hidden rounded-[4px] border px-1.5 py-0.5 font-display text-[10px] font-medium tracking-label uppercase whitespace-nowrap transition-colors focus-visible:border-outline-strong has-data-[icon=inline-end]:pr-1 has-data-[icon=inline-start]:pl-1 aria-invalid:border-destructive [&>svg]:pointer-events-none [&>svg]:size-3!",
+  "group/badge inline-flex h-5 w-fit shrink-0 items-center justify-center gap-1 overflow-hidden rounded-[4px] border px-1.5 py-0.5 font-display text-[10px] font-medium tracking-label uppercase normal:rounded-full normal:px-2 normal:font-sans normal:text-xs normal:tracking-normal normal:normal-case whitespace-nowrap transition-colors focus-visible:border-outline-strong has-data-[icon=inline-end]:pr-1 has-data-[icon=inline-start]:pl-1 aria-invalid:border-destructive [&>svg]:pointer-events-none [&>svg]:size-3!",
   {
     variants: {
       variant: {

@@ -149,7 +149,7 @@ export const FragmentPicker = memo(function FragmentPicker({
                 >
                   <label
                     className={cn(
-                      "group flex cursor-pointer items-center gap-2 rounded-none px-1 text-left text-sm transition-colors",
+                      "group flex cursor-pointer items-center gap-2 rounded-none normal:rounded-[6px] px-1 text-left text-sm transition-colors",
                       on
                         ? "text-foreground"
                         : "text-muted-foreground hover:text-foreground",

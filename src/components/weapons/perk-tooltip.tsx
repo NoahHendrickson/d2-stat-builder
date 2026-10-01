@@ -90,7 +90,7 @@ export function PerkTooltip({
       : undefined;
   return (
     <div className="grid gap-2 whitespace-normal">
-      <p className="font-medium text-foreground uppercase tracking-wide">
+      <p className="font-medium text-foreground uppercase normal:normal-case normal:tracking-normal tracking-wide">
         {perk.name}
         {!perk.currentlyCanRoll && (
           <span className="ml-2 font-normal normal-case tracking-normal text-muted-foreground">
@@ -109,7 +109,7 @@ export function PerkTooltip({
       )}
       {insight && (
         <div className="border-t border-foreground/10 pt-2 text-muted-foreground">
-          <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wider">
+          <p className="mb-1.5 text-[10px] font-medium uppercase normal:normal-case normal:tracking-normal tracking-wider">
             Community insight from Clarity
           </p>
           <ClarityLines lines={insight} />

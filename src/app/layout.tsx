@@ -6,6 +6,7 @@ import { LoadingScreen } from "@/components/loading/loading-screen";
 import { Providers } from "@/components/providers";
 import { Analytics } from "@vercel/analytics/next";
 import { EARLY_FETCH_SCRIPT } from "@/lib/early-fetch";
+import { APP_THEME_SCRIPT, DEFAULT_APP_THEME } from "@/lib/app-theme-script";
 
 const geistSans = Geist({
   variable: "--font-sans",
@@ -26,6 +27,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
+      data-app-theme={DEFAULT_APP_THEME}
       suppressHydrationWarning
       className={geistSans.variable}
     >
@@ -36,6 +38,7 @@ export default function RootLayout({
             starts the session + profile requests before the bundle arrives
             (see early-fetch.ts). */}
         <script id="early-fetch" dangerouslySetInnerHTML={{ __html: EARLY_FETCH_SCRIPT }} />
+        <script id="app-theme" dangerouslySetInnerHTML={{ __html: APP_THEME_SCRIPT }} />
         {/* Dev only: Figma's html-to-design capture script (Send to Figma). */}
         {process.env.NODE_ENV === "development" && (
           <script src="https://mcp.figma.com/mcp/html-to-design/capture.js" async />

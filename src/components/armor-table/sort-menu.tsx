@@ -157,7 +157,7 @@ export const SortMenu = memo(function SortMenu({
             <span
               aria-hidden
               className={cn(
-                "absolute flex size-4 items-center justify-center rounded-none transition-colors",
+                "absolute flex size-4 items-center justify-center rounded-none normal:rounded-[4px] transition-colors",
                 "hover:bg-accent group-data-popup-open:bg-accent",
                 align === "right"
                   ? "top-1/2 left-[calc(50%+0.5rem+2px)] -translate-y-1/2"

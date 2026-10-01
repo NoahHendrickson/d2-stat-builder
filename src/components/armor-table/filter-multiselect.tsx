@@ -116,7 +116,7 @@ export function FilterMultiselectPanel<V extends string | number>({
                 onTogglePin(opt.value);
               }}
               className={cn(
-                "relative flex size-7 shrink-0 items-center justify-center rounded-none transition-opacity outline-none focus-visible:opacity-100 focus-visible:ring-1 focus-visible:ring-outline-strong",
+                "relative flex size-7 shrink-0 items-center justify-center rounded-none normal:rounded-[8px] transition-opacity outline-none focus-visible:opacity-100 focus-visible:ring-1 focus-visible:ring-outline-strong",
                 isPinned
                   ? "text-foreground"
                   : "text-muted-foreground hover:text-foreground opacity-0 group-hover/dropdown-menu-checkbox-item:opacity-100",
@@ -296,7 +296,7 @@ export function FilterMultiselect<V extends string | number>({
                 onChange([]);
                 triggerRef.current?.focus();
               }}
-              className="absolute top-1/2 right-8 flex size-4 -translate-y-1/2 items-center justify-center rounded-none text-current outline-none focus-visible:ring-1 focus-visible:ring-outline-strong"
+              className="absolute top-1/2 right-8 flex size-4 -translate-y-1/2 items-center justify-center rounded-none normal:rounded-[4px] text-current outline-none focus-visible:ring-1 focus-visible:ring-outline-strong"
             >
               <HugeiconsIcon icon={Cancel01Icon} className="size-4" aria-hidden />
             </button>

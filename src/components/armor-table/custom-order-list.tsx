@@ -90,7 +90,7 @@ export function CustomOrderList({
             onDrop={(e) => onDrop(e, i)}
             onDragEnd={clearDrag}
             className={cn(
-              "group/row hover:bg-accent flex h-8 cursor-grab items-center gap-1.5 rounded-none pr-0.5 pl-1.5 text-sm active:cursor-grabbing",
+              "group/row hover:bg-accent flex h-8 cursor-grab items-center gap-1.5 rounded-none normal:rounded-[6px] pr-0.5 pl-1.5 text-sm active:cursor-grabbing",
               dragFrom === i && "bg-accent opacity-60",
             )}
           >
@@ -110,7 +110,7 @@ export function CustomOrderList({
                   aria-label={`Move ${value} up`}
                   disabled={i === 0}
                   onClick={() => onMove(i, i - 1)}
-                  className="text-muted-foreground hover:text-foreground flex size-6 cursor-pointer items-center justify-center rounded-none outline-none focus-visible:ring-1 focus-visible:ring-outline-strong disabled:pointer-events-none disabled:opacity-30"
+                  className="text-muted-foreground hover:text-foreground flex size-6 cursor-pointer items-center justify-center rounded-none normal:rounded-[6px] outline-none focus-visible:ring-1 focus-visible:ring-outline-strong disabled:pointer-events-none disabled:opacity-30"
                 >
                   <HugeiconsIcon icon={ArrowUp01Icon} strokeWidth={2} className="size-3.5" aria-hidden />
                 </button>
@@ -121,7 +121,7 @@ export function CustomOrderList({
                   aria-label={`Move ${value} down`}
                   disabled={i === values.length - 1}
                   onClick={() => onMove(i, i + 1)}
-                  className="text-muted-foreground hover:text-foreground flex size-6 cursor-pointer items-center justify-center rounded-none outline-none focus-visible:ring-1 focus-visible:ring-outline-strong disabled:pointer-events-none disabled:opacity-30"
+                  className="text-muted-foreground hover:text-foreground flex size-6 cursor-pointer items-center justify-center rounded-none normal:rounded-[6px] outline-none focus-visible:ring-1 focus-visible:ring-outline-strong disabled:pointer-events-none disabled:opacity-30"
                 >
                   <HugeiconsIcon icon={ArrowDown01Icon} strokeWidth={2} className="size-3.5" aria-hidden />
                 </button>

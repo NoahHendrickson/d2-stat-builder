@@ -199,7 +199,7 @@ export const LoadoutRow = memo(function LoadoutRow({
           onClick={() => onToggle(saved.id)}
           aria-expanded={open}
           aria-label={open ? "Hide stat breakdown" : "Show stat breakdown"}
-          className="text-foreground hover:bg-foreground/6 flex h-9 items-center gap-4 rounded-none px-2 text-sm leading-5 tabular-nums outline-none transition-colors focus-visible:ring-1 focus-visible:ring-outline-strong"
+          className="text-foreground hover:bg-foreground/6 flex h-9 items-center gap-4 rounded-none normal:rounded-[8px] px-2 text-sm leading-5 tabular-nums outline-none transition-colors focus-visible:ring-1 focus-visible:ring-outline-strong"
         >
           {optimizer ? (
             <>

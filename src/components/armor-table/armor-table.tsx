@@ -455,7 +455,7 @@ export function ArmorTable() {
   const refresh = useCallback(() => void refetch(), [refetch]);
 
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-none border border-foreground/12">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-none normal:rounded-[20px] border border-foreground/12">
       {/* Toolbar + column headers share one tinted header band. The toolbar
           sits outside the scroller so it survives horizontal scroll; thead
           stays sticky inside it. */}

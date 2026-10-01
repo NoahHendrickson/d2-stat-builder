@@ -38,7 +38,7 @@ function ProgressFill({ store, className }: { store: ValueStore<number>; classNa
       aria-valuenow={Math.round(progress * 100)}
       className={className}
     >
-      <div className="bg-foreground h-full rounded-none" style={{ width: `${progress * 100}%` }} />
+      <div className="bg-foreground h-full rounded-none normal:rounded-full" style={{ width: `${progress * 100}%` }} />
     </div>
   );
 }
@@ -84,7 +84,7 @@ export function BuildsMobileBar({
         {state === "searching" && (
           <ProgressFill
             store={progressStore}
-            className="bg-black/30 h-0.5 w-full overflow-hidden rounded-none fine-pointer:hidden"
+            className="bg-black/30 h-0.5 w-full overflow-hidden rounded-none normal:rounded-full fine-pointer:hidden"
           />
         )}
         <span className="flex items-center gap-3">

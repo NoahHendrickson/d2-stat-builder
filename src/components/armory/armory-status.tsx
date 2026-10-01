@@ -272,7 +272,7 @@ export function ArmoryStatus() {
   return (
     <section
       aria-label="Account and game data"
-      className="flex w-full flex-col overflow-hidden rounded-none border border-foreground/8 bg-lifted shadow-raised"
+      className="flex w-full flex-col overflow-hidden rounded-none normal:rounded-[12px] border border-foreground/8 bg-lifted shadow-raised"
     >
       <div className="flex flex-col gap-2 p-3">
         <div className="flex items-center gap-2">
@@ -439,7 +439,7 @@ function AccountMenu({ account, collapsed }: { account: ArmoryAccount; collapsed
   ) : (
     <DropdownMenuTrigger
       aria-label={`Account: ${account.displayName}`}
-      className="group/profile flex h-11 min-w-0 flex-1 items-center gap-2 rounded-none px-1.5 text-left outline-none transition-colors hover:bg-foreground/5 focus-visible:ring-1 focus-visible:ring-outline-strong aria-expanded:bg-foreground/8"
+      className="group/profile flex h-11 min-w-0 flex-1 items-center gap-2 rounded-none normal:rounded-[8px] px-1.5 text-left outline-none transition-colors hover:bg-foreground/5 focus-visible:ring-1 focus-visible:ring-outline-strong aria-expanded:bg-foreground/8"
     >
       <AccountAvatar iconPath={account.iconPath} />
       <span className="min-w-0 flex-1 truncate text-sm font-medium">{account.displayName}</span>

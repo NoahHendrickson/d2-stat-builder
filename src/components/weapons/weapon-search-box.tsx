@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { ArrowRight01Icon, Cancel01Icon, Search01Icon } from "@hugeicons/core-free-icons";
 import {
@@ -105,8 +105,8 @@ type Section = { heading?: string; items: Item[]; note?: string };
 
 /**
  * Search input with the applied filters as chips inside it. Typing suggests
- * "Category: value" filters beneath it (noeyarmory's command palette); an empty
- * box lists the categories; picking a category browses its values.
+ * "Category: value" filters and matching categories beneath it, above the
+ * results; picking a category browses its values.
  */
 export function WeaponSearchBox({
   index,
@@ -119,6 +119,7 @@ export function WeaponSearchBox({
   onClear,
   damageTypes,
   ammoTypes,
+  trailing,
 }: {
   index: readonly FilterIndexEntry[];
   query: string;
@@ -130,6 +131,8 @@ export function WeaponSearchBox({
   onClear: () => void;
   damageTypes?: readonly DamageTypeRef[];
   ammoTypes?: readonly AmmoTypeRef[];
+  /** Shown at the end of the bar, after the clear button (the result count and sort). */
+  trailing?: ReactNode;
 }) {
   const id = useId();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -172,6 +175,9 @@ export function WeaponSearchBox({
         },
       ];
     }
+    const q = query.trim();
+    // Nothing until the user types; focusing the box alone stays quiet.
+    if (!q) return [];
     const categories = matchingCategories(index, query).map((entry): Item => ({
       kind: "category",
       entry,
@@ -179,11 +185,7 @@ export function WeaponSearchBox({
     const suggestions = suggestFilters(index, query, params).map(
       ({ category, value }): Item => ({ kind: "value", category, value }),
     );
-    const q = query.trim();
-    const browse = {
-      heading: q ? "Browse filters" : "Filter by",
-      items: categories,
-    };
+    const browse = { heading: "Browse filters", items: categories };
     // Typing a category's name ("frame", "ammo") means browsing it, so lead with it.
     const leadWithCategories =
       q.length >= 3 &&
@@ -284,7 +286,7 @@ export function WeaponSearchBox({
   );
   return (
     <div
-      className="relative min-w-0 flex-1"
+      className="min-w-0 flex-1"
       onBlur={(event) => {
         if (!event.currentTarget.contains(event.relatedTarget)) {
           setOpen(false);
@@ -293,7 +295,7 @@ export function WeaponSearchBox({
       }}
     >
       <div
-        className="flex min-h-[42px] cursor-text flex-wrap items-center gap-1.5 border-y border-foreground/12 bg-foreground/8 px-4 py-1.5 transition-colors hover:border-foreground/20 focus-within:border-foreground/30"
+        className="flex min-h-12 cursor-text flex-wrap items-center gap-1.5 border-y border-foreground/12 bg-foreground/8 px-4 py-2 transition-colors md:px-6 normal:px-3 hover:border-foreground/20 focus-within:border-foreground/30 normal:mx-6 normal:rounded-[10px] normal:border normal:bg-foreground/4"
         onMouseDown={(event) => {
           if (event.target === event.currentTarget) {
             event.preventDefault();
@@ -310,8 +312,8 @@ export function WeaponSearchBox({
               key={`${chip.param}:${chip.value}`}
               type="button"
               className={cn(
-                "flex h-7 max-w-full items-center gap-1 text-xs font-medium hover:brightness-125 focus-visible:outline-1",
-                icon ? "pr-1.5 pl-1" : "px-2",
+                "flex h-7 max-w-full items-center gap-1 rounded-full text-xs font-medium hover:brightness-125 focus-visible:outline-1",
+                icon ? "pr-2 pl-1.5" : "px-2.5",
                 chipTone(chip),
               )}
               onClick={() => onRemove(chip)}
@@ -324,7 +326,7 @@ export function WeaponSearchBox({
           );
         })}
         {drill && (
-          <span className="flex h-7 items-center bg-foreground/15 px-2 text-xs font-medium">
+          <span className="flex h-7 items-center rounded-full bg-foreground/15 px-2.5 text-xs font-medium">
             {drill.category.label}
             {drill.category.numeric ? " >" : ":"}
             {pending && ` ${pending} +`}
@@ -379,13 +381,17 @@ export function WeaponSearchBox({
             <HugeiconsIcon icon={Cancel01Icon} className="size-4" />
           </button>
         )}
+        {trailing}
       </div>
+      {/* In the page's flow, not floating: the options open at the top of the
+          results list and push the weapons down. Its rows sit out in the page
+          padding like the result rows, so their text lines up. */}
       {expanded && (
         <div
           id={`${id}-list`}
           role="listbox"
           aria-label="Filter suggestions"
-          className="absolute top-full right-0 left-0 z-30 mt-1 max-h-[min(26rem,60dvh)] overflow-y-auto d2-glass p-1 text-sm"
+          className="mx-[7px] mt-3 max-h-[min(26rem,45dvh)] overflow-y-auto border-b border-foreground/8 pb-2 text-sm md:mx-[15px]"
           // Keep focus in the input while clicking rows.
           onMouseDown={(event) => event.preventDefault()}
         >
@@ -395,7 +401,7 @@ export function WeaponSearchBox({
                 <div
                   role="presentation"
                   className={cn(
-                    "px-2 pt-2 pb-1 text-[11px] font-medium tracking-wider text-muted-foreground uppercase",
+                    "px-[9px] pt-2 pb-1 text-[11px] font-medium tracking-wider text-muted-foreground uppercase normal:text-xs normal:normal-case normal:tracking-normal",
                     s > 0 && "mt-1 border-t border-foreground/8",
                   )}
                 >
@@ -415,7 +421,7 @@ export function WeaponSearchBox({
                     role="option"
                     aria-selected={i === active}
                     className={cn(
-                      "flex cursor-pointer items-center gap-2 px-2 py-1.5 text-xs",
+                      "flex cursor-pointer items-center gap-2 border border-transparent px-2 py-1.5 text-xs normal:rounded-[10px]",
                       i === active && "bg-foreground/10",
                     )}
                     onMouseMove={() => i !== active && setActive(i)}
@@ -462,7 +468,7 @@ export function WeaponSearchBox({
                 );
               })}
               {section.note && (
-                <p className="px-2 py-1.5 text-xs text-muted-foreground">
+                <p className="px-[9px] py-1.5 text-xs text-muted-foreground">
                   {section.note}
                 </p>
               )}

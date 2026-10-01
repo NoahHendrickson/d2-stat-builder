@@ -57,7 +57,7 @@ export function WeaponStats({
               // line, but filled white rather than green.
               <div
                 aria-hidden
-                className="relative mx-[3px] mt-2.5 h-2.5 before:pointer-events-none before:absolute before:-inset-[3px] before:d2-line before:content-['']"
+                className="relative mx-[3px] mt-2.5 h-2.5 before:pointer-events-none before:absolute before:-inset-[3px] before:d2-line before:content-[''] normal:mx-0 normal:h-2 normal:overflow-hidden normal:rounded-full normal:bg-foreground/16 normal:before:content-none"
               >
                 <div
                   className="d2-line-white absolute inset-y-0 left-0 bg-foreground/80"

@@ -21,7 +21,7 @@ export const fieldControlInnerTriggerClasses = cn(
  */
 export const fieldFilterControlShellClasses = cn(
   fieldControlHeightClasses,
-  "d2-line relative box-border overflow-hidden rounded-none bg-lifted transition-colors",
+  "d2-line relative box-border overflow-hidden rounded-none normal:rounded-[10px] bg-lifted transition-colors",
   "hover:[--line-alpha:1.6] has-data-popup-open:[--line-alpha:2.6] focus-within:[--line-alpha:2.6]",
   "data-active:[border-image:none] data-active:border-white/70 data-active:bg-emphatic data-active:text-white data-active:hover:bg-emphatic data-active:has-data-popup-open:border-white data-active:focus-within:border-white",
 );

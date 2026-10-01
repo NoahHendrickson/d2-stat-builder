@@ -298,7 +298,7 @@ export function LoadoutSubclassEditor({
     <section
       className={cn(
         "group/subclass space-y-3",
-        !compact && "border-foreground/15 rounded-none border p-3",
+        !compact && "border-foreground/15 rounded-none normal:rounded-[12px] border p-3",
       )}
       data-compact={compact || undefined}
       aria-label="Subclass configuration"
@@ -311,7 +311,7 @@ export function LoadoutSubclassEditor({
           <DropdownMenuTrigger
             id={id}
             aria-label="Subclass"
-            className="inline-flex h-8 w-full min-w-0 cursor-pointer items-center justify-between gap-1.5 rounded-none border border-foreground/30 bg-black/15 pr-2 pl-2.5 text-sm whitespace-nowrap transition-colors outline-none select-none hover:border-foreground/60 focus-visible:border-outline-strong data-popup-open:border-outline-strong dark:bg-black/25"
+            className="inline-flex h-8 w-full min-w-0 cursor-pointer items-center justify-between gap-1.5 rounded-none normal:rounded-[10px] border border-foreground/30 bg-black/15 pr-2 pl-2.5 text-sm whitespace-nowrap transition-colors outline-none select-none hover:border-foreground/60 focus-visible:border-outline-strong data-popup-open:border-outline-strong dark:bg-black/25"
           >
             <span className="truncate">
               {active ? `${active} · ${catalog[active].name}` : "No subclass"}

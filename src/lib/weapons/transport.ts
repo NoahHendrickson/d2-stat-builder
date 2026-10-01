@@ -27,6 +27,7 @@ export function compactWeaponIndex(index: WeaponIndex): CompactWeaponIndex {
     damageTypes: index.damageTypes,
     weaponTypes: index.weaponTypes,
     ammoTypes: index.ammoTypes,
+    championTypes: index.championTypes,
     statCurves: index.statCurves,
     weapons: index.weapons.filter(isCatalogWeapon).map((weapon) => {
       const { perks, perksLower, perkHashes, ...compact } = weapon;

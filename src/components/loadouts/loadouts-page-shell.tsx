@@ -1,8 +1,10 @@
 "use client";
 
-import { Suspense, useCallback, useEffect } from "react";
+import { Suspense, useCallback, useEffect, useState, type ComponentProps } from "react";
 import dynamic from "next/dynamic";
 import { SignInCard } from "@/components/auth/sign-in-card";
+import type { LoadoutsList } from "@/components/loadouts/loadouts-list";
+import { loadLoadoutsList, loadedLoadoutsList } from "@/components/loadouts/loadouts-list-chunk";
 import { useSession } from "@/lib/auth/use-session";
 import { useArmory } from "@/lib/armory/use-armory";
 import { useManifest } from "@/lib/manifest/use-manifest";
@@ -21,10 +23,21 @@ function LoadoutsListPlaceholder() {
  * on this page (for signed-in players) rather than shipped with the root layout.
  * Client-only: it never renders on the server (it needs both of those loaded).
  */
-const LoadoutsList = dynamic(
+const LazyLoadoutsList = dynamic(
   () => import("@/components/loadouts/loadouts-list").then((m) => m.LoadoutsList),
   { ssr: false, loading: () => <LoadoutsListPlaceholder /> },
 );
+
+/**
+ * The list, rendered directly when its chunk is already in (the app shell warms it once
+ * the player is signed in). The lazy wrapper shows its placeholder first even for a
+ * loaded chunk, and React keeps a placeholder up for ~300ms before replacing it: a wait
+ * on every first visit. Picked once per mount, so the component never changes under the list.
+ */
+function ReadyLoadoutsList(props: ComponentProps<typeof LoadoutsList>) {
+  const [List] = useState(() => loadedLoadoutsList() ?? LazyLoadoutsList);
+  return <List {...props} />;
+}
 
 export function LoadoutsPageShell() {
   const session = useSession();
@@ -33,9 +46,9 @@ export function LoadoutsPageShell() {
   const authed = session.data?.authenticated ?? false;
 
   // Start fetching the list's chunk while the armory and manifest are still loading
-  // (direct entry), rather than only once they're ready. Importing has no side effects.
+  // (direct entry), rather than only once they're ready.
   useEffect(() => {
-    if (authed) void import("@/components/loadouts/loadouts-list");
+    if (authed) void loadLoadoutsList();
   }, [authed]);
 
   // Stable identity: this reaches every memoized row, so a fresh closure per render
@@ -65,7 +78,7 @@ export function LoadoutsPageShell() {
       ) : (
         // useSearchParams (share-link import) needs a Suspense boundary above it.
         <Suspense fallback={<LoadoutsListPlaceholder />}>
-          <LoadoutsList
+          <ReadyLoadoutsList
             armory={armory.data}
             provisional={armory.isProvisional}
             manifest={manifestStatus.manifest}

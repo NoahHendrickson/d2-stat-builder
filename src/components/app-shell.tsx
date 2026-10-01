@@ -4,25 +4,26 @@ import { TooltipLabel } from "@/components/ui/tooltip";
 import {
   useCallback,
   useEffect,
-  useLayoutEffect,
-  useRef,
   useState,
   useSyncExternalStore,
   type ReactNode,
 } from "react";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Cancel01Icon, Menu01Icon } from "@hugeicons/core-free-icons";
-import { AppSidebar, pageTitle } from "@/components/app-sidebar";
+import { AppSidebar, NAV_ITEMS, pageTitle } from "@/components/app-sidebar";
 import { ArmoryDiagnosticsGate } from "@/components/armory/armory-diagnostics-gate";
 import { ApplyProgressSection } from "@/components/loadouts/apply-progress-card";
+import { loadLoadoutsList } from "@/components/loadouts/loadouts-list-chunk";
 import { Button } from "@/components/ui/button";
 import { Drawer, DrawerClose, DrawerContent } from "@/components/ui/drawer";
 import { SiteIconSync } from "@/components/site-icon-sync";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { useSession } from "@/lib/auth/use-session";
 import { useLoadouts } from "@/lib/loadouts/use-loadouts";
 import { useMinWidth } from "@/lib/use-min-width";
 import { cn } from "@/lib/utils";
+import { whenIdle } from "@/lib/when-idle";
 
 /** Tailwind `lg` — below it the sidebar collapses into a drawer. */
 export const SIDEBAR_BREAKPOINT_PX = 1024;
@@ -83,7 +84,24 @@ export function AppShell({ children }: { children: ReactNode }) {
   // Start the signed-in query alongside game data so /loadouts opens with its
   // list ready; LoadoutsList shares and revalidates this same query.
   useLoadouts();
+  // Its code too: the list is a chunk of its own, and a first visit that had to wait
+  // for it sat on the placeholder for ~300ms (see ReadyLoadoutsList).
+  const authed = useSession().data?.authenticated === true;
+  useEffect(() => {
+    if (!authed) return;
+    return whenIdle(() => void loadLoadoutsList());
+  }, [authed]);
   const desktop = useMinWidth(SIDEBAR_BREAKPOINT_PX);
+  // The sidebar's links prefetch their views as soon as they're on screen. Below the
+  // breakpoint they only exist while the menu drawer is open, so the first tap raced
+  // the fetch it had just started: warm the same views up front instead.
+  const router = useRouter();
+  useEffect(() => {
+    if (desktop) return;
+    return whenIdle(() => {
+      for (const item of NAV_ITEMS) router.prefetch(item.href);
+    });
+  }, [desktop, router]);
   const pathname = usePathname();
   const title = pageTitle(pathname);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -108,20 +126,6 @@ export function AppShell({ children }: { children: ReactNode }) {
   );
   const sidebarWidth = collapsed ? SIDEBAR_RAIL_PX : SIDEBAR_EXPANDED_PX;
 
-  // Fade the page in when the view changes. Opacity only: a transform here would
-  // become the containing block for fixed children (the mobile builds bar).
-  const mainRef = useRef<HTMLDivElement>(null);
-  const shownPath = useRef(pathname);
-  useLayoutEffect(() => {
-    if (shownPath.current === pathname) return;
-    shownPath.current = pathname;
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    mainRef.current?.animate([{ opacity: 0 }, { opacity: 1 }], {
-      duration: 200,
-      easing: "ease-out",
-    });
-  }, [pathname]);
-
   // Portaled surfaces (the loadout editor drawer) sit over the main column,
   // not the sidebar. Publish the width so anything under <html> can inset.
   useEffect(() => {
@@ -136,10 +140,10 @@ export function AppShell({ children }: { children: ReactNode }) {
     <div className="relative flex h-full w-full">
       <aside
         className={cn(
-          // bg-glass (no backdrop-filter): this pane and the main one cover the
+          // bg-shell-* (glass, no backdrop-filter): this pane and the main one cover the
           // viewport over the pre-blurred backdrop, so a backdrop blur adds
           // nothing visible — and Firefox re-blurs it on every repaint.
-          "bg-glass relative hidden h-full min-w-0 shrink-0 overflow-hidden border-r border-foreground/8 lg:block",
+          "bg-shell-sidebar relative hidden h-full min-w-0 shrink-0 overflow-hidden border-r border-foreground/8 lg:block",
           slideEnabled &&
             "transition-[width] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none",
         )}
@@ -150,7 +154,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       {/* contain-layout stands in for the dropped backdrop-filter: a stacking
           context plus the containing block the fixed mobile builds bar sits in. */}
-      <div className="bg-glass flex min-h-0 min-w-0 flex-1 flex-col contain-layout">
+      <div className="bg-shell-main flex min-h-0 min-w-0 flex-1 flex-col contain-layout">
         <header className="flex h-14 shrink-0 items-stretch gap-2 border-b border-foreground/8 pr-2 pl-1 lg:hidden">
           <div className="flex items-center">
             <TooltipLabel label="Open menu">
@@ -172,7 +176,9 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         </header>
         {desktop && <h1 className="sr-only">{title}</h1>}
-        <div ref={mainRef} className="min-h-0 flex-1 overflow-y-auto">
+        {/* No fade on a view change: a kept view is ready the moment it's shown, and a
+            fade from nothing held it back ~170ms on every tab swap. */}
+        <div className="min-h-0 flex-1 overflow-y-auto">
           {desktop && (
             <div className="px-6 pt-6 empty:hidden">
               <ArmoryDiagnosticsGate />

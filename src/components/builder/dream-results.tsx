@@ -120,7 +120,7 @@ function FarmLine({
       {farm.exotic && exoticIcon ? (
         <ArmorThumb icon={exoticIcon} alt={farm.exoticName} size={48} gearTier={5} />
       ) : (
-        <span className="d2-brackets text-muted-foreground flex size-12 shrink-0 items-center justify-center bg-black/25 text-[10px] font-medium tracking-wider uppercase">
+        <span className="d2-brackets text-muted-foreground flex size-12 shrink-0 items-center justify-center bg-black/25 text-[10px] font-medium tracking-wider uppercase normal:normal-case normal:tracking-normal">
           {slot === "Class Item" ? "Class" : slot}
         </span>
       )}
@@ -452,14 +452,14 @@ export function DreamComparison({
                   <span className="opacity-40">
                     <PieceThumb piece={piece} size={40} />
                   </span>
-                  <span className="text-muted-foreground text-xs font-medium tracking-wider uppercase">
+                  <span className="text-muted-foreground text-xs font-medium tracking-wider uppercase normal:normal-case normal:tracking-normal">
                     Keep
                   </span>
                 </div>
               )}
               {v.kind === "replace" && (
                 <div className="border-positive/40 bg-positive/8 flex flex-col gap-2 border p-2">
-                  <span className="text-positive text-xs font-medium tracking-wider uppercase">
+                  <span className="text-positive text-xs font-medium tracking-wider uppercase normal:normal-case normal:tracking-normal">
                     Replace
                   </span>
                   <FarmLine farm={v.farm} icons={statIcons} exoticIcon={exoticIcon} />

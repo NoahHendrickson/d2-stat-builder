@@ -1,8 +1,9 @@
 "use client";
 
 import {
-  Fragment,
+  memo,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -19,7 +20,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useQueryClient } from "@tanstack/react-query";
-import { ClassGlyph } from "@/components/class-glyph";
+import { ClassGlyph, classGlyphWidth } from "@/components/class-glyph";
 import { PowerValue } from "@/components/power-value";
 import { StatGlyph } from "@/components/stat-glyph";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -55,8 +56,21 @@ import {
   VAULT_TAB_LABELS,
   VAULT_TABS,
   type GroupKey,
+  type ItemGroup,
   type VaultTab,
+  type ViewSettings,
 } from "@/lib/inventory/view-settings";
+import {
+  GROUP_GAP_X_PX,
+  MARKER_GAP_PX,
+  TILE_WIDTH_PX,
+  layoutVault,
+  lineOfItem,
+  linesBetween,
+  type VaultBucket,
+  type VaultSection,
+  type VaultTileLine,
+} from "@/lib/inventory/vault-layout";
 import { statIconsFromManifest } from "@/lib/manifest/stat-icons";
 import { useManifest } from "@/lib/manifest/use-manifest";
 import {
@@ -380,10 +394,6 @@ function CharacterGrid({ inventory }: { inventory: ManagerInventory }) {
   );
 }
 
-function GroupHeading({ children }: { children: string }) {
-  return <h2 className="d2-label pt-5 pb-1">{children}</h2>;
-}
-
 /**
  * The character's emblem nameplate with class and Power, pinned while the grid scrolls.
  * Dropping on it sends the item to that character (and pulls postmaster items).
@@ -410,7 +420,7 @@ function CharacterHeader({
               <button
                 type="button"
                 aria-label={`${name} options`}
-                className="relative block h-12 w-full overflow-hidden border border-foreground/15 text-left outline-none focus-visible:d2-tile-selected"
+                className="relative block h-12 w-full overflow-hidden border border-foreground/15 text-left outline-none focus-visible:d2-tile-selected normal:rounded-[12px]"
               />
             }
           >
@@ -545,7 +555,7 @@ function PostmasterCell({ items, capacity }: { items: InventoryItem[]; capacity:
   const nearlyFull = items.length >= capacity - 3;
   return (
     <div className="pt-2">
-      <div className="d2-card-frame flex flex-col gap-2 p-2">
+      <div className="d2-card-frame flex flex-col gap-2 p-2 normal:[--card-radius:10px]">
         <div className="flex items-baseline justify-between gap-2 text-xs">
           <h3 className="d2-label">Postmaster</h3>
           <span
@@ -558,9 +568,11 @@ function PostmasterCell({ items, capacity }: { items: InventoryItem[]; capacity:
           </span>
         </div>
         {items.length > 0 && (
-          <div className="grid grid-cols-[repeat(5,44px)] gap-1.5">
+          // Full-size tiles like every slot row (smaller ones clip the Power); four across
+          // keeps the card inside the column width the slot rows set.
+          <div className="grid grid-cols-[repeat(4,56px)] gap-1.5">
             {items.map((item) => (
-              <ItemTile key={item.key} item={item} size={44} />
+              <ItemTile key={item.key} item={item} />
             ))}
           </div>
         )}
@@ -569,18 +581,74 @@ function PostmasterCell({ items, capacity }: { items: InventoryItem[]; capacity:
   );
 }
 
-/** The vault; the whole pane is one drop target. */
-function VaultPane({ inventory }: { inventory: ManagerInventory }) {
-  const { vault, account } = inventory;
-  const other = vault[OTHER_BUCKET] ?? [];
-  const view = useViewSettings();
-  const { weaponGroup, armorGroup, vaultTab } = view;
-  // The Weapons and Armor tabs show just that section; All shows every one.
-  const groups =
-    vaultTab === "all" ? VAULT_GROUPS : VAULT_GROUPS.filter((g) => g.label === VAULT_TAB_LABELS[vaultTab]);
+/** Height the class sigil draws at beside a group of armor. */
+const CLASS_MARKER_PX = 32;
+
+/** Width of a group's marker (see GroupMarker), or 0 when its grouping draws none. */
+function markerWidth(groupBy: GroupKey, { items }: ItemGroup): number {
+  const item = items[0];
+  if (!item) return 0;
+  if (groupBy === "class") return classGlyphWidth(item.classType, CLASS_MARKER_PX);
+  // Only weapons have an ammo type; a type without a silhouette keeps its column.
+  return groupBy === "type" && item.ammoType !== undefined ? TILE_WIDTH_PX : 0;
+}
+
+/**
+ * The vault as sections of sorted, grouped buckets, ready to lay out: the tab's gear,
+ * then (on All) what has no row of its own and the account-wide inventories.
+ */
+function vaultSections(
+  { vault, account }: ManagerInventory,
+  compare: (a: InventoryItem, b: InventoryItem) => number,
+  { weaponGroup, armorGroup, vaultTab }: ViewSettings,
+): VaultSection[] {
+  const bucket = (
+    key: string,
+    label: string | undefined,
+    items: readonly InventoryItem[] | undefined,
+    groupBy: GroupKey,
+  ): VaultBucket => ({
+    key,
+    label,
+    groupBy,
+    groups: groupItems([...(items ?? [])].sort(compare), groupBy),
+    // No text labels: groups sit side by side, except types, which get a line each.
+    stacked: groupBy === "type",
+    markerWidth: (group) => markerWidth(groupBy, group),
+  });
   // Weapons and armor each follow their own grouping; the rest isn't grouped.
   const groupFor = (label: string): GroupKey =>
     label === "Weapons" ? weaponGroup : label === "Armor" ? armorGroup : "none";
+  // The Weapons and Armor tabs show just that section; All shows every one.
+  const shown =
+    vaultTab === "all" ? VAULT_GROUPS : VAULT_GROUPS.filter((g) => g.label === VAULT_TAB_LABELS[vaultTab]);
+  const sections: VaultSection[] = shown.map((group) => ({
+    heading: group.label,
+    buckets: group.rows.map((row) =>
+      bucket(String(row.hash), row.label, vault[row.hash], groupFor(group.label)),
+    ),
+  }));
+  if (vaultTab === "all") {
+    const other = vault[OTHER_BUCKET] ?? [];
+    if (other.length > 0) {
+      sections.push({ heading: "Other", buckets: [bucket("other", undefined, other, "none")] });
+    }
+    sections.push({
+      heading: "Account",
+      buckets: ACCOUNT_ROWS.map((row) =>
+        bucket(`account:${row.hash}`, row.label, account[row.hash], "none"),
+      ),
+    });
+  }
+  return sections;
+}
+
+/** The vault; the whole pane is one drop target. */
+function VaultPane({ inventory }: { inventory: ManagerInventory }) {
+  const view = useViewSettings();
+  const { vaultTab } = view;
+  const compare = useItemComparator();
+  const sections = useMemo(() => vaultSections(inventory, compare, view), [inventory, compare, view]);
 
   return (
     <DropZone to={{ kind: "vault" }} className="flex min-w-0 flex-1 flex-col xl:min-h-0">
@@ -600,38 +668,127 @@ function VaultPane({ inventory }: { inventory: ManagerInventory }) {
         </Tabs>
         <VaultHeader inventory={inventory} />
         <div className="d2-scroll flex flex-col pb-4 xl:min-h-0 xl:flex-1 xl:overflow-y-auto">
-          {groups.map((group) => (
-            <Fragment key={group.label}>
-              <GroupHeading>{group.label}</GroupHeading>
-              {group.rows.map((row) => (
-                <VaultRow
-                  key={row.hash}
-                  label={row.label}
-                  items={vault[row.hash] ?? []}
-                  groupBy={groupFor(group.label)}
-                />
-              ))}
-            </Fragment>
-          ))}
-          {vaultTab === "all" && (
-            <>
-              {other.length > 0 && (
-                <>
-                  <GroupHeading>Other</GroupHeading>
-                  <VaultRow items={other} groupBy="none" />
-                </>
-              )}
-              <GroupHeading>Account</GroupHeading>
-              {ACCOUNT_ROWS.map((row) => (
-                <VaultRow key={row.hash} label={row.label} items={account[row.hash] ?? []} groupBy="none" />
-              ))}
-            </>
-          )}
+          <VaultLines sections={sections} />
         </div>
       </section>
     </DropZone>
   );
 }
+
+/** Kept mounted past each edge of the viewport, so a scroll brings in tiles, not gaps. */
+const VAULT_OVERSCAN_PX = 400;
+/** The mounted stretch moves in steps this size: a scroll re-renders once a step, not once a frame. */
+const VAULT_STEP_PX = 200;
+
+/**
+ * The vault's headings and tiles, with only the lines near the viewport mounted. Every
+ * line's place comes from the layout (see vault-layout.ts), so the list keeps its full
+ * height and the scrollbar its size however little of it is drawn. The inventory itself
+ * is untouched: search, totals, and bulk actions still see every item.
+ */
+function VaultLines({ sections }: { sections: readonly VaultSection[] }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [width, setWidth] = useState(0);
+  /** The stretch of the list to keep mounted, as offsets from its top. */
+  const [span, setSpan] = useState<readonly [number, number]>([0, 0]);
+  const [focused, setFocused] = useState<string | null>(null);
+  const drag = useStoreValue(dragStore);
+  const layout = useMemo(() => layoutVault(sections, width), [sections, width]);
+
+  // Measured before paint (so the first frame already has its tiles), then on anything
+  // that moves the list against the viewport. Capture, because scroll events don't
+  // bubble and the scroller differs: the pane itself from xl up, the page below it.
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const measure = () => {
+      // Hidden along with its view (the router keeps recent views mounted): keep what it had.
+      if (el.clientWidth === 0) return;
+      setWidth(el.clientWidth);
+      const { top } = el.getBoundingClientRect();
+      const from = Math.floor((-top - VAULT_OVERSCAN_PX) / VAULT_STEP_PX) * VAULT_STEP_PX;
+      const to =
+        Math.ceil((window.innerHeight - top + VAULT_OVERSCAN_PX) / VAULT_STEP_PX) * VAULT_STEP_PX;
+      setSpan((prev) => (prev[0] === from && prev[1] === to ? prev : [from, to]));
+    };
+    measure();
+    const resize = new ResizeObserver(measure);
+    resize.observe(el);
+    document.addEventListener("scroll", measure, { capture: true, passive: true });
+    window.addEventListener("resize", measure);
+    return () => {
+      resize.disconnect();
+      document.removeEventListener("scroll", measure, { capture: true });
+      window.removeEventListener("resize", measure);
+    };
+  }, []);
+
+  const [start, end] = linesBetween(layout.lines, span[0], span[1]);
+  // Two lines stay mounted wherever the list is scrolled: the one last focused (a tile
+  // that opened the item panel is its anchor, and a focused tile shouldn't lose focus by
+  // scrolling) and the one a drag started on (a removed drag source never gets its dragend).
+  const kept = [
+    focused === null ? -1 : layout.lines.findIndex((line) => line.key === focused),
+    drag ? lineOfItem(layout.lines, drag.item.key) : -1,
+  ].filter((i) => i >= 0 && (i < start || i >= end));
+  const shown = [
+    ...new Set([...kept, ...Array.from({ length: end - start }, (_, i) => start + i)]),
+  ].sort((a, b) => a - b);
+
+  return (
+    <div
+      ref={ref}
+      className="relative shrink-0"
+      style={{ height: layout.height }}
+      onFocus={(e) =>
+        setFocused((e.target as HTMLElement).closest<HTMLElement>("[data-line]")?.dataset.line ?? null)
+      }
+    >
+      {shown.map((i) => {
+        const line = layout.lines[i]!;
+        return line.kind === "heading" ? (
+          <h2 key={line.key} className="d2-label absolute inset-x-0 pt-5 pb-1" style={{ top: line.top }}>
+            {line.label}
+          </h2>
+        ) : (
+          <VaultLineRow key={line.key} line={line} />
+        );
+      })}
+    </div>
+  );
+}
+
+/** One line of vault tiles: a group's (or a few small groups'), each after its marker's column. */
+const VaultLineRow = memo(function VaultLineRow({ line }: { line: VaultTileLine }) {
+  return (
+    <div
+      role="group"
+      aria-label={line.label}
+      data-line={line.key}
+      className="absolute inset-x-0 flex items-start"
+      style={{ top: line.top, paddingTop: line.padTop, columnGap: GROUP_GAP_X_PX }}
+    >
+      {line.cells.map((cell) => (
+        <div key={cell.key} className="flex items-start">
+          {cell.markerWidth > 0 && (
+            // Centred on the tile's icon (56px), above its footer bar.
+            <span
+              className="flex h-14 shrink-0 items-center"
+              style={{ width: cell.markerWidth, marginRight: MARKER_GAP_PX }}
+            >
+              {cell.marker && <GroupMarker groupBy={line.groupBy} item={cell.marker} />}
+            </span>
+          )}
+          <div className="flex gap-1.5">
+            {cell.items.map((item) => (
+              <ItemTile key={item.key} item={item} />
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+});
 
 /**
  * Vault space (total, and per kind of item), the account-wide inventories' space, and
@@ -710,66 +867,25 @@ function VaultHeader({ inventory }: { inventory: ManagerInventory }) {
   );
 }
 
-/** One vault row, sorted by the view settings and split into groups. */
-function VaultRow({ label, items, groupBy }: { label?: string; items: InventoryItem[]; groupBy: GroupKey }) {
-  const compare = useItemComparator();
-  const groups = useMemo(
-    () => groupItems([...items].sort(compare), groupBy),
-    [items, compare, groupBy],
-  );
-  if (items.length === 0) return null;
-  // No text labels: groups sit side by side, except types, which get a line each.
-  return (
-    <div
-      role="group"
-      aria-label={label}
-      className={cn(
-        "flex items-start py-2.5 [content-visibility:auto]",
-        groupBy === "type" ? "flex-col gap-4" : "flex-wrap gap-x-5 gap-y-4",
-      )}
-    >
-      {groups.map((group) => (
-        <div key={group.key} className="flex max-w-full items-start gap-3">
-          <GroupMarker groupBy={groupBy} item={group.items[0]!} />
-          <div className="flex flex-wrap gap-1.5">
-            {group.items.map((item) => (
-              <ItemTile key={item.key} item={item} />
-            ))}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
 /**
- * What a vault group is, as a picture beside its tiles: the weapon type's silhouette
- * or the class sigil. Nothing for other groupings, armor types, or any-class items.
+ * What a vault group is, as a picture in the column beside its tiles: the weapon type's
+ * silhouette or the class sigil. Other groupings, armor types, and any-class items have
+ * no column (see markerWidth).
  */
 function GroupMarker({ groupBy, item }: { groupBy: GroupKey; item: InventoryItem }) {
   if (groupBy === "class") {
-    // Centred on the tile's icon (56px), above its footer bar.
-    return item.classType === 3 ? null : (
-      <span className="flex h-14 shrink-0 items-center">
-        <ClassGlyph classType={item.classType} className="text-muted-foreground h-8 w-auto" />
-      </span>
-    );
+    return <ClassGlyph classType={item.classType} className="text-muted-foreground h-8 w-auto" />;
   }
-  // Only weapons have an ammo type; a type without a silhouette keeps its column.
-  if (groupBy !== "type" || item.ammoType === undefined) return null;
-  const icon = weaponTypeIcon(item.typeName, item.ammoType);
-  const mask = icon && `url("${icon}") left center / contain no-repeat`;
+  const icon = groupBy === "type" ? weaponTypeIcon(item.typeName, item.ammoType) : undefined;
+  if (!icon) return null;
+  const mask = `url("${icon}") left center / contain no-repeat`;
   return (
-    <span className="flex h-14 w-14 shrink-0 items-center">
-      {mask && (
-        <span
-          role="img"
-          aria-label={item.typeName}
-          title={item.typeName}
-          className="bg-muted-foreground h-5 w-full"
-          style={{ mask, WebkitMask: mask }}
-        />
-      )}
-    </span>
+    <span
+      role="img"
+      aria-label={item.typeName}
+      title={item.typeName}
+      className="bg-muted-foreground h-5 w-full"
+      style={{ mask, WebkitMask: mask }}
+    />
   );
 }

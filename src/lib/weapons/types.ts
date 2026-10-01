@@ -175,6 +175,13 @@ export interface AmmoTypeRef {
   icon?: string;
 }
 
+export interface ChampionTypeRef {
+  /** "Barrier" | "Overload" | "Unstoppable", as `WeaponSummary.champions` names them. */
+  name: string;
+  /** Bungie icon path from DestinyBreakerTypeDefinition; prefix with https://www.bungie.net to render. */
+  icon?: string;
+}
+
 export interface WeaponIndex {
   /** Bungie manifest version this index was built from. */
   version: string;
@@ -190,6 +197,8 @@ export interface WeaponIndex {
   weaponTypes?: WeaponTypeRef[];
   /** Ammo type catalog from DestinyIconDefinition HUD icons (Primary / Special / Heavy). */
   ammoTypes?: AmmoTypeRef[];
+  /** Champion catalog from DestinyBreakerTypeDefinition (anti-champion icons). */
+  championTypes?: ChampionTypeRef[];
   /** Stat group hash → stat name → curve; stats without a curve display their investment value. */
   statCurves?: Record<string, Record<string, StatCurve>>;
 }

@@ -152,7 +152,7 @@ export const AppSidebar = memo(function AppSidebar({
         <span
           aria-hidden
           className={cn(
-            "bg-foreground/8 pointer-events-none absolute top-0 h-9 transition-[transform,opacity] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none",
+            "bg-foreground/8 normal:bg-foreground/6 normal:rounded-[8px] pointer-events-none absolute top-0 h-9 transition-[transform,opacity] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none",
             collapsed ? "left-2.5 w-9" : "inset-x-2",
             activeIndex < 0 && "opacity-0",
           )}
@@ -181,7 +181,7 @@ export const AppSidebar = memo(function AppSidebar({
 
 /** Shared row look for nav items and links: square, 36px (the nav list draws the active highlight). */
 const rowClass =
-  "group/row relative flex h-9 items-center gap-3 rounded-none text-sm outline-none transition-colors focus-visible:ring-1 focus-visible:ring-outline-strong";
+  "group/row relative flex h-9 items-center gap-3 rounded-none normal:rounded-[8px] text-sm outline-none transition-colors focus-visible:ring-1 focus-visible:ring-outline-strong";
 
 function NavItem({
   href,
@@ -288,7 +288,7 @@ function LinksSection({ collapsed }: { collapsed: boolean }) {
         <button
           type="button"
           onClick={() => setDialog({ kind: "add" })}
-          className="text-muted-foreground hover:text-foreground mx-2 flex items-start gap-3 rounded-none px-2.5 py-2 text-left text-sm leading-5 outline-none transition-colors hover:bg-foreground/5 focus-visible:ring-1 focus-visible:ring-outline-strong"
+          className="text-muted-foreground hover:text-foreground mx-2 flex items-start gap-3 rounded-none normal:rounded-[8px] px-2.5 py-2 text-left text-sm leading-5 outline-none transition-colors hover:bg-foreground/5 focus-visible:ring-1 focus-visible:ring-outline-strong"
         >
           <HugeiconsIcon icon={Add01Icon} className="mt-0.5 size-4 shrink-0" aria-hidden />
           <span>Pin a spreadsheet or site you use alongside the app</span>

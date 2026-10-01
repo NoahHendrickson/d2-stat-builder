@@ -14,6 +14,7 @@ import { reconcileAdeptTierPools, reconcileCraftableTwins } from "./weapon-varia
 import { GENERIC_WEAPON_TYPE_ICONS } from "./weapon-type-icon-paths";
 import type {
   AmmoTypeRef,
+  ChampionTypeRef,
   DamageTypeRef,
   PerkColumn,
   PerkRef,
@@ -283,6 +284,17 @@ export function buildDamageTypeCatalog(defs: ManifestDefs): DamageTypeRef[] {
   return damageTypes;
 }
 
+/** Build the champion catalog (Barrier, Overload, Unstoppable) for anti-champion icons. */
+export function buildChampionTypeCatalog(defs: ManifestDefs): ChampionTypeRef[] {
+  const refs: ChampionTypeRef[] = [];
+  for (const breaker of Object.values(defs.DestinyBreakerTypeDefinition ?? {})) {
+    const name = BREAKER_CHAMPIONS[breaker.enumValue];
+    if (!name || breaker.redacted) continue;
+    refs.push({ name, icon: breaker.displayProperties?.icon || undefined });
+  }
+  return refs.sort((a, b) => a.name.localeCompare(b.name));
+}
+
 /** Build compact stat-group definitions referenced by weapons. */
 export function buildStatGroupCatalog(
   defs: ManifestDefs,
@@ -513,6 +525,7 @@ export function buildWeaponIndex(
       damageTypes: buildDamageTypeCatalog(defs),
       weaponTypes: buildWeaponTypeCatalog(defs),
       ammoTypes,
+      championTypes: buildChampionTypeCatalog(defs),
       statCurves: buildStatCurves(
         defs,
         new Set(index.weapons.flatMap((w) => (w.statGroupHash != null ? [w.statGroupHash] : []))),

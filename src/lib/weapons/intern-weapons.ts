@@ -219,6 +219,7 @@ export function normalizeWeaponIndex(raw: {
   damageTypes?: WeaponIndex["damageTypes"];
   weaponTypes?: WeaponIndex["weaponTypes"];
   ammoTypes?: WeaponIndex["ammoTypes"];
+  championTypes?: WeaponIndex["championTypes"];
   statCurves?: WeaponIndex["statCurves"];
   perks?: PerkRef[];
   weaponsByPerkName?: Record<string, number[]>;
@@ -234,6 +235,7 @@ export function normalizeWeaponIndex(raw: {
       damageTypes: raw.damageTypes ?? [],
       weaponTypes: raw.weaponTypes ?? [],
       ammoTypes: raw.ammoTypes ?? [],
+      championTypes: raw.championTypes ?? [],
       statCurves: raw.statCurves,
     };
   }
@@ -251,6 +253,7 @@ export function normalizeWeaponIndex(raw: {
       damageTypes: raw.damageTypes ?? [],
       weaponTypes: raw.weaponTypes ?? [],
       ammoTypes: raw.ammoTypes ?? [],
+      championTypes: raw.championTypes ?? [],
       statCurves: raw.statCurves,
     };
   }
@@ -261,6 +264,7 @@ export function normalizeWeaponIndex(raw: {
     damageTypes: raw.damageTypes ?? [],
     weaponTypes: raw.weaponTypes ?? [],
     ammoTypes: raw.ammoTypes ?? [],
+    championTypes: raw.championTypes ?? [],
     statCurves: raw.statCurves,
   };
 }

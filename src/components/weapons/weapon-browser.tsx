@@ -2,10 +2,10 @@
 
 import Image from "next/image";
 import { useSearchParams } from "next/navigation";
-import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { ArrowUp02Icon, CrosshairIcon } from "@hugeicons/core-free-icons";
+import { ArrowUpDownIcon } from "@hugeicons/core-free-icons";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -14,12 +14,14 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Tooltip,
   TooltipContent,
@@ -43,9 +45,12 @@ import { SORTS, readSearchState } from "@/lib/weapons/search-state";
 import type { WeaponCatalog } from "@/lib/weapons/catalog";
 import type {
   AmmoTypeRef,
+  ChampionTypeRef,
   DamageTypeRef,
+  PerkRef,
   WeaponSummary,
 } from "@/lib/weapons/types";
+import { weaponTypeIcon } from "@/lib/weapons/weapon-type-icon-paths";
 import { useMinWidth } from "@/lib/use-min-width";
 import { cn } from "@/lib/utils";
 
@@ -56,13 +61,15 @@ const SPLIT_MIN_PX = 1024;
 function WeaponIcon({
   weapon,
   size = 44,
+  className,
 }: {
   weapon: WeaponSummary;
   size?: number;
+  className?: string;
 }) {
   return (
     <span
-      className="relative block shrink-0 bg-foreground/5"
+      className={cn("relative block shrink-0 bg-foreground/5", className)}
       style={{ width: size, height: size }}
     >
       {weapon.icon && (
@@ -140,12 +147,68 @@ function AmmoIcon({
       aria-label={ammo}
       title={ammo}
       className={cn(
-        "-my-1 inline-block size-6 shrink-0 bg-current",
+        "-my-1.5 inline-block size-[30px] shrink-0 bg-current",
         AMMO_COLOR[ammo],
       )}
       style={{ mask, WebkitMask: mask }}
     />
   );
+}
+
+/** The anti-champion glyph from the catalog; Bungie's is white, so it inverts on light. */
+function ChampionIcon({
+  champion,
+  championTypes,
+}: {
+  champion: string;
+  championTypes: readonly ChampionTypeRef[] | undefined;
+}) {
+  const icon = championTypes?.find((type) => type.name === champion)?.icon;
+  if (!icon) return null;
+  return (
+    <Image
+      className="shrink-0 invert dark:invert-0"
+      src={`https://www.bungie.net${icon}`}
+      alt={`Anti-${champion}`}
+      title={`Anti-${champion}`}
+      width={18}
+      height={18}
+      unoptimized
+    />
+  );
+}
+
+/** The weapon type's silhouette, as a mask so it takes the text colour. */
+function TypeSilhouette({ weapon }: { weapon: WeaponSummary }) {
+  const icon = weaponTypeIcon(weapon.type, AMMO_TYPE[weapon.ammo]);
+  // A type without a silhouette keeps its slot, so the icons after it stay in line.
+  if (!icon) return <span className="w-11 shrink-0" />;
+  const mask = `url("${icon}") center / contain no-repeat`;
+  return (
+    <span
+      role="img"
+      aria-label={weapon.type}
+      title={weapon.type}
+      className="h-3 w-11 shrink-0 bg-foreground"
+      style={{ mask, WebkitMask: mask }}
+    />
+  );
+}
+
+/** Ammo names as DestinyAmmunitionType, for the heavy grenade launcher silhouette. */
+const AMMO_TYPE: Record<string, number> = { Primary: 1, Special: 2, Heavy: 3 };
+
+/** The icon of the weapon's frame (its intrinsic perk), looked up by the frame's name. */
+function frameIcon(weapon: WeaponSummary, perks: readonly PerkRef[]): string | undefined {
+  if (!weapon.frame) return undefined;
+  for (const column of weapon.columns) {
+    if (column.kind !== "Intrinsic") continue;
+    for (const index of column.perkIndices) {
+      const perk = perks[index];
+      if (perk?.name === weapon.frame) return perk.icon;
+    }
+  }
+  return undefined;
 }
 
 /** A perk's place in the grid: which column, and its catalog index. */
@@ -154,7 +217,12 @@ type PerkPick = { column: number; perk: number };
 /** Masterworks pick like their own column; no real column index is negative. */
 const MASTERWORK = -1;
 
-function WeaponDetails({
+/**
+ * Memoized: the list beside it re-renders this page as it scrolls (the virtualizer
+ * lives in the same parent), and the details would otherwise recompute their stats and
+ * rebuild every perk tile each time for a weapon that hasn't changed.
+ */
+const WeaponDetails = memo(function WeaponDetails({
   weapon,
   catalog,
   inDialog = false,
@@ -194,10 +262,10 @@ function WeaponDetails({
     if (!perk) return null;
     const selected = picked[columnKey] === index;
     const label = perk.currentlyCanRoll ? perk.name : `${perk.name} (retired)`;
-    // light.gg's perk grid: the icon on a tile framed by the app's line;
-    // picking it fills the tile blue, under the line too, so the line reads
-    // on the blue. A gold arrow tucked into the top-left corner marks perks
-    // with an enhanced tier. The name lives in the tooltip.
+    // Drawn like the Items popover's perk grid (PerkColumnView), at the full size of
+    // its Figma cell: a round cell with a hairline, filled blue once picked, and
+    // the enhanced arrow in the top-left for perks with an enhanced tier. The
+    // name lives in the tooltip.
     const content = (
       <>
         {perk.icon && (
@@ -210,10 +278,12 @@ function WeaponDetails({
           />
         )}
         {perk.alternateHashes?.length ? (
-          <HugeiconsIcon icon={ArrowUp02Icon}
-            aria-hidden
-            strokeWidth={2}
-            className="absolute top-1 left-1 size-2.5 text-exotic-line"
+          <Image
+            src="/manager/perk-enhanced.svg"
+            alt=""
+            width={10}
+            height={10}
+            className="absolute top-1 left-1"
           />
         ) : null}
       </>
@@ -239,10 +309,12 @@ function WeaponDetails({
                 )
               }
               className={cn(
-                "d2-line relative flex size-14 shrink-0 items-center justify-center [--line-alpha:1.6] hover:[--line-alpha:2.6] focus-visible:outline-1 focus-visible:outline-offset-2",
+                "relative flex size-14 shrink-0 items-center justify-center border border-foreground/12 outline-none focus-visible:d2-tile-selected",
+                // Masterwork art is square, so its cell stays square.
+                columnKey !== MASTERWORK && "rounded-full",
                 selected
-                  ? "bg-[#3b6ea5] [--line-alpha:2.6]"
-                  : "hover:bg-foreground/10",
+                  ? "bg-[#305f8e]"
+                  : "bg-foreground/4 hover:bg-foreground/10",
                 !perk.currentlyCanRoll && "opacity-40",
               )}
             />
@@ -336,7 +408,7 @@ function WeaponDetails({
       </div>
     </>
   );
-}
+});
 
 export function WeaponBrowser() {
   const query = useWeaponCatalog();
@@ -380,7 +452,7 @@ export function WeaponBrowser() {
   const virtualizer = useVirtualizer({
     count: results.length,
     getScrollElement: () => scrollRef.current,
-    estimateSize: () => 76,
+    estimateSize: () => 50,
     overscan: 8,
     getItemKey: (index) => results[index].hash,
   });
@@ -409,7 +481,8 @@ export function WeaponBrowser() {
     <main className="flex h-full min-h-[480px] w-full gap-6 p-4 md:p-6">
       <div className="flex min-w-0 flex-1 flex-col gap-4 lg:w-[26rem] lg:flex-none xl:w-1/2 2xl:w-[44rem]">
         <h1 className="flex shrink-0 items-center gap-2 text-lg font-medium">
-          <HugeiconsIcon icon={CrosshairIcon} className="size-5 text-muted-foreground" /> Weapon search
+          <Image src="/weapon-search-icon.png" alt="" width={28} height={28} className="size-7" />
+          Weapon search
         </h1>
 
         {/* Full-bleed band: from the sidebar's edge to the details divider (the page's
@@ -430,45 +503,56 @@ export function WeaponBrowser() {
             onClear={() => navigate(new URLSearchParams(), true)}
             damageTypes={data?.damageTypes}
             ammoTypes={data?.ammoTypes}
-          />
-        </div>
-
-        <div className="flex shrink-0 items-center gap-3 border-b border-foreground/8 pb-3 text-xs">
-          <span
-            role="status"
-            className="text-sm tabular-nums text-foreground"
-            title={
-              data
-                ? `Catalog updated ${data.generatedAt.slice(0, 10)}`
-                : undefined
+            // The result count and sort ride at the end of the bar (Figma 120:127).
+            trailing={
+              <>
+                <span
+                  role="status"
+                  className="ml-auto shrink-0 text-sm tabular-nums"
+                  title={
+                    data
+                      ? `${results.length.toLocaleString()} weapons\nCatalog updated ${data.generatedAt.slice(0, 10)}`
+                      : undefined
+                  }
+                >
+                  {query.isPending ? (
+                    "Loading…"
+                  ) : state !== deferred ? (
+                    <span className="text-muted-foreground">Updating…</span>
+                  ) : (
+                    <>
+                      {results.length.toLocaleString()}
+                      <span className="sr-only"> weapons</span>
+                    </>
+                  )}
+                </span>
+                <DropdownMenu>
+                  <DropdownMenuTrigger
+                    className="flex size-7 shrink-0 items-center justify-center text-muted-foreground outline-none hover:text-foreground focus-visible:outline-1 data-popup-open:text-foreground"
+                    aria-label={`Sort weapons: ${SORT_ITEMS[state.sort]}`}
+                    title={`Sort: ${SORT_ITEMS[state.sort]}`}
+                  >
+                    <HugeiconsIcon icon={ArrowUpDownIcon} className="size-4" />
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-44">
+                    <DropdownMenuGroup>
+                      <DropdownMenuLabel>Sort by</DropdownMenuLabel>
+                    </DropdownMenuGroup>
+                    <DropdownMenuRadioGroup
+                      value={state.sort}
+                      onValueChange={(value) => update("sort", [value])}
+                    >
+                      {SORTS.map(([value, label]) => (
+                        <DropdownMenuRadioItem key={value} value={value}>
+                          {label}
+                        </DropdownMenuRadioItem>
+                      ))}
+                    </DropdownMenuRadioGroup>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </>
             }
-          >
-            {query.isPending
-              ? "Loading weapons…"
-              : `${results.length.toLocaleString()} weapons`}
-            {state !== deferred && (
-              <span className="ml-3 text-muted-foreground">Updating…</span>
-            )}
-          </span>
-          <Select
-            items={SORT_ITEMS}
-            value={state.sort}
-            onValueChange={(value) => value && update("sort", [value])}
-          >
-            <SelectTrigger
-              className="ml-auto min-w-36"
-              aria-label="Sort weapons"
-            >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent alignItemWithTrigger={false}>
-              {SORTS.map(([value, label]) => (
-                <SelectItem key={value} value={value}>
-                  {label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          />
         </div>
 
         {query.isError ? (
@@ -482,7 +566,9 @@ export function WeaponBrowser() {
           <div
             ref={scrollRef}
             className={cn(
-              "min-h-40 flex-1 overflow-y-auto",
+              // Out into the page padding by the row's padding and border, so the
+              // thumbnails line up with the heading and the search bar's icon.
+              "-mx-[9px] min-h-40 flex-1 overflow-y-auto",
               state !== deferred && "opacity-60",
             )}
             aria-busy={query.isPending || state !== deferred}
@@ -505,6 +591,7 @@ export function WeaponBrowser() {
                 const weapon = results[row.index];
                 const poolLabel = data?.poolLabel(weapon.hash);
                 const current = weapon.hash === shown?.hash;
+                const frame = data && frameIcon(weapon, data.perks);
                 return (
                   <div
                     key={row.key}
@@ -517,11 +604,13 @@ export function WeaponBrowser() {
                       transform: `translateY(${row.start}px)`,
                     }}
                   >
+                    {/* One compact line (Figma 120:146): icon and name, the type's
+                        silhouette, then element, frame, ammo, and champion icons. */}
                     <button
                       type="button"
                       className={cn(
-                        "flex h-full w-full items-center gap-3 border-b border-foreground/5 px-2 text-left outline-none hover:bg-foreground/5 focus-visible:bg-foreground/8",
-                        current && "bg-foreground/8",
+                        "flex h-full w-full items-center gap-3 border border-transparent px-2 text-left outline-none hover:bg-foreground/5 focus-visible:bg-foreground/8 normal:rounded-[10px]",
+                        current && "border-foreground/16 bg-foreground/4",
                       )}
                       onClick={() => {
                         setPicked(weapon);
@@ -530,44 +619,59 @@ export function WeaponBrowser() {
                       aria-current={current || undefined}
                       aria-label={`View ${weapon.name} perks`}
                     >
-                      <WeaponIcon weapon={weapon} />
-                      <div className="min-w-0 flex-1">
-                        <p
-                          className={cn(
-                            "truncate text-sm font-medium",
-                            weapon.rarity === "Exotic" && "text-amber-300",
+                      <WeaponIcon
+                        weapon={weapon}
+                        size={32}
+                        className="outline-1 -outline-offset-1 outline-foreground/24"
+                      />
+                      <p
+                        className={cn(
+                          // A set width (shrinking alike on every row) so the icons after it line up.
+                          "min-w-0 shrink basis-60 truncate text-sm font-medium",
+                          weapon.rarity === "Exotic" && "text-amber-300",
+                        )}
+                      >
+                        {weapon.name}
+                        {poolLabel && (
+                          <span className="ml-1.5 font-normal text-muted-foreground">
+                            {poolLabel}
+                          </span>
+                        )}
+                      </p>
+                      <TypeSilhouette weapon={weapon} />
+                      <span className="flex shrink-0 items-center gap-4">
+                        <ElementIcon
+                          element={weapon.element}
+                          damageTypes={data?.damageTypes}
+                          size={18}
+                        />
+                        {/* Kept as an empty slot when missing, so the columns hold. */}
+                        <span className="flex size-5 shrink-0">
+                          {frame && (
+                            <Image
+                              src={`https://www.bungie.net${frame}`}
+                              alt={weapon.frame ?? ""}
+                              title={weapon.frame}
+                              width={20}
+                              height={20}
+                              unoptimized
+                            />
                           )}
-                        >
-                          {weapon.name}
-                          {poolLabel && (
-                            <>
-                              {" "}
-                              <span className="ml-1 font-normal text-muted-foreground">
-                                {poolLabel}
-                              </span>
-                            </>
-                          )}
-                        </p>
-                        <p className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
-                          <ElementIcon
-                            element={weapon.element}
-                            damageTypes={data?.damageTypes}
-                          />
-                          <AmmoIcon
-                            ammo={weapon.ammo}
-                            ammoTypes={data?.ammoTypes}
-                          />
-                          <span className="truncate">{weapon.type}</span>
-                          {weapon.frame && (
-                            <span className="ml-1.5 truncate">
-                              {weapon.frame}
-                            </span>
-                          )}
-                          {weapon.craftable && (
-                            <span className="ml-1.5 shrink-0">Craftable</span>
-                          )}
-                        </p>
-                      </div>
+                        </span>
+                        <AmmoIcon
+                          ammo={weapon.ammo}
+                          ammoTypes={data?.ammoTypes}
+                        />
+                        <span className="flex items-center gap-1.5">
+                          {weapon.champions?.map((champion) => (
+                            <ChampionIcon
+                              key={champion}
+                              champion={champion}
+                              championTypes={data?.championTypes}
+                            />
+                          ))}
+                        </span>
+                      </span>
                     </button>
                   </div>
                 );

@@ -56,7 +56,7 @@ function StepButton({
       title={label}
       disabled={disabled}
       onClick={onClick}
-      className="text-muted-foreground hover:text-foreground hover:bg-foreground/8 focus-visible:ring-outline-strong flex size-5 cursor-pointer items-center justify-center border border-foreground/12 outline-none focus-visible:ring-1 disabled:cursor-not-allowed disabled:opacity-40 [&_svg]:size-3"
+      className="text-muted-foreground hover:text-foreground hover:bg-foreground/8 focus-visible:ring-outline-strong flex size-5 cursor-pointer items-center justify-center border border-foreground/12 outline-none normal:rounded-[6px] focus-visible:ring-1 disabled:cursor-not-allowed disabled:opacity-40 [&_svg]:size-3"
     >
       {children}
     </button>
@@ -163,7 +163,7 @@ export const StatTargetRow = memo(function StatTargetRow({
                   : 0,
               );
             }}
-            className="h-5 w-9 border-foreground/12 bg-foreground/8 px-1 text-center text-[11px] leading-5 font-medium tabular-nums [appearance:textfield] md:text-[11px] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+            className="h-5 w-9 border-foreground/12 bg-foreground/8 px-1 text-center text-[11px] leading-5 font-medium tabular-nums normal:h-6 normal:w-10 normal:rounded-[6px] normal:bg-foreground/4 normal:text-xs normal:font-normal md:normal:text-xs [appearance:textfield] md:text-[11px] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
           />
           {stepper && (
             <StepButton
@@ -220,7 +220,7 @@ export const StatTargetRow = memo(function StatTargetRow({
                   }}
                   className={cn(
                     // Centered under the thumb (sliderValueLeft is the thumb's center).
-                    "absolute top-0 -translate-x-1/2 cursor-pointer text-[10px] leading-4 font-medium tracking-wider uppercase tabular-nums transition-colors after:absolute after:-inset-x-2 after:-inset-y-1.5 after:content-[''] focus-visible:outline-1 focus-visible:outline-outline-strong",
+                    "absolute top-0 -translate-x-1/2 cursor-pointer text-[10px] leading-4 font-medium tracking-wider uppercase tabular-nums normal:text-xs normal:font-normal normal:tracking-normal normal:normal-case transition-colors after:absolute after:-inset-x-2 after:-inset-y-1.5 after:content-[''] focus-visible:outline-1 focus-visible:outline-outline-strong",
                     value === tickValue
                       ? "text-foreground"
                       : "text-muted-foreground hover:text-foreground",
