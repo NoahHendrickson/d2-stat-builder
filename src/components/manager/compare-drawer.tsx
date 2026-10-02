@@ -34,6 +34,7 @@ import { useManifest } from "@/lib/manifest/use-manifest";
 import { cn } from "@/lib/utils";
 import { ItemTile } from "./item-tile";
 import { PerkFinder } from "./perk-finder";
+import { TagButtons } from "./tag-buttons";
 
 /** Stats where less is better (DIM highlights the lowest). */
 const LOWER_IS_BETTER = new Set(["Charge Time", "Draw Time"]);
@@ -352,24 +353,26 @@ function CopyHeader({
   inventory: ManagerInventory;
   status: PerkStatus | undefined;
 }) {
+  const dim = status?.matched === 0;
   return (
-    <div
-      className={cn(
-        "border-foreground/8 flex items-start gap-2.5 border-b px-3 pb-3",
-        status?.matched === 0 && "opacity-40",
-      )}
-    >
-      <ItemTile item={copy.item} />
-      <div className="flex min-w-0 flex-col gap-1 pt-0.5">
-        <span className="truncate">{placeLabel(inventory, copy.place)}</span>
-        {status && (
-          <span className="flex items-center gap-1.5 text-xs">
-            {status.keep && <span className="bg-positive px-1.5 py-px font-medium text-white">Keep</span>}
-            <span className="text-muted-foreground tabular-nums">
-              {status.matched}/{status.total} perks
+    <div className="border-foreground/8 flex flex-col gap-2 border-b px-3 pb-3">
+      <div className={cn("flex items-start gap-2.5 transition-opacity", dim && "opacity-40")}>
+        <ItemTile item={copy.item} />
+        <div className="flex min-w-0 flex-col gap-1 pt-0.5">
+          <span className="truncate">{placeLabel(inventory, copy.place)}</span>
+          {status && (
+            <span className="flex items-center gap-1.5 text-xs">
+              {status.keep && <span className="bg-positive px-1.5 py-px font-medium text-white">Keep</span>}
+              <span className="text-muted-foreground tabular-nums">
+                {status.matched}/{status.total} perks
+              </span>
             </span>
-          </span>
-        )}
+          )}
+        </div>
+      </div>
+      {/* Not dimmed: the copies the picks leave out are the ones to tag. */}
+      <div className="flex gap-1">
+        <TagButtons instanceId={copy.item.instanceId!} />
       </div>
     </div>
   );

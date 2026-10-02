@@ -90,6 +90,25 @@ export async function fetchProfile(): Promise<DestinyProfileResponse> {
   return (await res.json()) as DestinyProfileResponse;
 }
 
+/**
+ * The profile to keep after a fetch: `next`, unless Bungie minted it no later than the
+ * one already held. Bungie serves profiles from a cache, so a refetch can come back
+ * older than what's on screen (and roll it back); one minted at the same moment is the
+ * same snapshot, and keeping the old object spares everything derived from it.
+ */
+export function newerProfile(
+  prev: DestinyProfileResponse | undefined,
+  next: DestinyProfileResponse,
+): DestinyProfileResponse {
+  if (!prev) return next;
+  // A missing or unreadable timestamp is NaN, which never compares as older.
+  const notNewer = (key: "responseMintedTimestamp" | "secondaryComponentsMintedTimestamp") =>
+    Date.parse(next[key]) <= Date.parse(prev[key]);
+  return notNewer("responseMintedTimestamp") && notNewer("secondaryComponentsMintedTimestamp")
+    ? prev
+    : next;
+}
+
 const derived = new WeakMap<DestinyProfileResponse, WeakMap<Manifest, Armory>>();
 
 /**

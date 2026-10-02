@@ -11,6 +11,12 @@ import { moveOps } from "./move-queue";
 import { applyMoves, settledOps } from "./moves";
 
 /**
+ * How often the manager refetches the profile while it's on screen: items picked up or
+ * moved in game show up within this long (DIM refreshes as often).
+ */
+const REFRESH_MS = 30_000;
+
+/**
  * The whole account laid out for the manager: characters, vault, postmaster, and
  * account-wide inventories, with the moves and lock changes still in flight (or not yet
  * reflected by Bungie's profile) applied on top. Derived from the same profile query
@@ -18,7 +24,7 @@ import { applyMoves, settledOps } from "./moves";
  * notes store at the signed-in account.
  */
 export function useInventory() {
-  const { query: profile, membershipId } = useProfile();
+  const { query: profile, membershipId } = useProfile({ refreshMs: REFRESH_MS });
   const manifestStatus = useManifest();
   const manifest = manifestStatus.state === "ready" ? manifestStatus.manifest : undefined;
   const base = useMemo<ManagerInventory | undefined>(

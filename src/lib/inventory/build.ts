@@ -57,6 +57,8 @@ export interface InventoryItem {
   locked: boolean;
   masterworked: boolean;
   crafted: boolean;
+  /** Has a crafting pattern, crafted or not (only set when true). */
+  craftable?: boolean;
   /** Enhanced by the player (the game's diamond overlay). */
   enhanced: boolean;
   /** Deepsight resonance (ItemState.HighlightedObjective): extract its pattern. */
@@ -276,6 +278,7 @@ function buildItem(
     locked: (state & ITEM_STATE_LOCKED) !== 0,
     masterworked: (state & ITEM_STATE_MASTERWORK) !== 0,
     crafted: (state & ITEM_STATE_CRAFTED) !== 0,
+    ...(def?.inventory?.recipeItemHash ? { craftable: true } : {}),
     enhanced: (state & ITEM_STATE_ENHANCED) !== 0,
     deepsight: (state & ITEM_STATE_HIGHLIGHTED_OBJECTIVE) !== 0,
     transferStatus: item.transferStatus ?? 0,

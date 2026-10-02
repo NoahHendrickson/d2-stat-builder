@@ -79,6 +79,11 @@ describe("projectItemDef", () => {
     expect(Object.keys(projectItemDef(full)).sort()).toEqual([...ITEM_DEF_KEYS].sort());
   });
 
+  it("keeps a weapon's crafting recipe hash", () => {
+    const weapon = { ...armor, itemType: 3, inventory: { ...armor.inventory, recipeItemHash: 7 } } as DestinyInventoryItemDefinition;
+    expect(projectItemDef(weapon).inventory).toEqual({ bucketTypeHash: 3448274439, tierType: 5, recipeItemHash: 7 });
+  });
+
   it("keeps inline socket plug lists only on subclass items", () => {
     const subclass = { ...armor, itemType: 16 } as DestinyInventoryItemDefinition;
     const out = projectItemDef(subclass);

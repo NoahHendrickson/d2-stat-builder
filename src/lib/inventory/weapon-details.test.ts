@@ -84,3 +84,29 @@ test("lists the stats the game shows, in its order", () => {
     "Rounds Per Minute 72",
   ]);
 });
+
+test("keeps a crossbow's rail and bolt columns", () => {
+  const crossbowItems: Record<number, object> = {
+    ...items,
+    90: plug("Mag-lev Rail", "rails"),
+    91: plug("Explosive Bolts", "bolts"),
+  };
+  const crossbowManifest = {
+    def: (table: string, hash: number | null | undefined) =>
+      hash == null || table === "DestinyStatDefinition" ? undefined : crossbowItems[hash],
+  } as unknown as Manifest;
+  const crossbow = {
+    itemComponents: {
+      sockets: {
+        data: { x: { sockets: [10, 90, 91, 30].map((plugHash) => ({ plugHash, isVisible: true })) } },
+      },
+    },
+  } as unknown as DestinyProfileResponse;
+  expect(
+    weaponRoll(crossbow, crossbowManifest, "x").columns.map((c) => [c.category, c.current.name]),
+  ).toEqual([
+    ["rails", "Mag-lev Rail"],
+    ["bolts", "Explosive Bolts"],
+    ["frames", "Chaos Reshaped"],
+  ]);
+});

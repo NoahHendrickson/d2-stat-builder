@@ -5,7 +5,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { DestinyProfileResponse } from "bungie-api-ts/destiny2";
 import { useSession, type SessionState } from "@/lib/auth/use-session";
 import { handleSessionExpired } from "@/lib/auth/sign-out";
-import { ArmoryError, fetchProfile } from "./fetch";
+import { ArmoryError, fetchProfile, newerProfile } from "./fetch";
 import { profileKey } from "./keys";
 
 export const isSessionExpired = (error: unknown): boolean =>
@@ -20,8 +20,12 @@ export function sessionMembershipId(session: SessionState | undefined): string |
  * The signed-in player's raw Destiny profile, fetched as soon as the session is known —
  * it does not wait for the manifest, so the two longest startup legs overlap.
  * `useArmory` normalizes it once the manifest is ready.
+ *
+ * `refreshMs` keeps it current while the caller is mounted and the tab is visible:
+ * refetched that often and on every return to the window (pages that show what's on
+ * each character, which changes as the player plays).
  */
-export function useProfile() {
+export function useProfile({ refreshMs }: { refreshMs?: number } = {}) {
   const session = useSession();
   const membershipId = sessionMembershipId(session.data);
   const queryClient = useQueryClient();
@@ -30,7 +34,14 @@ export function useProfile() {
     queryKey: profileKey(membershipId),
     enabled: membershipId !== undefined,
     staleTime: 5 * 60_000,
-    queryFn: fetchProfile,
+    // A cached response older than the profile on screen is dropped (see newerProfile).
+    queryFn: async () =>
+      newerProfile(
+        queryClient.getQueryData<DestinyProfileResponse>(profileKey(membershipId)),
+        await fetchProfile(),
+      ),
+    refetchInterval: refreshMs ?? false,
+    refetchOnWindowFocus: refreshMs ? "always" : true,
     // Every response is a new profile (timestamps move); deep-diffing a multi-MB
     // payload to preserve identity would only cost time.
     structuralSharing: false,

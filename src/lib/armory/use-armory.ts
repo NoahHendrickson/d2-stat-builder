@@ -41,6 +41,9 @@ export type ArmoryQuery = Omit<UseQueryResult<Armory>, "refetch"> & {
  */
 const SUPERSEDED_ARMORY_GC_MS = 60_000;
 
+/** Armories already saved: a refetch that brings the same profile re-derives the same object. */
+const persisted = new WeakSet<Armory>();
+
 /**
  * The signed-in player's normalized armor, as a query derived from the raw profile and
  * the manifest (both fetched independently) — keyed on the account, the manifest
@@ -77,11 +80,14 @@ export function useArmory(): ArmoryQuery {
         profileData as DestinyProfileResponse,
         manifest as Manifest,
       );
-      persistArmoryWhenIdle(membershipId as string, {
-        manifestVersion: version as string,
-        savedAt: Date.now(),
-        armory,
-      });
+      if (!persisted.has(armory)) {
+        persisted.add(armory);
+        persistArmoryWhenIdle(membershipId as string, {
+          manifestVersion: version as string,
+          savedAt: Date.now(),
+          armory,
+        });
+      }
       return armory;
     },
     // While a refetch re-derives, keep the previous armory on screen; before the first

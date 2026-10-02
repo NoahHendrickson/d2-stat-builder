@@ -261,7 +261,8 @@ function LinksSection({ collapsed }: { collapsed: boolean }) {
       {collapsed ? (
         <div className="flex justify-center">{addButton}</div>
       ) : (
-        <div className="flex h-6 shrink-0 items-center justify-between pr-3 pl-4">
+        // pr-3.5 puts the + over each link's ⋯ (ul px-2 + right-1.5).
+        <div className="flex h-6 shrink-0 items-center justify-between pr-3.5 pl-4">
           <h2 className="d2-label">Links</h2>
           {addButton}
         </div>
@@ -326,7 +327,8 @@ function LinkRow({
         collapsed ? "w-9 justify-center" : "min-w-0 flex-1 px-2.5 pr-9",
       )}
     >
-      <LinkFavicon url={link.url} />
+      {/* 16px favicon in the nav icons' 20px column, so icons and labels line up. */}
+      <LinkFavicon url={link.url} className="mx-0.5" />
       {!collapsed && (
         <>
           <span className="min-w-0 flex-1 truncate">{link.name}</span>

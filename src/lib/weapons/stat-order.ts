@@ -3,6 +3,7 @@ export const WEAPON_STAT_ORDER = [
   "Impact",
   "Blast Radius",
   "Velocity",
+  "Persistence",
   "Accuracy",
   "Range",
   "Shield Duration",

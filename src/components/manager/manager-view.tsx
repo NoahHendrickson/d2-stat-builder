@@ -203,7 +203,7 @@ export function ManagerView({
 
   return (
     <ManagerActionsContext.Provider value={actions}>
-      <FarmingRunner inventory={inventory} membershipId={membershipId} />
+      <FarmingRunner inventory={inventory} />
       <div className="flex min-h-0 flex-1 flex-col gap-4">
         <ManagerSearch inventory={inventory} />
         <FarmingBanner inventory={inventory} />

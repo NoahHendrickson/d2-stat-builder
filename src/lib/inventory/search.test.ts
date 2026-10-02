@@ -35,7 +35,7 @@ const inv: ManagerInventory = {
       stats: {},
       equipped: { [BUCKETS.kinetic]: item("Ace of Spades", { tierType: 6, power: 410, element: "kinetic", locked: true }) },
       inventory: {
-        [BUCKETS.energy]: [item("Calus Mini-Tool", { bucketHash: BUCKETS.energy, power: 400, element: "solar", typeName: "Submachine Gun", crafted: true, breakerType: 2 })],
+        [BUCKETS.energy]: [item("Calus Mini-Tool", { bucketHash: BUCKETS.energy, power: 400, element: "solar", typeName: "Submachine Gun", crafted: true, craftable: true, breakerType: 2 })],
       },
       postmaster: [],
     },
@@ -79,6 +79,8 @@ test("filters by keywords, tags, comparisons, stats, and places", () => {
   expect(search("is:invault is:titan")).toEqual(["Helm B"]);
   expect(search("is:dupe")).toEqual(["Helm A", "Helm B"]);
   expect(search("is:crafted is:overload element:solar")).toEqual(["Calus Mini-Tool"]);
+  expect(search("is:craftable")).toEqual(["Calus Mini-Tool"]);
+  expect(search("is:weapon not:craftable")).toEqual(["Ace of Spades"]);
   expect(search("type:submachinegun")).toEqual(["Calus Mini-Tool"]);
   expect(search("is:locked")).toEqual(["Ace of Spades"]);
 });

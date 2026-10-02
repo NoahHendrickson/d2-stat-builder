@@ -173,7 +173,7 @@ export function ManagerSearch({ inventory }: { inventory: ManagerInventory }) {
 const HELP: [string, string][] = [
   ["fatebringer", "Name or perk contains it"],
   ["is:weapon  is:armor  is:exotic", "Kind and rarity"],
-  ["is:crafted  is:deepsight  is:masterwork", "Item state"],
+  ["is:crafted  is:craftable  is:deepsight", "Item state"],
   ["is:locked  is:dupe  is:equipped  is:invault", "Lock, duplicates, where it is"],
   ["tag:junk  tag:none  is:tagged", "Your tags"],
   ["is:solar  is:heavy  is:overload", "Element, ammo, champion"],

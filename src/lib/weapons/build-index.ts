@@ -157,6 +157,8 @@ function columnKind(isIntrinsic: boolean, identifier: string): string {
   if (id.includes("string")) return "Bowstring";
   if (id.includes("arrow")) return "Arrows";
   if (id.includes("haft")) return "Haft";
+  if (id === "rails") return "Rail";
+  if (id === "bolts") return "Bolt";
   if (id.includes("tube") || id.includes("launcher_barrel")) return "Barrel";
   if (id.includes("grip") || id.includes("stock")) return "Stock";
   return "Trait";

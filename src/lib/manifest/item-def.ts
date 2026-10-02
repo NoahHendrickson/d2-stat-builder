@@ -48,7 +48,9 @@ export interface ItemDef
   readonly inventory?: Pick<
     DestinyItemInventoryBlockDefinition,
     "bucketTypeHash" | "tierType"
-  >;
+  > &
+    // Set on weapons with a crafting pattern (the manager's is:craftable).
+    Partial<Pick<DestinyItemInventoryBlockDefinition, "recipeItemHash">>;
   readonly equippingBlock?: Pick<DestinyEquippingBlockDefinition, "equipableItemSetHash"> &
     Partial<Pick<DestinyEquippingBlockDefinition, "ammoType">>;
   readonly investmentStats: Pick<
@@ -165,7 +167,7 @@ export function projectItemDef(def: DestinyInventoryItemDefinition): ItemDef {
     perks: (def.perks ?? []).map((p) => pick(p, ["perkHash"])),
   };
   if (def.inventory) {
-    out.inventory = pick(def.inventory, ["bucketTypeHash", "tierType"]);
+    out.inventory = pick(def.inventory, ["bucketTypeHash", "tierType", "recipeItemHash"]);
   }
   if (def.equippingBlock) {
     out.equippingBlock = pick(def.equippingBlock, ["equipableItemSetHash", "ammoType"]);

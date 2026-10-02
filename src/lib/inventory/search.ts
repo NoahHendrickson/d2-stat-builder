@@ -1,7 +1,7 @@
 // The manager's item search, a DIM-style query language:
 //   plain words        name, perk, or notes contain it ("fatebringer", "kill clip")
 //   #word              notes contain the hashtag
-//   is:/not:<keyword>  weapon, armor, exotic, crafted, locked, junk, dupe, heavy, …
+//   is:/not:<keyword>  weapon, armor, exotic, crafted, craftable, locked, junk, dupe, heavy, …
 //   tag:<tag>          favorite, keep, junk, infuse, archive, none
 //   power:>=400        also >, <, <=, =; the same for tier: and stat:<name>:
 //   stat:total:>=60    armor stat total; any live stat by name (stat:range:>50)
@@ -71,6 +71,7 @@ export const IS_KEYWORDS: readonly string[] = [
   ...Object.keys(TIER_NAMES),
   "masterwork",
   "crafted",
+  "craftable",
   "enhanced",
   "deepsight",
   "locked",
@@ -114,6 +115,8 @@ function isKeyword(word: string): Predicate | undefined {
       return (i) => i.masterworked;
     case "crafted":
       return (i) => i.crafted;
+    case "craftable":
+      return (i) => i.craftable === true;
     case "enhanced":
       return (i) => i.enhanced;
     case "deepsight":

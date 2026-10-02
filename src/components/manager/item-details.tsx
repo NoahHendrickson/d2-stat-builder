@@ -16,7 +16,6 @@ import { useProfile } from "@/lib/armory/use-profile";
 import { applyPerks, type PerkChange } from "@/lib/inventory/apply-perks";
 import { armorDetails } from "@/lib/inventory/armor-details";
 import { BUNGIE_IMAGE_BASE } from "@/lib/bungie/constants";
-import { TAG_LABELS, setTag, useAnnotation, type ItemTag } from "@/lib/inventory/annotations";
 import { BREAKER_NAMES, type InventoryItem, type ManagerInventory } from "@/lib/inventory/build";
 import { locate } from "@/lib/inventory/moves";
 import { weaponCopies } from "@/lib/inventory/search";
@@ -37,7 +36,7 @@ import type { PerkRef } from "@/lib/weapons/types";
 import { useClarity } from "@/lib/weapons/use-clarity";
 import { useWeaponCatalog } from "@/lib/weapons/use-weapon-catalog";
 import { cn } from "@/lib/utils";
-import { TAG_ICONS } from "./tag-icons";
+import { TAG_BUTTON, TagButtons } from "./tag-buttons";
 
 const ITEM_TYPE_ARMOR = 2;
 const ITEM_TYPE_WEAPON = 3;
@@ -108,7 +107,7 @@ export function ItemDetails({
             )}
             {(found.item.instanceId || copies > 1) && (
               <div className={cn(SECTION, "flex-row flex-wrap items-center gap-1")}>
-                {found.item.instanceId && <Tags instanceId={found.item.instanceId} />}
+                {found.item.instanceId && <TagButtons instanceId={found.item.instanceId} />}
                 {copies > 1 && (
                   <button
                     type="button"
@@ -259,45 +258,6 @@ function Header({
           <PowerValue value={item.power} size="xs" className="text-inherit" />
         )}
       </div>
-    </div>
-  );
-}
-
-/** The bottom row's 32px buttons: the tags, and Compare beside them. */
-const TAG_BUTTON =
-  "d2-hover-ring flex h-8 min-w-8 items-center justify-center border outline-none focus-visible:d2-tile-selected";
-
-/** The tags the panel offers; an item already tagged Infuse or Archive still shows that one. */
-const PANEL_TAGS: readonly ItemTag[] = ["favorite", "keep", "junk"];
-
-/**
- * DIM-style tag buttons, icon only (the active one is filled): one tag per item, click
- * the active one again to clear it.
- */
-function Tags({ instanceId }: { instanceId: string }) {
-  const tag = useAnnotation(instanceId)?.tag;
-  const shown = tag && !PANEL_TAGS.includes(tag) ? [...PANEL_TAGS, tag] : PANEL_TAGS;
-  return (
-    <div className="contents" role="group" aria-label="Tag">
-      {shown.map((t) => (
-        <button
-          key={t}
-          type="button"
-          title={TAG_LABELS[t]}
-          aria-label={TAG_LABELS[t]}
-          aria-pressed={tag === t}
-          onClick={() => setTag([instanceId], tag === t ? undefined : t)}
-          className={cn(
-            TAG_BUTTON,
-            "shrink-0",
-            tag === t
-              ? "border-transparent bg-foreground text-background"
-              : "border-foreground/12 bg-foreground/4",
-          )}
-        >
-          <HugeiconsIcon icon={TAG_ICONS[t]} className="size-3" aria-hidden />
-        </button>
-      ))}
     </div>
   );
 }

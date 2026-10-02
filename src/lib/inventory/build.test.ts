@@ -8,7 +8,7 @@ const MATERIAL_BUCKET = 999;
 
 const items: Record<number, object> = {
   1: { displayProperties: { name: "Ace of Spades", icon: "/ace.png" }, itemType: 3, itemTypeDisplayName: "Hand Cannon", inventory: { bucketTypeHash: BUCKETS.kinetic, tierType: 6 } },
-  2: { displayProperties: { name: "Fatebringer" }, itemType: 3, inventory: { bucketTypeHash: BUCKETS.kinetic, tierType: 5 } },
+  2: { displayProperties: { name: "Fatebringer" }, itemType: 3, inventory: { bucketTypeHash: BUCKETS.kinetic, tierType: 5, recipeItemHash: 2002 } },
   3: { displayProperties: { name: "Helm" }, itemType: 2, classType: 1, inventory: { bucketTypeHash: BUCKETS.helmet, tierType: 5 } },
   4: { displayProperties: { name: "Glimmer-ish" }, itemType: 0, inventory: { bucketTypeHash: MATERIAL_BUCKET, tierType: 2 } },
   5: { displayProperties: { name: "Shader" }, itemType: 0, inventory: { bucketTypeHash: BUCKETS.consumables, tierType: 2 } },
@@ -146,7 +146,8 @@ test("reads crafted, enhanced, and Deepsight state and the weapon's champion", (
   const byId = Object.fromEntries(
     Object.values(inv.vault).flat().map((i) => [i.instanceId, i]),
   );
-  expect(byId.a).toMatchObject({ crafted: true, deepsight: true, enhanced: false, breakerType: 1, breakerIcon: "/barrier.png" });
+  expect(byId.a).toMatchObject({ crafted: true, craftable: true, deepsight: true, enhanced: false, breakerType: 1, breakerIcon: "/barrier.png" });
+  expect(byId.c).not.toHaveProperty("craftable");
   expect(byId.b).toMatchObject({ crafted: false, enhanced: true, breakerType: 3, breakerIcon: "/stagger.png" });
   expect(byId.c.breakerType).toBeUndefined();
 });

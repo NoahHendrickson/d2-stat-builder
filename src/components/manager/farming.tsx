@@ -1,11 +1,9 @@
 "use client";
 
 import { useEffect } from "react";
-import { useQueryClient } from "@tanstack/react-query";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { PlantIcon } from "@hugeicons/core-free-icons";
 import { Button } from "@/components/ui/button";
-import { profileKey } from "@/lib/armory/keys";
 import { annotationsStore } from "@/lib/inventory/annotations";
 import type { ManagerInventory } from "@/lib/inventory/build";
 import { farmingPlans } from "@/lib/inventory/farming";
@@ -17,33 +15,14 @@ import { useManagerActions } from "./manager-context";
 /** The character being farmed on, or null. Lasts for the session (not saved). */
 export const farmingStore = createValueStore<string | null>(null);
 
-/** How often farming mode refreshes the profile to spot new drops. */
-const REFRESH_MS = 30_000;
-
 /**
- * Runs farming mode: refreshes the profile every 30 seconds while the tab is visible,
- * and after each refresh sends the least wanted items to the vault so every gear slot
- * on the farmed character has room for a drop.
+ * Runs farming mode: after each profile refresh (the manager refetches every 30 seconds
+ * while the tab is visible, see useInventory), sends the least wanted items to the vault
+ * so every gear slot on the farmed character has room for a drop.
  */
-export function FarmingRunner({
-  inventory,
-  membershipId,
-}: {
-  inventory: ManagerInventory;
-  membershipId: string | undefined;
-}) {
+export function FarmingRunner({ inventory }: { inventory: ManagerInventory }) {
   const characterId = useStoreValue(farmingStore);
   const actions = useManagerActions();
-  const queryClient = useQueryClient();
-
-  useEffect(() => {
-    if (!characterId) return;
-    const timer = setInterval(() => {
-      if (document.visibilityState !== "visible") return;
-      void queryClient.refetchQueries({ queryKey: profileKey(membershipId) });
-    }, REFRESH_MS);
-    return () => clearInterval(timer);
-  }, [characterId, membershipId, queryClient]);
 
   useEffect(() => {
     if (!characterId || !actions) return;

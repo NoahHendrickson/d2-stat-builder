@@ -66,6 +66,8 @@ const PERK_CATEGORIES = new Set([
   "tubes",
   "bowstrings",
   "hafts",
+  "rails",
+  "bolts",
 ]);
 const INTRINSIC_CATEGORY = "intrinsics";
 
