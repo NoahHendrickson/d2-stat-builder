@@ -100,6 +100,12 @@ import {
 const POSTMASTER_FALLBACK_CAPACITY = 21;
 
 /**
+ * Below this width, three character columns (about 830px) would leave the vault only a
+ * handful of tiles across: show one character at a time, with tabs to switch.
+ */
+const ALL_CHARACTERS_MIN_PX = 1480;
+
+/**
  * The inventory manager: one column per character on the left (postmaster, then
  * weapons, armor, and general gear, each row showing the equipped item beside the
  * rest of that slot), and the vault on the right. Drag a tile onto a slot, a
@@ -119,6 +125,18 @@ export function ManagerView({
   }, [inventory]);
 
   const [menu, setMenu] = useState<ItemDetailsTarget | null>(null);
+  const layoutRef = useRef<HTMLDivElement>(null);
+  const [compact, setCompact] = useState(false);
+  useLayoutEffect(() => {
+    const el = layoutRef.current;
+    if (!el) return;
+    const observer = new ResizeObserver(() => {
+      // Hidden along with its view (the router keeps recent views mounted): keep what it had.
+      if (el.clientWidth > 0) setCompact(el.clientWidth < ALL_CHARACTERS_MIN_PX);
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
   /** The weapon (by name) whose copies are open in Compare. */
   const [comparing, setComparing] = useState<string | null>(null);
   useEffect(loadViewSettings, []);
@@ -189,8 +207,8 @@ export function ManagerView({
       <div className="flex min-h-0 flex-1 flex-col gap-4">
         <ManagerSearch inventory={inventory} />
         <FarmingBanner inventory={inventory} />
-        <div className="flex min-h-0 flex-1 flex-col gap-6 xl:flex-row">
-          <CharacterGrid inventory={inventory} />
+        <div ref={layoutRef} className="flex min-h-0 flex-1 flex-col gap-6 xl:flex-row">
+          <CharacterGrid inventory={inventory} compact={compact} />
           <VaultPane inventory={inventory} />
         </div>
       </div>
@@ -339,10 +357,19 @@ function DropZone({
   );
 }
 
-function CharacterGrid({ inventory }: { inventory: ManagerInventory }) {
+/**
+ * Every character side by side, or (when `compact`) one at a time under a tab strip,
+ * starting on the one played last. The others stay mounted, just hidden, so a drag that
+ * started on one still ends when a tab switches away from it.
+ */
+function CharacterGrid({ inventory, compact }: { inventory: ManagerInventory; compact: boolean }) {
   const { characters } = inventory;
+  const [picked, setPicked] = useState<string | null>(null);
+  const shown = characters.find((c) => c.id === picked) ?? characters[0];
   const postmasterCapacity = inventory.postmasterCapacity ?? POSTMASTER_FALLBACK_CAPACITY;
-  const columns = { gridTemplateColumns: `repeat(${characters.length}, max-content)` };
+  const columns = {
+    gridTemplateColumns: compact ? "max-content" : `repeat(${characters.length}, max-content)`,
+  };
   // Nameplate, postmaster, then every slot row: each column spans them all on a subgrid,
   // so rows still line up across characters.
   const rowCount = 2 + CHARACTER_GROUPS.reduce((n, group) => n + group.rows.length, 0);
@@ -352,45 +379,97 @@ function CharacterGrid({ inventory }: { inventory: ManagerInventory }) {
   const compare = useItemComparator();
 
   return (
-    <section
-      aria-label="Characters"
-      className="d2-scroll group/grid shrink-0 overflow-x-auto xl:min-h-0 xl:overflow-y-auto"
-      // The pinned nameplates only need a fill once rows scroll under them; at rest the
-      // pane shows through. Set directly so scrolling never re-renders the grid.
-      onScroll={(e) =>
-        e.currentTarget.toggleAttribute("data-scrolled", e.currentTarget.scrollTop > 0)
-      }
-    >
-      <div className="grid" style={columns}>
-        {characters.map((c) => (
-          // The whole column is one target (padding splits the gap between columns), so a
-          // drop anywhere on a character sends the item there.
-          <DropZone
-            key={c.id}
-            to={{ kind: "character", characterId: c.id }}
-            column
-            label={CLASS_NAMES[c.classType] ?? "Guardian"}
-            className="grid grid-rows-subgrid px-3 first:pl-0 last:pr-0"
-            style={{ gridRow: `span ${rowCount}` }}
-          >
-            <CharacterHeader character={c} statIcons={statIcons} />
-            <PostmasterCell items={c.postmaster} capacity={postmasterCapacity} />
-            {/* Weapons, armor, general: no headings, just a wider gap before each group. */}
-            {CHARACTER_GROUPS.map((group) =>
-              group.rows.map((row, i) => (
-                <CharacterCell
-                  key={row.hash}
-                  character={c}
-                  row={row}
-                  groupStart={i === 0}
-                  compare={compare}
-                />
-              )),
-            )}
-          </DropZone>
-        ))}
+    <section aria-label="Characters" className="flex shrink-0 flex-col xl:min-h-0">
+      {compact && shown && (
+        <Tabs value={shown.id} onValueChange={(id) => setPicked(id as string)} className="pb-3">
+          <TabsList variant="line" aria-label="Characters" className="w-full justify-start">
+            {characters.map((c) => (
+              <CharacterTab key={c.id} character={c} onPick={() => setPicked(c.id)} />
+            ))}
+          </TabsList>
+        </Tabs>
+      )}
+      <div
+        className="d2-scroll group/grid overflow-x-auto xl:min-h-0 xl:overflow-y-auto"
+        // The pinned nameplates only need a fill once rows scroll under them; at rest the
+        // pane shows through. Set directly so scrolling never re-renders the grid.
+        onScroll={(e) =>
+          e.currentTarget.toggleAttribute("data-scrolled", e.currentTarget.scrollTop > 0)
+        }
+      >
+        <div className="grid" style={columns}>
+          {characters.map((c) => (
+            // The whole column is one target (padding splits the gap between columns), so a
+            // drop anywhere on a character sends the item there.
+            <DropZone
+              key={c.id}
+              to={{ kind: "character", characterId: c.id }}
+              column
+              label={CLASS_NAMES[c.classType] ?? "Guardian"}
+              className={cn(
+                "grid grid-rows-subgrid",
+                !compact ? "px-3 first:pl-0 last:pr-0" : c !== shown && "hidden",
+              )}
+              style={{ gridRow: `span ${rowCount}` }}
+            >
+              <CharacterHeader character={c} statIcons={statIcons} />
+              <PostmasterCell items={c.postmaster} capacity={postmasterCapacity} />
+              {/* Weapons, armor, general: no headings, just a wider gap before each group. */}
+              {CHARACTER_GROUPS.map((group) =>
+                group.rows.map((row, i) => (
+                  <CharacterCell
+                    key={row.hash}
+                    character={c}
+                    row={row}
+                    groupStart={i === 0}
+                    compare={compare}
+                  />
+                )),
+              )}
+            </DropZone>
+          ))}
+        </div>
       </div>
     </section>
+  );
+}
+
+/**
+ * A character's tab in the compact grid. Dragging an item over it switches to that
+ * character, so the item can go onto a slot there; dropping on the tab itself sends the
+ * item to that character.
+ */
+function CharacterTab({ character, onPick }: { character: ManagerCharacter; onPick: () => void }) {
+  const actions = useManagerActions();
+  const drag = useStoreValue(dragStore);
+  const [over, setOver] = useState(false);
+  const to = { kind: "character", characterId: character.id } as const;
+  const accepts = drag !== null && actions !== null && canLand(actions, drag, to);
+
+  return (
+    <TabsTrigger
+      value={character.id}
+      className={cn("flex-none px-1.5", accepts && (over ? "bg-foreground/15" : "bg-foreground/5"))}
+      onDragEnter={() => {
+        if (drag) onPick();
+      }}
+      onDragOver={(e) => {
+        if (!accepts) return;
+        setOver(true);
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+      }}
+      onDragLeave={() => setOver(false)}
+      onDrop={(e) => {
+        setOver(false);
+        if (!accepts || !actions) return;
+        e.preventDefault();
+        actions.move(drag.item, drag.place, to);
+        actions.dragEnd();
+      }}
+    >
+      {CLASS_NAMES[character.classType] ?? "Guardian"}
+    </TabsTrigger>
   );
 }
 
