@@ -1,5 +1,15 @@
 import type { ArmorLocation } from "@/lib/armory/normalize";
-import type { ArmorSlot } from "@/lib/armory/stats";
+import { ARMOR_SLOTS, SLOT_BUCKETS, type ArmorSlot } from "@/lib/armory/stats";
+import { WEAPON_SLOTS, WEAPON_SLOT_BUCKETS, type WeaponSlot } from "@/lib/armory/weapons";
+
+/** A slot the equip flow can make room in: an armor slot or a weapon slot. */
+export type EquipSlot = ArmorSlot | WeaponSlot;
+export const EQUIP_SLOTS: readonly EquipSlot[] = [...ARMOR_SLOTS, ...WEAPON_SLOTS];
+/** Slot → its character inventory bucket hash. */
+export const EQUIP_SLOT_BUCKETS: Record<EquipSlot, number> = {
+  ...SLOT_BUCKETS,
+  ...WEAPON_SLOT_BUCKETS,
+};
 
 /** What the client knows about a piece's whereabouts when it asks to equip. */
 export interface EquipItemState {
@@ -8,15 +18,16 @@ export interface EquipItemState {
   location: ArmorLocation;
   characterId?: string;
   /**
-   * Armor exotic. EquipItems rejects a new exotic (1641) while another is still on a
-   * different slot, so we equip legendaries first to swap that piece off.
+   * Exotic armor or weapon. EquipItems rejects a new exotic (1641) while another of its
+   * kind is still on a different slot, so we equip legendaries first to swap that one off.
    */
   isExotic?: boolean;
   /**
-   * Armor slot. Lets the server look in the character's live inventory for a piece to
-   * vault when the client's spares run out (see pickLiveSpares). Absent for the subclass.
+   * Armor or weapon slot. Lets the server look in the character's live inventory for a
+   * piece to vault when the client's spares run out (see pickLiveSpares). Absent for the
+   * subclass.
    */
-  slot?: ArmorSlot;
+  slot?: EquipSlot;
 }
 
 /** One TransferItem call: move `itemId` to/from the vault for `characterId`. */

@@ -66,7 +66,7 @@ function TagPanel({
           }}
           placeholder={onCreate ? "Search or create…" : "Search…"}
           aria-label={onCreate ? "Search or create tags" : "Search tags"}
-          className="min-w-0 flex-1 [&::-webkit-search-cancel-button]:hidden"
+          className="min-w-0 flex-1"
         />
         {onCreate && (
           <Button

@@ -9,6 +9,7 @@ import {
 } from "bungie-api-ts/destiny2";
 import { BungieHttpError } from "./http";
 import { ACTION_SPACING_MS, EQUIP_MESSAGES, transferMessage } from "./equip-server";
+import { THROTTLED_MESSAGE, isThrottled, withThrottleRetry } from "./throttle";
 import { landingAfter, planMove, type Landing, type MoveRequest, type MoveStep } from "./move-plan";
 
 export type MoveResult =
@@ -20,47 +21,7 @@ export type MoveResult =
       landed: Landing | null;
     };
 
-/** PlatformErrorCodes that mean "slow down" rather than "no". */
-const THROTTLE_CODES = new Set([
-  31, // ThrottleLimitExceeded
-  36, // ThrottleLimitExceededMomentarily
-  37, // ThrottleLimitExceededSeconds
-  51, // PerEndpointRequestThrottleExceeded
-  1672, // DestinyThrottledByGameServer
-]);
-/** ThrottleLimitExceededMinutes: not worth holding the request open for. */
-const THROTTLED_MINUTES = 35;
-const MAX_THROTTLE_RETRIES = 2;
-/** Longest we wait out a throttle inside one request. */
-const MAX_THROTTLE_WAIT_MS = 5000;
-export const THROTTLED_MESSAGE = "Bungie is limiting item moves — wait a moment and try again";
-
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-
-export function isThrottled(err: unknown): boolean {
-  return (
-    err instanceof BungieHttpError &&
-    err.code !== undefined &&
-    (THROTTLE_CODES.has(err.code) || err.code === THROTTLED_MINUTES)
-  );
-}
-
-/**
- * Run one Bungie action, waiting out a short throttle (up to MAX_THROTTLE_RETRIES times)
- * before giving up. Any other error is thrown as is.
- */
-export async function withThrottleRetry<T>(call: () => Promise<T>): Promise<T> {
-  for (let attempt = 0; ; attempt++) {
-    try {
-      return await call();
-    } catch (err) {
-      const retryable =
-        err instanceof BungieHttpError && err.code !== undefined && THROTTLE_CODES.has(err.code);
-      if (!retryable || attempt >= MAX_THROTTLE_RETRIES) throw err;
-      await sleep(Math.min((err.throttleSeconds || 1) * 1000, MAX_THROTTLE_WAIT_MS));
-    }
-  }
-}
 
 function stepMessage(step: MoveStep, err: unknown): string {
   if (isThrottled(err)) return THROTTLED_MESSAGE;

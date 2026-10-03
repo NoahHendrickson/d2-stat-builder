@@ -10,6 +10,7 @@ import {
   Copy01Icon,
   Delete02Icon,
   Download04Icon,
+  FloppyDiskIcon,
   LinkSquare02Icon,
   Loading03Icon,
   MoreVerticalIcon,
@@ -19,6 +20,7 @@ import {
 } from "@hugeicons/core-free-icons";
 import { toast } from "@/lib/toast";
 import type { ArmorPiece } from "@/lib/armory/normalize";
+import type { LoadoutWeapon } from "@/lib/armory/weapons";
 import type { ArmoryCharacter } from "@/lib/armory/fetch";
 import type { Manifest } from "@/lib/manifest/load";
 import {
@@ -31,6 +33,7 @@ import {
 import { lastPlayedCharacter } from "@/lib/bungie/equip-client";
 import { buildDimLoadoutUrl } from "@/lib/dim/loadout-link";
 import { applySavedLoadout } from "@/lib/loadouts/apply-client";
+import { saveLoadoutInGame, type InGameSlotChoice } from "@/lib/loadouts/ingame-save";
 import { formatRelativeTime } from "@/lib/armor-table/relative-time";
 import { resolveLoadout } from "@/lib/loadouts/resolve";
 import { loadoutHashtags, type SavedLoadout } from "@/lib/loadouts/types";
@@ -51,6 +54,7 @@ import {
   SetBonusChip,
 } from "@/components/loadouts/loadout-row-details";
 import { LoadoutCardBody } from "@/components/loadouts/loadout-card-body";
+import { InGameSaveDialog } from "@/components/loadouts/ingame-save-dialog";
 
 const STAT_COLS = STAT_DISPLAY_ORDER.map((key) => ({
   key,
@@ -71,6 +75,8 @@ export const LoadoutRow = memo(function LoadoutRow({
   open,
   onToggle,
   pieceMap,
+  weaponMap,
+  weapons,
   provisional = false,
   manifest,
   characters,
@@ -90,6 +96,9 @@ export const LoadoutRow = memo(function LoadoutRow({
   open: boolean;
   onToggle: (id: string) => void;
   pieceMap: ReadonlyMap<string, ArmorPiece>;
+  weaponMap: ReadonlyMap<string, LoadoutWeapon>;
+  /** Every owned weapon, for making room and swapping an equipped exotic on equip. */
+  weapons?: readonly LoadoutWeapon[];
   /** The pieces are last visit's copy; Equip waits for the live profile. */
   provisional?: boolean;
   manifest: Manifest;
@@ -111,11 +120,12 @@ export const LoadoutRow = memo(function LoadoutRow({
 }) {
   const queryClient = useQueryClient();
   const [applying, setApplying] = useState(false);
+  const [inGameSaveOpen, setInGameSaveOpen] = useState(false);
   const { loadout, optimizer } = saved;
 
   const resolved = useMemo(
-    () => resolveLoadout(loadout, pieceMap, manifest),
-    [loadout, pieceMap, manifest],
+    () => resolveLoadout(loadout, pieceMap, manifest, weaponMap),
+    [loadout, pieceMap, manifest, weaponMap],
   );
 
   const className =
@@ -128,18 +138,23 @@ export const LoadoutRow = memo(function LoadoutRow({
   );
   const canApply = resolved.actionable && !!targetCharacter && !applying && !provisional;
 
-  const applyLoadout = async () => {
+  /** Equip the loadout; with a slot `choice`, also save it into that in-game slot. */
+  const applyLoadout = async (choice?: InGameSlotChoice) => {
     if (!canApply || !targetCharacter) return;
     setApplying(true);
     try {
-      const outcome = await applySavedLoadout({
+      const request = {
         saved,
         resolved,
         character: targetCharacter,
         armory: pieceMap.values(),
+        weapons,
         manifest,
         queryClient,
-      });
+      };
+      const outcome = choice
+        ? await saveLoadoutInGame({ ...request, choice })
+        : await applySavedLoadout(request);
       if (outcome) onArmoryChanged();
     } catch {
       toast.error("Apply failed — check your connection and try again");
@@ -150,7 +165,9 @@ export const LoadoutRow = memo(function LoadoutRow({
 
   const copyItemIds = async () => {
     if (!resolved.actionable) return;
-    const query = resolved.armor.map((a) => `id:'${a.ref.id}'`).join(" OR ");
+    const query = [...resolved.armor, ...resolved.weapons]
+      .map((a) => `id:'${a.ref.id}'`)
+      .join(" OR ");
     try {
       await navigator.clipboard.writeText(query);
       toast.success("Item IDs copied — paste into DIM search");
@@ -179,7 +196,7 @@ export const LoadoutRow = memo(function LoadoutRow({
           <h3 className="flex min-w-0 items-center gap-1.5 text-base leading-6 font-medium">
             <span className="truncate">{loadout.name}</span>
             {resolved.missing && (
-              <TooltipLabel label="Some pieces aren't in your inventory">
+              <TooltipLabel label="Some items aren't in your inventory">
                 <HugeiconsIcon icon={Alert02Icon}
                   strokeWidth={2}
                   tabIndex={0}
@@ -242,7 +259,7 @@ export const LoadoutRow = memo(function LoadoutRow({
               variant="emphatic"
               size="xs"
               className="h-8 gap-1.5 px-4"
-              onClick={applyLoadout}
+              onClick={() => applyLoadout()}
               disabled={!canApply}
             >
               {applying && <HugeiconsIcon icon={Loading03Icon} className="animate-spin" aria-hidden />}
@@ -261,9 +278,13 @@ export const LoadoutRow = memo(function LoadoutRow({
                 <HugeiconsIcon icon={SlidersHorizontalIcon} aria-hidden />
                 Optimize
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={applyLoadout} disabled={!canApply}>
+              <DropdownMenuItem onClick={() => applyLoadout()} disabled={!canApply}>
                 <HugeiconsIcon icon={Download04Icon} aria-hidden />
                 Equip
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setInGameSaveOpen(true)} disabled={!canApply}>
+                <HugeiconsIcon icon={FloppyDiskIcon} aria-hidden />
+                Save in-game
               </DropdownMenuItem>
               <DropdownMenuItem onClick={() => onEdit(saved)}>
                 <HugeiconsIcon icon={PencilEdit02Icon} aria-hidden />
@@ -309,6 +330,17 @@ export const LoadoutRow = memo(function LoadoutRow({
       )}
 
       <LoadoutCardBody saved={saved} resolved={resolved} manifest={manifest} />
+
+      {inGameSaveOpen && targetCharacter && (
+        <InGameSaveDialog
+          open
+          onOpenChange={setInGameSaveOpen}
+          loadoutName={loadout.name}
+          character={targetCharacter}
+          manifest={manifest}
+          onConfirm={(choice) => void applyLoadout(choice)}
+        />
+      )}
 
       {open && (
         <LoadoutRowDetails

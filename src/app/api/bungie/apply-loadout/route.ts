@@ -15,7 +15,7 @@ import { MAX_MODS } from "@/lib/loadouts/types";
 import { ABILITY_SOCKET_COUNT, ASPECT_SOCKET_COUNT } from "@/lib/dim/subclasses";
 
 /**
- * A full apply is long: up to 6 items × (2 vault hops + up to 3 spares vaulted, each
+ * A full apply is long: up to 10 items × (2 vault hops + up to 3 spares vaulted, each
  * followed by a retry) transfers at 150 ms spacing, plus a character-inventory read
  * when the live fallback runs (repeated only after a failed read), then every plug at
  * 600 ms spacing —
@@ -24,8 +24,8 @@ import { ABILITY_SOCKET_COUNT, ASPECT_SOCKET_COUNT } from "@/lib/dim/subclasses"
  */
 export const maxDuration = 60;
 
-/** 5 armor + 1 subclass. */
-const MAX_ITEMS = 6;
+/** 5 armor + 1 subclass + 3 weapons + 1 legendary weapon swapped in to free the exotic slot. */
+const MAX_ITEMS = 10;
 /**
  * Every mod a loadout may list (stat / tuning / artifice / slot-specific — the same cap
  * the loadout parser enforces) plus every subclass socket a loadout can pin: abilities,
@@ -36,7 +36,7 @@ const MAX_PLUGS = MAX_MODS + ABILITY_SOCKET_COUNT + ASPECT_SOCKET_COUNT + FRAGME
 
 interface ApplyRequestBody {
   characterId: string;
-  /** Armor (and the subclass item) to stage + equip. May be empty when only plugs change. */
+  /** Armor, weapons, and the subclass item to stage + equip. May be empty when only plugs change. */
   items: EquipItemState[];
   /** Socket inserts to run after equipping (planned client-side, see apply-plan.ts). */
   plugs: PlugRequest[];
@@ -84,7 +84,7 @@ function streamError(err: unknown): Extract<ApplyStreamEvent, { type: "error" }>
 }
 
 /**
- * Apply a saved loadout: stage + equip the armor (and subclass), then socket the
+ * Apply a saved loadout: stage + equip the armor, weapons, and subclass, then socket the
  * planned mods / tuning / artifice / fragments. Plugs for an item whose equip failed
  * are skipped (and say so, with that item's message) rather than attempted.
  *

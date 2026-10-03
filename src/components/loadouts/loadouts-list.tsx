@@ -10,7 +10,7 @@ import {
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { ArrowUpDownIcon, Cancel01Icon, Search01Icon } from "@hugeicons/core-free-icons";
+import { ArrowUpDownIcon, Search01Icon } from "@hugeicons/core-free-icons";
 import { toast, type Notifier } from "@/lib/toast";
 import type { Armory } from "@/lib/armory/fetch";
 import type { Manifest } from "@/lib/manifest/load";
@@ -47,6 +47,8 @@ import {
 import { countMajorStatMods, isMajorStatMod } from "@/lib/dim/mod-hashes";
 import { selectionsForLoadout } from "@/lib/loadouts/load-in-builder";
 import { loadoutSubclass, withLoadoutSubclass } from "@/lib/loadouts/subclass";
+import { withLoadoutWeapons } from "@/lib/loadouts/weapons";
+import { weaponSlotOfHash } from "@/lib/armory/weapons";
 import {
   LOADOUT_SCHEMA_VERSION,
   MAX_TAGS,
@@ -55,7 +57,7 @@ import {
 } from "@/lib/loadouts/types";
 import { FilterMultiselect } from "@/components/armor-table/filter-multiselect";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Input, SearchClearButton } from "@/components/ui/input";
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -156,6 +158,10 @@ export function LoadoutsList({
     () => new Map(armory.pieces.map((p) => [p.instanceId, p])),
     [armory.pieces],
   );
+  const weaponMap = useMemo(
+    () => new Map((armory.weapons ?? []).map((w) => [w.instanceId, w])),
+    [armory.weapons],
+  );
   const statIcons = useMemo(() => statIconsFromManifest(manifest), [manifest]);
   const balancedTuningIcon = useMemo(
     () => balancedTuningIconFromManifest(manifest),
@@ -227,7 +233,7 @@ export function LoadoutsList({
   /** Open Edit; the mod picker is available when every piece is still in the armory. */
   const openEdit = useCallback(
     (saved: SavedLoadout) => {
-      const resolved = resolveLoadout(saved.loadout, pieceMap, manifest);
+      const resolved = resolveLoadout(saved.loadout, pieceMap, manifest, weaponMap);
       let mods: ModsSection | undefined;
       if (resolved.armor.length > 0 && !resolved.missing) {
         const pieces = resolved.armor.map((a) => a.piece!);
@@ -241,7 +247,7 @@ export function LoadoutsList({
       }
       setDialog({ kind: "edit", loadout: saved, mods });
     },
-    [pieceMap, manifest, armory.insertablePlugs],
+    [pieceMap, weaponMap, manifest, armory.insertablePlugs],
   );
   const openDelete = useCallback(
     (saved: SavedLoadout) => setDialog({ kind: "delete", loadout: saved }),
@@ -254,6 +260,7 @@ export function LoadoutsList({
     placement,
     desiredStatMods,
     subclass,
+    weapons,
     stats,
   }: LoadoutDetailsValues) => {
     if (dialog.kind !== "edit") return;
@@ -261,7 +268,13 @@ export function LoadoutsList({
     const next: SavedLoadoutData = {
       version: LOADOUT_SCHEMA_VERSION,
       loadout: {
-        ...loadout,
+        ...(weapons
+          ? withLoadoutWeapons(
+              loadout,
+              weapons,
+              (ref) => weaponSlotOfHash(manifest, ref.hash) !== undefined,
+            )
+          : loadout),
         name,
         ...(notes ? { notes } : { notes: undefined }),
       },
@@ -405,6 +418,18 @@ export function LoadoutsList({
 
   const editorLoadout = dialog.kind === "edit" ? dialog.loadout : undefined;
   const editorMods = dialog.kind === "edit" ? dialog.mods : undefined;
+  const editorWeapons = useMemo(() => {
+    // Without the weapon list (an armory cached before weapons were tracked) the pickers
+    // would be empty and a save would look like "remove every weapon" — so no section.
+    if (dialog.kind !== "edit" || !armory.weapons) return undefined;
+    return {
+      manifest,
+      owned: armory.weapons,
+      initial: dialog.loadout.loadout.equipped.filter(
+        (ref) => weaponSlotOfHash(manifest, ref.hash) !== undefined,
+      ),
+    };
+  }, [dialog, armory.weapons, manifest]);
   const editorSubclass = useMemo(() => {
     if (!editorLoadout || editorLoadout.loadout.classType >= 3) return undefined;
     return {
@@ -450,18 +475,9 @@ export function LoadoutsList({
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search your loadouts"
             aria-label="Search loadouts (names, notes, set bonuses, or #hashtags)"
-            className="pl-8 pr-8 [&::-webkit-search-cancel-button]:hidden"
+            className="pl-8 pr-8"
           />
-          {query.length > 0 && (
-            <button
-              type="button"
-              aria-label="Clear search"
-              onClick={() => setQuery("")}
-              className="text-muted-foreground hover:text-foreground absolute top-1/2 right-1.5 flex size-5 -translate-y-1/2 cursor-pointer items-center justify-center rounded-none normal:rounded-[6px] outline-none focus-visible:ring-1 focus-visible:ring-outline-strong"
-            >
-              <HugeiconsIcon icon={Cancel01Icon} strokeWidth={2} className="size-3.5" aria-hidden />
-            </button>
-          )}
+          {query.length > 0 && <SearchClearButton onClick={() => setQuery("")} />}
         </div>
 
         <FilterMultiselect
@@ -576,6 +592,8 @@ export function LoadoutsList({
                     open={expanded.has(saved.id)}
                     onToggle={toggleExpanded}
                     pieceMap={pieceMap}
+                    weaponMap={weaponMap}
+                    weapons={armory.weapons}
                     provisional={provisional}
                     manifest={manifest}
                     characters={armory.characters}
@@ -615,6 +633,7 @@ export function LoadoutsList({
         }
         mods={editorMods}
         subclass={editorSubclass}
+        weapons={editorWeapons}
         busy={update.isPending}
         onSubmit={editLoadout}
       />

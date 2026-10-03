@@ -11,7 +11,7 @@ import {
   fieldFilterControlShellClasses,
 } from "@/lib/field-surface";
 import { cn } from "@/lib/utils";
-import { Input } from "@/components/ui/input";
+import { Input, SearchClearButton } from "@/components/ui/input";
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -154,8 +154,9 @@ export function FilterMultiselectPanel<V extends string | number>({
               onKeyDown={(e) => e.stopPropagation()}
               placeholder="Search…"
               aria-label={`Search ${allLabel.toLowerCase()}`}
-              className="pl-8"
+              className="pr-8 pl-8"
             />
+            {query.length > 0 && <SearchClearButton onClick={() => onQueryChange("")} />}
           </div>
         </div>
       )}

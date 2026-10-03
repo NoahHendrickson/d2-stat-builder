@@ -40,6 +40,21 @@ const STAT_COLS = STAT_DISPLAY_ORDER.map((key) => ({
 /** Name column takes the slack; the six stat columns and Tuned stay fixed. */
 const DETAIL_COLS = "minmax(0,1fr) repeat(6, 2.25rem) 3rem";
 
+/**
+ * Hairline frame tinted with `--element-line`, drawn on an overlay so it sits on top of the
+ * icon (an inset shadow on the <img> itself paints under the art). The host must be
+ * `relative`.
+ */
+const ELEMENT_FRAME =
+  "after:pointer-events-none after:absolute after:inset-0 after:shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--element-line)_45%,transparent)]";
+
+/**
+ * Soft `--element-line` glow for shaped art (the Super / subclass diamond): a drop shadow
+ * follows the icon's transparency, where a square frame would box in the empty corners.
+ */
+const ELEMENT_GLOW =
+  "[filter:drop-shadow(0_0_5px_color-mix(in_srgb,var(--element-line)_55%,transparent))]";
+
 /** Icon + name for a plug/mod hash, from the manifest; falls back to the hash. */
 export function PlugIcon({
   hash,
@@ -90,7 +105,6 @@ export function PlugIcon({
           : size === 40
             ? "size-10"
             : "size-6");
-  const tileClass = plugElement ? "d2-tile-element" : undefined;
   const tileStyle = plugElement
     ? ({ "--element-line": SUBCLASS_LINE[plugElement] } as CSSProperties)
     : undefined;
@@ -101,6 +115,7 @@ export function PlugIcon({
           sizeClass,
           "relative inline-flex shrink-0",
           recolor && "isolate",
+          plugElement && ELEMENT_FRAME,
         )}
         style={tileStyle}
         tabIndex={0}
@@ -114,7 +129,6 @@ export function PlugIcon({
             sizeClass,
             "rounded-none",
             dim && "opacity-40 grayscale",
-            tileClass,
             className,
           )}
           style={recolor ? { filter: STRAND_ABILITY_PLATE_FILTER } : undefined}
@@ -127,10 +141,10 @@ export function PlugIcon({
     <TooltipLabel label={label}>
       <span
         className={cn(
-          "bg-muted shrink-0 rounded-none",
+          "bg-muted relative shrink-0 rounded-none",
           sizeClass,
           dim && "opacity-40",
-          tileClass,
+          plugElement && ELEMENT_FRAME,
           className,
         )}
         style={tileStyle}
@@ -169,7 +183,6 @@ export function ManifestIcon({
             : size === 40
               ? "size-10"
               : "size-4";
-  const tileClass = element ? "d2-tile-element" : undefined;
   const tileStyle = element
     ? ({ "--element-line": SUBCLASS_LINE[element] } as CSSProperties)
     : undefined;
@@ -181,7 +194,7 @@ export function ManifestIcon({
         tabIndex={showTooltip ? 0 : undefined}
         width={size}
         height={size}
-        className={cn(sizeClass, "shrink-0", tileClass, className)}
+        className={cn(sizeClass, "shrink-0", element && ELEMENT_GLOW, className)}
         style={tileStyle}
         unoptimized
       />
@@ -189,8 +202,11 @@ export function ManifestIcon({
   ) : (
     <TooltipLabel label={showTooltip ? label : undefined}>
       <span
-        className={cn("bg-muted shrink-0 rounded-none", sizeClass, tileClass, className)}
-        style={tileStyle}
+        className={cn(
+          "bg-muted relative shrink-0 rounded-none",
+          sizeClass,
+          className,
+        )}
         tabIndex={showTooltip ? 0 : undefined}
       />
     </TooltipLabel>

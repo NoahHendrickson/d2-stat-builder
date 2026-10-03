@@ -6,6 +6,7 @@ import { signOutForReauth } from "@/lib/auth/sign-out";
 import type { ArmoryCharacter } from "@/lib/armory/fetch";
 import { isFullyMasterworked } from "@/lib/armory/masterwork";
 import { armorPipTier, type ArmorPiece } from "@/lib/armory/normalize";
+import type { LoadoutWeapon } from "@/lib/armory/weapons";
 import type { Manifest } from "@/lib/manifest/load";
 import { ABILITY_KINDS } from "@/lib/dim/subclasses";
 import { equipItemRef, vaultedNote } from "@/lib/bungie/equip-client";
@@ -17,6 +18,7 @@ import { planLoadoutPlugs, type ApplyPlan, type SubclassPlugGroup } from "./appl
 import { subclassOptions, selectedSubclassPlugs, subclassFragmentCapacity } from "./subclass";
 import { planPiecesFromArmor } from "./plan-pieces";
 import { plugInfoFromManifest } from "./plug-info";
+import { planExoticWeaponSwap } from "./weapons";
 import {
   beginApplyProgress,
   finishApplyProgress,
@@ -44,6 +46,7 @@ export async function applySavedLoadout({
   resolved,
   character,
   armory,
+  weapons: ownedWeapons = [],
   manifest,
   queryClient,
 }: {
@@ -52,6 +55,8 @@ export async function applySavedLoadout({
   character: ArmoryCharacter;
   /** Every owned piece — picks same-slot spares to vault if a character's slot is full. */
   armory: Iterable<ArmorPiece>;
+  /** Every owned weapon — the same for weapon slots, plus the exotic swap (see below). */
+  weapons?: readonly LoadoutWeapon[];
   manifest: Manifest;
   queryClient: QueryClient;
 }): Promise<ApplyOutcome | null> {
@@ -60,8 +65,29 @@ export async function applySavedLoadout({
   // Callers may hand over a one-shot iterator (e.g. `map.values()`); it's walked more
   // than once below.
   const owned = Array.isArray(armory) ? (armory as ArmorPiece[]) : [...armory];
-  const spares = planSpares(owned, items, character.id);
-  const pieceName = (id: string) => owned.find((p) => p.instanceId === id)?.name ?? "a piece";
+
+  // Weapons are optional, and one that has left the account is skipped (and reported)
+  // rather than holding back the armor. A legendary goes on first when the loadout's
+  // exotic would otherwise collide with the one already equipped.
+  const liveWeapons = resolved.weapons.flatMap((w) => (w.weapon ? [w.weapon] : []));
+  const exoticSwap = planExoticWeaponSwap(liveWeapons, ownedWeapons, character.id);
+  const equipWeapons = exoticSwap.swap ? [exoticSwap.swap, ...liveWeapons] : liveWeapons;
+  for (const w of equipWeapons) {
+    items.push({
+      itemInstanceId: w.instanceId,
+      itemHash: w.itemHash,
+      location: w.location,
+      characterId: w.characterId,
+      isExotic: w.isExotic,
+      slot: w.slot,
+    });
+  }
+
+  const spares = planSpares([...owned, ...ownedWeapons], items, character.id);
+  const pieceName = (id: string) =>
+    owned.find((p) => p.instanceId === id)?.name ??
+    ownedWeapons.find((w) => w.instanceId === id)?.name ??
+    "a piece";
 
   // Subclass: equip the loadout's subclass item if it isn't already, and plan fragments.
   const subclassItem = resolved.subclass
@@ -116,6 +142,10 @@ export async function applySavedLoadout({
         : undefined,
   });
   if (resolved.subclass && !subclassItem) plan.skipped.push("Subclass is not available on this character");
+  for (const w of resolved.weapons) {
+    if (w.missing) plan.skipped.push(`${w.name} is no longer in your inventory`);
+  }
+  if (exoticSwap.blocked) plan.skipped.push(exoticSwap.blocked);
 
   const plugs: PlugRequest[] = plan.plugs.map(({ itemInstanceId, socketIndex, plugItemHash }) => ({
     itemInstanceId,
@@ -134,6 +164,15 @@ export async function applySavedLoadout({
       id: itemStepId(subclassItem.instanceId),
       name: subclassDef?.displayProperties?.name ?? "Subclass",
       icon: subclassDef?.displayProperties?.icon,
+      status: "pending",
+    });
+  }
+  for (const w of equipWeapons) {
+    steps.push({
+      id: itemStepId(w.instanceId),
+      name: w.name,
+      icon: w.icon,
+      watermark: w.watermark,
       status: "pending",
     });
   }
@@ -245,7 +284,7 @@ export async function applySavedLoadout({
 
   const outcome: ApplyOutcome = { plan, equip, plugs: plugsOut };
   if (showCard) finishApplyProgress(session, finishFromResults(equip, plugsOut));
-  else toastOutcome(outcome, pieces, character, pieceName);
+  else toastOutcome(outcome, [...pieces, ...equipWeapons], character, pieceName);
   return outcome;
 }
 

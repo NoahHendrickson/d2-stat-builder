@@ -16,7 +16,7 @@ describe("deriveArmory", () => {
     const profile = { characters: { data: {} } } as unknown as DestinyProfileResponse;
     const m1 = manifest();
     const a = deriveArmory(profile, m1);
-    expect(a).toEqual({ pieces: [], characters: [] });
+    expect(a).toEqual({ pieces: [], weapons: [], characters: [] });
     expect(deriveArmory(profile, m1)).toBe(a);
     expect(deriveArmory(profile, manifest())).not.toBe(a);
     expect(deriveArmory({ ...profile } as DestinyProfileResponse, m1)).not.toBe(a);

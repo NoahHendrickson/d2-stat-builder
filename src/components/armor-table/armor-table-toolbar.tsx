@@ -7,7 +7,7 @@ import type { FilterOption } from "@/lib/armor-table/pinned";
 import type { ArmorVersion, FacetFilters } from "@/lib/armor-table/filters";
 import { CLASS_NAMES } from "@/lib/armory/stats";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Input, SearchClearButton } from "@/components/ui/input";
 import {
   FilterCascadeMenu,
   TUNING_FILTER_OPTIONS,
@@ -107,8 +107,16 @@ export const ArmorTableToolbar = memo(function ArmorTableToolbar({
           }}
           placeholder="Press F to search"
           aria-label="Search armor by name"
-          className="h-8 pl-8"
+          className="h-8 pr-8 pl-8"
         />
+        {search.length > 0 && (
+          <SearchClearButton
+            onClick={() => {
+              onSearchChange("");
+              searchRef.current?.focus();
+            }}
+          />
+        )}
       </div>
       <div className="hidden min-w-0 items-center gap-2 @[58rem]/toolbar:flex">
         <FilterMultiselect

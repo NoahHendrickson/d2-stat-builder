@@ -4,7 +4,7 @@ import { useCallback, useMemo, useState } from "react";
 import dynamic from "next/dynamic";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Search01Icon } from "@hugeicons/core-free-icons";
-import { Input } from "@/components/ui/input";
+import { Input, SearchClearButton } from "@/components/ui/input";
 import { SetRow } from "@/components/builder/set-row";
 import { SetListControls } from "@/components/builder/set-list-controls";
 import { getArchetypes } from "@/lib/armory/archetypes";
@@ -129,8 +129,9 @@ export function SetBonusesSection({
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search set bonuses"
             aria-label="Search set bonuses"
-            className="pl-8"
+            className="pr-8 pl-8"
           />
+          {query.length > 0 && <SearchClearButton onClick={() => setQuery("")} />}
         </div>
         <SetListControls
           count={pinnedList.length + unpinnedList.length}

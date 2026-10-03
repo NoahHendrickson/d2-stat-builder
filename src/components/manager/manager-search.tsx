@@ -1,6 +1,6 @@
 "use client";
 
-import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import { useDeferredValue, useEffect, useId, useMemo, useRef, useState } from "react";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
   Cancel01Icon,
@@ -45,18 +45,28 @@ import { recentlyMoved, type MoveOutcome } from "@/lib/inventory/move-queue";
 import { NO_PERKS, createPerkLookup } from "@/lib/inventory/perk-index";
 import { planSmartMove } from "@/lib/inventory/smart-moves";
 import { dupeHashes, forEachItem, matchItems, parseSearch } from "@/lib/inventory/search";
+import { applySuggestion, suggestSearch, vocabList, type SearchVocab, type Suggestion } from "@/lib/inventory/search-suggest";
 import { useManifest } from "@/lib/manifest/use-manifest";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 import { useStoreValue } from "@/lib/value-store";
 import { useManagerActions } from "./manager-context";
+import { SearchResultsDrawer } from "./search-results-drawer";
 import { searchMatches } from "./search-store";
 import { TAG_ICONS } from "./tag-icons";
 import { ViewMenu } from "./view-menu";
 
+/** Runs `f` the first time it's asked, then hands back the same answer. */
+function once<T>(f: () => T): () => T {
+  let value: { v: T } | undefined;
+  return () => (value ??= { v: f() }).v;
+}
+
 /**
  * The manager's search box (DIM's query language, see lib/inventory/search.ts): items
  * it doesn't match are dimmed, and the menu beside it tags, locks, or moves every match.
+ * Typing suggests completions for the term at the caret (Tab or Enter takes one), and
+ * the match count opens every match in a drawer.
  */
 export function ManagerSearch({ inventory }: { inventory: ManagerInventory }) {
   const [query, setQuery] = useState("");
@@ -86,6 +96,70 @@ export function ManagerSearch({ inventory }: { inventory: ManagerInventory }) {
 
   const error = parsed && !parsed.ok ? parsed.error : undefined;
   const inputRef = useRef<HTMLInputElement>(null);
+  const [showResults, setShowResults] = useState(false);
+  // Clearing the search closes the drawer for good, not until the next search.
+  if (showResults && !matches) setShowResults(false);
+
+  // What the account holds, for suggestions; perk names are read only once asked for.
+  const vocab = useMemo<SearchVocab>(() => {
+    const all: InventoryItem[] = [];
+    forEachItem(inventory, (item) => all.push(item));
+    const instanced = once(() => all.filter((i) => i.instanceId));
+    return {
+      types: once(() => vocabList(instanced().map((i) => i.typeName).filter(Boolean))),
+      names: once(() => vocabList(all.map((i) => i.name))),
+      stats: once(() => vocabList(all.flatMap((i) => Object.keys(i.stats ?? {})).filter((s) => s !== "total"))),
+      perks: once(() => vocabList(instanced().flatMap((i) => perks.perks(i)))),
+      origins: once(() => vocabList(instanced().flatMap((i) => perks.origins(i)))),
+    };
+  }, [inventory, perks]);
+
+  const listId = useId();
+  const [open, setOpen] = useState(false);
+  const [caret, setCaret] = useState(0);
+  const suggestions = useMemo(
+    () => (open ? suggestSearch(query, caret, vocab) : undefined),
+    [open, query, caret, vocab],
+  );
+  const options = suggestions?.items;
+  const [active, setActive] = useState(0);
+  // The top row is what Tab and Enter take, so reset to it whenever the list changes.
+  const [activeFor, setActiveFor] = useState(options);
+  if (activeFor !== options) {
+    setActiveFor(options);
+    setActive(0);
+  }
+
+  const accept = (option: Suggestion) => {
+    if (!suggestions) return;
+    const next = applySuggestion(query, suggestions, option.text);
+    setQuery(next.query);
+    setCaret(next.caret);
+    requestAnimationFrame(() => inputRef.current?.setSelectionRange(next.caret, next.caret));
+  };
+
+  const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    const option = options?.[active];
+    switch (e.key) {
+      case "ArrowDown":
+      case "ArrowUp":
+        if (!options) break;
+        e.preventDefault();
+        setActive((i) => (e.key === "ArrowDown" ? Math.min(i + 1, options.length - 1) : Math.max(i - 1, 0)));
+        break;
+      case "Tab":
+      case "Enter":
+        if (!option || e.shiftKey) break;
+        e.preventDefault();
+        accept(option);
+        break;
+      case "Escape":
+        // One layer at a time: suggestions, then the text.
+        if (options) setOpen(false);
+        else setQuery("");
+        break;
+    }
+  };
 
   // Global "F" focuses search (ignored while typing in any field).
   useEffect(() => {
@@ -122,23 +196,66 @@ export function ManagerSearch({ inventory }: { inventory: ManagerInventory }) {
       }}
     >
       <HugeiconsIcon icon={Search01Icon} className="text-muted-foreground size-4 shrink-0" aria-hidden />
-      <input
-        ref={inputRef}
-        type="search"
-        value={query}
-        onChange={(e) => setQuery(e.target.value)}
-        onKeyDown={(e) => e.key === "Escape" && setQuery("")}
-        placeholder="Find items"
-        aria-label="Search items"
-        aria-keyshortcuts="F"
-        aria-invalid={error ? true : undefined}
-        aria-describedby={error ? "manager-search-error" : undefined}
-        className="peer placeholder:text-muted-foreground h-14 min-w-24 flex-1 bg-transparent text-base outline-none [&::-webkit-search-cancel-button]:hidden"
-      />
+      <div className="peer relative flex min-w-24 flex-1 self-stretch">
+        <input
+          ref={inputRef}
+          type="search"
+          role="combobox"
+          value={query}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            setCaret(e.target.selectionStart ?? e.target.value.length);
+            setOpen(true);
+          }}
+          onSelect={(e) => setCaret(e.currentTarget.selectionStart ?? 0)}
+          onKeyDown={onKeyDown}
+          onBlur={() => setOpen(false)}
+          placeholder="Find items"
+          aria-label="Search items"
+          aria-keyshortcuts="F"
+          aria-expanded={options !== undefined}
+          aria-controls={listId}
+          aria-autocomplete="list"
+          aria-activedescendant={options?.[active] ? `${listId}-${active}` : undefined}
+          aria-invalid={error ? true : undefined}
+          aria-describedby={error ? "manager-search-error" : undefined}
+          autoComplete="off"
+          spellCheck={false}
+          className="placeholder:text-muted-foreground h-14 w-full bg-transparent text-base outline-none [&::-webkit-search-cancel-button]:hidden"
+        />
+        {options && (
+          <div
+            id={listId}
+            role="listbox"
+            aria-label="Search suggestions"
+            className="d2-glass normal:rounded-[10px] absolute top-full left-0 z-50 mt-1 flex w-[min(26rem,calc(100vw-2rem))] cursor-default flex-col p-1 text-sm"
+            // Keep focus (and the caret) in the input while clicking rows.
+            onMouseDown={(e) => e.preventDefault()}
+          >
+            {options.map((option, i) => (
+              <div
+                key={option.text}
+                id={`${listId}-${i}`}
+                role="option"
+                aria-selected={i === active}
+                onMouseMove={() => i !== active && setActive(i)}
+                onClick={() => accept(option)}
+                className={cn(
+                  "normal:rounded-[8px] flex cursor-pointer items-center gap-3 px-2 py-1.5",
+                  i === active && "bg-foreground/10",
+                )}
+              >
+                <span className="min-w-0 flex-1 truncate font-mono text-[13px]">{option.text}</span>
+                <span className="text-muted-foreground shrink-0 text-xs">{option.hint}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
       {query.length === 0 && (
         <kbd
           aria-hidden
-          className="text-muted-foreground border-foreground/20 flex h-5 min-w-5 shrink-0 items-center justify-center border px-1 font-sans text-xs peer-focus:hidden"
+          className="text-muted-foreground border-foreground/20 flex h-5 min-w-5 shrink-0 items-center justify-center border px-1 font-sans text-xs peer-focus-within:hidden"
         >
           F
         </kbd>
@@ -153,19 +270,33 @@ export function ManagerSearch({ inventory }: { inventory: ManagerInventory }) {
           <HugeiconsIcon icon={Cancel01Icon} strokeWidth={2} className="size-3.5" aria-hidden />
         </button>
       )}
-      <span
-        id="manager-search-error"
-        className={cn(
-          "min-w-0 truncate text-sm tabular-nums",
-          error ? "text-destructive" : "text-muted-foreground",
-        )}
-        aria-live="polite"
-      >
-        {error ?? (matches ? `${matches.size.toLocaleString()} ${matches.size === 1 ? "item" : "items"}` : "")}
+      <span id="manager-search-error" className="flex min-w-0 text-sm tabular-nums" aria-live="polite">
+        {error ? (
+          <span className="text-destructive truncate">{error}</span>
+        ) : matches ? (
+          <TooltipLabel label="Show them all">
+            <button
+              type="button"
+              aria-haspopup="dialog"
+              aria-expanded={showResults}
+              onClick={() => setShowResults((s) => !s)}
+              className="text-muted-foreground hover:text-foreground aria-expanded:text-foreground normal:rounded-[6px] cursor-pointer truncate px-1 underline decoration-foreground/30 underline-offset-4 outline-none hover:decoration-foreground focus-visible:ring-1 focus-visible:ring-outline-strong"
+            >
+              {matches.size.toLocaleString()} {matches.size === 1 ? "item" : "items"}
+            </button>
+          </TooltipLabel>
+        ) : null}
       </span>
       {matches && matches.size > 0 && <BulkActions inventory={inventory} matches={matches} />}
       <SearchHelp />
       <ViewMenu />
+      <SearchResultsDrawer
+        inventory={inventory}
+        query={deferred}
+        matches={matches}
+        open={showResults}
+        onClose={() => setShowResults(false)}
+      />
     </div>
   );
 }

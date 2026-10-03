@@ -11,9 +11,17 @@ import {
   type DestinyComponentType,
   type DestinyItemComponent,
 } from "bungie-api-ts/destiny2";
-import { SLOT_BUCKETS } from "@/lib/armory/stats";
 import { BungieHttpError } from "./http";
 import {
+  MAX_THROTTLE_RETRIES,
+  THROTTLE_CODES,
+  THROTTLED_MESSAGE,
+  isThrottled,
+  throttleWait,
+  withThrottleRetry,
+} from "./throttle";
+import {
+  EQUIP_SLOT_BUCKETS,
   MAX_SPARES_PER_ITEM,
   pickLiveSpares,
   planEquipBatches,
@@ -37,7 +45,17 @@ export const EQUIP_MESSAGES: Record<number, string> = {
   1641: "Only one exotic can be equipped at a time",
   1642: "No room on that character — free up inventory space",
   1671: "Can't equip during an activity — go to orbit or a social space",
+  1672: "Moved, but Bungie is limiting equips — apply again in a moment",
 };
+
+function equipMessage(err: unknown): string {
+  if (isThrottled(err)) return EQUIP_MESSAGES[1672];
+  const code = err instanceof BungieHttpError ? err.code : undefined;
+  return (
+    (code !== undefined ? EQUIP_MESSAGES[code] : undefined) ??
+    (err instanceof Error ? err.message : "Equip failed")
+  );
+}
 
 /** DestinyNoRoomInDestination — the target bucket (character slot or vault) is full. */
 const NO_ROOM = 1642;
@@ -55,6 +73,7 @@ const CHARACTER_FULL_MESSAGE = "No room on that character — free up inventory 
 export function transferMessage(err: unknown, toVault: boolean): string {
   const code = err instanceof BungieHttpError ? err.code : undefined;
   if (code === NO_ROOM) return toVault ? VAULT_FULL_MESSAGE : CHARACTER_FULL_MESSAGE;
+  if (isThrottled(err)) return THROTTLED_MESSAGE;
   return (
     (code !== undefined ? TRANSFER_MESSAGES[code] : undefined) ??
     (err instanceof Error ? err.message : "Transfer failed")
@@ -222,14 +241,16 @@ export async function stageAndEquip({
     characterId,
   );
   const transfer = (action: TransferAction) =>
-    transferItem(http, {
-      itemReferenceHash: action.itemReferenceHash,
-      stackSize: 1,
-      transferToVault: action.transferToVault,
-      itemId: action.itemId,
-      characterId: action.characterId,
-      membershipType,
-    });
+    withThrottleRetry(() =>
+      transferItem(http, {
+        itemReferenceHash: action.itemReferenceHash,
+        stackSize: 1,
+        transferToVault: action.transferToVault,
+        itemId: action.itemId,
+        characterId: action.characterId,
+        membershipType,
+      }),
+    );
   const isNoRoom = (err: unknown) => err instanceof BungieHttpError && err.code === NO_ROOM;
 
   const slotOf = new Map(items.map((i) => [i.itemInstanceId, i.slot]));
@@ -257,7 +278,7 @@ export async function stageAndEquip({
         return [];
       }
     }
-    return pickLiveSpares(liveInventory, SLOT_BUCKETS[slot], characterId, tried, limit);
+    return pickLiveSpares(liveInventory, EQUIP_SLOT_BUCKETS[slot], characterId, tried, limit);
   };
 
   /** Attach the spares vaulted for this item — on failures too, so nothing moves unreported. */

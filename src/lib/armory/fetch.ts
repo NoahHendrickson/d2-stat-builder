@@ -13,6 +13,7 @@ import {
 import { abilitySocketIndex } from "@/lib/loadouts/subclass";
 import { ABILITY_KINDS } from "@/lib/dim/subclasses";
 import { normalizeArmory, type ArmorPiece } from "./normalize";
+import { normalizeWeapons, type LoadoutWeapon } from "./weapons";
 import { artifactUnlocksForCharacter } from "./artifact";
 import type { DimArtifactUnlocks } from "@/lib/dim/loadout-link";
 
@@ -36,6 +37,11 @@ export interface ArmoryCharacter {
 
 export interface Armory {
   pieces: ArmorPiece[];
+  /**
+   * Every owned weapon, for saved loadouts that carry weapons. Absent on an armory
+   * cached before weapons were tracked; the live profile fills it in.
+   */
+  weapons?: LoadoutWeapon[];
   characters: ArmoryCharacter[];
   /**
    * Plug hashes the player can socket right now (profile + character plug sets,
@@ -170,5 +176,10 @@ export function buildArmory(
   });
 
   const insertablePlugs = insertablePlugsFromProfile(profile);
-  return { pieces, characters, ...(insertablePlugs ? { insertablePlugs } : {}) };
+  return {
+    pieces,
+    weapons: normalizeWeapons(profile, manifest),
+    characters,
+    ...(insertablePlugs ? { insertablePlugs } : {}),
+  };
 }

@@ -3,7 +3,7 @@ import { setItemLockState } from "bungie-api-ts/destiny2";
 import { BungieHttpError, createBungieHttp } from "@/lib/bungie/http";
 import { getValidAccessToken, readUser } from "@/lib/bungie/session";
 import { bungieErrorResponse } from "@/lib/bungie/equip-route";
-import { THROTTLED_MESSAGE, isThrottled, withThrottleRetry } from "@/lib/bungie/move-server";
+import { THROTTLED_MESSAGE, isThrottled, withThrottleRetry } from "@/lib/bungie/throttle";
 
 const isId = (v: unknown): v is string => typeof v === "string" && /^\d+$/.test(v);
 

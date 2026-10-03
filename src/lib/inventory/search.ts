@@ -92,6 +92,38 @@ export const IS_KEYWORDS: readonly string[] = [
   ...Object.keys(SLOT_NAMES),
 ];
 
+/** Every `key:` the parser takes (aliases aside), in the order suggestions list them. */
+export const SEARCH_KEYS: readonly string[] = [
+  "is",
+  "not",
+  "tag",
+  "perk",
+  "origin",
+  "name",
+  "type",
+  "element",
+  "champion",
+  "class",
+  "ammo",
+  "power",
+  "tier",
+  "stat",
+  "notes",
+];
+
+/** The fixed values a key takes, aliases included; open-ended keys (perk:, type:, …) aren't here. */
+export const KEY_VALUES: Readonly<Record<string, readonly string[]>> = {
+  is: IS_KEYWORDS,
+  not: IS_KEYWORDS,
+  tag: [...ITEM_TAGS, "none", "any"],
+  element: [...ELEMENTS],
+  damage: [...ELEMENTS],
+  champion: ["barrier", "overload", "unstoppable"],
+  breaker: ["barrier", "overload", "unstoppable"],
+  class: Object.keys(CLASS_NAMES),
+  ammo: Object.keys(AMMO_NAMES),
+};
+
 const tagOf = (item: InventoryItem, ctx: SearchContext): ItemTag | undefined =>
   item.instanceId ? ctx.annotations[item.instanceId]?.tag : undefined;
 const notesOf = (item: InventoryItem, ctx: SearchContext): string =>

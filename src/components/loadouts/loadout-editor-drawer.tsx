@@ -72,6 +72,12 @@ import {
   LoadoutSubclassEditor,
   type SubclassSection,
 } from "@/components/loadouts/loadout-subclass-editor";
+import {
+  LoadoutWeaponsEditor,
+  initialWeaponPicks,
+  weaponPickRefs,
+  type WeaponsSection,
+} from "@/components/loadouts/loadout-weapons-editor";
 import type { DimLoadoutItem } from "@/lib/dim/loadout-link";
 import type { EditorTotals } from "@/lib/loadouts/editor-stats";
 import { cn } from "@/lib/utils";
@@ -84,6 +90,8 @@ export interface LoadoutDetailsValues {
   /** Current wishlist after explicit stat-mod replacements/removals. */
   desiredStatMods?: number[];
   subclass?: DimLoadoutItem | null;
+  /** Present only when a `weapons` section was shown; empty means armor-only. */
+  weapons?: DimLoadoutItem[];
   /**
    * Armor + placed mods + fragments as the header showed them. Present only when every
    * piece was known (a `mods` section), so the total is complete.
@@ -112,6 +120,7 @@ interface EditorProps {
   initialNotes?: string;
   mods?: ModsSection;
   subclass?: SubclassSection;
+  weapons?: WeaponsSection;
   busy?: boolean;
   /** Piece/subclass grids; deferred so the header can paint during the slide. */
   showGrids?: boolean;
@@ -681,6 +690,7 @@ function EditorForm({
   initialNotes = "",
   mods,
   subclass,
+  weapons,
   busy = false,
   showGrids = true,
   onSubmit,
@@ -694,6 +704,9 @@ function EditorForm({
   }));
   const { placement, desiredStatMods } = modEditor;
   const [subclassItem, setSubclassItem] = useState(subclass?.initial ?? null);
+  const [weaponPicks, setWeaponPicks] = useState(() =>
+    weapons ? initialWeaponPicks(weapons) : {},
+  );
   const nameId = useId();
   const notesId = useId();
 
@@ -809,6 +822,7 @@ function EditorForm({
       notes: identityRef.current.notes.trim(),
       ...(mods ? { placement, desiredStatMods } : {}),
       ...(subclass ? { subclass: subclassItem } : {}),
+      ...(weapons ? { weapons: weaponPickRefs(weaponPicks) } : {}),
       ...(mods && totals ? { stats: totals } : {}),
     });
   };
@@ -890,6 +904,9 @@ function EditorForm({
             stats={totals.stats}
             statIcons={statIcons}
           />
+        )}
+        {weapons && (
+          <LoadoutWeaponsEditor section={weapons} value={weaponPicks} onChange={setWeaponPicks} />
         )}
         {/* Subclass first, then the five pieces; at `lg` every column shares the width.
             Gated so the header can paint before ~550 tooltip roots and images mount. */}
