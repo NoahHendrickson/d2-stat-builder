@@ -78,6 +78,12 @@ import {
   weaponPickRefs,
   type WeaponsSection,
 } from "@/components/loadouts/loadout-weapons-editor";
+import {
+  LoadoutArtifactEditor,
+  artifactPickRef,
+  initialArtifactPick,
+  type ArtifactSection,
+} from "@/components/loadouts/loadout-artifact-editor";
 import type { DimLoadoutItem } from "@/lib/dim/loadout-link";
 import type { EditorTotals } from "@/lib/loadouts/editor-stats";
 import { cn } from "@/lib/utils";
@@ -92,6 +98,8 @@ export interface LoadoutDetailsValues {
   subclass?: DimLoadoutItem | null;
   /** Present only when a `weapons` section was shown; empty means armor-only. */
   weapons?: DimLoadoutItem[];
+  /** Present only when an `artifact` section was shown; null means no artifact. */
+  artifact?: DimLoadoutItem | null;
   /**
    * Armor + placed mods + fragments as the header showed them. Present only when every
    * piece was known (a `mods` section), so the total is complete.
@@ -121,6 +129,7 @@ interface EditorProps {
   mods?: ModsSection;
   subclass?: SubclassSection;
   weapons?: WeaponsSection;
+  artifact?: ArtifactSection;
   busy?: boolean;
   /** Piece/subclass grids; deferred so the header can paint during the slide. */
   showGrids?: boolean;
@@ -590,7 +599,8 @@ function EditorStatsRow({
 }) {
   return (
     <div
-      className="flex shrink-0 items-center gap-3 px-7 pb-2 text-xs leading-4 tabular-nums"
+      role="group"
+      className="flex shrink-0 items-center gap-3 px-1 text-sm leading-5 tabular-nums"
       aria-label="Loadout stats"
     >
       <TooltipLabel label="Total stats">
@@ -663,7 +673,7 @@ function EditorIdentityFields({
         maxLength={MAX_NAME_LENGTH}
         placeholder="Loadout name"
         aria-label="Loadout name"
-        className="h-9 w-full bg-transparent text-sm sm:w-80 dark:bg-transparent"
+        className="h-9 w-full bg-transparent text-sm sm:w-64 lg:w-full dark:bg-transparent"
         autoFocus
         onFocus={(e) => e.target.select()}
       />
@@ -676,7 +686,7 @@ function EditorIdentityFields({
         onChange={(e) => setNotesValue(e.target.value)}
         maxLength={MAX_NOTES_LENGTH}
         placeholder="Notes (optional — #hashtags become filters)"
-        className="h-9 min-w-0 flex-1 bg-transparent text-sm sm:max-w-md sm:min-w-60 dark:bg-transparent"
+        className="h-9 min-w-0 flex-1 bg-transparent text-sm sm:max-w-md sm:min-w-48 lg:max-w-none lg:min-w-0 dark:bg-transparent"
       />
     </>
   );
@@ -691,6 +701,7 @@ function EditorForm({
   mods,
   subclass,
   weapons,
+  artifact,
   busy = false,
   showGrids = true,
   onSubmit,
@@ -706,6 +717,9 @@ function EditorForm({
   const [subclassItem, setSubclassItem] = useState(subclass?.initial ?? null);
   const [weaponPicks, setWeaponPicks] = useState(() =>
     weapons ? initialWeaponPicks(weapons) : {},
+  );
+  const [artifactPick, setArtifactPick] = useState(() =>
+    artifact ? initialArtifactPick(artifact) : null,
   );
   const nameId = useId();
   const notesId = useId();
@@ -823,6 +837,7 @@ function EditorForm({
       ...(mods ? { placement, desiredStatMods } : {}),
       ...(subclass ? { subclass: subclassItem } : {}),
       ...(weapons ? { weapons: weaponPickRefs(weaponPicks) } : {}),
+      ...(artifact ? { artifact: artifactPickRef(artifact, artifactPick) } : {}),
       ...(mods && totals ? { stats: totals } : {}),
     });
   };
@@ -848,8 +863,11 @@ function EditorForm({
         <DrawerDescription className="sr-only">{description}</DrawerDescription>
       )}
 
-      {/* Header: name (Figma "Select Trigger" 22:8019), notes, and the actions. */}
-      <div className="flex shrink-0 flex-wrap items-center gap-2 px-4 pt-4 pb-3 sm:gap-3">
+      {/* Header: name (Figma "Select Trigger" 22:8019), notes, the build's stat mods and
+          stats, and the actions. From `lg` it is one grid row: name and notes give up width
+          first, and the mods + stats cluster wraps inside its own cell, so the actions never
+          drop to a second line. */}
+      <div className="flex shrink-0 flex-wrap items-center gap-2 px-4 pt-4 pb-3 sm:gap-3 lg:grid lg:grid-cols-[minmax(10rem,0.6fr)_minmax(10rem,1fr)_auto_auto]">
         <EditorIdentityFields
           initialName={initialName}
           initialNotes={initialNotes}
@@ -858,23 +876,32 @@ function EditorForm({
           valuesRef={identityRef}
           onNameValidChange={setNameValid}
         />
-        {mods && desiredStatMods.length > 0 && (
-          <div
-            role="group"
-            aria-label="Stat mods"
-            className="flex flex-wrap items-center gap-0.5"
-          >
-            {desiredStatMods.map((hash, i) => (
-              <StatModChip
-                key={`${hash}-${i}`}
-                option={mods.catalog.option(hash)}
-                slotted={slotted[i] ?? false}
-                blocked={statModBlocked[i]}
-                onSlot={() => slotDesiredStatMod(hash)}
-              />
-            ))}
-          </div>
-        )}
+        <div className="flex min-w-0 flex-wrap items-center gap-x-5 gap-y-2">
+          {mods && desiredStatMods.length > 0 && (
+            <div
+              role="group"
+              aria-label="Stat mods"
+              className="flex flex-wrap items-center gap-0.5"
+            >
+              {desiredStatMods.map((hash, i) => (
+                <StatModChip
+                  key={`${hash}-${i}`}
+                  option={mods.catalog.option(hash)}
+                  slotted={slotted[i] ?? false}
+                  blocked={statModBlocked[i]}
+                  onSlot={() => slotDesiredStatMod(hash)}
+                />
+              ))}
+            </div>
+          )}
+          {totals && (
+            <EditorStatsRow
+              total={totals.total}
+              stats={totals.stats}
+              statIcons={statIcons}
+            />
+          )}
+        </div>
         <div className="ml-auto flex items-center gap-2">
           {overEnergy && (
             <span className="text-destructive text-xs">
@@ -898,15 +925,20 @@ function EditorForm({
         {description && !mods && (
           <p className="text-muted-foreground mb-3 text-xs">{description}</p>
         )}
-        {totals && (
-          <EditorStatsRow
-            total={totals.total}
-            stats={totals.stats}
-            statIcons={statIcons}
-          />
-        )}
-        {weapons && (
-          <LoadoutWeaponsEditor section={weapons} value={weaponPicks} onChange={setWeaponPicks} />
+        {(weapons || artifact) && (
+          // One row of equipment slots: kinetic, energy, power, then the wider artifact.
+          <div className="grid shrink-0 grid-cols-1 gap-2 px-7 pb-4 sm:grid-cols-2 xl:grid-cols-[repeat(3,minmax(0,1fr))_minmax(0,1.5fr)]">
+            {weapons && (
+              <LoadoutWeaponsEditor section={weapons} value={weaponPicks} onChange={setWeaponPicks} />
+            )}
+            {artifact && (
+              <LoadoutArtifactEditor
+                section={artifact}
+                value={artifactPick}
+                onChange={setArtifactPick}
+              />
+            )}
+          </div>
         )}
         {/* Subclass first, then the five pieces; at `lg` every column shares the width.
             Gated so the header can paint before ~550 tooltip roots and images mount. */}
@@ -995,7 +1027,8 @@ export function LoadoutEditorDrawer({
     >
       <DrawerContent
         aria-label={form.title}
-        className="d2-sidebar d2-line bg-glass rounded-none border border-transparent shadow-none data-[swipe-axis=y]:[--drawer-content-max-height:min(80dvh,60rem)] [--bleed:0px] [--drawer-bleed-background:var(--glass)]"
+        // No left edge: the sidebar's own border-r already draws that line.
+        className="d2-sidebar d2-line bg-glass rounded-none border border-transparent border-l-0! shadow-none data-[swipe-axis=y]:[--drawer-content-max-height:min(80dvh,60rem)] [--bleed:0px] [--drawer-bleed-background:var(--glass)]"
         // Over the main column only — past the sidebar. `--app-sidebar-width` is 0 below `lg`.
         style={{
           left: "var(--app-sidebar-width, 0px)",

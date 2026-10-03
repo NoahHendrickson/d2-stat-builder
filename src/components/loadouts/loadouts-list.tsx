@@ -49,6 +49,8 @@ import { selectionsForLoadout } from "@/lib/loadouts/load-in-builder";
 import { loadoutSubclass, withLoadoutSubclass } from "@/lib/loadouts/subclass";
 import { withLoadoutWeapons } from "@/lib/loadouts/weapons";
 import { weaponSlotOfHash } from "@/lib/armory/weapons";
+import { isArtifactHash } from "@/lib/armory/artifact-items";
+import { lastPlayedCharacter } from "@/lib/bungie/equip-client";
 import {
   LOADOUT_SCHEMA_VERSION,
   MAX_TAGS,
@@ -261,20 +263,29 @@ export function LoadoutsList({
     desiredStatMods,
     subclass,
     weapons,
+    artifact,
     stats,
   }: LoadoutDetailsValues) => {
     if (dialog.kind !== "edit") return;
     const { id, loadout, optimizer, builder, modPlacement } = dialog.loadout;
+    const withWeapons = weapons
+      ? withLoadoutWeapons(
+          loadout,
+          weapons,
+          (ref) => weaponSlotOfHash(manifest, ref.hash) !== undefined,
+        )
+      : loadout;
+    // Same swap for the artifact: undefined = no section shown, null = none.
+    const base =
+      artifact === undefined
+        ? withWeapons
+        : withLoadoutWeapons(withWeapons, artifact ? [artifact] : [], (ref) =>
+            isArtifactHash(manifest, ref.hash),
+          );
     const next: SavedLoadoutData = {
       version: LOADOUT_SCHEMA_VERSION,
       loadout: {
-        ...(weapons
-          ? withLoadoutWeapons(
-              loadout,
-              weapons,
-              (ref) => weaponSlotOfHash(manifest, ref.hash) !== undefined,
-            )
-          : loadout),
+        ...base,
         name,
         ...(notes ? { notes } : { notes: undefined }),
       },
@@ -430,6 +441,23 @@ export function LoadoutsList({
       ),
     };
   }, [dialog, armory.weapons, manifest]);
+  const editorArtifact = useMemo(() => {
+    if (dialog.kind !== "edit") return undefined;
+    const { loadout } = dialog.loadout;
+    const classType =
+      loadout.classType < 3
+        ? loadout.classType
+        : loadout.equipped.map((ref) => pieceMap.get(ref.id ?? "")).find(Boolean)?.classType;
+    const owned = lastPlayedCharacter(armory.characters, classType)?.artifacts;
+    // No artifacts read (stale cache, no profile data): no section, so a save can't
+    // read as "remove the artifact".
+    if (!owned?.length) return undefined;
+    return {
+      manifest,
+      owned,
+      initial: loadout.equipped.find((ref) => isArtifactHash(manifest, ref.hash)),
+    };
+  }, [dialog, armory.characters, pieceMap, manifest]);
   const editorSubclass = useMemo(() => {
     if (!editorLoadout || editorLoadout.loadout.classType >= 3) return undefined;
     return {
@@ -634,6 +662,7 @@ export function LoadoutsList({
         mods={editorMods}
         subclass={editorSubclass}
         weapons={editorWeapons}
+        artifact={editorArtifact}
         busy={update.isPending}
         onSubmit={editLoadout}
       />

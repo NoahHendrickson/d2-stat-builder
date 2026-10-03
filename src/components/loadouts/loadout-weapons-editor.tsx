@@ -1,15 +1,18 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Image from "next/image";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { Cancel01Icon } from "@hugeicons/core-free-icons";
+import { Add01Icon, ArrowDown01Icon, Cancel01Icon } from "@hugeicons/core-free-icons";
 import {
   WEAPON_SLOTS,
   WEAPON_SLOT_LABELS,
   weaponSlotOfHash,
   type LoadoutWeapon,
+  type WeaponPerks,
   type WeaponSlot,
 } from "@/lib/armory/weapons";
+import { BUNGIE_IMAGE_BASE } from "@/lib/bungie/constants";
 import type { DimLoadoutItem } from "@/lib/dim/loadout-link";
 import type { Manifest } from "@/lib/manifest/load";
 import { ArmorThumb } from "@/components/armor-thumb";
@@ -46,13 +49,67 @@ export function weaponPickRefs(picks: WeaponPicks): DimLoadoutItem[] {
   return WEAPON_SLOTS.flatMap((slot) => (picks[slot] ? [picks[slot]] : []));
 }
 
+/**
+ * An equipment slot in the editor (weapons, artifact): the game's icon well — a faint
+ * frame with corner ticks — so the row reads as slots to fill, not loose text.
+ */
+export const LOADOUT_SLOT_CLASS =
+  "d2-corner-well d2-hover-ring hover:[--tick-alpha:60%] data-[popup-open]:[--tick-alpha:60%] data-[popup-open]:bg-foreground/8 flex h-full min-h-16 w-full min-w-0 cursor-pointer items-center gap-3 p-2 text-left outline-none transition-colors focus-visible:ring-1 focus-visible:ring-outline-strong";
+
+/** An unfilled slot: the empty-socket bracket corners around a plus. */
+export function EmptySlotIcon() {
+  return (
+    <span className="d2-brackets text-muted-foreground flex size-12 shrink-0 items-center justify-center bg-black/25" aria-hidden>
+      <HugeiconsIcon icon={Add01Icon} strokeWidth={1.5} className="size-4" />
+    </span>
+  );
+}
+
 /** More than this many matches and the list asks for a narrower search instead. */
 const MAX_OPTIONS = 60;
 
-function whereLabel(weapon: LoadoutWeapon) {
-  if (weapon.postmaster) return "Postmaster";
-  if (weapon.location === "vault") return "Vault";
-  return weapon.location === "equipped" ? "Equipped" : "On a character";
+/**
+ * A weapon's roll under its row in the picker, like the Manager's perk grid but smaller:
+ * one column per perk socket, with the perk it has filled blue.
+ */
+function WeaponPerkGrid({ perks, manifest }: { perks: WeaponPerks; manifest: Manifest }) {
+  const plug = (hash: number) =>
+    manifest.def("DestinyInventoryItemDefinition", hash)?.displayProperties;
+  return (
+    <div className="flex gap-1 pt-1 pr-1 pb-2 pl-11" aria-label="Perks">
+      {perks.columns.map((column, i) => (
+        <div key={i} className="flex flex-col gap-1">
+          {column.options.map((hash) => {
+            const def = plug(hash);
+            const current = hash === column.current;
+            const name = def?.name ?? "Unknown perk";
+            return (
+              <TooltipLabel key={hash} label={current ? `${name} (equipped)` : name}>
+                <span
+                  tabIndex={0}
+                  className={cn(
+                    "border-foreground/12 flex size-7 items-center justify-center rounded-full border outline-none focus-visible:ring-1 focus-visible:ring-outline-strong",
+                    current ? "bg-[#305f8e]" : "bg-foreground/4",
+                  )}
+                >
+                  {def?.icon && (
+                    <Image
+                      src={`${BUNGIE_IMAGE_BASE}${def.icon}`}
+                      alt={name}
+                      width={20}
+                      height={20}
+                      className="size-5"
+                      unoptimized
+                    />
+                  )}
+                </span>
+              </TooltipLabel>
+            );
+          })}
+        </div>
+      ))}
+    </div>
+  );
 }
 
 function SlotPicker({
@@ -71,6 +128,8 @@ function SlotPicker({
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
+  /** The one weapon row opened to show its perks. */
+  const [expanded, setExpanded] = useState<string | null>(null);
   const label = WEAPON_SLOT_LABELS[slot];
 
   const live = pick ? section.owned.find((w) => w.instanceId === pick.id) : undefined;
@@ -92,29 +151,33 @@ function SlotPicker({
   }, [open, query, section.owned, slot]);
 
   return (
-    <div className="flex min-w-0 items-center gap-1">
+    <div className="relative min-w-0">
       <Popover
         open={open}
         onOpenChange={(next) => {
           setOpen(next);
-          if (!next) setQuery("");
+          if (!next) {
+            setQuery("");
+            setExpanded(null);
+          }
         }}
       >
         <PopoverTrigger
           aria-label={pick ? `${label} weapon: ${pickName ?? "Unknown weapon"}` : `Add ${label} weapon`}
-          className="d2-hover-ring hover:bg-foreground/6 data-[popup-open]:bg-foreground/8 flex h-10 min-w-0 cursor-pointer items-center gap-2 pr-2 text-left outline-none transition-colors focus-visible:ring-1 focus-visible:ring-outline-strong"
+          className={cn(LOADOUT_SLOT_CLASS, pick && "pr-8")}
         >
           {pick ? (
             <ArmorThumb
               icon={live?.icon ?? pickDef?.displayProperties.icon}
               watermark={live?.watermark}
-              size={40}
+              size={48}
               className={cn(!live && "opacity-50")}
             />
           ) : (
-            <span className="d2-brackets size-10 shrink-0 bg-black/25" aria-hidden />
+            <EmptySlotIcon />
           )}
           <span className="flex min-w-0 flex-col">
+            <span className="d2-label text-[10px] leading-4">{label}</span>
             <span
               className={cn(
                 "truncate text-sm leading-5",
@@ -122,15 +185,16 @@ function SlotPicker({
                 !pick && "text-muted-foreground",
               )}
             >
-              {pick ? (pickName ?? "Unknown weapon") : "None"}
+              {pick ? (pickName ?? "Unknown weapon") : "Add weapon"}
             </span>
-            <span className="flex items-center gap-2 text-[10px] leading-4">
-              <span className="d2-label text-[10px]">{label}</span>
-              {pick && !live && <span className="text-warning">Missing</span>}
-            </span>
+            {pick && (
+              <span className="text-muted-foreground truncate text-xs leading-4">
+                {live ? live.typeName : <span className="text-warning">Missing</span>}
+              </span>
+            )}
           </span>
         </PopoverTrigger>
-        <PopoverContent align="start" className="w-80 gap-2 p-2">
+        <PopoverContent align="start" className="w-(--anchor-width) min-w-80 gap-2 p-2">
           <div className="relative">
             <Input
               type="search"
@@ -146,45 +210,67 @@ function SlotPicker({
           <div
             role="listbox"
             aria-label={`${label} weapons`}
-            className="flex max-h-72 flex-col overflow-y-auto overscroll-contain"
+            className="d2-scroll flex max-h-96 flex-col overflow-y-auto overscroll-contain"
           >
             {options.slice(0, MAX_OPTIONS).map((weapon) => {
               const selected = weapon.instanceId === pick?.id;
               const blocked = weapon.isExotic && exoticElsewhere;
+              const isExpanded = expanded === weapon.instanceId;
               return (
-                <button
+                <div
                   key={weapon.instanceId}
-                  type="button"
-                  role="option"
-                  aria-selected={selected}
-                  aria-disabled={blocked || undefined}
-                  title={blocked ? "Only one exotic weapon can be equipped" : undefined}
-                  onClick={() => {
-                    if (blocked) return;
-                    onPick({ id: weapon.instanceId, hash: weapon.itemHash });
-                    setOpen(false);
-                    setQuery("");
-                  }}
-                  className={cn(
-                    "hover:bg-foreground/6 focus-visible:bg-foreground/6 flex shrink-0 cursor-pointer items-center gap-2 p-1 text-left outline-none",
-                    selected && "bg-foreground/10",
-                    blocked && "cursor-not-allowed opacity-40",
-                  )}
+                  role="none"
+                  className={cn("flex shrink-0 flex-col", selected && "bg-foreground/10")}
                 >
-                  <ArmorThumb icon={weapon.icon} watermark={weapon.watermark} size={32} />
-                  <span className="flex min-w-0 flex-1 flex-col">
-                    <span className={cn("truncate text-sm leading-5", weapon.isExotic && "text-exotic")}>
-                      {weapon.name}
-                    </span>
-                    <span className="text-muted-foreground flex items-center gap-2 text-xs leading-4">
-                      <span className="truncate">{weapon.typeName}</span>
-                      <span className="shrink-0">{whereLabel(weapon)}</span>
-                    </span>
-                  </span>
-                  {weapon.power !== undefined && (
-                    <PowerValue value={weapon.power} size="xs" tone="gold" className="shrink-0" />
+                  <div role="none" className="flex items-center">
+                    <button
+                      type="button"
+                      role="option"
+                      aria-selected={selected}
+                      aria-disabled={blocked || undefined}
+                      title={blocked ? "Only one exotic weapon can be equipped" : undefined}
+                      onClick={() => {
+                        if (blocked) return;
+                        onPick({ id: weapon.instanceId, hash: weapon.itemHash });
+                        setOpen(false);
+                        setQuery("");
+                      }}
+                      className={cn(
+                        "hover:bg-foreground/6 focus-visible:bg-foreground/6 flex min-w-0 flex-1 cursor-pointer items-center gap-2 p-1 text-left outline-none",
+                        blocked && "cursor-not-allowed opacity-40",
+                      )}
+                    >
+                      <ArmorThumb icon={weapon.icon} watermark={weapon.watermark} size={32} />
+                      <span
+                        className={cn("min-w-0 flex-1 truncate text-sm leading-5", weapon.isExotic && "text-exotic")}
+                      >
+                        {weapon.name}
+                      </span>
+                      {weapon.power !== undefined && (
+                        <PowerValue value={weapon.power} size="xs" tone="gold" className="shrink-0" />
+                      )}
+                    </button>
+                    {weapon.perks && (
+                      <button
+                        type="button"
+                        aria-expanded={isExpanded}
+                        aria-label={`${isExpanded ? "Hide" : "Show"} ${weapon.name} perks`}
+                        onClick={() => setExpanded(isExpanded ? null : weapon.instanceId)}
+                        className="text-muted-foreground hover:text-foreground hover:bg-foreground/6 focus-visible:bg-foreground/6 flex size-8 shrink-0 cursor-pointer items-center justify-center self-stretch outline-none"
+                      >
+                        <HugeiconsIcon
+                          icon={ArrowDown01Icon}
+                          strokeWidth={2}
+                          className={cn("size-4 transition-transform", isExpanded && "rotate-180")}
+                          aria-hidden
+                        />
+                      </button>
+                    )}
+                  </div>
+                  {isExpanded && weapon.perks && (
+                    <WeaponPerkGrid perks={weapon.perks} manifest={section.manifest} />
                   )}
-                </button>
+                </div>
               );
             })}
             {options.length === 0 && (
@@ -206,7 +292,7 @@ function SlotPicker({
             type="button"
             aria-label={`Remove ${label.toLowerCase()} weapon`}
             onClick={() => onPick(undefined)}
-            className="text-muted-foreground hover:text-foreground flex size-6 shrink-0 cursor-pointer items-center justify-center outline-none focus-visible:ring-1 focus-visible:ring-outline-strong"
+            className="text-muted-foreground hover:text-foreground absolute top-1.5 right-1.5 flex size-6 cursor-pointer items-center justify-center outline-none focus-visible:ring-1 focus-visible:ring-outline-strong"
           >
             <HugeiconsIcon icon={Cancel01Icon} strokeWidth={2} className="size-3.5" aria-hidden />
           </button>
@@ -234,11 +320,8 @@ export function LoadoutWeaponsEditor({
     return id !== undefined && section.owned.find((w) => w.instanceId === id)?.isExotic;
   });
   return (
-    <section
-      aria-label="Weapons"
-      className="flex shrink-0 flex-wrap items-center gap-x-6 gap-y-2 px-7 pb-3"
-    >
-      <span className="d2-label text-[10px]">Weapons</span>
+    // `contents`: the three slots sit straight in the editor's slot grid.
+    <section aria-label="Weapons" className="contents">
       {WEAPON_SLOTS.map((slot) => (
         <SlotPicker
           key={slot}

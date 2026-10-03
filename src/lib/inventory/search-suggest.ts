@@ -31,9 +31,11 @@ const KEY_HINT = "Filter";
 const OPEN_KEYS: Record<string, { hint: string; values: (v: SearchVocab) => readonly string[] }> = {
   perk: { hint: "Perk", values: (v) => v.perks() },
   perkname: { hint: "Perk", values: (v) => v.perks() },
+  exactperk: { hint: "Perk", values: (v) => v.perks() },
   origin: { hint: "Origin trait", values: (v) => v.origins() },
   origintrait: { hint: "Origin trait", values: (v) => v.origins() },
   name: { hint: "Item", values: (v) => v.names() },
+  exactname: { hint: "Item", values: (v) => v.names() },
   type: { hint: "Type", values: (v) => v.types() },
 };
 /** Words the parser reads as operators, never completed. */

@@ -15,6 +15,7 @@ import { ABILITY_KINDS } from "@/lib/dim/subclasses";
 import { normalizeArmory, type ArmorPiece } from "./normalize";
 import { normalizeWeapons, type LoadoutWeapon } from "./weapons";
 import { artifactUnlocksForCharacter } from "./artifact";
+import { artifactsForCharacter, type OwnedArtifact } from "./artifact-items";
 import type { DimArtifactUnlocks } from "@/lib/dim/loadout-link";
 
 export interface ArmoryCharacter {
@@ -31,6 +32,8 @@ export interface ArmoryCharacter {
   equippedSubclass?: EquippedSubclass;
   /** Currently unlocked seasonal-artifact perks (dim-api shape); omitted if unavailable. */
   artifactUnlocks?: DimArtifactUnlocks;
+  /** The character's artifacts (Artifacts 2.0), equipped first, with their live perks. */
+  artifacts?: OwnedArtifact[];
   /** The character's subclass items with live fragment sockets (for applying loadouts). */
   subclassItems: SubclassItem[];
 }
@@ -166,6 +169,7 @@ export function buildArmory(
       dateLastPlayed: c.dateLastPlayed,
       ...(equippedSubclass ? { equippedSubclass } : {}),
       ...(artifactUnlocks ? { artifactUnlocks } : {}),
+      artifacts: artifactsForCharacter(profile, c.characterId, manifest),
       subclassItems: subclassItemsForCharacter(profile, c.characterId, (hash) =>
         ABILITY_KINDS.flatMap((kind) => {
           const index = abilitySocketIndex(manifest, hash, kind);

@@ -302,16 +302,18 @@ export function ManagerSearch({ inventory }: { inventory: ManagerInventory }) {
 }
 
 const HELP: [string, string][] = [
-  ["fatebringer", "Name or perk contains it"],
+  ["fatebringer", "Name, type, or perk contains it"],
+  ["stasis  hunter  smg", "Keywords work without is: too"],
   ["is:weapon  is:armor  is:exotic", "Kind and rarity"],
   ["is:crafted  is:craftable  is:deepsight", "Item state"],
   ["is:locked  is:dupe  is:equipped  is:invault", "Lock, duplicates, where it is"],
   ["tag:junk  tag:none  is:tagged", "Your tags"],
-  ["is:solar  is:heavy  is:overload", "Element, ammo, champion"],
+  ["is:solar  is:dark  is:heavy  is:overload", "Element, ammo, champion"],
+  ["is:handcannon  is:lfr  is:adept", "Weapon type, adept"],
   ["is:hunter  is:helmet  is:powerslot", "Class and slot"],
   ["power:>=400  tier:5", "Power and gear tier"],
   ["stat:total:>=60  stat:range:>50", "Any stat by name"],
-  ['perk:"kill clip"  type:"hand cannon"', "Perks and weapon type"],
+  ['perk:"kill clip"  exactperk:"kill clip"', "Perks"],
   ['origin:"veist stinger"', "Origin trait"],
   ["a or b   -is:exotic   (a or b) c", "Combine, negate, group"],
 ];

@@ -98,6 +98,7 @@ import { useApplyCurrentFragments } from "@/lib/armory/use-apply-current-fragmen
 import { useAutoSearch } from "@/lib/optimizer/use-auto-search";
 import { useOptimizerWarmup } from "@/lib/optimizer/use-optimizer-warmup";
 import { MAX_SET_BONUSES, type BuilderSnapshot, type QueryOrigin } from "@/lib/loadouts/types";
+import { getSetting, setSetting, useSetting } from "@/lib/settings/synced-settings";
 
 const MAX_MODS = 5;
 // The Dream build modal is opened by few sessions; keep it out of the initial bundle.
@@ -156,9 +157,8 @@ export function BuilderPanel({
   const [setReqs, setSetReqs] = useState<Record<number, 2 | 4>>(
     () => initialSaved?.setReqs ?? {},
   );
-  const [pinnedSets, setPinnedSets] = useState<number[]>(
-    () => initialSaved?.pinnedSets ?? [],
-  );
+  // Pins follow the account between computers (synced-settings.ts), not the selections.
+  const pinnedSets = useSetting("pinnedSets");
   const [setFilters, setSetFilters] = useState<SetFilters>(
     () => initialSaved?.setFilters ?? DEFAULT_SET_FILTERS,
   );
@@ -638,7 +638,6 @@ export function BuilderPanel({
       setTargets(saved.targets);
       setMajor(saved.major);
       setSetReqs(saved.setReqs);
-      setPinnedSets(saved.pinnedSets);
       setSetFilters(saved.setFilters);
       setUseBalancedTuning(saved.balancedTuning);
       setUseLegacyExotics(saved.legacyExotics);
@@ -673,7 +672,6 @@ export function BuilderPanel({
         targets,
         major,
         setReqs: persistedSetReqs,
-        pinnedSets,
         setFilters,
         exoticName:
           selectedExotic === null
@@ -697,7 +695,6 @@ export function BuilderPanel({
     targets,
     major,
     persistedSetReqs,
-    pinnedSets,
     setFilters,
     selectedExotic,
     exotics,
@@ -944,7 +941,9 @@ export function BuilderPanel({
 
   const onMajorChange = useCallback((v: string) => setMajor(Number(v)), []);
   const togglePin = useCallback((setHash: number) => {
-    setPinnedSets((prev) =>
+    const prev = getSetting("pinnedSets");
+    setSetting(
+      "pinnedSets",
       prev.includes(setHash)
         ? prev.filter((h) => h !== setHash)
         : [...prev, setHash],

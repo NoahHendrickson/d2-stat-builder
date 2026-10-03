@@ -9,6 +9,7 @@ import type { Subclass } from "../armory/fragments";
 import { isSyntheticClassItemId } from "../armory/exotic-class-perks";
 import { ARMOR_BUCKETS, ARMOR_SLOTS, type ArmorSlot } from "../armory/stats";
 import { WEAPON_BUCKETS, WEAPON_SLOTS, type LoadoutWeapon, type WeaponSlot } from "../armory/weapons";
+import { ARTIFACT_BUCKET } from "../armory/artifact-items";
 import type { DimLoadout, DimLoadoutItem } from "../dim/loadout-link";
 import { ABILITY_KINDS, ASPECT_SOCKET_COUNT, FRAGMENT_SOCKET_COUNT, FRAGMENT_SOCKET_START, SUPER_SOCKET_COUNT, aspectSocketStart, subclassFromItemHash, type AbilityKind } from "../dim/subclasses";
 import { abilitySocketIndex, selectedSubclassPlugs } from "./subclass";
@@ -64,12 +65,26 @@ export interface ResolvedSubclass {
   socketOverrides: Record<number, number>;
 }
 
+/**
+ * The loadout's artifact (Artifacts 2.0). Matched by item hash on the character it is
+ * applied to, so it never counts as missing.
+ */
+export interface ResolvedArtifact {
+  ref: DimLoadoutItem;
+  itemHash: number;
+  name: string;
+  icon?: string;
+  /** Picked perks, in socket order. */
+  perks: number[];
+}
+
 export interface ResolvedLoadout {
   /** Armor entries in ARMOR_SLOTS order where the slot is known; unknown slots last. */
   armor: ResolvedArmorItem[];
   /** The loadout's weapons (optional — an armor-only loadout has none), in slot order. */
   weapons: ResolvedWeaponItem[];
   subclass?: ResolvedSubclass;
+  artifact?: ResolvedArtifact;
   /** True when any armor piece or weapon failed to resolve to a live instance. */
   missing: boolean;
   /**
@@ -91,6 +106,7 @@ export function resolveLoadout(
   const armor: ResolvedArmorItem[] = [];
   const weapons: ResolvedWeaponItem[] = [];
   let subclass: ResolvedSubclass | undefined;
+  let artifact: ResolvedArtifact | undefined;
 
   for (const ref of loadout.equipped) {
     const sc = subclassFromItemHash(ref.hash);
@@ -114,6 +130,17 @@ export function resolveLoadout(
     }
     const piece = ref.id ? pieceMap.get(ref.id) : undefined;
     const def = manifest.def("DestinyInventoryItemDefinition", ref.hash);
+    if (!piece && def?.inventory?.bucketTypeHash === ARTIFACT_BUCKET) {
+      const overrides = Object.entries(ref.socketOverrides ?? {}).sort(([a], [b]) => Number(a) - Number(b));
+      artifact = {
+        ref,
+        itemHash: ref.hash,
+        name: def.displayProperties?.name ?? "Artifact",
+        icon: def.displayProperties?.icon,
+        perks: overrides.map(([, hash]) => hash),
+      };
+      continue;
+    }
     // A weapon is one the account holds, else one whose definition sits in a weapon bucket.
     const weapon = ref.id ? weaponMap?.get(ref.id) : undefined;
     const weaponSlot = weapon?.slot ?? WEAPON_BUCKETS[def?.inventory?.bucketTypeHash ?? 0];
@@ -152,5 +179,5 @@ export function resolveLoadout(
     armor.length > 0 &&
     !armor.some((a) => a.missing) &&
     !armor.some((a) => a.ref.id !== undefined && isSyntheticClassItemId(a.ref.id));
-  return { armor, weapons, subclass, missing, actionable };
+  return { armor, weapons, subclass, ...(artifact ? { artifact } : {}), missing, actionable };
 }

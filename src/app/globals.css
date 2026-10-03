@@ -314,6 +314,9 @@
   --shell-sidebar: rgb(255 255 255 / 4%);
   --shell-main: transparent;
   --glass-opaque: rgb(51 61 76);
+  /* Menus take the gradient's blue-slate hue a step lighter; the default
+     neutral grey reads green against it. */
+  --glass-raised: rgb(78 90 112 / 85%);
 }
 
 /* Normal (Figma 130:6188): a plain rounded UI on a flat page. No scene, no

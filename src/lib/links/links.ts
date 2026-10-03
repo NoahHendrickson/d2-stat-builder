@@ -58,6 +58,11 @@ export function parseStoredLinks(raw: string | null): SavedLink[] {
   } catch {
     return [];
   }
+  return parseLinks(data);
+}
+
+/** Keep only well-formed entries from parsed JSON (storage or the account's copy). */
+export function parseLinks(data: unknown): SavedLink[] {
   if (!Array.isArray(data)) return [];
   const links: SavedLink[] = [];
   for (const entry of data) {

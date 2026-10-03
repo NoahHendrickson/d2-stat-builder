@@ -64,7 +64,6 @@ function sampleSelections(): PersistedSelections {
     targets: [100, 0, 50, 0, 0, 30],
     major: 3,
     setReqs: { 987654: 4, 123456: 2 },
-    pinnedSets: [123456, 555],
     setFilters: { hideLessThan2: false },
     exoticName: "Gyrfalcon's Hauberk",
     exoticPerks: [null, null],
@@ -112,11 +111,10 @@ test("load defaults exoticPerks to Any/Any for data stored before the field exis
   expect(loadSelections()).toEqual({ ...old, exoticPerks: [null, null] });
 });
 
-test("load defaults pinnedSets to [] for data stored before the field existed", () => {
-  const old: Partial<PersistedSelections> = sampleSelections();
-  delete old.pinnedSets;
-  localStorage.setItem(SELECTIONS_KEY, JSON.stringify(old));
-  expect(loadSelections()).toEqual({ ...old, pinnedSets: [] });
+test("load ignores the pinnedSets that older blobs carried", () => {
+  const sel = sampleSelections();
+  localStorage.setItem(SELECTIONS_KEY, JSON.stringify({ ...sel, pinnedSets: [1, 2] }));
+  expect(loadSelections()).toEqual(sel);
 });
 
 test("load defaults balancedTuning to true for data stored before the field existed", () => {

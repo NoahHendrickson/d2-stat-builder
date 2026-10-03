@@ -1,17 +1,21 @@
 // The manager's item search, a DIM-style query language:
-//   plain words        name, perk, or notes contain it ("fatebringer", "kill clip")
+//   plain words        name, type, perk, or notes contain it ("fatebringer", "kill clip");
+//                      a descriptive keyword on its own ("stasis", "hunter", "smg") also
+//                      matches as its is: filter
 //   #word              notes contain the hashtag
-//   is:/not:<keyword>  weapon, armor, exotic, crafted, craftable, locked, junk, dupe, heavy, …
+//   is:/not:<keyword>  weapon, armor, exotic, crafted, craftable, locked, junk, dupe, heavy,
+//                      handcannon, light, …
 //   tag:<tag>          favorite, keep, junk, infuse, archive, none
 //   power:>=400        also >, <, <=, =; the same for tier: and stat:<name>:
 //   stat:total:>=60    armor stat total; any live stat by name (stat:range:>50)
-//   perk: origin: name: notes: type: element: breaker: class: ammo:
+//   perk: exactperk: origin: name: exactname: notes: type: element: breaker: class: ammo:
 // Terms are ANDed; "or" between terms ORs them; "-term" negates; ( ) group.
 import type { Annotations, ItemTag } from "./annotations";
 import { ITEM_TAGS } from "./annotations";
 import { BUCKETS } from "./buckets";
 import type { InventoryItem, ManagerInventory } from "./build";
 import type { Place } from "./moves";
+import { WEAPON_CATEGORIES, WEAPON_TYPE_ALIASES } from "./weapon-types";
 
 export interface SearchContext {
   annotations: Annotations;
@@ -32,6 +36,7 @@ export type ParsedSearch =
 const ITEM_TYPE_ARMOR = 2;
 const ITEM_TYPE_WEAPON = 3;
 const TIER_NAMES: Record<string, number> = { exotic: 6, legendary: 5, rare: 4, uncommon: 3, common: 2 };
+const TIER_COLORS: Record<string, number> = { yellow: 6, purple: 5, blue: 4, green: 3, white: 2 };
 const CLASS_NAMES: Record<string, number> = { titan: 0, hunter: 1, warlock: 2 };
 const AMMO_NAMES: Record<string, number> = { primary: 1, special: 2, heavy: 3 };
 const BREAKER_NAMES: Record<string, number> = {
@@ -44,6 +49,12 @@ const BREAKER_NAMES: Record<string, number> = {
   stagger: 3,
 };
 const ELEMENTS = new Set(["kinetic", "arc", "solar", "void", "stasis", "strand", "prismatic"]);
+/** DIM's is:light / is:dark: the element's side for Prismatic. */
+const ELEMENT_SIDES: Record<string, ReadonlySet<string>> = {
+  light: new Set(["arc", "solar", "void"]),
+  dark: new Set(["stasis", "strand"]),
+};
+const WEAPON_TYPES = new Set(WEAPON_CATEGORIES.map(([name]) => name));
 const SLOT_NAMES: Record<string, number> = {
   kineticslot: BUCKETS.kinetic,
   energyslot: BUCKETS.energy,
@@ -59,7 +70,10 @@ const SLOT_NAMES: Record<string, number> = {
   sparrow: BUCKETS.vehicle,
   vehicle: BUCKETS.vehicle,
   ship: BUCKETS.ships,
+  ships: BUCKETS.ships,
 };
+/** DIM's slot names that read as something else on their own ("power"), so only after is:. */
+const SLOT_ALIASES: Record<string, number> = { energy: BUCKETS.energy, power: BUCKETS.power };
 
 /** Strip case, spaces, and punctuation so "Hand Cannon" and "handcannon" meet. */
 export const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9#]+/g, "");
@@ -74,6 +88,7 @@ export const IS_KEYWORDS: readonly string[] = [
   "craftable",
   "enhanced",
   "deepsight",
+  "adept",
   "locked",
   "unlocked",
   "tagged",
@@ -82,15 +97,43 @@ export const IS_KEYWORDS: readonly string[] = [
   "equipped",
   "postmaster",
   "invault",
+  "transferable",
+  "haspower",
   "dupe",
+  ...Object.keys(CLASS_NAMES),
+  ...Object.keys(AMMO_NAMES),
+  ...ELEMENTS,
+  ...Object.keys(ELEMENT_SIDES),
+  "barrier",
+  "overload",
+  "unstoppable",
+  ...WEAPON_TYPES,
+  "heavygrenadelauncher",
+  "specialgrenadelauncher",
+  ...Object.keys(WEAPON_TYPE_ALIASES),
+  ...Object.keys(SLOT_NAMES),
+  ...Object.keys(SLOT_ALIASES),
+  ...Object.keys(TIER_COLORS),
+];
+
+/**
+ * Keywords that describe what an item is, so typed on their own ("stasis", "hunter",
+ * "smg") they also match as `is:`. State words (locked, junk, dupe, …) stay text.
+ */
+const BARE_KEYWORDS: ReadonlySet<string> = new Set([
+  "weapon",
+  "armor",
+  ...Object.keys(TIER_NAMES),
   ...Object.keys(CLASS_NAMES),
   ...Object.keys(AMMO_NAMES),
   ...ELEMENTS,
   "barrier",
   "overload",
   "unstoppable",
+  ...WEAPON_TYPES,
+  ...Object.keys(WEAPON_TYPE_ALIASES),
   ...Object.keys(SLOT_NAMES),
-];
+]);
 
 /** Every `key:` the parser takes (aliases aside), in the order suggestions list them. */
 export const SEARCH_KEYS: readonly string[] = [
@@ -98,8 +141,10 @@ export const SEARCH_KEYS: readonly string[] = [
   "not",
   "tag",
   "perk",
+  "exactperk",
   "origin",
   "name",
+  "exactname",
   "type",
   "element",
   "champion",
@@ -124,6 +169,11 @@ export const KEY_VALUES: Readonly<Record<string, readonly string[]>> = {
   ammo: Object.keys(AMMO_NAMES),
 };
 
+/** Adept-tier reprises: Trials/Nightfall "(Adept)", raid "(Timelost)" and "(Harrowed)". */
+const ADEPT_NAME = /\((adept|timelost|harrowed)\)/i;
+/** TransferStatuses.NotTransferrable. */
+const TRANSFER_NOT_TRANSFERRABLE = 2;
+
 const tagOf = (item: InventoryItem, ctx: SearchContext): ItemTag | undefined =>
   item.instanceId ? ctx.annotations[item.instanceId]?.tag : undefined;
 const notesOf = (item: InventoryItem, ctx: SearchContext): string =>
@@ -131,11 +181,16 @@ const notesOf = (item: InventoryItem, ctx: SearchContext): string =>
 
 function isKeyword(word: string): Predicate | undefined {
   if (word in TIER_NAMES) return (i) => i.tierType === TIER_NAMES[word];
+  if (word in TIER_COLORS) return (i) => i.tierType === TIER_COLORS[word];
   if (word in CLASS_NAMES) return (i) => i.classType === CLASS_NAMES[word];
   if (word in AMMO_NAMES) return (i) => i.ammoType === AMMO_NAMES[word];
   if (word in BREAKER_NAMES) return (i) => i.breakerType === BREAKER_NAMES[word];
   if (word in SLOT_NAMES) return (i) => i.bucketHash === SLOT_NAMES[word];
+  if (word in SLOT_ALIASES) return (i) => i.bucketHash === SLOT_ALIASES[word];
   if (ELEMENTS.has(word)) return (i) => i.element === word;
+  if (word in ELEMENT_SIDES) return (i) => i.element !== undefined && ELEMENT_SIDES[word]!.has(i.element);
+  const weaponType = WEAPON_TYPE_ALIASES[word] ?? word;
+  if (WEAPON_TYPES.has(weaponType)) return (i) => i.weaponType === weaponType;
   if ((ITEM_TAGS as readonly string[]).includes(word)) return (i, _, ctx) => tagOf(i, ctx) === word;
   switch (word) {
     case "weapon":
@@ -153,6 +208,18 @@ function isKeyword(word: string): Predicate | undefined {
       return (i) => i.enhanced;
     case "deepsight":
       return (i) => i.deepsight;
+    case "adept":
+      return (i) => i.itemType === ITEM_TYPE_WEAPON && ADEPT_NAME.test(i.name);
+    case "heavygrenadelauncher":
+      return (i) => i.weaponType === "grenadelauncher" && i.ammoType === AMMO_NAMES.heavy;
+    case "specialgrenadelauncher":
+      return (i) => i.weaponType === "grenadelauncher" && i.ammoType === AMMO_NAMES.special;
+    case "transferable":
+    case "movable":
+      return (i) => (i.transferStatus & TRANSFER_NOT_TRANSFERRABLE) === 0;
+    case "haspower":
+    case "haslight":
+      return (i) => i.power !== undefined;
     case "locked":
       return (i) => i.locked;
     case "unlocked":
@@ -216,9 +283,13 @@ function filterTerm(key: string, raw: string): { predicate: Predicate; usesPerks
       return { predicate: (i, _, c) => notesOf(i, c).includes(text) };
     case "name":
       return { predicate: (i) => normalize(i.name).includes(value) };
+    case "exactname":
+      return { predicate: (i) => normalize(i.name) === value };
     case "perk":
     case "perkname":
       return { predicate: (i, _, c) => c.perks(i).some((p) => normalize(p).includes(value)), usesPerks: true };
+    case "exactperk":
+      return { predicate: (i, _, c) => c.perks(i).some((p) => normalize(p) === value), usesPerks: true };
     case "origin":
     case "origintrait":
       return { predicate: (i, _, c) => c.origins(i).some((p) => normalize(p).includes(value)), usesPerks: true };
@@ -324,12 +395,16 @@ export function parseSearch(query: string): ParsedSearch | null {
       const tag = token.toLowerCase();
       return (i, _, c) => notesOf(i, c).includes(tag);
     }
-    // Plain text: the name, a perk, or the notes.
-    usesPerks = true;
     const word = normalize(token);
+    // A descriptive keyword: what it says ("stasis" is is:stasis), or an item named so.
+    const keyword = BARE_KEYWORDS.has(word) ? isKeyword(word) : undefined;
+    if (keyword) return (i, p, c) => keyword(i, p, c) || normalize(i.name).includes(word);
+    // Plain text: the name, the type, a perk, or the notes.
+    usesPerks = true;
     const text = token.toLowerCase();
     return (i, _, c) =>
       normalize(i.name).includes(word) ||
+      normalize(i.typeName).includes(word) ||
       c.perks(i).some((p) => normalize(p).includes(word)) ||
       notesOf(i, c).includes(text);
   };

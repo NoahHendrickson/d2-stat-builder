@@ -14,6 +14,7 @@ import {
 } from "@/lib/armory/stats";
 import { ACCOUNT_ROWS, BUCKETS, VAULT_ROW_HASHES } from "./buckets";
 import { maxPower } from "./max-power";
+import { weaponTypeOf } from "./weapon-types";
 
 /** One item anywhere on the account, drawn as a tile by the manager. */
 export interface InventoryItem {
@@ -46,6 +47,8 @@ export interface InventoryItem {
    * "aimassistance", "weapons", …); armor also gets "total". For search.
    */
   stats?: Record<string, number>;
+  /** Weapon type by DIM's `is:` name ("handcannon", "linearfusionrifle", …), from its item categories. */
+  weaponType?: string;
   /** Weapon ammo: 1 primary, 2 special, 3 heavy. */
   ammoType?: number;
   /** Champion the weapon stuns: 1 barrier (shield piercing), 2 overload (disruption), 3 unstoppable (stagger). */
@@ -244,6 +247,7 @@ function buildItem(
       )
     : undefined;
   const ammoType = isWeapon ? def?.equippingBlock?.ammoType : undefined;
+  const weaponType = isWeapon ? weaponTypeOf(def?.itemCategoryHashes) : undefined;
   const armorArchetype =
     def?.itemType === ITEM_TYPE_ARMOR && item.itemInstanceId
       ? archetype(profile, manifest, item.itemInstanceId)
@@ -267,6 +271,7 @@ function buildItem(
     ...(damageIcon ? { damageIcon } : {}),
     ...(element ? { element } : {}),
     ...(stats ? { stats } : {}),
+    ...(weaponType ? { weaponType } : {}),
     ...(ammoType ? { ammoType } : {}),
     ...(breaker
       ? {

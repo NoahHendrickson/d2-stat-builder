@@ -6,20 +6,13 @@ import { Cancel01Icon } from "@hugeicons/core-free-icons";
 import { Button } from "@/components/ui/button";
 import { Drawer, DrawerContent, DrawerTitle } from "@/components/ui/drawer";
 import type { InventoryItem, ManagerInventory } from "@/lib/inventory/build";
-import { characterName } from "@/lib/inventory/moves";
 import { forEachItem } from "@/lib/inventory/search";
 import { ItemTile } from "./item-tile";
 import { useItemComparator } from "./view-menu";
 
-interface Group {
-  key: string;
-  label: string;
-  items: InventoryItem[];
-}
-
 /**
- * Every item the search matches in one place, grouped by where it is: each character,
- * their postmasters, the vault, then account-wide items. Non-modal like Compare, so a
+ * Every item the search matches in one flat list, wherever it lives, in the View
+ * menu's sort order. Non-modal like Compare, so a
  * tile opens its details popup over it and the search box stays live behind it.
  */
 export function SearchResultsDrawer({
@@ -60,32 +53,12 @@ function Results({
   onClose: () => void;
 }) {
   const compare = useItemComparator();
-  const groups = useMemo(() => {
-    const byKey = new Map<string, Group>();
-    const order: string[] = [
-      ...inventory.characters.map((c) => `character:${c.id}`),
-      ...inventory.characters.map((c) => `postmaster:${c.id}`),
-      "vault",
-      "account",
-    ];
-    const labels = new Map<string, string>([
-      ...inventory.characters.map((c): [string, string] => [`character:${c.id}`, characterName(c)]),
-      ...inventory.characters.map((c): [string, string] => [`postmaster:${c.id}`, `${characterName(c)} postmaster`]),
-      ["vault", "Vault"],
-      ["account", "Account"],
-    ]);
-    forEachItem(inventory, (item, place) => {
-      if (!matches.has(item.key)) return;
-      const key =
-        place.kind === "character" || place.kind === "postmaster" ? `${place.kind}:${place.characterId}` : place.kind;
-      let group = byKey.get(key);
-      if (!group) byKey.set(key, (group = { key, label: labels.get(key) ?? "Other", items: [] }));
-      group.items.push(item);
+  const items = useMemo(() => {
+    const found: InventoryItem[] = [];
+    forEachItem(inventory, (item) => {
+      if (matches.has(item.key)) found.push(item);
     });
-    return order.flatMap((key) => {
-      const group = byKey.get(key);
-      return group ? [{ ...group, items: group.items.toSorted(compare) }] : [];
-    });
+    return found.sort(compare);
   }, [inventory, matches, compare]);
 
   return (
@@ -99,23 +72,15 @@ function Results({
           <HugeiconsIcon icon={Cancel01Icon} aria-hidden />
         </Button>
       </div>
-      <div className="d2-scroll flex min-h-0 flex-1 flex-col gap-4 overflow-auto px-4 py-3">
-        {groups.length === 0 ? (
+      <div className="d2-scroll min-h-0 flex-1 overflow-auto px-4 py-3">
+        {items.length === 0 ? (
           <p className="text-muted-foreground text-sm">Nothing matches.</p>
         ) : (
-          groups.map((group) => (
-            <section key={group.key} aria-label={group.label} className="flex flex-col gap-2">
-              <h3 className="flex items-baseline gap-2 text-sm">
-                <span className="font-medium">{group.label}</span>
-                <span className="text-muted-foreground tabular-nums">{group.items.length.toLocaleString()}</span>
-              </h3>
-              <div className="flex flex-wrap gap-1">
-                {group.items.map((item) => (
-                  <ItemTile key={item.key} item={item} />
-                ))}
-              </div>
-            </section>
-          ))
+          <div className="flex flex-wrap gap-1">
+            {items.map((item) => (
+              <ItemTile key={item.key} item={item} />
+            ))}
+          </div>
         )}
       </div>
     </div>

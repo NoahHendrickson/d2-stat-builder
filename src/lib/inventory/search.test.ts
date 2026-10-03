@@ -33,9 +33,9 @@ const inv: ManagerInventory = {
       emblemPath: "",
       dateLastPlayed: "",
       stats: {},
-      equipped: { [BUCKETS.kinetic]: item("Ace of Spades", { tierType: 6, power: 410, element: "kinetic", locked: true }) },
+      equipped: { [BUCKETS.kinetic]: item("Ace of Spades", { tierType: 6, power: 410, element: "kinetic", weaponType: "handcannon", locked: true }) },
       inventory: {
-        [BUCKETS.energy]: [item("Calus Mini-Tool", { bucketHash: BUCKETS.energy, power: 400, element: "solar", typeName: "Submachine Gun", crafted: true, craftable: true, breakerType: 2 })],
+        [BUCKETS.energy]: [item("Calus Mini-Tool", { bucketHash: BUCKETS.energy, power: 400, element: "solar", typeName: "Submachine Gun", weaponType: "submachine", crafted: true, craftable: true, breakerType: 2 })],
       },
       postmaster: [],
     },
@@ -91,6 +91,36 @@ test("free text matches names, perks, and notes; #tags match notes", () => {
   expect(search("perk:incandescent")).toEqual(["Calus Mini-Tool"]);
   expect(search("#pvp")).toEqual(["Helm B"]);
   expect(search("great")).toEqual(["Helm B"]);
+});
+
+test("descriptive keywords work bare, like DIM: stasis, hunter, smg", () => {
+  const stasis = item("Verglas Curve", { bucketHash: BUCKETS.power, element: "stasis", typeName: "Combat Bow", weaponType: "bow" });
+  const named = item("Stasis Ward Helm", { itemType: 2, bucketHash: BUCKETS.helmet, typeName: "Helmet" });
+  const own: ManagerInventory = { ...inv, vault: { ...inv.vault, [BUCKETS.power]: [stasis], [BUCKETS.ghost]: [named] } };
+  const find = (query: string) => {
+    const parsed = parseSearch(query);
+    if (!parsed?.ok) throw new Error(parsed ? parsed.error : "empty");
+    return [...matchItems(own, parsed.predicate, ctx)].sort();
+  };
+  expect(find("stasis")).toEqual(["Stasis Ward Helm", "Verglas Curve"]);
+  expect(find("is:stasis")).toEqual(["Verglas Curve"]);
+  expect(find("stasis is:weapon")).toEqual(["Verglas Curve"]);
+  expect(find("is:dark")).toEqual(["Verglas Curve"]);
+  expect(find("is:light")).toEqual(["Calus Mini-Tool"]);
+  expect(find("bow")).toEqual(["Verglas Curve"]);
+  expect(find("smg")).toEqual(["Calus Mini-Tool"]);
+  expect(find("is:handcannon or is:submachinegun")).toEqual(["Ace of Spades", "Calus Mini-Tool"]);
+  expect(find("hunter")).toEqual(["Helm A"]);
+  expect(find("is:yellow")).toEqual(["Ace of Spades"]);
+  expect(find("is:power")).toEqual(["Verglas Curve"]);
+  expect(find("cannon")).toEqual(["Ace of Spades"]);
+});
+
+test("exactname: and exactperk: match the whole name", () => {
+  expect(search("exactname:ace")).toEqual([]);
+  expect(search('exactname:"ace of spades"')).toEqual(["Ace of Spades"]);
+  expect(search("exactperk:grave")).toEqual([]);
+  expect(search('exactperk:"grave robber"')).toEqual(["Calus Mini-Tool"]);
 });
 
 test("origin: matches only the origin trait", () => {

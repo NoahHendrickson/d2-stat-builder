@@ -1,7 +1,7 @@
 "use client";
 
 import type { CSSProperties, ReactNode } from "react";
-import { subclassFromPlugCategory } from "@/lib/armory/fragments";
+import { subclassFromPlug } from "@/lib/armory/fragments";
 import { isFullyMasterworked } from "@/lib/armory/masterwork";
 import { armorPipTier } from "@/lib/armory/normalize";
 import { SLOT_LABELS } from "@/lib/armory/stats";
@@ -9,6 +9,7 @@ import { ABILITY_KINDS, ABILITY_LABELS } from "@/lib/dim/subclasses";
 import type { Manifest } from "@/lib/manifest/load";
 import { WEAPON_SLOT_LABELS } from "@/lib/armory/weapons";
 import type {
+  ResolvedArtifact,
   ResolvedArmorItem,
   ResolvedLoadout,
   ResolvedSubclass,
@@ -91,6 +92,29 @@ function WeaponsGroup({ weapons }: { weapons: ResolvedWeaponItem[] }) {
   );
 }
 
+/** The loadout's artifact and its perks; a perk's name lives in its tooltip. */
+function ArtifactGroup({
+  artifact,
+  manifest,
+}: {
+  artifact: ResolvedArtifact | undefined;
+  manifest: Manifest;
+}) {
+  if (!artifact) return null;
+  return (
+    <TileRow label="Artifact">
+      <TooltipLabel label={artifact.name}>
+        <span tabIndex={0} aria-label={artifact.name} className="flex outline-none">
+          <ArmorThumb icon={artifact.icon} size={40} />
+        </span>
+      </TooltipLabel>
+      {artifact.perks.map((hash) => (
+        <PlugIcon key={hash} hash={hash} manifest={manifest} size={40} sizeClassName={MOD_SIZE_CLASS} />
+      ))}
+    </TileRow>
+  );
+}
+
 /**
  * Super as the column's badge, then one evenly spaced grid of tiles: abilities and aspects
  * on the first row, fragments on the second. Names live in the tooltips.
@@ -130,11 +154,11 @@ function SubclassColumn({
     return hash === undefined ? [] : [{ kind, hash }];
   });
 
-  // 30px so four abilities + two aspects, or six fragments, fit the 14rem column on one line.
+  // 36px so four abilities + two aspects, or six fragments, fit the 16rem column on one line.
   const tile = {
     manifest,
-    size: 32,
-    sizeClassName: "size-7.5",
+    size: 40,
+    sizeClassName: "size-9",
     className: "rounded-none",
     element: subclass.subclass,
   } as const;
@@ -145,12 +169,10 @@ function SubclassColumn({
         <ManifestIcon
           icon={superDef?.displayProperties?.icon ?? subclassDef?.displayProperties?.icon}
           label={superName ? `${superName}, ${subclassName}` : subclassName}
-          size={40}
+          size={48}
           className="rounded-none"
-          element={
-            subclassFromPlugCategory(superDef?.plug?.plugCategoryIdentifier) ??
-            subclass.subclass
-          }
+          diamond={superDef?.displayProperties?.icon !== undefined}
+          element={subclassFromPlug(superDef) ?? subclass.subclass}
         />
         <div className="flex min-w-0 flex-col">
           <span className="truncate text-sm font-medium">{superName ?? subclassName}</span>
@@ -305,7 +327,7 @@ export function LoadoutCardBody({
   return (
     <div className="flex flex-col gap-3">
       <div
-        className="grid gap-x-4 gap-y-4 [grid-template-columns:repeat(var(--pieces),minmax(0,1fr))] @3xl:[grid-template-columns:minmax(14rem,1.25fr)_repeat(var(--pieces),minmax(0,1fr))] @3xl:divide-x @3xl:divide-foreground/8 @3xl:gap-x-0 @3xl:*:px-4 @3xl:*:first:pl-0 @3xl:*:last:pr-0"
+        className="grid gap-x-4 gap-y-4 [grid-template-columns:repeat(var(--pieces),minmax(0,1fr))] @3xl:[grid-template-columns:minmax(16rem,1.25fr)_repeat(var(--pieces),minmax(0,1fr))] @3xl:divide-x @3xl:divide-foreground/8 @3xl:gap-x-0 @3xl:*:px-4 @3xl:*:first:pl-0 @3xl:*:last:pr-0"
         style={{ "--pieces": pieceCols } as CSSProperties}
       >
         <div className="col-span-full flex flex-col gap-4 @3xl:col-span-1">
@@ -315,6 +337,7 @@ export function LoadoutCardBody({
             classType={loadout.classType}
           />
           <WeaponsGroup weapons={resolved.weapons} />
+          <ArtifactGroup artifact={resolved.artifact} manifest={manifest} />
         </div>
         {resolved.armor.map((item, i) => (
           <PieceColumn

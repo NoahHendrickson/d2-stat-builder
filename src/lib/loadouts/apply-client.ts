@@ -19,6 +19,7 @@ import { subclassOptions, selectedSubclassPlugs, subclassFragmentCapacity } from
 import { planPiecesFromArmor } from "./plan-pieces";
 import { plugInfoFromManifest } from "./plug-info";
 import { planExoticWeaponSwap } from "./weapons";
+import { planArtifactApply } from "./artifact-apply";
 import {
   beginApplyProgress,
   finishApplyProgress,
@@ -102,6 +103,14 @@ export async function applySavedLoadout({
     });
   }
 
+  // Artifact: the character's copy goes on (if it isn't already), then its perks move.
+  const nameOf = (hash: number | undefined) =>
+    manifest.def("DestinyInventoryItemDefinition", hash)?.displayProperties?.name ?? "Perk";
+  const artifactPlan = resolved.artifact
+    ? planArtifactApply(resolved.artifact, character.artifacts ?? [], character.id, manifest, nameOf)
+    : undefined;
+  if (artifactPlan?.equip) items.push(artifactPlan.equip);
+
   const groups: SubclassPlugGroup[] = [];
   if (subclassItem && resolved.subclass?.subclass) {
     const options = subclassOptions(manifest, character.classType, resolved.subclass.subclass);
@@ -146,6 +155,12 @@ export async function applySavedLoadout({
     if (w.missing) plan.skipped.push(`${w.name} is no longer in your inventory`);
   }
   if (exoticSwap.blocked) plan.skipped.push(exoticSwap.blocked);
+  if (artifactPlan) {
+    plan.plugs.push(...artifactPlan.plugs);
+    plan.inPlace.push(...artifactPlan.inPlace);
+    plan.alreadyApplied.push(...artifactPlan.inPlace.map((p) => p.label));
+    plan.skipped.push(...artifactPlan.skipped);
+  }
 
   const plugs: PlugRequest[] = plan.plugs.map(({ itemInstanceId, socketIndex, plugItemHash }) => ({
     itemInstanceId,
@@ -164,6 +179,14 @@ export async function applySavedLoadout({
       id: itemStepId(subclassItem.instanceId),
       name: subclassDef?.displayProperties?.name ?? "Subclass",
       icon: subclassDef?.displayProperties?.icon,
+      status: "pending",
+    });
+  }
+  if (artifactPlan?.equip && resolved.artifact) {
+    steps.push({
+      id: itemStepId(artifactPlan.equip.itemInstanceId),
+      name: resolved.artifact.name,
+      icon: resolved.artifact.icon,
       status: "pending",
     });
   }

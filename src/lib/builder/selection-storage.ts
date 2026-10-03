@@ -121,8 +121,6 @@ export interface PersistedSelections {
   targets: number[];
   major: number;
   setReqs: Record<number, 2 | 4>;
-  /** Set hashes pinned to the top of the set-bonus list, in pin order. */
-  pinnedSets: number[];
   /** Armor-set list display settings (ownership / piece-count toggles). */
   setFilters: SetFilters;
   exoticName: string | null;
@@ -237,10 +235,8 @@ function parse(raw: string | null): PersistedSelections | null {
     return null;
   if (typeof o.major !== "number") return null;
   if (typeof o.setReqs !== "object" || o.setReqs === null) return null;
-  // Optional (added after v1 shipped) — older stored blobs won't have it.
-  const pinnedSets = Array.isArray(o.pinnedSets)
-    ? o.pinnedSets.filter((n): n is number => typeof n === "number")
-    : [];
+  // Older blobs also carry `pinnedSets`: those moved to synced-settings.ts, which
+  // copies them out once. Ignored here.
   const setFilters = parseSetFilters(o.setFilters);
   if (!(typeof o.exoticName === "string" || o.exoticName === null)) return null;
   if (typeof o.allowTuning !== "boolean") return null;
@@ -279,7 +275,6 @@ function parse(raw: string | null): PersistedSelections | null {
     targets: o.targets as number[],
     major: o.major as number,
     setReqs: o.setReqs as Record<number, 2 | 4>,
-    pinnedSets,
     setFilters,
     exoticName: o.exoticName as string | null,
     exoticPerks,

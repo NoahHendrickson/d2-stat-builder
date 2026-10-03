@@ -129,3 +129,31 @@ test("weapons resolve apart from armor, in slot order, and a missing one doesn't
   expect(out.missing).toBe(true);
   expect(out.actionable).toBe(true);
 });
+
+test("an artifact resolves on its own and never counts as missing", () => {
+  const artifactManifest: DefLookup = {
+    def: (table, hash) =>
+      table === "DestinyInventoryItemDefinition" && hash === 700
+        ? { displayProperties: { name: "Tablet of Ruin", icon: "/t.png" }, inventory: { bucketTypeHash: 1506418338 } }
+        : manifest.def(table, hash),
+  };
+  const out = resolveLoadout(
+    {
+      id: "x",
+      name: "n",
+      classType: 1,
+      unequipped: [],
+      parameters: { mods: [], assumeArmorMasterwork: 3 },
+      equipped: [
+        { id: "c1", hash: 1 },
+        { id: "art", hash: 700, socketOverrides: { 5: 30, 0: 10, 2: 20 } },
+      ],
+    },
+    pieceMap,
+    artifactManifest,
+  );
+  expect(out.armor.map((a) => a.name)).toEqual(["live chest"]);
+  expect(out.artifact).toMatchObject({ itemHash: 700, name: "Tablet of Ruin", perks: [10, 20, 30] });
+  expect(out.missing).toBe(false);
+  expect(out.actionable).toBe(true);
+});

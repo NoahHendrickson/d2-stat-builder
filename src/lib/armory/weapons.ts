@@ -5,6 +5,7 @@
 // Runtime imports are relative so the module runs under vitest.
 import type { DestinyItemComponent, DestinyProfileResponse } from "bungie-api-ts/destiny2";
 import type { Manifest } from "../manifest/load";
+import { weaponRoll } from "../inventory/weapon-details";
 import { itemWatermark, type ArmorLocation } from "./normalize";
 
 export const WEAPON_SLOTS = ["kinetic", "energy", "power"] as const;
@@ -28,6 +29,15 @@ export const WEAPON_SLOT_LABELS: Record<WeaponSlot, string> = {
   power: "Power",
 };
 
+/**
+ * A weapon's roll as plug hashes, for the picker to show on demand. Hashes keep it
+ * light across a whole vault; names and icons come from the manifest when drawn.
+ */
+export interface WeaponPerks {
+  /** Barrel through origin trait: the perk in the socket, and every perk it rolled with. */
+  columns: { current: number; options: number[] }[];
+}
+
 /** One owned weapon instance. */
 export interface LoadoutWeapon {
   instanceId: string;
@@ -46,6 +56,8 @@ export interface LoadoutWeapon {
   locked?: boolean;
   /** Sitting in the postmaster: listed under `inventory`, but not transferable. */
   postmaster?: boolean;
+  /** Absent when Bungie sent no sockets for it (or on an armory cached before perks). */
+  perks?: WeaponPerks;
 }
 
 const POSTMASTER_BUCKET = 215593132;
@@ -81,6 +93,16 @@ export function normalizeWeapons(
       if (!def || !slot) continue;
       const power = instances?.[item.itemInstanceId]?.primaryStat?.value;
       const watermark = itemWatermark(def, item.versionNumber);
+      const roll = weaponRoll(profile, manifest, item.itemInstanceId);
+      const perks: WeaponPerks | undefined =
+        roll.columns.length > 0
+          ? {
+              columns: roll.columns.map((c) => ({
+                current: c.current.hash,
+                options: c.options.map((o) => o.hash),
+              })),
+            }
+          : undefined;
       weapons.push({
         instanceId: item.itemInstanceId,
         itemHash: item.itemHash,
@@ -95,6 +117,7 @@ export function normalizeWeapons(
         ...(characterId ? { characterId } : {}),
         ...((item.state ?? 0) & ITEM_STATE_LOCKED ? { locked: true } : {}),
         ...(item.bucketHash === POSTMASTER_BUCKET ? { postmaster: true } : {}),
+        ...(perks ? { perks } : {}),
       });
     }
   };

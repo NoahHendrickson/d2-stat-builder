@@ -17,6 +17,7 @@ import { ApplyProgressSection } from "@/components/loadouts/apply-progress-card"
 import { loadLoadoutsList } from "@/components/loadouts/loadouts-list-chunk";
 import { Button } from "@/components/ui/button";
 import { Drawer, DrawerClose, DrawerContent } from "@/components/ui/drawer";
+import { SettingsSync } from "@/components/settings-sync";
 import { SiteIconSync } from "@/components/site-icon-sync";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useSession } from "@/lib/auth/use-session";
@@ -189,6 +190,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <ApplyProgressSection />
       </div>
       <SiteIconSync />
+      <SettingsSync />
 
       {!desktop && (
         <Drawer

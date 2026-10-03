@@ -27,13 +27,13 @@ export const MAX_SET_BONUSES = 8;
  * The builder state a loadout was generated from — the parts DIM's `parameters` can't
  * express. Lets "Load in builder" restore the optimizer UI exactly. It IS the builder's
  * `PersistedSelections` minus what isn't the loadout's business: the storage version,
- * the class (the DIM loadout carries it), list-display state (pins, set filters), and
+ * the class (the DIM loadout carries it), list-display state (set filters), and
  * other subclasses' fragments. A new builder flag added to `PersistedSelections` must be
  * added to `parseBuilderSnapshot` too — the type makes the compiler say so.
  */
 export type BuilderSnapshot = Omit<
   PersistedSelections,
-  "version" | "classType" | "pinnedSets" | "setFilters" | "fragSel"
+  "version" | "classType" | "setFilters" | "fragSel"
 > & {
   /** Selected fragment hashes for `activeSubclass` only. */
   fragmentHashes: number[];

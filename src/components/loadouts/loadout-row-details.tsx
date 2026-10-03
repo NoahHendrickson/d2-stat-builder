@@ -9,7 +9,7 @@ import {
 import { Fragment, type CSSProperties } from "react";
 import Image from "next/image";
 import type { ArmoryCharacter } from "@/lib/armory/fetch";
-import { buildFragmentStats, formatFragmentStats, SUBCLASS_LINE, subclassFromPlugCategory, type Subclass } from "@/lib/armory/fragments";
+import { buildFragmentStats, formatFragmentStats, SUBCLASS_LINE, subclassFromPlug, type Subclass } from "@/lib/armory/fragments";
 import { isStrandSharedAbilityIcon } from "@/lib/dim/subclasses";
 import {
   STRAND_ABILITY_PLATE_FILTER,
@@ -49,11 +49,11 @@ const ELEMENT_FRAME =
   "after:pointer-events-none after:absolute after:inset-0 after:shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--element-line)_45%,transparent)]";
 
 /**
- * Soft `--element-line` glow for shaped art (the Super / subclass diamond): a drop shadow
- * follows the icon's transparency, where a square frame would box in the empty corners.
+ * Armor mod categories whose art leaves out the square plate (white at ~14%) that the
+ * rest of the mod icons bake in: tuning mods and the newer raid mods. Painted behind
+ * them so a row of mods reads as one set of tiles.
  */
-const ELEMENT_GLOW =
-  "[filter:drop-shadow(0_0_5px_color-mix(in_srgb,var(--element-line)_55%,transparent))]";
+const PLATELESS_MOD = /\.tuning\.mods$|^enhancements\.raid_v[78]\d\d$/;
 
 /** Icon + name for a plug/mod hash, from the manifest; falls back to the hash. */
 export function PlugIcon({
@@ -92,8 +92,9 @@ export function PlugIcon({
   const label = stats ? `${title}\n${stats}` : title;
   const icon = def?.displayProperties?.icon;
   const recolor = isStrandSharedAbilityIcon(def?.plug?.plugCategoryIdentifier);
+  const plate = PLATELESS_MOD.test(def?.plug?.plugCategoryIdentifier ?? "");
   const plugElement =
-    subclassFromPlugCategory(def?.plug?.plugCategoryIdentifier) ?? element;
+    subclassFromPlug(def) ?? element;
   const sizeClass =
     sizeClassName ??
     (size === 16
@@ -128,6 +129,7 @@ export function PlugIcon({
           className={cn(
             sizeClass,
             "rounded-none",
+            plate && "bg-white/14",
             dim && "opacity-40 grayscale",
             className,
           )}
@@ -162,13 +164,17 @@ export function ManifestIcon({
   size,
   className,
   showTooltip = true,
+  diamond = false,
   element,
 }: {
   showTooltip?: boolean;
   icon?: string;
   label: string;
-  size: 12 | 16 | 22 | 24 | 32 | 40;
+  size: 12 | 16 | 22 | 24 | 32 | 40 | 48;
   className?: string;
+  /** Super art: a full-bleed diamond, outlined with a sharp 1px stroke. */
+  diamond?: boolean;
+  /** Tints the diamond outline to match the art; white at 16% without one. */
   element?: Subclass;
 }) {
   const sizeClass =
@@ -182,22 +188,50 @@ export function ManifestIcon({
             ? "size-8"
             : size === 40
               ? "size-10"
-              : "size-4";
-  const tileStyle = element
-    ? ({ "--element-line": SUBCLASS_LINE[element] } as CSSProperties)
-    : undefined;
+              : size === 48
+                ? "size-12"
+                : "size-4";
+  const image = (
+    <Image
+      src={`${BUNGIE_IMAGE_BASE}${icon}`}
+      alt={label}
+      tabIndex={showTooltip && !diamond ? 0 : undefined}
+      width={size}
+      height={size}
+      className={cn(sizeClass, "shrink-0", className)}
+      unoptimized
+    />
+  );
   return icon ? (
     <TooltipLabel label={showTooltip ? label : undefined}>
-      <Image
-        src={`${BUNGIE_IMAGE_BASE}${icon}`}
-        alt={label}
-        tabIndex={showTooltip ? 0 : undefined}
-        width={size}
-        height={size}
-        className={cn(sizeClass, "shrink-0", element && ELEMENT_GLOW, className)}
-        style={tileStyle}
-        unoptimized
-      />
+      {diamond ? (
+        <span
+          className={cn(sizeClass, "relative inline-flex shrink-0")}
+          tabIndex={showTooltip ? 0 : undefined}
+        >
+          {image}
+          <svg
+            viewBox={`0 0 ${size} ${size}`}
+            className="pointer-events-none absolute inset-0 size-full overflow-visible"
+            aria-hidden
+          >
+            <polygon
+              points={`${size / 2},0 ${size},${size / 2} ${size / 2},${size} 0,${size / 2}`}
+              fill="none"
+              // var() only resolves in CSS, not in the stroke attribute.
+              style={{
+                stroke: element
+                  ? `color-mix(in srgb, ${SUBCLASS_LINE[element]} 60%, white)`
+                  : "white",
+              }}
+              strokeOpacity={element ? 0.55 : 0.16}
+              vectorEffect="non-scaling-stroke"
+            />
+          </svg>
+        </span>
+      ) : (
+        image
+      )}
     </TooltipLabel>
   ) : (
     <TooltipLabel label={showTooltip ? label : undefined}>

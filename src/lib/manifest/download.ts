@@ -3,6 +3,7 @@ import type {
   DestinyMaterialRequirementSetDefinition,
 } from "bungie-api-ts/destiny2";
 import { isFestivalMask } from "@/lib/armory/festival-masks";
+import { ARTIFACT_BUCKET } from "@/lib/armory/artifact-items";
 import { setCachedTable } from "./db";
 import { projectItemDef, projectItemDefLean, type ItemDef } from "./item-def";
 import { MANIFEST_TABLES, type ManifestTableName, type ManifestTables } from "./tables";
@@ -69,7 +70,7 @@ const MANAGER_BUCKETS = new Set([
 ]);
 
 /**
- * Keep armor, subclasses, plugs/mods, Festival of the Lost masks, and upgrade materials,
+ * Keep armor, subclasses, artifacts, plugs/mods, Festival of the Lost masks, and upgrade materials,
  * projected down to the fields the app reads (`ItemDef`), plus a lean copy of anything
  * else the inventory manager can show.
  */
@@ -87,6 +88,8 @@ export function filterInventoryItems(
       materials.has(Number(key)) ||
       def.itemType === ITEM_TYPE_MOD ||
       def.itemType === ITEM_TYPE_SUBCLASS ||
+      // Artifacts keep their sockets: the loadout picker reads each perk socket's pool.
+      def.inventory?.bucketTypeHash === ARTIFACT_BUCKET ||
       def.plug ||
       isFestivalMask(Number(key), def)
     ) {

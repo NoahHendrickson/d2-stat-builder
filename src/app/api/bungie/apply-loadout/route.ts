@@ -14,8 +14,11 @@ import { FRAGMENT_SOCKET_COUNT } from "@/lib/armory/equipped-subclass";
 import { MAX_MODS } from "@/lib/loadouts/types";
 import { ABILITY_SOCKET_COUNT, ASPECT_SOCKET_COUNT } from "@/lib/dim/subclasses";
 
+/** 7 perk inserts, plus an empty plug for each perk that moves to another socket. */
+const ARTIFACT_PLUGS = 14;
+
 /**
- * A full apply is long: up to 10 items × (2 vault hops + up to 3 spares vaulted, each
+ * A full apply is long: up to 11 items × (2 vault hops + up to 3 spares vaulted, each
  * followed by a retry) transfers at 150 ms spacing, plus a character-inventory read
  * when the live fallback runs (repeated only after a failed read), then every plug at
  * 600 ms spacing —
@@ -24,15 +27,19 @@ import { ABILITY_SOCKET_COUNT, ASPECT_SOCKET_COUNT } from "@/lib/dim/subclasses"
  */
 export const maxDuration = 60;
 
-/** 5 armor + 1 subclass + 3 weapons + 1 legendary weapon swapped in to free the exotic slot. */
-const MAX_ITEMS = 10;
+/**
+ * 5 armor + 1 subclass + 3 weapons + 1 legendary weapon swapped in to free the exotic
+ * slot + the artifact.
+ */
+const MAX_ITEMS = 11;
 /**
  * Every mod a loadout may list (stat / tuning / artifice / slot-specific — the same cap
  * the loadout parser enforces) plus every subclass socket a loadout can pin: abilities,
  * aspects, and fragments. Anything the client plans within a valid loadout must fit, or
- * a fully-specified build could never be applied.
+ * a fully-specified build could never be applied. Then the artifact's perks.
  */
-const MAX_PLUGS = MAX_MODS + ABILITY_SOCKET_COUNT + ASPECT_SOCKET_COUNT + FRAGMENT_SOCKET_COUNT;
+const MAX_PLUGS =
+  MAX_MODS + ABILITY_SOCKET_COUNT + ASPECT_SOCKET_COUNT + FRAGMENT_SOCKET_COUNT + ARTIFACT_PLUGS;
 
 interface ApplyRequestBody {
   characterId: string;

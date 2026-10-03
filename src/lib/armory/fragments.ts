@@ -38,6 +38,21 @@ export function subclassFromPlugCategory(
   return undefined;
 }
 
+/**
+ * Damage type a plug's art is drawn in. Prismatic abilities and aspects sit under
+ * `*.prism.*` but keep their source element's art, which only the type name carries
+ * ("Strand Super | Darkness Ability"); Prismatic-only plugs (fragments, Transcendence,
+ * class abilities) stay Prismatic.
+ */
+export function subclassFromPlug(
+  def: { itemTypeDisplayName?: string; plug?: { plugCategoryIdentifier?: string } } | undefined,
+): Subclass | undefined {
+  const fromCategory = subclassFromPlugCategory(def?.plug?.plugCategoryIdentifier);
+  if (fromCategory !== "Prismatic") return fromCategory;
+  const word = def?.itemTypeDisplayName?.split(" ", 1)[0];
+  return SUBCLASSES.find((s) => s === word) ?? "Prismatic";
+}
+
 // Fragment plug category -> subclass. NOTE: Stasis fragments live under
 // `shared.stasis.trinkets`, NOT `.fragments` — verified against the live manifest,
 // and a naive "fragments" filter silently drops all of Stasis.
