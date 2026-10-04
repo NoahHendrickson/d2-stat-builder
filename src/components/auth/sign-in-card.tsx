@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { toast } from "@/lib/toast";
 import { useQueryClient } from "@tanstack/react-query";
 import { useSession } from "@/lib/auth/use-session";
+import { signOut } from "@/lib/auth/sign-out";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -48,11 +49,8 @@ export function SignInCard() {
             size="lg"
             className="w-full"
             onClick={async () => {
-              // POST, not a GET link — the logout route is POST-only to avoid CSRF.
-              const res = await fetch("/api/auth/logout", { method: "POST" }).catch(
-                () => null,
-              );
-              if (!res?.ok) {
+              // Also clears the cached armory, so a shared computer keeps no gear.
+              if (!(await signOut(queryClient))) {
                 toast.error("Sign out failed. Please try again.");
                 return;
               }

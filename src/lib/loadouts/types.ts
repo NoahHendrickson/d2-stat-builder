@@ -220,7 +220,7 @@ export function parseOptimizerLoadout(v: unknown): OptimizerLoadout | null {
   if (
     !Array.isArray(v.pieceIds) ||
     v.pieceIds.length !== 5 ||
-    !v.pieceIds.every((id) => typeof id === "string")
+    !v.pieceIds.every((id) => typeof id === "string" && id.length <= 64)
   )
     return null;
   const baseStats = statArray(v.baseStats);
@@ -271,7 +271,13 @@ export function parseBuilderSnapshot(v: unknown): BuilderSnapshot | null {
   if (!targets || !isInt(v.major)) return null;
   const setReqs = intKeyedRecord(v.setReqs ?? {}, MAX_SET_BONUSES, (x) => x === 2 || x === 4);
   if (!setReqs) return null;
-  if (!(v.exoticName === null || typeof v.exoticName === "string")) return null;
+  if (
+    !(
+      v.exoticName === null ||
+      (typeof v.exoticName === "string" && v.exoticName.length <= MAX_NAME_LENGTH)
+    )
+  )
+    return null;
   const ep = v.exoticPerks;
   if (!Array.isArray(ep) || ep.length !== 2 || !ep.every((x) => x === null || isInt(x)))
     return null;

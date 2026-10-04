@@ -40,6 +40,7 @@ import { loadoutHashtags, type SavedLoadout } from "@/lib/loadouts/types";
 import { LoadoutTagAssignSubmenu } from "@/components/loadouts/loadout-tag-menu";
 import { StatGlyph } from "@/components/stat-glyph";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -78,6 +79,7 @@ export const LoadoutRow = memo(function LoadoutRow({
   weaponMap,
   weapons,
   provisional = false,
+  setRunning = false,
   manifest,
   characters,
   statIcons,
@@ -91,6 +93,8 @@ export const LoadoutRow = memo(function LoadoutRow({
   onArmoryChanged,
   allTags,
   onSetTag,
+  selected,
+  onSelect,
 }: {
   saved: SavedLoadout;
   open: boolean;
@@ -101,6 +105,8 @@ export const LoadoutRow = memo(function LoadoutRow({
   weapons?: readonly LoadoutWeapon[];
   /** The pieces are last visit's copy; Equip waits for the live profile. */
   provisional?: boolean;
+  /** An activity set is equipping gear; another apply now would fight it. */
+  setRunning?: boolean;
   manifest: Manifest;
   characters: ArmoryCharacter[];
   statIcons: StatIconMap;
@@ -117,6 +123,9 @@ export const LoadoutRow = memo(function LoadoutRow({
   /** Every hashtag across the library, for the Tag submenu. */
   allTags: readonly string[];
   onSetTag: (saved: SavedLoadout, tag: string, present: boolean) => void;
+  /** Set while the list is in select mode: whether this card is picked for bulk delete. */
+  selected?: boolean;
+  onSelect?: (id: string) => void;
 }) {
   const queryClient = useQueryClient();
   const [applying, setApplying] = useState(false);
@@ -136,7 +145,13 @@ export const LoadoutRow = memo(function LoadoutRow({
       ? resolved.armor[0]?.piece?.classType
       : loadout.classType,
   );
-  const canApply = resolved.actionable && !!targetCharacter && !applying && !provisional;
+  const canApply =
+    resolved.actionable && !!targetCharacter && !applying && !provisional && !setRunning;
+  const blockedLabel = provisional
+    ? "Refreshing your gear from Bungie…"
+    : setRunning
+      ? "Wait for the activity set to finish"
+      : undefined;
 
   /** Equip the loadout; with a slot `choice`, also save it into that in-game slot. */
   const applyLoadout = async (choice?: InGameSlotChoice) => {
@@ -192,6 +207,14 @@ export const LoadoutRow = memo(function LoadoutRow({
       className="@container d2-card-frame flex flex-col gap-4 p-4 hover:[--line-alpha:1.6]"
     >
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        {selected !== undefined && onSelect && (
+          <Checkbox
+            size="lg"
+            checked={selected}
+            onCheckedChange={() => onSelect(saved.id)}
+            aria-label={`Select ${loadout.name}`}
+          />
+        )}
         <div className="flex min-w-0 flex-1 basis-48 flex-col">
           <h3 className="flex min-w-0 items-center gap-1.5 text-base leading-6 font-medium">
             <span className="truncate">{loadout.name}</span>
@@ -252,8 +275,8 @@ export const LoadoutRow = memo(function LoadoutRow({
 
         <div className="flex shrink-0 items-center gap-2">
           <TooltipLabel
-            label={provisional ? "Refreshing your gear from Bungie…" : undefined}
-            disabled={!provisional}
+            label={blockedLabel}
+            disabled={!blockedLabel}
           >
             <Button
               variant="emphatic"

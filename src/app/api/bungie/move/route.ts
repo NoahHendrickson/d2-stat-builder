@@ -4,6 +4,7 @@ import { getValidAccessToken, readUser } from "@/lib/bungie/session";
 import { bungieErrorResponse } from "@/lib/bungie/equip-route";
 import type { MoveDestination, MoveRequest, MoveSource } from "@/lib/bungie/move-plan";
 import { runMove } from "@/lib/bungie/move-server";
+import { rejectCrossSite } from "@/lib/http/same-origin";
 
 const isId = (v: unknown): v is string => typeof v === "string" && /^\d+$/.test(v);
 
@@ -41,6 +42,8 @@ function parseBody(body: unknown): MoveRequest | null {
 
 /** Move one item for the inventory manager: vault ↔ characters, postmaster pulls, equips. */
 export async function POST(request: Request) {
+  const refused = rejectCrossSite(request);
+  if (refused) return refused;
   const user = await readUser();
   const token = await getValidAccessToken();
   if (!user?.destinyMembershipId || user.destinyMembershipType == null || !token) {

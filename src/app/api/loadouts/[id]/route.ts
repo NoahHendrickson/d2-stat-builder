@@ -2,20 +2,21 @@ import { NextResponse } from "next/server";
 import { readUser } from "@/lib/bungie/session";
 import { getServerLoadoutStore } from "@/lib/loadouts/neon-store";
 import { parseSavedLoadoutData } from "@/lib/loadouts/types";
-import { notConfigured, storageError } from "@/lib/loadouts/api-responses";
-
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+import { isLoadoutId, notConfigured, storageError } from "@/lib/loadouts/api-responses";
+import { rejectCrossSite } from "@/lib/http/same-origin";
 
 type Ctx = { params: Promise<{ id: string }> };
 
 export async function PUT(request: Request, { params }: Ctx) {
+  const refused = rejectCrossSite(request);
+  if (refused) return refused;
   const user = await readUser();
   if (!user) return NextResponse.json({ error: "Not signed in" }, { status: 401 });
   const store = getServerLoadoutStore();
   if (!store) return notConfigured();
 
   const { id } = await params;
-  if (!UUID.test(id)) return NextResponse.json({ error: "Invalid id" }, { status: 400 });
+  if (!isLoadoutId(id)) return NextResponse.json({ error: "Invalid id" }, { status: 400 });
   const data = parseSavedLoadoutData(await request.json().catch(() => null));
   if (!data) return NextResponse.json({ error: "Invalid loadout" }, { status: 400 });
 
@@ -28,14 +29,16 @@ export async function PUT(request: Request, { params }: Ctx) {
   }
 }
 
-export async function DELETE(_request: Request, { params }: Ctx) {
+export async function DELETE(request: Request, { params }: Ctx) {
+  const refused = rejectCrossSite(request);
+  if (refused) return refused;
   const user = await readUser();
   if (!user) return NextResponse.json({ error: "Not signed in" }, { status: 401 });
   const store = getServerLoadoutStore();
   if (!store) return notConfigured();
 
   const { id } = await params;
-  if (!UUID.test(id)) return NextResponse.json({ error: "Invalid id" }, { status: 400 });
+  if (!isLoadoutId(id)) return NextResponse.json({ error: "Invalid id" }, { status: 400 });
 
   try {
     const ok = await store.delete(user.membershipId, id);

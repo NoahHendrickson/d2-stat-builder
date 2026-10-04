@@ -56,7 +56,8 @@ export async function GET() {
   }
 
   const logContext = {
-    destinyMembershipId: user.destinyMembershipId,
+    // Enough to tell accounts apart in the logs without recording the full id.
+    destinyMembershipId: `…${user.destinyMembershipId.slice(-4)}`,
     membershipType: user.destinyMembershipType,
   };
 

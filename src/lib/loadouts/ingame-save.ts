@@ -17,6 +17,8 @@ export interface InGameSlotChoice extends SlotIdentifiers {
 /** Bungie asks for at least a second between actions; the apply's last plug just landed. */
 const SNAPSHOT_DELAY_MS = 1000;
 
+export const waitBeforeSnapshot = () => new Promise((r) => setTimeout(r, SNAPSHOT_DELAY_MS));
+
 /** The character's in-game loadout slots and the identifiers they can carry. */
 export async function fetchInGameLoadouts(characterId: string): Promise<InGameLoadoutsResponse> {
   const res = await fetch(`/api/bungie/ingame-loadouts?characterId=${encodeURIComponent(characterId)}`);
@@ -32,6 +34,29 @@ export async function fetchInGameLoadouts(characterId: string): Promise<InGameLo
 /** Every piece equipped and every planned mod socketed — what the slot is about to capture. */
 export function fullyApplied({ equip, plugs }: Pick<ApplyOutcome, "equip" | "plugs">): boolean {
   return equip.every((r) => r.ok) && plugs.every((r) => r.ok);
+}
+
+export type SnapshotResult = { ok: true } | { ok: false; error: string; reauth?: boolean };
+
+/** Save what `characterId` is wearing into an in-game slot. Never throws. */
+export async function snapshotInGame(
+  characterId: string,
+  choice: InGameSlotChoice,
+): Promise<SnapshotResult> {
+  try {
+    const res = await fetch("/api/bungie/ingame-loadouts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ characterId, ...choice } satisfies SnapshotRequest),
+    });
+    if (res.ok) return { ok: true };
+    const data = (await res.json().catch(() => null)) as
+      | { error?: string; reauth?: boolean }
+      | null;
+    return { ok: false, error: data?.error ?? "Bungie request failed", reauth: data?.reauth };
+  } catch {
+    return { ok: false, error: "Check your connection and try again" };
+  }
 }
 
 /**
@@ -60,27 +85,12 @@ export async function saveLoadoutInGame({
     return outcome;
   }
 
-  await new Promise((r) => setTimeout(r, SNAPSHOT_DELAY_MS));
-  try {
-    const res = await fetch("/api/bungie/ingame-loadouts", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        characterId: apply.character.id,
-        ...choice,
-      } satisfies SnapshotRequest),
-    });
-    if (!res.ok) {
-      const data = (await res.json().catch(() => null)) as
-        | { error?: string; reauth?: boolean }
-        | null;
-      toast.error(`Couldn't save to ${slot}`, data?.error ?? "Bungie request failed");
-      // The route cleared the dead session; forget the local player data too.
-      if (data?.reauth) void handleSessionExpired(queryClient);
-      return outcome;
-    }
-  } catch {
-    toast.error(`Couldn't save to ${slot}`, "Check your connection and try again");
+  await waitBeforeSnapshot();
+  const snapshot = await snapshotInGame(apply.character.id, choice);
+  if (!snapshot.ok) {
+    toast.error(`Couldn't save to ${slot}`, snapshot.error);
+    // The route cleared the dead session; forget the local player data too.
+    if (snapshot.reauth) void handleSessionExpired(queryClient);
     return outcome;
   }
 

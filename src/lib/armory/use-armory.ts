@@ -13,6 +13,8 @@ import { sessionMembershipId, useProfile } from "./use-profile";
 
 export interface RefreshResult {
   data?: Armory;
+  /** When Bungie generated the profile behind `data` (epoch ms; NaN if unreadable). */
+  mintedAt?: number;
   error: unknown;
   isSuccess: boolean;
 }
@@ -112,7 +114,8 @@ export function useArmory(): ArmoryQuery {
   const refetch = useCallback<ArmoryQuery["refetch"]>(async () => {
     const result = await profileRefetch();
     const data = result.data && manifest ? deriveArmory(result.data, manifest) : undefined;
-    return { data, error: result.error, isSuccess: result.isSuccess };
+    const mintedAt = result.data ? Date.parse(result.data.responseMintedTimestamp) : undefined;
+    return { data, mintedAt, error: result.error, isSuccess: result.isSuccess };
   }, [profileRefetch, manifest]);
 
   // The derived query is disabled (not pending, not fetching) while the profile is

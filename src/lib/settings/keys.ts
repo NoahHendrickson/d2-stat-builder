@@ -2,12 +2,15 @@
 // Shared by the client store (sync.ts) and the server route, so both validate a value
 // the same way. Pure — runtime imports stay relative so the module runs under vitest.
 import { parseLinks, type SavedLink } from "../links/links";
+import { parseActivitySets, MAX_ACTIVITY_SETS, type ActivitySet } from "../loadouts/activity-sets";
 
 export interface SettingValues {
   /** Sidebar bookmarks, in display order. */
   links: SavedLink[];
   /** Set hashes pinned to the top of the builder's set-bonus list, in pin order. */
   pinnedSets: number[];
+  /** Saved loadouts assigned to in-game loadout slots, in display order. */
+  activitySets: ActivitySet[];
 }
 
 export type SettingKey = keyof SettingValues;
@@ -21,7 +24,7 @@ export interface StoredSetting<K extends SettingKey = SettingKey> {
 /** `GET /api/settings`: the keys this account has ever written. */
 export type StoredSettings = { [K in SettingKey]?: StoredSetting<K> };
 
-export const SETTING_KEYS: readonly SettingKey[] = ["links", "pinnedSets"];
+export const SETTING_KEYS: readonly SettingKey[] = ["links", "pinnedSets", "activitySets"];
 
 export function isSettingKey(key: string): key is SettingKey {
   return (SETTING_KEYS as readonly string[]).includes(key);
@@ -54,6 +57,8 @@ export function parseSettingValue<K extends SettingKey>(
       return parseLinks(value).slice(0, MAX_LINKS) as SettingValues[K];
     case "pinnedSets":
       return parsePinnedSets(value) as SettingValues[K];
+    case "activitySets":
+      return parseActivitySets(value) as SettingValues[K];
   }
   return null;
 }
@@ -61,7 +66,7 @@ export function parseSettingValue<K extends SettingKey>(
 /**
  * The first sync on a browser that already has its own value: keep both rather than
  * let either computer's list wipe the other's. The account's list leads; local extras
- * follow (links matched by URL, pins by hash).
+ * follow (links matched by URL, pins by hash, activity sets by id).
  */
 export function mergeSettingValues<K extends SettingKey>(
   key: K,
@@ -76,6 +81,14 @@ export function mergeSettingValues<K extends SettingKey>(
       .filter((l) => !urls.has(l.url))
       .map((l) => (ids.has(l.id) ? { ...l, id: crypto.randomUUID() } : l));
     return [...s, ...extra].slice(0, MAX_LINKS) as SettingValues[K];
+  }
+  if (key === "activitySets") {
+    const s = server as ActivitySet[];
+    const ids = new Set(s.map((a) => a.id));
+    return [...s, ...(local as ActivitySet[]).filter((a) => !ids.has(a.id))].slice(
+      0,
+      MAX_ACTIVITY_SETS,
+    ) as SettingValues[K];
   }
   const s = server as number[];
   const have = new Set(s);

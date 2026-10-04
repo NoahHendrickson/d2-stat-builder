@@ -139,6 +139,25 @@ export function useLoadoutMutations() {
     onSuccess: (_, id) => patchList((list) => list.filter((l) => l.id !== id)),
   });
 
+  /** Bulk delete: the listed ids, or "all" for every loadout on the account. */
+  const removeMany = useMutation<string[], LoadoutsApiError, readonly string[] | "all">({
+    mutationFn: async (target) => {
+      const { deleted } = await api<{ deleted: string[] }>("/api/loadouts", {
+        method: "DELETE",
+        body: JSON.stringify(target === "all" ? { all: true } : { ids: target }),
+      });
+      return deleted;
+    },
+    onSuccess: (deleted, target) => {
+      if (target === "all") {
+        patchList(() => []);
+        return;
+      }
+      const gone = new Set(deleted);
+      patchList((list) => list.filter((l) => !gone.has(l.id)));
+    },
+  });
+
   const updateMutateAsync = update.mutateAsync;
 
   /**
@@ -215,5 +234,5 @@ export function useLoadoutMutations() {
     [queryClient, updateMutateAsync],
   );
 
-  return { create, update, remove, setTag };
+  return { create, update, remove, removeMany, setTag };
 }

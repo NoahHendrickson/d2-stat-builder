@@ -3,6 +3,7 @@ import { readUser } from "@/lib/bungie/session";
 import { isSettingKey, parseSettingValue } from "@/lib/settings/keys";
 import { getServerSettingsStore } from "@/lib/settings/neon-store";
 import { notConfigured, storageError } from "@/lib/loadouts/api-responses";
+import { rejectCrossSite } from "@/lib/http/same-origin";
 
 /** Settings are small lists; anything bigger is not something this app wrote. */
 const MAX_BODY_LENGTH = 64 * 1024;
@@ -11,6 +12,8 @@ type Ctx = { params: Promise<{ key: string }> };
 
 /** Replace one synced setting. Body: `{ value }`. Answers `{ value, updatedAt }`. */
 export async function PUT(request: Request, { params }: Ctx) {
+  const refused = rejectCrossSite(request);
+  if (refused) return refused;
   const user = await readUser();
   if (!user) return NextResponse.json({ error: "Not signed in" }, { status: 401 });
   const store = getServerSettingsStore();

@@ -10,9 +10,17 @@ import {
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { ArrowUpDownIcon, Search01Icon } from "@hugeicons/core-free-icons";
+import {
+  Add01Icon,
+  ArrowUpDownIcon,
+  CheckListIcon,
+  Delete02Icon,
+  MoreVerticalIcon,
+  Search01Icon,
+} from "@hugeicons/core-free-icons";
 import { toast, type Notifier } from "@/lib/toast";
 import type { Armory } from "@/lib/armory/fetch";
+import type { RefreshResult } from "@/lib/armory/use-armory";
 import type { Manifest } from "@/lib/manifest/load";
 import { SUBCLASSES, type Subclass } from "@/lib/armory/fragments";
 import { CLASS_NAMES, STAT_HASH_TO_INDEX } from "@/lib/armory/stats";
@@ -59,15 +67,31 @@ import {
 } from "@/lib/loadouts/types";
 import { FilterMultiselect } from "@/components/armor-table/filter-multiselect";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input, SearchClearButton } from "@/components/ui/input";
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuGroup,
+  DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import type { ActivitySet } from "@/lib/loadouts/activity-sets";
+import {
+  removeActivitySet,
+  saveActivitySet,
+  useActivitySets,
+} from "@/lib/loadouts/use-activity-sets";
+import {
+  runActivitySet,
+  stopActivitySet,
+  useActivitySetRun,
+} from "@/lib/loadouts/activity-set-run";
+import { ActivitySetStrip } from "@/components/loadouts/activity-set-strip";
+import { ActivitySetEditor } from "@/components/loadouts/activity-set-editor";
 import { ConfirmDialog } from "@/components/loadouts/confirm-dialog";
 import { type ModsSection } from "@/lib/loadouts/mod-placement";
 import { commitLoadout, modsSectionForPieces } from "@/lib/loadouts/commit";
@@ -85,7 +109,11 @@ let dismissedImportParam: string | null = null;
 type DialogState =
   | { kind: "none" }
   | { kind: "edit"; loadout: SavedLoadout; mods?: ModsSection }
-  | { kind: "delete"; loadout: SavedLoadout };
+  | { kind: "delete"; loadout: SavedLoadout }
+  | { kind: "delete-many"; ids: string[] }
+  | { kind: "delete-all" }
+  | { kind: "set-edit"; set?: ActivitySet }
+  | { kind: "set-delete"; set: ActivitySet };
 
 const SUBCLASS_OPTIONS = SUBCLASSES.map((sc) => ({ value: sc, label: sc }));
 
@@ -104,19 +132,24 @@ export function LoadoutsList({
   provisional = false,
   manifest,
   onArmoryChanged,
+  refreshArmory,
 }: {
   armory: Armory;
   /** `armory` is last visit's copy; applying a loadout waits for the live profile. */
   provisional?: boolean;
   manifest: Manifest;
   onArmoryChanged: () => void;
+  /** Re-reads the profile and resolves with the new armory (an activity set runs on it). */
+  refreshArmory: () => Promise<RefreshResult>;
 }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const loadouts = useLoadouts();
-  const { create, update, remove, setTag } = useLoadoutMutations();
+  const { create, update, remove, removeMany, setTag } = useLoadoutMutations();
+  const activitySets = useActivitySets();
+  const setRun = useActivitySetRun();
 
   const [query, setQuery] = useState("");
   // The filter pass runs on the deferred value so typing never waits on it.
@@ -138,6 +171,22 @@ export function LoadoutsList({
       return next;
     });
   }, []);
+
+  // Select mode: cards grow checkboxes for bulk delete. Only picks that are still
+  // shown count, so a filter change never deletes something off screen.
+  const [selecting, setSelecting] = useState(false);
+  const [picked, setPicked] = useState<ReadonlySet<string>>(() => new Set());
+  const togglePicked = useCallback((id: string) => {
+    setPicked((prev) => {
+      const next = new Set(prev);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    });
+  }, []);
+  const stopSelecting = () => {
+    setSelecting(false);
+    setPicked(new Set());
+  };
 
   // A share link lands here with ?import=<json>; offer to save a copy.
   const importParam = searchParams.get(SHARE_PARAM);
@@ -208,6 +257,12 @@ export function LoadoutsList({
       ),
     [all, deferredQuery, classFilter, subclassFilter, setFilter, tagFilter, sortKey, manifest],
   );
+
+  const pickedShown = useMemo(
+    () => shown.filter((l) => picked.has(l.id)).map((l) => l.id),
+    [shown, picked],
+  );
+  const allShownPicked = shown.length > 0 && pickedShown.length === shown.length;
 
   // Rows are virtualized against the section's own scroller: only the visible slice
   // (plus overscan) resolves items and renders, however long the list gets.
@@ -323,6 +378,22 @@ export function LoadoutsList({
       onSuccess: () => {
         setDialog({ kind: "none" });
         pending.success("Loadout deleted");
+      },
+      onError: mutationError(pending),
+    });
+  };
+
+  const deleteMany = () => {
+    if (dialog.kind !== "delete-many" && dialog.kind !== "delete-all") return;
+    const everything = dialog.kind === "delete-all";
+    const pending = toast.loading(everything ? "Deleting all loadouts" : "Deleting loadouts");
+    removeMany.mutate(everything ? "all" : dialog.ids, {
+      onSuccess: (deleted) => {
+        setDialog({ kind: "none" });
+        stopSelecting();
+        pending.success(
+          `${deleted.length} ${deleted.length === 1 ? "loadout" : "loadouts"} deleted`,
+        );
       },
       onError: mutationError(pending),
     });
@@ -475,6 +546,23 @@ export function LoadoutsList({
     };
   }, [importData, manifest]);
 
+  const runSet = (set: ActivitySet) =>
+    void runActivitySet({
+      set,
+      loadouts: all,
+      armory,
+      refreshArmory,
+      manifest,
+      queryClient,
+    });
+
+  const deleteSet = () => {
+    if (dialog.kind !== "set-delete") return;
+    removeActivitySet(dialog.set.id);
+    setDialog({ kind: "none" });
+    toast.success("Activity set deleted");
+  };
+
   const sortLabel =
     LOADOUT_LIST_SORT_OPTIONS.find((o) => o.key === sortKey)?.label ?? "Sort";
   const classOptions = ownedClasses.map((c) => ({ value: c, label: CLASS_NAMES[c] }));
@@ -575,9 +663,102 @@ export function LoadoutsList({
               </DropdownMenuGroup>
             </DropdownMenuContent>
           </DropdownMenu>
-
+          <DropdownMenu>
+            <TooltipLabel label="New">
+              <DropdownMenuTrigger
+                render={<Button variant="default" size="icon" />}
+                aria-label="New"
+              >
+                <HugeiconsIcon icon={Add01Icon} aria-hidden />
+              </DropdownMenuTrigger>
+            </TooltipLabel>
+            <DropdownMenuContent align="end" className="w-48">
+              <DropdownMenuItem onClick={() => setDialog({ kind: "set-edit" })}>
+                New activity set
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <DropdownMenu>
+            <TooltipLabel label="More">
+              <DropdownMenuTrigger
+                render={<Button variant="default" size="icon" />}
+                aria-label="More loadout actions"
+              >
+                <HugeiconsIcon icon={MoreVerticalIcon} strokeWidth={2} aria-hidden />
+              </DropdownMenuTrigger>
+            </TooltipLabel>
+            <DropdownMenuContent align="end" className="w-52">
+              <DropdownMenuItem
+                onClick={() => setSelecting(true)}
+                disabled={selecting || all.length === 0}
+              >
+                <HugeiconsIcon icon={CheckListIcon} aria-hidden />
+                Select loadouts
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                variant="destructive"
+                onClick={() => setDialog({ kind: "delete-all" })}
+                disabled={all.length === 0}
+              >
+                <HugeiconsIcon icon={Delete02Icon} aria-hidden />
+                Delete all loadouts
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
+
+      <ActivitySetStrip
+        sets={activitySets}
+        characters={armory.characters}
+        loadouts={all}
+        run={setRun}
+        canRun={!provisional && !loadouts.isPending}
+        onRun={runSet}
+        onStop={stopActivitySet}
+        onEdit={(set) => setDialog({ kind: "set-edit", set })}
+        onDelete={(set) => setDialog({ kind: "set-delete", set })}
+      />
+
+      {selecting && all.length > 0 && (
+        <div className="flex flex-wrap items-center gap-3">
+          <label className="flex items-center gap-2 text-sm">
+            <Checkbox
+              size="lg"
+              checked={allShownPicked}
+              disabled={shown.length === 0}
+              onCheckedChange={(checked) =>
+                setPicked((prev) => {
+                  const next = new Set(prev);
+                  for (const l of shown) {
+                    if (checked) next.add(l.id);
+                    else next.delete(l.id);
+                  }
+                  return next;
+                })
+              }
+            />
+            Select all
+          </label>
+          <span className="text-muted-foreground text-sm tabular-nums" aria-live="polite">
+            {pickedShown.length} selected
+          </span>
+          <div className="ml-auto flex items-center gap-2">
+            <Button variant="outline" onClick={stopSelecting}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={pickedShown.length === 0}
+              onClick={() => setDialog({ kind: "delete-many", ids: pickedShown })}
+            >
+              <HugeiconsIcon icon={Delete02Icon} aria-hidden />
+              Delete
+            </Button>
+          </div>
+        </div>
+      )}
 
       {loadouts.isError ? (
         <p className="text-muted-foreground text-sm">
@@ -623,6 +804,7 @@ export function LoadoutsList({
                     weaponMap={weaponMap}
                     weapons={armory.weapons}
                     provisional={provisional}
+                    setRunning={setRun !== null}
                     manifest={manifest}
                     characters={armory.characters}
                     statIcons={statIcons}
@@ -636,6 +818,8 @@ export function LoadoutsList({
                     onArmoryChanged={onArmoryChanged}
                     allTags={hashtags}
                     onSetTag={setLoadoutTag}
+                    selected={selecting ? picked.has(saved.id) : undefined}
+                    onSelect={togglePicked}
                   />
                 </div>
               );
@@ -678,6 +862,52 @@ export function LoadoutsList({
         confirmLabel="Delete"
         busy={remove.isPending}
         onConfirm={deleteLoadout}
+      />
+      <ConfirmDialog
+        open={dialog.kind === "delete-many" || dialog.kind === "delete-all"}
+        onOpenChange={(open) => !open && setDialog({ kind: "none" })}
+        title={
+          dialog.kind === "delete-all"
+            ? `Delete all ${all.length} loadouts?`
+            : dialog.kind === "delete-many"
+              ? `Delete ${dialog.ids.length} ${dialog.ids.length === 1 ? "loadout" : "loadouts"}?`
+              : ""
+        }
+        description={
+          dialog.kind === "delete-all"
+            ? "Every saved loadout on your account will be removed. This can't be undone."
+            : "The selected loadouts will be removed. This can't be undone."
+        }
+        confirmLabel={dialog.kind === "delete-all" ? "Delete all" : "Delete"}
+        busy={removeMany.isPending}
+        onConfirm={deleteMany}
+      />
+      {dialog.kind === "set-edit" && (
+        <ActivitySetEditor
+          open
+          onOpenChange={(open) => !open && setDialog({ kind: "none" })}
+          initial={dialog.set}
+          characters={armory.characters}
+          loadouts={all}
+          pieceMap={pieceMap}
+          manifest={manifest}
+          onSave={(set) => {
+            saveActivitySet(set);
+            toast.success(dialog.set ? "Activity set updated" : "Activity set created");
+          }}
+        />
+      )}
+      <ConfirmDialog
+        open={dialog.kind === "set-delete"}
+        onOpenChange={(open) => !open && setDialog({ kind: "none" })}
+        title="Delete activity set?"
+        description={
+          dialog.kind === "set-delete"
+            ? `“${dialog.set.name}” will be removed. Your loadouts and in-game slots stay as they are.`
+            : undefined
+        }
+        confirmLabel="Delete"
+        onConfirm={deleteSet}
       />
       <LoadoutEditorDrawer
         open={importOpen}

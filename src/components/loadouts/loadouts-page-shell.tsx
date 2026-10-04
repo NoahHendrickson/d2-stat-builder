@@ -83,6 +83,7 @@ export function LoadoutsPageShell() {
             provisional={armory.isProvisional}
             manifest={manifestStatus.manifest}
             onArmoryChanged={onArmoryChanged}
+            refreshArmory={refetchArmory}
           />
         </Suspense>
       )}

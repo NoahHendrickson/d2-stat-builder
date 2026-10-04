@@ -4,7 +4,7 @@ import "./globals.css";
 import { AppShell } from "@/components/app-shell";
 import { LoadingScreen } from "@/components/loading/loading-screen";
 import { Providers } from "@/components/providers";
-import { Analytics } from "@vercel/analytics/next";
+import { Analytics } from "@/components/analytics";
 import { EARLY_FETCH_SCRIPT } from "@/lib/early-fetch";
 import { APP_THEME_SCRIPT, DEFAULT_APP_THEME } from "@/lib/app-theme-script";
 

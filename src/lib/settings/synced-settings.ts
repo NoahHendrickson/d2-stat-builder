@@ -25,6 +25,7 @@ import {
 const STORAGE_KEYS: Record<SettingKey, string> = {
   links: "stat-builder:links",
   pinnedSets: "stat-builder:pinned-sets",
+  activitySets: "stat-builder:activity-sets",
 };
 const META_KEY = "stat-builder:settings-sync";
 /** Edits are pushed this long after the last one, so a burst of pins is one write. */
@@ -73,9 +74,10 @@ const values: Partial<SettingValues> = {};
 const listeners: Record<SettingKey, Set<() => void>> = {
   links: new Set(),
   pinnedSets: new Set(),
+  activitySets: new Set(),
 };
 /** Bumped on every local edit in this tab: tells a finished push whether it was the last. */
-const localVersion: Record<SettingKey, number> = { links: 0, pinnedSets: 0 };
+const localVersion: Record<SettingKey, number> = { links: 0, pinnedSets: 0, activitySets: 0 };
 
 function readLocal<K extends SettingKey>(key: K): SettingValues[K] {
   let stored = readJson(STORAGE_KEYS[key]);

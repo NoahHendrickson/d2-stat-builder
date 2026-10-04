@@ -12,6 +12,10 @@ import {
   type SpareItems,
 } from "./equip-plan";
 
+/** Bungie instance / character ids: decimal int64s, sent as strings. */
+export const isBungieId = (v: unknown): v is string =>
+  typeof v === "string" && /^\d{1,20}$/.test(v);
+
 /** Validate a client-supplied item list; null if malformed or outside `min`–`max` items. */
 export function parseEquipItems(
   v: unknown,
@@ -20,10 +24,9 @@ export function parseEquipItems(
   if (!Array.isArray(v) || v.length < min || v.length > max) return null;
   for (const i of v as Partial<EquipItemState>[]) {
     if (
-      typeof i?.itemInstanceId !== "string" ||
-      !i.itemInstanceId ||
+      !isBungieId(i?.itemInstanceId) ||
       typeof i.itemHash !== "number" ||
-      (i.characterId !== undefined && typeof i.characterId !== "string") ||
+      (i.characterId !== undefined && !isBungieId(i.characterId)) ||
       (i.isExotic !== undefined && typeof i.isExotic !== "boolean") ||
       (i.slot !== undefined && !EQUIP_SLOTS.includes(i.slot))
     )
@@ -41,6 +44,7 @@ export function parseSpares(v: unknown): SpareItems | null {
   if (!v || typeof v !== "object" || Array.isArray(v)) return null;
   const out: SpareItems = {};
   for (const [id, list] of Object.entries(v as Record<string, unknown>)) {
+    if (!isBungieId(id)) return null;
     const items = parseEquipItems(list, { min: 0, max: MAX_SPARES_PER_ITEM });
     if (!items) return null;
     if (items.length > 0) out[id] = items;

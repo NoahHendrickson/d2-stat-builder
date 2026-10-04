@@ -47,3 +47,18 @@ test("create honors a caller-supplied id and delete removes it", async () => {
   expect(await store.delete("o", "fixed-id")).toBe(true);
   expect(await store.list("o")).toEqual([]);
 });
+
+test("deleteMany removes only the owner's listed rows, or all of them", async () => {
+  const store = new MemoryLoadoutStore();
+  const a = await store.create("o", data("a"));
+  const b = await store.create("o", data("b"));
+  const c = await store.create("o", data("c"));
+  const other = await store.create("x", data("other"));
+
+  expect(await store.deleteMany("o", [a.id, other.id, "nope"])).toEqual([a.id]);
+  expect((await store.list("o")).map((l) => l.id).sort()).toEqual([b.id, c.id].sort());
+
+  expect((await store.deleteMany("o", "all")).sort()).toEqual([b.id, c.id].sort());
+  expect(await store.list("o")).toEqual([]);
+  expect((await store.list("x")).map((l) => l.id)).toEqual([other.id]);
+});

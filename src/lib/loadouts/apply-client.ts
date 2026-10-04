@@ -50,6 +50,7 @@ export async function applySavedLoadout({
   weapons: ownedWeapons = [],
   manifest,
   queryClient,
+  batch,
 }: {
   saved: SavedLoadout;
   resolved: ResolvedLoadout;
@@ -60,6 +61,11 @@ export async function applySavedLoadout({
   weapons?: readonly LoadoutWeapon[];
   manifest: Manifest;
   queryClient: QueryClient;
+  /**
+   * Labels the progress card when this apply is one step of a run (an activity set);
+   * the run reports the result, so no outcome toast is shown here.
+   */
+  batch?: string;
 }): Promise<ApplyOutcome | null> {
   const pieces = resolved.armor.map((a) => a.piece!);
   const items: EquipItemState[] = pieces.map(equipItemRef);
@@ -230,7 +236,7 @@ export async function applySavedLoadout({
 
   const showCard = steps.length > 0;
   const session = showCard
-    ? beginApplyProgress({ name: saved.loadout.name, steps, skipped: plan.skipped })
+    ? beginApplyProgress({ name: saved.loadout.name, batch, steps, skipped: plan.skipped })
     : 0;
 
   const failCard = (message: string) => {
@@ -307,7 +313,7 @@ export async function applySavedLoadout({
 
   const outcome: ApplyOutcome = { plan, equip, plugs: plugsOut };
   if (showCard) finishApplyProgress(session, finishFromResults(equip, plugsOut));
-  else toastOutcome(outcome, [...pieces, ...equipWeapons], character, pieceName);
+  else if (!batch) toastOutcome(outcome, [...pieces, ...equipWeapons], character, pieceName);
   return outcome;
 }
 

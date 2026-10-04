@@ -16,6 +16,8 @@ export interface ApplyStep {
 export interface ApplyProgressState {
   session: number;
   name: string;
+  /** Set when the apply is one step of a longer run (an activity set): "Raid · 2 of 5". */
+  batch?: string;
   steps: ApplyStep[];
   skipped: string[];
   finished?: "ok" | "partial" | "fail";

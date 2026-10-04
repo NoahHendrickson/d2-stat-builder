@@ -40,7 +40,7 @@ const SWATCH_CLASS =
   "d2-hover-ring relative shrink-0 overflow-hidden rounded-none outline-none transition-shadow focus-visible:ring-1 focus-visible:ring-outline-strong";
 
 /** A loadout's emblem as the game draws it: the icon over its colour. */
-function Emblem({
+export function Emblem({
   identifiers,
   iconHash,
   colorHash,

@@ -14,6 +14,8 @@ export interface LoadoutStore {
   update(membershipId: string, id: string, data: SavedLoadoutData): Promise<SavedLoadout | null>;
   /** Returns false when the row doesn't exist for this owner. */
   delete(membershipId: string, id: string): Promise<boolean>;
+  /** Deletes the given rows (or every row with "all"); returns the ids actually removed. */
+  deleteMany(membershipId: string, ids: readonly string[] | "all"): Promise<string[]>;
 }
 
 /** In-memory store — unit tests and a fallback when no database is configured. */
@@ -62,5 +64,11 @@ export class MemoryLoadoutStore implements LoadoutStore {
 
   async delete(membershipId: string, id: string) {
     return this.bucket(membershipId).delete(id);
+  }
+
+  async deleteMany(membershipId: string, ids: readonly string[] | "all") {
+    const bucket = this.bucket(membershipId);
+    const targets = ids === "all" ? [...bucket.keys()] : ids;
+    return targets.filter((id) => bucket.delete(id));
   }
 }

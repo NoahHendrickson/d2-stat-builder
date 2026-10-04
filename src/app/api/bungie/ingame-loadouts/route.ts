@@ -19,6 +19,7 @@ import {
   type InGameLoadoutsResponse,
 } from "@/lib/bungie/ingame-loadouts";
 import { getValidAccessToken, readUser } from "@/lib/bungie/session";
+import { rejectCrossSite } from "@/lib/http/same-origin";
 
 // 206 CharacterLoadouts, plus the item lists that turn a slot's instance ids into item
 // hashes for the preview: 102 Vault · 201 CharacterInventories · 205 CharacterEquipment.
@@ -137,6 +138,8 @@ export async function GET(request: Request) {
  * contents directly, so the caller equips the loadout first (see ingame-save.ts).
  */
 export async function POST(request: Request) {
+  const refused = rejectCrossSite(request);
+  if (refused) return refused;
   const user = await readUser();
   const token = await getValidAccessToken();
   if (!user?.destinyMembershipId || user.destinyMembershipType == null || !token) {

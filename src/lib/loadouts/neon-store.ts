@@ -108,6 +108,22 @@ export class NeonLoadoutStore implements LoadoutStore {
       RETURNING id`) as Row[];
     return rows.length > 0;
   }
+
+  async deleteMany(membershipId: string, ids: readonly string[] | "all"): Promise<string[]> {
+    await this.ensureSchema();
+    if (ids !== "all" && ids.length === 0) return [];
+    const rows = (
+      ids === "all"
+        ? await this.sql`
+            DELETE FROM loadouts WHERE membership_id = ${membershipId}
+            RETURNING id`
+        : await this.sql`
+            DELETE FROM loadouts
+            WHERE membership_id = ${membershipId} AND id = ANY(${[...ids]}::uuid[])
+            RETURNING id`
+    ) as Pick<Row, "id">[];
+    return rows.map((r) => r.id);
+  }
 }
 
 let singleton: LoadoutStore | null | undefined;

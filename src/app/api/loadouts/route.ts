@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { readUser } from "@/lib/bungie/session";
 import { getServerLoadoutStore } from "@/lib/loadouts/neon-store";
 import { parseSavedLoadoutData } from "@/lib/loadouts/types";
-import { notConfigured, storageError } from "@/lib/loadouts/api-responses";
+import { isLoadoutId, notConfigured, storageError } from "@/lib/loadouts/api-responses";
+import { rejectCrossSite } from "@/lib/http/same-origin";
 
 /**
  * Saved loadouts, owned by the signed (tamper-evident) session cookie's Bungie.net
@@ -22,6 +23,8 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
+  const refused = rejectCrossSite(request);
+  if (refused) return refused;
   const user = await readUser();
   if (!user) return NextResponse.json({ error: "Not signed in" }, { status: 401 });
   const store = getServerLoadoutStore();
@@ -33,6 +36,42 @@ export async function POST(request: Request) {
   try {
     const loadout = await store.create(user.membershipId, data);
     return NextResponse.json({ loadout }, { status: 201 });
+  } catch (err) {
+    return storageError(err);
+  }
+}
+
+/** Most ids one bulk delete accepts — well past any real library. */
+const MAX_BULK_DELETE = 1000;
+
+/**
+ * Bulk delete: `{ ids: [...] }` removes those rows, `{ all: true }` removes every row
+ * this account owns. Answers with the ids that were actually deleted.
+ */
+export async function DELETE(request: Request) {
+  const refused = rejectCrossSite(request);
+  if (refused) return refused;
+  const user = await readUser();
+  if (!user) return NextResponse.json({ error: "Not signed in" }, { status: 401 });
+  const store = getServerLoadoutStore();
+  if (!store) return notConfigured();
+
+  const body = (await request.json().catch(() => null)) as { ids?: unknown; all?: unknown } | null;
+  let target: string[] | "all";
+  if (body?.all === true) {
+    target = "all";
+  } else if (
+    Array.isArray(body?.ids) &&
+    body.ids.length <= MAX_BULK_DELETE &&
+    body.ids.every(isLoadoutId)
+  ) {
+    target = [...new Set(body.ids)];
+  } else {
+    return NextResponse.json({ error: "Invalid delete request" }, { status: 400 });
+  }
+
+  try {
+    return NextResponse.json({ deleted: await store.deleteMany(user.membershipId, target) });
   } catch (err) {
     return storageError(err);
   }

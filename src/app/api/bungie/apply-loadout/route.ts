@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createBungieHttp, BungieHttpError } from "@/lib/bungie/http";
-import { parseEquipItems, parseSpares } from "@/lib/bungie/equip-route";
+import { isBungieId, parseEquipItems, parseSpares } from "@/lib/bungie/equip-route";
 import type { EquipItemState, SpareItems } from "@/lib/bungie/equip-plan";
 import {
   insertPlugs,
@@ -13,6 +13,7 @@ import { getValidAccessToken, readUser } from "@/lib/bungie/session";
 import { FRAGMENT_SOCKET_COUNT } from "@/lib/armory/equipped-subclass";
 import { MAX_MODS } from "@/lib/loadouts/types";
 import { ABILITY_SOCKET_COUNT, ASPECT_SOCKET_COUNT } from "@/lib/dim/subclasses";
+import { rejectCrossSite } from "@/lib/http/same-origin";
 
 /** 7 perk inserts, plus an empty plug for each perk that moves to another socket. */
 const ARTIFACT_PLUGS = 14;
@@ -55,8 +56,7 @@ function parsePlugs(v: unknown): PlugRequest[] | null {
   if (!Array.isArray(v) || v.length > MAX_PLUGS) return null;
   for (const p of v as Partial<PlugRequest>[]) {
     if (
-      typeof p?.itemInstanceId !== "string" ||
-      !p.itemInstanceId ||
+      !isBungieId(p?.itemInstanceId) ||
       !Number.isInteger(p.socketIndex) ||
       (p.socketIndex as number) < 0 ||
       !Number.isInteger(p.plugItemHash)
@@ -68,7 +68,7 @@ function parsePlugs(v: unknown): PlugRequest[] | null {
 
 function parseBody(body: unknown): ApplyRequestBody | null {
   const b = body as Partial<ApplyRequestBody> | null;
-  if (!b || typeof b.characterId !== "string" || !b.characterId) return null;
+  if (!b || !isBungieId(b.characterId)) return null;
   const items = parseEquipItems(b.items ?? [], { min: 0, max: MAX_ITEMS });
   const plugs = parsePlugs(b.plugs ?? []);
   const spares = parseSpares(b.spares);
@@ -99,6 +99,8 @@ function streamError(err: unknown): Extract<ApplyStreamEvent, { type: "error" }>
  * transfer / equip / plug as it happens. Auth and validation failures stay JSON.
  */
 export async function POST(request: Request) {
+  const refused = rejectCrossSite(request);
+  if (refused) return refused;
   const user = await readUser();
   const token = await getValidAccessToken();
   if (!user?.destinyMembershipId || user.destinyMembershipType == null || !token) {

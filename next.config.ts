@@ -65,7 +65,14 @@ const nextConfig: NextConfig = {
           { key: "X-Content-Type-Options", value: "nosniff" },
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
           { key: "X-Frame-Options", value: "DENY" },
+          { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
         ],
+      },
+      // API answers depend on the session cookies: keep them out of shared caches.
+      // The favicon proxy is public and cacheable; the apply stream sets its own.
+      {
+        source: "/api/:path((?!favicon|bungie/apply-loadout).*)",
+        headers: [{ key: "Cache-Control", value: "private, no-store" }],
       },
       // The weapon catalog snapshot changes only when it is regenerated and
       // committed; let repeat visits reuse it for an hour instead of revalidating.

@@ -3,6 +3,7 @@ import { createBungieHttp } from "@/lib/bungie/http";
 import { getValidAccessToken, readUser } from "@/lib/bungie/session";
 import { bungieErrorResponse } from "@/lib/bungie/equip-route";
 import { insertPlugs, type PlugRequest } from "@/lib/bungie/equip-server";
+import { rejectCrossSite } from "@/lib/http/same-origin";
 
 const isId = (v: unknown): v is string => typeof v === "string" && /^\d+$/.test(v);
 /** A weapon has well under this many perk sockets. */
@@ -15,6 +16,8 @@ const MAX_PLUGS = 12;
  * offline. Answers `{ plugs: PlugResult[] }`; a dead session is a 401 with `reauth`.
  */
 export async function POST(request: Request) {
+  const refused = rejectCrossSite(request);
+  if (refused) return refused;
   const user = await readUser();
   const token = await getValidAccessToken();
   if (!user?.destinyMembershipId || user.destinyMembershipType == null || !token) {

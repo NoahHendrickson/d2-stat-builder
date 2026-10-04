@@ -105,6 +105,9 @@ export function ApplyProgressSection() {
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <h2 className="truncate text-sm font-medium">{title}</h2>
+          {state.batch && (
+            <p className="text-muted-foreground truncate text-xs">{state.batch}</p>
+          )}
           <p className="text-muted-foreground text-xs tabular-nums">
             {done}/{state.steps.length}
           </p>

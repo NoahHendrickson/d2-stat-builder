@@ -4,6 +4,7 @@ import { BungieHttpError, createBungieHttp } from "@/lib/bungie/http";
 import { getValidAccessToken, readUser } from "@/lib/bungie/session";
 import { bungieErrorResponse } from "@/lib/bungie/equip-route";
 import { THROTTLED_MESSAGE, isThrottled, withThrottleRetry } from "@/lib/bungie/throttle";
+import { rejectCrossSite } from "@/lib/http/same-origin";
 
 const isId = (v: unknown): v is string => typeof v === "string" && /^\d+$/.test(v);
 
@@ -13,6 +14,8 @@ const isId = (v: unknown): v is string => typeof v === "string" && /^\d+$/.test(
  * Answers `{ ok: true }` or `{ ok: false, error }`; a dead session is a 401 with `reauth`.
  */
 export async function POST(request: Request) {
+  const refused = rejectCrossSite(request);
+  if (refused) return refused;
   const user = await readUser();
   const token = await getValidAccessToken();
   if (!user?.destinyMembershipId || user.destinyMembershipType == null || !token) {
