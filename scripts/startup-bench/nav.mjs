@@ -28,7 +28,7 @@ const MARKERS = {
   "/armor": "table tbody tr td",
   "/weapons": '[aria-label="Weapons"] [role=listitem]',
   "/loadouts": '[aria-label^="Search loadouts"]',
-  "/manager": 'section[aria-label="Characters"] [role=button][draggable]',
+  "/manager": 'section[aria-label^="Characters"] [role=button][draggable]',
   "/settings": "#settings-appearance",
 };
 const ROUTES = ["/", "/armor", "/weapons", "/loadouts", "/manager"];
@@ -83,7 +83,7 @@ const samples = { first: {}, cycle: {}, revisit: {} };
 const record = (kind, route, r) => (samples[kind][route] ??= []).push(r);
 const heapStart = await heap();
 for (const route of [...ROUTES.slice(1), "/settings"]) record("first", route, await go(route));
-const items = JSON.parse(await b.evalJs(`JSON.stringify({ tiles: document.querySelectorAll("[role=button][draggable]").length, vaultTiles: document.querySelectorAll('section[aria-label="Vault"] [role=button][draggable]').length, nodes: document.querySelectorAll("*").length, images: document.images.length })`));
+const items = JSON.parse(await b.evalJs(`JSON.stringify({ tiles: document.querySelectorAll("[role=button][draggable]").length, vaultTiles: document.querySelectorAll('[aria-label="Vault"] [role=button][draggable]').length, nodes: document.querySelectorAll("*").length, images: document.images.length })`));
 for (let i = 0; i < cycles; i++) for (const route of ROUTES) record("cycle", route, await go(route));
 const heapEnd = await heap();
 // Straight back: the route is still mounted (hidden), so this is a show, not a mount.

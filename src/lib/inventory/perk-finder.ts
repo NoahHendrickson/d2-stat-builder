@@ -1,15 +1,17 @@
 // The Compare view's perk finder (ported from the DIM branch new-compare-feature): pick
 // the perks you want from every perk your copies of a weapon can roll, and it finds the
 // fewest copies to keep. Left and right perks decide which copies are kept; masterwork,
-// barrel, and magazine picks only order them, unless ranked above a left or right perk.
+// barrel, magazine, and origin trait picks only order them, unless ranked above a left
+// or right perk.
 import type { PerkColumn, WeaponRoll } from "./weapon-details";
 
 /**
  * The perk columns the finder lets you pick from, by index: barrel, magazine, left
- * trait, right trait, masterwork. Weapon types name their components differently
- * (blades and guards on swords), so columns go by position, not plug category.
+ * trait, right trait, masterwork, origin trait. Weapon types name their components
+ * differently (blades and guards on swords), so columns go by position, not plug
+ * category.
  */
-export const perkFinderColumnCount = 5;
+export const perkFinderColumnCount = 6;
 
 /**
  * The masterwork column. Every masterwork can go on every copy, so this matches each
@@ -20,6 +22,12 @@ export const masterworkColumn = 4;
 /** The left and right perk columns. */
 export const leftColumn = 2;
 export const rightColumn = 3;
+
+/**
+ * The origin trait column. Some weapons can roll one of several origin traits, so they
+ * can be picked like any other perk.
+ */
+export const originColumn = 5;
 
 /**
  * For each column, the (unenhanced) perk hashes a copy can roll there, or its
@@ -39,19 +47,23 @@ export interface PerkFinderOption {
 }
 
 export interface PerkFinderColumn {
-  /** Position of this column (0–4). */
+  /** Position of this column (0–5). */
   index: number;
   /** The game's name for its perks ("Barrel", "Magazine", "Trait"). */
   typeName: string;
   options: PerkFinderOption[];
 }
 
-/** A copy's barrel, magazine, and two trait columns, in that order (origin traits aside). */
+/**
+ * A copy's perk columns by finder column: barrel, magazine, two traits, nothing for the
+ * masterwork (a mod, not a perk column), then the origin trait.
+ */
 export function finderPerkColumns(roll: WeaponRoll): (PerkColumn | undefined)[] {
   const perks = roll.columns.filter((c) => !c.origin);
   const components = perks.filter((c) => c.category !== "frames");
   const traits = perks.filter((c) => c.category === "frames");
-  return [components[0], components[1], traits[0], traits[1]];
+  const origin = roll.columns.find((c) => c.origin);
+  return [components[0], components[1], traits[0], traits[1], undefined, origin];
 }
 
 function masterworkOf(roll: WeaponRoll) {
@@ -125,7 +137,8 @@ export function perkFinderInput(copies: readonly PerkFinderCopy[]): {
         ...(masterwork.icon ? { icon: masterwork.icon } : {}),
       });
     }
-    return { id, columns: [...perkColumns, new Set(masterwork ? [masterwork.hash] : [])] };
+    perkColumns[masterworkColumn] = new Set(masterwork ? [masterwork.hash] : []);
+    return { id, columns: perkColumns };
   });
 
   return { columns: columns.filter((c) => c.options.length > 0), items };
@@ -157,7 +170,7 @@ export type PerkMatchMode = "strict" | "loose" | "combos";
  */
 export const poolColumns = [leftColumn, rightColumn];
 /** The columns that order the pool, in display order. */
-export const orderColumns = [masterworkColumn, 0, 1];
+export const orderColumns = [masterworkColumn, 0, 1, originColumn];
 
 export const isPoolPick = (pick: PerkPick) => poolColumns.includes(pick.column);
 
@@ -175,7 +188,7 @@ export function addCombo(combos: PerkCombo[], combo: PerkCombo): PerkCombo[] {
 
 /**
  * The picks in play. In combo mode, that's every left and right perk in a combo, plus
- * the masterwork, barrel, and magazine picks. Otherwise it's just the picks.
+ * the masterwork, barrel, magazine, and origin trait picks. Otherwise it's just the picks.
  */
 export function activePicks(priority: PerkPriority, mode: PerkMatchMode, combos: PerkCombo[]): PerkPriority {
   if (mode !== "combos") return priority;
@@ -183,12 +196,12 @@ export function activePicks(priority: PerkPriority, mode: PerkMatchMode, combos:
   return [...comboPicks, ...priority.filter((pick) => !isPoolPick(pick))];
 }
 
-/** Order new picks: left and right perks, then masterworks, barrels, and magazines. */
+/** Order new picks: left and right perks, then masterworks, barrels, magazines, and origin traits. */
 const pickGroup = (column: number) => (poolColumns.includes(column) ? 0 : 1 + orderColumns.indexOf(column));
 
 /**
- * The default order for picks: left perks, right perks, then masterworks, barrels, and
- * magazines, each in the order they're listed in their column.
+ * The default order for picks: left perks, right perks, then masterworks, barrels,
+ * magazines, and origin traits, each in the order they're listed in their column.
  */
 export function defaultPriority(priority: PerkPriority, columns: PerkFinderColumn[]) {
   const optionIndex = (pick: PerkPick) =>

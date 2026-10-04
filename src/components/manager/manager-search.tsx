@@ -186,7 +186,7 @@ export function ManagerSearch({ inventory }: { inventory: ManagerInventory }) {
   // click anywhere on it that isn't a control lands in the input.
   return (
     <div
-      className="-mx-4 -mt-6 flex min-h-14 shrink-0 cursor-text items-center gap-2 border-b border-foreground/15 bg-foreground/10 px-4 transition-colors hover:bg-foreground/12 focus-within:border-foreground/35 focus-within:bg-foreground/12 lg:-mx-6 lg:px-6"
+      className="flex min-h-14 shrink-0 cursor-text items-center gap-2 border-b border-foreground/15 bg-foreground/10 px-4 transition-colors hover:bg-foreground/12 focus-within:border-foreground/35 focus-within:bg-foreground/12 lg:px-6"
       onMouseDown={(e) => {
         // contains() skips clicks bubbling up (through React) from portalled popovers.
         const target = e.target as HTMLElement;

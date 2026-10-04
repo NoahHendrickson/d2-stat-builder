@@ -29,9 +29,14 @@ export function ManagerPageShell() {
     else status = "Loading your inventory…";
   }
 
-  // Below xl the two panes stack and the page scrolls; from xl each pane scrolls itself.
+  // One scroll for the whole page. The search bar and nameplates pin to its top, and only
+  // fill in once something has scrolled under them. Set directly so scrolling never
+  // re-renders the view.
   return (
-    <main className="flex h-full min-h-0 w-full flex-col overflow-y-auto px-4 py-6 lg:px-6 xl:overflow-hidden">
+    <main
+      className="group/manager d2-scroll flex h-full min-h-0 w-full flex-col overflow-y-auto px-4 py-6 lg:px-6"
+      onScroll={(e) => e.currentTarget.toggleAttribute("data-scrolled", e.currentTarget.scrollTop > 0)}
+    >
       {data ? (
         <ManagerView inventory={data} membershipId={membershipId} />
       ) : (

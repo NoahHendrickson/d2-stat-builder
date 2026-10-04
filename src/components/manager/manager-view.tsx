@@ -106,10 +106,20 @@ const POSTMASTER_FALLBACK_CAPACITY = 21;
 const ALL_CHARACTERS_MIN_PX = 1480;
 
 /**
+ * From this width the vault sits beside the characters, each of its slots on the same row
+ * as that slot on the characters. Narrower, it goes below them in one list.
+ */
+const ALIGNED_MIN_PX = 760;
+
+/** Above and below a slot's tiles: the slot rows' drop zones are padded this much. */
+const SLOT_PAD_PX = 4;
+
+/**
  * The inventory manager: one column per character on the left (postmaster, then
  * weapons, armor, and general gear, each row showing the equipped item beside the
- * rest of that slot), and the vault on the right. Drag a tile onto a slot, a
- * character's nameplate, or the vault to move it; click it for its details and moves.
+ * rest of that slot), and the vault on the right, every vault slot level with that slot
+ * on the characters. The page scrolls as one. Drag a tile onto a slot, a character's
+ * nameplate, or the vault to move it; click it for its details and moves.
  */
 export function ManagerView({
   inventory,
@@ -127,12 +137,15 @@ export function ManagerView({
   const [menu, setMenu] = useState<ItemDetailsTarget | null>(null);
   const layoutRef = useRef<HTMLDivElement>(null);
   const [compact, setCompact] = useState(false);
+  const [aligned, setAligned] = useState(true);
   useLayoutEffect(() => {
     const el = layoutRef.current;
     if (!el) return;
     const observer = new ResizeObserver(() => {
       // Hidden along with its view (the router keeps recent views mounted): keep what it had.
-      if (el.clientWidth > 0) setCompact(el.clientWidth < ALL_CHARACTERS_MIN_PX);
+      if (el.clientWidth === 0) return;
+      setCompact(el.clientWidth < ALL_CHARACTERS_MIN_PX);
+      setAligned(el.clientWidth >= ALIGNED_MIN_PX);
     });
     observer.observe(el);
     return () => observer.disconnect();
@@ -204,12 +217,16 @@ export function ManagerView({
   return (
     <ManagerActionsContext.Provider value={actions}>
       <FarmingRunner inventory={inventory} />
-      <div className="flex min-h-0 flex-1 flex-col gap-4">
-        <ManagerSearch inventory={inventory} />
+      <div className="flex flex-col gap-4">
+        {/* Pinned over the page as it scrolls (the page's top padding counts toward a sticky
+            offset, hence -top-6); filled once there's something under it. */}
+        <div className="sticky -top-6 z-30 -mx-4 -mt-6 transition-colors group-data-scrolled/manager:bg-glass-opaque lg:-mx-6">
+          <ManagerSearch inventory={inventory} />
+        </div>
         <FarmingBanner inventory={inventory} />
-        <div ref={layoutRef} className="flex min-h-0 flex-1 flex-col gap-6 xl:flex-row">
-          <CharacterGrid inventory={inventory} compact={compact} />
-          <VaultPane inventory={inventory} />
+        <div ref={layoutRef} className="flex flex-col gap-6">
+          <InventoryGrid inventory={inventory} compact={compact} aligned={aligned} />
+          {!aligned && <VaultPane inventory={inventory} />}
         </div>
       </div>
       <ItemDetails
@@ -357,78 +374,93 @@ function DropZone({
   );
 }
 
+/** Every slot row of a character, top to bottom, and whether it starts a group. */
+const SLOT_ROWS = CHARACTER_GROUPS.flatMap((group) =>
+  group.rows.map((row, i) => ({ row, groupStart: i === 0 })),
+);
+
 /**
  * Every character side by side, or (when `compact`) one at a time under a tab strip,
  * starting on the one played last. The others stay mounted, just hidden, so a drag that
- * started on one still ends when a tab switches away from it.
+ * started on one still ends when a tab switches away from it. When `aligned`, the vault
+ * is one more column on the same rows, so each of its slots starts level with that slot
+ * on the characters, and a row is as tall as the taller of the two.
  */
-function CharacterGrid({ inventory, compact }: { inventory: ManagerInventory; compact: boolean }) {
+function InventoryGrid({
+  inventory,
+  compact,
+  aligned,
+}: {
+  inventory: ManagerInventory;
+  compact: boolean;
+  aligned: boolean;
+}) {
   const { characters } = inventory;
   const [picked, setPicked] = useState<string | null>(null);
   const shown = characters.find((c) => c.id === picked) ?? characters[0];
   const postmasterCapacity = inventory.postmasterCapacity ?? POSTMASTER_FALLBACK_CAPACITY;
   const columns = {
-    gridTemplateColumns: compact ? "max-content" : `repeat(${characters.length}, max-content)`,
+    gridTemplateColumns: `${compact ? "max-content" : `repeat(${characters.length}, max-content)`}${aligned ? " minmax(0, 1fr)" : ""}`,
   };
   // Nameplate, postmaster, then every slot row: each column spans them all on a subgrid,
-  // so rows still line up across characters.
-  const rowCount = 2 + CHARACTER_GROUPS.reduce((n, group) => n + group.rows.length, 0);
+  // so rows still line up across characters (and with the vault). Aligned, a row of tabs
+  // comes first, and the vault ends with a row of its own for what no character holds.
+  const rowCount = 2 + SLOT_ROWS.length;
+  const firstRow = aligned ? 2 : 1;
   const manifestStatus = useManifest();
   const manifest = manifestStatus.state === "ready" ? manifestStatus.manifest : undefined;
   const statIcons = useMemo(() => statIconsFromManifest(manifest), [manifest]);
   const compare = useItemComparator();
 
+  const tabs = compact && shown && (
+    <Tabs
+      value={shown.id}
+      onValueChange={(id) => setPicked(id as string)}
+      className={cn("pb-3", aligned && "col-[1/-2] row-start-1 self-end")}
+    >
+      <TabsList variant="line" aria-label="Characters" className="w-full justify-start">
+        {characters.map((c) => (
+          <CharacterTab key={c.id} character={c} onPick={() => setPicked(c.id)} />
+        ))}
+      </TabsList>
+    </Tabs>
+  );
+
   return (
-    <section aria-label="Characters" className="flex shrink-0 flex-col xl:min-h-0">
-      {compact && shown && (
-        <Tabs value={shown.id} onValueChange={(id) => setPicked(id as string)} className="pb-3">
-          <TabsList variant="line" aria-label="Characters" className="w-full justify-start">
-            {characters.map((c) => (
-              <CharacterTab key={c.id} character={c} onPick={() => setPicked(c.id)} />
+    <section aria-label={aligned ? "Characters and vault" : "Characters"} className="flex flex-col">
+      {!aligned && tabs}
+      <div className="grid" style={columns}>
+        {aligned && tabs}
+        {characters.map((c) => (
+          // The whole column is one target (padding splits the gap between columns), so a
+          // drop anywhere on a character sends the item there.
+          <DropZone
+            key={c.id}
+            to={{ kind: "character", characterId: c.id }}
+            column
+            label={CLASS_NAMES[c.classType] ?? "Guardian"}
+            className={cn(
+              "grid grid-rows-subgrid",
+              !compact ? "px-3 first:pl-0 last:pr-0" : c !== shown && "hidden",
+              compact && aligned && "pr-3",
+            )}
+            style={{ gridRow: `${firstRow} / span ${rowCount}` }}
+          >
+            <CharacterHeader character={c} statIcons={statIcons} />
+            <PostmasterCell items={c.postmaster} capacity={postmasterCapacity} />
+            {/* Weapons, armor, general: no headings, just a wider gap before each group. */}
+            {SLOT_ROWS.map(({ row, groupStart }) => (
+              <CharacterCell
+                key={row.hash}
+                character={c}
+                row={row}
+                groupStart={groupStart}
+                compare={compare}
+              />
             ))}
-          </TabsList>
-        </Tabs>
-      )}
-      <div
-        className="d2-scroll group/grid overflow-x-auto xl:min-h-0 xl:overflow-y-auto"
-        // The pinned nameplates only need a fill once rows scroll under them; at rest the
-        // pane shows through. Set directly so scrolling never re-renders the grid.
-        onScroll={(e) =>
-          e.currentTarget.toggleAttribute("data-scrolled", e.currentTarget.scrollTop > 0)
-        }
-      >
-        <div className="grid" style={columns}>
-          {characters.map((c) => (
-            // The whole column is one target (padding splits the gap between columns), so a
-            // drop anywhere on a character sends the item there.
-            <DropZone
-              key={c.id}
-              to={{ kind: "character", characterId: c.id }}
-              column
-              label={CLASS_NAMES[c.classType] ?? "Guardian"}
-              className={cn(
-                "grid grid-rows-subgrid",
-                !compact ? "px-3 first:pl-0 last:pr-0" : c !== shown && "hidden",
-              )}
-              style={{ gridRow: `span ${rowCount}` }}
-            >
-              <CharacterHeader character={c} statIcons={statIcons} />
-              <PostmasterCell items={c.postmaster} capacity={postmasterCapacity} />
-              {/* Weapons, armor, general: no headings, just a wider gap before each group. */}
-              {CHARACTER_GROUPS.map((group) =>
-                group.rows.map((row, i) => (
-                  <CharacterCell
-                    key={row.hash}
-                    character={c}
-                    row={row}
-                    groupStart={i === 0}
-                    compare={compare}
-                  />
-                )),
-              )}
-            </DropZone>
-          ))}
-        </div>
+          </DropZone>
+        ))}
+        {aligned && <AlignedVault inventory={inventory} rowSpan={rowCount + 2} />}
       </div>
     </section>
   );
@@ -492,7 +524,7 @@ function CharacterHeader({
     : undefined;
 
   return (
-    <div className="group-data-scrolled/grid:bg-glass-opaque sticky top-0 z-10 pb-1">
+    <div className="sticky top-8 z-10 pb-1 group-data-scrolled/manager:bg-glass-opaque">
         <DropdownMenu>
           <DropdownMenuTrigger
             render={
@@ -605,7 +637,8 @@ function CharacterCell({
   const empty = Math.max(0, CHARACTER_SLOTS - items.length);
 
   return (
-    <div className={cn("flex gap-2 pb-2", groupStart && "pt-5")} aria-label={row.label}>
+    // Tiles keep to the top: an aligned row grows with the vault's slot beside it.
+    <div className={cn("flex items-start gap-2 pb-2", groupStart && "pt-5")} aria-label={row.label}>
       <DropZone
         to={{ kind: "character", characterId: character.id, equipped: true }}
         bucket={row.hash}
@@ -673,14 +706,15 @@ function markerWidth(groupBy: GroupKey, { items }: ItemGroup): number {
 }
 
 /**
- * The vault as sections of sorted, grouped buckets, ready to lay out: the tab's gear,
- * then (on All) what has no row of its own and the account-wide inventories.
+ * The vault as sections of sorted, grouped buckets, ready to lay out: the tab's gear
+ * (one bucket per character slot, keyed by its hash), then (on All) what has no row of
+ * its own and the account-wide inventories.
  */
 function vaultSections(
   { vault, account }: ManagerInventory,
   compare: (a: InventoryItem, b: InventoryItem) => number,
   { weaponGroup, armorGroup, vaultTab }: ViewSettings,
-): VaultSection[] {
+): { gear: VaultSection[]; extra: VaultSection[] } {
   const bucket = (
     key: string,
     label: string | undefined,
@@ -701,56 +735,114 @@ function vaultSections(
   // The Weapons and Armor tabs show just that section; All shows every one.
   const shown =
     vaultTab === "all" ? VAULT_GROUPS : VAULT_GROUPS.filter((g) => g.label === VAULT_TAB_LABELS[vaultTab]);
-  const sections: VaultSection[] = shown.map((group) => ({
+  const gear: VaultSection[] = shown.map((group) => ({
     heading: group.label,
     buckets: group.rows.map((row) =>
       bucket(String(row.hash), row.label, vault[row.hash], groupFor(group.label)),
     ),
   }));
+  const extra: VaultSection[] = [];
   if (vaultTab === "all") {
     const other = vault[OTHER_BUCKET] ?? [];
     if (other.length > 0) {
-      sections.push({ heading: "Other", buckets: [bucket("other", undefined, other, "none")] });
+      extra.push({ heading: "Other", buckets: [bucket("other", undefined, other, "none")] });
     }
-    sections.push({
+    extra.push({
       heading: "Account",
       buckets: ACCOUNT_ROWS.map((row) =>
         bucket(`account:${row.hash}`, row.label, account[row.hash], "none"),
       ),
     });
   }
-  return sections;
+  return { gear, extra };
 }
 
-/** The vault; the whole pane is one drop target. */
-function VaultPane({ inventory }: { inventory: ManagerInventory }) {
+function useVaultSections(inventory: ManagerInventory) {
   const view = useViewSettings();
-  const { vaultTab } = view;
   const compare = useItemComparator();
-  const sections = useMemo(() => vaultSections(inventory, compare, view), [inventory, compare, view]);
+  return useMemo(() => vaultSections(inventory, compare, view), [inventory, compare, view]);
+}
+
+const NO_SECTIONS: readonly VaultSection[] = [];
+
+/**
+ * The vault as the grid's last column (a subgrid on the characters' rows): its tabs and
+ * header beside the nameplates and postmasters, then each slot's tiles level with that
+ * slot on the characters, and last what no character slot holds. The whole column is
+ * one drop target.
+ */
+function AlignedVault({ inventory, rowSpan }: { inventory: ManagerInventory; rowSpan: number }) {
+  const { gear, extra } = useVaultSections(inventory);
+  // Each slot's bucket on its own, without a heading: the row it's on names it.
+  const bySlot = useMemo(
+    () => new Map(gear.flatMap((section) => section.buckets).map((b) => [b.key, [{ buckets: [b] }]])),
+    [gear],
+  );
 
   return (
-    <DropZone to={{ kind: "vault" }} className="flex min-w-0 flex-1 flex-col xl:min-h-0">
-      <section aria-label="Vault" className="flex flex-1 flex-col xl:min-h-0">
-        <Tabs
-          value={vaultTab}
-          onValueChange={(tab) => setViewSettings({ ...view, vaultTab: tab as VaultTab })}
-          className="pb-3"
-        >
-          <TabsList variant="line" aria-label="Vault sections" className="w-full justify-start">
-            {VAULT_TABS.map((tab) => (
-              <TabsTrigger key={tab} value={tab} className="flex-none">
-                {VAULT_TAB_LABELS[tab]}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-        </Tabs>
-        <VaultHeader inventory={inventory} />
-        <div className="d2-scroll flex flex-col pb-4 xl:min-h-0 xl:flex-1 xl:overflow-y-auto">
+    <DropZone
+      to={{ kind: "vault" }}
+      label="Vault"
+      className="grid min-w-0 grid-rows-subgrid pl-3"
+      style={{ gridColumn: "-2", gridRow: `1 / span ${rowSpan}` }}
+    >
+      <VaultTabs />
+      <div className="sticky top-8 z-10 pb-1 group-data-scrolled/manager:bg-glass-opaque">
+        <VaultSpace inventory={inventory} />
+      </div>
+      <div className="pt-2">
+        <VaultCurrencies inventory={inventory} />
+      </div>
+      {SLOT_ROWS.map(({ row, groupStart }) => (
+        <div key={row.hash} className={cn("min-w-0 pb-2", groupStart && "pt-5")}>
+          <VaultLines sections={bySlot.get(String(row.hash)) ?? NO_SECTIONS} pad={SLOT_PAD_PX} />
+        </div>
+      ))}
+      <div className="min-w-0 pb-4">
+        <VaultLines sections={extra} />
+      </div>
+    </DropZone>
+  );
+}
+
+/** The vault below the characters, as one list under section headings; one drop target. */
+function VaultPane({ inventory }: { inventory: ManagerInventory }) {
+  const { gear, extra } = useVaultSections(inventory);
+  const sections = useMemo(() => [...gear, ...extra], [gear, extra]);
+
+  return (
+    <DropZone to={{ kind: "vault" }} className="flex min-w-0 flex-col">
+      <section aria-label="Vault" className="flex flex-col">
+        <VaultTabs />
+        <header className="flex flex-col gap-2 pb-2">
+          <VaultSpace inventory={inventory} />
+          <VaultCurrencies inventory={inventory} />
+        </header>
+        <div className="flex flex-col pb-4">
           <VaultLines sections={sections} />
         </div>
       </section>
     </DropZone>
+  );
+}
+
+/** Which of the vault's sections to show: everything, or just weapons or armor. */
+function VaultTabs() {
+  const view = useViewSettings();
+  return (
+    <Tabs
+      value={view.vaultTab}
+      onValueChange={(tab) => setViewSettings({ ...view, vaultTab: tab as VaultTab })}
+      className="pb-3"
+    >
+      <TabsList variant="line" aria-label="Vault sections" className="w-full justify-start">
+        {VAULT_TABS.map((tab) => (
+          <TabsTrigger key={tab} value={tab} className="flex-none">
+            {VAULT_TAB_LABELS[tab]}
+          </TabsTrigger>
+        ))}
+      </TabsList>
+    </Tabs>
   );
 }
 
@@ -765,18 +857,18 @@ const VAULT_STEP_PX = 200;
  * height and the scrollbar its size however little of it is drawn. The inventory itself
  * is untouched: search, totals, and bulk actions still see every item.
  */
-function VaultLines({ sections }: { sections: readonly VaultSection[] }) {
+function VaultLines({ sections, pad }: { sections: readonly VaultSection[]; pad?: number }) {
   const ref = useRef<HTMLDivElement>(null);
   const [width, setWidth] = useState(0);
   /** The stretch of the list to keep mounted, as offsets from its top. */
   const [span, setSpan] = useState<readonly [number, number]>([0, 0]);
   const [focused, setFocused] = useState<string | null>(null);
   const drag = useStoreValue(dragStore);
-  const layout = useMemo(() => layoutVault(sections, width), [sections, width]);
+  const layout = useMemo(() => layoutVault(sections, width, pad), [sections, width, pad]);
 
   // Measured before paint (so the first frame already has its tiles), then on anything
   // that moves the list against the viewport. Capture, because scroll events don't
-  // bubble and the scroller differs: the pane itself from xl up, the page below it.
+  // bubble from the page's scroller.
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
@@ -869,12 +961,9 @@ const VaultLineRow = memo(function VaultLineRow({ line }: { line: VaultTileLine 
   );
 });
 
-/**
- * Vault space (total, and per kind of item), the account-wide inventories' space, and
- * the account's currencies.
- */
-function VaultHeader({ inventory }: { inventory: ManagerInventory }) {
-  const { vault, account, vaultCount, vaultCapacity, accountCapacity, currencies } = inventory;
+/** Vault space (total, and per kind of item), and the account-wide inventories' space. */
+function VaultSpace({ inventory }: { inventory: ManagerInventory }) {
+  const { vault, account, vaultCount, vaultCapacity, accountCapacity } = inventory;
   const counts = [
     ...VAULT_GROUPS.map((group) => ({
       label: group.label,
@@ -894,7 +983,7 @@ function VaultHeader({ inventory }: { inventory: ManagerInventory }) {
   const fill = vaultCapacity ? Math.min(100, (vaultCount / vaultCapacity) * 100) : undefined;
 
   return (
-    <header className="flex flex-col gap-2 pb-2">
+    <div className="flex flex-col gap-2">
       <div className="flex items-baseline justify-between gap-3">
         <h2 className="d2-heading text-sm">Vault</h2>
         <span className={cn("text-xs tabular-nums", full ? "text-destructive" : "text-muted-foreground")}>
@@ -923,26 +1012,31 @@ function VaultHeader({ inventory }: { inventory: ManagerInventory }) {
           </span>
         ))}
       </div>
-      {currencies.length > 0 && (
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs" aria-label="Currencies">
-          {currencies.map((c) => (
-            <span key={c.itemHash} className="flex items-center gap-1.5" title={c.name}>
-              {c.icon && (
-                <Image
-                  src={`${BUNGIE_IMAGE_BASE}${c.icon}`}
-                  alt={c.name}
-                  width={16}
-                  height={16}
-                  className="size-4"
-                  unoptimized
-                />
-              )}
-              <span className="tabular-nums">{c.quantity.toLocaleString()}</span>
-            </span>
-          ))}
-        </div>
-      )}
-    </header>
+    </div>
+  );
+}
+
+/** The account's currencies. */
+function VaultCurrencies({ inventory: { currencies } }: { inventory: ManagerInventory }) {
+  if (currencies.length === 0) return null;
+  return (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs" aria-label="Currencies">
+      {currencies.map((c) => (
+        <span key={c.itemHash} className="flex items-center gap-1.5" title={c.name}>
+          {c.icon && (
+            <Image
+              src={`${BUNGIE_IMAGE_BASE}${c.icon}`}
+              alt={c.name}
+              width={16}
+              height={16}
+              className="size-4"
+              unoptimized
+            />
+          )}
+          <span className="tabular-nums">{c.quantity.toLocaleString()}</span>
+        </span>
+      ))}
+    </div>
   );
 }
 

@@ -26,6 +26,7 @@ const mag = (hash: number): PerkPick => ({ column: 1, hash });
 const left = (hash: number): PerkPick => ({ column: 2, hash });
 const right = (hash: number): PerkPick => ({ column: 3, hash });
 const masterwork = (hash: number): PerkPick => ({ column: 4, hash });
+const origin = (hash: number): PerkPick => ({ column: 5, hash });
 
 function gun(
   id: string,
@@ -35,11 +36,12 @@ function gun(
     barrels = [barrel1],
     mags = [mag1],
     mw = stability,
-  }: { barrels?: number[]; mags?: number[]; mw?: number } = {},
+    origins = [],
+  }: { barrels?: number[]; mags?: number[]; mw?: number; origins?: number[] } = {},
 ): { id: string; columns: ItemPerkColumns } {
   return {
     id,
-    columns: [new Set(barrels), new Set(mags), new Set(lefts), new Set(rights), new Set([mw])],
+    columns: [new Set(barrels), new Set(mags), new Set(lefts), new Set(rights), new Set([mw]), new Set(origins)],
   };
 }
 
@@ -258,6 +260,50 @@ describe("ranking", () => {
     const below = [left(leftA), right(rightX), mag(mag1), mag(mag2)];
     expect(findPerkFinderResult(guns, above, "strict", true).keep.size).toBe(2);
     expect(findPerkFinderResult(guns, below, "strict", true).keep.size).toBe(1);
+  });
+});
+
+describe("origin traits", () => {
+  const [veist, nadir] = [50, 51];
+
+  test("choose between equally good guns, and sort them", () => {
+    const guns = [
+      gun("plain", [leftA], [rightX], { origins: [veist] }),
+      gun("nadir", [leftA], [rightX], { origins: [nadir] }),
+    ];
+    const result = findPerkFinderResult(guns, [left(leftA), right(rightX), origin(nadir)], "strict");
+    expect(keepOf(result)).toEqual(["nadir"]);
+    expect(sortedIds(result, ["plain", "nadir"])).toEqual(["nadir", "plain"]);
+  });
+
+  test("a gun that can roll either origin trait has both", () => {
+    const guns = [
+      gun("both", [leftA], [rightX], { origins: [veist, nadir] }),
+      gun("one", [leftA], [rightX], { origins: [veist] }),
+    ];
+    const result = findPerkFinderResult(guns, [left(leftA), right(rightX), origin(veist), origin(nadir)], "strict");
+    expect(keepOf(result)).toEqual(["both"]);
+    expect(result.matchedCount.get("both")).toBe(4);
+  });
+
+  test("ranked above a trait, an origin trait can add a gun", () => {
+    const guns = [
+      gun("veist", [leftA], [rightX], { origins: [veist] }),
+      gun("nadir", [leftA], [rightX], { origins: [nadir] }),
+    ];
+    const above = [origin(veist), origin(nadir), left(leftA), right(rightX)];
+    const below = [left(leftA), right(rightX), origin(veist), origin(nadir)];
+    expect(findPerkFinderResult(guns, above, "strict", true).keep.size).toBe(2);
+    expect(findPerkFinderResult(guns, below, "strict", true).keep.size).toBe(1);
+  });
+
+  test("new origin trait picks go after masterworks, barrels, and magazines", () => {
+    expect(togglePick([left(leftA), mag(mag1)], origin(veist))).toEqual([left(leftA), mag(mag1), origin(veist)]);
+    expect(togglePick([left(leftA), origin(veist)], barrel(barrel1))).toEqual([
+      left(leftA),
+      barrel(barrel1),
+      origin(veist),
+    ]);
   });
 });
 
@@ -520,6 +566,7 @@ describe("perkFinderInput", () => {
       [2, "Trait", ["Outlaw 11 ×2", "Rapid Hit 12 ×1"]],
       [3, "Trait", ["Kill Clip 40 ×2"]],
       [4, "", ["Range " + range + " ×1", "Stability " + stability + " ×1"]],
+      [5, "Origin Trait", ["Veist Stinger 50 ×2"]],
     ]);
     // Both copies can take the same combo, so one is enough.
     const result = findPerkFinderResult(items, [left(11), right(40)], "strict");
@@ -527,9 +574,22 @@ describe("perkFinderInput", () => {
     expect(result.matchedCount.get("a")).toBe(2);
   });
 
-  test("leaves the origin trait out", () => {
-    const { columns } = perkFinderInput([{ id: "a", roll: roll([plug(1, "Arrowhead Brake")], [plug(11, "Outlaw")]) }]);
-    expect(columns.flatMap((c) => c.options.map((o) => o.name))).not.toContain("Veist Stinger");
+  test("offers every origin trait the copies can roll", () => {
+    const withOrigins = (origins: ReturnType<typeof plug>[]): WeaponRoll => {
+      const base = roll([plug(1, "Arrowhead Brake")], [plug(11, "Outlaw")]);
+      return { ...base, columns: base.columns.map((c) => (c.origin ? column(8, "origins", "Origin Trait", origins) : c)) };
+    };
+    const { columns, items } = perkFinderInput([
+      { id: "a", roll: withOrigins([plug(50, "Veist Stinger"), plug(51, "Nadir Focus")]) },
+      { id: "b", roll: withOrigins([plug(51, "Nadir Focus")]) },
+    ]);
+    expect(columns.find((c) => c.index === 5)?.options.map((o) => `${o.name} ×${o.count}`)).toEqual([
+      "Veist Stinger ×1",
+      "Nadir Focus ×2",
+    ]);
+    expect(items.map((item) => [...item.columns[5]!])).toEqual([[50, 51], [51]]);
+    // The masterwork column stays where it was.
+    expect(items.map((item) => item.columns[4]!.size)).toEqual([0, 0]);
   });
 });
 

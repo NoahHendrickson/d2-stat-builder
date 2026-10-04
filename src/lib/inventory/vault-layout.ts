@@ -16,7 +16,7 @@ export const MARKER_GAP_PX = 12;
 /** Between groups side by side, and between one group's lines and the next's. */
 export const GROUP_GAP_X_PX = 20;
 const GROUP_GAP_Y_PX = 16;
-/** Above and below a bucket's tiles. */
+/** Above and below a bucket's tiles, unless the caller asks for other padding. */
 const BUCKET_PAD_PX = 10;
 /** A section heading: 20px above one 16px label line, 4px below. */
 export const HEADING_HEIGHT_PX = 40;
@@ -38,7 +38,8 @@ export interface VaultBucket {
 }
 
 export interface VaultSection {
-  heading: string;
+  /** Drawn above the section's buckets; none when the buckets sit beside what names them. */
+  heading?: string;
   buckets: readonly VaultBucket[];
 }
 
@@ -136,30 +137,36 @@ function bucketRows(bucket: VaultBucket, width: number): BucketRow[] {
 }
 
 /**
- * Every section's heading and tile lines, top to bottom, for a pane `width` px wide.
- * Nothing is left out: each item is in exactly one cell. An unmeasured pane (width 0)
- * has no lines yet.
+ * Every section's heading and tile lines, top to bottom, for a pane `width` px wide,
+ * with `pad` px above and below each bucket's tiles. Nothing is left out: each item is
+ * in exactly one cell. An unmeasured pane (width 0) has no lines yet.
  */
-export function layoutVault(sections: readonly VaultSection[], width: number): VaultLayout {
+export function layoutVault(
+  sections: readonly VaultSection[],
+  width: number,
+  pad = BUCKET_PAD_PX,
+): VaultLayout {
   const lines: VaultLine[] = [];
   if (width <= 0) return { lines, height: 0 };
   let top = 0;
 
   for (const section of sections) {
-    lines.push({
-      kind: "heading",
-      key: `heading:${section.heading}`,
-      label: section.heading,
-      top,
-      height: HEADING_HEIGHT_PX,
-    });
-    top += HEADING_HEIGHT_PX;
+    if (section.heading !== undefined) {
+      lines.push({
+        kind: "heading",
+        key: `heading:${section.heading}`,
+        label: section.heading,
+        top,
+        height: HEADING_HEIGHT_PX,
+      });
+      top += HEADING_HEIGHT_PX;
+    }
 
     for (const bucket of section.buckets) {
       const rows = bucketRows(bucket, width);
       rows.forEach((row, i) => {
-        const padTop = i === 0 ? BUCKET_PAD_PX : row.opens ? GROUP_GAP_Y_PX : TILE_GAP_PX;
-        const height = padTop + TILE_HEIGHT_PX + (i === rows.length - 1 ? BUCKET_PAD_PX : 0);
+        const padTop = i === 0 ? pad : row.opens ? GROUP_GAP_Y_PX : TILE_GAP_PX;
+        const height = padTop + TILE_HEIGHT_PX + (i === rows.length - 1 ? pad : 0);
         lines.push({
           kind: "tiles",
           key: row.key,

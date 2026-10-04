@@ -27,6 +27,14 @@ const LOWER_TIER_OVERLAY: Record<2 | 3 | 4, string> = {
 };
 
 /**
+ * Darkens the strip down the left of a tiered watermark (behind the season glyph and
+ * tier pips). Bungie's art has it at ~15% black over x 2–25, y 2–92 of 96px; this
+ * takes it to ~36% so the pips stand out. Goes under the watermark.
+ */
+export const TIER_STRIP_CLASS =
+  "pointer-events-none absolute top-[2.083%] left-[2.083%] h-[94.79%] w-[25%] bg-black/25";
+
+/**
  * Armor icon. The watermark renders whenever one is supplied (legacy and
  * lower-tier Armor 3.0 pieces carry one too). The pip rail matches gear
  * tier: five gold diamonds are Tier-5 only. The gold glow frame is for
@@ -73,6 +81,7 @@ export function ArmorThumb({
       ) : (
         <span className="bg-muted block size-full" aria-hidden />
       )}
+      {watermark && gearTier !== undefined && <span aria-hidden className={TIER_STRIP_CLASS} />}
       {watermark && (
         <Image
           src={`${BUNGIE_IMAGE_BASE}${watermark}`}

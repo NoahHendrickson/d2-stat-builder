@@ -23,6 +23,7 @@ import {
   leftColumn,
   masterworkColumn,
   orderColumns as orderColumnIndexes,
+  originColumn,
   poolColumns as poolColumnIndexes,
   rightColumn,
   samePick,
@@ -102,9 +103,12 @@ export function PerkFinder({
   onTagJunk: () => void;
 }) {
   const poolColumns = columns.filter((c) => poolColumnIndexes.includes(c.index));
+  // The origin trait sorts like the others, but sits after the perks, as in the game.
   const orderColumns = orderColumnIndexes
+    .filter((index) => index !== originColumn)
     .map((index) => columns.find((c) => c.index === index))
     .filter((c) => c !== undefined);
+  const originOptions = columns.find((c) => c.index === originColumn);
 
   const comboMode = mode === "combos";
   // In combo mode, the first half of the combo being made.
@@ -116,7 +120,7 @@ export function PerkFinder({
   const optionFor = (pick: PerkPick) =>
     columns.find((c) => c.index === pick.column)?.options.find((o) => o.hash === pick.hash);
 
-  // Masterwork, barrel, and magazine picks ranked above a left or right perk decide
+  // Masterwork, barrel, magazine, and origin trait picks ranked above a left or right perk decide
   // which copies are kept, rather than only sorting them.
   const promotedNames = splitPicks(priority, rankingEnabled && !comboMode)
     .poolPicks.filter((pick) => !isPoolPick(pick))
@@ -248,9 +252,9 @@ export function PerkFinder({
         </div>
       </div>
 
-      {/* One grid for both sections, so their help text and perk columns share rows and the column headers line up. */}
-      <div className="grid gap-x-8 gap-y-2 lg:grid-cols-[auto_auto] lg:justify-start">
-        {/* Masterwork, barrel, and magazine first, then perks, like the game's perk grid. */}
+      {/* One grid for every section, so their help text and perk columns share rows and the column headers line up. */}
+      <div className="grid gap-x-8 gap-y-2 lg:grid-cols-[repeat(3,auto)] lg:justify-start">
+        {/* Masterwork, barrel, and magazine first (they only sort), then the perks that decide, then the origin trait. */}
         {orderColumns.length > 0 && (
           <div className="row-span-2 grid grid-rows-subgrid">
             {promotedNames.length > 0 ? (
@@ -278,6 +282,12 @@ export function PerkFinder({
           </p>
           <div className="flex gap-2">{poolColumns.map(renderColumn)}</div>
         </div>
+        {originOptions && (
+          <div className="row-span-2 grid grid-rows-subgrid">
+            <p className="text-muted-foreground max-w-44 text-xs">Sorts, unless ranked above a perk.</p>
+            <div className="flex gap-2">{renderColumn(originOptions)}</div>
+          </div>
+        )}
       </div>
 
       {comboMode && (combos.length > 0 || pending) && (
@@ -372,13 +382,14 @@ function columnLabel(column: PerkFinderColumn) {
   if (column.index === leftColumn) return "Left perk";
   if (column.index === rightColumn) return "Right perk";
   if (column.index === masterworkColumn) return "Masterwork";
+  if (column.index === originColumn) return "Origin trait";
   return column.typeName;
 }
 
 /**
  * A button that opens the ranking menu. Ranking is off until turned on; then picks can
- * be reordered (drag, or the arrows), most important first. Masterwork, barrel, and
- * magazine picks ranked below every left and right perk only sort.
+ * be reordered (drag, or the arrows), most important first. Masterwork, barrel,
+ * magazine, and origin trait picks ranked below every left and right perk only sort.
  */
 function PriorityMenu({
   priority,
@@ -408,8 +419,8 @@ function PriorityMenu({
         </label>
         <p className="text-muted-foreground text-xs">
           {rankingEnabled
-            ? "Most important first. A masterwork, barrel, or magazine ranked above a left or right perk also decides which copies you keep."
-            : "Off: your left and right perks count equally, and your masterwork, barrel, and magazine picks count equally."}
+            ? "Most important first. A masterwork, barrel, magazine, or origin trait ranked above a left or right perk also decides which copies you keep."
+            : "Off: your left and right perks count equally, and your masterwork, barrel, magazine, and origin trait picks count equally."}
         </p>
         {rankingEnabled && (
           <>

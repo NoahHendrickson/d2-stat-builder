@@ -161,3 +161,12 @@ test("lineOfItem finds the line an item is on", () => {
   expect(lineOfItem(lines, "a11")).toBe(3);
   expect(lineOfItem(lines, "missing")).toBe(-1);
 });
+
+test("a section without a heading starts with its tiles, padded as asked", () => {
+  const { lines, height } = layoutVault([{ buckets: [bucket([group("a", 3)])] }], 1000, 4);
+  expect(lines.map((line) => line.kind)).toEqual(["tiles"]);
+  const [line] = lines as VaultTileLine[];
+  expect(line!.top).toBe(0);
+  expect(line!.padTop).toBe(4);
+  expect(height).toBe(4 + 72 + 4);
+});

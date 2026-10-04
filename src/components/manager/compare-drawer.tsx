@@ -246,8 +246,33 @@ export function CompareView({
               />
             ))}
 
-            {statNames.map((stat) => (
-              <Row key={stat}>
+            {/* Perks first: they matter more than the stats. */}
+            <Row>
+              <span className="text-muted-foreground">Perks</span>
+              {ordered.map((copy) => (
+                <Cell key={copy.item.key} dim={isDim(finderActive, result, copy)}>
+                  <CopyPerks roll={copy.roll} picks={picks} names={finderInput} />
+                </Cell>
+              ))}
+            </Row>
+
+            <Row last={statNames.length === 0}>
+              <span className="text-muted-foreground">Masterwork</span>
+              {ordered.map((copy) => {
+                const mw = copy.roll.mods.find((m) => m.kind === "masterwork");
+                const picked = mw?.stat
+                  ? picks.some((p) => p.column === masterworkColumn && p.hash === mw.stat!.hash)
+                  : false;
+                return (
+                  <Cell key={copy.item.key} dim={isDim(finderActive, result, copy)}>
+                    <span className={cn("px-1", picked && "bg-item-frame-masterwork/70")}>{mw?.stat?.name ?? "–"}</span>
+                  </Cell>
+                );
+              })}
+            </Row>
+
+            {statNames.map((stat, i) => (
+              <Row key={stat} last={i === statNames.length - 1}>
                 <button
                   type="button"
                   onClick={() => sortBy(stat)}
@@ -281,30 +306,6 @@ export function CompareView({
                 })}
               </Row>
             ))}
-
-            <Row>
-              <span className="text-muted-foreground">Masterwork</span>
-              {ordered.map((copy) => {
-                const mw = copy.roll.mods.find((m) => m.kind === "masterwork");
-                const picked = mw?.stat
-                  ? picks.some((p) => p.column === masterworkColumn && p.hash === mw.stat!.hash)
-                  : false;
-                return (
-                  <Cell key={copy.item.key} dim={isDim(finderActive, result, copy)}>
-                    <span className={cn("px-1", picked && "bg-item-frame-masterwork/70")}>{mw?.stat?.name ?? "–"}</span>
-                  </Cell>
-                );
-              })}
-            </Row>
-
-            <Row last>
-              <span className="text-muted-foreground">Perks</span>
-              {ordered.map((copy) => (
-                <Cell key={copy.item.key} dim={isDim(finderActive, result, copy)}>
-                  <CopyPerks roll={copy.roll} picks={picks} names={finderInput} />
-                </Cell>
-              ))}
-            </Row>
           </div>
         )}
       </div>

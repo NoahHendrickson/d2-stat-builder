@@ -6,8 +6,8 @@ import Image from "next/image";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { GitCompareIcon, SquareLock02Icon, SquareUnlock02Icon } from "@hugeicons/core-free-icons";
 import { PerkTooltip } from "@/components/weapons/perk-tooltip";
+import { TIER_STRIP_CLASS } from "@/components/armor-thumb";
 import { PowerValue } from "@/components/power-value";
-import { StatGlyph } from "@/components/stat-glyph";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent } from "@/components/ui/popover";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -27,7 +27,6 @@ import {
   type PerkColumn,
   type WeaponRoll,
 } from "@/lib/inventory/weapon-details";
-import { statIconsFromManifest } from "@/lib/manifest/stat-icons";
 import { useManifest } from "@/lib/manifest/use-manifest";
 import { clarityLines, type ClarityMap } from "@/lib/weapons/clarity";
 import { weaponDisplayStats } from "@/lib/weapons/display-stats";
@@ -173,6 +172,7 @@ function Header({
           className="pointer-events-none absolute top-0 left-0"
           style={{ width: WATERMARK_PX, height: WATERMARK_PX }}
         >
+          {item.watermark && item.gearTier !== undefined && <span className={TIER_STRIP_CLASS} />}
           {item.watermark && (
             <Image
               src={`${BUNGIE_IMAGE_BASE}${item.watermark}`}
@@ -561,19 +561,30 @@ function ArmorView({ instanceId, itemHash }: { instanceId: string; itemHash: num
     () => (profile.data && manifest ? armorDetails(profile.data, manifest, instanceId, itemHash) : undefined),
     [profile.data, manifest, instanceId, itemHash],
   );
-  const icons = useMemo(() => statIconsFromManifest(manifest), [manifest]);
   if (!details) return null;
+  // Exotics can tune any stat, so no one row gets the glyph.
+  const tunedStat = details.tunable === "any" ? undefined : details.tunable;
   return (
     <div className={SECTION}>
-      <dl className="grid grid-cols-[auto_auto_1.75rem_1fr] items-center gap-x-2 gap-y-0.5 text-[11px]">
+      {/* A column for the tuning glyph, left of the stat, when one stat is tunable. */}
+      <dl
+        className={cn(
+          "grid items-center gap-x-2.5 gap-y-1 text-[13px]",
+          tunedStat ? "grid-cols-[0.75rem_auto_2rem_1fr]" : "grid-cols-[auto_2rem_1fr]",
+        )}
+      >
         {details.stats.map(({ key, value }) => (
           <div key={key} className="contents">
             <dt className="contents">
-              <StatGlyph src={icons[key]} label={STAT_LABELS[key]} className="size-3.5" plain />
+              {tunedStat && (
+                <span title={tunedStat === key ? `Tunable: tuning can add +5 ${STAT_LABELS[key]}` : undefined}>
+                  {tunedStat === key && <TuningIcon />}
+                </span>
+              )}
               <span className="text-muted-foreground">{STAT_LABELS[key]}</span>
             </dt>
             <dd className="tabular-nums">{value}</dd>
-            <dd aria-hidden className="bg-foreground/10 relative h-1.5">
+            <dd aria-hidden className="bg-foreground/10 relative h-2">
               <span
                 className="bg-foreground/80 absolute inset-y-0 left-0"
                 style={{ width: `${Math.min(100, (value / ARMOR_STAT_BAR_MAX) * 100)}%` }}
@@ -581,23 +592,25 @@ function ArmorView({ instanceId, itemHash }: { instanceId: string; itemHash: num
             </dd>
           </div>
         ))}
-        <div className="contents">
-          <dt className="col-span-2 text-right font-medium">Total</dt>
-          <dd className="font-medium tabular-nums">{details.total}</dd>
-        </div>
       </dl>
+      {details.tunable === "any" && (
+        <p className="text-muted-foreground flex items-center gap-1.5 text-[13px]">
+          <TuningIcon />
+          Tunable: any stat
+        </p>
+      )}
       {(details.archetype || details.energy) && (
-        <div className="flex items-center justify-between gap-3 text-xs">
+        <div className="flex items-center justify-between gap-3 text-[13px]">
           {details.archetype ? (
             <span className="flex items-center gap-2">
-              <PlugIcon plug={details.archetype} size={18} />
+              <PlugIcon plug={details.archetype} size={22} />
               {details.archetype.name}
             </span>
           ) : (
             <span />
           )}
           {details.energy && (
-            <span className="text-muted-foreground text-xs tabular-nums">
+            <span className="text-muted-foreground tabular-nums">
               Energy {details.energy.used} / {details.energy.capacity}
             </span>
           )}
@@ -605,17 +618,17 @@ function ArmorView({ instanceId, itemHash }: { instanceId: string; itemHash: num
       )}
       {details.intrinsic && (
         <div className="flex items-start gap-2.5">
-          <PlugIcon plug={details.intrinsic} size={24} />
-          <div className="flex flex-col gap-0.5 text-xs">
+          <PlugIcon plug={details.intrinsic} size={28} />
+          <div className="flex flex-col gap-0.5 text-[13px]">
             <span className="font-medium">{details.intrinsic.name}</span>
             {details.intrinsic.description && (
-              <span className="text-muted-foreground text-xs">{details.intrinsic.description}</span>
+              <span className="text-muted-foreground">{details.intrinsic.description}</span>
             )}
           </div>
         </div>
       )}
       {details.set && (
-        <div className="flex flex-col gap-1 text-xs">
+        <div className="flex flex-col gap-1 text-[13px]">
           <span className="d2-label">{details.set.name}</span>
           {details.set.perks.map((perk) => (
             <p key={perk.count}>
@@ -630,11 +643,24 @@ function ArmorView({ instanceId, itemHash }: { instanceId: string; itemHash: num
       {details.plugs.length > 0 && (
         <div className="flex flex-wrap gap-1.5" aria-label="Mods">
           {details.plugs.map((plug, i) => (
-            <PlugBadge key={`${plug.hash}:${i}`} plug={plug} />
+            <PlugBadge key={`${plug.hash}:${i}`} plug={plug} size={30} />
           ))}
         </div>
       )}
     </div>
+  );
+}
+
+/** The game's tuning glyph (up and down arrows over offset bars), from the user's tuning.svg. */
+function TuningIcon() {
+  return (
+    <svg viewBox="0 0 27 32" className="h-3.5 w-auto" fill="currentColor" role="img" aria-label="Tunable">
+      <path d="M20 32L13 25H17L20 28L23 25H27L20 32Z" />
+      <path d="M14 7H10L7 4L4 7H0L7 0L14 7Z" />
+      <rect x="13" y="20" width="14" height="2" />
+      <rect y="10" width="14" height="2" />
+      <rect y="15" width="27" height="2" />
+    </svg>
   );
 }
 

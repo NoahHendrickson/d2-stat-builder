@@ -8,6 +8,9 @@ import {
   ARMOR_STATS_PLUG_CATEGORY,
   STAT_DISPLAY_ORDER,
   STAT_HASHES,
+  STAT_HASH_TO_INDEX,
+  STAT_ORDER,
+  TUNING_PLUG_CATEGORY,
   type StatKey,
 } from "@/lib/armory/stats";
 import type { DetailPlug } from "./weapon-details";
@@ -21,12 +24,16 @@ export interface SetPerk {
 
 export interface ArmorDetails {
   stats: { key: StatKey; value: number }[];
-  total: number;
   archetype?: DetailPlug;
   /** The exotic's (or other intrinsic) perk. */
   intrinsic?: DetailPlug;
   set?: { name: string; perks: SetPerk[] };
   energy?: { used: number; capacity: number };
+  /**
+   * The stat a Tier 5 piece's tuning adds +5 to, or "any" when it can tune any stat
+   * (exotics). Undefined when it can't be tuned.
+   */
+  tunable?: StatKey | "any";
   /** Everything else socketed: mods, tuning, masterwork, shader, ornament. */
   plugs: DetailPlug[];
 }
@@ -44,6 +51,33 @@ function plugInfo(manifest: Manifest, hash: number): DetailPlug | undefined {
   };
 }
 
+/**
+ * The stats the piece's directional tuning plugs (+5 to one stat, −5 to another) can
+ * raise, from the tuning socket's options (component 310). A legendary rolls one; an
+ * exotic offers them all.
+ */
+function tunableStat(
+  profile: DestinyProfileResponse,
+  manifest: Manifest,
+  instanceId: string,
+): ArmorDetails["tunable"] {
+  const raised = new Set<StatKey>();
+  for (const plugs of Object.values(profile.itemComponents?.reusablePlugs?.data?.[instanceId]?.plugs ?? {})) {
+    for (const { plugItemHash } of plugs) {
+      const def = manifest.def("DestinyInventoryItemDefinition", plugItemHash);
+      if (!def?.plug?.plugCategoryIdentifier?.includes(TUNING_PLUG_CATEGORY)) continue;
+      const investments = def.investmentStats ?? [];
+      // Balanced Tuning only adds, so it says nothing about the tuned stat.
+      if (!investments.some((s) => s.value < 0)) continue;
+      const plus = investments.find((s) => s.value > 0);
+      const index = plus ? STAT_HASH_TO_INDEX[plus.statTypeHash] : undefined;
+      if (index !== undefined) raised.add(STAT_ORDER[index]!);
+    }
+  }
+  if (raised.size === 0) return undefined;
+  return raised.size === 1 ? [...raised][0] : "any";
+}
+
 /** Empty sockets and the default shader / ornament add nothing worth listing. */
 const isPlaceholder = (name: string) => /^(empty\b|default (shader|ornament))/i.test(name);
 
@@ -57,7 +91,6 @@ export function armorDetails(
   const stats = STAT_DISPLAY_ORDER.map((key) => ({ key, value: live[STAT_HASHES[key]]?.value ?? 0 }));
   const details: ArmorDetails = {
     stats,
-    total: stats.reduce((sum, s) => sum + s.value, 0),
     plugs: [],
   };
 
@@ -65,6 +98,9 @@ export function armorDetails(
   if (energy && energy.energyCapacity > 0) {
     details.energy = { used: energy.energyUsed, capacity: energy.energyCapacity };
   }
+
+  const tunable = tunableStat(profile, manifest, instanceId);
+  if (tunable) details.tunable = tunable;
 
   const setHash = manifest.def("DestinyInventoryItemDefinition", itemHash)?.equippingBlock?.equipableItemSetHash;
   const set = setHash ? manifest.def("DestinyEquipableItemSetDefinition", setHash) : undefined;
