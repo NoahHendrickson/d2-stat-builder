@@ -266,14 +266,16 @@ const WeaponDetails = memo(function WeaponDetails({
     // its Figma cell: a round cell with a hairline, filled blue once picked, and
     // the enhanced arrow in the top-left for perks with an enhanced tier. The
     // name lives in the tooltip.
+    // Perk art fills its whole square, so round cells inset it a little more.
+    const iconSize = columnKey === MASTERWORK ? 40 : 34;
     const content = (
       <>
         {perk.icon && (
           <Image
             src={`https://www.bungie.net${perk.icon}`}
             alt=""
-            width={40}
-            height={40}
+            width={iconSize}
+            height={iconSize}
             unoptimized
           />
         )}
