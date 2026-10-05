@@ -127,6 +127,8 @@ export type ApplyStreamEvent =
   | { type: "plug-start"; plug: PlugRequest }
   | { type: "plug"; result: PlugResult }
   | { type: "done"; equip: ItemResult[]; plugs: PlugResult[] }
+  /** The user stopped the apply; nothing after this event ran. */
+  | { type: "cancelled" }
   | { type: "error"; error: string; reauth?: boolean };
 
 export type EquipProgressEvent =
@@ -138,6 +140,21 @@ export type PlugProgressEvent =
   | { phase: "result"; result: PlugResult };
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** Thrown at a `shouldStop` checkpoint once the user has cancelled the apply. */
+export class ApplyCancelledError extends Error {
+  constructor() {
+    super("Apply cancelled");
+    this.name = "ApplyCancelledError";
+  }
+}
+
+/** Asked between Bungie calls; true stops the run with an ApplyCancelledError. */
+export type StopCheck = () => Promise<boolean>;
+
+async function checkpoint(shouldStop: StopCheck | undefined) {
+  if (shouldStop && (await shouldStop())) throw new ApplyCancelledError();
+}
 
 /** Equipped items can't be transferred — give that case a clear message up front. */
 function transferBlockReason(item: EquipItemState, targetId: string): string | null {
@@ -198,6 +215,7 @@ export async function stageAndEquip({
   spares,
   mode = "equip",
   onProgress,
+  shouldStop,
 }: {
   http: HttpClient;
   membershipType: BungieMembershipType;
@@ -209,6 +227,8 @@ export async function stageAndEquip({
   spares?: SpareItems;
   mode?: "move" | "equip";
   onProgress?: (event: EquipProgressEvent) => void;
+  /** Checked before each item's first hop and before equipping, never mid-item. */
+  shouldStop?: StopCheck;
 }): Promise<ItemResult[]> {
   const failed = new Map<string, string>();
   /** Staged item → spares vaulted to make room for it. */
@@ -289,6 +309,7 @@ export async function stageAndEquip({
 
   for (const action of actions) {
     if (failed.has(action.itemId)) continue; // earlier hop failed
+    if (!started.has(action.itemId)) await checkpoint(shouldStop);
     start(action.itemId);
     // A hop onto the target can hit a full bucket (9 unequipped per slot). Vault a
     // same-slot spare (see spareSource) and retry, until the spares run out. A spare
@@ -357,6 +378,7 @@ export async function stageAndEquip({
       emitResult(result);
     }
   } else if (stagedIds.length > 0) {
+    await checkpoint(shouldStop);
     const collect = async (ids: string[]) => {
       if (ids.length === 0) return;
       for (const id of ids) start(id);
@@ -402,12 +424,15 @@ export async function insertPlugs({
   characterId,
   plugs,
   onProgress,
+  shouldStop,
 }: {
   http: HttpClient;
   membershipType: BungieMembershipType;
   characterId: string;
   plugs: PlugRequest[];
   onProgress?: (event: PlugProgressEvent) => void;
+  /** Checked before each insert. */
+  shouldStop?: StopCheck;
 }): Promise<PlugResult[]> {
   const results: PlugResult[] = [];
   let inActivity = false;
@@ -417,6 +442,7 @@ export async function insertPlugs({
   };
   for (let i = 0; i < plugs.length; i++) {
     const plug = plugs[i];
+    if (!inActivity) await checkpoint(shouldStop);
     onProgress?.({ phase: "start", plug });
     if (inActivity) {
       emitResult({ ...plug, ok: false, message: PLUG_MESSAGES[1671] });

@@ -202,23 +202,6 @@
   --color-outline-strong: var(--outline-strong);
   --color-outline-glow: var(--outline-glow);
   --color-label: var(--label);
-
-  @keyframes loading-drift {
-    from {
-      transform: translateX(-160px);
-    }
-    to {
-      transform: translateX(calc(100vw + 160px));
-    }
-  }
-  @keyframes loading-bob {
-    from {
-      transform: translateY(-11px) rotate(-3deg);
-    }
-    to {
-      transform: translateY(11px) rotate(3deg);
-    }
-  }
   --color-emphatic: var(--emphatic);
   --color-emphatic-foreground: var(--emphatic-foreground);
   --color-emphatic-dark: var(--emphatic-dark);
@@ -313,10 +296,17 @@
 .dark[data-app-theme="slate"] {
   --shell-sidebar: rgb(255 255 255 / 4%);
   --shell-main: transparent;
+  /* Drawers (the loadout editor) take the gradient's blue too, a step darker
+     than the menus so a popover still lifts off them. */
+  --glass: rgb(60 70 90 / 82%);
+  /* …and run the backdrop's angle, blue at the right fading to its grey at the
+     left, so a full-width drawer matches the page at both ends. */
+  --glass-gradient: linear-gradient(241.87deg, rgb(60 70 90 / 82%) 2.15%, rgb(56 63 72 / 82%) 93.13%);
   --glass-opaque: rgb(51 61 76);
-  /* Menus take the gradient's blue-slate hue a step lighter; the default
-     neutral grey reads green against it. */
-  --glass-raised: rgb(78 90 112 / 85%);
+  /* Menus take the gradient's blue (#374358) about 1.4× lighter; the default
+     neutral grey reads green against it. 92% so a dark dialog under a menu
+     doesn't grey it out. */
+  --glass-raised: rgb(76 92 120 / 92%);
 }
 
 /* Normal (Figma 130:6188): a plain rounded UI on a flat page. No scene, no
@@ -388,27 +378,6 @@ input[type="number"] {
   appearance: textfield;
 }
 
-/* Loading-screen exotics: the outer wrapper drifts across the viewport while
-   the inner image bobs and tilts, so the two motions compose independently.
-   Tiles start parked offscreen left; negative animation delays scatter them
-   mid-flight on first paint. Reduced motion pauses both animations instead of
-   hiding the tiles: paused-at-negative-delay keeps that first-paint scatter,
-   so the sky stays decorated but motionless. */
-.loading-tile-drift {
-  animation: loading-drift var(--drift-duration) linear var(--drift-delay)
-    infinite var(--drift-direction, normal);
-}
-.loading-tile-bob {
-  animation: loading-bob var(--bob-duration) ease-in-out var(--drift-delay)
-    infinite alternate;
-}
-@media (prefers-reduced-motion: reduce) {
-  .loading-tile-drift,
-  .loading-tile-bob {
-    animation-play-state: paused;
-  }
-}
-
 @utility corner-smooth {
   corner-shape: superellipse(1.2);
 }
@@ -446,19 +415,6 @@ input[type="number"] {
   [data-app-theme="normal"] & {
     background: var(--background);
   }
-}
-
-/* The same scene unblurred, for the loading screen that covers the app. Always
-   dark; the blurred copy (already cached for app-backdrop) shows until the
-   sharp one loads. Scrim: a dark pool behind centred text over an edge vignette. */
-@utility app-backdrop-sharp {
-  background-image:
-    radial-gradient(ellipse 48% 32% at center, rgb(0 0 0 / 0.75), rgb(0 0 0 / 0.4) 55%, transparent),
-    radial-gradient(ellipse at center, rgb(0 0 0 / 0.1) 40%, rgb(0 0 0 / 0.5) 100%),
-    url("/backdrop.webp"),
-    url("/backdrop-blur.webp");
-  background-size: cover;
-  background-position: center;
 }
 
 /* Small uppercase label: column headers, stat names, section tags, EQUIP. */
@@ -499,6 +455,9 @@ input[type="number"] {
     transparent
   );
   height: 1px;
+  [data-line-style="plain"] & {
+    background: color-mix(in srgb, var(--foreground) 15%, transparent);
+  }
   [data-app-theme="normal"] & {
     background: var(--border);
   }
@@ -582,6 +541,10 @@ input[type="number"] {
   border: 1px solid transparent;
   border-image: var(--line-image, linear-gradient(to right, var(--line-side), var(--line-mid) 50%, var(--line-side))) 1;
   box-shadow: 0 2px 16px rgb(0 0 0 / 0.25);
+  [data-line-style="plain"] & {
+    border-image-source: none;
+    border-color: color-mix(in srgb, var(--foreground) calc(var(--line-alpha, 1) * 15%), transparent);
+  }
   [data-app-theme="normal"] & {
     backdrop-filter: none;
     /* -source, not the `border-image: none` shorthand: lightningcss empties that. */
@@ -609,6 +572,11 @@ input[type="number"] {
 @utility d2-sidebar {
   background-color: var(--glass);
   backdrop-filter: blur(20px);
+  /* Slate: the gradient instead of the flat fill (beats a bg-glass on the element). */
+  .dark[data-app-theme="slate"] & {
+    background-color: transparent;
+    background-image: var(--glass-gradient);
+  }
   [data-app-theme="normal"] & {
     backdrop-filter: none;
   }
@@ -691,6 +659,8 @@ input[type="number"] {
    d2-equip, which put it before the button's bg-clip-padding, and that clip
    hid the line on every theme. */
 @layer utilities {
+  /* Plain lines leave d2-equip alone: primary buttons and the active tab keep
+     the gradient line. */
   [data-app-theme="normal"] .d2-equip {
     background: var(--equip-fill);
     border-color: rgb(255 255 255 / 0.2);
@@ -743,6 +713,8 @@ input[type="number"] {
     animation: none;
     --line-image: linear-gradient(to right, var(--line-side), var(--line-mid) 50%, var(--line-side));
   }
+  /* EQUIP keeps its gradient under plain lines, so it keeps the spin too. */
+  [data-line-style="plain"] &:not(.d2-equip),
   [data-app-theme="normal"] & {
     animation: none;
   }
@@ -759,12 +731,22 @@ input[type="number"] {
      --line-mid    centre stop (default foreground 24%)
    Corners must be square (border-image ignores border-radius). Focus keeps
    the gradient and just raises --line-alpha; only a state that wants a solid
-   line (the active blue chip) sets [border-image:none] and a border-color. */
+   line (the active blue chip) sets [border-image:none] and a border-color.
+   `data-line-style="plain"` on <html> (layout.tsx) swaps the gradient lines —
+   d2-line, d2-line-white, d2-glass, d2-card-frame, d2-rule — for a solid one like
+   the search inputs. The green controls keep the gradient: d2-equip (primary
+   buttons, the active tab) and checked checkboxes. Drop the attribute to bring
+   the gradient back everywhere. */
 @utility d2-line {
   --line-side: color-mix(in srgb, var(--foreground) calc(var(--line-alpha, 1) * 6%), transparent);
   --line-mid: color-mix(in srgb, var(--foreground) calc(var(--line-alpha, 1) * 24%), transparent);
   border: 1px solid transparent;
   border-image: var(--line-image, linear-gradient(to right, var(--line-side), var(--line-mid) 50%, var(--line-side))) 1;
+  /* Plain lines: the search inputs' solid white/15, still scaled by --line-alpha. */
+  [data-line-style="plain"] & {
+    border-image-source: none;
+    border-color: color-mix(in srgb, var(--foreground) calc(var(--line-alpha, 1) * 15%), transparent);
+  }
   /* Normal: a solid white/12 border (Figma 130:6587), and --line-alpha still
      brightens it on hover and focus. */
   [data-app-theme="normal"] & {
@@ -789,6 +771,10 @@ input[type="number"] {
   --line-mid: rgb(255 255 255 / 0.55);
   border: 1px solid transparent;
   border-image: var(--line-image, linear-gradient(to right, var(--line-side), var(--line-mid) 50%, var(--line-side))) 1;
+  [data-line-style="plain"] & {
+    border-image-source: none;
+    border-color: rgb(255 255 255 / 0.2);
+  }
   [data-app-theme="normal"] & {
     border-image-source: none;
     border-color: rgb(255 255 255 / 0.16);
@@ -840,6 +826,10 @@ input[type="number"] {
   border: 1px solid transparent;
   border-image: var(--line-image, linear-gradient(to right, var(--line-side), var(--line-mid) 50%, var(--line-side))) 1;
   background-color: var(--lifted);
+  [data-line-style="plain"] & {
+    border-image-source: none;
+    border-color: color-mix(in srgb, var(--foreground) calc(var(--line-alpha, 1) * 15%), transparent);
+  }
   /* Normal (Figma 140:2200): a 20px rounded card with a solid border. */
   [data-app-theme="normal"] & {
     border-image-source: none;
@@ -872,6 +862,18 @@ input[type="number"] {
   box-shadow: var(--shadow-raised);
 }
 
+/* Plain lines: the checked box keeps the gradient line on the green, like EQUIP. */
+[data-line-style="plain"] [data-slot="checkbox"][data-checked],
+[data-line-style="plain"]
+  [data-slot="dropdown-menu-checkbox-item"][data-indicator="start"][data-checked]
+  [data-slot="dropdown-menu-checkbox-item-indicator"] {
+  border-color: transparent;
+  border-image-source: var(
+    --line-image,
+    linear-gradient(to right, var(--line-side), var(--line-mid) 50%, var(--line-side))
+  );
+}
+
 /* Normal (Figma 140:10858): the brighter slider green, no line. */
 [data-app-theme="normal"] [data-slot="checkbox"][data-checked],
 [data-app-theme="normal"] [data-slot="checkbox"][data-checked]:hover,
@@ -880,4 +882,5 @@ input[type="number"] {
   [data-slot="dropdown-menu-checkbox-item-indicator"] {
   background-color: var(--normal-green, var(--emphatic));
   border-color: transparent;
+  border-image-source: none;
 }

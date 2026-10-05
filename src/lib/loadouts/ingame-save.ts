@@ -32,8 +32,12 @@ export async function fetchInGameLoadouts(characterId: string): Promise<InGameLo
 }
 
 /** Every piece equipped and every planned mod socketed — what the slot is about to capture. */
-export function fullyApplied({ equip, plugs }: Pick<ApplyOutcome, "equip" | "plugs">): boolean {
-  return equip.every((r) => r.ok) && plugs.every((r) => r.ok);
+export function fullyApplied({
+  equip,
+  plugs,
+  cancelled,
+}: Pick<ApplyOutcome, "equip" | "plugs" | "cancelled">): boolean {
+  return !cancelled && equip.every((r) => r.ok) && plugs.every((r) => r.ok);
 }
 
 export type SnapshotResult = { ok: true } | { ok: false; error: string; reauth?: boolean };
@@ -75,6 +79,8 @@ export async function saveLoadoutInGame({
 }): Promise<ApplyOutcome | null> {
   const outcome = await applySavedLoadout({ ...apply, queryClient });
   if (!outcome) return null;
+  // Stopped from the progress card, which already says so; the slot is left alone.
+  if (outcome.cancelled) return outcome;
 
   const slot = `in-game loadout ${choice.loadoutIndex + 1}`;
   if (!fullyApplied(outcome)) {

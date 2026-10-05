@@ -76,10 +76,10 @@ function Icon({
   className,
 }: {
   icon: string | undefined;
-  size: 24 | 40;
+  size: 20 | 40;
   className?: string;
 }) {
-  const sizeClass = size === 24 ? "size-6" : "size-10";
+  const sizeClass = size === 20 ? "size-5" : "size-10";
   return icon ? (
     <Image
       src={`${BUNGIE_IMAGE_BASE}${icon}`}
@@ -192,10 +192,11 @@ export function LoadoutArtifactEditor({
               {value ? name : "Add artifact"}
             </span>
             {value && (
+              // 20px perks so all seven fit an equal-width slot.
               <span className="flex items-center gap-0.5">
                 {ordered.length > 0 ? (
                   ordered.map((hash) => (
-                    <Icon key={hash} icon={def(hash)?.displayProperties?.icon} size={24} />
+                    <Icon key={hash} icon={def(hash)?.displayProperties?.icon} size={20} />
                   ))
                 ) : (
                   <span className="text-muted-foreground text-[10px] leading-4">No perks</span>

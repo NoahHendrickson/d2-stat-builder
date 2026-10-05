@@ -185,11 +185,11 @@ export const ArmorTableToolbar = memo(function ArmorTableToolbar({
       {filtersActive && (
         <Button
           type="button"
-          variant="ghost"
-          className="ml-auto h-8 shrink-0 gap-1.5 px-2.5 pr-3"
+          variant="outline"
+          className="ml-auto shrink-0"
           onClick={onClearFilters}
         >
-          <HugeiconsIcon icon={Cancel01Icon} className="size-4" aria-hidden />
+          <HugeiconsIcon icon={Cancel01Icon} data-icon="inline-start" aria-hidden />
           Clear all
         </Button>
       )}

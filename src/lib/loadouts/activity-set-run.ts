@@ -169,6 +169,8 @@ export async function runActivitySet({
         queryClient,
         batch: `${set.name}: slot ${assignment.index + 1} (${i + 1} of ${total})`,
       });
+      // Cancel on the progress card stops the whole run; this slot counts as not run.
+      if (outcome?.cancelled) break;
       if (!outcome) {
         skip(`${saved.loadout.name} couldn't be equipped`);
       } else if (!fullyApplied(outcome)) {

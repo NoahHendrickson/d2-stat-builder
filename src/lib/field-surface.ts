@@ -14,17 +14,20 @@ export const fieldControlInnerTriggerClasses = cn(
   "items-center justify-between gap-1.5 pr-2.5 pl-3 text-sm whitespace-nowrap select-none",
 );
 
-/**
- * Filter trigger shell — Figma Frame 226: primary/lifted fill, input border,
- * emphatic fill when selected. Active stroke is the build-card fade
- * (foreground 24% at the top → 0% at the bottom), not a solid white outline.
- */
+/** Filter trigger shell — Figma Frame 226. Add the idle or active classes below. */
 export const fieldFilterControlShellClasses = cn(
   fieldControlHeightClasses,
-  "d2-line relative box-border overflow-hidden rounded-none normal:rounded-[10px] bg-lifted transition-colors",
-  "hover:[--line-alpha:1.6] has-data-popup-open:[--line-alpha:2.6] focus-within:[--line-alpha:2.6]",
-  "data-active:[border-image:none] data-active:border-white/70 data-active:bg-emphatic data-active:text-white data-active:hover:bg-emphatic data-active:has-data-popup-open:border-white data-active:focus-within:border-white",
+  "relative box-border overflow-hidden rounded-none normal:rounded-[10px] transition-colors",
 );
 
-/** Active filter chips are a plain white plate; no extra rim. */
-export const fieldFilterActiveEdgeClasses = "";
+/** No filter set: lifted fill and the field line, brighter on hover / while open. */
+export const fieldFilterIdleClasses =
+  "d2-line bg-lifted hover:[--line-alpha:1.6] has-data-popup-open:[--line-alpha:2.6] focus-within:[--line-alpha:2.6]";
+
+/**
+ * A filter set: the EQUIP button — green under the Bungie gradient line (kept under
+ * plain lines), lighter green on hover or while open. Never alongside d2-line, whose
+ * border-image would cover the line.
+ */
+export const fieldFilterActiveEdgeClasses =
+  "d2-equip text-white hover:[--equip-fill:var(--emphatic-light)] has-data-popup-open:[--equip-fill:var(--emphatic-light)]";

@@ -1,18 +1,20 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactElement, type ReactNode } from "react";
 import dynamic from "next/dynamic";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
   Copy01Icon,
   LinkSquare02Icon,
   Loading03Icon,
+  Shirt01Icon,
   SparklesIcon,
 } from "@hugeicons/core-free-icons";
 import { useQueryClient } from "@tanstack/react-query";
 import { TooltipLabel } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/lib/toast";
+import { cn } from "@/lib/utils";
 import type { ArmorPiece } from "@/lib/armory/normalize";
 import type { ArmoryCharacter } from "@/lib/armory/fetch";
 import { isSyntheticClassItemId } from "@/lib/armory/exotic-class-perks";
@@ -284,61 +286,71 @@ export function BuildActions({
   };
 
   return (
-    // Figma 18:6865 footer: outline actions, then the emphatic "Save as loadout".
-    <div className="flex flex-wrap items-center justify-end gap-2 p-4">
+    // Figma 18:6865 footer: icon actions that open to their label, then the emphatic
+    // "Save as loadout", all on one line.
+    <div className="flex items-center justify-end gap-2 p-4">
       {onDream && (
-        <Button
-          variant="outline"
-          onClick={() => onDream(loadout)}
-          className="mr-auto"
-        >
-          <HugeiconsIcon icon={SparklesIcon} data-icon="inline-start" aria-hidden />
-          Dream build
-        </Button>
+        <RevealAction className="mr-auto">
+          <Button variant="outline" onClick={() => onDream(loadout)} className="gap-0 px-2">
+            <HugeiconsIcon icon={SparklesIcon} aria-hidden />
+            <RevealLabel>Dream build</RevealLabel>
+          </Button>
+        </RevealAction>
       )}
-      <TooltipLabel
-        label={
-          missingTitle ??
-          (targetCharacter
-            ? undefined
-            : `No ${CLASS_NAMES[buildClass ?? -1] ?? "matching"} character`)
-        }
-        disabled={!canActOnItems || !targetCharacter || equipping}
-      >
-        <Button
-          variant="outline"
-          onClick={equip}
+      <RevealAction>
+        <TooltipLabel
+          label={
+            missingTitle ??
+            (targetCharacter
+              ? undefined
+              : `No ${CLASS_NAMES[buildClass ?? -1] ?? "matching"} character`)
+          }
           disabled={!canActOnItems || !targetCharacter || equipping}
         >
-          {equipping ? (
-            <HugeiconsIcon icon={Loading03Icon} className="animate-spin" aria-hidden />
-          ) : null}
-          Equip items
-        </Button>
-      </TooltipLabel>
-      <TooltipLabel label={missingTitle} disabled={!canActOnItems}>
-        <Button
-          variant="outline"
-          onClick={copyItemIds}
-          disabled={!canActOnItems}
-        >
-          <HugeiconsIcon icon={Copy01Icon} data-icon="inline-start" aria-hidden />
-          Copy item IDs
-        </Button>
-      </TooltipLabel>
-      <TooltipLabel
-        label={missingTitle}
-        disabled={!canActOnItems || !hasModHashes}
-      >
-        <Button
-          variant="outline"
-          onClick={openInDim}
+          <Button
+            variant="outline"
+            onClick={equip}
+            disabled={!canActOnItems || !targetCharacter || equipping}
+            className="gap-0 px-2"
+          >
+            <HugeiconsIcon
+              icon={equipping ? Loading03Icon : Shirt01Icon}
+              className={equipping ? "animate-spin" : undefined}
+              aria-hidden
+            />
+            <RevealLabel>Equip items</RevealLabel>
+          </Button>
+        </TooltipLabel>
+      </RevealAction>
+      <RevealAction>
+        <TooltipLabel label={missingTitle} disabled={!canActOnItems}>
+          <Button
+            variant="outline"
+            onClick={copyItemIds}
+            disabled={!canActOnItems}
+            className="gap-0 px-2"
+          >
+            <HugeiconsIcon icon={Copy01Icon} aria-hidden />
+            <RevealLabel>Copy item IDs</RevealLabel>
+          </Button>
+        </TooltipLabel>
+      </RevealAction>
+      <RevealAction>
+        <TooltipLabel
+          label={missingTitle}
           disabled={!canActOnItems || !hasModHashes}
         >
-          Open in DIM
-          <HugeiconsIcon icon={LinkSquare02Icon} data-icon="inline-end" aria-hidden />
-        </Button>
-      </TooltipLabel>
+          <Button
+            variant="outline"
+            onClick={openInDim}
+            disabled={!canActOnItems || !hasModHashes}
+            className="gap-0 px-2"
+          >
+            <HugeiconsIcon icon={LinkSquare02Icon} aria-hidden />
+            <RevealLabel>Open in DIM</RevealLabel>
+          </Button>
+        </TooltipLabel>
+      </RevealAction>
       <TooltipLabel
         label={!complete ? missingTitle : undefined}
         disabled={!canSave}
@@ -360,11 +372,31 @@ export function BuildActions({
           buildClass={buildClass}
           defaultName={saveContext.defaultName}
           subclassItemHash={saveContext.subclassItemHash}
+          artifacts={targetCharacter?.artifacts}
           makeDimLoadout={makeDimLoadout}
           busy={createLoadout.isPending}
           onSubmit={saveLoadout}
         />
       )}
     </div>
+  );
+}
+
+/**
+ * Hover / focus scope for an icon action whose label slides open. It sits outside the
+ * tooltip so a disabled button (no pointer events of its own) still opens on hover.
+ */
+function RevealAction({ children, className }: { children: ReactElement; className?: string }) {
+  return <span className={cn("group/reveal inline-flex", className)}>{children}</span>;
+}
+
+/** The label of a RevealAction button: zero-width until hovered or focused. */
+function RevealLabel({ children }: { children: ReactNode }) {
+  return (
+    <span className="grid grid-cols-[0fr] transition-[grid-template-columns] duration-200 ease-out group-has-focus-visible/reveal:grid-cols-[1fr] group-hover/reveal:grid-cols-[1fr] motion-reduce:transition-none">
+      <span className="overflow-hidden">
+        <span className="block pr-1 pl-1.5">{children}</span>
+      </span>
+    </span>
   );
 }

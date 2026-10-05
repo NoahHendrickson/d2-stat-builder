@@ -1,10 +1,11 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
+import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
+import { ArrowDown02Icon, ArrowUp02Icon } from "@hugeicons/core-free-icons";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -92,11 +93,21 @@ function DreamBuildBody({
     <>
       <DialogHeader className="pr-8">
         <DialogTitle>Dream build</DialogTitle>
-        <DialogDescription>
-          Set the stats you want. We&apos;ll find which pieces of this build to replace,
-          and with what, to get there.
-        </DialogDescription>
       </DialogHeader>
+      <ol className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <DreamStep
+          step={1}
+          icon={ArrowDown02Icon}
+          title="Lower the stats you don't care about"
+          body="Every point you give up frees room for the stats you do want."
+        />
+        <DreamStep
+          step={2}
+          icon={ArrowUp02Icon}
+          title="Raise the stats you want"
+          body="We'll find which pieces of this build to replace, and with what, to get there."
+        />
+      </ol>
       <div className="grid min-h-0 flex-1 grid-cols-1 gap-6 overflow-y-auto md:grid-cols-[minmax(0,20rem)_minmax(0,1fr)] md:overflow-hidden">
         <section className="border-foreground/8 flex flex-col gap-4 md:overflow-y-auto md:border-r md:pr-6">
           <div className="flex min-h-5 items-center justify-between">
@@ -148,5 +159,31 @@ function DreamBuildBody({
         </section>
       </div>
     </>
+  );
+}
+
+/** One numbered how-to card above the dream build's sliders. */
+function DreamStep({
+  step,
+  icon,
+  title,
+  body,
+}: {
+  step: number;
+  icon: IconSvgElement;
+  title: string;
+  body: string;
+}) {
+  return (
+    <li className="d2-card-frame flex items-start gap-3 p-4 [--card-radius:14px]">
+      <span className="bg-foreground/8 normal:rounded-lg flex size-8 shrink-0 items-center justify-center">
+        <HugeiconsIcon icon={icon} className="size-4" aria-hidden />
+      </span>
+      <div className="flex min-w-0 flex-col gap-1">
+        <span className="d2-label">Step {step}</span>
+        <span className="text-sm font-medium">{title}</span>
+        <span className="text-muted-foreground text-xs">{body}</span>
+      </div>
+    </li>
   );
 }

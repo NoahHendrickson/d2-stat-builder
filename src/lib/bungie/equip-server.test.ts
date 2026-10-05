@@ -12,7 +12,7 @@ vi.mock("bungie-api-ts/destiny2", () => ({
   insertSocketPlugFree: vi.fn(),
 }));
 
-const { stageAndEquip } = await import("./equip-server");
+const { ApplyCancelledError, insertPlugs, stageAndEquip } = await import("./equip-server");
 
 const http = (() => Promise.resolve({})) as unknown as HttpClient;
 const TARGET = "char-A";
@@ -245,5 +245,44 @@ describe("stageAndEquip make-room from the live inventory", () => {
     const results = await run({ http, membershipType: 3, membershipId: "m", characterId: TARGET, items: [slottedHelm], spares });
     expect(moved()).toEqual([["helm", false], ["spare-1", true], ["spare-2", true], ["live-1", true]]);
     expect(results[0]).toEqual({ itemInstanceId: "helm", ok: false, message: "Couldn't make room: That item can't be transferred" });
+  });
+});
+
+describe("cancel checkpoints", () => {
+  test("stageAndEquip stops before the next item and never equips", async () => {
+    transferItem.mockResolvedValue({});
+    const chest = { itemInstanceId: "chest", itemHash: 8, location: "vault" as const };
+    let checks = 0;
+    const p = stageAndEquip({
+      http,
+      membershipType: 3,
+      membershipId: "m",
+      characterId: TARGET,
+      items: [helm, chest],
+      shouldStop: async () => ++checks > 1,
+    }).catch((err: unknown) => err);
+    await vi.runAllTimersAsync();
+    expect(await p).toBeInstanceOf(ApplyCancelledError);
+    expect(moved()).toEqual([["helm", false]]);
+    expect(equipItems).not.toHaveBeenCalled();
+  });
+
+  test("insertPlugs stops before the next insert", async () => {
+    const plugs = [1, 2, 3].map((i) => ({ itemInstanceId: "helm", socketIndex: i, plugItemHash: i }));
+    const done: number[] = [];
+    let checks = 0;
+    const p = insertPlugs({
+      http,
+      membershipType: 3,
+      characterId: TARGET,
+      plugs,
+      shouldStop: async () => ++checks > 2,
+      onProgress: (e) => {
+        if (e.phase === "result") done.push(e.result.socketIndex);
+      },
+    }).catch((err: unknown) => err);
+    await vi.runAllTimersAsync();
+    expect(await p).toBeInstanceOf(ApplyCancelledError);
+    expect(done).toEqual([1, 2]);
   });
 });

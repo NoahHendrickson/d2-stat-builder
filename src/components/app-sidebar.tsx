@@ -242,11 +242,10 @@ function LinksSection({ collapsed }: { collapsed: boolean }) {
   const addButton = (
     <TooltipLabel label="Add a link">
       <Button
-        variant="ghost"
+        variant="outline"
         size={collapsed ? "icon" : "icon-xs"}
         aria-label="Add a link"
         onClick={() => setDialog({ kind: "add" })}
-        className="text-muted-foreground hover:text-foreground"
       >
         <HugeiconsIcon icon={Add01Icon} strokeWidth={2} aria-hidden />
       </Button>
@@ -261,7 +260,8 @@ function LinksSection({ collapsed }: { collapsed: boolean }) {
       {collapsed ? (
         <div className="flex justify-center">{addButton}</div>
       ) : (
-        // pr-3.5 puts the + over each link's ⋯ (ul px-2 + right-1.5).
+        // pr-3.5 puts the + over each link's ⋯ (ul px-2 + right-1.5); the list drops
+        // d2-scroll's stable gutter so a reserved scrollbar track doesn't push the ⋯ left.
         <div className="flex h-6 shrink-0 items-center justify-between pr-3.5 pl-4">
           <h2 className="d2-label">Links</h2>
           {addButton}
@@ -270,7 +270,7 @@ function LinksSection({ collapsed }: { collapsed: boolean }) {
 
       <ul
         className={cn(
-          "d2-scroll flex min-h-0 flex-col gap-0.5 overflow-y-auto overscroll-contain",
+          "d2-scroll flex min-h-0 flex-col gap-0.5 overflow-y-auto overscroll-contain [scrollbar-gutter:auto]!",
           collapsed ? "items-center px-2.5" : "px-2",
         )}
       >
@@ -349,7 +349,7 @@ function LinkRow({
         <DropdownMenuTrigger
           render={
             <Button
-              variant="ghost"
+              variant="outline"
               size="icon-xs"
               className="absolute top-1/2 right-1.5 -translate-y-1/2 opacity-0 group-hover/link:opacity-100 focus-visible:opacity-100 aria-expanded:opacity-100 pointer-coarse:opacity-100"
             />

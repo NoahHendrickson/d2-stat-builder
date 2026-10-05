@@ -1,12 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { ArmorPiece } from "@/lib/armory/normalize";
+import type { OwnedArtifact } from "@/lib/armory/artifact-items";
+import { useArmory } from "@/lib/armory/use-armory";
 import {
   LoadoutEditorDrawer,
   type LoadoutDetailsValues,
 } from "@/components/loadouts/loadout-editor-drawer";
 import type { SubclassSection } from "@/components/loadouts/loadout-subclass-editor";
+import type { WeaponsSection } from "@/components/loadouts/loadout-weapons-editor";
+import type { ArtifactSection } from "@/components/loadouts/loadout-artifact-editor";
 import type { DimLoadout } from "@/lib/dim/loadout-link";
 import { modsSectionForPieces } from "@/lib/loadouts/commit";
 import { modsFromEditor, type ModsSection } from "@/lib/loadouts/mod-placement";
@@ -27,6 +31,8 @@ export interface SaveLoadoutDrawerProps {
   defaultName: string;
   /** The builder's subclass item — the fallback when the DIM loadout carries none. */
   subclassItemHash?: number;
+  /** The artifacts on the character the build is for; none read = no artifact slot. */
+  artifacts?: readonly OwnedArtifact[];
   makeDimLoadout: (name: string, notes?: string) => DimLoadout;
   busy: boolean;
   /** The DIM loadout with the picker's mods applied, plus the rest of the form. */
@@ -46,6 +52,8 @@ interface Picker {
  * Apply would place them; the user adds other mods on top. Mods the planner can't place
  * on the live pieces — e.g. the class item's stat mod when the build uses a theoretical
  * (socket-less) exotic class item — are kept in the saved loadout, not dropped.
+ *
+ * Weapons and the artifact start empty, as on a loadout made in Edit: the build is armor.
  */
 export function SaveLoadoutDrawer(props: SaveLoadoutDrawerProps) {
   // Keying remounts the picker for each Save click so it is built from the inputs as
@@ -63,6 +71,7 @@ function SaveLoadoutDrawerSession({
   buildClass,
   defaultName,
   subclassItemHash,
+  artifacts,
   makeDimLoadout,
   busy,
   onSubmit,
@@ -89,17 +98,33 @@ function SaveLoadoutDrawerSession({
     };
   });
 
+  // Without the weapon list (an armory cached before weapons were tracked) the pickers
+  // would be empty, so no Weapons row — same as Edit on the Loadouts page.
+  const ownedWeapons = useArmory().data?.weapons;
+  const weapons = useMemo(
+    (): WeaponsSection | undefined =>
+      ownedWeapons ? { manifest, owned: ownedWeapons, initial: [] } : undefined,
+    [manifest, ownedWeapons],
+  );
+  const artifact = useMemo(
+    (): ArtifactSection | undefined =>
+      artifacts?.length ? { manifest, owned: artifacts } : undefined,
+    [manifest, artifacts],
+  );
+
   return (
     <LoadoutEditorDrawer
       open={open}
       onOpenChange={onOpenChange}
       formKey={session}
       title="Save loadout"
-      description="Save your armor and builder targets, and customize your subclass, aspects, fragments, and mods below."
+      description="Save your armor and builder targets, and add weapons, an artifact, and your subclass, aspects, fragments, and mods below."
       submitLabel="Save"
       initialName={defaultName}
       mods={picker.mods}
       subclass={picker.subclass}
+      weapons={weapons}
+      artifact={artifact}
       busy={busy}
       onSubmit={(values) => {
         const dim = makeDimLoadout(values.name, values.notes || undefined);

@@ -27,7 +27,6 @@ import {
 import { StatGlyph } from "@/components/stat-glyph";
 import { statIconsFromManifest } from "@/lib/manifest/stat-icons";
 import { sumEditorStats } from "@/lib/loadouts/editor-stats";
-import { clearsLeftover } from "@/lib/loadouts/energy";
 import { BUNGIE_IMAGE_BASE } from "@/lib/bungie/constants";
 import { ArmorThumb } from "@/components/armor-thumb";
 import { PowerValue } from "@/components/power-value";
@@ -403,12 +402,6 @@ function KindGrid({
   const fits = (o: ModOption) =>
     (exclusive || !full) && (energyLeft === undefined || o.cost <= energyLeft + credit);
   const heading = sockets.length > 1 ? `${KIND_LABEL[kind]}s` : KIND_LABEL[kind];
-  // Sockets nothing was chosen for: apply clears an energy-costing leftover, keeps the rest.
-  const unchosen = sockets.filter(
-    (s) => chosen?.[s.index] === undefined && s.plugHash && s.plugHash !== s.emptyPlugHash,
-  );
-  const removing = unchosen.filter((s) => clearsLeftover(s.plugHash, s.emptyPlugHash, costOf)).length;
-  const keeping = unchosen.length - removing;
 
   const tooltipHandle = useMemo(() => BaseTooltip.createHandle<string>(), []);
 
@@ -431,34 +424,31 @@ function KindGrid({
   );
 
   return (
+    // auto-fill tracks are explicit, so the Clear row's `col-span-full` ends at the last
+    // column of cells, not the panel edge. The row keeps its height with nothing to clear.
     <section
       aria-label={`${heading} on ${piece.name}`}
-      className="space-y-1 text-xs"
+      className="grid grid-cols-[repeat(auto-fill,3.5rem)] gap-0.5 text-xs"
     >
-      <div className="flex flex-wrap items-baseline justify-between gap-x-2">
-        <span className="d2-label text-[10px]">{heading}</span>
-        <span className="text-muted-foreground flex items-baseline gap-1.5 tabular-nums">
-          {sockets.length > 1 ? `${used}/${sockets.length} sockets` : used ? "1/1" : removing ? "Removes current" : "Keeps current"}
-          {keeping > 0 && sockets.length > 1 && ` · ${keeping} kept`}
-          {used > 0 && (
-            <button
-              type="button"
-              onClick={() =>
-                onChange((prev) => {
-                  const next = { ...(prev ?? {}) };
-                  for (const s of sockets) delete next[s.index];
-                  return next;
-                })
-              }
-              className="text-foreground/70 hover:text-foreground cursor-pointer underline-offset-2 hover:underline"
-            >
-              Clear
-            </button>
-          )}
-        </span>
+      <div className="col-span-full mb-0.5 flex h-4 justify-end">
+        {used > 0 && (
+          <button
+            type="button"
+            aria-label={`Clear ${heading.toLowerCase()} on ${piece.name}`}
+            onClick={() =>
+              onChange((prev) => {
+                const next = { ...(prev ?? {}) };
+                for (const s of sockets) delete next[s.index];
+                return next;
+              })
+            }
+            className="text-foreground/70 hover:text-foreground cursor-pointer leading-4 underline-offset-2 hover:underline"
+          >
+            Clear
+          </button>
+        )}
       </div>
-      <div className="flex flex-wrap gap-0.5">
-        {options.map((o) => {
+      {options.map((o) => {
           const count = chosenCount(chosen, sockets, o.hash);
           const canAdd = fits(o);
           return (
@@ -473,7 +463,6 @@ function KindGrid({
             />
           );
         })}
-      </div>
       <BaseTooltip.Root handle={tooltipHandle} disableHoverablePopup>
         {({ payload }) =>
           payload !== undefined ? <TooltipContent>{payload}</TooltipContent> : null
@@ -482,6 +471,9 @@ function KindGrid({
     </section>
   );
 }
+
+/** A subclass or armor column: the same corner-tick well as the equipment slots above it. */
+const EDITOR_COLUMN_CLASS = "d2-corner-well flex min-h-0 min-w-0 flex-col gap-3 p-3";
 
 type PieceChosenUpdate = (
   chosen: Record<number, number> | undefined,
@@ -523,7 +515,7 @@ const PiecePanel = memo(function PiecePanel({
   return (
     <section
       aria-label={`${piece.name}, ${SLOT_LABELS[piece.slot]}`}
-      className="flex min-h-0 min-w-0 flex-col gap-3 px-7 py-2.5"
+      className={EDITOR_COLUMN_CLASS}
     >
       <div className="flex min-w-0 shrink-0 items-center gap-2.5">
         <PieceThumb piece={piece} />
@@ -926,8 +918,8 @@ function EditorForm({
           <p className="text-muted-foreground mb-3 text-xs">{description}</p>
         )}
         {(weapons || artifact) && (
-          // One row of equipment slots: kinetic, energy, power, then the wider artifact.
-          <div className="grid shrink-0 grid-cols-1 gap-2 px-7 pb-4 sm:grid-cols-2 xl:grid-cols-[repeat(3,minmax(0,1fr))_minmax(0,1.5fr)]">
+          // One row of equal equipment slots: kinetic, energy, power, artifact.
+          <div className="grid shrink-0 grid-cols-1 gap-2 pb-2 sm:grid-cols-2 xl:grid-cols-4">
             {weapons && (
               <LoadoutWeaponsEditor section={weapons} value={weaponPicks} onChange={setWeaponPicks} />
             )}
@@ -944,13 +936,13 @@ function EditorForm({
             Gated so the header can paint before ~550 tooltip roots and images mount. */}
         {showGrids && (
           <div
-            className="divide-border grid min-h-0 flex-1 grid-cols-[repeat(auto-fit,minmax(11rem,1fr))] divide-x lg:grid-cols-[repeat(var(--editor-cols),minmax(0,1fr))]"
+            className="grid min-h-0 flex-1 grid-cols-[repeat(auto-fit,minmax(11rem,1fr))] gap-2 lg:grid-cols-[repeat(var(--editor-cols),minmax(0,1fr))]"
             style={{ "--editor-cols": (mods?.pieces.length ?? 0) + (subclass ? 1 : 0) } as CSSProperties}
           >
             {subclass && (
               <section
                 aria-label="Subclass"
-                className="flex min-h-0 min-w-0 flex-col gap-3 px-7 py-2.5"
+                className={EDITOR_COLUMN_CLASS}
               >
                 <div className="flex min-w-0 shrink-0 items-center gap-2.5">
                   <ItemIcon icon={subclassDef?.displayProperties?.icon} size={24} />

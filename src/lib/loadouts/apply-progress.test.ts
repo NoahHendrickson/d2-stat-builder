@@ -54,6 +54,16 @@ describe("applyStreamEvent", () => {
   });
 });
 
+test("cancelled marks what hadn't finished as skipped", () => {
+  const steps = [step("a", "ok"), step("b", "fail"), step("c", "active"), step("d")];
+  expect(applyStreamEvent(steps, { type: "cancelled" }).map((s) => s.status)).toEqual([
+    "ok",
+    "fail",
+    "skipped",
+    "skipped",
+  ]);
+});
+
 describe("finishKind", () => {
   test("ok / partial / fail", () => {
     expect(finishKind([step("a", "ok"), step("b", "ok")])).toBe("ok");

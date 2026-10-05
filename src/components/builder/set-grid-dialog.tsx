@@ -19,6 +19,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ArmorThumb } from "@/components/armor-thumb";
+import { FilterMultiselect } from "@/components/armor-table/filter-multiselect";
 import { StatGlyph } from "@/components/stat-glyph";
 import type { ArmorPiece } from "@/lib/armory/normalize";
 import type { ArmorSetInfo, SetSlotIcon } from "@/lib/armory/sets";
@@ -42,7 +43,6 @@ import {
 import type { ArmorArchetype } from "@/lib/armory/archetypes";
 import { cn } from "@/lib/utils";
 
-const ANY_TUNING = "any";
 const NO_COMPARE = "none";
 /** Inset the menu so item text lines up with the trigger's and highlights don't touch the edges. */
 const MENU_CLASS = "p-1";
@@ -166,7 +166,8 @@ function SetGridBody({
   const [archetypeName, setArchetypeName] = useState(ordered[0]?.name ?? "");
   const archetype = ordered.find((a) => a.name === archetypeName) ?? ordered[0];
 
-  // Only tuned stats owned in the set(s) for this archetype; a pick it lacks falls back to any.
+  // Only tuned stats owned in the set(s) for this archetype; picks it lacks are ignored,
+  // and nothing left picked means any tuning.
   const ownedTuned = useMemo(() => {
     const out = new Set<number>();
     for (const p of pieces) {
@@ -177,10 +178,11 @@ function SetGridBody({
     }
     return out;
   }, [pieces, setHash, otherHash, archetype]);
-  const [tuningPick, setTuning] = useState<string>(ANY_TUNING);
-  const tuning =
-    tuningPick !== ANY_TUNING && ownedTuned.has(Number(tuningPick)) ? tuningPick : ANY_TUNING;
-  const tuned = tuning === ANY_TUNING ? null : Number(tuning);
+  const [tuningPicks, setTuningPicks] = useState<number[]>([]);
+  const tuned = useMemo(
+    () => tuningPicks.filter((t) => ownedTuned.has(t)),
+    [tuningPicks, ownedTuned],
+  );
 
   const grid = useMemo(
     () => (archetype ? setArchetypeGrid(pieces, setHash, archetype, tuned) : null),
@@ -275,11 +277,9 @@ function SetGridBody({
         : `${a.name} (${counts.get(a.name) ?? 0})`,
     ]),
   );
-  const tuningItems: Record<string, string> = { [ANY_TUNING]: "Any tuning" };
-  for (const key of STAT_DISPLAY_ORDER) {
-    const stat = STAT_ORDER.indexOf(key);
-    if (ownedTuned.has(stat)) tuningItems[String(stat)] = `${STAT_LABELS[key]} tuning`;
-  }
+  const tuningOptions = STAT_DISPLAY_ORDER.map((key) => STAT_ORDER.indexOf(key))
+    .filter((stat) => ownedTuned.has(stat))
+    .map((stat) => ({ value: stat, label: `${STAT_LABELS[STAT_ORDER[stat]]} tuning` }));
 
   return (
     <>
@@ -306,22 +306,14 @@ function SetGridBody({
               ))}
             </SelectContent>
           </Select>
-          <Select
-            items={tuningItems}
-            value={tuning}
-            onValueChange={(v) => v != null && setTuning(String(v))}
-          >
-            <SelectTrigger className="w-full" aria-label="Tuning">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent alignItemWithTrigger={false} className={MENU_CLASS}>
-              {Object.entries(tuningItems).map(([value, text]) => (
-                <SelectItem key={value} value={value} className={MENU_ITEM_CLASS}>
-                  {text}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <FilterMultiselect
+            label="Tuning"
+            allLabel="Any tuning"
+            options={tuningOptions}
+            value={tuned}
+            onChange={setTuningPicks}
+            className="w-full"
+          />
         </div>
         {other && (
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
@@ -389,7 +381,11 @@ function SetGridBody({
           first={set.name}
           second={other.name}
           archetype={archetype.name}
-          tunedLabel={tuned === null ? undefined : STAT_LABELS[STAT_ORDER[tuned]]}
+          tunedLabel={
+            tuned.length > 0
+              ? tuned.map((t) => STAT_LABELS[STAT_ORDER[t]]).join(" or ")
+              : undefined
+          }
           coveredFirst={coveredSlots(grid)}
           coveredSecond={coveredSlots(otherGrid)}
         />

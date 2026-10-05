@@ -210,7 +210,8 @@ function SlotPicker({
           <div
             role="listbox"
             aria-label={`${label} weapons`}
-            className="d2-scroll flex max-h-96 flex-col overflow-y-auto overscroll-contain"
+            // pr-2.5: macOS overlay scrollbars ignore the gutter; keep the thumb off the chevrons.
+            className="d2-scroll flex max-h-96 flex-col overflow-y-auto overscroll-contain pr-2.5"
           >
             {options.slice(0, MAX_OPTIONS).map((weapon) => {
               const selected = weapon.instanceId === pick?.id;
@@ -256,7 +257,7 @@ function SlotPicker({
                         aria-expanded={isExpanded}
                         aria-label={`${isExpanded ? "Hide" : "Show"} ${weapon.name} perks`}
                         onClick={() => setExpanded(isExpanded ? null : weapon.instanceId)}
-                        className="text-muted-foreground hover:text-foreground hover:bg-foreground/6 focus-visible:bg-foreground/6 flex size-8 shrink-0 cursor-pointer items-center justify-center self-stretch outline-none"
+                        className="text-muted-foreground hover:text-foreground hover:bg-foreground/6 focus-visible:bg-foreground/6 flex w-8 shrink-0 cursor-pointer items-center justify-center self-stretch outline-none"
                       >
                         <HugeiconsIcon
                           icon={ArrowDown01Icon}

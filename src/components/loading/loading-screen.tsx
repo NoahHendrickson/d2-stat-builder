@@ -1,12 +1,12 @@
 "use client";
 
-import Image from "next/image";
 import { usePathname } from "next/navigation";
-import { memo, useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { useSession } from "@/lib/auth/use-session";
 import { useManifest } from "@/lib/manifest/use-manifest";
 import { useArmory } from "@/lib/armory/use-armory";
 import { loadingView } from "@/lib/loading/progress";
+import { SITE_ICONS, useSiteIcon } from "@/lib/site-icon";
 import { cn } from "@/lib/utils";
 
 /**
@@ -58,37 +58,46 @@ function useEasedProgress(target: number, done: boolean): number {
   return displayed;
 }
 
-/**
- * One pixel-art exotic drifting across the screen. `delay` is negative so the
- * sky is already populated on first paint; `duration`/`size`/`blur` vary for a
- * loose parallax feel (small + blurred reads as far away).
- */
-interface TileSpec {
-  img: number;
-  top: string;
-  size: number;
-  duration: number;
-  delay: number;
-  bob: number;
-  opacity: number;
-  reverse?: boolean;
-  blur?: boolean;
+/** The site icons are 24×24 pixel-art grids (public/favicons). */
+const GRID = 24;
+const PIXELS = GRID * GRID;
+/** How long each icon sits whole before dissolving into the next. */
+const HOLD_MS = 900;
+/** One icon replacing the last, pixel by pixel. */
+const DISSOLVE_MS = 1100;
+
+/** Rasterizes a site icon at its native 24×24, one RGBA word per art pixel. */
+function loadIconPixels(src: string): Promise<Uint32Array> {
+  return new Promise((resolve, reject) => {
+    const img = new window.Image();
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = GRID;
+      canvas.height = GRID;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return reject(new Error("no 2d context"));
+      ctx.drawImage(img, 0, 0, GRID, GRID);
+      try {
+        resolve(new Uint32Array(ctx.getImageData(0, 0, GRID, GRID).data.buffer));
+      } catch (err) {
+        reject(err);
+      }
+    };
+    img.onerror = () => reject(new Error(`failed to load ${src}`));
+    img.src = src;
+  });
 }
 
-const TILES: TileSpec[] = [
-  { img: 1, top: "8%", size: 72, duration: 30, delay: -2, bob: 5.5, opacity: 0.9 },
-  { img: 2, top: "19%", size: 96, duration: 24, delay: -14, bob: 6.3, opacity: 0.95 },
-  { img: 3, top: "13%", size: 44, duration: 38, delay: -25, bob: 4.7, opacity: 0.55, blur: true, reverse: true },
-  { img: 4, top: "68%", size: 88, duration: 26, delay: -8, bob: 5.9, opacity: 0.95 },
-  { img: 5, top: "84%", size: 56, duration: 34, delay: -19, bob: 5.1, opacity: 0.7, reverse: true },
-  { img: 6, top: "74%", size: 104, duration: 22, delay: -5, bob: 6.7, opacity: 0.95 },
-  { img: 5, top: "30%", size: 64, duration: 29, delay: -22, bob: 5.4, opacity: 0.8 },
-  { img: 1, top: "58%", size: 40, duration: 42, delay: -31, bob: 4.4, opacity: 0.5, blur: true, reverse: true },
-  { img: 3, top: "88%", size: 76, duration: 27, delay: -16, bob: 6.1, opacity: 0.9 },
-  { img: 6, top: "38%", size: 48, duration: 36, delay: -9, bob: 4.9, opacity: 0.6, blur: true },
-  { img: 4, top: "4%", size: 52, duration: 33, delay: -27, bob: 5.7, opacity: 0.65, reverse: true },
-  { img: 2, top: "50%", size: 44, duration: 40, delay: -12, bob: 4.6, opacity: 0.5, blur: true },
-];
+/** Every pixel index once, in random order: the order a dissolve swaps them in. */
+function shuffledPixels(): Uint16Array {
+  const order = new Uint16Array(PIXELS);
+  for (let i = 0; i < PIXELS; i++) order[i] = i;
+  for (let i = PIXELS - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [order[i], order[j]] = [order[j], order[i]];
+  }
+  return order;
+}
 
 /**
  * Views that don't wait for the player's gear: the public weapon catalog loads on its
@@ -178,52 +187,98 @@ function ActiveLoadingScreen({
 }
 
 /**
- * Drifting exotics. Purely decorative; reduced motion pauses them in place. Memoized so
- * the progress bar's per-frame state updates don't reconcile twelve images each tick.
+ * The site icons (Settings → site icon) in turn, each dissolving into the next one
+ * random pixel at a time. Starts on the player's picked icon. A 24×24 canvas scaled up
+ * with pixelated sampling, so every art pixel stays a crisp square. Reduced motion
+ * shows the first icon still. Memoized (no props) so the progress bar's per-frame
+ * updates never touch it.
  */
-const Tiles = memo(function Tiles() {
-  return (
-    <div aria-hidden className="absolute inset-0">
-      {TILES.map((tile, i) => (
-        <div
-          key={i}
-          className="loading-tile-drift absolute left-0 will-change-transform"
-          style={
-            {
-              top: tile.top,
-              "--drift-duration": `${tile.duration}s`,
-              "--drift-delay": `${tile.delay}s`,
-              "--drift-direction": tile.reverse ? "reverse" : "normal",
-            } as CSSProperties
-          }
-        >
-          <Image
-            src={`/loading-exotics/exotic-${tile.img}.svg`}
-            alt=""
-            width={tile.size}
-            height={tile.size}
-            unoptimized
-            draggable={false}
-            className={cn(
-              "loading-tile-bob select-none",
-              // Near tiles cast a soft shadow onto the scene; far ones stay flat.
-              tile.blur ? "blur-[1.5px]" : "shadow-[0_10px_28px_rgb(0_0_0/0.35)]",
-            )}
-            style={
-              {
-                opacity: tile.opacity,
-                "--bob-duration": `${tile.bob}s`,
-                "--drift-delay": `${tile.delay}s`,
-              } as CSSProperties
+const PixelDissolve = memo(function PixelDissolve() {
+  const { id: startId } = useSiteIcon();
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [shown, setShown] = useState(false);
+
+  useEffect(() => {
+    const ctx = canvasRef.current?.getContext("2d");
+    if (!ctx) return;
+    const start = Math.max(0, SITE_ICONS.findIndex((i) => i.id === startId));
+    const loads = [...SITE_ICONS.slice(start), ...SITE_ICONS.slice(0, start)].map((i) =>
+      loadIconPixels(i.src),
+    );
+    const frame = new ImageData(GRID, GRID);
+    const framePx = new Uint32Array(frame.data.buffer);
+    let cancelled = false;
+    let raf = 0;
+
+    // Paint the first icon as soon as it's in, without waiting on the rest.
+    loads[0].then(
+      (first) => {
+        if (cancelled) return;
+        framePx.set(first);
+        ctx.putImageData(frame, 0, 0);
+        setShown(true);
+      },
+      () => {},
+    );
+
+    Promise.all(loads).then(
+      (icons) => {
+        if (cancelled || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+        let from = 0;
+        let order = shuffledPixels();
+        let swapped = 0;
+        let dissolving = false;
+        let phaseStart = performance.now();
+        const tick = (now: number) => {
+          const t = now - phaseStart;
+          if (!dissolving) {
+            if (t >= HOLD_MS) {
+              dissolving = true;
+              phaseStart = now;
             }
-          />
-        </div>
-      ))}
-    </div>
+          } else {
+            // Ease in and out so the swap starts and ends on a trickle of pixels.
+            const p = Math.min(1, t / DISSOLVE_MS);
+            const goal = Math.round(PIXELS * p * p * (3 - 2 * p));
+            const to = icons[(from + 1) % icons.length];
+            for (; swapped < goal; swapped++) framePx[order[swapped]] = to[order[swapped]];
+            ctx.putImageData(frame, 0, 0);
+            if (swapped === PIXELS) {
+              from = (from + 1) % icons.length;
+              order = shuffledPixels();
+              swapped = 0;
+              dissolving = false;
+              phaseStart = now;
+            }
+          }
+          raf = requestAnimationFrame(tick);
+        };
+        raf = requestAnimationFrame(tick);
+      },
+      () => {},
+    );
+
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(raf);
+    };
+  }, [startId]);
+
+  return (
+    <canvas
+      ref={canvasRef}
+      width={GRID}
+      height={GRID}
+      aria-hidden
+      className={cn(
+        "size-36 shadow-[0_12px_32px_rgb(0_0_0/0.35)] transition-opacity duration-200 [image-rendering:pixelated]",
+        !shown && "opacity-0",
+      )}
+    />
   );
 });
 
-/** Presentational overlay: floating pixel-art exotics over the app's scene, with the progress text centered on it. */
+/** Presentational overlay: the site icons dissolving into one another on the slate gradient, over the progress bar. */
 export function LoadingScreenView({
   progress,
   message,
@@ -240,19 +295,16 @@ export function LoadingScreenView({
     <div
       role="status"
       aria-live="polite"
-      // The unblurred scene, always dark inside: the text sits straight on the
-      // photo, whatever the app theme. Fading out pulls focus to the blurred
-      // copy the app floats over.
+      // The Slate theme's gradient, always dark inside, whatever the app theme.
       className={cn(
-        "app-backdrop-sharp dark text-foreground fixed inset-0 z-[60] overflow-hidden transition-opacity ease-out",
+        "dark text-foreground fixed inset-0 z-[60] overflow-hidden transition-opacity ease-out",
         fading && "pointer-events-none opacity-0",
       )}
-      style={{ transitionDuration: `${FADE_MS}ms` }}
+      style={{ backgroundImage: "var(--slate-gradient)", transitionDuration: `${FADE_MS}ms` }}
     >
-      <Tiles />
-
-      <div className="relative z-10 flex h-full flex-col items-center justify-center px-6">
-        <div className="flex w-full max-w-sm flex-col gap-3 [text-shadow:0_1px_8px_rgb(0_0_0/0.6)]">
+      <div className="flex h-full flex-col items-center justify-center gap-10 px-6">
+        <PixelDissolve />
+        <div className="flex w-full max-w-sm flex-col gap-3">
           <h1 className="d2-heading text-lg">Loading your armor</h1>
           {/* Drawn like the stat slider's track (ui/slider.tsx): a 10px well
               framed by the line with a 2px gap and the green fill in the white

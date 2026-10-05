@@ -9,6 +9,7 @@ import {
   fieldControlInnerTriggerClasses,
   fieldFilterActiveEdgeClasses,
   fieldFilterControlShellClasses,
+  fieldFilterIdleClasses,
 } from "@/lib/field-surface";
 import { cn } from "@/lib/utils";
 import { Input, SearchClearButton } from "@/components/ui/input";
@@ -230,11 +231,8 @@ export function FilterMultiselect<V extends string | number>({
 
   return (
     <div
-      className={cn(
-        "relative min-w-0 max-w-full overflow-visible",
-        active ? "flex-1" : "w-max",
-        className,
-      )}
+      // Sized to its label, not stretched: a crowded row still shrinks it to truncate.
+      className={cn("relative w-max min-w-0 max-w-full overflow-visible", className)}
     >
       <DropdownMenu
         modal={false}
@@ -246,7 +244,7 @@ export function FilterMultiselect<V extends string | number>({
           className={cn(
             fieldFilterControlShellClasses,
             "box-border w-full",
-            active && fieldFilterActiveEdgeClasses,
+            active ? fieldFilterActiveEdgeClasses : fieldFilterIdleClasses,
           )}
           data-active={active || undefined}
         >
@@ -268,8 +266,9 @@ export function FilterMultiselect<V extends string | number>({
             >
               {active ? (
                 <>
+                  {/* "Class: Titan" — the muted name keeps what's filtered in view. */}
                   <span className="min-w-0 grow truncate text-left">
-                    {summaryText}
+                    <span className="text-white/70">{label}:</span> {summaryText}
                   </span>
                   <span className="size-4 shrink-0" aria-hidden />
                 </>

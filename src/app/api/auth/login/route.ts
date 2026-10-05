@@ -1,12 +1,13 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { buildAuthorizeUrl } from "@/lib/bungie/oauth";
+import { OAUTH_STATE_COOKIE } from "@/lib/bungie/session";
 
 /** Start the OAuth flow: set a CSRF `state` cookie and redirect to Bungie. */
 export async function GET() {
   const state = crypto.randomUUID();
   const jar = await cookies();
-  jar.set("d2_oauth_state", state, {
+  jar.set(OAUTH_STATE_COOKIE, state, {
     httpOnly: true,
     secure: true,
     sameSite: "lax",

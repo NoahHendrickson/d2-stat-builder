@@ -1,6 +1,7 @@
 import type { ApplyStreamEvent, PlugRequest } from "@/lib/bungie/equip-server";
 
-export type ApplyStepStatus = "pending" | "active" | "ok" | "fail";
+/** "skipped": never ran because the apply was cancelled. */
+export type ApplyStepStatus = "pending" | "active" | "ok" | "fail" | "skipped";
 
 export interface ApplyStep {
   id: string;
@@ -20,7 +21,11 @@ export interface ApplyProgressState {
   batch?: string;
   steps: ApplyStep[];
   skipped: string[];
-  finished?: "ok" | "partial" | "fail";
+  finished?: "ok" | "partial" | "fail" | "cancelled";
+  /** The apply can be stopped (it registered a cancel handler). */
+  cancellable?: boolean;
+  /** Cancel was pressed; waiting for the server to stop. */
+  cancelling?: boolean;
 }
 
 export function itemStepId(instanceId: string) {
@@ -52,6 +57,10 @@ export function applyStreamEvent(steps: ApplyStep[], event: ApplyStreamEvent): A
         status: event.result.ok ? "ok" : "fail",
         message: event.result.message,
       });
+    case "cancelled":
+      return steps.map((s) =>
+        s.status === "pending" || s.status === "active" ? { ...s, status: "skipped" as const } : s,
+      );
     case "error":
       return steps.map((s) =>
         s.status === "ok" || s.status === "fail"
@@ -113,6 +122,8 @@ type Listener = () => void;
 
 let snapshot: ApplyProgressState | null = null;
 let session = 0;
+/** The running apply's cancel request, keyed to its session so a stale one can't fire. */
+let cancelHandler: { session: number; cancel: () => Promise<void> } | null = null;
 const listeners = new Set<Listener>();
 
 function emit() {
@@ -133,16 +144,40 @@ export function subscribeApplyProgress(listener: Listener) {
 export function dismissApplyProgress() {
   session += 1;
   snapshot = null;
+  cancelHandler = null;
   emit();
 }
 
 export function beginApplyProgress(
-  init: Omit<ApplyProgressState, "session" | "finished">,
+  init: Omit<ApplyProgressState, "session" | "finished" | "cancellable" | "cancelling">,
+  cancel?: () => Promise<void>,
 ): number {
   session += 1;
-  snapshot = { ...init, session };
+  snapshot = { ...init, session, cancellable: !!cancel };
+  cancelHandler = cancel ? { session, cancel } : null;
   emit();
   return session;
+}
+
+/**
+ * Ask the running apply to stop. The card shows "Cancelling" until the stream reports
+ * the stop (or the apply finishes first); a failed request re-arms the button.
+ */
+export async function cancelApplyProgress() {
+  const handler = cancelHandler;
+  if (!snapshot || snapshot.finished || snapshot.cancelling) return;
+  if (!handler || handler.session !== snapshot.session) return;
+  snapshot = { ...snapshot, cancelling: true };
+  emit();
+  try {
+    await handler.cancel();
+  } catch (err) {
+    if (snapshot?.session === handler.session && !snapshot.finished) {
+      snapshot = { ...snapshot, cancelling: false };
+      emit();
+    }
+    throw err;
+  }
 }
 
 export function patchApplyProgress(id: number, event: ApplyStreamEvent) {
@@ -153,6 +188,7 @@ export function patchApplyProgress(id: number, event: ApplyStreamEvent) {
 
 export function finishApplyProgress(id: number, finished: ApplyProgressState["finished"]) {
   if (snapshot?.session !== id) return;
-  snapshot = { ...snapshot, finished };
+  snapshot = { ...snapshot, finished, cancelling: false };
+  if (cancelHandler?.session === id) cancelHandler = null;
   emit();
 }

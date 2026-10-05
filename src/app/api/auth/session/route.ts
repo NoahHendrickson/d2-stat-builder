@@ -4,7 +4,7 @@ import { createBungieHttp } from "@/lib/bungie/http";
 import {
   clearSession,
   getValidAccessToken,
-  readLegacyUser,
+  readUnconfirmedUser,
   readUser,
   writeUser,
   type SessionUser,
@@ -19,7 +19,12 @@ export async function GET() {
   if (!token) {
     return NextResponse.json({ authenticated: false });
   }
-  const user = (await readUser()) ?? (await migrateLegacyUser(token));
+  const user = (await readUser()) ?? (await confirmUser(token));
+  if (user === UNCHECKED) {
+    // Bungie couldn't be asked right now. Answer signed-out for this load but keep the
+    // cookies, so the next load tries again instead of the outage signing anyone out.
+    return NextResponse.json({ authenticated: false });
+  }
   if (!user) {
     // Tokens without a verifiable identity cookie are dead weight: drop them so the
     // next sign-in is clean.
@@ -32,18 +37,25 @@ export async function GET() {
   });
 }
 
+const UNCHECKED = Symbol("unchecked");
+
 /**
- * Sessions from before the identity cookie was signed still carry it as plain JSON.
- * Rather than signing everyone out on deploy, confirm the identity with Bungie once —
- * the plain cookie is forgeable, so its ids are trusted only after Bungie says the
- * token belongs to them — and rewrite the cookie signed. Anything that doesn't line up
- * reads as no session.
+ * An identity cookie readUser() won't vouch for — plain JSON from before signing, signed
+ * before SESSION_SECRET or expiry existed, or expired — would otherwise sign the user
+ * out. Instead, confirm the identity with Bungie once (its ids are forgeable, so they're
+ * trusted only after Bungie says the token belongs to them) and rewrite the cookie in
+ * the current form. Anything that doesn't line up reads as no session.
  */
-async function migrateLegacyUser(token: string): Promise<SessionUser | null> {
-  const legacy = await readLegacyUser();
+async function confirmUser(token: string): Promise<SessionUser | null | typeof UNCHECKED> {
+  const legacy = await readUnconfirmedUser();
   if (!legacy) return null;
+  let membership;
   try {
-    const membership = await getMembershipDataForCurrentUser(createBungieHttp(token));
+    membership = await getMembershipDataForCurrentUser(createBungieHttp(token));
+  } catch {
+    return UNCHECKED;
+  }
+  try {
     const bungieNetUser = membership.Response?.bungieNetUser;
     if (bungieNetUser?.membershipId !== legacy.membershipId) return null;
     const destinyOk =

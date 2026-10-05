@@ -1,5 +1,5 @@
 import { test, expect } from "vitest";
-import { MemoryLoadoutStore } from "./store";
+import { LoadoutLimitError, MAX_LOADOUTS_PER_ACCOUNT, MemoryLoadoutStore } from "./store";
 import type { SavedLoadoutData } from "./types";
 
 const data = (name: string): SavedLoadoutData => ({
@@ -61,4 +61,11 @@ test("deleteMany removes only the owner's listed rows, or all of them", async ()
   expect((await store.deleteMany("o", "all")).sort()).toEqual([b.id, c.id].sort());
   expect(await store.list("o")).toEqual([]);
   expect((await store.list("x")).map((l) => l.id)).toEqual([other.id]);
+});
+
+test("create refuses past the per-account cap, per owner", async () => {
+  const store = new MemoryLoadoutStore();
+  for (let i = 0; i < MAX_LOADOUTS_PER_ACCOUNT; i++) await store.create("o", data(String(i)));
+  await expect(store.create("o", data("one more"))).rejects.toBeInstanceOf(LoadoutLimitError);
+  await expect(store.create("other", data("fine"))).resolves.toBeTruthy();
 });

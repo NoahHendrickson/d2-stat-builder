@@ -28,6 +28,7 @@ export default function RootLayout({
     <html
       lang="en"
       data-app-theme={DEFAULT_APP_THEME}
+      data-line-style="plain"
       suppressHydrationWarning
       className={geistSans.variable}
     >

@@ -38,13 +38,14 @@ export function tertiaryColumns(archetype: ArmorArchetype): number[] {
 
 /**
  * Count `pieces` of `setHash` rolled as `archetype` into slot × tertiary cells. With
- * `tuned` set, only pieces with that tuned stat count (untunable pieces never do).
+ * `tuned` non-empty, only pieces tuned to one of those stats count (untunable pieces
+ * never do).
  */
 export function setArchetypeGrid(
   pieces: readonly GridPiece[],
   setHash: number,
   archetype: ArmorArchetype,
-  tuned: number | null = null,
+  tuned: readonly number[] = [],
 ): SetGrid {
   const columns = tertiaryColumns(archetype);
   const cells = ARMOR_SLOTS.map(() =>
@@ -52,7 +53,7 @@ export function setArchetypeGrid(
   );
   for (const p of pieces) {
     if (p.setHash !== setHash || p.archetype !== archetype.name) continue;
-    if (tuned !== null && p.tunedStat !== tuned) continue;
+    if (tuned.length > 0 && (p.tunedStat === undefined || !tuned.includes(p.tunedStat))) continue;
     const col = columns.indexOf(tertiaryStatIndex(p.baseStats));
     const row = ARMOR_SLOTS.indexOf(p.slot);
     if (col < 0 || row < 0) continue;

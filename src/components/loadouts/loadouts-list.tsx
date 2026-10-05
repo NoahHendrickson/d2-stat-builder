@@ -6,6 +6,7 @@ import {
   useDeferredValue,
   useMemo,
   useState,
+  useSyncExternalStore,
 } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -51,11 +52,11 @@ import {
   buildShareUrl,
   parseShareParam,
   SHARE_PARAM,
+  shareParamFromHash,
 } from "@/lib/loadouts/share";
 import { countMajorStatMods, isMajorStatMod } from "@/lib/dim/mod-hashes";
 import { selectionsForLoadout } from "@/lib/loadouts/load-in-builder";
 import { loadoutSubclass, withLoadoutSubclass } from "@/lib/loadouts/subclass";
-import { withLoadoutWeapons } from "@/lib/loadouts/weapons";
 import { weaponSlotOfHash } from "@/lib/armory/weapons";
 import { isArtifactHash } from "@/lib/armory/artifact-items";
 import { lastPlayedCharacter } from "@/lib/bungie/equip-client";
@@ -105,6 +106,14 @@ import {
 // Survives the list remounting (leaving the page and coming back) so a dismissed
 // share-link import stays dismissed.
 let dismissedImportParam: string | null = null;
+
+// Share links carry the loadout in the URL fragment, which useSearchParams doesn't see.
+function subscribeHash(onChange: () => void) {
+  window.addEventListener("hashchange", onChange);
+  return () => window.removeEventListener("hashchange", onChange);
+}
+const readHashImport = () => shareParamFromHash(window.location.hash);
+const noHashImport = () => null;
 
 type DialogState =
   | { kind: "none" }
@@ -188,8 +197,10 @@ export function LoadoutsList({
     setPicked(new Set());
   };
 
-  // A share link lands here with ?import=<json>; offer to save a copy.
-  const importParam = searchParams.get(SHARE_PARAM);
+  // A share link lands here with #import=<json> (older ones with ?import=); offer to
+  // save a copy.
+  const hashImport = useSyncExternalStore(subscribeHash, readHashImport, noHashImport);
+  const importParam = hashImport ?? searchParams.get(SHARE_PARAM);
   const importData = useMemo(() => parseShareParam(importParam), [importParam]);
   const [importDismissed, setImportDismissed] = useState<string | null>(
     () => dismissedImportParam,
@@ -323,24 +334,10 @@ export function LoadoutsList({
   }: LoadoutDetailsValues) => {
     if (dialog.kind !== "edit") return;
     const { id, loadout, optimizer, builder, modPlacement } = dialog.loadout;
-    const withWeapons = weapons
-      ? withLoadoutWeapons(
-          loadout,
-          weapons,
-          (ref) => weaponSlotOfHash(manifest, ref.hash) !== undefined,
-        )
-      : loadout;
-    // Same swap for the artifact: undefined = no section shown, null = none.
-    const base =
-      artifact === undefined
-        ? withWeapons
-        : withLoadoutWeapons(withWeapons, artifact ? [artifact] : [], (ref) =>
-            isArtifactHash(manifest, ref.hash),
-          );
     const next: SavedLoadoutData = {
       version: LOADOUT_SCHEMA_VERSION,
       loadout: {
-        ...base,
+        ...loadout,
         name,
         ...(notes ? { notes } : { notes: undefined }),
       },
@@ -357,7 +354,7 @@ export function LoadoutsList({
         data: commitLoadout(
           next,
           manifest,
-          { placement, desiredStatMods, subclass, stats },
+          { placement, desiredStatMods, subclass, weapons, artifact, stats },
           dialog.mods,
         ),
       },

@@ -35,6 +35,11 @@ export interface ApplyOutcome {
   plan: ApplyPlan;
   equip: ItemResult[];
   plugs: PlugResult[];
+  /**
+   * The user stopped it from the progress card. Some steps may have run (the card shows
+   * which), so gear has moved, but `equip` / `plugs` are empty: treat it as not applied.
+   */
+  cancelled?: boolean;
 }
 
 /**
@@ -235,8 +240,21 @@ export async function applySavedLoadout({
   }
 
   const showCard = steps.length > 0;
+  // Names this apply for the card's Cancel button (see apply-loadout/cancel).
+  const applyId = crypto.randomUUID();
+  const requestCancel = async () => {
+    const res = await fetch("/api/bungie/apply-loadout/cancel", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ applyId }),
+    });
+    if (!res.ok) throw new Error("Cancel failed");
+  };
   const session = showCard
-    ? beginApplyProgress({ name: saved.loadout.name, batch, steps, skipped: plan.skipped })
+    ? beginApplyProgress(
+        { name: saved.loadout.name, batch, steps, skipped: plan.skipped },
+        requestCancel,
+      )
     : 0;
 
   const failCard = (message: string) => {
@@ -250,7 +268,7 @@ export async function applySavedLoadout({
     res = await fetch("/api/bungie/apply-loadout", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ characterId: character.id, items, plugs, spares }),
+      body: JSON.stringify({ characterId: character.id, items, plugs, spares, applyId }),
     });
   } catch {
     failCard("Apply failed");
@@ -274,6 +292,7 @@ export async function applySavedLoadout({
   let plugsOut: PlugResult[] = [];
   let streamError: string | undefined;
   let gotDone = false;
+  let cancelled = false;
   try {
     for await (const line of readNdjsonLines(res.body)) {
       let event = parseApplyStreamEvent(line);
@@ -288,6 +307,8 @@ export async function applySavedLoadout({
         equip = event.equip;
         plugsOut = event.plugs;
         gotDone = true;
+      } else if (event.type === "cancelled") {
+        cancelled = true;
       } else if (event.type === "error") {
         streamError = event.error;
         if (event.reauth) void signOutForReauth(queryClient);
@@ -298,6 +319,11 @@ export async function applySavedLoadout({
     // be partially changed — say so rather than leave the card spinning.
     streamError = "Connection lost while applying — refresh your gear to see what changed";
     if (showCard) patchApplyProgress(session, { type: "error", error: streamError });
+  }
+
+  if (cancelled) {
+    if (showCard) finishApplyProgress(session, "cancelled");
+    return { plan, equip: [], plugs: [], cancelled: true };
   }
 
   if (streamError || !gotDone) {

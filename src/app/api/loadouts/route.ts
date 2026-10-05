@@ -4,6 +4,7 @@ import { getServerLoadoutStore } from "@/lib/loadouts/neon-store";
 import { parseSavedLoadoutData } from "@/lib/loadouts/types";
 import { isLoadoutId, notConfigured, storageError } from "@/lib/loadouts/api-responses";
 import { rejectCrossSite } from "@/lib/http/same-origin";
+import { LoadoutLimitError, MAX_LOADOUTS_PER_ACCOUNT } from "@/lib/loadouts/store";
 
 /**
  * Saved loadouts, owned by the signed (tamper-evident) session cookie's Bungie.net
@@ -37,6 +38,12 @@ export async function POST(request: Request) {
     const loadout = await store.create(user.membershipId, data);
     return NextResponse.json({ loadout }, { status: 201 });
   } catch (err) {
+    if (err instanceof LoadoutLimitError) {
+      return NextResponse.json(
+        { error: `You can keep up to ${MAX_LOADOUTS_PER_ACCOUNT} loadouts — delete some to save more` },
+        { status: 409 },
+      );
+    }
     return storageError(err);
   }
 }

@@ -8,7 +8,7 @@ import { Cancel01Icon } from "@hugeicons/core-free-icons"
 import { cn } from "@/lib/utils"
 
 /**
- * Figma "Select Trigger" 69:867: 32px, square, lifted fill, the app's centre-bright line, which brightens on focus.
+ * Figma "Select Trigger" 69:867: 32px, square, lifted fill, a faint white outline that brightens on hover and focus.
  * The browser's own search-field X is hidden; search fields pair with `SearchClearButton` instead.
  */
 function Input({ className, type, ...props }: React.ComponentProps<"input">) {
@@ -17,7 +17,7 @@ function Input({ className, type, ...props }: React.ComponentProps<"input">) {
       type={type}
       data-slot="input"
       className={cn(
-        "d2-line h-8 w-full min-w-0 rounded-none normal:rounded-[10px] bg-lifted px-2.5 py-1 text-base transition-[background-color] outline-none file:inline-flex file:h-6 file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground placeholder:text-muted-foreground hover:[--line-alpha:1.6] focus-visible:[--line-alpha:2.6] focus-visible:d2-line-drift disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-40 aria-invalid:border-destructive md:text-sm [&::-webkit-search-cancel-button]:hidden",
+        "border border-foreground/15 h-8 w-full min-w-0 rounded-none normal:rounded-[10px] bg-lifted px-2.5 py-1 text-base transition-[background-color,border-color] outline-none file:inline-flex file:h-6 file:border-0 file:bg-transparent file:text-sm file:font-medium file:text-foreground placeholder:text-muted-foreground hover:border-foreground/25 focus-visible:border-foreground/40 disabled:pointer-events-none disabled:cursor-not-allowed disabled:opacity-40 aria-invalid:border-destructive md:text-sm [&::-webkit-search-cancel-button]:hidden",
         className
       )}
       {...props}

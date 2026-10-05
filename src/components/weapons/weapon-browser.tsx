@@ -332,13 +332,24 @@ const WeaponDetails = memo(function WeaponDetails({
   }
 
   const poolLabel = catalog.poolLabel(weapon.hash);
+  const frame = frameIcon(weapon, catalog.perks);
+  const origin = [
+    poolLabel !== weapon.source ? weapon.source : undefined,
+    weapon.seasonName,
+  ].filter(Boolean);
   const Title = inDialog ? DialogTitle : "h2";
-  const Description = inDialog ? DialogDescription : "p";
+  const Description = inDialog ? DialogDescription : "div";
   return (
     <>
-      <div className={cn("flex items-center gap-3", inDialog && "pr-8")}>
-        <WeaponIcon weapon={weapon} size={inDialog ? 56 : 72} />
-        <div>
+      {/* The list row, opened up: the same outlined icon, the name, then the
+          row's icons in the same order with where it drops from after them. */}
+      <div className={cn("flex items-center gap-4", inDialog && "pr-8")}>
+        <WeaponIcon
+          weapon={weapon}
+          size={inDialog ? 56 : 72}
+          className="outline-1 -outline-offset-1 outline-foreground/24"
+        />
+        <div className="grid min-w-0 gap-2">
           <Title
             className={cn(
               "font-medium",
@@ -347,37 +358,57 @@ const WeaponDetails = memo(function WeaponDetails({
             )}
           >
             {weapon.name}
+            {poolLabel && (
+              <span className="ml-2 font-normal text-muted-foreground">
+                {poolLabel}
+              </span>
+            )}
           </Title>
-          <Description className="mt-2 flex items-center gap-3 text-sm text-muted-foreground">
-            <span className="flex items-center gap-1.5">
-              <ElementIcon
-                element={weapon.element}
-                damageTypes={catalog.damageTypes}
-                size={16}
+          <Description className="flex items-center gap-4 text-muted-foreground">
+            {weaponTypeIcon(weapon.type, AMMO_TYPE[weapon.ammo]) && (
+              <TypeSilhouette weapon={weapon} />
+            )}
+            <ElementIcon
+              element={weapon.element}
+              damageTypes={catalog.damageTypes}
+              size={18}
+            />
+            {frame && (
+              <Image
+                className="shrink-0"
+                src={`https://www.bungie.net${frame}`}
+                alt={weapon.frame ?? ""}
+                title={weapon.frame}
+                width={20}
+                height={20}
+                unoptimized
               />
-              {weapon.type}
-            </span>
-            <span>{weapon.ammo}</span>
+            )}
+            <AmmoIcon ammo={weapon.ammo} ammoTypes={catalog.ammoTypes} />
+            {weapon.champions?.map((champion) => (
+              <ChampionIcon
+                key={champion}
+                champion={champion}
+                championTypes={catalog.championTypes}
+              />
+            ))}
+            {/* Last on the line and the one part that gives way, so the
+                header stays two lines in a narrow pane. */}
+            {origin.length > 0 && (
+              <span className="ml-2 min-w-0 truncate" title={origin.join(", ")}>
+                {origin.map((part) => (
+                  <span key={part} className="mr-4 last:mr-0">
+                    {part}
+                  </span>
+                ))}
+              </span>
+            )}
           </Description>
         </div>
       </div>
-      <p className="flex flex-wrap gap-x-4 gap-y-1 text-muted-foreground">
-        {[
-          weapon.frame,
-          ...(weapon.champions ?? []).map((champion) => `Anti-${champion}`),
-          weapon.source,
-          poolLabel !== weapon.source ? poolLabel : undefined,
-          weapon.seasonName,
-        ]
-          .filter(Boolean)
-          .map((part) => (
-            <span key={part}>{part}</span>
-          ))}
-      </p>
-      <div className="flex flex-wrap items-start gap-8">
-        {Object.keys(current).length > 0 && (
-          <WeaponStats base={current} stats={preview} />
-        )}
+      {/* Perks first, the stats they move beside them on the right; the stats
+          take what width is left, dropping below once that is under 16rem. */}
+      <div className="flex flex-wrap items-start gap-6">
         <div className="flex max-w-full gap-2.5 overflow-x-auto pb-1">
           {!hasIntrinsic && masterworks.length > 0 && (
             <section
@@ -407,6 +438,11 @@ const WeaponDetails = memo(function WeaponDetails({
             </section>
           ))}
         </div>
+        {Object.keys(current).length > 0 && (
+          <div className="min-w-64 flex-1 basis-64">
+            <WeaponStats base={current} stats={preview} />
+          </div>
+        )}
       </div>
     </>
   );

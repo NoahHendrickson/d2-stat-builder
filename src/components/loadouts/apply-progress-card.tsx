@@ -6,10 +6,13 @@ import { Cancel01Icon, Loading03Icon, Tick02Icon } from "@hugeicons/core-free-ic
 import { Button } from "@/components/ui/button";
 import { TooltipLabel } from "@/components/ui/tooltip";
 import { ArmorThumb } from "@/components/armor-thumb";
+import { toast } from "@/lib/toast";
 import {
+  cancelApplyProgress,
   dismissApplyProgress,
   getApplyProgress,
   subscribeApplyProgress,
+  type ApplyProgressState,
   type ApplyStep,
 } from "@/lib/loadouts/apply-progress";
 import { cn } from "@/lib/utils";
@@ -26,7 +29,9 @@ function Cell({ step }: { step: ApplyStep }) {
         ? step.message ?? "failed"
         : step.status === "active"
           ? "applying"
-          : "waiting";
+          : step.status === "skipped"
+            ? "cancelled"
+            : "waiting";
   const label = [step.name, state].join(" · ");
   return (
     <TooltipLabel label={label}>
@@ -35,7 +40,7 @@ function Cell({ step }: { step: ApplyStep }) {
         aria-label={label}
         className={cn(
           "relative flex aspect-square w-full min-w-0 items-center justify-center border border-input leading-none",
-          step.status === "pending" && "opacity-40",
+          (step.status === "pending" || step.status === "skipped") && "opacity-40",
           step.status === "active" && "border-foreground d2-tile-selected",
           step.status === "ok" && "border-positive",
           step.status === "fail" && "border-destructive",
@@ -73,14 +78,15 @@ function Cell({ step }: { step: ApplyStep }) {
   );
 }
 
-function titleFor(name: string, finished: "ok" | "partial" | "fail" | undefined) {
+function titleFor(name: string, finished: ApplyProgressState["finished"]) {
   if (finished === "ok") return `${name} applied`;
+  if (finished === "cancelled") return `Stopped applying ${name}`;
   if (finished === "partial") return `Partially applied ${name}`;
   if (finished === "fail") return `Couldn't apply ${name}`;
   return `Applying ${name}`;
 }
 
-/** Apply-loadout progress — lives on the main column so it outlives a collapsed sidebar / closed drawer. */
+/** Apply-loadout progress — floats on the main column so it outlives a collapsed sidebar / closed drawer. */
 export function ApplyProgressSection() {
   const state = useSyncExternalStore(subscribeApplyProgress, getApplyProgress, () => null);
 
@@ -100,7 +106,10 @@ export function ApplyProgressSection() {
       role="status"
       aria-live="polite"
       aria-label={title}
-      className="m-3 flex shrink-0 flex-col gap-2 rounded-md border border-foreground/15 bg-popover p-3 text-popover-foreground shadow-[0_8px_24px_rgb(0_0_0/0.45)]"
+      // Pinned to the main column's top-left (its contain-layout is the containing
+      // block), clear of the mobile header. A fixed 6-across grid keeps it square-ish.
+      // On Slate the menu fill reads too blue for a card this big: same lift, less hue.
+      className="d2-glass [.dark[data-app-theme=slate]_&]:[--glass-raised:rgb(68_76_92/92%)] animate-in fade-in-0 slide-in-from-top-2 absolute top-[4.25rem] left-3 z-40 flex w-60 flex-col gap-3 p-3 text-popover-foreground motion-reduce:animate-none lg:top-3"
     >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
@@ -122,11 +131,32 @@ export function ApplyProgressSection() {
           <HugeiconsIcon icon={Cancel01Icon} aria-hidden />
         </Button>
       </div>
-      <div role="list" className="grid grid-cols-[repeat(auto-fill,minmax(2rem,1fr))] gap-1.5">
+      <div role="list" className="grid grid-cols-6 gap-1.5">
         {state.steps.map((step) => (
           <Cell key={step.id} step={step} />
         ))}
       </div>
+      {state.cancellable && !state.finished && (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={state.cancelling}
+          onClick={() =>
+            cancelApplyProgress().catch(() => toast.error("Couldn't cancel — try again"))
+          }
+        >
+          {state.cancelling && (
+            <HugeiconsIcon icon={Loading03Icon} className="animate-spin" aria-hidden />
+          )}
+          {state.cancelling ? "Cancelling" : "Cancel"}
+        </Button>
+      )}
+      {state.finished === "cancelled" && (
+        <p className="text-muted-foreground text-xs">
+          Steps that already ran stay applied. Dimmed ones never ran.
+        </p>
+      )}
       {state.finished && state.skipped.length > 0 && (
         <p className="text-muted-foreground text-xs">{state.skipped.join(" · ")}</p>
       )}

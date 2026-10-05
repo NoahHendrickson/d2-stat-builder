@@ -1,5 +1,5 @@
 import { test, expect } from "vitest";
-import { decodeSigned, encodeSigned } from "./signed-cookie";
+import { decodeSigned, encodeSigned, readUnverified } from "./signed-cookie";
 
 const SECRET = "test-secret";
 
@@ -29,4 +29,13 @@ test("rejects legacy unsigned JSON and garbage", async () => {
   expect(await decodeSigned(undefined, SECRET)).toBeNull();
   expect(await decodeSigned("a.b", SECRET)).toBeNull();
   expect(await decodeSigned("no-dot", SECRET)).toBeNull();
+});
+
+test("readUnverified reads the payload whatever the signature", async () => {
+  const value = { membershipId: "123", exp: 1 };
+  const raw = await encodeSigned(value, "some-other-key");
+  expect(readUnverified(raw)).toEqual(value);
+  expect(await decodeSigned(raw, SECRET)).toBeNull();
+  expect(readUnverified("not base64 json")).toBeNull();
+  expect(readUnverified(undefined)).toBeNull();
 });

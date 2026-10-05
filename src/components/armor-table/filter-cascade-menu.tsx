@@ -20,6 +20,7 @@ import {
   fieldControlInnerTriggerClasses,
   fieldFilterActiveEdgeClasses,
   fieldFilterControlShellClasses,
+  fieldFilterIdleClasses,
 } from "@/lib/field-surface";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -182,7 +183,7 @@ export function FilterCascadeMenu({
         className={cn(
           fieldFilterControlShellClasses,
           "min-w-28 shrink-0",
-          active && fieldFilterActiveEdgeClasses,
+          active ? fieldFilterActiveEdgeClasses : fieldFilterIdleClasses,
         )}
         data-active={active || undefined}
       >

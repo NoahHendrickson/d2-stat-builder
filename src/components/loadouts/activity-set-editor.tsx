@@ -84,8 +84,14 @@ function SlotAssignment({
       >
         <PopoverTrigger
           aria-label={`Slot ${label}: ${pick ? pick.loadout.name : assigned ? "a deleted loadout" : "not assigned"}`}
-          // Stacked like the game's loadout grid: emblem on top, names under it.
-          className={cn(LOADOUT_SLOT_CLASS, "flex-col justify-start gap-1.5 px-1.5 text-center")}
+          data-assigned={assigned ? "" : undefined}
+          // Stacked like the game's loadout grid: emblem on top, names under it. An
+          // assigned slot is filled in so the set's picks stand out from the rest.
+          className={cn(
+            LOADOUT_SLOT_CLASS,
+            "flex-col justify-start gap-1.5 px-1.5 text-center",
+            "data-[assigned]:border-foreground/30 data-[assigned]:bg-foreground/12 data-[assigned]:[--tick-alpha:70%]",
+          )}
         >
           {slot.empty ? (
             <EmptySlotIcon />
