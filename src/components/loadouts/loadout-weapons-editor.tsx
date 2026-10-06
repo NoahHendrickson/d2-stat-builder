@@ -50,11 +50,15 @@ export function weaponPickRefs(picks: WeaponPicks): DimLoadoutItem[] {
 }
 
 /**
- * An equipment slot in the editor (weapons, artifact): the game's icon well — a faint
- * frame with corner ticks — so the row reads as slots to fill, not loose text.
+ * An equipment slot (weapons, artifact): the game's icon well — a faint frame with
+ * corner ticks — so the row reads as slots, not loose text. The loadout card shows it
+ * as is; the editor's clickable version is LOADOUT_SLOT_CLASS.
  */
-export const LOADOUT_SLOT_CLASS =
-  "d2-corner-well d2-hover-ring hover:[--tick-alpha:60%] data-[popup-open]:[--tick-alpha:60%] data-[popup-open]:bg-foreground/8 flex h-full min-h-16 w-full min-w-0 cursor-pointer items-center gap-3 p-2 text-left outline-none transition-colors focus-visible:ring-1 focus-visible:ring-outline-strong";
+export const LOADOUT_SLOT_WELL_CLASS =
+  "d2-corner-well flex h-full min-h-16 w-full min-w-0 items-center gap-3 p-2 text-left";
+
+/** An equipment slot in the editor: the well, plus hover and open states. */
+export const LOADOUT_SLOT_CLASS = `${LOADOUT_SLOT_WELL_CLASS} d2-hover-ring hover:[--tick-alpha:60%] data-[popup-open]:[--tick-alpha:60%] data-[popup-open]:bg-foreground/8 cursor-pointer outline-none transition-colors focus-visible:ring-1 focus-visible:ring-outline-strong`;
 
 /** An unfilled slot: the empty-socket bracket corners around a plus. */
 export function EmptySlotIcon() {

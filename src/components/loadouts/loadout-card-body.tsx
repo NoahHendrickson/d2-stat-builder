@@ -5,6 +5,7 @@ import { subclassFromPlug } from "@/lib/armory/fragments";
 import { isFullyMasterworked } from "@/lib/armory/masterwork";
 import { armorPipTier } from "@/lib/armory/normalize";
 import { SLOT_LABELS } from "@/lib/armory/stats";
+import { artifactPerkColumns, artifactPerkSockets } from "@/lib/armory/artifact-items";
 import { ABILITY_KINDS, ABILITY_LABELS } from "@/lib/dim/subclasses";
 import type { Manifest } from "@/lib/manifest/load";
 import { WEAPON_SLOT_LABELS } from "@/lib/armory/weapons";
@@ -18,9 +19,9 @@ import type {
 import { superSocketIndex } from "@/lib/loadouts/subclass";
 import type { SavedLoadout } from "@/lib/loadouts/types";
 import { ArmorThumb } from "@/components/armor-thumb";
-import { TooltipLabel } from "@/components/ui/tooltip";
 import { PowerValue } from "@/components/power-value";
 import { ManifestIcon, PlugIcon } from "@/components/loadouts/loadout-row-details";
+import { LOADOUT_SLOT_WELL_CLASS } from "@/components/loadouts/loadout-weapons-editor";
 import { cn } from "@/lib/utils";
 
 /** Mod tiles: 40px on the wide card, 32px in the compact icon columns. */
@@ -64,54 +65,80 @@ function TileRow({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-/** The loadout's weapons (it may carry none): one tile per saved slot. */
-function WeaponsGroup({ weapons }: { weapons: ResolvedWeaponItem[] }) {
-  if (weapons.length === 0) return null;
+/** A saved weapon as the editor's slot shows it: art, slot, name, type. */
+function WeaponSlot({ item }: { item: ResolvedWeaponItem }) {
+  const label = WEAPON_SLOT_LABELS[item.slot];
   return (
-    <TileRow label="Weapons">
-      {weapons.map((item) => {
-        const label = [
-          item.name,
-          WEAPON_SLOT_LABELS[item.slot],
-          ...(item.missing ? ["Missing"] : []),
-        ].join(", ");
-        return (
-          <TooltipLabel key={item.ref.id ?? item.ref.hash} label={label}>
-            <span tabIndex={0} aria-label={label} className="flex outline-none">
-              <ArmorThumb
-                icon={item.icon}
-                watermark={item.weapon?.watermark}
-                size={40}
-                className={cn(item.missing && "opacity-50")}
-              />
-            </span>
-          </TooltipLabel>
-        );
-      })}
-    </TileRow>
+    <div role="group" aria-label={`${label} weapon: ${item.name}`} className={LOADOUT_SLOT_WELL_CLASS}>
+      <ArmorThumb
+        icon={item.icon}
+        watermark={item.weapon?.watermark}
+        size={48}
+        className={cn(item.missing && "opacity-50")}
+      />
+      <span className="flex min-w-0 flex-col">
+        <span className="d2-label text-[10px] leading-4">{label}</span>
+        <span
+          className={cn("truncate text-sm leading-5", item.weapon?.isExotic && "text-exotic")}
+          title={item.name}
+        >
+          {item.name}
+        </span>
+        <span className="text-muted-foreground truncate text-xs leading-4">
+          {item.missing ? <span className="text-warning">Missing</span> : item.weapon?.typeName}
+        </span>
+      </span>
+    </div>
   );
 }
 
-/** The loadout's artifact and its perks; a perk's name lives in its tooltip. */
-function ArtifactGroup({
+/** The saved artifact as the editor's slot shows it: art, name, perks in grid order. */
+function ArtifactSlot({ artifact, manifest }: { artifact: ResolvedArtifact; manifest: Manifest }) {
+  const picked = new Set(artifact.perks);
+  const ordered = artifactPerkColumns(artifactPerkSockets(manifest, artifact.itemHash))
+    .flat()
+    .filter((hash) => picked.has(hash));
+  // A perk the cached columns don't list still shows, after the rest.
+  const perks = [...ordered, ...artifact.perks.filter((hash) => !ordered.includes(hash))];
+  return (
+    <div role="group" aria-label={`Artifact: ${artifact.name}`} className={LOADOUT_SLOT_WELL_CLASS}>
+      <ArmorThumb icon={artifact.icon} size={48} />
+      <span className="flex min-w-0 flex-col">
+        <span className="d2-label text-[10px] leading-4">Artifact</span>
+        <span className="truncate text-sm leading-5" title={artifact.name}>
+          {artifact.name}
+        </span>
+        {/* 20px perks so all seven fit an equal-width slot. */}
+        <span className="flex items-center gap-0.5">
+          {perks.length > 0 ? (
+            perks.map((hash) => <PlugIcon key={hash} hash={hash} manifest={manifest} size={20} />)
+          ) : (
+            <span className="text-muted-foreground text-[10px] leading-4">No perks</span>
+          )}
+        </span>
+      </span>
+    </div>
+  );
+}
+
+/** The loadout's weapons and artifact (it may carry neither) as the editor's slot row. */
+function EquipmentRow({
+  weapons,
   artifact,
   manifest,
 }: {
+  weapons: ResolvedWeaponItem[];
   artifact: ResolvedArtifact | undefined;
   manifest: Manifest;
 }) {
-  if (!artifact) return null;
+  if (weapons.length === 0 && !artifact) return null;
   return (
-    <TileRow label="Artifact">
-      <TooltipLabel label={artifact.name}>
-        <span tabIndex={0} aria-label={artifact.name} className="flex outline-none">
-          <ArmorThumb icon={artifact.icon} size={40} />
-        </span>
-      </TooltipLabel>
-      {artifact.perks.map((hash) => (
-        <PlugIcon key={hash} hash={hash} manifest={manifest} size={40} sizeClassName={MOD_SIZE_CLASS} />
+    <div className="grid grid-cols-1 gap-2 @md:grid-cols-2 @3xl:grid-cols-4">
+      {weapons.map((item) => (
+        <WeaponSlot key={item.ref.id ?? item.ref.hash} item={item} />
       ))}
-    </TileRow>
+      {artifact && <ArtifactSlot artifact={artifact} manifest={manifest} />}
+    </div>
   );
 }
 
@@ -309,8 +336,9 @@ function PieceColumn({
 }
 
 /**
- * The card's body, laid out like the editor drawer: the subclass column on the far left,
- * then one column per armor piece with its mods. Below the card's `@3xl` width the
+ * The card's body, laid out like the editor drawer: the weapons and artifact as a row of
+ * slots on top, then the subclass column on the far left and one column per armor piece
+ * with its mods. Below the card's `@3xl` width the
  * subclass sits on top and the pieces shrink to icon columns.
  */
 export function LoadoutCardBody({
@@ -326,18 +354,17 @@ export function LoadoutCardBody({
   const pieceCols = Math.max(resolved.armor.length, 1);
   return (
     <div className="flex flex-col gap-3">
+      <EquipmentRow weapons={resolved.weapons} artifact={resolved.artifact} manifest={manifest} />
       <div
         className="grid gap-x-4 gap-y-4 [grid-template-columns:repeat(var(--pieces),minmax(0,1fr))] @3xl:[grid-template-columns:minmax(16rem,1.25fr)_repeat(var(--pieces),minmax(0,1fr))] @3xl:divide-x @3xl:divide-foreground/8 @3xl:gap-x-0 @3xl:*:px-4 @3xl:*:first:pl-0 @3xl:*:last:pr-0"
         style={{ "--pieces": pieceCols } as CSSProperties}
       >
-        <div className="col-span-full flex flex-col gap-4 @3xl:col-span-1">
+        <div className="col-span-full @3xl:col-span-1">
           <SubclassColumn
             subclass={resolved.subclass}
             manifest={manifest}
             classType={loadout.classType}
           />
-          <WeaponsGroup weapons={resolved.weapons} />
-          <ArtifactGroup artifact={resolved.artifact} manifest={manifest} />
         </div>
         {resolved.armor.map((item, i) => (
           <PieceColumn
