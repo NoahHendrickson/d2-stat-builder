@@ -336,10 +336,10 @@ function PieceColumn({
 }
 
 /**
- * The card's body, laid out like the editor drawer: the weapons and artifact as a row of
- * slots on top, then the subclass column on the far left and one column per armor piece
- * with its mods. Below the card's `@3xl` width the
- * subclass sits on top and the pieces shrink to icon columns.
+ * The card's body, laid out like the editor drawer: the subclass column on the far left,
+ * then one column per armor piece with its mods, and the weapons and artifact as a row of
+ * slots underneath. Below the card's `@3xl` width the subclass sits on top and the pieces
+ * shrink to icon columns.
  */
 export function LoadoutCardBody({
   saved,
@@ -354,7 +354,6 @@ export function LoadoutCardBody({
   const pieceCols = Math.max(resolved.armor.length, 1);
   return (
     <div className="flex flex-col gap-3">
-      <EquipmentRow weapons={resolved.weapons} artifact={resolved.artifact} manifest={manifest} />
       <div
         className="grid gap-x-4 gap-y-4 [grid-template-columns:repeat(var(--pieces),minmax(0,1fr))] @3xl:[grid-template-columns:minmax(16rem,1.25fr)_repeat(var(--pieces),minmax(0,1fr))] @3xl:divide-x @3xl:divide-foreground/8 @3xl:gap-x-0 @3xl:*:px-4 @3xl:*:first:pl-0 @3xl:*:last:pr-0"
         style={{ "--pieces": pieceCols } as CSSProperties}
@@ -392,6 +391,7 @@ export function LoadoutCardBody({
           </div>
         </div>
       )}
+      <EquipmentRow weapons={resolved.weapons} artifact={resolved.artifact} manifest={manifest} />
     </div>
   );
 }
