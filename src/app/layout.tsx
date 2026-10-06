@@ -5,6 +5,7 @@ import { AppShell } from "@/components/app-shell";
 import { LoadingScreen } from "@/components/loading/loading-screen";
 import { Providers } from "@/components/providers";
 import { Analytics } from "@/components/analytics";
+import { SearchSelectOnRefocus } from "@/components/search-select-on-refocus";
 import { EARLY_FETCH_SCRIPT } from "@/lib/early-fetch";
 import { APP_THEME_SCRIPT, DEFAULT_APP_THEME } from "@/lib/app-theme-script";
 
@@ -52,6 +53,7 @@ export default function RootLayout({
           <AppShell>{children}</AppShell>
           <LoadingScreen />
         </Providers>
+        <SearchSelectOnRefocus />
         <Analytics />
       </body>
     </html>
