@@ -25,6 +25,12 @@ import { PowerValue } from "@/components/power-value";
 import { StatGlyph } from "@/components/stat-glyph";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
+  ASCENDANT_SHARD_HASH,
+  ENHANCEMENT_CORE_HASH,
+  ENHANCEMENT_PRISM_HASH,
+  GLIMMER_HASH,
+} from "@/lib/armory/masterwork";
+import {
   CLASS_NAMES,
   STAT_DISPLAY_ORDER,
   STAT_LABELS,
@@ -38,6 +44,8 @@ import {
   type BucketRow,
 } from "@/lib/inventory/buckets";
 import {
+  ASCENDANT_ALLOY_HASH,
+  BRIGHT_DUST_HASH,
   OTHER_BUCKET,
   type InventoryItem,
   type ManagerCharacter,
@@ -403,10 +411,11 @@ function InventoryGrid({
     gridTemplateColumns: `${compact ? "max-content" : `repeat(${characters.length}, max-content)`}${aligned ? " minmax(0, 1fr)" : ""}`,
   };
   // Nameplate, postmaster, then every slot row: each column spans them all on a subgrid,
-  // so rows still line up across characters (and with the vault). Aligned, a row of tabs
-  // comes first, and the vault ends with a row of its own for what no character holds.
+  // so rows still line up across characters (and with the vault). Aligned, the vault's
+  // title and tabs sit level with the nameplates (compact, a row of character tabs comes
+  // first for them to share), and the vault ends with a row for what no character holds.
   const rowCount = 2 + SLOT_ROWS.length;
-  const firstRow = aligned ? 2 : 1;
+  const firstRow = aligned && compact ? 2 : 1;
   const manifestStatus = useManifest();
   const manifest = manifestStatus.state === "ready" ? manifestStatus.manifest : undefined;
   const statIcons = useMemo(() => statIconsFromManifest(manifest), [manifest]);
@@ -460,7 +469,7 @@ function InventoryGrid({
             ))}
           </DropZone>
         ))}
-        {aligned && <AlignedVault inventory={inventory} rowSpan={rowCount + 2} />}
+        {aligned && <AlignedVault inventory={inventory} headerRows={firstRow} rowSpan={firstRow + rowCount} />}
       </div>
     </section>
   );
@@ -524,14 +533,14 @@ function CharacterHeader({
     : undefined;
 
   return (
-    <div className="sticky top-8 z-10 pb-1 group-data-scrolled/manager:bg-glass-opaque">
+    <div className="sticky top-8 z-10 pb-3 group-data-scrolled/manager:bg-glass-opaque">
         <DropdownMenu>
           <DropdownMenuTrigger
             render={
               <button
                 type="button"
                 aria-label={`${name} options`}
-                className="relative block h-12 w-full overflow-hidden border border-foreground/15 text-left outline-none focus-visible:d2-tile-selected normal:rounded-[12px]"
+                className="relative block h-16 w-full overflow-hidden border border-foreground/15 text-left outline-none focus-visible:d2-tile-selected normal:rounded-[12px]"
               />
             }
           >
@@ -540,7 +549,7 @@ function CharacterHeader({
                 src={`${BUNGIE_IMAGE_BASE}${character.emblemBackgroundPath}`}
                 alt=""
                 fill
-                sizes="240px"
+                sizes="320px"
                 className="object-cover object-left"
                 onError={() => setImgFailed(true)}
                 unoptimized
@@ -552,12 +561,12 @@ function CharacterHeader({
               />
             )}
             <div className="absolute inset-0 bg-gradient-to-r from-black/10 via-black/45 to-black/75" />
-            <div className="absolute inset-y-0 right-0 flex flex-col items-end justify-center gap-0.5 px-2.5 text-right">
-              <span className="d2-heading text-xs leading-none text-white drop-shadow">{name}</span>
-              <PowerValue value={character.light} size="xs" className="drop-shadow" />
+            <div className="absolute inset-y-0 right-0 flex flex-col items-end justify-center gap-1 px-3 text-right">
+              <span className="d2-heading text-sm leading-none text-white drop-shadow">{name}</span>
+              <PowerValue value={character.light} size="sm" className="leading-none drop-shadow" />
               {character.maxPower !== undefined && (
                 <span
-                  className="text-[10px] leading-none text-white/75 tabular-nums drop-shadow"
+                  className="text-[11px] leading-none text-white/75 tabular-nums drop-shadow"
                   title="The highest gear power this character could equip from your whole account"
                 >
                   Max {character.maxPower}
@@ -602,11 +611,11 @@ function CharacterStats({
 }) {
   if (Object.keys(stats).length === 0) return null;
   return (
-    <dl className="flex justify-between pt-1.5 text-xs">
+    <dl className="flex justify-between pt-2.5 text-xs">
       {STAT_DISPLAY_ORDER.map((key) => (
-        <div key={key} className="flex items-center gap-0.5">
+        <div key={key} className="flex items-center gap-1">
           <dt>
-            <StatGlyph src={icons[key]} label={STAT_LABELS[key]} className="size-3.5" />
+            <StatGlyph src={icons[key]} label={STAT_LABELS[key]} className="size-4" />
           </dt>
           <dd className="tabular-nums">{stats[key] ?? "–"}</dd>
         </div>
@@ -666,29 +675,24 @@ function PostmasterCell({ items, capacity }: { items: InventoryItem[]; capacity:
   // The game warns once the postmaster is close to overflowing (and losing items).
   const nearlyFull = items.length >= capacity - 3;
   return (
-    <div className="pt-2">
-      <div className="d2-card-frame flex flex-col gap-2 p-2 normal:[--card-radius:10px]">
-        <div className="flex items-baseline justify-between gap-2 text-xs">
-          <h3 className="d2-label">Postmaster</h3>
-          <span
-            className={cn(
-              "tabular-nums",
-              nearlyFull ? "text-destructive" : "text-muted-foreground",
-            )}
-          >
-            {items.length === 0 ? "Empty" : `${items.length} / ${capacity}`}
-          </span>
-        </div>
-        {items.length > 0 && (
-          // Full-size tiles like every slot row (smaller ones clip the Power); four across
-          // keeps the card inside the column width the slot rows set.
-          <div className="grid grid-cols-[repeat(4,56px)] gap-1.5">
-            {items.map((item) => (
-              <ItemTile key={item.key} item={item} />
-            ))}
-          </div>
-        )}
+    <div className="flex flex-col gap-2 pt-2">
+      <div className="flex items-baseline justify-between gap-2 text-xs">
+        <h3 className="d2-label">Postmaster</h3>
+        <span
+          className={cn("tabular-nums", nearlyFull ? "text-destructive" : "text-muted-foreground")}
+        >
+          {items.length === 0 ? "Empty" : `${items.length} / ${capacity}`}
+        </span>
       </div>
+      {items.length > 0 && (
+        // Full-size tiles like every slot row (smaller ones clip the Power); four across
+        // keeps the grid inside the column width the slot rows set.
+        <div className="grid grid-cols-[repeat(4,56px)] gap-1.5">
+          {items.map((item) => (
+            <ItemTile key={item.key} item={item} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -771,7 +775,16 @@ const NO_SECTIONS: readonly VaultSection[] = [];
  * slot on the characters, and last what no character slot holds. The whole column is
  * one drop target.
  */
-function AlignedVault({ inventory, rowSpan }: { inventory: ManagerInventory; rowSpan: number }) {
+function AlignedVault({
+  inventory,
+  headerRows,
+  rowSpan,
+}: {
+  inventory: ManagerInventory;
+  /** Rows above the postmasters' row: the vault's header takes the first. */
+  headerRows: number;
+  rowSpan: number;
+}) {
   const { gear, extra } = useVaultSections(inventory);
   // Each slot's bucket on its own, without a heading: the row it's on names it.
   const bySlot = useMemo(
@@ -786,13 +799,12 @@ function AlignedVault({ inventory, rowSpan }: { inventory: ManagerInventory; row
       className="grid min-w-0 grid-rows-subgrid pl-3"
       style={{ gridColumn: "-2", gridRow: `1 / span ${rowSpan}` }}
     >
-      <VaultTabs />
-      <div className="sticky top-8 z-10 pb-1 group-data-scrolled/manager:bg-glass-opaque">
-        <VaultSpace inventory={inventory} />
+      <div className="flex flex-col justify-between">
+        <VaultTitle inventory={inventory} />
+        <VaultTabs inventory={inventory} />
       </div>
-      <div className="pt-2">
-        <VaultCurrencies inventory={inventory} />
-      </div>
+      {/* Down to the postmasters' row: nothing of the vault's own. */}
+      <div style={{ gridRow: `span ${headerRows}` }} />
       {SLOT_ROWS.map(({ row, groupStart }) => (
         <div key={row.hash} className={cn("min-w-0 pb-2", groupStart && "pt-5")}>
           <VaultLines sections={bySlot.get(String(row.hash)) ?? NO_SECTIONS} pad={SLOT_PAD_PX} />
@@ -813,11 +825,8 @@ function VaultPane({ inventory }: { inventory: ManagerInventory }) {
   return (
     <DropZone to={{ kind: "vault" }} className="flex min-w-0 flex-col">
       <section aria-label="Vault" className="flex flex-col">
-        <VaultTabs />
-        <header className="flex flex-col gap-2 pb-2">
-          <VaultSpace inventory={inventory} />
-          <VaultCurrencies inventory={inventory} />
-        </header>
+        <VaultTitle inventory={inventory} />
+        <VaultTabs inventory={inventory} />
         <div className="flex flex-col pb-4">
           <VaultLines sections={sections} />
         </div>
@@ -826,23 +835,41 @@ function VaultPane({ inventory }: { inventory: ManagerInventory }) {
   );
 }
 
-/** Which of the vault's sections to show: everything, or just weapons or armor. */
-function VaultTabs() {
+/**
+ * Which of the vault's sections to show: everything, or just weapons or armor (each with
+ * how many the vault holds). The currencies share the tabs' line, wrapping beside them.
+ */
+function VaultTabs({ inventory }: { inventory: ManagerInventory }) {
   const view = useViewSettings();
+  const { vault } = inventory;
+  const count = (tab: VaultTab) =>
+    VAULT_GROUPS.find((g) => g.label === VAULT_TAB_LABELS[tab])?.rows.reduce(
+      (n, row) => n + (vault[row.hash]?.length ?? 0),
+      0,
+    );
   return (
-    <Tabs
-      value={view.vaultTab}
-      onValueChange={(tab) => setViewSettings({ ...view, vaultTab: tab as VaultTab })}
-      className="pb-3"
-    >
-      <TabsList variant="line" aria-label="Vault sections" className="w-full justify-start">
-        {VAULT_TABS.map((tab) => (
-          <TabsTrigger key={tab} value={tab} className="flex-none">
-            {VAULT_TAB_LABELS[tab]}
-          </TabsTrigger>
-        ))}
-      </TabsList>
-    </Tabs>
+    <div className="mb-3 flex items-end gap-6 border-b border-foreground/12">
+      <Tabs
+        value={view.vaultTab}
+        onValueChange={(tab) => setViewSettings({ ...view, vaultTab: tab as VaultTab })}
+        className="flex-none"
+      >
+        <TabsList variant="line" aria-label="Vault sections" className="border-b-0">
+          {VAULT_TABS.map((tab) => {
+            const n = tab === "all" ? undefined : count(tab);
+            return (
+              <TabsTrigger key={tab} value={tab} className="flex-none">
+                <span className="tabular-nums">
+                  {VAULT_TAB_LABELS[tab]}
+                  {n !== undefined && ` (${n})`}
+                </span>
+              </TabsTrigger>
+            );
+          })}
+        </TabsList>
+      </Tabs>
+      <VaultCurrencies inventory={inventory} />
+    </div>
   );
 }
 
@@ -961,81 +988,64 @@ const VaultLineRow = memo(function VaultLineRow({ line }: { line: VaultTileLine 
   );
 });
 
-/** Vault space (total, and per kind of item), and the account-wide inventories' space. */
-function VaultSpace({ inventory }: { inventory: ManagerInventory }) {
-  const { vault, account, vaultCount, vaultCapacity, accountCapacity } = inventory;
-  const counts = [
-    ...VAULT_GROUPS.map((group) => ({
-      label: group.label,
-      count: group.rows.reduce((n, row) => n + (vault[row.hash]?.length ?? 0), 0),
-      capacity: undefined as number | undefined,
-    })),
-    ...((vault[OTHER_BUCKET]?.length ?? 0) > 0
-      ? [{ label: "Other", count: vault[OTHER_BUCKET]?.length ?? 0, capacity: undefined }]
-      : []),
-    ...ACCOUNT_ROWS.map((row) => ({
-      label: row.label,
-      count: account[row.hash]?.length ?? 0,
-      capacity: accountCapacity[row.hash],
-    })),
-  ];
+/** "Vault" and how full it is, above the vault's tabs. */
+function VaultTitle({ inventory: { vaultCount, vaultCapacity } }: { inventory: ManagerInventory }) {
   const full = vaultCapacity !== undefined && vaultCount >= vaultCapacity;
-  const fill = vaultCapacity ? Math.min(100, (vaultCount / vaultCapacity) * 100) : undefined;
-
   return (
-    <div className="flex flex-col gap-2">
-      <div className="flex items-baseline justify-between gap-3">
-        <h2 className="d2-heading text-sm">Vault</h2>
-        <span className={cn("text-xs tabular-nums", full ? "text-destructive" : "text-muted-foreground")}>
-          {vaultCount.toLocaleString()}
-          {vaultCapacity ? ` / ${vaultCapacity.toLocaleString()}` : ""}
-        </span>
-      </div>
-      {fill !== undefined && (
-        <div aria-hidden className="bg-foreground/10 h-1">
-          <div className={cn("h-full", full ? "bg-destructive" : "bg-foreground/60")} style={{ width: `${fill}%` }} />
-        </div>
-      )}
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
-        {counts.map(({ label, count, capacity }) => (
-          <span key={label} className="text-muted-foreground">
-            {label}{" "}
-            <span
-              className={cn(
-                "text-foreground tabular-nums",
-                capacity !== undefined && count >= capacity && "text-destructive",
-              )}
-            >
-              {count}
-              {capacity !== undefined ? ` / ${capacity}` : ""}
-            </span>
-          </span>
-        ))}
-      </div>
+    <div className="flex items-baseline justify-between gap-3 pb-2">
+      <h2 className="d2-heading text-sm">Vault</h2>
+      <span className={cn("text-xs tabular-nums", full ? "text-destructive" : "text-muted-foreground")}>
+        {vaultCount.toLocaleString()}
+        {vaultCapacity ? ` / ${vaultCapacity.toLocaleString()}` : ""}
+      </span>
     </div>
   );
 }
 
-/** The account's currencies. */
+/** Each currency's box takes its colour from the currency's artwork. */
+const CURRENCY_TINTS: Record<number, string> = {
+  [GLIMMER_HASH]: "#4fc3e8",
+  [BRIGHT_DUST_HASH]: "#f5b98a",
+  [ENHANCEMENT_CORE_HASH]: "#f39a2b",
+  [ENHANCEMENT_PRISM_HASH]: "#e6c229",
+  [ASCENDANT_SHARD_HASH]: "#dfe4ea",
+  [ASCENDANT_ALLOY_HASH]: "#e0552b",
+};
+
+/** The account's currencies and upgrade materials, a tinted box each. */
 function VaultCurrencies({ inventory: { currencies } }: { inventory: ManagerInventory }) {
   if (currencies.length === 0) return null;
   return (
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs" aria-label="Currencies">
-      {currencies.map((c) => (
-        <span key={c.itemHash} className="flex items-center gap-1.5" title={c.name}>
-          {c.icon && (
-            <Image
-              src={`${BUNGIE_IMAGE_BASE}${c.icon}`}
-              alt={c.name}
-              width={16}
-              height={16}
-              className="size-4"
-              unoptimized
-            />
-          )}
-          <span className="tabular-nums">{c.quantity.toLocaleString()}</span>
-        </span>
-      ))}
+    <div className="flex min-w-0 flex-wrap gap-1.5 py-1" aria-label="Currencies">
+      {currencies.map((c) => {
+        const tint = CURRENCY_TINTS[c.itemHash] ?? "var(--foreground)";
+        return (
+          // The icon says what it is; the name is left to the tooltip.
+          <div
+            key={c.itemHash}
+            title={c.name}
+            className="flex items-center gap-1.5 border py-0.5 pr-2 pl-0.5 text-xs font-medium tabular-nums normal:rounded-md"
+            style={{
+              borderColor: `color-mix(in srgb, ${tint} 65%, transparent)`,
+              background: `color-mix(in srgb, ${tint} 20%, transparent)`,
+            }}
+          >
+            {c.icon ? (
+              <Image
+                src={`${BUNGIE_IMAGE_BASE}${c.icon}`}
+                alt={c.name}
+                width={18}
+                height={18}
+                className="size-[18px] shrink-0 normal:rounded-sm"
+                unoptimized
+              />
+            ) : (
+              <span className="sr-only">{c.name}</span>
+            )}
+            {c.quantity.toLocaleString()}
+          </div>
+        );
+      })}
     </div>
   );
 }

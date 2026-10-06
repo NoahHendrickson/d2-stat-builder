@@ -5,6 +5,12 @@ import type {
 } from "bungie-api-ts/destiny2";
 import type { Manifest } from "@/lib/manifest/load";
 import { parseArchetypeDescription } from "@/lib/armory/archetypes";
+import {
+  ASCENDANT_SHARD_HASH,
+  ENHANCEMENT_CORE_HASH,
+  ENHANCEMENT_PRISM_HASH,
+  GLIMMER_HASH,
+} from "@/lib/armory/masterwork";
 import { itemWatermark } from "@/lib/armory/normalize";
 import {
   ARMOR_ARCHETYPE_PLUG_CATEGORY,
@@ -102,9 +108,26 @@ export interface ManagerInventory {
   account: Record<number, InventoryItem[]>;
   /** Slot count of each account-wide bucket, when the manifest knows it. */
   accountCapacity: Record<number, number>;
-  /** Glimmer, Bright Dust, … (component 103), in Bungie's order. */
+  /** Glimmer, Bright Dust, and the upgrade materials, in VAULT_CURRENCIES order. */
   currencies: Currency[];
 }
+
+export const BRIGHT_DUST_HASH = 2817410917;
+export const ASCENDANT_ALLOY_HASH = 353704689;
+
+/**
+ * What the vault header counts: two profile currencies (component 103) and the upgrade
+ * materials, which live as stacks in Consumables. Engrams, Synthweave, and the rest of
+ * the profile currencies stay off.
+ */
+export const VAULT_CURRENCIES: readonly number[] = [
+  GLIMMER_HASH,
+  BRIGHT_DUST_HASH,
+  ENHANCEMENT_CORE_HASH,
+  ENHANCEMENT_PRISM_HASH,
+  ASCENDANT_SHARD_HASH,
+  ASCENDANT_ALLOY_HASH,
+];
 
 export interface Currency {
   itemHash: number;
@@ -440,15 +463,25 @@ export function buildInventory(
     if (max !== undefined) c.maxPower = max;
   }
 
-  const currencies: Currency[] = (profile.profileCurrencies?.data?.items ?? []).flatMap((item) => {
-    const def = manifest.def("DestinyInventoryItemDefinition", item.itemHash);
+  // Materials can be split over several stacks; none held still shows, as 0.
+  const held = new Map<number, number>();
+  for (const item of [
+    ...(profile.profileCurrencies?.data?.items ?? []),
+    ...(profile.profileInventory?.data?.items ?? []),
+  ]) {
+    if (VAULT_CURRENCIES.includes(item.itemHash)) {
+      held.set(item.itemHash, (held.get(item.itemHash) ?? 0) + item.quantity);
+    }
+  }
+  const currencies: Currency[] = VAULT_CURRENCIES.flatMap((itemHash) => {
+    const def = manifest.def("DestinyInventoryItemDefinition", itemHash);
     if (!def?.displayProperties?.name) return [];
     return [
       {
-        itemHash: item.itemHash,
+        itemHash,
         name: def.displayProperties.name,
         ...(def.displayProperties.icon ? { icon: def.displayProperties.icon } : {}),
-        quantity: item.quantity,
+        quantity: held.get(itemHash) ?? 0,
       },
     ];
   });
