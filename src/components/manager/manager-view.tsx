@@ -172,7 +172,9 @@ export function ManagerView({
       );
     return {
       inventory: () => latest.current,
-      open: (item, anchor) => setMenu({ key: item.key, anchor }),
+      // Opening the item that's already open closes it.
+      open: (item, anchor) =>
+        setMenu((menu) => (menu?.key === item.key && menu.anchor === anchor ? null : { key: item.key, anchor })),
       dragStart: (item) => {
         const found = locate(latest.current, item.key);
         if (!found || !canDrag(found.item, found.place)) return false;
@@ -533,7 +535,8 @@ function CharacterHeader({
     : undefined;
 
   return (
-    <div className="sticky top-8 z-10 pb-3 group-data-scrolled/manager:bg-glass-opaque">
+    // pt-3 is a filled gap under the search bar once pinned; -mt-3 keeps it out of the layout.
+    <div className="sticky top-8 z-10 -mt-3 py-3 group-data-scrolled/manager:bg-glass-opaque">
         <DropdownMenu>
           <DropdownMenuTrigger
             render={

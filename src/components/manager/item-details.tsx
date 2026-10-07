@@ -78,7 +78,15 @@ export function ItemDetails({
   const copies =
     found?.item.itemType === ITEM_TYPE_WEAPON ? weaponCopies(inventory, found.item.name).length : 0;
   return (
-    <Popover open={Boolean(found)} onOpenChange={(open) => !open && onClose()}>
+    <Popover
+      open={Boolean(found)}
+      onOpenChange={(open, { reason, event }) => {
+        // A press on the tile that opened the panel is left to the tile's click, which
+        // closes it (closing here would have that click open it straight back up).
+        if (reason === "outside-press" && target?.anchor.contains(event.target as Node)) return;
+        if (!open) onClose();
+      }}
+    >
       <PopoverContent
         anchor={target?.anchor}
         side="right"
