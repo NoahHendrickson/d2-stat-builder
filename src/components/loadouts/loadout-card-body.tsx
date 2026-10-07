@@ -27,6 +27,9 @@ import { cn } from "@/lib/utils";
 /** Mod tiles: 40px on the wide card, 32px in the compact icon columns. */
 const MOD_SIZE_CLASS = "size-8 @3xl:size-10";
 
+/** A subclass or armor column: the same corner-tick well as the editor's columns. */
+const COLUMN_WELL_CLASS = "d2-corner-well flex h-full min-w-0 flex-col p-2 @3xl:p-3";
+
 /** An unfilled mod socket: the game's empty-slot bracket corners. */
 function EmptySocket() {
   return <span className={cn("d2-brackets shrink-0 bg-black/20", MOD_SIZE_CLASS)} aria-hidden />;
@@ -157,7 +160,7 @@ function SubclassColumn({
 }) {
   if (!subclass) {
     return (
-      <section aria-label="Subclass">
+      <section aria-label="Subclass" className={COLUMN_WELL_CLASS}>
         <p className="text-muted-foreground text-xs">No subclass saved</p>
       </section>
     );
@@ -181,7 +184,7 @@ function SubclassColumn({
     return hash === undefined ? [] : [{ kind, hash }];
   });
 
-  // 36px so four abilities + two aspects, or six fragments, fit the 16rem column on one line.
+  // 36px so four abilities + two aspects, or six fragments, fit the 17rem column on one line.
   const tile = {
     manifest,
     size: 40,
@@ -191,7 +194,7 @@ function SubclassColumn({
   } as const;
 
   return (
-    <section aria-label={`Subclass: ${subclassName}`} className="flex min-w-0 flex-col gap-3">
+    <section aria-label={`Subclass: ${subclassName}`} className={cn(COLUMN_WELL_CLASS, "gap-3")}>
       <div className="flex min-w-0 items-center gap-2.5">
         <ManifestIcon
           icon={superDef?.displayProperties?.icon ?? subclassDef?.displayProperties?.icon}
@@ -280,9 +283,9 @@ function PieceColumn({
   return (
     <section
       aria-label={`${item.name}, ${slotLabel}`}
-      className="flex min-w-0 flex-col gap-2"
+      className={cn(COLUMN_WELL_CLASS, "gap-2")}
     >
-      <div className="flex min-w-0 flex-col gap-2 @3xl:flex-row @3xl:items-center">
+      <div className="flex min-w-0 flex-col gap-2 @6xl:flex-row @6xl:items-center">
         {item.icon ? (
           <ArmorThumb
             icon={item.icon}
@@ -296,7 +299,7 @@ function PieceColumn({
         ) : (
           <span className="d2-brackets size-12 shrink-0 bg-black/25 @3xl:size-14" aria-hidden />
         )}
-        <div className="hidden min-w-0 flex-col @3xl:flex">
+        <div className="hidden min-w-0 flex-col @6xl:flex">
           <span
             className={cn(
               "truncate text-sm leading-5",
@@ -336,10 +339,10 @@ function PieceColumn({
 }
 
 /**
- * The card's body, laid out like the editor drawer: the subclass column on the far left,
- * then one column per armor piece with its mods, and the weapons and artifact as a row of
- * slots underneath. Below the card's `@3xl` width the subclass sits on top and the pieces
- * shrink to icon columns.
+ * The card's body, laid out like the editor drawer: the subclass box on the far left,
+ * then one box per armor piece with its mods, and the weapons and artifact as a row of
+ * slots underneath. Below the card's `@3xl` width the subclass sits on top; below `@6xl`
+ * the pieces shrink to icon columns.
  */
 export function LoadoutCardBody({
   saved,
@@ -355,7 +358,7 @@ export function LoadoutCardBody({
   return (
     <div className="flex flex-col gap-3">
       <div
-        className="grid gap-x-4 gap-y-4 [grid-template-columns:repeat(var(--pieces),minmax(0,1fr))] @3xl:[grid-template-columns:minmax(16rem,1.25fr)_repeat(var(--pieces),minmax(0,1fr))] @3xl:divide-x @3xl:divide-foreground/8 @3xl:gap-x-0 @3xl:*:px-4 @3xl:*:first:pl-0 @3xl:*:last:pr-0"
+        className="grid gap-2 [grid-template-columns:repeat(var(--pieces),minmax(0,1fr))] @3xl:[grid-template-columns:minmax(17rem,1.25fr)_repeat(var(--pieces),minmax(0,1fr))]"
         style={{ "--pieces": pieceCols } as CSSProperties}
       >
         <div className="col-span-full @3xl:col-span-1">
