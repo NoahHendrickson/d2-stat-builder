@@ -41,9 +41,13 @@ const ARMOR_VERSION_OPTIONS: FilterOption<ArmorVersion>[] = [
 
 const OVERFLOW_FACETS = ["archetypes", "tunings", "tertiaries"] as const;
 
-/** Both halves of the Duplicates split button turn amber while it's on. */
+/**
+ * Both halves of the Duplicates split button turn amber while it's on, outline included:
+ * a solid amber border in place of d2-line's gradient (important, so it beats the
+ * plain-line and Normal theme rules too).
+ */
 const DUPLICATES_ON =
-  "bg-amber-500/22 text-amber-800 hover:bg-amber-500/30 aria-expanded:bg-amber-500/30 dark:text-amber-200";
+  "bg-amber-500/22 text-amber-800 hover:bg-amber-500/30 aria-expanded:bg-amber-500/30 dark:text-amber-200 [border-image-source:none]! border-amber-500/55! hover:border-amber-500/75! aria-expanded:border-amber-500/75!";
 
 /**
  * Duplicates as a split button: the left half shows or hides only twinned pieces, the
