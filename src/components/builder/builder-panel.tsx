@@ -96,6 +96,7 @@ import {
 } from "@/lib/dim/subclasses";
 import { useApplyCurrentFragments } from "@/lib/armory/use-apply-current-fragments";
 import { useAutoSearch } from "@/lib/optimizer/use-auto-search";
+import { useWeaponPlan } from "@/lib/optimizer/use-weapon-plan";
 import { useOptimizerWarmup } from "@/lib/optimizer/use-optimizer-warmup";
 import { MAX_SET_BONUSES, type BuilderSnapshot, type QueryOrigin } from "@/lib/loadouts/types";
 import { getSetting, setSetting, useSetting } from "@/lib/settings/synced-settings";
@@ -770,33 +771,63 @@ export function BuilderPanel({
 
   // The builder's search settings (everything but pieces, targets and the exotic) —
   // shared by the regular search and the dream search.
-  const searchSettings = useMemo(
+  // The power range is layered on separately so the weapon-mix scan (which supplies its
+  // own weapons) doesn't re-run when only the entered weapons change.
+  const baseSearchSettings = useMemo(
     (): DreamSettings => ({
       mods: { major, minor: MAX_MODS - major },
       setRequirements,
       allowTuning: true,
       allowBalancedTuning: useBalancedTuning,
       fragmentBonus,
+    }),
+    [major, setRequirements, useBalancedTuning, fragmentBonus],
+  );
+  const searchSettings = useMemo(
+    (): DreamSettings => ({
+      ...baseSearchSettings,
       powerRange: toOptimizerPowerRange(powerRange),
     }),
-    [major, setRequirements, useBalancedTuning, fragmentBonus, powerRange],
+    [baseSearchSettings, powerRange],
+  );
+
+  const optimizerSlots = useMemo(
+    () => slotPieces.map((pieces) => pieces.map(armorToOptimizerPiece)),
+    [slotPieces],
+  );
+  const exoticConstraint = useMemo(
+    (): ExoticConstraint =>
+      selectedExotic === null
+        ? { mode: "any" }
+        : { mode: "specific", hashes: exotics[selectedExotic]?.hashes ?? [] },
+    [selectedExotic, exotics],
   );
 
   // The regular search input over owned pieces.
   const optimizerInput = useMemo((): OptimizerInput | null => {
     if (classType === null) return null;
-    const exotic: ExoticConstraint =
-      selectedExotic === null
-        ? { mode: "any" }
-        : { mode: "specific", hashes: exotics[selectedExotic]?.hashes ?? [] };
     return {
       ...searchSettings,
-      slots: slotPieces.map((pieces) => pieces.map(armorToOptimizerPiece)),
+      slots: optimizerSlots,
       minimums: targets,
-      exotic,
+      exotic: exoticConstraint,
       maxResults: 200,
     };
-  }, [slotPieces, classType, targets, selectedExotic, exotics, searchSettings]);
+  }, [optimizerSlots, classType, targets, exoticConstraint, searchSettings]);
+
+  // The weapon-mix scan: the same query, once per mix of common weapon powers.
+  const powerBounds = powerRange.enabled ? powerRange.bounds : null;
+  const weaponPlanInput = useMemo((): OptimizerInput | null => {
+    if (classType === null || powerBounds === null) return null;
+    return {
+      ...baseSearchSettings,
+      slots: optimizerSlots,
+      minimums: targets,
+      exotic: exoticConstraint,
+      powerRange: { min: powerBounds.min, max: powerBounds.max },
+    };
+  }, [classType, powerBounds, baseSearchSettings, optimizerSlots, targets, exoticConstraint]);
+  const weaponPlan = useWeaponPlan(weaponPlanInput);
 
   const runOptimizer = useCallback(() => {
     if (!optimizerInput) return;
@@ -1140,6 +1171,7 @@ export function BuilderPanel({
                 value={powerRange}
                 onChange={onPowerRangeChange}
                 slotPieces={powerSlotPieces}
+                weaponPlan={weaponPlan}
                 dreamersItemName={dreamersClassItemName(classType ?? 2)}
               />
             </Section>
