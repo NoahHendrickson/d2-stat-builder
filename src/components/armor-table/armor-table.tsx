@@ -11,6 +11,9 @@ import {
 } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useArmory } from "@/lib/armory/use-armory";
+import { sessionMembershipId } from "@/lib/armory/use-profile";
+import { useSession } from "@/lib/auth/use-session";
+import { loadAnnotations } from "@/lib/inventory/annotations";
 import { useManifest } from "@/lib/manifest/use-manifest";
 import { availableSets } from "@/lib/armory/sets";
 import type { ArmoryCharacter } from "@/lib/armory/fetch";
@@ -33,6 +36,12 @@ import {
 } from "@/lib/armor-table/filters";
 import type { SortMode } from "@/lib/armor-table/sort";
 import { normalizeSearchText, tokenizeSearchQuery } from "@/lib/armor-table/search";
+import {
+  DEFAULT_DUPLICATE_MATCH,
+  duplicateMatchSummary,
+  groupDuplicates,
+  type DuplicateMatch,
+} from "@/lib/armor-table/duplicates";
 import {
   TABLE_SCHEMA_VERSION,
   loadTableState,
@@ -62,10 +71,7 @@ import { useArmorTableSort } from "@/components/armor-table/use-armor-table-sort
 /** Approximate single-row height; the virtualizer remeasures real rows on mount. */
 const ESTIMATED_ROW_HEIGHT_PX = 48;
 
-const TABLE_HEAD_CELL =
-  "border-b border-foreground/15 py-2.5 pr-3 text-sm font-normal whitespace-nowrap first:pl-3";
-
-/** Header-cell order → sort key; `undefined` marks unsortable columns (Actions). */
+/** Header-cell order → sort key. */
 const COLUMN_SORT_KEYS: readonly (SortKey | undefined)[] = [
   "name",
   "class",
@@ -74,7 +80,6 @@ const COLUMN_SORT_KEYS: readonly (SortKey | undefined)[] = [
   "tuned",
   "set",
   ...STAT_DISPLAY_ORDER.map((key) => `stat-${key}` as const),
-  undefined, // actions
 ];
 
 const HeaderRow = memo(function HeaderRow({
@@ -215,7 +220,6 @@ const HeaderRow = memo(function HeaderRow({
             onUndoSort={undoSort}
           />
         ))}
-        <th className={cn(TABLE_HEAD_CELL, "text-left")}>Actions</th>
       </tr>
     </thead>
   );
@@ -223,6 +227,9 @@ const HeaderRow = memo(function HeaderRow({
 
 export function ArmorTable() {
   const armory = useArmory();
+  // Junk tags live in the Manager's tag store; point it at this account here too.
+  const membershipId = sessionMembershipId(useSession().data);
+  useEffect(() => loadAnnotations(membershipId), [membershipId]);
   const manifestStatus = useManifest();
   const manifest =
     manifestStatus.state === "ready" ? manifestStatus.manifest : undefined;
@@ -409,6 +416,21 @@ export function ArmorTable() {
     [sorted, facets, searchTokens],
   );
 
+  // Duplicates narrows the filtered list to pieces with a twin, each group together.
+  // Picking what has to match (the split button's menu) turns it on.
+  const [showDuplicates, setShowDuplicates] = useState(false);
+  const [duplicateMatch, setDuplicateMatch] = useState(DEFAULT_DUPLICATE_MATCH);
+  const toggleDuplicates = useCallback(() => setShowDuplicates((on) => !on), []);
+  const changeDuplicateMatch = useCallback((match: DuplicateMatch) => {
+    setDuplicateMatch(match);
+    setShowDuplicates(true);
+  }, []);
+  const duplicates = useMemo(
+    () => (showDuplicates ? groupDuplicates(filtered, duplicateMatch) : null),
+    [showDuplicates, filtered, duplicateMatch],
+  );
+  const visible = duplicates?.rows ?? filtered;
+
   const filtersActive = hasActiveFilters({ ...facets, search });
 
   const clearFilters = useCallback(() => {
@@ -437,7 +459,7 @@ export function ArmorTable() {
   // Virtualized rows: the scroller is the bounded-height container below.
   const [scrollerEl, setScrollerEl] = useState<HTMLDivElement | null>(null);
   const rowVirtualizer = useVirtualizer({
-    count: filtered.length,
+    count: visible.length,
     getScrollElement: () => scrollerEl,
     estimateSize: () => ESTIMATED_ROW_HEIGHT_PX,
     overscan: 10,
@@ -473,7 +495,11 @@ export function ArmorTable() {
             pinnedArchetypes={pinnedArchetypes}
             onTogglePinnedSet={togglePinnedSet}
             onTogglePinnedArchetype={togglePinnedArchetype}
-            filteredCount={filtered.length}
+            filteredCount={visible.length}
+            duplicateGroups={duplicates?.groupCount}
+            onToggleDuplicates={toggleDuplicates}
+            duplicateMatch={duplicateMatch}
+            onDuplicateMatchChange={changeDuplicateMatch}
             filtersActive={filtersActive}
             onClearFilters={clearFilters}
           />
@@ -502,7 +528,7 @@ export function ArmorTable() {
                 </tr>
               )}
               {virtualRows.map((vRow) => {
-                const row = filtered[vRow.index];
+                const row = visible[vRow.index];
                 return (
                   <ArmorRow
                     key={row.piece.instanceId}
@@ -511,6 +537,7 @@ export function ArmorTable() {
                     onRefresh={refresh}
                     provisional={armory.isProvisional}
                     dataIndex={vRow.index}
+                    group={duplicates?.groups[vRow.index]}
                     measureRef={rowVirtualizer.measureElement}
                   />
                 );
@@ -522,11 +549,13 @@ export function ArmorTable() {
               )}
             </tbody>
           </table>
-          {filtered.length === 0 && (
+          {visible.length === 0 && (
             <p className="text-muted-foreground border-t border-foreground/15 py-6 text-center text-sm">
               {rows.length === 0
                 ? "No armor pieces loaded yet."
-                : "No armor matches your filters."}
+                : filtered.length === 0
+                  ? "No armor matches your filters."
+                  : `No duplicates here: no two pieces share a ${duplicateMatchSummary(duplicateMatch)}.`}
             </p>
           )}
       </div>

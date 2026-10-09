@@ -2,11 +2,26 @@
 
 import { memo, type RefObject } from "react";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { Cancel01Icon, Search01Icon } from "@hugeicons/core-free-icons";
+import {
+  ArrowDown01Icon,
+  Cancel01Icon,
+  Copy01Icon,
+  Search01Icon,
+} from "@hugeicons/core-free-icons";
 import type { FilterOption } from "@/lib/armor-table/pinned";
 import type { ArmorVersion, FacetFilters } from "@/lib/armor-table/filters";
+import { duplicateMatchSummary, type DuplicateMatch } from "@/lib/armor-table/duplicates";
 import { CLASS_NAMES } from "@/lib/armory/stats";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input, SearchClearButton } from "@/components/ui/input";
 import {
   FilterCascadeMenu,
@@ -26,6 +41,77 @@ const ARMOR_VERSION_OPTIONS: FilterOption<ArmorVersion>[] = [
 
 const OVERFLOW_FACETS = ["archetypes", "tunings", "tertiaries"] as const;
 
+/** Both halves of the Duplicates split button turn amber while it's on. */
+const DUPLICATES_ON =
+  "bg-amber-500/22 text-amber-800 hover:bg-amber-500/30 aria-expanded:bg-amber-500/30 dark:text-amber-200";
+
+/**
+ * Duplicates as a split button: the left half shows or hides only twinned pieces, the
+ * arrow opens what twins must share beyond set, slot, and archetype.
+ */
+function DuplicatesButton({
+  on,
+  match,
+  onToggle,
+  onMatchChange,
+}: {
+  on: boolean;
+  match: DuplicateMatch;
+  onToggle: () => void;
+  onMatchChange: (match: DuplicateMatch) => void;
+}) {
+  return (
+    <div className="ml-auto flex shrink-0">
+      <Button
+        type="button"
+        variant="outline"
+        aria-pressed={on}
+        title={`Show only pieces with a twin: same ${duplicateMatchSummary(match)}`}
+        className={cn("normal:rounded-r-none", on && DUPLICATES_ON)}
+        onClick={onToggle}
+      >
+        <HugeiconsIcon icon={Copy01Icon} data-icon="inline-start" aria-hidden />
+        Duplicates
+      </Button>
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          aria-label="What duplicates must share"
+          render={
+            <Button
+              variant="outline"
+              size="icon"
+              className={cn("-ml-px w-7 normal:rounded-l-none", on && DUPLICATES_ON)}
+            />
+          }
+        >
+          <HugeiconsIcon icon={ArrowDown01Icon} aria-hidden />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-48">
+          <DropdownMenuGroup>
+            <DropdownMenuLabel>Duplicates must share</DropdownMenuLabel>
+            <DropdownMenuCheckboxItem
+              indicator="start"
+              closeOnClick={false}
+              checked={match.tuning}
+              onCheckedChange={(checked) => onMatchChange({ ...match, tuning: checked === true })}
+            >
+              Same tuning
+            </DropdownMenuCheckboxItem>
+            <DropdownMenuCheckboxItem
+              indicator="start"
+              closeOnClick={false}
+              checked={match.tertiary}
+              onCheckedChange={(checked) => onMatchChange({ ...match, tertiary: checked === true })}
+            >
+              Same tertiary
+            </DropdownMenuCheckboxItem>
+          </DropdownMenuGroup>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </div>
+  );
+}
+
 /**
  * The table's filter bar: result count, search, and the six multiselect
  * filters. Sits above the sticky column headers.
@@ -44,6 +130,10 @@ export const ArmorTableToolbar = memo(function ArmorTableToolbar({
   onTogglePinnedSet,
   onTogglePinnedArchetype,
   filteredCount,
+  duplicateGroups,
+  onToggleDuplicates,
+  duplicateMatch,
+  onDuplicateMatchChange,
   filtersActive,
   onClearFilters,
 }: {
@@ -63,6 +153,12 @@ export const ArmorTableToolbar = memo(function ArmorTableToolbar({
   onTogglePinnedSet: (hash: number) => void;
   onTogglePinnedArchetype: (name: string) => void;
   filteredCount: number;
+  /** Set while the table shows only duplicates: how many groups it found. */
+  duplicateGroups?: number;
+  onToggleDuplicates: () => void;
+  duplicateMatch: DuplicateMatch;
+  /** Changes what twins must share, and shows duplicates. */
+  onDuplicateMatchChange: (match: DuplicateMatch) => void;
   filtersActive: boolean;
   onClearFilters: () => void;
 }) {
@@ -89,6 +185,8 @@ export const ArmorTableToolbar = memo(function ArmorTableToolbar({
         aria-label={`${filteredCount} results`}
       >
         {filteredCount} {filteredCount === 1 ? "piece" : "pieces"}
+        {duplicateGroups !== undefined &&
+          ` in ${duplicateGroups} ${duplicateGroups === 1 ? "group" : "groups"}`}
       </span>
       <div className="relative h-8 min-w-0 flex-1 @[58rem]/toolbar:w-[272px] @[58rem]/toolbar:flex-none">
         <HugeiconsIcon icon={Search01Icon}
@@ -182,11 +280,17 @@ export const ArmorTableToolbar = memo(function ArmorTableToolbar({
       <div className="h-8 shrink-0 @[58rem]/toolbar:hidden">
         <FilterCascadeMenu {...cascadeMenuProps} toggleSubmenusOnClick />
       </div>
+      <DuplicatesButton
+        on={duplicateGroups !== undefined}
+        match={duplicateMatch}
+        onToggle={onToggleDuplicates}
+        onMatchChange={onDuplicateMatchChange}
+      />
       {filtersActive && (
         <Button
           type="button"
           variant="outline"
-          className="ml-auto shrink-0"
+          className="shrink-0"
           onClick={onClearFilters}
         >
           <HugeiconsIcon icon={Cancel01Icon} data-icon="inline-start" aria-hidden />

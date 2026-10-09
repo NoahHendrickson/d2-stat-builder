@@ -4,8 +4,9 @@ import { TooltipLabel } from "@/components/ui/tooltip";
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { Loading03Icon } from "@hugeicons/core-free-icons";
+import { Delete02Icon, Loading03Icon } from "@hugeicons/core-free-icons";
 import { toast } from "@/lib/toast";
+import { setTag, type ItemTag } from "@/lib/inventory/annotations";
 import type { ArmorPiece } from "@/lib/armory/normalize";
 import type { ArmoryCharacter } from "@/lib/armory/fetch";
 import { peekArmory } from "@/lib/armory/use-armory";
@@ -18,8 +19,16 @@ import {
   vaultedNote,
 } from "@/lib/bungie/equip-client";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 type Action = "move" | "equip";
+
+/**
+ * Takes no room until its row is hovered or holds focus (sr-only keeps it tabbable), so
+ * piece names get the whole name cell otherwise. Always shown on touch screens.
+ */
+const REVEAL_ON_ROW_HOVER =
+  "sr-only group-hover/row:not-sr-only group-focus-within/row:not-sr-only pointer-coarse:not-sr-only";
 
 function moveDisabledReason(
   piece: ArmorPiece,
@@ -51,19 +60,24 @@ function equipDisabledReason(
 /**
  * Move / Equip a single piece onto its class's most recently played character,
  * via the same /api/bungie/equip proxy the builder's "Equip items" uses
- * (mode: "move" skips the equip step).
+ * (mode: "move" skips the equip step), and a Junk toggle on the Manager's tag store.
+ * Sits at the right of the row's name cell (`group/row`); the junk mark stays visible
+ * on junk pieces.
  */
 export function ArmorRowActions({
   piece,
   characters,
   onDone,
   provisional = false,
+  tag,
 }: {
   piece: ArmorPiece;
   characters: ArmoryCharacter[];
   onDone: () => void;
   /** The table shows last visit's gear; nothing may be moved until the live profile lands. */
   provisional?: boolean;
+  /** Its Manager tag; Junk replaces any other tag, and clicking it again clears it. */
+  tag?: ItemTag;
 }) {
   const queryClient = useQueryClient();
   const [busy, setBusy] = useState<Action | null>(null);
@@ -72,6 +86,7 @@ export function ArmorRowActions({
   const ownedPieces = (): ArmorPiece[] => peekArmory(queryClient)?.pieces ?? [];
 
   const target = lastPlayedCharacter(characters, piece.classType);
+  const junk = tag === "junk";
   const refreshing = provisional ? "Refreshing your gear from Bungie…" : null;
   const reasons: Record<Action, string | null> = {
     move: refreshing ?? moveDisabledReason(piece, target),
@@ -126,28 +141,43 @@ export function ArmorRowActions({
   };
 
   return (
-    <div className="flex items-center gap-1">
-      {(["move", "equip"] as const).map((action) => (
-        <TooltipLabel
-          label={reasons[action] ?? undefined}
-          key={action}
-          disabled={Boolean(reasons[action])}
-        >
+    <div className="flex shrink-0 items-center gap-1">
+      <div className={cn("flex items-center gap-1", !busy && REVEAL_ON_ROW_HOVER)}>
+        {(["move", "equip"] as const).map((action) => (
+          <TooltipLabel
+            label={reasons[action] ?? undefined}
+            key={action}
+            disabled={Boolean(reasons[action])}
+          >
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-6 px-2 text-xs"
+              disabled={Boolean(reasons[action]) || busy !== null}
+              onClick={() => void run(action)}
+            >
+              {busy === action && (
+                <HugeiconsIcon icon={Loading03Icon} className="animate-spin" aria-hidden />
+              )}
+              {action === "move" ? "Move" : "Equip"}
+            </Button>
+          </TooltipLabel>
+        ))}
+      </div>
+      <span className={cn("flex", !junk && REVEAL_ON_ROW_HOVER)}>
+        <TooltipLabel label={junk ? "Unmark junk" : "Mark as junk"}>
           <Button
             size="sm"
-            variant="outline"
-            className="h-6 px-2 text-xs"
-            disabled={Boolean(reasons[action]) || busy !== null}
-
-            onClick={() => void run(action)}
+            variant={junk ? "default" : "outline"}
+            className={cn("size-6 p-0", !junk && "text-muted-foreground")}
+            aria-label="Junk"
+            aria-pressed={junk}
+            onClick={() => setTag([piece.instanceId], junk ? undefined : "junk")}
           >
-            {busy === action && (
-              <HugeiconsIcon icon={Loading03Icon} className="animate-spin" aria-hidden />
-            )}
-            {action === "move" ? "Move" : "Equip"}
+            <HugeiconsIcon icon={Delete02Icon} className="size-3" aria-hidden />
           </Button>
         </TooltipLabel>
-      ))}
+      </span>
     </div>
   );
 }
