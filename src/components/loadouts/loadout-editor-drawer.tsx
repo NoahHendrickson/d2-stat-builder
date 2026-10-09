@@ -28,7 +28,7 @@ import { StatGlyph } from "@/components/stat-glyph";
 import { statIconsFromManifest } from "@/lib/manifest/stat-icons";
 import { sumEditorStats } from "@/lib/loadouts/editor-stats";
 import { BUNGIE_IMAGE_BASE } from "@/lib/bungie/constants";
-import { ArmorThumb } from "@/components/armor-thumb";
+import { ArmorThumb, ItemWatermark } from "@/components/armor-thumb";
 import { PowerValue } from "@/components/power-value";
 import type { ModOption, ModOptionCatalog } from "@/lib/loadouts/mod-options";
 import {
@@ -178,16 +178,7 @@ function ItemIcon({
       ) : (
         <span className="bg-muted block size-full" aria-hidden />
       )}
-      {watermark && (
-        <Image
-          src={`${BUNGIE_IMAGE_BASE}${watermark}`}
-          alt=""
-          width={size}
-          height={size}
-          className="absolute inset-0 size-full"
-          unoptimized
-        />
-      )}
+      {watermark && <ItemWatermark watermark={watermark} />}
     </span>
   );
 }

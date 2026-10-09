@@ -85,9 +85,9 @@
   --exotic-ring-inner: #3f3f3f;
   --exotic-ring-outer: #ffffff;
   --exotic-ring-glow: rgb(255 255 255 / 0.45);
-  /* Inventory tile frame + label bar (Figma 127:5757 plain, 127:5737 masterworked). */
-  --item-frame: #fcfcfc;
-  --item-frame-masterwork: #ffeb67;
+  /* Inventory tile frame + label bar (Figma 173:311: plain, masterworked). */
+  --item-frame: #babbbb;
+  --item-frame-masterwork: #faec95;
   /* Behind the icon, so transparent ones (engrams) sit on the game's dark tile, not the frame. */
   --item-backing: #262626;
   --legendary: #522f65;

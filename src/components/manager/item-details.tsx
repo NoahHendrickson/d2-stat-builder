@@ -6,7 +6,7 @@ import Image from "next/image";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { GitCompareIcon, SquareLock02Icon, SquareUnlock02Icon } from "@hugeicons/core-free-icons";
 import { PerkTooltip } from "@/components/weapons/perk-tooltip";
-import { TIER_STRIP_CLASS, TierPips } from "@/components/armor-thumb";
+import { ItemWatermark, TierPips } from "@/components/armor-thumb";
 import { PowerValue } from "@/components/power-value";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent } from "@/components/ui/popover";
@@ -175,17 +175,7 @@ function Header({
           className="pointer-events-none absolute top-0 left-0"
           style={{ width: WATERMARK_PX, height: WATERMARK_PX }}
         >
-          {item.watermark && item.gearTier !== undefined && <span className={TIER_STRIP_CLASS} />}
-          {item.watermark && (
-            <Image
-              src={`${BUNGIE_IMAGE_BASE}${item.watermark}`}
-              alt=""
-              width={WATERMARK_PX}
-              height={WATERMARK_PX}
-              className="absolute inset-0 size-full max-w-none"
-              unoptimized
-            />
-          )}
+          {item.watermark && <ItemWatermark watermark={item.watermark} />}
           {item.gearTier !== undefined && <TierPips tier={item.gearTier} />}
         </span>
       )}

@@ -4,6 +4,11 @@ import { memo } from "react";
 import Image from "next/image";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { ArmorThumb, type ArmorThumbSize } from "@/components/armor-thumb";
+import {
+  ArchetypeGlyph,
+  ITEM_TILE_FOOTER_PX,
+  MasterworkGlow,
+} from "@/components/item-tile-parts";
 import { BUNGIE_IMAGE_BASE } from "@/lib/bungie/constants";
 import { BREAKER_NAMES, type InventoryItem } from "@/lib/inventory/build";
 import { TAG_LABELS, useAnnotation } from "@/lib/inventory/annotations";
@@ -13,11 +18,7 @@ import { useManagerActions } from "./manager-context";
 import { useSearchState } from "./search-store";
 import { TAG_ICONS } from "./tag-icons";
 
-/** Height of the label bar under the icon (Figma: 12px on a 44px tile, scaled up). */
-const FOOTER_PX = 16;
-/** Full-tile overlays Bungie draws on crafted and enhanced weapons. */
-const CRAFTED_OVERLAY = "/img/destiny_content/items/crafted-icon-overlay.png";
-const ENHANCED_OVERLAY = "/img/destiny_content/items/enhanced-item-overlay.png";
+const FOOTER_PX = ITEM_TILE_FOOTER_PX;
 /** The icon sits inside a 1px frame, so it is 2px narrower than the tile. */
 const INNER_SIZE_CLASS: Partial<Record<ArmorThumbSize, string>> = {
   44: "size-[42px]",
@@ -28,7 +29,7 @@ const INNER_SIZE_CLASS: Partial<Record<ArmorThumbSize, string>> = {
 /**
  * One inventory cell (Figma 127:5757 / 127:5737): the icon inside a 1px frame, over a
  * label bar in the frame colour with the weapon element and Power, or the stack size.
- * The frame is near-white, or gold with an inner gold glow when masterworked (Figma's
+ * The frame is grey, or gold with an inner gold glow when masterworked (Figma's
  * dark vignette is left out: on exotics it read as an inner shadow). Every tile
  * carries the bar (blank when there's nothing to show) so rows stay one height.
  * Click (or Enter) opens the move menu; drag it onto a character slot or the vault.
@@ -103,23 +104,23 @@ export const ItemTile = memo(function ItemTile({
         size={size}
         className={cn("bg-item-backing", INNER_SIZE_CLASS[size])}
         gearTier={item.gearTier}
+        craft={item.enhanced ? "enhanced" : item.crafted ? "crafted" : undefined}
       >
-        {item.masterworked && (
+        {item.masterworked && <MasterworkGlow />}
+        {/* The tag as a tab in the frame colour off the top-right corner: the label bar
+            is too full to hold it at a legible size. Its own title replaces the tile's
+            while hovered. */}
+        {tag && (
           <span
             aria-hidden
-            className="pointer-events-none absolute inset-0 shadow-[inset_0_0_6px_1px_rgba(255,235,103,0.45)]"
-          />
-        )}
-        {/* The game's own overlays: the crafted and enhanced glyphs sit bottom-left. */}
-        {(item.crafted || item.enhanced) && (
-          <Image
-            src={`${BUNGIE_IMAGE_BASE}${item.crafted ? CRAFTED_OVERLAY : ENHANCED_OVERLAY}`}
-            alt=""
-            width={size}
-            height={size}
-            className="absolute inset-0 size-full max-w-none"
-            unoptimized
-          />
+            title={`Marked as ${TAG_LABELS[tag].toLowerCase()}`}
+            className={cn(
+              "absolute top-0 right-0 flex size-4 items-center justify-center text-black",
+              item.masterworked ? "bg-item-frame-masterwork" : "bg-item-frame",
+            )}
+          >
+            <HugeiconsIcon icon={TAG_ICONS[tag]} className="size-3" strokeWidth={2} />
+          </span>
         )}
         {/* Deepsight: the game's orange-red border. */}
         {item.deepsight && (
@@ -130,23 +131,8 @@ export const ItemTile = memo(function ItemTile({
         className="flex items-center gap-0.5 px-0.5 text-[11px] leading-none font-medium text-black tabular-nums"
         style={{ height: FOOTER_PX }}
       >
-        {tag && <HugeiconsIcon icon={TAG_ICONS[tag]} className="size-3" strokeWidth={2.2} aria-hidden />}
         <span className="flex-1" />
-        {/* Armor archetype beside the Power: its primary stat's glyph, blackened like the
-            others. The 51px stat icons pad their glyphs by 4px or more a side, so crop to
-            the middle 43px to keep the glyph legible at this size. */}
-        {item.archetype?.icon && (
-          <span className="relative size-3.5 shrink-0 overflow-hidden">
-            <Image
-              src={`${BUNGIE_IMAGE_BASE}${item.archetype.icon}`}
-              alt=""
-              width={51}
-              height={51}
-              className="absolute -top-[9.302%] -left-[9.302%] h-auto w-[118.605%] max-w-none brightness-0"
-              unoptimized
-            />
-          </span>
-        )}
+        {item.archetype?.icon && <ArchetypeGlyph icon={item.archetype.icon} />}
         {/* The champion it stuns, beside the element; Bungie's icon is white, so blacken it. */}
         {item.breakerIcon && (
           <Image

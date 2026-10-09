@@ -53,6 +53,7 @@ import type {
 import { weaponTypeIcon } from "@/lib/weapons/weapon-type-icon-paths";
 import { useMinWidth } from "@/lib/use-min-width";
 import { cn } from "@/lib/utils";
+import { ItemWatermark } from "@/components/armor-thumb";
 
 const SORT_ITEMS: Record<string, string> = Object.fromEntries(SORTS);
 /** Tailwind `lg`: from here the details sit beside the list instead of in a dialog. */
@@ -81,16 +82,7 @@ function WeaponIcon({
           unoptimized
         />
       )}
-      {weapon.watermark && (
-        <Image
-          className="absolute inset-0"
-          src={`https://www.bungie.net${weapon.watermark}`}
-          alt=""
-          width={size}
-          height={size}
-          unoptimized
-        />
-      )}
+      {weapon.watermark && <ItemWatermark watermark={weapon.watermark} />}
     </span>
   );
 }

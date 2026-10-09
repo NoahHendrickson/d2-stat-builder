@@ -133,6 +133,10 @@ test("reads crafted, enhanced, and Deepsight state and the weapon's champion", (
             item(2, BUCKETS.vault, { itemInstanceId: "b", state: 32 }),
             // Armor never gets a champion.
             item(3, BUCKETS.vault, { itemInstanceId: "c", state: 8 }),
+            // Enhanced with the Crafted flag too: enhanced, not crafted.
+            item(2, BUCKETS.vault, { itemInstanceId: "d", state: 8 | 32 }),
+            // Crafted flag on a weapon with no pattern: it can only have been enhanced.
+            item(1, BUCKETS.vault, { itemInstanceId: "e", state: 8 }),
           ],
         },
       },
@@ -150,6 +154,8 @@ test("reads crafted, enhanced, and Deepsight state and the weapon's champion", (
   expect(byId.c).not.toHaveProperty("craftable");
   expect(byId.b).toMatchObject({ crafted: false, enhanced: true, breakerType: 3, breakerIcon: "/stagger.png" });
   expect(byId.c.breakerType).toBeUndefined();
+  expect(byId.d).toMatchObject({ crafted: false, enhanced: true });
+  expect(byId.e).toMatchObject({ crafted: false, enhanced: true });
 });
 
 test("reads the champion a frame or exotic perk grants through its hidden sandbox perk", () => {

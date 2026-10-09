@@ -264,6 +264,12 @@ function buildItem(
   const watermark = def ? itemWatermark(def, item.versionNumber) : undefined;
   const state = item.state ?? 0;
   const isWeapon = def?.itemType === ITEM_TYPE_WEAPON;
+  // An enhanced weapon levels through the crafting system, so the Crafted flag can come
+  // with it: Enhanced wins, and so does Crafted on a weapon with no pattern to craft from.
+  const enhanced =
+    (state & ITEM_STATE_ENHANCED) !== 0 ||
+    (isWeapon && (state & ITEM_STATE_CRAFTED) !== 0 && !def?.inventory?.recipeItemHash);
+  const crafted = (state & ITEM_STATE_CRAFTED) !== 0 && !enhanced;
   const breaker = isWeapon
     ? manifest.def(
         "DestinyBreakerTypeDefinition",
@@ -313,9 +319,9 @@ function buildItem(
     ...(armorArchetype ? { archetype: armorArchetype } : {}),
     locked: (state & ITEM_STATE_LOCKED) !== 0,
     masterworked: (state & ITEM_STATE_MASTERWORK) !== 0,
-    crafted: (state & ITEM_STATE_CRAFTED) !== 0,
+    crafted,
     ...(def?.inventory?.recipeItemHash ? { craftable: true } : {}),
-    enhanced: (state & ITEM_STATE_ENHANCED) !== 0,
+    enhanced,
     deepsight: (state & ITEM_STATE_HIGHLIGHTED_OBJECTIVE) !== 0,
     transferStatus: item.transferStatus ?? 0,
   };

@@ -18,8 +18,13 @@ import type {
 } from "@/lib/loadouts/resolve";
 import { superSocketIndex } from "@/lib/loadouts/subclass";
 import type { SavedLoadout } from "@/lib/loadouts/types";
+import { archetypeStatIcon } from "@/lib/armory/archetypes";
 import { ArmorThumb } from "@/components/armor-thumb";
-import { PowerValue } from "@/components/power-value";
+import {
+  ArchetypeGlyph,
+  ITEM_TILE_FOOTER_PX,
+  MasterworkGlow,
+} from "@/components/item-tile-parts";
 import { ManifestIcon, PlugIcon, TILE_FRAME } from "@/components/loadouts/loadout-row-details";
 import { LOADOUT_SLOT_WELL_CLASS } from "@/components/loadouts/loadout-weapons-editor";
 import { cn } from "@/lib/utils";
@@ -269,6 +274,45 @@ function SubclassColumn({
 }
 
 /**
+ * A piece's art as the Manager's item tile shows it: a grey frame (gold, with an
+ * inner glow, when masterworked) over a bar with the archetype glyph and Power. The
+ * Manager's 60px tile: 58px art inside the frame.
+ */
+function PieceTile({ item, manifest }: { item: ResolvedArmorItem; manifest: Manifest }) {
+  const { piece } = item;
+  const masterworked = isFullyMasterworked(piece);
+  const archetypeIcon = archetypeStatIcon(manifest, piece?.archetype);
+  return (
+    <div
+      className={cn(
+        "flex w-15 shrink-0 flex-col self-start p-px @6xl:row-span-2",
+        masterworked ? "bg-item-frame-masterwork" : "bg-item-frame",
+        item.missing && "opacity-50",
+      )}
+    >
+      <ArmorThumb
+        icon={item.icon}
+        watermark={piece?.watermark}
+        alt={item.name}
+        size={60}
+        gearTier={armorPipTier(piece)}
+        className="bg-item-backing size-[58px]"
+      >
+        {masterworked && <MasterworkGlow />}
+      </ArmorThumb>
+      <span
+        className="flex items-center gap-0.5 px-0.5 text-[11px] leading-none font-medium text-black tabular-nums"
+        style={{ height: ITEM_TILE_FOOTER_PX }}
+      >
+        <span className="flex-1" />
+        {archetypeIcon && <ArchetypeGlyph icon={archetypeIcon} />}
+        {piece?.power}
+      </span>
+    </div>
+  );
+}
+
+/**
  * One armor piece: its mod sockets in socket order (the saved placement where there is
  * one, an empty bracket where there isn't) in two rows, the stat mod with the tuning /
  * artifice socket on top and the armor mods underneath. In the compact icon columns the
@@ -300,8 +344,9 @@ function PieceColumn({
     top.sort((a, b) => a.index - b.index);
   }
   const slotLabel = item.slot ? SLOT_LABELS[item.slot] : "Armor";
-  // From @6xl the art spans both rows of the box's grid, at the top.
-  const artClass = "size-12 @3xl:size-14 @6xl:row-span-2 @6xl:size-12";
+  // A missing piece's empty slot, the tile's size; from @6xl it spans both rows of the
+  // box's grid, at the top.
+  const artClass = "h-[76px] w-15 @6xl:row-span-2";
 
   return (
     <section
@@ -319,34 +364,16 @@ function PieceColumn({
         >
           {item.name}
         </span>
-        <span className="flex items-center gap-2 text-xs">
-          {item.missing ? (
-            <span className="text-warning">Missing</span>
-          ) : (
-            <span className="text-muted-foreground">{slotLabel}</span>
-          )}
-          {piece?.power !== undefined && (
-            <PowerValue
-              value={piece.power}
-              size="xs"
-              tone="gold"
-              className="shrink-0 items-center gap-0.5 text-xs"
-              title="Power"
-            />
-          )}
-        </span>
+        {/* Power is on the tile. */}
+        {item.missing ? (
+          <span className="text-warning text-xs">Missing</span>
+        ) : (
+          <span className="text-muted-foreground text-xs">{slotLabel}</span>
+        )}
       </div>
       <div className="flex flex-col gap-2 @6xl:grid @6xl:grid-cols-[auto_repeat(3,minmax(0,2.75rem))] @6xl:gap-1">
         {item.icon ? (
-          <ArmorThumb
-            icon={item.icon}
-            watermark={piece?.watermark}
-            alt={item.name}
-            size={56}
-            masterworked={isFullyMasterworked(piece)}
-            gearTier={armorPipTier(piece)}
-            className={cn(artClass, item.missing && "opacity-50")}
-          />
+          <PieceTile item={item} manifest={manifest} />
         ) : (
           <span className={cn("d2-brackets shrink-0 bg-black/25", artClass)} aria-hidden />
         )}
