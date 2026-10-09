@@ -144,6 +144,7 @@ export const OTHER_BUCKET = 0;
 
 const ITEM_TYPE_ARMOR = 2;
 const ITEM_TYPE_WEAPON = 3;
+const TIER_TYPE_EXOTIC = 6;
 /** ItemState flags. */
 const ITEM_STATE_LOCKED = 1;
 const ITEM_STATE_MASTERWORK = 4;
@@ -269,6 +270,13 @@ function buildItem(
         breakerHash(item, profile, manifest, instance?.breakerTypeHash, def?.breakerTypeHash),
       )
     : undefined;
+  // An exotic weapon wears its applied ornament's art, as in the game.
+  const ornamentIcon =
+    isWeapon && def?.inventory?.tierType === TIER_TYPE_EXOTIC
+      ? manifest.def("DestinyInventoryItemDefinition", item.overrideStyleItemHash)?.displayProperties
+          ?.icon
+      : undefined;
+  const icon = ornamentIcon || def?.displayProperties?.icon;
   const ammoType = isWeapon ? def?.equippingBlock?.ammoType : undefined;
   const weaponType = isWeapon ? weaponTypeOf(def?.itemCategoryHashes) : undefined;
   const armorArchetype =
@@ -281,7 +289,7 @@ function buildItem(
     ...(item.itemInstanceId ? { instanceId: item.itemInstanceId } : {}),
     itemHash: item.itemHash,
     name: def?.displayProperties?.name || "Unknown item",
-    ...(def?.displayProperties?.icon ? { icon: def.displayProperties.icon } : {}),
+    ...(icon ? { icon } : {}),
     ...(watermark ? { watermark } : {}),
     typeName: def?.itemTypeDisplayName ?? "",
     itemType: def?.itemType ?? 0,

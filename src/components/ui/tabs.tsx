@@ -52,7 +52,7 @@ const tabsListVariants = cva(
 )
 
 const tabsIndicatorVariants = cva(
-  "pointer-events-none absolute top-0 left-0 z-0 h-(--active-tab-height) w-(--active-tab-width) translate-x-(--active-tab-left) translate-y-(--active-tab-top) transition-[translate,width,height] duration-200 ease-out motion-reduce:transition-none",
+  "pointer-events-none absolute top-0 left-0 z-0 h-(--active-tab-height) w-(--active-tab-width) translate-x-(--active-tab-left) translate-y-(--active-tab-top) transition-[translate,width,height,--equip-fill] duration-200 ease-out motion-reduce:transition-none",
   {
     variants: {
       variant: {

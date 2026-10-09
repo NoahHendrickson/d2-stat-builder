@@ -58,7 +58,7 @@ export function LoadoutsPageShell() {
 
   if (!authed) {
     return (
-      <main className="mx-auto max-w-md px-6 py-6">
+      <main className="mx-auto flex h-full max-w-md flex-col items-center justify-center px-6 py-6">
         {session.isPending ? (
           <p className="text-muted-foreground text-sm">Checking your session…</p>
         ) : (

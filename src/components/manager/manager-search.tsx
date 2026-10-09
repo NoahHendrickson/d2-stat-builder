@@ -56,6 +56,24 @@ import { searchMatches } from "./search-store";
 import { TAG_ICONS } from "./tag-icons";
 import { ViewMenu } from "./view-menu";
 
+/**
+ * Text that combines terms with grouping or `or`: a picked filter stays inline there,
+ * since lifting it out into a chip (always ANDed) would change what the query means.
+ */
+const COMPOUND = /[()]|(^|\s)(or|and|not)(\s|$)/i;
+
+/** A chip's label: the key muted, the value without its quotes. */
+function ChipLabel({ term }: { term: string }) {
+  const colon = term.indexOf(":");
+  if (colon < 0) return <span className="truncate">{term}</span>;
+  return (
+    <span className="truncate">
+      <span className="text-muted-foreground">{term.slice(0, colon + 1)}</span>
+      {term.slice(colon + 1).replaceAll('"', "")}
+    </span>
+  );
+}
+
 /** Runs `f` the first time it's asked, then hands back the same answer. */
 function once<T>(f: () => T): () => T {
   let value: { v: T } | undefined;
@@ -65,12 +83,17 @@ function once<T>(f: () => T): () => T {
 /**
  * The manager's search box (DIM's query language, see lib/inventory/search.ts): items
  * it doesn't match are dimmed, and the menu beside it tags, locks, or moves every match.
- * Typing suggests completions for the term at the caret (Tab or Enter takes one), and
- * the match count opens every match in a drawer.
+ * Typing suggests completions for the term at the caret (Tab or Enter takes one); a
+ * picked filter becomes a chip before the text, and the chips and text search together.
+ * The match count opens every match in a drawer.
  */
 export function ManagerSearch({ inventory }: { inventory: ManagerInventory }) {
+  /** What's typed in the field (the chips aren't part of it). */
   const [query, setQuery] = useState("");
-  const deferred = useDeferredValue(query);
+  /** Filters picked from the suggestions, each a whole term (`is:handcannon`). */
+  const [chips, setChips] = useState<string[]>([]);
+  const fullQuery = [...chips, query.trim()].filter(Boolean).join(" ");
+  const deferred = useDeferredValue(fullQuery);
   const parsed = useMemo(() => parseSearch(deferred), [deferred]);
   const annotations = useStoreValue(annotationsStore);
   const { query: profile } = useProfile();
@@ -129,13 +152,47 @@ export function ManagerSearch({ inventory }: { inventory: ManagerInventory }) {
     setActiveFor(options);
     setActive(0);
   }
+  // The highlighted suggestion, ghosted after the text when the caret is at its end: the
+  // rest of it when it carries on from what's typed, otherwise the whole term after an
+  // arrow. Tab (or →) takes it.
+  const ghostOf = options?.[active];
+  let ghost: string | undefined;
+  if (suggestions && ghostOf && caret === query.length && suggestions.end === query.length) {
+    const typed = query.slice(suggestions.start);
+    ghost = ghostOf.text.toLowerCase().startsWith(typed.toLowerCase())
+      ? ghostOf.text.slice(typed.length)
+      : `  → ${ghostOf.text}`;
+  }
+
+  const moveCaret = (at: number) => {
+    setCaret(at);
+    requestAnimationFrame(() => inputRef.current?.setSelectionRange(at, at));
+  };
 
   const accept = (option: Suggestion) => {
     if (!suggestions) return;
+    const before = query.slice(0, suggestions.start);
+    const after = query.slice(suggestions.end);
+    // A finished filter becomes a chip; a key (`perk:`) still wants its value typed.
+    if (!option.text.endsWith(":") && !COMPOUND.test(before + after)) {
+      if (!chips.includes(option.text)) setChips([...chips, option.text]);
+      setQuery(before + after.trimStart());
+      moveCaret(before.length);
+      return;
+    }
     const next = applySuggestion(query, suggestions, option.text);
     setQuery(next.query);
-    setCaret(next.caret);
-    requestAnimationFrame(() => inputRef.current?.setSelectionRange(next.caret, next.caret));
+    moveCaret(next.caret);
+  };
+
+  const removeChip = (chip: string) => {
+    setChips(chips.filter((c) => c !== chip));
+    inputRef.current?.focus();
+  };
+
+  const clearAll = () => {
+    setChips([]);
+    setQuery("");
   };
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -153,11 +210,26 @@ export function ManagerSearch({ inventory }: { inventory: ManagerInventory }) {
         e.preventDefault();
         accept(option);
         break;
-      case "Escape":
-        // One layer at a time: suggestions, then the text.
-        if (options) setOpen(false);
-        else setQuery("");
+      case "ArrowRight":
+        // At the end of the text, → takes the ghosted suggestion (like a shell's).
+        if (!option || !ghost || e.currentTarget.selectionEnd !== query.length) break;
+        e.preventDefault();
+        accept(option);
         break;
+      case "Escape":
+        // One layer at a time: suggestions, then the text, then the chips.
+        if (options) setOpen(false);
+        else if (query) setQuery("");
+        else setChips([]);
+        break;
+      case "Backspace": {
+        // At the start of the field, take back the last chip.
+        const { selectionStart, selectionEnd } = e.currentTarget;
+        if (selectionStart !== 0 || selectionEnd !== 0 || chips.length === 0) break;
+        e.preventDefault();
+        setChips(chips.slice(0, -1));
+        break;
+      }
     }
   };
 
@@ -196,33 +268,60 @@ export function ManagerSearch({ inventory }: { inventory: ManagerInventory }) {
       }}
     >
       <HugeiconsIcon icon={Search01Icon} className="text-muted-foreground size-4 shrink-0" aria-hidden />
-      <div className="peer relative flex min-w-24 flex-1 self-stretch">
-        <input
-          ref={inputRef}
-          type="search"
-          role="combobox"
-          value={query}
-          onChange={(e) => {
-            setQuery(e.target.value);
-            setCaret(e.target.selectionStart ?? e.target.value.length);
-            setOpen(true);
-          }}
-          onSelect={(e) => setCaret(e.currentTarget.selectionStart ?? 0)}
-          onKeyDown={onKeyDown}
-          onBlur={() => setOpen(false)}
-          placeholder="Find items"
-          aria-label="Search items"
-          aria-keyshortcuts="F"
-          aria-expanded={options !== undefined}
-          aria-controls={listId}
-          aria-autocomplete="list"
-          aria-activedescendant={options?.[active] ? `${listId}-${active}` : undefined}
-          aria-invalid={error ? true : undefined}
-          aria-describedby={error ? "manager-search-error" : undefined}
-          autoComplete="off"
-          spellCheck={false}
-          className="placeholder:text-muted-foreground h-14 w-full bg-transparent text-base outline-none [&::-webkit-search-cancel-button]:hidden"
-        />
+      <div className="peer relative flex min-w-24 flex-1 flex-wrap items-center gap-x-1.5 self-stretch">
+        {chips.map((chip) => (
+          <button
+            key={chip}
+            type="button"
+            onClick={() => removeChip(chip)}
+            aria-label={`Remove filter ${chip}`}
+            className="flex h-7 max-w-full shrink-0 cursor-pointer items-center gap-1.5 bg-foreground/15 px-2.5 font-mono text-[13px] outline-none transition-colors hover:bg-foreground/22 focus-visible:ring-1 focus-visible:ring-outline-strong rounded-full"
+          >
+            <ChipLabel term={chip} />
+            <HugeiconsIcon icon={Cancel01Icon} strokeWidth={2} className="text-muted-foreground size-3 shrink-0" aria-hidden />
+          </button>
+        ))}
+        <div className="relative flex min-w-24 flex-1 self-stretch">
+          {ghost && (
+            // Mirrors the typed text invisibly so the ghost starts where the text ends.
+            <span
+              aria-hidden
+              className="pointer-events-none absolute inset-0 flex items-center overflow-hidden text-base whitespace-pre"
+            >
+              <span className="invisible">{query}</span>
+              <span className="text-muted-foreground/70">{ghost}</span>
+              <kbd className="text-muted-foreground border-foreground/20 ml-2 flex h-5 shrink-0 items-center border px-1 font-sans text-[11px]">
+                Tab
+              </kbd>
+            </span>
+          )}
+          <input
+            ref={inputRef}
+            type="search"
+            role="combobox"
+            value={query}
+            onChange={(e) => {
+              setQuery(e.target.value);
+              setCaret(e.target.selectionStart ?? e.target.value.length);
+              setOpen(true);
+            }}
+            onSelect={(e) => setCaret(e.currentTarget.selectionStart ?? 0)}
+            onKeyDown={onKeyDown}
+            onBlur={() => setOpen(false)}
+            placeholder={chips.length ? "Add a filter or search" : "Find items"}
+            aria-label="Search items"
+            aria-keyshortcuts="F"
+            aria-expanded={options !== undefined}
+            aria-controls={listId}
+            aria-autocomplete="list"
+            aria-activedescendant={options?.[active] ? `${listId}-${active}` : undefined}
+            aria-invalid={error ? true : undefined}
+            aria-describedby={error ? "manager-search-error" : undefined}
+            autoComplete="off"
+            spellCheck={false}
+            className="placeholder:text-muted-foreground relative h-14 w-full bg-transparent text-base outline-none [&::-webkit-search-cancel-button]:hidden"
+          />
+        </div>
         {options && (
           <div
             id={listId}
@@ -252,7 +351,7 @@ export function ManagerSearch({ inventory }: { inventory: ManagerInventory }) {
           </div>
         )}
       </div>
-      {query.length === 0 && (
+      {fullQuery.length === 0 && (
         <kbd
           aria-hidden
           className="text-muted-foreground border-foreground/20 flex h-5 min-w-5 shrink-0 items-center justify-center border px-1 font-sans text-xs peer-focus-within:hidden"
@@ -260,11 +359,11 @@ export function ManagerSearch({ inventory }: { inventory: ManagerInventory }) {
           F
         </kbd>
       )}
-      {query.length > 0 && (
+      {(query.length > 0 || chips.length > 0) && (
         <button
           type="button"
           aria-label="Clear search"
-          onClick={() => setQuery("")}
+          onClick={clearAll}
           className="text-muted-foreground hover:text-foreground flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-none normal:rounded-[6px] outline-none focus-visible:ring-1 focus-visible:ring-outline-strong"
         >
           <HugeiconsIcon icon={Cancel01Icon} strokeWidth={2} className="size-3.5" aria-hidden />

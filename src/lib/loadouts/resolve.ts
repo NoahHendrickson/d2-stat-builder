@@ -122,7 +122,9 @@ export function resolveLoadout(
       const abilityHashes: Partial<Record<AbilityKind, number>> = {};
       for (const kind of ABILITY_KINDS) {
         const start = abilitySocketIndex(manifest, ref.hash, kind);
-        const hash = start !== undefined ? selectedSubclassPlugs(ref, group(start, SUPER_SOCKET_COUNT))[0] : undefined;
+        // Ability sockets have no empty plug: the initial plug is the default ability
+        // (Marksman's Dodge), so a loadout that picks it must still show it.
+        const hash = start !== undefined ? selectedSubclassPlugs(ref, { start, count: SUPER_SOCKET_COUNT, emptyHash: undefined })[0] : undefined;
         if (hash !== undefined) abilityHashes[kind] = hash;
       }
       subclass = { itemHash: ref.hash, subclass: sc, fragmentHashes, aspectHashes, superHash: abilityHashes.super, abilityHashes, socketOverrides: ref.socketOverrides ?? {} };

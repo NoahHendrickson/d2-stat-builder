@@ -90,7 +90,7 @@ function AppThemePicker() {
             <span
               aria-hidden
               className={cn(
-                "d2-hover-ring block h-20 w-32 transition-shadow normal:rounded-[12px] group-focus-visible:ring-1 group-focus-visible:ring-outline-strong",
+                "d2-hover-ring block h-20 w-32 transition-[box-shadow,outline-offset] normal:rounded-[12px] group-focus-visible:ring-1 group-focus-visible:ring-outline-strong",
                 THEME_SWATCH[b.id],
                 selected && "d2-tile-selected",
               )}
@@ -122,7 +122,7 @@ function SiteIconPicker() {
             aria-label={`Icon ${i + 1}`}
             onClick={() => setSiteIcon(icon.id)}
             className={cn(
-              "d2-hover-ring size-12 shrink-0 rounded-none outline-none transition-shadow focus-visible:ring-1 focus-visible:ring-outline-strong",
+              "d2-hover-ring size-12 shrink-0 rounded-none outline-none transition-[box-shadow,outline-offset] focus-visible:ring-1 focus-visible:ring-outline-strong",
               selected && "d2-tile-selected",
             )}
           >

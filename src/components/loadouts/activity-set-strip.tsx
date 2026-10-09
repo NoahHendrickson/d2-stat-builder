@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
   Delete02Icon,
@@ -59,7 +58,7 @@ function ActivitySetTile({
   return (
     <article
       aria-label={set.name}
-      className="d2-card-frame flex w-64 shrink-0 flex-col gap-3 p-3 hover:[--line-alpha:1.6]"
+      className="d2-card-frame flex w-64 shrink-0 flex-col gap-3 p-3 transition-[--line-alpha] duration-200 hover:[--line-alpha:1.6]"
     >
       <div className="flex min-w-0 items-start gap-2">
         <div className="flex min-w-0 flex-1 flex-col">
@@ -126,11 +125,13 @@ function RunConfirmDialog({
   set,
   loadouts,
   onOpenChange,
+  onEdit,
   onConfirm,
 }: {
   set: ActivitySet | null;
   loadouts: readonly SavedLoadout[];
   onOpenChange: (open: boolean) => void;
+  onEdit: (set: ActivitySet) => void;
   onConfirm: (set: ActivitySet) => void;
 }) {
   return (
@@ -160,6 +161,10 @@ function RunConfirmDialog({
           </ol>
         )}
         <DialogFooter>
+          <Button variant="ghost" className="gap-1.5 sm:mr-auto" onClick={() => set && onEdit(set)}>
+            <HugeiconsIcon icon={PencilEdit02Icon} aria-hidden />
+            Edit slots
+          </Button>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
@@ -172,7 +177,8 @@ function RunConfirmDialog({
 
 /**
  * The player's activity sets, as a row of tiles above the loadout list. Running one
- * asks first (it overwrites in-game slots), then hands off to `onRun`.
+ * asks first (it overwrites in-game slots), then hands off to `onRun`. The parent owns
+ * the confirmation, so it can hand over to the set editor and back.
  */
 export function ActivitySetStrip({
   sets,
@@ -180,6 +186,9 @@ export function ActivitySetStrip({
   loadouts,
   run,
   canRun,
+  confirming,
+  onConfirmingChange,
+  onEditSlots,
   onRun,
   onStop,
   onEdit,
@@ -191,12 +200,16 @@ export function ActivitySetStrip({
   run: ActivitySetRunState | null;
   /** False while gear is still provisional or another apply is in flight. */
   canRun: boolean;
+  /** The set whose run is waiting on confirmation. */
+  confirming: ActivitySet | null;
+  onConfirmingChange: (set: ActivitySet | null) => void;
+  /** Edit the set's slots from the confirmation. */
+  onEditSlots: (set: ActivitySet) => void;
   onRun: (set: ActivitySet) => void;
   onStop: () => void;
   onEdit: (set: ActivitySet) => void;
   onDelete: (set: ActivitySet) => void;
 }) {
-  const [confirming, setConfirming] = useState<ActivitySet | null>(null);
   if (sets.length === 0) return null;
 
   return (
@@ -210,7 +223,7 @@ export function ActivitySetStrip({
             characters={characters}
             run={run?.setId === set.id ? run : null}
             canRun={canRun && !run}
-            onRun={() => setConfirming(set)}
+            onRun={() => onConfirmingChange(set)}
             onStop={onStop}
             onEdit={() => onEdit(set)}
             onDelete={() => onDelete(set)}
@@ -220,9 +233,10 @@ export function ActivitySetStrip({
       <RunConfirmDialog
         set={confirming}
         loadouts={loadouts}
-        onOpenChange={(open) => !open && setConfirming(null)}
+        onOpenChange={(open) => !open && onConfirmingChange(null)}
+        onEdit={onEditSlots}
         onConfirm={(set) => {
-          setConfirming(null);
+          onConfirmingChange(null);
           onRun(set);
         }}
       />

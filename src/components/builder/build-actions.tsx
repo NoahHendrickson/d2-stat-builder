@@ -77,10 +77,10 @@ const SaveLoadoutDrawer = dynamic(
 );
 
 /**
- * Footer of an expanded build: copy the piece IDs as a DIM search, hand the
- * build to DIM's loadout editor, or pull the pieces to a character and equip
- * them. All need every piece still present in the armory (a refetch can drop
- * instances from stale results).
+ * Footer of a build card, collapsed or expanded: copy the piece IDs as a DIM
+ * search, hand the build to DIM's loadout editor, or pull the pieces to a
+ * character and equip them. All need every piece still present in the armory
+ * (a refetch can drop instances from stale results).
  */
 export function BuildActions({
   loadout,
@@ -288,7 +288,7 @@ export function BuildActions({
   return (
     // Figma 18:6865 footer: icon actions that open to their label, then the emphatic
     // "Save as loadout", all on one line.
-    <div className="flex items-center justify-end gap-2 p-4">
+    <div className="flex items-center justify-end gap-2 p-2 normal:p-3">
       {onDream && (
         <RevealAction className="mr-auto">
           <Button variant="outline" onClick={() => onDream(loadout)} className="gap-0 px-2">

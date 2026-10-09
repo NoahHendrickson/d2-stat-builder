@@ -256,18 +256,23 @@ const WeaponDetails = memo(function WeaponDetails({
   const masterworks = weapon.masterworks ?? [];
   const hasIntrinsic = weapon.columns.some((c) => c.kind === "Intrinsic");
 
-  /** One perk's tile. `columnKey` is the column it picks in (MASTERWORK for masterworks). */
-  function perkTile(columnKey: number, index: number) {
+  /**
+   * One perk's tile. `columnKey` is the column it picks in (MASTERWORK for
+   * masterworks). A frame that is the only option in its column can't be
+   * picked, so it draws as a bare icon rather than a cell.
+   */
+  function perkTile(columnKey: number, index: number, fixed = false) {
     const perk = catalog.perks[index];
     if (!perk) return null;
     const selected = picked[columnKey] === index;
     const label = perk.currentlyCanRoll ? perk.name : `${perk.name} (retired)`;
+    const masterwork = columnKey === MASTERWORK;
     // Drawn like the Items popover's perk grid (PerkColumnView), at the full size of
     // its Figma cell: a round cell with a hairline, filled blue once picked, and
     // the enhanced arrow in the top-left for perks with an enhanced tier. The
-    // name lives in the tooltip.
-    // Perk art fills its whole square, so round cells inset it a little more.
-    const iconSize = columnKey === MASTERWORK ? 40 : 34;
+    // name lives in the tooltip. Masterwork art is its own framed square, so it
+    // goes without a cell; once one is picked, the others dim.
+    const iconSize = masterwork || fixed ? 44 : 34;
     const content = (
       <>
         {perk.icon && (
@@ -290,38 +295,47 @@ const WeaponDetails = memo(function WeaponDetails({
         ) : null}
       </>
     );
-    return (
-      <Tooltip key={index}>
-        <TooltipTrigger
-          delay={0}
-          render={
-            <button
-              type="button"
-              aria-label={label}
-              aria-pressed={selected}
-              onClick={() => toggle(columnKey, index)}
-              onPointerEnter={() =>
-                setHovered({ column: columnKey, perk: index })
-              }
-              // Leaving a tile ends its preview, even into the gaps between
-              // tiles; only clear if a neighbour hasn't already taken over.
-              onPointerLeave={() =>
-                setHovered((h) =>
-                  h?.column === columnKey && h.perk === index ? null : h,
-                )
-              }
-              className={cn(
-                "relative flex size-14 shrink-0 items-center justify-center border border-foreground/12 outline-none focus-visible:d2-tile-selected",
-                // Masterwork art is square, so its cell stays square.
-                columnKey !== MASTERWORK && "rounded-full",
+    const trigger = fixed ? (
+      <span
+        aria-label={label}
+        className="relative flex size-14 shrink-0 items-center justify-center"
+      />
+    ) : (
+      <button
+        type="button"
+        aria-label={label}
+        aria-pressed={selected}
+        onClick={() => toggle(columnKey, index)}
+        onPointerEnter={() => setHovered({ column: columnKey, perk: index })}
+        // Leaving a tile ends its preview, even into the gaps between
+        // tiles; only clear if a neighbour hasn't already taken over.
+        onPointerLeave={() =>
+          setHovered((h) =>
+            h?.column === columnKey && h.perk === index ? null : h,
+          )
+        }
+        className={cn(
+          "relative flex size-14 shrink-0 items-center justify-center outline-none",
+          masterwork
+            ? cn(
+                "transition-[opacity,filter] hover:brightness-125 focus-visible:[&>img]:d2-tile-selected",
+                picked[MASTERWORK] !== undefined &&
+                  !selected &&
+                  "opacity-40 hover:opacity-100",
+              )
+            : cn(
+                "rounded-full border border-foreground/12 transition-colors focus-visible:d2-tile-selected",
                 selected
                   ? "bg-[#305f8e]"
                   : "bg-foreground/4 hover:bg-foreground/10",
-                !perk.currentlyCanRoll && "opacity-40",
-              )}
-            />
-          }
-        >
+              ),
+          !perk.currentlyCanRoll && "opacity-40",
+        )}
+      />
+    );
+    return (
+      <Tooltip key={index}>
+        <TooltipTrigger delay={0} render={trigger}>
           {content}
         </TooltipTrigger>
         <TooltipContent side="right" align="start" className="max-w-sm">
@@ -424,7 +438,13 @@ const WeaponDetails = memo(function WeaponDetails({
               aria-label={column.kind}
               className="flex shrink-0 flex-col gap-2.5"
             >
-              {column.perkIndices.map((index) => perkTile(i, index))}
+              {column.perkIndices.map((index) =>
+                perkTile(
+                  i,
+                  index,
+                  column.kind === "Intrinsic" && column.perkIndices.length === 1,
+                ),
+              )}
               {column.kind === "Intrinsic" && masterworks.length > 0 && (
                 // Masterworks sit under the frame, a step apart from it.
                 <div
@@ -727,8 +747,9 @@ export function WeaponBrowser() {
         {/* Below the split the dialog shows the details instead; this pane is hidden,
             so don't build a second copy of them (perks, stats, Clarity) behind it. */}
         {!split ? null : shown && data ? (
-          <div className="grid gap-4 text-sm">
-            <WeaponDetails key={shown.hash} weapon={shown} catalog={data} />
+          // Keyed here, not on WeaponDetails, so the fade replays per weapon.
+          <div key={shown.hash} className="d2-fade grid gap-4 text-sm">
+            <WeaponDetails weapon={shown} catalog={data} />
           </div>
         ) : (
           !query.isPending && (

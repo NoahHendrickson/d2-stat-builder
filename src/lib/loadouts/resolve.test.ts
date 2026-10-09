@@ -16,7 +16,8 @@ const manifest: DefLookup = {
     if (hash === 4282591831) {
       return { sockets: { socketEntries: [
         { singleInitialItemHash: 0, socketTypeHash: SUPER_TYPE },
-        { singleInitialItemHash: 0, socketTypeHash: GRENADE_TYPE },
+        // The default grenade: a loadout that picks it still lists it.
+        { singleInitialItemHash: 88, socketTypeHash: GRENADE_TYPE },
       ] } };
     }
     if (hash === 200) {

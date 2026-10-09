@@ -80,7 +80,7 @@ function WeaponPerkGrid({ perks, manifest }: { perks: WeaponPerks; manifest: Man
   const plug = (hash: number) =>
     manifest.def("DestinyInventoryItemDefinition", hash)?.displayProperties;
   return (
-    <div className="flex gap-1 pt-1 pr-1 pb-2 pl-11" aria-label="Perks">
+    <div className="d2-reveal flex gap-1 pt-1 pr-1 pb-2 pl-11" aria-label="Perks">
       {perks.columns.map((column, i) => (
         <div key={i} className="flex flex-col gap-1">
           {column.options.map((hash) => {

@@ -6,7 +6,7 @@ import Image from "next/image";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { GitCompareIcon, SquareLock02Icon, SquareUnlock02Icon } from "@hugeicons/core-free-icons";
 import { PerkTooltip } from "@/components/weapons/perk-tooltip";
-import { TIER_STRIP_CLASS } from "@/components/armor-thumb";
+import { TIER_STRIP_CLASS, TierPips } from "@/components/armor-thumb";
 import { PowerValue } from "@/components/power-value";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent } from "@/components/ui/popover";
@@ -145,11 +145,6 @@ const SECTION = "border-foreground/24 flex flex-col gap-2 border-b p-3 last:bord
 
 /** Watermark box in the header's top-left corner, as in the game's inspect screen. */
 const WATERMARK_PX = 64;
-const LOWER_TIER_OVERLAY: Record<number, string> = {
-  2: "/img/destiny_content/items/inventory-item-tier2.png",
-  3: "/img/destiny_content/items/inventory-item-tier3.png",
-  4: "/img/destiny_content/items/inventory-item-tier4.png",
-};
 
 /**
  * The rarity plate: name, then element and type; the season watermark and tier pips in
@@ -191,24 +186,7 @@ function Header({
               unoptimized
             />
           )}
-          {item.gearTier === 5 ? (
-            <Image
-              src="/loadout/tier-5-pips.svg"
-              alt=""
-              width={WATERMARK_PX}
-              height={WATERMARK_PX}
-              className="absolute top-[29.5%] left-[9.1%] h-[67.5%] w-[11.4%] max-w-none"
-            />
-          ) : item.gearTier && LOWER_TIER_OVERLAY[item.gearTier] ? (
-            <Image
-              src={`${BUNGIE_IMAGE_BASE}${LOWER_TIER_OVERLAY[item.gearTier]}`}
-              alt=""
-              width={WATERMARK_PX}
-              height={WATERMARK_PX}
-              className="absolute inset-0 size-full max-w-none"
-              unoptimized
-            />
-          ) : null}
+          {item.gearTier !== undefined && <TierPips tier={item.gearTier} />}
         </span>
       )}
       <div className="relative flex items-start justify-between gap-3">

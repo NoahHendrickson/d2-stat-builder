@@ -680,6 +680,19 @@ input[type="number"] {
   inherits: false;
   initial-value: 0deg;
 }
+/* Registered so hover / focus can ease the line and the EQUIP fill instead of
+   snapping: list them in a control's transition-property to opt in. 1 is the
+   same default every `var(--line-alpha, 1)` falls back to. */
+@property --line-alpha {
+  syntax: "<number>";
+  inherits: true;
+  initial-value: 1;
+}
+@property --equip-fill {
+  syntax: "<color>";
+  inherits: false;
+  initial-value: transparent;
+}
 /* Indeterminate progress: a segment sweeping across its track (dream build search). */
 @keyframes dream-sweep {
   from {
@@ -717,6 +730,67 @@ input[type="number"] {
   [data-line-style="plain"] &:not(.d2-equip),
   [data-app-theme="normal"] & {
     animation: none;
+  }
+}
+
+/* ── Motion ────────────────────────────────────────────────────────────────
+   Small entrances for things that appear inside a page: transform and opacity
+   only (compositor work, never layout), the app's ease-out curve, and a
+   backwards fill so nothing keeps a transform once it has landed (a lingering
+   one would trap fixed descendants and pin a layer). Each plays once, on mount;
+   re-renders don't replay it. Reduced motion turns them all off. */
+@keyframes d2-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+@keyframes d2-rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+@keyframes d2-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+/* A panel opening under its trigger: row details, inline suggestions. */
+@utility d2-reveal {
+  animation: d2-reveal 180ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+  }
+}
+
+/* Content swapping in place (a new weapon in the details pane, a status line). */
+@utility d2-fade {
+  animation: d2-fade 160ms ease-out backwards;
+  @media (prefers-reduced-motion: reduce) {
+    animation: none;
+  }
+}
+
+/* A list whose items rise in, the first eight cascading 30ms apart. Items that
+   mount later (a re-sort, a new result) rise on their own; past eight they
+   share the last delay, so a long list never waits on its tail. */
+@utility d2-stagger {
+  & > * {
+    animation: d2-rise 260ms cubic-bezier(0.22, 1, 0.36, 1) backwards;
+  }
+  & > :nth-child(2) { animation-delay: 30ms; }
+  & > :nth-child(3) { animation-delay: 60ms; }
+  & > :nth-child(4) { animation-delay: 90ms; }
+  & > :nth-child(5) { animation-delay: 120ms; }
+  & > :nth-child(6) { animation-delay: 150ms; }
+  & > :nth-child(7) { animation-delay: 180ms; }
+  & > :nth-child(n + 8) { animation-delay: 210ms; }
+  @media (prefers-reduced-motion: reduce) {
+    & > * {
+      animation: none;
+    }
   }
 }
 

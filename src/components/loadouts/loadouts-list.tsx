@@ -121,7 +121,9 @@ type DialogState =
   | { kind: "delete"; loadout: SavedLoadout }
   | { kind: "delete-many"; ids: string[] }
   | { kind: "delete-all" }
-  | { kind: "set-edit"; set?: ActivitySet }
+  /** `fromRun`: opened from the run confirmation, which comes back when the editor closes. */
+  | { kind: "set-edit"; set?: ActivitySet; fromRun?: boolean }
+  | { kind: "set-run"; set: ActivitySet }
   | { kind: "set-delete"; set: ActivitySet };
 
 const SUBCLASS_OPTIONS = SUBCLASSES.map((sc) => ({ value: sc, label: sc }));
@@ -712,6 +714,13 @@ export function LoadoutsList({
         loadouts={all}
         run={setRun}
         canRun={!provisional && !loadouts.isPending}
+        confirming={dialog.kind === "set-run" ? dialog.set : null}
+        onConfirmingChange={(set) =>
+          set
+            ? setDialog({ kind: "set-run", set })
+            : setDialog((d) => (d.kind === "set-run" ? { kind: "none" } : d))
+        }
+        onEditSlots={(set) => setDialog({ kind: "set-edit", set, fromRun: true })}
         onRun={runSet}
         onStop={stopActivitySet}
         onEdit={(set) => setDialog({ kind: "set-edit", set })}
@@ -719,7 +728,7 @@ export function LoadoutsList({
       />
 
       {selecting && all.length > 0 && (
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="d2-reveal flex flex-wrap items-center gap-3">
           <label className="flex items-center gap-2 text-sm">
             <Checkbox
               size="lg"
@@ -882,7 +891,14 @@ export function LoadoutsList({
       {dialog.kind === "set-edit" && (
         <ActivitySetEditor
           open
-          onOpenChange={(open) => !open && setDialog({ kind: "none" })}
+          onOpenChange={(open) =>
+            !open &&
+            setDialog(
+              dialog.fromRun && dialog.set
+                ? { kind: "set-run", set: dialog.set }
+                : { kind: "none" },
+            )
+          }
           initial={dialog.set}
           characters={armory.characters}
           loadouts={all}
@@ -891,6 +907,8 @@ export function LoadoutsList({
           onSave={(set) => {
             saveActivitySet(set);
             toast.success(dialog.set ? "Activity set updated" : "Activity set created");
+            // Back to the confirmation, now showing the new slots.
+            if (dialog.fromRun) setDialog({ kind: "set-run", set });
           }}
         />
       )}

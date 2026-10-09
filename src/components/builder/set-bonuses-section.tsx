@@ -129,7 +129,7 @@ export function SetBonusesSection({
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search set bonuses"
             aria-label="Search set bonuses"
-            className="pr-8 pl-8"
+            className="h-9 pr-8 pl-8"
           />
           {query.length > 0 && <SearchClearButton onClick={() => setQuery("")} />}
         </div>

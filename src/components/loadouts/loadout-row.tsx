@@ -204,12 +204,13 @@ export const LoadoutRow = memo(function LoadoutRow({
   return (
     <article
       aria-label={loadout.name}
-      className="@container d2-card-frame flex flex-col gap-4 p-4 hover:[--line-alpha:1.6]"
+      className="@container d2-card-frame flex flex-col gap-4 p-4 transition-[--line-alpha] duration-200 hover:[--line-alpha:1.6]"
     >
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
         {selected !== undefined && onSelect && (
           <Checkbox
             size="lg"
+            className="d2-fade"
             checked={selected}
             onCheckedChange={() => onSelect(saved.id)}
             aria-label={`Select ${loadout.name}`}

@@ -404,7 +404,7 @@ export function DreamComparison({
 
       {options.length > 1 && (
         <div
-          className={cn("flex flex-wrap gap-2", running && "pointer-events-none opacity-50")}
+          className={cn("flex flex-wrap gap-2 transition-opacity", running && "pointer-events-none opacity-50")}
           role="group"
           aria-label="Ways to get there"
         >

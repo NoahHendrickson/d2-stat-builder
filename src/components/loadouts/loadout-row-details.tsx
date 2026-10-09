@@ -6,7 +6,7 @@ import {
   TooltipLabel,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Fragment, type CSSProperties } from "react";
+import { Fragment } from "react";
 import Image from "next/image";
 import type { ArmoryCharacter } from "@/lib/armory/fetch";
 import { buildFragmentStats, formatFragmentStats, SUBCLASS_LINE, subclassFromPlug, type Subclass } from "@/lib/armory/fragments";
@@ -41,12 +41,12 @@ const STAT_COLS = STAT_DISPLAY_ORDER.map((key) => ({
 const DETAIL_COLS = "minmax(0,1fr) repeat(6, 2.25rem) 3rem";
 
 /**
- * Hairline frame tinted with `--element-line`, drawn on an overlay so it sits on top of the
- * icon (an inset shadow on the <img> itself paints under the art). The host must be
- * `relative`.
+ * Light white hairline frame for subclass plugs and the artifact, drawn on an overlay so
+ * it sits on top of the icon (an inset shadow on the <img> itself paints under the art).
+ * The host must be `relative`.
  */
-const ELEMENT_FRAME =
-  "after:pointer-events-none after:absolute after:inset-0 after:shadow-[inset_0_0_0_1px_color-mix(in_srgb,var(--element-line)_45%,transparent)]";
+export const TILE_FRAME =
+  "after:pointer-events-none after:absolute after:inset-0 after:shadow-[inset_0_0_0_1px_rgb(255_255_255/0.4)]";
 
 /**
  * Armor mod categories whose art leaves out the square plate (white at ~14%) that the
@@ -66,6 +66,7 @@ export function PlugIcon({
   className,
   classType,
   element,
+  framed: framedProp = false,
 }: {
   hash: number;
   manifest: Manifest;
@@ -77,8 +78,10 @@ export function PlugIcon({
   className?: string;
   /** When set, append armor-stat bonuses (fragments' +10 / −10). */
   classType?: number;
-  /** Subclass damage type — tints the tile frame (aspects / fragments). */
+  /** Subclass damage type: marks a subclass plug (aspects / fragments), which gets a frame. */
   element?: Subclass;
+  /** Frame a plug that isn't a subclass plug (artifact perks). */
+  framed?: boolean;
 }) {
   const def = manifest.def("DestinyInventoryItemDefinition", hash);
   const name = def?.displayProperties?.name ?? `#${hash}`;
@@ -93,8 +96,7 @@ export function PlugIcon({
   const icon = def?.displayProperties?.icon;
   const recolor = isStrandSharedAbilityIcon(def?.plug?.plugCategoryIdentifier);
   const plate = PLATELESS_MOD.test(def?.plug?.plugCategoryIdentifier ?? "");
-  const plugElement =
-    subclassFromPlug(def) ?? element;
+  const framed = framedProp || (subclassFromPlug(def) ?? element) !== undefined;
   const sizeClass =
     sizeClassName ??
     (size === 16
@@ -106,9 +108,6 @@ export function PlugIcon({
           : size === 40
             ? "size-10"
             : "size-6");
-  const tileStyle = plugElement
-    ? ({ "--element-line": SUBCLASS_LINE[plugElement] } as CSSProperties)
-    : undefined;
   return icon ? (
     <TooltipLabel label={label}>
       <span
@@ -116,9 +115,8 @@ export function PlugIcon({
           sizeClass,
           "relative inline-flex shrink-0",
           recolor && "isolate",
-          plugElement && ELEMENT_FRAME,
+          framed && TILE_FRAME,
         )}
-        style={tileStyle}
         tabIndex={0}
       >
         <Image
@@ -146,10 +144,9 @@ export function PlugIcon({
           "bg-muted relative shrink-0 rounded-none",
           sizeClass,
           dim && "opacity-40",
-          plugElement && ELEMENT_FRAME,
+          framed && TILE_FRAME,
           className,
         )}
-        style={tileStyle}
         tabIndex={0}
         aria-label={label}
       />
@@ -276,66 +273,82 @@ export interface SetBonus {
   hash: number;
   count: number;
   icon?: string;
+  /** "2pc Set name". */
   label: string;
+  perkName?: string;
 }
 
-/** Set bonuses → the perk each piece count unlocks (its icon is the set's glyph). */
+/**
+ * Set bonuses → one entry per perk the piece count unlocks, so a 4pc set lists its 2pc
+ * perk too (each perk's icon is the set's glyph).
+ */
 export function loadoutSetBonuses(
   saved: SavedLoadout,
   manifest: Manifest,
 ): SetBonus[] {
-  return Object.entries(saved.loadout.parameters.setBonuses ?? {}).map(
+  return Object.entries(saved.loadout.parameters.setBonuses ?? {}).flatMap(
     ([hash, count]) => {
       const setDef = manifest.def(
         "DestinyEquipableItemSetDefinition",
         Number(hash),
       );
       const setName = setDef?.displayProperties?.name ?? "Set";
-      const perkHash = setDef?.setPerks?.find(
-        (p) => p.requiredSetCount === count,
-      )?.sandboxPerkHash;
-      const perk = manifest.def("DestinySandboxPerkDefinition", perkHash);
-      return {
-        hash: Number(hash),
-        count,
-        icon: perk?.displayProperties?.icon,
-        label: `${count}pc ${setName}`,
-      };
+      return (setDef?.setPerks ?? [])
+        .filter((p) => p.requiredSetCount <= count)
+        .sort((a, b) => a.requiredSetCount - b.requiredSetCount)
+        .map((p) => {
+          const perk = manifest.def(
+            "DestinySandboxPerkDefinition",
+            p.sandboxPerkHash,
+          );
+          return {
+            hash: Number(hash),
+            count: p.requiredSetCount,
+            icon: perk?.displayProperties?.icon,
+            label: `${p.requiredSetCount}pc ${setName}`,
+            perkName: perk?.displayProperties?.name,
+          };
+        });
     },
   );
 }
 
-/** Every active set bonus's perk glyph in one bordered 32px well; names in the tooltip. */
+/**
+ * Each set-bonus perk as a round blue cell, like a picked perk in the weapon search;
+ * the piece count, set and perk name are in its tooltip.
+ */
 export function SetBonusChip({ bonuses }: { bonuses: SetBonus[] }) {
   if (bonuses.length === 0) return null;
   return (
-    <Tooltip>
-      <TooltipTrigger
-        delay={100}
-        render={
-          <span
-            tabIndex={0}
-            aria-label={bonuses.map((b) => b.label).join(", ")}
-            className="bg-[#41a6ff] flex h-8 min-w-8 shrink-0 items-center justify-center gap-1.5 rounded-none normal:rounded-[8px] border border-foreground/8 px-1 outline-none focus-visible:border-outline-strong"
-          />
-        }
-      >
-        {bonuses.map((b) => (
-          <ManifestIcon
-            key={b.hash}
-            icon={b.icon}
-            label={b.label}
-            size={22}
-            showTooltip={false}
-          />
-        ))}
-      </TooltipTrigger>
-      <TooltipContent className="grid gap-2 px-3 py-2.5 text-sm leading-6">
-        {bonuses.map((b) => (
-          <div key={b.hash}>{b.label}</div>
-        ))}
-      </TooltipContent>
-    </Tooltip>
+    <div className="flex shrink-0 items-center gap-1.5">
+      {bonuses.map((b) => (
+        <Tooltip key={`${b.hash}-${b.count}`}>
+          <TooltipTrigger
+            delay={100}
+            render={
+              <span
+                tabIndex={0}
+                aria-label={b.perkName ? `${b.label}: ${b.perkName}` : b.label}
+                className="flex size-10 shrink-0 items-center justify-center rounded-full border border-foreground/12 bg-[#305f8e] outline-none focus-visible:d2-tile-selected"
+              />
+            }
+          >
+            <ManifestIcon
+              icon={b.icon}
+              label={b.label}
+              size={24}
+              showTooltip={false}
+            />
+          </TooltipTrigger>
+          <TooltipContent className="grid px-3 py-2.5 text-sm leading-6">
+            <div>{b.label}</div>
+            {b.perkName && (
+              <div className="text-muted-foreground">{b.perkName}</div>
+            )}
+          </TooltipContent>
+        </Tooltip>
+      ))}
+    </div>
   );
 }
 
@@ -375,7 +388,7 @@ export function LoadoutRowDetails({
     : 0;
 
   return (
-    <div className="grid gap-4 border-t border-foreground/15 pt-3 text-sm @3xl:grid-cols-[minmax(0,40rem)_minmax(0,1fr)]">
+    <div className="d2-reveal grid gap-4 border-t border-foreground/15 pt-3 text-sm @3xl:grid-cols-[minmax(0,40rem)_minmax(0,1fr)]">
       <div
         className="grid items-center gap-x-1 gap-y-1"
         style={{ gridTemplateColumns: DETAIL_COLS }}

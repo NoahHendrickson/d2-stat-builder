@@ -76,7 +76,7 @@ function Results({
         {items.length === 0 ? (
           <p className="text-muted-foreground text-sm">Nothing matches.</p>
         ) : (
-          <div className="flex flex-wrap gap-1">
+          <div className="flex flex-wrap gap-2">
             {items.map((item) => (
               <ItemTile key={item.key} item={item} />
             ))}

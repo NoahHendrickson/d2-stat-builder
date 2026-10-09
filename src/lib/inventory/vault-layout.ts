@@ -6,11 +6,11 @@
 import type { InventoryItem } from "./build";
 import type { GroupKey, ItemGroup } from "./view-settings";
 
-/** A tile: a 1px frame round a 54px icon over its 16px label bar. */
-export const TILE_WIDTH_PX = 56;
-export const TILE_HEIGHT_PX = 72;
+/** A tile: a 1px frame round a 58px icon over its 16px label bar. */
+export const TILE_WIDTH_PX = 60;
+export const TILE_HEIGHT_PX = 76;
 /** Between tiles, across and down. */
-export const TILE_GAP_PX = 6;
+export const TILE_GAP_PX = 8;
 /** Between a group's marker and its tiles. */
 export const MARKER_GAP_PX = 12;
 /** Between groups side by side, and between one group's lines and the next's. */

@@ -22,6 +22,7 @@ const ENHANCED_OVERLAY = "/img/destiny_content/items/enhanced-item-overlay.png";
 const INNER_SIZE_CLASS: Partial<Record<ArmorThumbSize, string>> = {
   44: "size-[42px]",
   56: "size-[54px]",
+  60: "size-[58px]",
 };
 
 /**
@@ -34,7 +35,7 @@ const INNER_SIZE_CLASS: Partial<Record<ArmorThumbSize, string>> = {
  */
 export const ItemTile = memo(function ItemTile({
   item,
-  size = 56,
+  size = 60,
 }: {
   item: InventoryItem;
   size?: ArmorThumbSize;
@@ -65,7 +66,7 @@ export const ItemTile = memo(function ItemTile({
       tabIndex={0}
       draggable={Boolean(actions)}
       className={cn(
-        "flex shrink-0 cursor-pointer flex-col self-start p-px outline-none select-none d2-hover-ring focus-visible:d2-tile-selected [&_img]:pointer-events-none",
+        "flex shrink-0 cursor-pointer flex-col self-start p-px outline-none select-none transition-[opacity,outline-offset] duration-150 d2-hover-ring focus-visible:d2-tile-selected [&_img]:pointer-events-none",
         item.masterworked ? "bg-item-frame-masterwork" : "bg-item-frame",
         // A search dims what it doesn't match; with no search, archived items stay out
         // of the way (as in DIM).
@@ -175,7 +176,7 @@ export const ItemTile = memo(function ItemTile({
 });
 
 /** An empty cell, drawn as the game's bracket corners, the same size as a tile. */
-export function EmptyTile({ size = 56 }: { size?: ArmorThumbSize }) {
+export function EmptyTile({ size = 60 }: { size?: ArmorThumbSize }) {
   return (
     <span
       aria-hidden

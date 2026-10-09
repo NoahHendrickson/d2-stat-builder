@@ -126,7 +126,7 @@ export const AppSidebar = memo(function AppSidebar({
           logo
         )}
         {!collapsed && (
-          <span className="min-w-0 flex-1 truncate text-sm font-medium">D2 Stat Builder</span>
+          <span className="min-w-0 flex-1 truncate text-sm font-medium">D2 Conflux</span>
         )}
         {!collapsed && onToggle && (
           <TooltipLabel label={toggleLabel}>
@@ -351,7 +351,7 @@ function LinkRow({
             <Button
               variant="outline"
               size="icon-xs"
-              className="absolute top-1/2 right-1.5 -translate-y-1/2 opacity-0 group-hover/link:opacity-100 focus-visible:opacity-100 aria-expanded:opacity-100 pointer-coarse:opacity-100"
+              className="absolute top-1/2 right-1.5 -translate-y-1/2 opacity-0 transition-opacity group-hover/link:opacity-100 focus-visible:opacity-100 aria-expanded:opacity-100 pointer-coarse:opacity-100"
             />
           }
           aria-label={`Options for ${link.name}`}

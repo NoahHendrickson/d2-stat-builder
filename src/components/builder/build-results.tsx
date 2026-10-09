@@ -45,6 +45,7 @@ import {
   type BuildActionProps,
 } from "@/components/builder/build-actions";
 import { cn } from "@/lib/utils";
+import { useEntrance } from "@/lib/use-entrance";
 import { useStoreValue, type ValueStore } from "@/lib/value-store";
 import { ArmorThumb } from "@/components/armor-thumb";
 import { MaterialCost, materialSummary } from "@/components/material-cost";
@@ -62,7 +63,7 @@ export { MAX_SHOWN };
 
 /** A build card: lifted face with the EQUIP centre-bright stroke. */
 export const BUILD_CARD_LIFT_CLASS =
-  "d2-card-frame relative rounded-none";
+  "d2-card-frame relative rounded-none transition-[outline-offset]";
 
 /** Stack of build cards — no well; they sit on the main column. */
 export const BUILD_LIST_WELL_CLASS = "flex flex-col gap-3";
@@ -384,7 +385,7 @@ const BuildRow = memo(function BuildRow({
       </button>
 
       {open && (
-        <div className="border-t border-foreground/8">
+        <div className="d2-reveal border-t border-foreground/8">
           {/* Shared column tracks so totals line up with per-piece stats
               (name column is max-content of the longest piece name). */}
           <div className={cn(BREAKDOWN_GRID, "border-b border-foreground/8 px-4")}>
@@ -573,25 +574,29 @@ const BuildRow = memo(function BuildRow({
               )}
             </div>
           </div>
-
-          <BuildActions
-            loadout={loadout}
-            pieces={pieces}
-            exoticName={exotic?.name}
-            setBadges={setBadges}
-            characters={characters}
-            statModHashes={statModHashes}
-            tuningPlugHashes={tuningPlugHashes}
-            artificeModHashes={artificeModHashes}
-            getBuilderState={getBuilderState}
-            manifest={manifest}
-            insertablePlugs={insertablePlugs}
-            onEquipped={onEquipped}
-            pieceMap={pieceMap}
-            onDream={onDream}
-          />
         </div>
       )}
+
+      {/* Always shown, so a build can be equipped or saved without expanding it (the
+          breakdown above already ends on a rule). */}
+      <div className={cn(!open && "border-t border-foreground/8")}>
+        <BuildActions
+          loadout={loadout}
+          pieces={pieces}
+          exoticName={exotic?.name}
+          setBadges={setBadges}
+          characters={characters}
+          statModHashes={statModHashes}
+          tuningPlugHashes={tuningPlugHashes}
+          artificeModHashes={artificeModHashes}
+          getBuilderState={getBuilderState}
+          manifest={manifest}
+          insertablePlugs={insertablePlugs}
+          onEquipped={onEquipped}
+          pieceMap={pieceMap}
+          onDream={onDream}
+        />
+      </div>
       </div>
     </div>
   );
@@ -605,7 +610,7 @@ function ImprovedMaximaAlert() {
   // Same alert footprint as the running card — green with a check instead of a spinner.
   return (
     <div
-      className="flex items-center gap-2.5 rounded-md border border-positive/30 bg-positive/10 px-3 py-2.5"
+      className="d2-reveal flex items-center gap-2.5 rounded-md border border-positive/30 bg-positive/10 px-3 py-2.5"
       aria-live="polite"
     >
       <HugeiconsIcon icon={CheckmarkCircle02Icon}
@@ -666,7 +671,7 @@ function SearchStatus({
       // visual weight than a status line.
       return (
         <div
-          className="flex items-center gap-2.5 rounded-md border border-foreground/15 bg-lifted px-3 py-2.5"
+          className="d2-reveal flex items-center gap-2.5 rounded-md border border-foreground/15 bg-lifted px-3 py-2.5"
           aria-live="polite"
         >
           <HugeiconsIcon icon={Loading03Icon}
@@ -705,7 +710,7 @@ function SearchStatus({
         lines.push(
           <p
             key="pending"
-            className="flex items-center gap-2 text-xs text-positive"
+            className="d2-fade flex items-center gap-2 text-xs text-positive"
             aria-live="polite"
           >
             Stronger builds found
@@ -726,7 +731,7 @@ function SearchStatus({
         lines.push(
           <p
             key="confirmed"
-            className="text-muted-foreground text-xs"
+            className="d2-fade text-muted-foreground text-xs"
             aria-live="polite"
           >
             Verified — no better builds or higher maximums exist for these
@@ -739,7 +744,7 @@ function SearchStatus({
         lines.push(
           <p
             key="verified-list"
-            className="text-muted-foreground text-xs"
+            className="d2-fade text-muted-foreground text-xs"
             aria-live="polite"
           >
             Search complete — no better builds exist for these targets (stat
@@ -817,6 +822,8 @@ export function BuildResults({
     () => sortLoadouts(result.loadouts, sort, costOf),
     [result.loadouts, sort, costOf],
   );
+  // New results cascade in; a re-sort only reorders (see useEntrance).
+  const entering = useEntrance(result.loadouts);
   const status = (
     <SearchStatus
       capped={result.capped}
@@ -853,7 +860,7 @@ export function BuildResults({
   return (
     <div className="space-y-3">
       {status}
-      <div className={BUILD_LIST_WELL_CLASS}>
+      <div className={cn(BUILD_LIST_WELL_CLASS, entering && "d2-stagger")}>
         {sortedLoadouts.slice(0, MAX_SHOWN).map((loadout) => (
           <BuildRow
             key={loadout.pieceIds.join("|")}

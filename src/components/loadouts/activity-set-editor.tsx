@@ -256,6 +256,8 @@ export function ActivitySetEditor({
 
   const save = () => {
     if (!canSave || !character) return;
+    // Close first, so whatever onSave opens next isn't undone by the close.
+    onOpenChange(false);
     onSave({
       id: initial?.id ?? crypto.randomUUID(),
       name: trimmed,
@@ -263,7 +265,6 @@ export function ActivitySetEditor({
       classType,
       slots: assignments,
     });
-    onOpenChange(false);
   };
 
   return (

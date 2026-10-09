@@ -71,6 +71,7 @@ import {
 import {
   GROUP_GAP_X_PX,
   MARKER_GAP_PX,
+  TILE_GAP_PX,
   TILE_WIDTH_PX,
   layoutVault,
   lineOfItem,
@@ -108,10 +109,10 @@ import {
 const POSTMASTER_FALLBACK_CAPACITY = 21;
 
 /**
- * Below this width, three character columns (about 830px) would leave the vault only a
+ * Below this width, three character columns (about 930px) would leave the vault only a
  * handful of tiles across: show one character at a time, with tabs to switch.
  */
-const ALL_CHARACTERS_MIN_PX = 1480;
+const ALL_CHARACTERS_MIN_PX = 1580;
 
 /**
  * From this width the vault sits beside the characters, each of its slots on the same row
@@ -452,7 +453,7 @@ function InventoryGrid({
             label={CLASS_NAMES[c.classType] ?? "Guardian"}
             className={cn(
               "grid grid-rows-subgrid",
-              !compact ? "px-3 first:pl-0 last:pr-0" : c !== shown && "hidden",
+              !compact ? "px-4 first:pl-0 last:pr-0" : c !== shown && "hidden",
               compact && aligned && "pr-3",
             )}
             style={{ gridRow: `${firstRow} / span ${rowCount}` }}
@@ -614,11 +615,11 @@ function CharacterStats({
 }) {
   if (Object.keys(stats).length === 0) return null;
   return (
-    <dl className="flex justify-between pt-2.5 text-xs">
+    <dl className="flex justify-between pt-2 text-[11px]">
       {STAT_DISPLAY_ORDER.map((key) => (
         <div key={key} className="flex items-center gap-1">
           <dt>
-            <StatGlyph src={icons[key]} label={STAT_LABELS[key]} className="size-4" />
+            <StatGlyph src={icons[key]} label={STAT_LABELS[key]} className="size-3.5" />
           </dt>
           <dd className="tabular-nums">{stats[key] ?? "–"}</dd>
         </div>
@@ -661,7 +662,7 @@ function CharacterCell({
       <DropZone
         to={{ kind: "character", characterId: character.id }}
         bucket={row.hash}
-        className="grid grid-cols-[repeat(3,56px)] content-start gap-1.5 p-1"
+        className="grid grid-cols-[repeat(3,60px)] content-start gap-2 p-1"
       >
         {items.map((item) => (
           <ItemTile key={item.key} item={item} />
@@ -690,7 +691,7 @@ function PostmasterCell({ items, capacity }: { items: InventoryItem[]; capacity:
       {items.length > 0 && (
         // Full-size tiles like every slot row (smaller ones clip the Power); four across
         // keeps the grid inside the column width the slot rows set.
-        <div className="grid grid-cols-[repeat(4,56px)] gap-1.5">
+        <div className="grid grid-cols-[repeat(4,60px)] gap-2">
           {items.map((item) => (
             <ItemTile key={item.key} item={item} />
           ))}
@@ -972,15 +973,15 @@ const VaultLineRow = memo(function VaultLineRow({ line }: { line: VaultTileLine 
       {line.cells.map((cell) => (
         <div key={cell.key} className="flex items-start">
           {cell.markerWidth > 0 && (
-            // Centred on the tile's icon (56px), above its footer bar.
+            // Centred on the tile's icon (60px), above its footer bar.
             <span
-              className="flex h-14 shrink-0 items-center"
+              className="flex h-15 shrink-0 items-center"
               style={{ width: cell.markerWidth, marginRight: MARKER_GAP_PX }}
             >
               {cell.marker && <GroupMarker groupBy={line.groupBy} item={cell.marker} />}
             </span>
           )}
-          <div className="flex gap-1.5">
+          <div className="flex" style={{ gap: TILE_GAP_PX }}>
             {cell.items.map((item) => (
               <ItemTile key={item.key} item={item} />
             ))}
