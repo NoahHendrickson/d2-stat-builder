@@ -34,16 +34,8 @@ import {
   type ItemTag,
 } from "@/lib/inventory/annotations";
 import type { InventoryItem, ManagerInventory } from "@/lib/inventory/build";
-import {
-  applyMoves,
-  characterName,
-  locate,
-  type Landing,
-  type Place,
-} from "@/lib/inventory/moves";
-import { recentlyMoved, type MoveOutcome } from "@/lib/inventory/move-queue";
+import { characterName, type Landing, type Place } from "@/lib/inventory/moves";
 import { NO_PERKS, createPerkLookup } from "@/lib/inventory/perk-index";
-import { planSmartMove } from "@/lib/inventory/smart-moves";
 import { dupeHashes, forEachItem, matchItems, parseSearch } from "@/lib/inventory/search";
 import { applySuggestion, suggestSearch, vocabList, type SearchVocab, type Suggestion } from "@/lib/inventory/search-suggest";
 import { useManifest } from "@/lib/manifest/use-manifest";
@@ -51,6 +43,7 @@ import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 import { useStoreValue } from "@/lib/value-store";
 import { useManagerActions } from "./manager-context";
+import { moveAll } from "./move-all";
 import { SearchResultsDrawer } from "./search-results-drawer";
 import { searchMatches } from "./search-store";
 import { TAG_ICONS } from "./tag-icons";
@@ -458,59 +451,13 @@ function BulkActions({ inventory, matches }: { inventory: ManagerInventory; matc
   const plural = (n: number) => `${n.toLocaleString()} ${n === 1 ? "item" : "items"}`;
   const count = plural(found.length);
 
+  const moveMatches = (to: Landing) => {
+    if (actions) moveAll(actions, found.map((f) => f.item), to);
+  };
+
   const tag = (t: ItemTag | undefined) => {
     setTag(ids, t);
     toast.success(t ? `Tagged ${ids.length} as ${TAG_LABELS[t]}` : `Cleared tags on ${ids.length}`);
-  };
-
-  /**
-   * Move each match that can go, making room as needed. Each plan is made against the
-   * moves already planned, and never moves an earlier match back out to make room.
-   */
-  const moveAll = (to: Landing) => {
-    if (!actions) return;
-    let sim = actions.inventory();
-    const placed = new Set<string>();
-    const runs: Promise<MoveOutcome>[] = [];
-    let skipped = 0;
-    for (const { item } of found) {
-      const at = locate(sim, item.key)?.place;
-      if (!at || isThere(at, to)) {
-        placed.add(item.key);
-        continue;
-      }
-      const plan = planSmartMove(sim, item, at, to, {
-        annotations: annotationsStore.get(),
-        recent: recentlyMoved(),
-        pinned: placed,
-      });
-      if (!plan.ok) {
-        skipped++;
-        continue;
-      }
-      runs.push(actions.runSteps(plan.steps, false));
-      sim = applyMoves(
-        sim,
-        plan.steps.map((s) => ({ id: -1, itemKey: s.item.key, to: s.to, status: "pending" as const, at: 0 })),
-      );
-      placed.add(item.key);
-    }
-    const noRoom = "No room could be made, or they can't go there";
-    if (runs.length === 0) {
-      if (skipped === 0) toast.info("Everything is already there");
-      else toast.error(`Couldn't move ${plural(skipped)}`, noRoom);
-      return;
-    }
-    // One toast for the batch: a spinner until every move is done, then the tally.
-    const pending = toast.loading(`Moving ${plural(runs.length)}`);
-    void Promise.all(runs).then((outcomes) => {
-      const failed = outcomes.filter((o) => !o.ok);
-      const why = failed[0] && !failed[0].ok ? failed[0].message : noRoom;
-      const moved = outcomes.length - failed.length;
-      if (moved === 0) pending.error(`Couldn't move ${plural(failed.length + skipped)}`, why);
-      else if (failed.length + skipped === 0) pending.success(`Moved ${plural(moved)}`);
-      else pending.warning(`Moved ${moved} of ${plural(outcomes.length + skipped)}`, why);
-    });
   };
 
   return (
@@ -556,20 +503,13 @@ function BulkActions({ inventory, matches }: { inventory: ManagerInventory; matc
           <DropdownMenuSeparator />
           <DropdownMenuLabel>Move to</DropdownMenuLabel>
           {inventory.characters.map((c) => (
-            <DropdownMenuItem key={c.id} onClick={() => moveAll({ kind: "character", characterId: c.id })}>
+            <DropdownMenuItem key={c.id} onClick={() => moveMatches({ kind: "character", characterId: c.id })}>
               {characterName(c)}
             </DropdownMenuItem>
           ))}
-          <DropdownMenuItem onClick={() => moveAll({ kind: "vault" })}>Vault</DropdownMenuItem>
+          <DropdownMenuItem onClick={() => moveMatches({ kind: "vault" })}>Vault</DropdownMenuItem>
         </DropdownMenuGroup>
       </DropdownMenuContent>
     </DropdownMenu>
   );
-}
-
-/** Already on that character (equipped or not) or in the vault. */
-function isThere(at: Place, to: Landing): boolean {
-  return to.kind === "vault"
-    ? at.kind === "vault"
-    : at.kind === "character" && at.characterId === to.characterId;
 }

@@ -2,12 +2,23 @@
 
 import { useMemo } from "react";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { Cancel01Icon } from "@hugeicons/core-free-icons";
+import { ArrowDown01Icon, Cancel01Icon } from "@hugeicons/core-free-icons";
 import { Button } from "@/components/ui/button";
 import { Drawer, DrawerContent, DrawerTitle } from "@/components/ui/drawer";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuGroup,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import type { InventoryItem, ManagerInventory } from "@/lib/inventory/build";
+import { characterName, type Landing } from "@/lib/inventory/moves";
 import { forEachItem } from "@/lib/inventory/search";
 import { ItemTile } from "./item-tile";
+import { useManagerActions } from "./manager-context";
+import { moveAll } from "./move-all";
 import { useItemComparator } from "./view-menu";
 
 /**
@@ -53,6 +64,7 @@ function Results({
   onClose: () => void;
 }) {
   const compare = useItemComparator();
+  const actions = useManagerActions();
   const items = useMemo(() => {
     const found: InventoryItem[] = [];
     forEachItem(inventory, (item) => {
@@ -60,6 +72,9 @@ function Results({
     });
     return found.sort(compare);
   }, [inventory, matches, compare]);
+  const moveTo = (to: Landing) => {
+    if (actions) moveAll(actions, items, to);
+  };
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -68,7 +83,32 @@ function Results({
           {matches.size.toLocaleString()} {matches.size === 1 ? "item" : "items"}
         </DrawerTitle>
         <span className="text-muted-foreground min-w-0 truncate font-mono text-xs">{query}</span>
-        <Button size="icon-sm" variant="ghost" className="ml-auto" aria-label="Close search results" onClick={onClose}>
+        {items.length > 0 && actions && (
+          <DropdownMenu>
+            <DropdownMenuTrigger render={<Button size="sm" variant="default" className="ml-auto" />}>
+              Move all
+              <HugeiconsIcon icon={ArrowDown01Icon} aria-hidden />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-52">
+              <DropdownMenuGroup>
+                <DropdownMenuLabel>Move all to</DropdownMenuLabel>
+                {inventory.characters.map((c) => (
+                  <DropdownMenuItem key={c.id} onClick={() => moveTo({ kind: "character", characterId: c.id })}>
+                    {characterName(c)}
+                  </DropdownMenuItem>
+                ))}
+                <DropdownMenuItem onClick={() => moveTo({ kind: "vault" })}>Vault</DropdownMenuItem>
+              </DropdownMenuGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
+        <Button
+          size="icon-sm"
+          variant="ghost"
+          className={items.length > 0 && actions ? undefined : "ml-auto"}
+          aria-label="Close search results"
+          onClick={onClose}
+        >
           <HugeiconsIcon icon={Cancel01Icon} aria-hidden />
         </Button>
       </div>
