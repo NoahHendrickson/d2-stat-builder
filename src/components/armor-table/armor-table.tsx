@@ -48,7 +48,7 @@ import {
   saveTableState,
 } from "@/lib/armor-table/filter-storage";
 import { togglePinned, type FilterOption } from "@/lib/armor-table/pinned";
-import { adoptPinnedSets } from "@/components/set-menu";
+import { adoptPinnedSets } from "@/lib/settings/pinned-sets";
 import {
   PINS_SCHEMA_VERSION,
   loadTablePins,

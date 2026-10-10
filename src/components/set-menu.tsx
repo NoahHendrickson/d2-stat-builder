@@ -5,25 +5,8 @@
 // account's pinned sets (synced setting `pinnedSets`).
 import { useCallback } from "react";
 import { FilterMultiselect } from "@/components/armor-table/filter-multiselect";
-import { togglePinned, type FilterOption } from "@/lib/armor-table/pinned";
-import { getSetting, setSetting, useSetting } from "@/lib/settings/synced-settings";
-
-/** Pin or unpin a set everywhere (new pins go last). */
-export function togglePinnedSet(setHash: number) {
-  setSetting("pinnedSets", togglePinned(getSetting("pinnedSets"), setHash));
-}
-
-/** Add pins kept elsewhere (an older per-page copy) after the current ones, once. */
-export function adoptPinnedSets(setHashes: readonly number[]) {
-  const current = getSetting("pinnedSets");
-  const added = setHashes.filter((h) => !current.includes(h));
-  if (added.length > 0) setSetting("pinnedSets", [...current, ...added]);
-}
-
-/** The account's pinned sets, in pin order. */
-export function usePinnedSets(): number[] {
-  return useSetting("pinnedSets");
-}
+import type { FilterOption } from "@/lib/armor-table/pinned";
+import { togglePinnedSet, usePinnedSets } from "@/lib/settings/pinned-sets";
 
 /** Set menu props shared by both kinds: options carry the set name and a count. */
 type SetMenuBase = {

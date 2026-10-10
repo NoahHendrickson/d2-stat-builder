@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
   Delete02Icon,
@@ -8,11 +9,17 @@ import {
   MoreVerticalIcon,
   PencilEdit02Icon,
 } from "@hugeicons/core-free-icons";
+import { toast } from "@/lib/toast";
 import type { ArmoryCharacter } from "@/lib/armory/fetch";
+import type { ArmorPiece } from "@/lib/armory/normalize";
 import { CLASS_NAMES } from "@/lib/armory/stats";
+import type { Manifest } from "@/lib/manifest/load";
 import type { ActivitySet } from "@/lib/loadouts/activity-sets";
 import type { ActivitySetRunState } from "@/lib/loadouts/activity-set-run";
+import { removeActivitySet, saveActivitySet } from "@/lib/loadouts/use-activity-sets";
 import type { SavedLoadout } from "@/lib/loadouts/types";
+import { ActivitySetEditor } from "@/components/loadouts/activity-set-editor";
+import { ConfirmDialog } from "@/components/loadouts/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -176,70 +183,137 @@ function RunConfirmDialog({
 }
 
 /**
- * The player's activity sets, as a row of tiles above the loadout list. Running one
- * asks first (it overwrites in-game slots), then hands off to `onRun`. The parent owns
- * the confirmation, so it can hand over to the set editor and back.
+ * Which activity-set dialog is up. `fromRun`: the editor was opened from the run
+ * confirmation, which comes back when the editor closes.
+ */
+type SetDialog =
+  | { kind: "none" }
+  | { kind: "edit"; set?: ActivitySet; fromRun?: boolean }
+  | { kind: "run"; set: ActivitySet }
+  | { kind: "delete"; set: ActivitySet };
+
+/**
+ * The strip's dialog state. The page holds it so its "New activity set" item can open
+ * the editor (and its own dialogs can wait while one is up); the strip does the rest.
+ */
+export function useActivitySetDialogs() {
+  const [dialog, setDialog] = useState<SetDialog>({ kind: "none" });
+  return {
+    dialog,
+    setDialog,
+    open: dialog.kind !== "none",
+    openNew: () => setDialog({ kind: "edit" }),
+  };
+}
+
+/**
+ * The player's activity sets, as a row of tiles above the loadout list, plus their
+ * dialogs: the editor, delete, and the run confirmation. Running one asks first (it
+ * overwrites in-game slots), then hands off to `onRun`; "Edit slots" there opens the
+ * editor and comes back to the confirmation.
  */
 export function ActivitySetStrip({
   sets,
   characters,
   loadouts,
+  pieceMap,
+  manifest,
   run,
   canRun,
-  confirming,
-  onConfirmingChange,
-  onEditSlots,
+  dialogs: { dialog, setDialog },
   onRun,
   onStop,
-  onEdit,
-  onDelete,
 }: {
   sets: readonly ActivitySet[];
   characters: ArmoryCharacter[];
   loadouts: readonly SavedLoadout[];
+  pieceMap: ReadonlyMap<string, ArmorPiece>;
+  manifest: Manifest;
   run: ActivitySetRunState | null;
   /** False while gear is still provisional or another apply is in flight. */
   canRun: boolean;
-  /** The set whose run is waiting on confirmation. */
-  confirming: ActivitySet | null;
-  onConfirmingChange: (set: ActivitySet | null) => void;
-  /** Edit the set's slots from the confirmation. */
-  onEditSlots: (set: ActivitySet) => void;
+  dialogs: ReturnType<typeof useActivitySetDialogs>;
   onRun: (set: ActivitySet) => void;
   onStop: () => void;
-  onEdit: (set: ActivitySet) => void;
-  onDelete: (set: ActivitySet) => void;
 }) {
-  if (sets.length === 0) return null;
+  const closeRun = () =>
+    setDialog((d) => (d.kind === "run" ? { kind: "none" } : d));
+
+  const deleteSet = () => {
+    if (dialog.kind !== "delete") return;
+    removeActivitySet(dialog.set.id);
+    setDialog({ kind: "none" });
+    toast.success("Activity set deleted");
+  };
 
   return (
-    <section aria-label="Activity sets" className="flex min-w-0 flex-col gap-2">
-      <h2 className="d2-label">Activity sets</h2>
-      <div className="d2-scroll -m-1 flex gap-3 overflow-x-auto p-1">
-        {sets.map((set) => (
-          <ActivitySetTile
-            key={set.id}
-            set={set}
-            characters={characters}
-            run={run?.setId === set.id ? run : null}
-            canRun={canRun && !run}
-            onRun={() => onConfirmingChange(set)}
-            onStop={onStop}
-            onEdit={() => onEdit(set)}
-            onDelete={() => onDelete(set)}
+    <>
+      {sets.length > 0 && (
+        <section aria-label="Activity sets" className="flex min-w-0 flex-col gap-2">
+          <h2 className="d2-label">Activity sets</h2>
+          <div className="d2-scroll -m-1 flex gap-3 overflow-x-auto p-1">
+            {sets.map((set) => (
+              <ActivitySetTile
+                key={set.id}
+                set={set}
+                characters={characters}
+                run={run?.setId === set.id ? run : null}
+                canRun={canRun && !run}
+                onRun={() => setDialog({ kind: "run", set })}
+                onStop={onStop}
+                onEdit={() => setDialog({ kind: "edit", set })}
+                onDelete={() => setDialog({ kind: "delete", set })}
+              />
+            ))}
+          </div>
+          <RunConfirmDialog
+            set={dialog.kind === "run" ? dialog.set : null}
+            loadouts={loadouts}
+            onOpenChange={(open) => !open && closeRun()}
+            onEdit={(set) => setDialog({ kind: "edit", set, fromRun: true })}
+            onConfirm={(set) => {
+              closeRun();
+              onRun(set);
+            }}
           />
-        ))}
-      </div>
-      <RunConfirmDialog
-        set={confirming}
-        loadouts={loadouts}
-        onOpenChange={(open) => !open && onConfirmingChange(null)}
-        onEdit={onEditSlots}
-        onConfirm={(set) => {
-          onConfirmingChange(null);
-          onRun(set);
-        }}
+        </section>
+      )}
+      {dialog.kind === "edit" && (
+        <ActivitySetEditor
+          open
+          onOpenChange={(open) =>
+            !open &&
+            setDialog(
+              dialog.fromRun && dialog.set
+                ? { kind: "run", set: dialog.set }
+                : { kind: "none" },
+            )
+          }
+          initial={dialog.set}
+          characters={characters}
+          loadouts={loadouts}
+          pieceMap={pieceMap}
+          manifest={manifest}
+          onSave={(set) => {
+            saveActivitySet(set);
+            toast.success(dialog.set ? "Activity set updated" : "Activity set created");
+            // Back to the confirmation, now showing the new slots.
+            if (dialog.fromRun) setDialog({ kind: "run", set });
+          }}
+        />
+      )}
+      <ConfirmDialog
+        open={dialog.kind === "delete"}
+        onOpenChange={(open) => !open && setDialog({ kind: "none" })}
+        title="Delete activity set?"
+        description={
+          dialog.kind === "delete"
+            ? `“${dialog.set.name}” will be removed. Your loadouts and in-game slots stay as they are.`
+            : undefined
+        }
+        confirmLabel="Delete"
+        onConfirm={deleteSet}
       />
-    </section>
+    </>
   );
 }

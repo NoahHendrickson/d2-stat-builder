@@ -37,7 +37,7 @@ import {
   FilterMultiselectPanel,
   selectionSummaryText,
 } from "@/components/armor-table/filter-multiselect";
-import { togglePinnedSet, usePinnedSets } from "@/components/set-menu";
+import { togglePinnedSet, usePinnedSets } from "@/lib/settings/pinned-sets";
 
 export const STAT_FILTER_OPTIONS: FilterOption<number>[] =
   STAT_DISPLAY_ORDER.map((key) => ({

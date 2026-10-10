@@ -82,18 +82,16 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import type { ActivitySet } from "@/lib/loadouts/activity-sets";
-import {
-  removeActivitySet,
-  saveActivitySet,
-  useActivitySets,
-} from "@/lib/loadouts/use-activity-sets";
+import { useActivitySets } from "@/lib/loadouts/use-activity-sets";
 import {
   runActivitySet,
   stopActivitySet,
   useActivitySetRun,
 } from "@/lib/loadouts/activity-set-run";
-import { ActivitySetStrip } from "@/components/loadouts/activity-set-strip";
-import { ActivitySetEditor } from "@/components/loadouts/activity-set-editor";
+import {
+  ActivitySetStrip,
+  useActivitySetDialogs,
+} from "@/components/loadouts/activity-set-strip";
 import { ConfirmDialog } from "@/components/loadouts/confirm-dialog";
 import { type ModsSection } from "@/lib/loadouts/mod-placement";
 import { commitLoadout, modsSectionForPieces } from "@/lib/loadouts/commit";
@@ -121,11 +119,7 @@ type DialogState =
   | { kind: "edit"; loadout: SavedLoadout; mods?: ModsSection }
   | { kind: "delete"; loadout: SavedLoadout }
   | { kind: "delete-many"; ids: string[] }
-  | { kind: "delete-all" }
-  /** `fromRun`: opened from the run confirmation, which comes back when the editor closes. */
-  | { kind: "set-edit"; set?: ActivitySet; fromRun?: boolean }
-  | { kind: "set-run"; set: ActivitySet }
-  | { kind: "set-delete"; set: ActivitySet };
+  | { kind: "delete-all" };
 
 const SUBCLASS_OPTIONS = SUBCLASSES.map((sc) => ({ value: sc, label: sc }));
 
@@ -172,6 +166,7 @@ export function LoadoutsList({
   const [tagFilter, setTagFilter] = useState<string[]>([]);
   const [sortKey, setSortKey] = useState<LoadoutListSortKey>("created");
   const [dialog, setDialog] = useState<DialogState>({ kind: "none" });
+  const setDialogs = useActivitySetDialogs();
   // Expanded rows, by id — kept here (not in the row) so it survives virtualization.
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(
     () => new Set(),
@@ -211,7 +206,8 @@ export function LoadoutsList({
   const importOpen =
     importData !== null &&
     importDismissed !== importParam &&
-    dialog.kind === "none";
+    dialog.kind === "none" &&
+    !setDialogs.open;
 
   const clearImportParam = () => {
     dismissedImportParam = importParam;
@@ -562,13 +558,6 @@ export function LoadoutsList({
       queryClient,
     });
 
-  const deleteSet = () => {
-    if (dialog.kind !== "set-delete") return;
-    removeActivitySet(dialog.set.id);
-    setDialog({ kind: "none" });
-    toast.success("Activity set deleted");
-  };
-
   const sortLabel =
     LOADOUT_LIST_SORT_OPTIONS.find((o) => o.key === sortKey)?.label ?? "Sort";
   const classOptions = ownedClasses.map((c) => ({ value: c, label: CLASS_NAMES[c] }));
@@ -678,7 +667,7 @@ export function LoadoutsList({
               </DropdownMenuTrigger>
             </TooltipLabel>
             <DropdownMenuContent align="end" className="w-48">
-              <DropdownMenuItem onClick={() => setDialog({ kind: "set-edit" })}>
+              <DropdownMenuItem onClick={setDialogs.openNew}>
                 New activity set
               </DropdownMenuItem>
             </DropdownMenuContent>
@@ -718,19 +707,13 @@ export function LoadoutsList({
         sets={activitySets}
         characters={armory.characters}
         loadouts={all}
+        pieceMap={pieceMap}
+        manifest={manifest}
         run={setRun}
         canRun={!provisional && !loadouts.isPending}
-        confirming={dialog.kind === "set-run" ? dialog.set : null}
-        onConfirmingChange={(set) =>
-          set
-            ? setDialog({ kind: "set-run", set })
-            : setDialog((d) => (d.kind === "set-run" ? { kind: "none" } : d))
-        }
-        onEditSlots={(set) => setDialog({ kind: "set-edit", set, fromRun: true })}
+        dialogs={setDialogs}
         onRun={runSet}
         onStop={stopActivitySet}
-        onEdit={(set) => setDialog({ kind: "set-edit", set })}
-        onDelete={(set) => setDialog({ kind: "set-delete", set })}
       />
 
       {selecting && all.length > 0 && (
@@ -893,42 +876,6 @@ export function LoadoutsList({
         confirmLabel={dialog.kind === "delete-all" ? "Delete all" : "Delete"}
         busy={removeMany.isPending}
         onConfirm={deleteMany}
-      />
-      {dialog.kind === "set-edit" && (
-        <ActivitySetEditor
-          open
-          onOpenChange={(open) =>
-            !open &&
-            setDialog(
-              dialog.fromRun && dialog.set
-                ? { kind: "set-run", set: dialog.set }
-                : { kind: "none" },
-            )
-          }
-          initial={dialog.set}
-          characters={armory.characters}
-          loadouts={all}
-          pieceMap={pieceMap}
-          manifest={manifest}
-          onSave={(set) => {
-            saveActivitySet(set);
-            toast.success(dialog.set ? "Activity set updated" : "Activity set created");
-            // Back to the confirmation, now showing the new slots.
-            if (dialog.fromRun) setDialog({ kind: "set-run", set });
-          }}
-        />
-      )}
-      <ConfirmDialog
-        open={dialog.kind === "set-delete"}
-        onOpenChange={(open) => !open && setDialog({ kind: "none" })}
-        title="Delete activity set?"
-        description={
-          dialog.kind === "set-delete"
-            ? `“${dialog.set.name}” will be removed. Your loadouts and in-game slots stay as they are.`
-            : undefined
-        }
-        confirmLabel="Delete"
-        onConfirm={deleteSet}
       />
       <LoadoutEditorDrawer
         open={importOpen}

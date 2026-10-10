@@ -58,17 +58,13 @@ import { FragmentPicker } from "@/components/builder/fragment-picker";
 import { ClassEmblemTabs } from "@/components/builder/class-emblem-tabs";
 import { SettingRow } from "@/components/builder/setting-row";
 import { PowerRangeControls } from "@/components/builder/power-range-controls";
+import { useBuilderSearchInputs } from "@/components/builder/use-builder-search-inputs";
 import { BuildsSurface } from "@/components/builder/builds-surface";
 import type { BuildsColumnContentProps } from "@/components/builder/builds-column-content";
 import { SetBonusesSection } from "@/components/builder/set-bonuses-section";
-import { dreamInputForBuild, type DreamSettings } from "@/lib/optimizer/dream-input";
-import { armorToOptimizerPiece } from "@/lib/optimizer/from-armory";
+import { dreamInputForBuild } from "@/lib/optimizer/dream-input";
 
-import type {
-  ExoticConstraint,
-  OptimizerInput,
-  OptimizerLoadout,
-} from "@/lib/optimizer/types";
+import type { OptimizerLoadout } from "@/lib/optimizer/types";
 import type { DreamInput } from "@/lib/optimizer/dream";
 import {
   DEFAULT_POWER_RANGE,
@@ -96,12 +92,10 @@ import {
 } from "@/lib/dim/subclasses";
 import { useApplyCurrentFragments } from "@/lib/armory/use-apply-current-fragments";
 import { useAutoSearch } from "@/lib/optimizer/use-auto-search";
-import { useWeaponPlan } from "@/lib/optimizer/use-weapon-plan";
 import { useOptimizerWarmup } from "@/lib/optimizer/use-optimizer-warmup";
 import { MAX_SET_BONUSES, type BuilderSnapshot, type QueryOrigin } from "@/lib/loadouts/types";
-import { togglePinnedSet, usePinnedSets } from "@/components/set-menu";
+import { togglePinnedSet, usePinnedSets } from "@/lib/settings/pinned-sets";
 
-const MAX_MODS = 5;
 // The Dream build modal is opened by few sessions; keep it out of the initial bundle.
 const DreamBuildDialog = dynamic(
   () => import("@/components/builder/dream-build-dialog").then((m) => m.DreamBuildDialog),
@@ -769,65 +763,19 @@ export function BuilderPanel({
     return shown.origin;
   }, [getSnapshot]);
 
-  // The builder's search settings (everything but pieces, targets and the exotic) —
-  // shared by the regular search and the dream search.
-  // The power range is layered on separately so the weapon-mix scan (which supplies its
-  // own weapons) doesn't re-run when only the entered weapons change.
-  const baseSearchSettings = useMemo(
-    (): DreamSettings => ({
-      mods: { major, minor: MAX_MODS - major },
-      setRequirements,
-      allowTuning: true,
-      allowBalancedTuning: useBalancedTuning,
-      fragmentBonus,
-    }),
-    [major, setRequirements, useBalancedTuning, fragmentBonus],
-  );
-  const searchSettings = useMemo(
-    (): DreamSettings => ({
-      ...baseSearchSettings,
-      powerRange: toOptimizerPowerRange(powerRange),
-    }),
-    [baseSearchSettings, powerRange],
-  );
-
-  const optimizerSlots = useMemo(
-    () => slotPieces.map((pieces) => pieces.map(armorToOptimizerPiece)),
-    [slotPieces],
-  );
-  const exoticConstraint = useMemo(
-    (): ExoticConstraint =>
-      selectedExotic === null
-        ? { mode: "any" }
-        : { mode: "specific", hashes: exotics[selectedExotic]?.hashes ?? [] },
-    [selectedExotic, exotics],
-  );
-
-  // The regular search input over owned pieces.
-  const optimizerInput = useMemo((): OptimizerInput | null => {
-    if (classType === null) return null;
-    return {
-      ...searchSettings,
-      slots: optimizerSlots,
-      minimums: targets,
-      exotic: exoticConstraint,
-      maxResults: 200,
-    };
-  }, [optimizerSlots, classType, targets, exoticConstraint, searchSettings]);
-
-  // The weapon-mix scan: the same query, once per mix of common weapon powers.
-  const powerBounds = powerRange.enabled ? powerRange.bounds : null;
-  const weaponPlanInput = useMemo((): OptimizerInput | null => {
-    if (classType === null || powerBounds === null) return null;
-    return {
-      ...baseSearchSettings,
-      slots: optimizerSlots,
-      minimums: targets,
-      exotic: exoticConstraint,
-      powerRange: { min: powerBounds.min, max: powerBounds.max },
-    };
-  }, [classType, powerBounds, baseSearchSettings, optimizerSlots, targets, exoticConstraint]);
-  const weaponPlan = useWeaponPlan(weaponPlanInput);
+  // The search settings, the regular search input, and the weapon-mix scan.
+  const { searchSettings, optimizerInput, weaponPlan } = useBuilderSearchInputs({
+    classType,
+    slotPieces,
+    targets,
+    major,
+    setRequirements,
+    useBalancedTuning,
+    fragmentBonus,
+    powerRange,
+    selectedExotic,
+    exotics,
+  });
 
   const runOptimizer = useCallback(() => {
     if (!optimizerInput) return;

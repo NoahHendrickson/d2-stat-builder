@@ -27,7 +27,7 @@ import {
   ITEM_TILE_FOOTER_PX,
   MasterworkGlow,
 } from "@/components/item-tile-parts";
-import { ManifestIcon, PlugIcon, TILE_FRAME } from "@/components/loadouts/loadout-row-details";
+import { ManifestIcon, PlugIcon, TILE_FRAME } from "@/components/loadouts/loadout-icons";
 import { LOADOUT_SLOT_WELL_CLASS } from "@/components/loadouts/loadout-weapons-editor";
 import { TooltipLabel } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
