@@ -37,6 +37,7 @@ import {
   FilterMultiselectPanel,
   selectionSummaryText,
 } from "@/components/armor-table/filter-multiselect";
+import { togglePinnedSet, usePinnedSets } from "@/components/set-menu";
 
 export const STAT_FILTER_OPTIONS: FilterOption<number>[] =
   STAT_DISPLAY_ORDER.map((key) => ({
@@ -137,9 +138,7 @@ export function FilterCascadeMenu({
   setOptions,
   archetypeOptions,
   statOptions,
-  pinnedSets,
   pinnedArchetypes,
-  onTogglePinnedSet,
   onTogglePinnedArchetype,
   filtersActive,
   onClearFilters,
@@ -157,9 +156,7 @@ export function FilterCascadeMenu({
   setOptions: FilterOption<number>[];
   archetypeOptions: FilterOption<string>[];
   statOptions: FilterOption<number>[];
-  pinnedSets: number[];
   pinnedArchetypes: string[];
-  onTogglePinnedSet: (hash: number) => void;
   onTogglePinnedArchetype: (name: string) => void;
   filtersActive: boolean;
   onClearFilters: () => void;
@@ -169,6 +166,7 @@ export function FilterCascadeMenu({
   triggerLabel?: string;
   toggleSubmenusOnClick?: boolean;
 }) {
+  const pinnedSets = usePinnedSets();
   const totalSelected = countFacetSelections(facets, includedFacets);
   const active = totalSelected > 0;
   const showClearAll = includedFacets.length === ALL_FACET_KEYS.length;
@@ -256,7 +254,7 @@ export function FilterCascadeMenu({
             searchable
             pinnable
             pinned={pinnedSets}
-            onTogglePin={onTogglePinnedSet}
+            onTogglePin={togglePinnedSet}
             toggleOnClick={toggleSubmenusOnClick}
           />
         )}

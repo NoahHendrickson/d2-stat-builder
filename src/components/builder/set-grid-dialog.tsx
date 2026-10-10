@@ -1,8 +1,6 @@
 "use client";
 
-import { Fragment, useMemo, useState } from "react";
-import { HugeiconsIcon } from "@hugeicons/react";
-import { Pin02Icon } from "@hugeicons/core-free-icons";
+import { useMemo, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -14,10 +12,10 @@ import {
   Select,
   SelectContent,
   SelectItem,
-  SelectSeparator,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { SetPickerMenu } from "@/components/set-menu";
 import { ArmorThumb } from "@/components/armor-thumb";
 import { FilterMultiselect } from "@/components/armor-table/filter-multiselect";
 import { StatGlyph } from "@/components/stat-glyph";
@@ -29,7 +27,6 @@ import {
   setArchetypeGrid,
   twoPlusTwoSplits,
   type SetGridCell,
-  type TwoPlusTwo,
 } from "@/lib/armory/set-grid";
 import {
   ARMOR_SLOTS,
@@ -43,7 +40,6 @@ import {
 import type { ArmorArchetype } from "@/lib/armory/archetypes";
 import { cn } from "@/lib/utils";
 
-const NO_COMPARE = "none";
 /** Inset the menu so item text lines up with the trigger's and highlights don't touch the edges. */
 const MENU_CLASS = "p-1";
 const MENU_ITEM_CLASS = "pl-2.5";
@@ -54,10 +50,13 @@ const SECOND = { fill: "bg-[#41a6ff]/25", border: "border-[#41a6ff]/60", swatch:
 
 type SlotLooks = Partial<Record<ArmorSlot, SetSlotIcon>>;
 
+/** Bungie's generic "Exotic Armor" icon (DestinyInventoryItemDefinition 319240191). */
+const EXOTIC_PLACEHOLDER_ICON = "/common/destiny2_content/icons/f30063b2d2c46c41f7ca7552eaec8bc9.jpg";
+
 /**
  * The roll-grid modal: for one archetype, how many pieces of a set you own per slot ×
  * tertiary stat, and their tuned stats — optionally side by side with a second set, with
- * every 2pc + 2pc split the two allow. Opens on `initialSetHash`; the set can be switched
+ * the slots an exotic can take while the two still make a 2pc + 2pc. Opens on `initialSetHash`; the set can be switched
  * without closing it. One instance serves the whole set list.
  */
 export function SetGridDialog({
@@ -69,7 +68,6 @@ export function SetGridDialog({
   archetypes,
   statIcons,
   getSlotIcons,
-  pinnedSets,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -77,7 +75,6 @@ export function SetGridDialog({
   initialSetHash: number;
   /** Every set in the pool, pinned first then the list's sort — the set pickers' order. */
   sets: readonly ArmorSetInfo[];
-  pinnedSets: ReadonlySet<number>;
   /** The optimizer pool's pieces (any set — filtered inside). */
   pieces: readonly ArmorPiece[];
   archetypes: readonly ArmorArchetype[];
@@ -92,7 +89,6 @@ export function SetGridDialog({
         <SetGridBody
           initialSetHash={initialSetHash}
           sets={sets}
-          pinnedSets={pinnedSets}
           pieces={pieces}
           archetypes={archetypes}
           statIcons={statIcons}
@@ -124,7 +120,6 @@ function useSlotLooks(
 function SetGridBody({
   initialSetHash,
   sets,
-  pinnedSets,
   pieces,
   archetypes,
   statIcons,
@@ -132,19 +127,18 @@ function SetGridBody({
 }: {
   initialSetHash: number;
   sets: readonly ArmorSetInfo[];
-  pinnedSets: ReadonlySet<number>;
   pieces: readonly ArmorPiece[];
   archetypes: readonly ArmorArchetype[];
   statIcons: StatIconMap;
   getSlotIcons: (setHash: number) => SlotLooks;
 }) {
-  const [setPick, setSetPick] = useState(String(initialSetHash));
-  const set = sets.find((s) => String(s.setHash) === setPick) ?? sets[0];
-  const [comparePick, setComparePick] = useState<string>(NO_COMPARE);
+  const [setPick, setSetPick] = useState(initialSetHash);
+  const set = sets.find((s) => s.setHash === setPick) ?? sets[0];
+  const [comparePick, setComparePick] = useState<number | null>(null);
   const other =
-    comparePick === NO_COMPARE
+    comparePick === null
       ? undefined
-      : sets.find((s) => String(s.setHash) === comparePick && s.setHash !== set?.setHash);
+      : sets.find((s) => s.setHash === comparePick && s.setHash !== set?.setHash);
   const otherHash = other?.setHash ?? null;
 
   const setHash = set?.setHash ?? initialSetHash;
@@ -196,50 +190,25 @@ function SetGridBody({
     [pieces, otherHash, archetype, tuned],
   );
 
-  const setItems = Object.fromEntries(sets.map((s) => [String(s.setHash), `${s.name} (${s.ownedCount})`]));
+  const setOptions = sets.map((s) => ({ value: s.setHash, label: s.name, count: s.ownedCount }));
   const setSelect = (
-    <Select
-      items={setItems}
-      value={String(setHash)}
-      onValueChange={(v) => v != null && setSetPick(String(v))}
-    >
-      <SelectTrigger className="w-full" aria-label="Set">
-        <SelectValue />
-      </SelectTrigger>
-      <SelectContent alignItemWithTrigger={false} className={MENU_CLASS}>
-        <SetOptions sets={sets} pinnedSets={pinnedSets} label={(s) => setItems[String(s.setHash)]} />
-      </SelectContent>
-    </Select>
+    <SetPickerMenu
+      options={setOptions}
+      value={setHash}
+      onChange={(v) => v !== null && setSetPick(v)}
+      className="w-full"
+    />
   );
-
-  const compareItems: Record<string, string> = { [NO_COMPARE]: "Compare with another set…" };
-  for (const s of sets) {
-    if (s.setHash !== setHash) compareItems[String(s.setHash)] = s.name;
-  }
   const compareSelect = (
-    <Select
-      items={compareItems}
-      value={other ? String(other.setHash) : NO_COMPARE}
-      onValueChange={(v) => v != null && setComparePick(String(v))}
-    >
-      <SelectTrigger className="w-full" aria-label="Compare with">
-        <SelectValue />
-      </SelectTrigger>
-      <SelectContent alignItemWithTrigger={false} className={MENU_CLASS}>
-        <SelectItem value={NO_COMPARE} className={MENU_ITEM_CLASS}>
-          <span className="flex items-center gap-2">
-            <span className="size-4 shrink-0" aria-hidden />
-            No comparison
-          </span>
-        </SelectItem>
-        <SelectSeparator />
-        <SetOptions
-          sets={sets.filter((s) => s.setHash !== setHash)}
-          pinnedSets={pinnedSets}
-          label={(s) => s.name}
-        />
-      </SelectContent>
-    </Select>
+    <SetPickerMenu
+      label="Compared set"
+      options={setOptions.filter((o) => o.value !== setHash)}
+      value={other?.setHash ?? null}
+      onChange={setComparePick}
+      noneLabel="No comparison"
+      placeholder="Compare with another set…"
+      className="w-full"
+    />
   );
 
   if (!set) return null;
@@ -377,7 +346,7 @@ function SetGridBody({
       </div>
 
       {other && otherGrid && (
-        <TwoPlusTwoList
+        <ExoticSlots
           first={set.name}
           second={other.name}
           archetype={archetype.name}
@@ -392,35 +361,6 @@ function SetGridBody({
       )}
     </>
   );
-}
-
-/** Set picker items in the given order, pinned ones marked, a divider after the pins. */
-function SetOptions({
-  sets,
-  pinnedSets,
-  label,
-}: {
-  sets: readonly ArmorSetInfo[];
-  pinnedSets: ReadonlySet<number>;
-  label: (s: ArmorSetInfo) => string;
-}) {
-  const lastPinned = sets.findLastIndex((s) => pinnedSets.has(s.setHash));
-  return sets.map((s, i) => (
-    <Fragment key={s.setHash}>
-      <SelectItem value={String(s.setHash)} className={MENU_ITEM_CLASS}>
-        {/* A fixed, centred icon slot on every row keeps the names aligned. */}
-        <span className="flex items-center gap-2">
-          <span className="flex size-4 shrink-0 items-center justify-center">
-            {pinnedSets.has(s.setHash) && (
-              <HugeiconsIcon icon={Pin02Icon} fill="currentColor" className="text-muted-foreground size-3.5" aria-label="Pinned" />
-            )}
-          </span>
-          {label(s)}
-        </span>
-      </SelectItem>
-      {i === lastPinned && i < sets.length - 1 && <SelectSeparator />}
-    </Fragment>
-  ));
 }
 
 function Swatch({ className, name }: { className: string; name: string }) {
@@ -579,16 +519,11 @@ function SplitCell({
   );
 }
 
-const SLOT_SHORT: Record<ArmorSlot, string> = {
-  helmet: "Helm",
-  arms: "Arms",
-  chest: "Chest",
-  legs: "Legs",
-  classItem: "Class",
-};
-
-/** Every 2pc + 2pc split the two sets allow, as a strip of slots per split. */
-function TwoPlusTwoList({
+/**
+ * Where the exotic can go: each slot that's left free by at least one 2pc + 2pc split of
+ * the two sets, so wearing an exotic there still keeps both 2-piece bonuses.
+ */
+function ExoticSlots({
   first,
   second,
   archetype,
@@ -605,16 +540,15 @@ function TwoPlusTwoList({
   coveredSecond: boolean[];
 }) {
   const splits = twoPlusTwoSplits(coveredFirst, coveredSecond);
+  const open = new Set(splits.map((s) => s.free));
   const nFirst = coveredFirst.filter(Boolean).length;
   const nSecond = coveredSecond.filter(Boolean).length;
   return (
     <div className="border-foreground/8 flex flex-col gap-2 border-t pt-3">
       <div className="flex items-baseline justify-between gap-3">
-        <span className="d2-label">2pc + 2pc</span>
+        <span className="d2-label">Exotic slot</span>
         {splits.length > 0 && (
-          <span className="text-muted-foreground text-xs">
-            {splits.length} way{splits.length === 1 ? "" : "s"}
-          </span>
+          <span className="text-muted-foreground text-xs">Keeps both 2-piece bonuses</span>
         )}
       </div>
       {splits.length === 0 ? (
@@ -625,39 +559,31 @@ function TwoPlusTwoList({
           other isn&apos;t using.
         </p>
       ) : (
-        <div className="flex flex-col gap-1.5">
-          {splits.map((split) => (
-            <SplitStrip key={splitKey(split)} split={split} />
-          ))}
-        </div>
+        <ul className="grid grid-cols-5 gap-2" aria-label="Slots your exotic can take">
+          {ARMOR_SLOTS.map((slot, i) => {
+            const fits = open.has(i);
+            return (
+              <li
+                key={slot}
+                aria-label={`${SLOT_LABELS[slot]} exotic: ${fits ? "keeps both bonuses" : "breaks a bonus"}`}
+                className={cn(
+                  "flex h-10 min-w-0 items-center gap-2 border px-2.5 text-sm leading-5",
+                  fits
+                    ? "border-exotic-line/60 bg-exotic/15 text-exotic-line"
+                    : "bg-foreground/4 text-muted-foreground border-transparent",
+                )}
+              >
+                <ArmorThumb
+                  icon={EXOTIC_PLACEHOLDER_ICON}
+                  size={20}
+                  className={cn(!fits && "opacity-35 grayscale")}
+                />
+                <span className="truncate">{SLOT_LABELS[slot]}</span>
+              </li>
+            );
+          })}
+        </ul>
       )}
-    </div>
-  );
-}
-
-function splitKey(s: TwoPlusTwo): string {
-  return `${s.first.join("")}|${s.second.join("")}`;
-}
-
-function SplitStrip({ split }: { split: TwoPlusTwo }) {
-  return (
-    <div className="grid grid-cols-5 gap-1">
-      {ARMOR_SLOTS.map((slot, i) => {
-        const which = split.first.includes(i) ? 0 : split.second.includes(i) ? 1 : null;
-        return (
-          <span
-            key={slot}
-            className={cn(
-              "flex h-6 items-center justify-center border text-[11px]",
-              which === 0 && cn(FIRST.border, FIRST.fill),
-              which === 1 && cn(SECOND.border, SECOND.fill),
-              which === null && "border-foreground/15 text-muted-foreground border-dashed",
-            )}
-          >
-            {which === null ? `${SLOT_SHORT[slot]} · free` : SLOT_SHORT[slot]}
-          </span>
-        );
-      })}
     </div>
   );
 }

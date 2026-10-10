@@ -28,6 +28,7 @@ import {
   TUNING_FILTER_OPTIONS,
 } from "@/components/armor-table/filter-cascade-menu";
 import { FilterMultiselect } from "@/components/armor-table/filter-multiselect";
+import { SetFilterMenu } from "@/components/set-menu";
 
 const CLASS_OPTIONS: FilterOption<number>[] = [0, 1, 2].map((c) => ({
   value: c,
@@ -129,9 +130,7 @@ export const ArmorTableToolbar = memo(function ArmorTableToolbar({
   setOptions,
   archetypeOptions,
   statOptions,
-  pinnedSets,
   pinnedArchetypes,
-  onTogglePinnedSet,
   onTogglePinnedArchetype,
   filteredCount,
   duplicateGroups,
@@ -152,9 +151,7 @@ export const ArmorTableToolbar = memo(function ArmorTableToolbar({
   setOptions: FilterOption<number>[];
   archetypeOptions: FilterOption<string>[];
   statOptions: FilterOption<number>[];
-  pinnedSets: number[];
   pinnedArchetypes: string[];
-  onTogglePinnedSet: (hash: number) => void;
   onTogglePinnedArchetype: (name: string) => void;
   filteredCount: number;
   /** Set while the table shows only duplicates: how many groups it found. */
@@ -172,9 +169,7 @@ export const ArmorTableToolbar = memo(function ArmorTableToolbar({
     setOptions,
     archetypeOptions,
     statOptions,
-    pinnedSets,
     pinnedArchetypes,
-    onTogglePinnedSet,
     onTogglePinnedArchetype,
     filtersActive,
     onClearFilters,
@@ -235,16 +230,10 @@ export const ArmorTableToolbar = memo(function ArmorTableToolbar({
           onChange={(v) => onFacetChange("armorVersions", v)}
           options={ARMOR_VERSION_OPTIONS}
         />
-        <FilterMultiselect
-          label="Set"
-          allLabel="All sets"
+        <SetFilterMenu
           value={facets.setHashes}
           onChange={(v) => onFacetChange("setHashes", v)}
           options={setOptions}
-          searchable
-          pinnable
-          pinned={pinnedSets}
-          onTogglePin={onTogglePinnedSet}
         />
       </div>
       <div className="hidden min-w-0 items-center gap-2 @[82.5rem]/toolbar:flex">

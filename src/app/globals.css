@@ -307,6 +307,9 @@
      neutral grey reads green against it. 92% so a dark dialog under a menu
      doesn't grey it out. */
   --glass-raised: rgb(76 92 120 / 92%);
+  /* Dialogs, toasts and tooltips take the gradient's blue (#374358) as well, so
+     they don't read grey over the page; menus stay the lighter step above. */
+  --panel-strong: rgb(55 67 88 / 82%);
 }
 
 /* Normal (Figma 130:6188): a plain rounded UI on a flat page. No scene, no

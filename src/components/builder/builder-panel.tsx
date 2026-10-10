@@ -99,7 +99,7 @@ import { useAutoSearch } from "@/lib/optimizer/use-auto-search";
 import { useWeaponPlan } from "@/lib/optimizer/use-weapon-plan";
 import { useOptimizerWarmup } from "@/lib/optimizer/use-optimizer-warmup";
 import { MAX_SET_BONUSES, type BuilderSnapshot, type QueryOrigin } from "@/lib/loadouts/types";
-import { getSetting, setSetting, useSetting } from "@/lib/settings/synced-settings";
+import { togglePinnedSet, usePinnedSets } from "@/components/set-menu";
 
 const MAX_MODS = 5;
 // The Dream build modal is opened by few sessions; keep it out of the initial bundle.
@@ -159,7 +159,7 @@ export function BuilderPanel({
     () => initialSaved?.setReqs ?? {},
   );
   // Pins follow the account between computers (synced-settings.ts), not the selections.
-  const pinnedSets = useSetting("pinnedSets");
+  const pinnedSets = usePinnedSets();
   const [setFilters, setSetFilters] = useState<SetFilters>(
     () => initialSaved?.setFilters ?? DEFAULT_SET_FILTERS,
   );
@@ -971,15 +971,6 @@ export function BuilderPanel({
   );
 
   const onMajorChange = useCallback((v: string) => setMajor(Number(v)), []);
-  const togglePin = useCallback((setHash: number) => {
-    const prev = getSetting("pinnedSets");
-    setSetting(
-      "pinnedSets",
-      prev.includes(setHash)
-        ? prev.filter((h) => h !== setHash)
-        : [...prev, setHash],
-    );
-  }, []);
 
   const refetchArmory = armoryQuery.refetch;
   const onEquipped = useCallback(() => {
@@ -1115,7 +1106,7 @@ export function BuilderPanel({
                 setReqs={setReqs}
                 onToggleSet={toggleSet}
                 pinnedSets={pinnedSets}
-                onTogglePin={togglePin}
+                onTogglePin={togglePinnedSet}
                 setFilters={setFilters}
                 onSetFilterChange={setSetFilter}
                 pieces={pool}

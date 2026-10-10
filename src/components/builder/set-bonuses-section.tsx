@@ -171,7 +171,6 @@ export function SetBonusesSection({
           onOpenChange={onGridOpenChange}
           initialSetHash={grid.setHash}
           sets={gridSets}
-          pinnedSets={pinned}
           pieces={pieces}
           archetypes={archetypes}
           statIcons={statIcons}

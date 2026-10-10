@@ -48,6 +48,7 @@ import {
   saveTableState,
 } from "@/lib/armor-table/filter-storage";
 import { togglePinned, type FilterOption } from "@/lib/armor-table/pinned";
+import { adoptPinnedSets } from "@/components/set-menu";
 import {
   PINS_SCHEMA_VERSION,
   loadTablePins,
@@ -247,9 +248,8 @@ export function ArmorTable() {
   const [facets, setFacets] = useState<FacetFilters>(
     () => initialFilters?.facets ?? emptyFacets(),
   );
-  const [pinnedSets, setPinnedSets] = useState<number[]>(
-    () => initialPins?.sets ?? [],
-  );
+  // Set pins are the account's (shared by every set menu, see set-menu.tsx); only
+  // archetype pins live here.
   const [pinnedArchetypes, setPinnedArchetypes] = useState<string[]>(
     () => initialPins?.archetypes ?? [],
   );
@@ -313,17 +313,23 @@ export function ArmorTable() {
     [facets, search, sort, schedule],
   );
 
-  // Pins persist debounced like the filters above.
+  // The table used to keep its own set pins: fold them into the shared ones. The
+  // save below writes the table's copy back empty, so this runs once.
+  useEffect(() => {
+    if (initialPins?.sets.length) adoptPinnedSets(initialPins.sets);
+  }, [initialPins]);
+
+  // Archetype pins persist debounced like the filters above.
   useEffect(
     () =>
       schedule("pins", () =>
         saveTablePins({
           version: PINS_SCHEMA_VERSION,
-          sets: pinnedSets,
+          sets: [],
           archetypes: pinnedArchetypes,
         }),
       ),
-    [pinnedSets, pinnedArchetypes, schedule],
+    [pinnedArchetypes, schedule],
   );
   // Flush on unmount / Activity hide, and on pagehide (tab close, navigation away):
   // a change made inside the debounce window is written, not dropped.
@@ -363,13 +369,16 @@ export function ArmorTable() {
   }, []);
 
   const setOptions = useMemo<FilterOption<number>[]>(() => {
-    const seen = new Map<number, string>();
+    const seen = new Map<number, { name: string; count: number }>();
     for (const r of rows) {
-      if (r.piece.setHash && r.setName) seen.set(r.piece.setHash, r.setName);
+      if (!r.piece.setHash || !r.setName) continue;
+      const entry = seen.get(r.piece.setHash);
+      if (entry) entry.count++;
+      else seen.set(r.piece.setHash, { name: r.setName, count: 1 });
     }
     return [...seen]
-      .sort((a, b) => a[1].localeCompare(b[1]))
-      .map(([hash, name]) => ({ value: hash, label: name }));
+      .sort((a, b) => a[1].name.localeCompare(b[1].name))
+      .map(([hash, { name, count }]) => ({ value: hash, label: name, count }));
   }, [rows]);
 
   const archetypeOptions = useMemo<FilterOption<string>[]>(() => {
@@ -444,11 +453,6 @@ export function ArmorTable() {
     [],
   );
 
-  const togglePinnedSet = useCallback(
-    (hash: number) => setPinnedSets((prev) => togglePinned(prev, hash)),
-    [],
-  );
-
   const togglePinnedArchetype = useCallback(
     (name: string) => setPinnedArchetypes((prev) => togglePinned(prev, name)),
     [],
@@ -491,9 +495,7 @@ export function ArmorTable() {
             setOptions={setOptions}
             archetypeOptions={archetypeOptions}
             statOptions={STAT_FILTER_OPTIONS}
-            pinnedSets={pinnedSets}
             pinnedArchetypes={pinnedArchetypes}
-            onTogglePinnedSet={togglePinnedSet}
             onTogglePinnedArchetype={togglePinnedArchetype}
             filteredCount={visible.length}
             duplicateGroups={duplicates?.groupCount}

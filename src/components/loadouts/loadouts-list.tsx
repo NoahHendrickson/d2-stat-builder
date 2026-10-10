@@ -67,6 +67,7 @@ import {
   type SavedLoadoutData,
 } from "@/lib/loadouts/types";
 import { FilterMultiselect } from "@/components/armor-table/filter-multiselect";
+import { SetFilterMenu } from "@/components/set-menu";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input, SearchClearButton } from "@/components/ui/input";
@@ -244,12 +245,18 @@ export function LoadoutsList({
   const [now] = useState(() => Date.now());
   const hashtags = useMemo(() => collectHashtags(all), [all]);
   const setBonusOptions = useMemo(() => {
+    // How many loadouts ask for each set, shown beside it in the menu.
+    const uses = new Map<number, number>();
+    for (const l of all) {
+      for (const hash of collectSetBonusHashes([l])) uses.set(hash, (uses.get(hash) ?? 0) + 1);
+    }
     return collectSetBonusHashes(all)
       .map((hash) => ({
         hash,
         name:
           manifest.def("DestinyEquipableItemSetDefinition", hash)?.displayProperties
             ?.name ?? `Set ${hash}`,
+        count: uses.get(hash) ?? 0,
       }))
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [all, manifest]);
@@ -565,7 +572,7 @@ export function LoadoutsList({
   const sortLabel =
     LOADOUT_LIST_SORT_OPTIONS.find((o) => o.key === sortKey)?.label ?? "Sort";
   const classOptions = ownedClasses.map((c) => ({ value: c, label: CLASS_NAMES[c] }));
-  const setOptions = setBonusOptions.map((o) => ({ value: o.hash, label: o.name }));
+  const setOptions = setBonusOptions.map((o) => ({ value: o.hash, label: o.name, count: o.count }));
   const tagOptions = [...new Set([...hashtags, ...tagFilter])].map((t) => ({
     value: t,
     label: `#${t}`,
@@ -612,10 +619,9 @@ export function LoadoutsList({
           className="max-w-56"
         />
         {(setBonusOptions.length > 0 || setFilter.length > 0) && (
-          <FilterMultiselect
+          <SetFilterMenu
             label="Set bonus"
             allLabel="All set bonuses"
-            searchable
             options={setOptions}
             value={setFilter}
             onChange={setSetFilter}

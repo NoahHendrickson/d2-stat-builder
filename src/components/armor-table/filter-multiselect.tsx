@@ -45,6 +45,12 @@ export function selectionSummaryText<V>(
 
 type FilterMultiselectPanelProps<V extends string | number> = {
   allLabel: string;
+  /**
+   * Pick exactly one: choosing an option replaces the value and closes the menu, and
+   * there's no Clear row. With `noneLabel`, a first row picks nothing (`[]`).
+   */
+  single?: boolean;
+  noneLabel?: string;
   options: FilterOption<V>[];
   value: V[];
   onChange: (value: V[]) => void;
@@ -64,6 +70,8 @@ type FilterMultiselectPanelProps<V extends string | number> = {
 /** Checkbox list body shared by FilterMultiselect and FilterCascadeMenu submenus. */
 export function FilterMultiselectPanel<V extends string | number>({
   allLabel,
+  single = false,
+  noneLabel,
   options,
   value,
   onChange,
@@ -89,7 +97,11 @@ export function FilterMultiselectPanel<V extends string | number>({
 
   const toggle = (v: V) =>
     onChange(
-      value.includes(v) ? value.filter((x) => !Object.is(x, v)) : [...value, v],
+      single
+        ? [v]
+        : value.includes(v)
+          ? value.filter((x) => !Object.is(x, v))
+          : [...value, v],
     );
 
   const renderOption = (opt: FilterOption<V>) => {
@@ -98,11 +110,14 @@ export function FilterMultiselectPanel<V extends string | number>({
       <DropdownMenuCheckboxItem
         key={String(opt.value)}
         indicator="start"
-        closeOnClick={false}
+        closeOnClick={single}
         checked={value.includes(opt.value)}
         onCheckedChange={() => toggle(opt.value)}
       >
         <span className="min-w-0 flex-1 truncate">{opt.label}</span>
+        {opt.count !== undefined && (
+          <span className="text-muted-foreground shrink-0 text-xs tabular-nums">{opt.count}</span>
+        )}
         {pinnable && onTogglePin && (
           <TooltipLabel
             label={isPinned ? `Unpin ${opt.label}` : `Pin ${opt.label}`}
@@ -161,6 +176,18 @@ export function FilterMultiselectPanel<V extends string | number>({
           </div>
         </div>
       )}
+      {noneLabel && !query.trim() && (
+        <>
+          <DropdownMenuCheckboxItem
+            indicator="start"
+            checked={value.length === 0}
+            onCheckedChange={() => onChange([])}
+          >
+            <span className="min-w-0 flex-1 truncate">{noneLabel}</span>
+          </DropdownMenuCheckboxItem>
+          <DropdownMenuSeparator />
+        </>
+      )}
       {partition.pinned.length > 0 && (
         <>
           <DropdownMenuGroup>
@@ -181,7 +208,7 @@ export function FilterMultiselectPanel<V extends string | number>({
           No matches.
         </p>
       )}
-      {active && (
+      {active && !single && (
         <>
           <DropdownMenuSeparator />
           <DropdownMenuItem closeOnClick={false} onClick={() => onChange([])}>
@@ -200,6 +227,9 @@ export function FilterMultiselectPanel<V extends string | number>({
 export function FilterMultiselect<V extends string | number>({
   label,
   allLabel,
+  single = false,
+  required = false,
+  noneLabel,
   options,
   value,
   onChange,
@@ -212,6 +242,11 @@ export function FilterMultiselect<V extends string | number>({
 }: {
   label: string;
   allLabel: string;
+  /** Pick one (see {@link FilterMultiselectPanel}); the trigger shows the pick alone. */
+  single?: boolean;
+  /** A single pick that can't be cleared: no clear button, never the idle look. */
+  required?: boolean;
+  noneLabel?: string;
   options: FilterOption<V>[];
   value: V[];
   onChange: (value: V[]) => void;
@@ -228,6 +263,15 @@ export function FilterMultiselect<V extends string | number>({
   const active = value.length > 0;
   const labels = selectedLabels(value, options);
   const summaryText = labels.length === 0 ? null : labels.join(", ");
+  const clearable = active && !required;
+  // A filter in effect gets the active fill; a single pick (a choice, not a filter) doesn't.
+  const highlighted = active && !single;
+  const pickCount = single ? options.find((o) => Object.is(o.value, value[0]))?.count : undefined;
+  const triggerLabel = active
+    ? single
+      ? `${label}: ${summaryText}`
+      : `${label}: ${summaryText} — ${value.length} selected`
+    : `${label}: ${allLabel}`;
 
   return (
     <div
@@ -244,33 +288,32 @@ export function FilterMultiselect<V extends string | number>({
           className={cn(
             fieldFilterControlShellClasses,
             "box-border w-full",
-            active ? fieldFilterActiveEdgeClasses : fieldFilterIdleClasses,
+            highlighted ? fieldFilterActiveEdgeClasses : fieldFilterIdleClasses,
           )}
-          data-active={active || undefined}
+          data-active={highlighted || undefined}
         >
-          <TooltipLabel
-            label={
-              active
-                ? `${label}: ${summaryText} — ${value.length} selected`
-                : `${label}: ${allLabel}`
-            }
-          >
+          <TooltipLabel label={triggerLabel}>
             <DropdownMenuTrigger
               ref={triggerRef}
-              aria-label={
-                active
-                  ? `${label}: ${summaryText} — ${value.length} selected`
-                  : `${label}: ${allLabel}`
-              }
+              aria-label={triggerLabel}
               className={fieldControlInnerTriggerClasses}
             >
               {active ? (
                 <>
-                  {/* "Class: Titan" — the muted name keeps what's filtered in view. */}
-                  <span className="min-w-0 grow truncate text-left">
-                    <span className="text-white/70">{label}:</span> {summaryText}
-                  </span>
-                  <span className="size-4 shrink-0" aria-hidden />
+                  {single ? (
+                    <span className="min-w-0 grow truncate text-left">
+                      {summaryText}
+                      {pickCount !== undefined && (
+                        <span className="text-white/70"> ({pickCount})</span>
+                      )}
+                    </span>
+                  ) : (
+                    // "Class: Titan" — the muted name keeps what's filtered in view.
+                    <span className="min-w-0 grow truncate text-left">
+                      <span className="text-white/70">{label}:</span> {summaryText}
+                    </span>
+                  )}
+                  {clearable && <span className="size-4 shrink-0" aria-hidden />}
                 </>
               ) : (
                 <span className="min-w-0 truncate text-left text-foreground/70">
@@ -280,18 +323,18 @@ export function FilterMultiselect<V extends string | number>({
               <HugeiconsIcon icon={UnfoldMoreIcon}
                 className={cn(
                   "pointer-events-none size-4 shrink-0",
-                  active ? "text-white" : "text-foreground/70",
+                  highlighted ? "text-white" : "text-foreground/70",
                 )}
                 aria-hidden
               />
             </DropdownMenuTrigger>
           </TooltipLabel>
         </div>
-        {active && (
-          <TooltipLabel label={`Clear ${label.toLowerCase()} filter`}>
+        {clearable && (
+          <TooltipLabel label={`Clear ${label.toLowerCase()}${single ? "" : " filter"}`}>
             <button
               type="button"
-              aria-label={`Clear ${label.toLowerCase()} filter`}
+              aria-label={`Clear ${label.toLowerCase()}${single ? "" : " filter"}`}
               onClick={() => {
                 onChange([]);
                 triggerRef.current?.focus();
@@ -308,6 +351,8 @@ export function FilterMultiselect<V extends string | number>({
         >
           <FilterMultiselectPanel
             allLabel={allLabel}
+            single={single}
+            noneLabel={noneLabel}
             options={options}
             value={value}
             onChange={onChange}
