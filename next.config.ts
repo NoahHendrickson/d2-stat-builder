@@ -28,6 +28,8 @@ const csp = [
   "object-src 'none'",
   "base-uri 'self'",
   "form-action 'self'",
+  // The What's new video.
+  "frame-src https://www.youtube-nocookie.com",
   "frame-ancestors 'none'",
 ].join("; ");
 

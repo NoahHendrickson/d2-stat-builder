@@ -3,6 +3,7 @@ import { Geist } from "next/font/google";
 import "./globals.css";
 import { AppShell } from "@/components/app-shell";
 import { LoadingScreen } from "@/components/loading/loading-screen";
+import { WhatsNewDialog } from "@/components/whats-new-dialog";
 import { Providers } from "@/components/providers";
 import { Analytics } from "@/components/analytics";
 import { SearchSelectOnRefocus } from "@/components/search-select-on-refocus";
@@ -52,6 +53,7 @@ export default function RootLayout({
         <Providers>
           <AppShell>{children}</AppShell>
           <LoadingScreen />
+          <WhatsNewDialog />
         </Providers>
         <SearchSelectOnRefocus />
         <Analytics />
