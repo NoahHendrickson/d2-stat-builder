@@ -3,20 +3,24 @@
 import { TooltipLabel } from "@/components/ui/tooltip";
 import { memo, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { HugeiconsIcon } from "@hugeicons/react";
 import {
-  ArrowLineDown,
-  ArrowSquareOut,
-  CircleNotch,
-  Copy,
-  DotsThreeVertical,
-  PencilSimple,
-  ShareFat,
-  SlidersHorizontal,
-  Trash,
-  Warning,
-} from "@phosphor-icons/react";
+  Alert02Icon,
+  ArrowDown01Icon,
+  Copy01Icon,
+  Delete02Icon,
+  Download04Icon,
+  FloppyDiskIcon,
+  LinkSquare02Icon,
+  Loading03Icon,
+  MoreVerticalIcon,
+  PencilEdit02Icon,
+  Share08Icon,
+  SlidersHorizontalIcon,
+} from "@hugeicons/core-free-icons";
 import { toast } from "@/lib/toast";
 import type { ArmorPiece } from "@/lib/armory/normalize";
+import type { LoadoutWeapon } from "@/lib/armory/weapons";
 import type { ArmoryCharacter } from "@/lib/armory/fetch";
 import type { Manifest } from "@/lib/manifest/load";
 import {
@@ -29,12 +33,14 @@ import {
 import { lastPlayedCharacter } from "@/lib/bungie/equip-client";
 import { buildDimLoadoutUrl } from "@/lib/dim/loadout-link";
 import { applySavedLoadout } from "@/lib/loadouts/apply-client";
+import { saveLoadoutInGame, type InGameSlotChoice } from "@/lib/loadouts/ingame-save";
 import { formatRelativeTime } from "@/lib/armor-table/relative-time";
 import { resolveLoadout } from "@/lib/loadouts/resolve";
 import { loadoutHashtags, type SavedLoadout } from "@/lib/loadouts/types";
 import { LoadoutTagAssignSubmenu } from "@/components/loadouts/loadout-tag-menu";
 import { StatGlyph } from "@/components/stat-glyph";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -43,7 +49,13 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
-import { LoadoutRowDetails } from "@/components/loadouts/loadout-row-details";
+import {
+  LoadoutRowDetails,
+  loadoutSetBonuses,
+  SetBonusChip,
+} from "@/components/loadouts/loadout-row-details";
+import { LoadoutCardBody } from "@/components/loadouts/loadout-card-body";
+import { InGameSaveDialog } from "@/components/loadouts/ingame-save-dialog";
 
 const STAT_COLS = STAT_DISPLAY_ORDER.map((key) => ({
   key,
@@ -51,9 +63,9 @@ const STAT_COLS = STAT_DISPLAY_ORDER.map((key) => ({
 }));
 
 /**
- * One saved loadout as a sidebar card (Figma "Attachment", 1:1209): name with Equip and
- * the actions menu, a row of chips, and the stat line. Clicking the name expands the
- * piece-by-piece breakdown (see LoadoutRowDetails).
+ * One saved loadout as a large card on the loadouts page: name, set bonuses, the stat
+ * line (which toggles the stat breakdown), Equip and the actions menu across the top,
+ * then the body laid out like the editor drawer (see LoadoutCardBody).
  *
  * Memoized: the list renders (virtualized) rows with stable, loadout-taking callbacks,
  * so a keystroke in the search box or one row's expansion doesn't re-render every other
@@ -64,7 +76,10 @@ export const LoadoutRow = memo(function LoadoutRow({
   open,
   onToggle,
   pieceMap,
+  weaponMap,
+  weapons,
   provisional = false,
+  setRunning = false,
   manifest,
   characters,
   statIcons,
@@ -78,13 +93,20 @@ export const LoadoutRow = memo(function LoadoutRow({
   onArmoryChanged,
   allTags,
   onSetTag,
+  selected,
+  onSelect,
 }: {
   saved: SavedLoadout;
   open: boolean;
   onToggle: (id: string) => void;
   pieceMap: ReadonlyMap<string, ArmorPiece>;
+  weaponMap: ReadonlyMap<string, LoadoutWeapon>;
+  /** Every owned weapon, for making room and swapping an equipped exotic on equip. */
+  weapons?: readonly LoadoutWeapon[];
   /** The pieces are last visit's copy; Equip waits for the live profile. */
   provisional?: boolean;
+  /** An activity set is equipping gear; another apply now would fight it. */
+  setRunning?: boolean;
   manifest: Manifest;
   characters: ArmoryCharacter[];
   statIcons: StatIconMap;
@@ -101,14 +123,18 @@ export const LoadoutRow = memo(function LoadoutRow({
   /** Every hashtag across the library, for the Tag submenu. */
   allTags: readonly string[];
   onSetTag: (saved: SavedLoadout, tag: string, present: boolean) => void;
+  /** Set while the list is in select mode: whether this card is picked for bulk delete. */
+  selected?: boolean;
+  onSelect?: (id: string) => void;
 }) {
   const queryClient = useQueryClient();
   const [applying, setApplying] = useState(false);
+  const [inGameSaveOpen, setInGameSaveOpen] = useState(false);
   const { loadout, optimizer } = saved;
 
   const resolved = useMemo(
-    () => resolveLoadout(loadout, pieceMap, manifest),
-    [loadout, pieceMap, manifest],
+    () => resolveLoadout(loadout, pieceMap, manifest, weaponMap),
+    [loadout, pieceMap, manifest, weaponMap],
   );
 
   const className =
@@ -119,20 +145,31 @@ export const LoadoutRow = memo(function LoadoutRow({
       ? resolved.armor[0]?.piece?.classType
       : loadout.classType,
   );
-  const canApply = resolved.actionable && !!targetCharacter && !applying && !provisional;
+  const canApply =
+    resolved.actionable && !!targetCharacter && !applying && !provisional && !setRunning;
+  const blockedLabel = provisional
+    ? "Refreshing your gear from Bungie…"
+    : setRunning
+      ? "Wait for the activity set to finish"
+      : undefined;
 
-  const applyLoadout = async () => {
+  /** Equip the loadout; with a slot `choice`, also save it into that in-game slot. */
+  const applyLoadout = async (choice?: InGameSlotChoice) => {
     if (!canApply || !targetCharacter) return;
     setApplying(true);
     try {
-      const outcome = await applySavedLoadout({
+      const request = {
         saved,
         resolved,
         character: targetCharacter,
         armory: pieceMap.values(),
+        weapons,
         manifest,
         queryClient,
-      });
+      };
+      const outcome = choice
+        ? await saveLoadoutInGame({ ...request, choice })
+        : await applySavedLoadout(request);
       if (outcome) onArmoryChanged();
     } catch {
       toast.error("Apply failed — check your connection and try again");
@@ -143,7 +180,9 @@ export const LoadoutRow = memo(function LoadoutRow({
 
   const copyItemIds = async () => {
     if (!resolved.actionable) return;
-    const query = resolved.armor.map((a) => `id:'${a.ref.id}'`).join(" OR ");
+    const query = [...resolved.armor, ...resolved.weapons]
+      .map((a) => `id:'${a.ref.id}'`)
+      .join(" OR ");
     try {
       await navigator.clipboard.writeText(query);
       toast.success("Item IDs copied — paste into DIM search");
@@ -156,162 +195,187 @@ export const LoadoutRow = memo(function LoadoutRow({
     window.open(buildDimLoadoutUrl(loadout), "_blank", "noopener,noreferrer");
   };
 
+  const setBonuses = useMemo(
+    () => loadoutSetBonuses(saved, manifest),
+    [saved, manifest],
+  );
+  const meta = `${className}${resolved.subclass?.subclass ? ` · ${resolved.subclass.subclass}` : ""} · edited ${formatRelativeTime(saved.updatedAt, now)}`;
+
   return (
-    <div className="d2-card-frame mx-2 flex flex-col gap-3 p-3 [--card-line-width:1.5px] hover:[--line-alpha:1.6]">
-      <div className="flex flex-col gap-2">
-        <div className="flex h-8 items-center justify-between gap-2">
-          <TooltipLabel
-            label={`${className}${resolved.subclass?.subclass ? ` · ${resolved.subclass.subclass}` : ""} · edited ${formatRelativeTime(saved.updatedAt, now)}`}
-          >
-            <button
-              type="button"
-              onClick={() => onToggle(saved.id)}
-              aria-expanded={open}
-              className="hover:text-foreground/80 flex min-w-0 flex-1 items-center gap-1.5 text-left text-base leading-6 transition-colors"
-            >
-              <span className="truncate">{loadout.name}</span>
-              {resolved.missing && (
-                <Warning
-                  weight="fill"
+    <article
+      aria-label={loadout.name}
+      className="@container d2-card-frame flex flex-col gap-4 p-4 transition-[--line-alpha] duration-200 hover:[--line-alpha:1.6]"
+    >
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        {selected !== undefined && onSelect && (
+          <Checkbox
+            size="lg"
+            className="d2-fade"
+            checked={selected}
+            onCheckedChange={() => onSelect(saved.id)}
+            aria-label={`Select ${loadout.name}`}
+          />
+        )}
+        <div className="flex min-w-0 flex-1 basis-48 flex-col">
+          <h3 className="flex min-w-0 items-center gap-1.5 text-base leading-6 font-medium">
+            <span className="truncate">{loadout.name}</span>
+            {resolved.missing && (
+              <TooltipLabel label="Some items aren't in your inventory">
+                <HugeiconsIcon icon={Alert02Icon}
+                  strokeWidth={2}
+                  tabIndex={0}
                   className="size-4 shrink-0 text-warning"
                   aria-label="Missing items"
                 />
-              )}
-            </button>
-          </TooltipLabel>
-          <div className="flex shrink-0 items-center gap-2">
-            <TooltipLabel
-              label={provisional ? "Refreshing your gear from Bungie…" : undefined}
-              disabled={!provisional}
-            >
-              <Button
-                variant="emphatic"
-                size="xs"
-                className="h-8 gap-1.5 px-3"
-                onClick={applyLoadout}
-                disabled={!canApply}
-              >
-                {applying && (
-                  <CircleNotch className="animate-spin" aria-hidden />
-                )}
-                Equip
-              </Button>
-            </TooltipLabel>
-            <DropdownMenu>
-              <DropdownMenuTrigger
-                render={<Button size="icon" variant="dashed" />}
-                aria-label={`Actions for ${loadout.name}`}
-              >
-                <DotsThreeVertical
-                  weight="bold"
-                  className="size-4"
-                  aria-hidden
-                />
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-50">
-                <DropdownMenuItem onClick={() => onOptimize(saved)}>
-                  <SlidersHorizontal weight="duotone" aria-hidden />
-                  Optimize
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={applyLoadout} disabled={!canApply}>
-                  <ArrowLineDown weight="duotone" aria-hidden />
-                  Equip
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => onEdit(saved)}>
-                  <PencilSimple weight="duotone" aria-hidden />
-                  Edit
-                </DropdownMenuItem>
-                <LoadoutTagAssignSubmenu
-                  assigned={loadoutHashtags(loadout)}
-                  tags={allTags}
-                  onToggle={(tag, checked) => onSetTag(saved, tag, checked)}
-                  onCreate={(tag) => onSetTag(saved, tag, true)}
-                />
-                <DropdownMenuItem onClick={() => onShare(saved)}>
-                  <ShareFat weight="duotone" aria-hidden />
-                  Share
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => onDuplicate(saved)}>
-                  <Copy weight="duotone" aria-hidden />
-                  Duplicate
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={copyItemIds}
-                  disabled={!resolved.actionable}
-                >
-                  <Copy weight="duotone" aria-hidden />
-                  Copy item IDs
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={openInDim}>
-                  <ArrowSquareOut weight="duotone" aria-hidden />
-                  Open in DIM
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  variant="destructive"
-                  onClick={() => onDelete(saved)}
-                >
-                  <Trash weight="duotone" aria-hidden />
-                  Delete
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
+              </TooltipLabel>
+            )}
+          </h3>
+          <p className="text-muted-foreground truncate text-xs leading-4">{meta}</p>
         </div>
 
+        <SetBonusChip bonuses={setBonuses} />
+
+        <button
+          type="button"
+          onClick={() => onToggle(saved.id)}
+          aria-expanded={open}
+          aria-label={open ? "Hide stat breakdown" : "Show stat breakdown"}
+          className="text-foreground hover:bg-foreground/6 flex h-9 items-center gap-4 rounded-none normal:rounded-[8px] px-2 text-sm leading-5 tabular-nums outline-none transition-colors focus-visible:ring-1 focus-visible:ring-outline-strong"
+        >
+          {optimizer ? (
+            <>
+              <span className="text-base font-medium">{optimizer.total}</span>
+              {STAT_COLS.map(({ key, i }) => {
+                const value = optimizer.stats[i];
+                return (
+                  <span key={key} className="flex items-center gap-1">
+                    <StatGlyph
+                      src={statIcons[key]}
+                      label={STAT_LABELS[key]}
+                      className="size-4 opacity-75"
+                    />
+                    <span className={cn(value === 0 && "text-muted-foreground")}>
+                      {value}
+                    </span>
+                  </span>
+                );
+              })}
+            </>
+          ) : (
+            <span className="text-muted-foreground">Details</span>
+          )}
+          <HugeiconsIcon icon={ArrowDown01Icon}
+            strokeWidth={2}
+            className={cn(
+              "text-muted-foreground size-3 transition-transform",
+              open && "rotate-180",
+            )}
+            aria-hidden
+          />
+        </button>
+
+        <div className="flex shrink-0 items-center gap-2">
+          <TooltipLabel
+            label={blockedLabel}
+            disabled={!blockedLabel}
+          >
+            <Button
+              variant="emphatic"
+              size="xs"
+              className="h-8 gap-1.5 px-4"
+              onClick={() => applyLoadout()}
+              disabled={!canApply}
+            >
+              {applying && <HugeiconsIcon icon={Loading03Icon} className="animate-spin" aria-hidden />}
+              Equip
+            </Button>
+          </TooltipLabel>
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={<Button size="icon" variant="dashed" />}
+              aria-label={`Actions for ${loadout.name}`}
+            >
+              <HugeiconsIcon icon={MoreVerticalIcon} strokeWidth={2} className="size-4" aria-hidden />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-50">
+              <DropdownMenuItem onClick={() => onOptimize(saved)}>
+                <HugeiconsIcon icon={SlidersHorizontalIcon} aria-hidden />
+                Optimize
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => applyLoadout()} disabled={!canApply}>
+                <HugeiconsIcon icon={Download04Icon} aria-hidden />
+                Equip
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setInGameSaveOpen(true)} disabled={!canApply}>
+                <HugeiconsIcon icon={FloppyDiskIcon} aria-hidden />
+                Save in-game
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => onEdit(saved)}>
+                <HugeiconsIcon icon={PencilEdit02Icon} aria-hidden />
+                Edit
+              </DropdownMenuItem>
+              <LoadoutTagAssignSubmenu
+                assigned={loadoutHashtags(loadout)}
+                tags={allTags}
+                onToggle={(tag, checked) => onSetTag(saved, tag, checked)}
+                onCreate={(tag) => onSetTag(saved, tag, true)}
+              />
+              <DropdownMenuItem onClick={() => onShare(saved)}>
+                <HugeiconsIcon icon={Share08Icon} aria-hidden />
+                Share
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => onDuplicate(saved)}>
+                <HugeiconsIcon icon={Copy01Icon} aria-hidden />
+                Duplicate
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={copyItemIds} disabled={!resolved.actionable}>
+                <HugeiconsIcon icon={Copy01Icon} aria-hidden />
+                Copy item IDs
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={openInDim}>
+                <HugeiconsIcon icon={LinkSquare02Icon} aria-hidden />
+                Open in DIM
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem variant="destructive" onClick={() => onDelete(saved)}>
+                <HugeiconsIcon icon={Delete02Icon} aria-hidden />
+                Delete
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </div>
+
+      {loadout.notes && (
+        <p className="text-muted-foreground -mt-2 line-clamp-2 text-sm whitespace-pre-wrap">
+          {loadout.notes}
+        </p>
+      )}
+
+      <LoadoutCardBody saved={saved} resolved={resolved} manifest={manifest} />
+
+      {inGameSaveOpen && targetCharacter && (
+        <InGameSaveDialog
+          open
+          onOpenChange={setInGameSaveOpen}
+          loadoutName={loadout.name}
+          character={targetCharacter}
+          manifest={manifest}
+          onConfirm={(choice) => void applyLoadout(choice)}
+        />
+      )}
+
+      {open && (
         <LoadoutRowDetails
-          part="chips"
           saved={saved}
           resolved={resolved}
           manifest={manifest}
           characters={characters}
           statIcons={statIcons}
           balancedTuningIcon={balancedTuningIcon}
-          now={now}
         />
-      </div>
-
-      {optimizer ? (
-        <div className="flex items-start justify-between gap-1 text-xs leading-4 tabular-nums">
-          <TooltipLabel label="Total stats">
-            <span tabIndex={0} className="text-foreground">{optimizer.total}</span>
-          </TooltipLabel>
-          {STAT_COLS.map(({ key, i }) => {
-            const value = optimizer.stats[i];
-            return (
-              <span key={key} className="flex items-center gap-0.5">
-                <StatGlyph
-                  src={statIcons[key]}
-                  label={STAT_LABELS[key]}
-                  className="size-3 opacity-65"
-                />
-                <span className={cn(value === 0 && "text-muted-foreground")}>
-                  {value}
-                </span>
-              </span>
-            );
-          })}
-        </div>
-      ) : (
-        <p className="text-muted-foreground text-xs leading-4">
-          {className}
-          {resolved.subclass?.subclass ? ` · ${resolved.subclass.subclass}` : ""}{" "}
-          · edited {formatRelativeTime(saved.updatedAt, now)}
-        </p>
       )}
-
-      <LoadoutRowDetails
-        part="expanded"
-        open={open}
-        saved={saved}
-        resolved={resolved}
-        manifest={manifest}
-        characters={characters}
-        statIcons={statIcons}
-        balancedTuningIcon={balancedTuningIcon}
-        now={now}
-      />
-    </div>
+    </article>
   );
 });

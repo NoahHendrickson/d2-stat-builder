@@ -6,7 +6,7 @@
 // tooling for a single table on a hobby deploy. Add a real migration step if the
 // schema ever changes shape.
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
-import type { LoadoutStore } from "./store";
+import { LoadoutLimitError, MAX_LOADOUTS_PER_ACCOUNT, type LoadoutStore } from "./store";
 import { parseSavedLoadoutData, type SavedLoadout, type SavedLoadoutData } from "./types";
 
 interface Row {
@@ -78,10 +78,15 @@ export class NeonLoadoutStore implements LoadoutStore {
     id = crypto.randomUUID(),
   ): Promise<SavedLoadout> {
     await this.ensureSchema();
+    // The cap rides in the INSERT itself (counted off loadouts_owner_idx), so it costs no
+    // extra round trip. Two racing creates can overshoot by one; that's fine for a cap.
     const rows = (await this.sql`
       INSERT INTO loadouts (id, membership_id, data)
-      VALUES (${id}::uuid, ${membershipId}, ${JSON.stringify(data)}::jsonb)
+      SELECT ${id}::uuid, ${membershipId}, ${JSON.stringify(data)}::jsonb
+      WHERE (SELECT count(*) FROM loadouts WHERE membership_id = ${membershipId})
+        < ${MAX_LOADOUTS_PER_ACCOUNT}
       RETURNING id, data, created_at, updated_at`) as Row[];
+    if (!rows[0]) throw new LoadoutLimitError();
     const row = rowToLoadout(rows[0]);
     if (!row) throw new Error("Stored loadout failed to parse back");
     return row;
@@ -107,6 +112,22 @@ export class NeonLoadoutStore implements LoadoutStore {
       WHERE membership_id = ${membershipId} AND id = ${id}::uuid
       RETURNING id`) as Row[];
     return rows.length > 0;
+  }
+
+  async deleteMany(membershipId: string, ids: readonly string[] | "all"): Promise<string[]> {
+    await this.ensureSchema();
+    if (ids !== "all" && ids.length === 0) return [];
+    const rows = (
+      ids === "all"
+        ? await this.sql`
+            DELETE FROM loadouts WHERE membership_id = ${membershipId}
+            RETURNING id`
+        : await this.sql`
+            DELETE FROM loadouts
+            WHERE membership_id = ${membershipId} AND id = ANY(${[...ids]}::uuid[])
+            RETURNING id`
+    ) as Pick<Row, "id">[];
+    return rows.map((r) => r.id);
   }
 }
 

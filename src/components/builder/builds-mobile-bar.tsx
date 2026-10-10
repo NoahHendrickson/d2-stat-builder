@@ -1,6 +1,7 @@
 "use client";
 
-import { CaretUp } from "@phosphor-icons/react";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { ArrowUp01Icon } from "@hugeicons/core-free-icons";
 
 import {
   getBuildsStatusLabel,
@@ -37,7 +38,7 @@ function ProgressFill({ store, className }: { store: ValueStore<number>; classNa
       aria-valuenow={Math.round(progress * 100)}
       className={className}
     >
-      <div className="bg-foreground h-full rounded-none" style={{ width: `${progress * 100}%` }} />
+      <div className="bg-foreground h-full rounded-none normal:rounded-full" style={{ width: `${progress * 100}%` }} />
     </div>
   );
 }
@@ -66,7 +67,7 @@ export function BuildsMobileBar({
         className={cn(
           "border-foreground/15 bg-background/95 pointer-events-auto relative flex w-full flex-col gap-2 border-t px-4 py-3 text-left transition-colors",
           "pb-[calc(0.75rem+env(safe-area-inset-bottom))] hover:bg-muted/40 active:bg-muted/60",
-          "fine-pointer:border-t-2 fine-pointer:px-5 fine-pointer:py-4",
+          "fine-pointer:px-5 fine-pointer:py-4",
           state === "results"
             ? "fine-pointer:border-foreground/70"
             : state === "searching"
@@ -83,7 +84,7 @@ export function BuildsMobileBar({
         {state === "searching" && (
           <ProgressFill
             store={progressStore}
-            className="bg-black/30 h-0.5 w-full overflow-hidden rounded-none fine-pointer:hidden"
+            className="bg-black/30 h-0.5 w-full overflow-hidden rounded-none normal:rounded-full fine-pointer:hidden"
           />
         )}
         <span className="flex items-center gap-3">
@@ -98,8 +99,7 @@ export function BuildsMobileBar({
           {running && state === "searching" && (
             <span className="text-muted-foreground shrink-0 text-xs">Running</span>
           )}
-          <CaretUp
-            weight="duotone"
+          <HugeiconsIcon icon={ArrowUp01Icon}
             className={cn(
               "text-muted-foreground size-4 shrink-0 transition-transform fine-pointer:size-5",
               open && "rotate-180",

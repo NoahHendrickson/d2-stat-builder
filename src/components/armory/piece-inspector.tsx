@@ -56,7 +56,7 @@ export function PieceInspector() {
         {matches.map((p) => (
           <div
             key={p.instanceId}
-            className="rounded-none border border-foreground/15 p-3 text-sm"
+            className="rounded-none normal:rounded-[12px] border border-foreground/15 p-3 text-sm"
           >
             <div className="mb-1 flex flex-wrap items-center gap-2">
               <span className="font-medium">{p.name}</span>

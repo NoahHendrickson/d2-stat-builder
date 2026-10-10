@@ -1,7 +1,8 @@
 "use client";
 
 import { memo, useId, type ReactNode } from "react";
-import { ArrowsDownUp, FunnelSimple } from "@phosphor-icons/react";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { ArrowUpDownIcon, FilterIcon } from "@hugeicons/core-free-icons";
 import { TooltipLabel } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -67,7 +68,7 @@ export const SetListControls = memo(function SetListControls({
                 />
               }
             >
-              <ArrowsDownUp aria-hidden />
+              <HugeiconsIcon icon={ArrowUpDownIcon} aria-hidden />
             </DropdownMenuTrigger>
           </TooltipLabel>
           <DropdownMenuContent side="bottom" align="end" className="min-w-48">
@@ -100,7 +101,7 @@ export const SetListControls = memo(function SetListControls({
                 />
               }
             >
-              <FunnelSimple aria-hidden />
+              <HugeiconsIcon icon={FilterIcon} aria-hidden />
             </PopoverTrigger>
           </TooltipLabel>
           {/* Figma 18:6255 — "Select Menu": titled header, then a checkbox list. */}

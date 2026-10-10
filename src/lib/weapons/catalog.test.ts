@@ -1,0 +1,190 @@
+import { describe, expect, it } from "vitest";
+import { sampleWeapons } from "./fixtures/sample-weapons";
+import { internWeaponCatalog } from "./intern-weapons";
+import { createWeaponCatalog } from "./catalog";
+import { compactWeaponIndex, expandWeaponIndex } from "./transport";
+import { mergeWeaponFilters } from "./query-language";
+import { readSearchState } from "./search-state";
+
+const { index } = internWeaponCatalog(sampleWeapons, "test");
+
+describe("weapon browser integration", () => {
+  it("round trips the compact catalog without changing search results", () => {
+    const original = createWeaponCatalog(index);
+    const compact = compactWeaponIndex(index);
+    const restored = createWeaponCatalog(
+      expandWeaponIndex(JSON.parse(JSON.stringify(compact))),
+    );
+    for (const query of [
+      "",
+      "fatebringer",
+      "type:hc",
+      'perk:"Firefly"',
+      "is:craftable",
+      "solar",
+      "fatebringr",
+    ]) {
+      const result = (catalog: ReturnType<typeof createWeaponCatalog>) =>
+        catalog
+          .search(query, {}, "name")
+          .map(({ hash, columns, perks }) => ({ hash, columns, perks }));
+      expect(result(restored)).toEqual(result(original));
+    }
+    expect(JSON.stringify(compact).length).toBeLessThan(
+      JSON.stringify(index).length,
+    );
+  });
+
+  it("combines free text, query syntax, and explicit facets without poisoning cached text", () => {
+    const catalog = createWeaponCatalog(index);
+    const all = catalog.search("fatebringer", {}, "name");
+    expect(all.length).toBeGreaterThan(0);
+    expect(
+      catalog.search("fatebringer", { element: ["Solar"] }, "name"),
+    ).toEqual([]);
+    expect(catalog.search("fatebringer", {}, "name")).toEqual(all);
+    expect(
+      catalog
+        .search("type:hc", {}, "name")
+        .every((w) => w.type === "Hand Cannon"),
+    ).toBe(true);
+  });
+
+  it("lists only source options that the source filter can match", () => {
+    const catalog = createWeaponCatalog(index);
+    expect(catalog.facets.source!.length).toBeGreaterThan(0);
+    for (const { value } of catalog.facets.source!) {
+      expect(
+        catalog.search("", { source: [value] }, "name").length,
+      ).toBeGreaterThan(0);
+    }
+  });
+
+  it("labels same-name results only when the name has several current perk pools", () => {
+    const catalog = createWeaponCatalog(index);
+    for (const weapon of catalog.search("", {}, "name")) {
+      expect(catalog.poolLabel(weapon.hash)).toBeUndefined();
+    }
+
+    const fatebringer = sampleWeapons.find((w) => w.name === "Fatebringer")!;
+    const reprise = {
+      ...fatebringer,
+      hash: 9_001,
+      source: "Pantheon",
+      releaseIndex: fatebringer.releaseIndex + 1_000,
+      columns: [
+        {
+          kind: "Trait",
+          perks: [
+            { hash: 9_002, name: "Kinetic Tremors", currentlyCanRoll: true },
+          ],
+        },
+      ],
+      perks: ["Kinetic Tremors"],
+      perkHashes: [9_002],
+    };
+    const twoPools = createWeaponCatalog(
+      internWeaponCatalog([...sampleWeapons, reprise], "test").index,
+    );
+    const rows = twoPools.search("fatebringer", {}, "name");
+    expect(rows.map((w) => twoPools.poolLabel(w.hash)).sort()).toEqual([
+      "Pantheon",
+      "Vault of Glass",
+    ]);
+  });
+
+  it("matches element and rarity words typed as free text", () => {
+    const catalog = createWeaponCatalog(index);
+    expect(
+      catalog.search("solar fusion", {}, "name").map((w) => w.name),
+    ).toEqual(["Sunlit Fusion"]);
+    const legendary = catalog.search("legendary", {}, "name");
+    expect(legendary.length).toBeGreaterThan(0);
+    expect(legendary.every((w) => w.rarity === "Legendary")).toBe(true);
+  });
+
+  it("preserves damage flags and perk combinations when merging filters", () => {
+    expect(
+      mergeWeaponFilters(
+        { element: ["Solar"] },
+        {
+          trait1DamagePerks: true,
+          trait2DamagePerks: false,
+          perkCombo: ["Firefly", "Frenzy"],
+        },
+      ),
+    ).toEqual({
+      element: ["Solar"],
+      trait1DamagePerks: true,
+      trait2DamagePerks: false,
+      perkCombo: ["Firefly", "Frenzy"],
+    });
+  });
+
+  it("restores share URLs and safely ignores invalid sort and boolean values", () => {
+    const state = readSearchState(
+      new URLSearchParams(
+        "q=fate&element=Solar&element=Arc&element=Arc&sort=invalid&adept=garbage&trait1DamagePerks=true",
+      ),
+    );
+    expect(state).toEqual({
+      query: "fate",
+      sort: "season-desc",
+      filters: { element: ["Solar", "Arc"], trait1DamagePerks: true },
+    });
+  });
+
+  it("rejects incompatible or broken catalog data", () => {
+    const compact = compactWeaponIndex(index);
+    expect(() => expandWeaponIndex({ ...compact, schema: 2 } as never)).toThrow(
+      "incomplete",
+    );
+    expect(() => expandWeaponIndex({ ...compact, perks: [] })).toThrow(
+      "invalid perk reference",
+    );
+  });
+
+  it("restores custom OR groups and ignores malformed shared values", () => {
+    const params = new URLSearchParams();
+    params.append(
+      "group",
+      JSON.stringify(["Firefly", "Frenzy", "Firefly", 123]),
+    );
+    params.append("group", "broken");
+    params.append("group", "null");
+    expect(readSearchState(params).filters.customPerkGroups).toEqual([
+      ["Firefly", "Frenzy"],
+    ]);
+  });
+});
+
+describe("perk stats in the shipped catalog", () => {
+  it("ships masterworks as perks with name-keyed stats, and keeps them through transport", () => {
+    const restored = expandWeaponIndex(
+      JSON.parse(JSON.stringify(compactWeaponIndex(index))),
+    );
+    const fatebringer = restored.weapons.find((w) => w.name === "Fatebringer")!;
+    const masterworks = fatebringer.masterworks!.map((i) => restored.perks[i]!);
+    expect(
+      masterworks.map(({ name, description, stats, statMods }) => ({
+        name,
+        description,
+        stats,
+        statMods,
+      })),
+    ).toEqual([
+      {
+        name: "Range Masterwork",
+        description: "+10 Range",
+        stats: { Range: 10 },
+        statMods: undefined,
+      },
+      {
+        name: "Stability Masterwork",
+        description: "+10 Stability",
+        stats: { Stability: 10 },
+        statMods: undefined,
+      },
+    ]);
+  });
+});

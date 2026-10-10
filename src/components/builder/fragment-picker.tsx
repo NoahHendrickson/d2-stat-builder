@@ -8,7 +8,8 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import Image from "next/image";
-import { CircleNotch } from "@phosphor-icons/react";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { Loading03Icon } from "@hugeicons/core-free-icons";
 import { cn } from "@/lib/utils";
 import { BUNGIE_IMAGE_BASE } from "@/lib/bungie/constants";
 import { STAT_LABELS, STAT_ORDER, type StatIconMap } from "@/lib/armory/stats";
@@ -81,7 +82,7 @@ export const FragmentPicker = memo(function FragmentPicker({
             onClick={onApplyCurrent}
           >
             {applyLoading ? (
-              <CircleNotch className="animate-spin" aria-hidden />
+              <HugeiconsIcon icon={Loading03Icon} className="animate-spin" aria-hidden />
             ) : null}
             Apply current
           </Button>
@@ -148,7 +149,7 @@ export const FragmentPicker = memo(function FragmentPicker({
                 >
                   <label
                     className={cn(
-                      "group flex cursor-pointer items-center gap-2 rounded-none px-1 text-left text-sm transition-colors",
+                      "group flex cursor-pointer items-center gap-2 rounded-none normal:rounded-[6px] px-1 text-left text-sm transition-colors",
                       on
                         ? "text-foreground"
                         : "text-muted-foreground hover:text-foreground",

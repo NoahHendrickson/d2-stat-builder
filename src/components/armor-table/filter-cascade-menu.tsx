@@ -2,7 +2,8 @@
 
 import { TooltipLabel } from "@/components/ui/tooltip";
 import { useState } from "react";
-import { CaretUpDown } from "@phosphor-icons/react";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { UnfoldMoreIcon } from "@hugeicons/core-free-icons";
 import type { FilterOption } from "@/lib/armor-table/pinned";
 import type {
   ArmorVersion,
@@ -19,6 +20,7 @@ import {
   fieldControlInnerTriggerClasses,
   fieldFilterActiveEdgeClasses,
   fieldFilterControlShellClasses,
+  fieldFilterIdleClasses,
 } from "@/lib/field-surface";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -35,6 +37,7 @@ import {
   FilterMultiselectPanel,
   selectionSummaryText,
 } from "@/components/armor-table/filter-multiselect";
+import { togglePinnedSet, usePinnedSets } from "@/lib/settings/pinned-sets";
 
 export const STAT_FILTER_OPTIONS: FilterOption<number>[] =
   STAT_DISPLAY_ORDER.map((key) => ({
@@ -135,9 +138,7 @@ export function FilterCascadeMenu({
   setOptions,
   archetypeOptions,
   statOptions,
-  pinnedSets,
   pinnedArchetypes,
-  onTogglePinnedSet,
   onTogglePinnedArchetype,
   filtersActive,
   onClearFilters,
@@ -155,9 +156,7 @@ export function FilterCascadeMenu({
   setOptions: FilterOption<number>[];
   archetypeOptions: FilterOption<string>[];
   statOptions: FilterOption<number>[];
-  pinnedSets: number[];
   pinnedArchetypes: string[];
-  onTogglePinnedSet: (hash: number) => void;
   onTogglePinnedArchetype: (name: string) => void;
   filtersActive: boolean;
   onClearFilters: () => void;
@@ -167,6 +166,7 @@ export function FilterCascadeMenu({
   triggerLabel?: string;
   toggleSubmenusOnClick?: boolean;
 }) {
+  const pinnedSets = usePinnedSets();
   const totalSelected = countFacetSelections(facets, includedFacets);
   const active = totalSelected > 0;
   const showClearAll = includedFacets.length === ALL_FACET_KEYS.length;
@@ -181,7 +181,7 @@ export function FilterCascadeMenu({
         className={cn(
           fieldFilterControlShellClasses,
           "min-w-28 shrink-0",
-          active && fieldFilterActiveEdgeClasses,
+          active ? fieldFilterActiveEdgeClasses : fieldFilterIdleClasses,
         )}
         data-active={active || undefined}
       >
@@ -213,7 +213,7 @@ export function FilterCascadeMenu({
                 {totalSelected}
               </Badge>
             )}
-            <CaretUpDown
+            <HugeiconsIcon icon={UnfoldMoreIcon}
               className={cn(
                 "pointer-events-none size-4 shrink-0",
                 active ? "text-white" : "text-foreground/70",
@@ -254,7 +254,7 @@ export function FilterCascadeMenu({
             searchable
             pinnable
             pinned={pinnedSets}
-            onTogglePin={onTogglePinnedSet}
+            onTogglePin={togglePinnedSet}
             toggleOnClick={toggleSubmenusOnClick}
           />
         )}

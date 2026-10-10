@@ -3,7 +3,13 @@ import { createBungieHttp } from "@/lib/bungie/http";
 import { getValidAccessToken, readUser } from "@/lib/bungie/session";
 import type { EquipItemState, SpareItems } from "@/lib/bungie/equip-plan";
 import { stageAndEquip } from "@/lib/bungie/equip-server";
-import { bungieErrorResponse, parseEquipItems, parseSpares } from "@/lib/bungie/equip-route";
+import {
+  bungieErrorResponse,
+  isBungieId,
+  parseEquipItems,
+  parseSpares,
+} from "@/lib/bungie/equip-route";
+import { rejectCrossSite } from "@/lib/http/same-origin";
 
 interface EquipRequestBody {
   characterId: string;
@@ -16,7 +22,7 @@ interface EquipRequestBody {
 
 function parseBody(body: unknown): EquipRequestBody | null {
   const b = body as Partial<EquipRequestBody> | null;
-  if (!b || typeof b.characterId !== "string" || !b.characterId) return null;
+  if (!b || !isBungieId(b.characterId)) return null;
   const items = parseEquipItems(b.items, { min: 1, max: 5 });
   if (!items) return null;
   if (b.mode !== undefined && b.mode !== "move" && b.mode !== "equip") return null;
@@ -26,6 +32,8 @@ function parseBody(body: unknown): EquipRequestBody | null {
 }
 
 export async function POST(request: Request) {
+  const refused = rejectCrossSite(request);
+  if (refused) return refused;
   const user = await readUser();
   const token = await getValidAccessToken();
   if (!user?.destinyMembershipId || user.destinyMembershipType == null || !token) {

@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
 import { createBungieHttp, BungieHttpError } from "@/lib/bungie/http";
-import { parseEquipItems, parseSpares } from "@/lib/bungie/equip-route";
+import { isBungieId, parseEquipItems, parseSpares } from "@/lib/bungie/equip-route";
 import type { EquipItemState, SpareItems } from "@/lib/bungie/equip-plan";
 import {
+  ApplyCancelledError,
   insertPlugs,
   stageAndEquip,
   type ApplyStreamEvent,
@@ -13,9 +14,14 @@ import { getValidAccessToken, readUser } from "@/lib/bungie/session";
 import { FRAGMENT_SOCKET_COUNT } from "@/lib/armory/equipped-subclass";
 import { MAX_MODS } from "@/lib/loadouts/types";
 import { ABILITY_SOCKET_COUNT, ASPECT_SOCKET_COUNT } from "@/lib/dim/subclasses";
+import { rejectCrossSite } from "@/lib/http/same-origin";
+import { getApplyCancelStore, isApplyId } from "@/lib/loadouts/apply-cancel-store";
+
+/** 7 perk inserts, plus an empty plug for each perk that moves to another socket. */
+const ARTIFACT_PLUGS = 14;
 
 /**
- * A full apply is long: up to 6 items × (2 vault hops + up to 3 spares vaulted, each
+ * A full apply is long: up to 11 items × (2 vault hops + up to 3 spares vaulted, each
  * followed by a retry) transfers at 150 ms spacing, plus a character-inventory read
  * when the live fallback runs (repeated only after a failed read), then every plug at
  * 600 ms spacing —
@@ -24,32 +30,37 @@ import { ABILITY_SOCKET_COUNT, ASPECT_SOCKET_COUNT } from "@/lib/dim/subclasses"
  */
 export const maxDuration = 60;
 
-/** 5 armor + 1 subclass. */
-const MAX_ITEMS = 6;
+/**
+ * 5 armor + 1 subclass + 3 weapons + 1 legendary weapon swapped in to free the exotic
+ * slot + the artifact.
+ */
+const MAX_ITEMS = 11;
 /**
  * Every mod a loadout may list (stat / tuning / artifice / slot-specific — the same cap
  * the loadout parser enforces) plus every subclass socket a loadout can pin: abilities,
  * aspects, and fragments. Anything the client plans within a valid loadout must fit, or
- * a fully-specified build could never be applied.
+ * a fully-specified build could never be applied. Then the artifact's perks.
  */
-const MAX_PLUGS = MAX_MODS + ABILITY_SOCKET_COUNT + ASPECT_SOCKET_COUNT + FRAGMENT_SOCKET_COUNT;
+const MAX_PLUGS =
+  MAX_MODS + ABILITY_SOCKET_COUNT + ASPECT_SOCKET_COUNT + FRAGMENT_SOCKET_COUNT + ARTIFACT_PLUGS;
 
 interface ApplyRequestBody {
   characterId: string;
-  /** Armor (and the subclass item) to stage + equip. May be empty when only plugs change. */
+  /** Armor, weapons, and the subclass item to stage + equip. May be empty when only plugs change. */
   items: EquipItemState[];
   /** Socket inserts to run after equipping (planned client-side, see apply-plan.ts). */
   plugs: PlugRequest[];
   /** Same-slot pieces the server may vault when a character's slot is full. */
   spares: SpareItems;
+  /** Client-made id the Cancel button flags (apply-loadout/cancel); none means no cancel. */
+  applyId?: string;
 }
 
 function parsePlugs(v: unknown): PlugRequest[] | null {
   if (!Array.isArray(v) || v.length > MAX_PLUGS) return null;
   for (const p of v as Partial<PlugRequest>[]) {
     if (
-      typeof p?.itemInstanceId !== "string" ||
-      !p.itemInstanceId ||
+      !isBungieId(p?.itemInstanceId) ||
       !Number.isInteger(p.socketIndex) ||
       (p.socketIndex as number) < 0 ||
       !Number.isInteger(p.plugItemHash)
@@ -61,12 +72,13 @@ function parsePlugs(v: unknown): PlugRequest[] | null {
 
 function parseBody(body: unknown): ApplyRequestBody | null {
   const b = body as Partial<ApplyRequestBody> | null;
-  if (!b || typeof b.characterId !== "string" || !b.characterId) return null;
+  if (!b || !isBungieId(b.characterId)) return null;
   const items = parseEquipItems(b.items ?? [], { min: 0, max: MAX_ITEMS });
   const plugs = parsePlugs(b.plugs ?? []);
   const spares = parseSpares(b.spares);
   if (!items || !plugs || !spares || (items.length === 0 && plugs.length === 0)) return null;
-  return { characterId: b.characterId, items, plugs, spares };
+  if (b.applyId !== undefined && !isApplyId(b.applyId)) return null;
+  return { characterId: b.characterId, items, plugs, spares, applyId: b.applyId };
 }
 
 function streamError(err: unknown): Extract<ApplyStreamEvent, { type: "error" }> {
@@ -84,7 +96,7 @@ function streamError(err: unknown): Extract<ApplyStreamEvent, { type: "error" }>
 }
 
 /**
- * Apply a saved loadout: stage + equip the armor (and subclass), then socket the
+ * Apply a saved loadout: stage + equip the armor, weapons, and subclass, then socket the
  * planned mods / tuning / artifice / fragments. Plugs for an item whose equip failed
  * are skipped (and say so, with that item's message) rather than attempted.
  *
@@ -92,6 +104,8 @@ function streamError(err: unknown): Extract<ApplyStreamEvent, { type: "error" }>
  * transfer / equip / plug as it happens. Auth and validation failures stay JSON.
  */
 export async function POST(request: Request) {
+  const refused = rejectCrossSite(request);
+  if (refused) return refused;
   const user = await readUser();
   const token = await getValidAccessToken();
   if (!user?.destinyMembershipId || user.destinyMembershipType == null || !token) {
@@ -109,8 +123,26 @@ export async function POST(request: Request) {
   const http = createBungieHttp(token);
   const membershipType = user.destinyMembershipType;
   const membershipId = user.destinyMembershipId;
-  const { characterId, items, plugs: requestedPlugs, spares } = body;
+  const { characterId, items, plugs: requestedPlugs, spares, applyId } = body;
   const encoder = new TextEncoder();
+
+  // The cancel flag lives in the database (another instance takes the cancel request),
+  // so it's read at most once a second: a cancel lands within a step or two, and a
+  // 40-plug apply costs a few dozen tiny reads, not one per Bungie call.
+  const cancelStore = getApplyCancelStore();
+  const cancelOwner = user.membershipId;
+  let cancelled = false;
+  let lastCancelCheck = 0;
+  const shouldStop = applyId
+    ? async () => {
+        if (cancelled) return true;
+        const now = Date.now();
+        if (now - lastCancelCheck < 1000) return false;
+        lastCancelCheck = now;
+        cancelled = await cancelStore.isCancelled(cancelOwner, applyId).catch(() => false);
+        return cancelled;
+      }
+    : undefined;
 
   // Once the client goes away (tab closed, connection dropped) the controller rejects
   // every enqueue; keep applying — Bungie is mid-way through the character — but stop
@@ -139,6 +171,7 @@ export async function POST(request: Request) {
                 characterId,
                 items,
                 spares,
+                shouldStop,
                 onProgress: (event) => {
                   if (event.phase === "start") {
                     send({ type: "item-start", itemInstanceId: event.itemInstanceId });
@@ -169,6 +202,7 @@ export async function POST(request: Request) {
           membershipType,
           characterId,
           plugs: runnable,
+          shouldStop,
           onProgress: (event) => {
             if (event.phase === "start") send({ type: "plug-start", plug: event.plug });
             else send({ type: "plug", result: event.result });
@@ -176,6 +210,10 @@ export async function POST(request: Request) {
         });
         send({ type: "done", equip, plugs: [...plugResults, ...skippedPlugs] });
       } catch (err) {
+        if (err instanceof ApplyCancelledError) {
+          send({ type: "cancelled" });
+          return;
+        }
         // Cookies can't change once the stream has started, so unlike the equip route
         // the dead session isn't cleared here: the client signs out on `reauth`.
         send(streamError(err));

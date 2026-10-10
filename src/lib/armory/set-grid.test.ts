@@ -64,9 +64,25 @@ describe("setArchetypeGrid", () => {
       [piece("helmet", 1, { tuned: 0 }), piece("helmet", 1, { tuned: 4 }), piece("legs", 4)],
       SET,
       GUNNER,
-      0,
+      [0],
     );
     expect(grid.rows[0][grid.columns.indexOf(1)]).toEqual({ count: 1, tuned: [0] });
+    expect(grid.rows[3][grid.columns.indexOf(4)].count).toBe(0);
+  });
+
+  it("filters to any of several tuned stats", () => {
+    const grid = setArchetypeGrid(
+      [
+        piece("helmet", 1, { tuned: 0 }),
+        piece("helmet", 1, { tuned: 4 }),
+        piece("helmet", 1, { tuned: 5 }),
+        piece("legs", 4),
+      ],
+      SET,
+      GUNNER,
+      [0, 4],
+    );
+    expect(grid.rows[0][grid.columns.indexOf(1)]).toEqual({ count: 2, tuned: [0, 4] });
     expect(grid.rows[3][grid.columns.indexOf(4)].count).toBe(0);
   });
 });

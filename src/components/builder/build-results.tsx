@@ -9,7 +9,13 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { CaretDown, CheckCircle, CircleNotch, X } from "@phosphor-icons/react";
+import { HugeiconsIcon } from "@hugeicons/react";
+import {
+  ArrowDown01Icon,
+  Cancel01Icon,
+  CheckmarkCircle02Icon,
+  Loading03Icon,
+} from "@hugeicons/core-free-icons";
 import { armorPipTier, type ArmorPiece } from "@/lib/armory/normalize";
 import {
   isFullyMasterworked,
@@ -39,6 +45,7 @@ import {
   type BuildActionProps,
 } from "@/components/builder/build-actions";
 import { cn } from "@/lib/utils";
+import { useEntrance } from "@/lib/use-entrance";
 import { useStoreValue, type ValueStore } from "@/lib/value-store";
 import { ArmorThumb } from "@/components/armor-thumb";
 import { MaterialCost, materialSummary } from "@/components/material-cost";
@@ -56,7 +63,7 @@ export { MAX_SHOWN };
 
 /** A build card: lifted face with the EQUIP centre-bright stroke. */
 export const BUILD_CARD_LIFT_CLASS =
-  "d2-card-frame relative rounded-none [--card-line-width:1.5px]";
+  "d2-card-frame relative rounded-none transition-[outline-offset]";
 
 /** Stack of build cards — no well; they sit on the main column. */
 export const BUILD_LIST_WELL_CLASS = "flex flex-col gap-3";
@@ -309,15 +316,15 @@ const BuildRow = memo(function BuildRow({
 
   return (
     <div className={cn(BUILD_CARD_LIFT_CLASS, "d2-hover-ring", "@container/build")}>
-      <div className="overflow-hidden rounded-none">
+      <div className="overflow-hidden rounded-none normal:rounded-[19px]">
       {/* Figma 86:862 — 56px exotic, total + six stats, then set pills / light / materials */}
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
         className={cn(
-          "flex w-full items-center justify-between gap-4 p-2 text-left transition-colors",
-          !open && "hover:bg-foreground/4",
+          "flex w-full items-center justify-between gap-4 p-2 text-left transition-colors normal:bg-popover normal:p-3",
+          !open && "hover:bg-foreground/4 normal:hover:bg-[color-mix(in_srgb,var(--popover),var(--foreground)_4%)]",
         )}
       >
         <div className="flex min-w-0 flex-1 items-center gap-4">
@@ -329,10 +336,11 @@ const BuildRow = memo(function BuildRow({
               size={56}
               masterworked={isFullyMasterworked(exotic)}
               gearTier={armorPipTier(exotic)}
+              className="normal:rounded-[8px]"
             />
           ) : (
             <span
-              className="d2-brackets size-14 shrink-0 rounded-none bg-black/25"
+              className="d2-brackets size-14 shrink-0 rounded-none normal:rounded-[8px] bg-black/25"
               aria-hidden
             />
           )}
@@ -364,10 +372,10 @@ const BuildRow = memo(function BuildRow({
           </div>
         </div>
         <span
-          className="text-foreground flex size-8 shrink-0 items-center justify-center rounded-none"
+          className="text-foreground flex size-8 shrink-0 items-center justify-center rounded-none normal:rounded-[10px]"
           aria-hidden
         >
-          <CaretDown
+          <HugeiconsIcon icon={ArrowDown01Icon}
             className={cn(
               "size-4 transition-transform",
               open && "rotate-180",
@@ -377,7 +385,7 @@ const BuildRow = memo(function BuildRow({
       </button>
 
       {open && (
-        <div className="border-t border-foreground/8">
+        <div className="d2-reveal border-t border-foreground/8">
           {/* Shared column tracks so totals line up with per-piece stats
               (name column is max-content of the longest piece name). */}
           <div className={cn(BREAKDOWN_GRID, "border-b border-foreground/8 px-4")}>
@@ -566,25 +574,29 @@ const BuildRow = memo(function BuildRow({
               )}
             </div>
           </div>
-
-          <BuildActions
-            loadout={loadout}
-            pieces={pieces}
-            exoticName={exotic?.name}
-            setBadges={setBadges}
-            characters={characters}
-            statModHashes={statModHashes}
-            tuningPlugHashes={tuningPlugHashes}
-            artificeModHashes={artificeModHashes}
-            getBuilderState={getBuilderState}
-            manifest={manifest}
-            insertablePlugs={insertablePlugs}
-            onEquipped={onEquipped}
-            pieceMap={pieceMap}
-            onDream={onDream}
-          />
         </div>
       )}
+
+      {/* Always shown, so a build can be equipped or saved without expanding it (the
+          breakdown above already ends on a rule). */}
+      <div className={cn(!open && "border-t border-foreground/8")}>
+        <BuildActions
+          loadout={loadout}
+          pieces={pieces}
+          exoticName={exotic?.name}
+          setBadges={setBadges}
+          characters={characters}
+          statModHashes={statModHashes}
+          tuningPlugHashes={tuningPlugHashes}
+          artificeModHashes={artificeModHashes}
+          getBuilderState={getBuilderState}
+          manifest={manifest}
+          insertablePlugs={insertablePlugs}
+          onEquipped={onEquipped}
+          pieceMap={pieceMap}
+          onDream={onDream}
+        />
+      </div>
       </div>
     </div>
   );
@@ -598,11 +610,11 @@ function ImprovedMaximaAlert() {
   // Same alert footprint as the running card — green with a check instead of a spinner.
   return (
     <div
-      className="flex items-center gap-2.5 rounded-md border border-positive/30 bg-positive/10 px-3 py-2.5"
+      className="d2-reveal flex items-center gap-2.5 rounded-md border border-positive/30 bg-positive/10 px-3 py-2.5"
       aria-live="polite"
     >
-      <CheckCircle
-        weight="fill"
+      <HugeiconsIcon icon={CheckmarkCircle02Icon}
+        strokeWidth={2}
         className="size-4 shrink-0 text-positive"
         aria-hidden
       />
@@ -619,7 +631,7 @@ function ImprovedMaximaAlert() {
           onClick={() => setDismissed(true)}
           className="text-muted-foreground hover:text-foreground shrink-0"
         >
-          <X weight="bold" className="size-3.5" aria-hidden />
+          <HugeiconsIcon icon={Cancel01Icon} strokeWidth={2} className="size-3.5" aria-hidden />
         </Button>
       </TooltipLabel>
     </div>
@@ -659,10 +671,10 @@ function SearchStatus({
       // visual weight than a status line.
       return (
         <div
-          className="flex items-center gap-2.5 rounded-md border border-foreground/15 bg-lifted px-3 py-2.5"
+          className="d2-reveal flex items-center gap-2.5 rounded-md border border-foreground/15 bg-lifted px-3 py-2.5"
           aria-live="polite"
         >
-          <CircleNotch
+          <HugeiconsIcon icon={Loading03Icon}
             className="size-4 shrink-0 animate-spin text-primary"
             aria-hidden
           />
@@ -698,7 +710,7 @@ function SearchStatus({
         lines.push(
           <p
             key="pending"
-            className="flex items-center gap-2 text-xs text-positive"
+            className="d2-fade flex items-center gap-2 text-xs text-positive"
             aria-live="polite"
           >
             Stronger builds found
@@ -719,7 +731,7 @@ function SearchStatus({
         lines.push(
           <p
             key="confirmed"
-            className="text-muted-foreground text-xs"
+            className="d2-fade text-muted-foreground text-xs"
             aria-live="polite"
           >
             Verified — no better builds or higher maximums exist for these
@@ -732,7 +744,7 @@ function SearchStatus({
         lines.push(
           <p
             key="verified-list"
-            className="text-muted-foreground text-xs"
+            className="d2-fade text-muted-foreground text-xs"
             aria-live="polite"
           >
             Search complete — no better builds exist for these targets (stat
@@ -810,6 +822,8 @@ export function BuildResults({
     () => sortLoadouts(result.loadouts, sort, costOf),
     [result.loadouts, sort, costOf],
   );
+  // New results cascade in; a re-sort only reorders (see useEntrance).
+  const entering = useEntrance(result.loadouts);
   const status = (
     <SearchStatus
       capped={result.capped}
@@ -846,7 +860,7 @@ export function BuildResults({
   return (
     <div className="space-y-3">
       {status}
-      <div className={BUILD_LIST_WELL_CLASS}>
+      <div className={cn(BUILD_LIST_WELL_CLASS, entering && "d2-stagger")}>
         {sortedLoadouts.slice(0, MAX_SHOWN).map((loadout) => (
           <BuildRow
             key={loadout.pieceIds.join("|")}

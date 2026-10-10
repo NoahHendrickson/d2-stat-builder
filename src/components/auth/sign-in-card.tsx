@@ -4,15 +4,14 @@ import { useEffect } from "react";
 import { toast } from "@/lib/toast";
 import { useQueryClient } from "@tanstack/react-query";
 import { useSession } from "@/lib/auth/use-session";
+import { signOut } from "@/lib/auth/sign-out";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { PixelDissolve } from "@/components/loading/pixel-dissolve";
 
+/**
+ * The signed-out screen: the loader's dissolving site icons over the sign-in button,
+ * so signing in and the load that follows read as one sequence.
+ */
 export function SignInCard() {
   const { data, isLoading } = useSession();
   const queryClient = useQueryClient();
@@ -32,47 +31,43 @@ export function SignInCard() {
   }, [queryClient]);
 
   return (
-    <Card className="w-full">
-      <CardHeader>
-        <CardTitle>{authed ? "You're signed in" : "Get started"}</CardTitle>
-        <CardDescription>
+    <div className="flex w-full flex-col items-center gap-8 text-center">
+      <PixelDissolve className="size-36" />
+      <div className="flex flex-col gap-2">
+        <h1 className="d2-heading text-lg">{authed ? "You're signed in" : "D2 Conflux"}</h1>
+        <p className="text-muted-foreground text-sm">
           {authed
             ? `Signed in as ${data?.user?.displayName ?? "your Bungie account"}.`
             : "Sign in with your Bungie account to load your Guardians' gear."}
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        {authed ? (
-          <Button
-            variant="outline"
-            size="lg"
-            className="w-full"
-            onClick={async () => {
-              // POST, not a GET link — the logout route is POST-only to avoid CSRF.
-              const res = await fetch("/api/auth/logout", { method: "POST" }).catch(
-                () => null,
-              );
-              if (!res?.ok) {
-                toast.error("Sign out failed. Please try again.");
-                return;
-              }
-              window.location.assign("/");
-            }}
-          >
-            Sign out
-          </Button>
-        ) : (
-          <Button
-            render={<a href="/api/auth/login" />}
-            nativeButton={false}
-            variant="emphatic"
-            size="lg"
-            className="w-full"
-          >
-            {isLoading ? "Loading…" : "Sign in with Bungie"}
-          </Button>
-        )}
-      </CardContent>
-    </Card>
+        </p>
+      </div>
+      {authed ? (
+        <Button
+          variant="outline"
+          size="lg"
+          className="w-full max-w-xs"
+          onClick={async () => {
+            // Also clears the cached armory, so a shared computer keeps no gear.
+            if (!(await signOut(queryClient))) {
+              toast.error("Sign out failed. Please try again.");
+              return;
+            }
+            window.location.assign("/");
+          }}
+        >
+          Sign out
+        </Button>
+      ) : (
+        <Button
+          render={<a href="/api/auth/login" />}
+          nativeButton={false}
+          variant="emphatic"
+          size="lg"
+          className="w-full max-w-xs"
+        >
+          {isLoading ? "Loading…" : "Sign in with Bungie"}
+        </Button>
+      )}
+    </div>
   );
 }

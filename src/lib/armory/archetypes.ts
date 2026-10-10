@@ -1,6 +1,8 @@
 import { memoByManifest } from "../manifest/memo";
+import type { Manifest } from "../manifest/load";
 import {
   ARMOR_ARCHETYPE_PLUG_CATEGORY,
+  STAT_HASHES,
   STAT_LABELS,
   STAT_ORDER,
 } from "./stats";
@@ -51,3 +53,17 @@ export const getArchetypes = memoByManifest((manifest): ArmorArchetype[] => {
   }
   return [...byName.values()].sort((a, b) => a.name.localeCompare(b.name));
 });
+
+/**
+ * An archetype's glyph by name: its primary stat's icon, the archetype plug's art
+ * without the shield frame (as the Manager's item tiles show it).
+ */
+export function archetypeStatIcon(manifest: Manifest, name: string | undefined): string | undefined {
+  if (!name) return undefined;
+  const primary = getArchetypes(manifest).find((a) => a.name === name)?.primary;
+  if (primary === undefined) return undefined;
+  return (
+    manifest.def("DestinyStatDefinition", STAT_HASHES[STAT_ORDER[primary]])?.displayProperties
+      ?.icon || undefined
+  );
+}

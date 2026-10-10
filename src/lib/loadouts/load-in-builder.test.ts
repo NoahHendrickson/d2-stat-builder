@@ -10,7 +10,6 @@ const existing: PersistedSelections = {
   targets: [9, 9, 9, 9, 9, 9],
   major: 5,
   setReqs: { 1: 2 },
-  pinnedSets: [1, 2],
   setFilters: { hideLessThan2: false },
   exoticName: "Old",
   exoticPerks: [1, 2],
@@ -82,7 +81,6 @@ test("with a builder snapshot: restores it, keeps pins/filters, merges fragSel",
   expect(out.classType).toBe(2);
   expect(out.major).toBe(2);
   expect(out.exoticName).toBe("Cenotaph Mask");
-  expect(out.pinnedSets).toEqual([1, 2]);
   expect(out.setFilters).toEqual(existing.setFilters);
   expect(out.activeSubclass).toBe("Prismatic");
   expect(out.fragSel.Prismatic).toEqual([8, 9]);
@@ -104,7 +102,6 @@ test("without a snapshot: derives targets/sets from parameters, exotic by name",
   expect(out.targets).toEqual([0, 100, 0, 0, 0, 0]);
   expect(out.setReqs).toEqual({ 42: 4 });
   expect(out.exoticName).toBe("Cenotaph Mask");
-  expect(out.pinnedSets).toEqual([]);
   expect(out.powerRange).toEqual({
     enabled: false,
     bounds: null,

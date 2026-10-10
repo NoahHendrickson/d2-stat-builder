@@ -1,5 +1,5 @@
 import { test, expect } from "vitest";
-import { MemoryLoadoutStore } from "./store";
+import { LoadoutLimitError, MAX_LOADOUTS_PER_ACCOUNT, MemoryLoadoutStore } from "./store";
 import type { SavedLoadoutData } from "./types";
 
 const data = (name: string): SavedLoadoutData => ({
@@ -46,4 +46,26 @@ test("create honors a caller-supplied id and delete removes it", async () => {
   expect(row.id).toBe("fixed-id");
   expect(await store.delete("o", "fixed-id")).toBe(true);
   expect(await store.list("o")).toEqual([]);
+});
+
+test("deleteMany removes only the owner's listed rows, or all of them", async () => {
+  const store = new MemoryLoadoutStore();
+  const a = await store.create("o", data("a"));
+  const b = await store.create("o", data("b"));
+  const c = await store.create("o", data("c"));
+  const other = await store.create("x", data("other"));
+
+  expect(await store.deleteMany("o", [a.id, other.id, "nope"])).toEqual([a.id]);
+  expect((await store.list("o")).map((l) => l.id).sort()).toEqual([b.id, c.id].sort());
+
+  expect((await store.deleteMany("o", "all")).sort()).toEqual([b.id, c.id].sort());
+  expect(await store.list("o")).toEqual([]);
+  expect((await store.list("x")).map((l) => l.id)).toEqual([other.id]);
+});
+
+test("create refuses past the per-account cap, per owner", async () => {
+  const store = new MemoryLoadoutStore();
+  for (let i = 0; i < MAX_LOADOUTS_PER_ACCOUNT; i++) await store.create("o", data(String(i)));
+  await expect(store.create("o", data("one more"))).rejects.toBeInstanceOf(LoadoutLimitError);
+  await expect(store.create("other", data("fine"))).resolves.toBeTruthy();
 });

@@ -6,14 +6,20 @@ import {
   equipItems,
   getCharacter,
   insertSocketPlugFree,
+  pullFromPostmaster,
   transferItem,
   type BungieMembershipType,
   type DestinyComponentType,
   type DestinyItemComponent,
 } from "bungie-api-ts/destiny2";
-import { SLOT_BUCKETS } from "@/lib/armory/stats";
 import { BungieHttpError } from "./http";
 import {
+  THROTTLED_MESSAGE,
+  isThrottled,
+  withThrottleRetry,
+} from "./throttle";
+import {
+  EQUIP_SLOT_BUCKETS,
   MAX_SPARES_PER_ITEM,
   pickLiveSpares,
   planEquipBatches,
@@ -24,7 +30,7 @@ import {
 } from "./equip-plan";
 
 /** Bungie asks for ≥100ms between item actions; stay comfortably above it. */
-const ACTION_SPACING_MS = 150;
+export const ACTION_SPACING_MS = 150;
 /** …and ≥500ms between socket-plug actions. */
 const PLUG_SPACING_MS = 600;
 
@@ -37,7 +43,17 @@ export const EQUIP_MESSAGES: Record<number, string> = {
   1641: "Only one exotic can be equipped at a time",
   1642: "No room on that character — free up inventory space",
   1671: "Can't equip during an activity — go to orbit or a social space",
+  1672: "Moved, but Bungie is limiting equips — apply again in a moment",
 };
+
+function equipMessage(err: unknown): string {
+  if (isThrottled(err)) return EQUIP_MESSAGES[1672];
+  const code = err instanceof BungieHttpError ? err.code : undefined;
+  return (
+    (code !== undefined ? EQUIP_MESSAGES[code] : undefined) ??
+    (err instanceof Error ? err.message : "Equip failed")
+  );
+}
 
 /** DestinyNoRoomInDestination — the target bucket (character slot or vault) is full. */
 const NO_ROOM = 1642;
@@ -52,13 +68,21 @@ const TRANSFER_MESSAGES: Record<number, string> = {
 const VAULT_FULL_MESSAGE = "Vault is full — free up vault space";
 const CHARACTER_FULL_MESSAGE = "No room on that character — free up inventory space";
 
-function transferMessage(err: unknown, toVault: boolean): string {
+export function transferMessage(err: unknown, toVault: boolean): string {
   const code = err instanceof BungieHttpError ? err.code : undefined;
   if (code === NO_ROOM) return toVault ? VAULT_FULL_MESSAGE : CHARACTER_FULL_MESSAGE;
+  if (isThrottled(err)) return THROTTLED_MESSAGE;
   return (
     (code !== undefined ? TRANSFER_MESSAGES[code] : undefined) ??
     (err instanceof Error ? err.message : "Transfer failed")
   );
+}
+
+/** A failed pull leaves the piece in the postmaster; say so, since that's where to look. */
+function pullMessage(message: string): string {
+  if (message === CHARACTER_FULL_MESSAGE) return "Stuck in the postmaster — no room on that character to pull it";
+  if (message === VAULT_FULL_MESSAGE) return "Stuck in the postmaster — vault is full, so nothing could make room";
+  return `Stuck in the postmaster: ${message}`;
 }
 
 /**
@@ -108,6 +132,8 @@ export type ApplyStreamEvent =
   | { type: "plug-start"; plug: PlugRequest }
   | { type: "plug"; result: PlugResult }
   | { type: "done"; equip: ItemResult[]; plugs: PlugResult[] }
+  /** The user stopped the apply; nothing after this event ran. */
+  | { type: "cancelled" }
   | { type: "error"; error: string; reauth?: boolean };
 
 export type EquipProgressEvent =
@@ -119,6 +145,21 @@ export type PlugProgressEvent =
   | { phase: "result"; result: PlugResult };
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** Thrown at a `shouldStop` checkpoint once the user has cancelled the apply. */
+export class ApplyCancelledError extends Error {
+  constructor() {
+    super("Apply cancelled");
+    this.name = "ApplyCancelledError";
+  }
+}
+
+/** Asked between Bungie calls; true stops the run with an ApplyCancelledError. */
+export type StopCheck = () => Promise<boolean>;
+
+async function checkpoint(shouldStop: StopCheck | undefined) {
+  if (shouldStop && (await shouldStop())) throw new ApplyCancelledError();
+}
 
 /** Equipped items can't be transferred — give that case a clear message up front. */
 function transferBlockReason(item: EquipItemState, targetId: string): string | null {
@@ -179,6 +220,7 @@ export async function stageAndEquip({
   spares,
   mode = "equip",
   onProgress,
+  shouldStop,
 }: {
   http: HttpClient;
   membershipType: BungieMembershipType;
@@ -190,6 +232,8 @@ export async function stageAndEquip({
   spares?: SpareItems;
   mode?: "move" | "equip";
   onProgress?: (event: EquipProgressEvent) => void;
+  /** Checked before each item's first hop and before equipping, never mid-item. */
+  shouldStop?: StopCheck;
 }): Promise<ItemResult[]> {
   const failed = new Map<string, string>();
   /** Staged item → spares vaulted to make room for it. */
@@ -222,13 +266,17 @@ export async function stageAndEquip({
     characterId,
   );
   const transfer = (action: TransferAction) =>
-    transferItem(http, {
-      itemReferenceHash: action.itemReferenceHash,
-      stackSize: 1,
-      transferToVault: action.transferToVault,
-      itemId: action.itemId,
-      characterId: action.characterId,
-      membershipType,
+    withThrottleRetry(() => {
+      const base = {
+        itemReferenceHash: action.itemReferenceHash,
+        stackSize: 1,
+        itemId: action.itemId,
+        characterId: action.characterId,
+        membershipType,
+      };
+      return action.pull
+        ? pullFromPostmaster(http, base)
+        : transferItem(http, { ...base, transferToVault: action.transferToVault });
     });
   const isNoRoom = (err: unknown) => err instanceof BungieHttpError && err.code === NO_ROOM;
 
@@ -236,28 +284,35 @@ export async function stageAndEquip({
   /** Staged items plus every spare we've tried to vault — never offered again. */
   const tried = new Set(items.map((i) => i.itemInstanceId));
   /**
-   * The target's unequipped inventory, read on the first slot the client's spares can't
-   * clear and shared by later ones. A failed read isn't kept, so the next slot retries.
+   * A character's unequipped inventory, read on the first slot the client's spares can't
+   * clear there and shared by later ones. Usually the target; a postmaster pull onto
+   * another character reads that one. A failed read isn't kept, so the next slot retries.
    */
-  let liveInventory: DestinyItemComponent[] | undefined;
-  const liveSpares = async (itemId: string, limit: number): Promise<EquipItemState[]> => {
+  const liveInventory = new Map<string, DestinyItemComponent[]>();
+  const liveSpares = async (
+    itemId: string,
+    onCharacter: string,
+    limit: number,
+  ): Promise<EquipItemState[]> => {
     const slot = slotOf.get(itemId);
     if (!slot) return [];
-    if (!liveInventory) {
+    let inventory = liveInventory.get(onCharacter);
+    if (!inventory) {
       try {
         const res = await getCharacter(http, {
           destinyMembershipId: membershipId,
           membershipType,
-          characterId,
+          characterId: onCharacter,
           components: [201 as DestinyComponentType], // CharacterInventories
         });
-        liveInventory = res.Response?.inventory?.data?.items ?? [];
+        inventory = res.Response?.inventory?.data?.items ?? [];
+        liveInventory.set(onCharacter, inventory);
       } catch (err) {
         if (err instanceof BungieHttpError && err.status === 401) throw err;
         return [];
       }
     }
-    return pickLiveSpares(liveInventory, SLOT_BUCKETS[slot], characterId, tried, limit);
+    return pickLiveSpares(inventory, EQUIP_SLOT_BUCKETS[slot], onCharacter, tried, limit);
   };
 
   /** Attach the spares vaulted for this item — on failures too, so nothing moves unreported. */
@@ -268,17 +323,19 @@ export async function stageAndEquip({
 
   for (const action of actions) {
     if (failed.has(action.itemId)) continue; // earlier hop failed
+    if (!started.has(action.itemId)) await checkpoint(shouldStop);
     start(action.itemId);
     // A hop onto the target can hit a full bucket (9 unequipped per slot). Vault a
     // same-slot spare (see spareSource) and retry, until the spares run out. A spare
     // Bungie won't move (e.g. it turned out to be untransferable) is skipped for the next
     // one; a full vault (or any other error on the piece itself) ends the attempt. Hops
-    // into the vault never make room.
+    // into the vault never make room. The client's spares sit on the target, so a pull
+    // onto another character makes room from that character's live inventory alone.
     const source = action.transferToVault
       ? undefined
       : spareSource(
-          spares?.[action.itemId] ?? [],
-          (limit) => liveSpares(action.itemId, limit),
+          action.characterId === characterId ? (spares?.[action.itemId] ?? []) : [],
+          (limit) => liveSpares(action.itemId, action.characterId, limit),
           tried,
         );
     let message: string | undefined;
@@ -320,6 +377,7 @@ export async function stageAndEquip({
       await sleep(ACTION_SPACING_MS);
     }
     if (message !== undefined) {
+      if (action.pull) message = pullMessage(message);
       failed.set(action.itemId, message);
       emitResult(withVaulted({ itemInstanceId: action.itemId, ok: false, message }));
     }
@@ -336,10 +394,27 @@ export async function stageAndEquip({
       emitResult(result);
     }
   } else if (stagedIds.length > 0) {
+    await checkpoint(shouldStop);
     const collect = async (ids: string[]) => {
       if (ids.length === 0) return;
       for (const id of ids) start(id);
-      const res = await equipItems(http, { itemIds: ids, characterId, membershipType });
+      let res;
+      try {
+        res = await withThrottleRetry(() =>
+          equipItems(http, { itemIds: ids, characterId, membershipType }),
+        );
+      } catch (err) {
+        // A batch-level error (a throttle that outlasted the retries, an activity
+        // lock) fails each piece in it, keeping the spares already vaulted for them.
+        if (err instanceof BungieHttpError && err.status === 401) throw err;
+        const message = equipMessage(err);
+        for (const id of ids) {
+          const result = withVaulted({ itemInstanceId: id, ok: false, message });
+          results.push(result);
+          emitResult(result);
+        }
+        return;
+      }
       for (const r of res.Response.equipResults ?? []) {
         const result = withVaulted({
           itemInstanceId: r.itemInstanceId,
@@ -381,12 +456,15 @@ export async function insertPlugs({
   characterId,
   plugs,
   onProgress,
+  shouldStop,
 }: {
   http: HttpClient;
   membershipType: BungieMembershipType;
   characterId: string;
   plugs: PlugRequest[];
   onProgress?: (event: PlugProgressEvent) => void;
+  /** Checked before each insert. */
+  shouldStop?: StopCheck;
 }): Promise<PlugResult[]> {
   const results: PlugResult[] = [];
   let inActivity = false;
@@ -396,22 +474,25 @@ export async function insertPlugs({
   };
   for (let i = 0; i < plugs.length; i++) {
     const plug = plugs[i];
+    if (!inActivity) await checkpoint(shouldStop);
     onProgress?.({ phase: "start", plug });
     if (inActivity) {
       emitResult({ ...plug, ok: false, message: PLUG_MESSAGES[1671] });
       continue;
     }
     try {
-      await insertSocketPlugFree(http, {
-        plug: {
-          socketIndex: plug.socketIndex,
-          socketArrayType: 0, // DestinySocketArrayType.Default
-          plugItemHash: plug.plugItemHash,
-        },
-        itemId: plug.itemInstanceId,
-        characterId,
-        membershipType,
-      });
+      await withThrottleRetry(() =>
+        insertSocketPlugFree(http, {
+          plug: {
+            socketIndex: plug.socketIndex,
+            socketArrayType: 0, // DestinySocketArrayType.Default
+            plugItemHash: plug.plugItemHash,
+          },
+          itemId: plug.itemInstanceId,
+          characterId,
+          membershipType,
+        }),
+      );
       emitResult({ ...plug, ok: true });
     } catch (err) {
       if (err instanceof BungieHttpError && err.status === 401) throw err;
@@ -424,9 +505,10 @@ export async function insertPlugs({
       emitResult({
         ...plug,
         ok: false,
-        message:
-          (code !== undefined ? PLUG_MESSAGES[code] : undefined) ??
-          (err instanceof Error ? err.message : "Mod insert failed"),
+        message: isThrottled(err)
+          ? THROTTLED_MESSAGE
+          : ((code !== undefined ? PLUG_MESSAGES[code] : undefined) ??
+            (err instanceof Error ? err.message : "Mod insert failed")),
       });
     }
     if (i < plugs.length - 1) await sleep(PLUG_SPACING_MS);

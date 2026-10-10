@@ -75,8 +75,13 @@ describe("projectItemDef", () => {
   it("keeps every key of ItemDef when the source has them all", () => {
     // A def with every block present: the projection's key set must be exactly the
     // type's key set, so a field added to ItemDef but not to projectItemDef is caught.
-    const full = { ...armor, collectibleHash: 42, plug: { plugCategoryIdentifier: "x", insertionMaterialRequirementHash: 0, isDummyPlug: false, insertionRules: [] } } as unknown as DestinyInventoryItemDefinition;
+    const full = { ...armor, collectibleHash: 42, breakerTypeHash: 485622768, plug: { plugCategoryIdentifier: "x", insertionMaterialRequirementHash: 0, isDummyPlug: false, insertionRules: [] } } as unknown as DestinyInventoryItemDefinition;
     expect(Object.keys(projectItemDef(full)).sort()).toEqual([...ITEM_DEF_KEYS].sort());
+  });
+
+  it("keeps a weapon's crafting recipe hash", () => {
+    const weapon = { ...armor, itemType: 3, inventory: { ...armor.inventory, recipeItemHash: 7 } } as DestinyInventoryItemDefinition;
+    expect(projectItemDef(weapon).inventory).toEqual({ bucketTypeHash: 3448274439, tierType: 5, recipeItemHash: 7 });
   });
 
   it("keeps inline socket plug lists only on subclass items", () => {

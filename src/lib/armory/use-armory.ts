@@ -13,6 +13,8 @@ import { sessionMembershipId, useProfile } from "./use-profile";
 
 export interface RefreshResult {
   data?: Armory;
+  /** When Bungie generated the profile behind `data` (epoch ms; NaN if unreadable). */
+  mintedAt?: number;
   error: unknown;
   isSuccess: boolean;
 }
@@ -40,6 +42,9 @@ export type ArmoryQuery = Omit<UseQueryResult<Armory>, "refetch"> & {
  * needs to live on.
  */
 const SUPERSEDED_ARMORY_GC_MS = 60_000;
+
+/** Armories already saved: a refetch that brings the same profile re-derives the same object. */
+const persisted = new WeakSet<Armory>();
 
 /**
  * The signed-in player's normalized armor, as a query derived from the raw profile and
@@ -77,11 +82,14 @@ export function useArmory(): ArmoryQuery {
         profileData as DestinyProfileResponse,
         manifest as Manifest,
       );
-      persistArmoryWhenIdle(membershipId as string, {
-        manifestVersion: version as string,
-        savedAt: Date.now(),
-        armory,
-      });
+      if (!persisted.has(armory)) {
+        persisted.add(armory);
+        persistArmoryWhenIdle(membershipId as string, {
+          manifestVersion: version as string,
+          savedAt: Date.now(),
+          armory,
+        });
+      }
       return armory;
     },
     // While a refetch re-derives, keep the previous armory on screen; before the first
@@ -106,7 +114,8 @@ export function useArmory(): ArmoryQuery {
   const refetch = useCallback<ArmoryQuery["refetch"]>(async () => {
     const result = await profileRefetch();
     const data = result.data && manifest ? deriveArmory(result.data, manifest) : undefined;
-    return { data, error: result.error, isSuccess: result.isSuccess };
+    const mintedAt = result.data ? Date.parse(result.data.responseMintedTimestamp) : undefined;
+    return { data, mintedAt, error: result.error, isSuccess: result.isSuccess };
   }, [profileRefetch, manifest]);
 
   // The derived query is disabled (not pending, not fetching) while the profile is

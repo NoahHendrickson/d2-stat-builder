@@ -6,6 +6,7 @@ import type { SavedLoadoutData } from "./types";
 import type { Manifest } from "../manifest/load";
 import type { ArmorPiece } from "../armory/normalize";
 import { planLoadoutPlugs } from "./apply-plan";
+import { ARTIFACT_BUCKET } from "../armory/artifact-items";
 
 const piece = (instanceId: string): ArmorPiece =>
   ({
@@ -121,4 +122,29 @@ test("commitLoadout clearing placement wipes a saved one", () => {
   const saved = commitLoadout(payload, {} as Manifest, { placement: {} }, mods);
   expect(saved).not.toHaveProperty("modPlacement");
   expect(saved.loadout.parameters.mods).toEqual([]);
+});
+
+test("commitLoadout swaps weapon and artifact refs, keeping armor", () => {
+  const buckets: Record<number, number> = { 1: 1498876634, 2: 953998645, 3: ARTIFACT_BUCKET, 4: 3448274439 };
+  const manifest = {
+    def: (_table: string, hash: number) =>
+      buckets[hash] ? { inventory: { bucketTypeHash: buckets[hash] } } : undefined,
+  } as unknown as Manifest;
+  const payload = data();
+  payload.loadout.equipped = [{ id: "helm", hash: 4 }, { id: "old", hash: 1 }];
+  const out = commitLoadout(payload, manifest, {
+    weapons: [{ id: "rocket", hash: 2 }],
+    artifact: { id: "art", hash: 3, socketOverrides: {} },
+  });
+  expect(out.loadout.equipped).toEqual([
+    { id: "helm", hash: 4 },
+    { id: "rocket", hash: 2 },
+    { id: "art", hash: 3, socketOverrides: {} },
+  ]);
+  // Fields left out keep what was saved; a null artifact clears it.
+  const cleared = commitLoadout(out, manifest, { artifact: null });
+  expect(cleared.loadout.equipped).toEqual([
+    { id: "helm", hash: 4 },
+    { id: "rocket", hash: 2 },
+  ]);
 });

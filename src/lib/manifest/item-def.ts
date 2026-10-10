@@ -37,17 +37,22 @@ export interface ItemDef
     // bungie-api-ts declares these required, but the live table omits them on
     // thousands of definitions (a census of the kept table: iconWatermark absent on
     // ~5,100, iconWatermarkFeatured on ~5,500, displayProperties.icon on ~500).
-    Partial<Pick<DestinyInventoryItemDefinition, "iconWatermark" | "iconWatermarkFeatured">> {
+    Partial<
+      Pick<
+        DestinyInventoryItemDefinition,
+        "iconWatermark" | "iconWatermarkFeatured" | "breakerTypeHash"
+      >
+    > {
   readonly displayProperties: Pick<DestinyDisplayPropertiesDefinition, "name" | "description"> &
     Partial<Pick<DestinyDisplayPropertiesDefinition, "icon">>;
   readonly inventory?: Pick<
     DestinyItemInventoryBlockDefinition,
     "bucketTypeHash" | "tierType"
-  >;
-  readonly equippingBlock?: Pick<
-    DestinyEquippingBlockDefinition,
-    "equipableItemSetHash"
-  >;
+  > &
+    // Set on weapons with a crafting pattern (the manager's is:craftable).
+    Partial<Pick<DestinyItemInventoryBlockDefinition, "recipeItemHash">>;
+  readonly equippingBlock?: Pick<DestinyEquippingBlockDefinition, "equipableItemSetHash"> &
+    Partial<Pick<DestinyEquippingBlockDefinition, "ammoType">>;
   readonly investmentStats: Pick<
     DestinyItemInvestmentStatDefinition,
     "statTypeHash" | "value" | "isConditionallyActive"
@@ -131,6 +136,7 @@ const TOP_KEYS = [
   "isFeaturedItem",
   "iconWatermark",
   "iconWatermarkFeatured",
+  "breakerTypeHash",
 ] as const satisfies readonly Exclude<keyof ItemDef, BlockKey>[];
 // Compile-time completeness: a key added to ItemDef must be listed in one of the two
 // (otherwise projectItemDef would silently drop it). A missing key makes this line
@@ -161,10 +167,10 @@ export function projectItemDef(def: DestinyInventoryItemDefinition): ItemDef {
     perks: (def.perks ?? []).map((p) => pick(p, ["perkHash"])),
   };
   if (def.inventory) {
-    out.inventory = pick(def.inventory, ["bucketTypeHash", "tierType"]);
+    out.inventory = pick(def.inventory, ["bucketTypeHash", "tierType", "recipeItemHash"]);
   }
   if (def.equippingBlock) {
-    out.equippingBlock = pick(def.equippingBlock, ["equipableItemSetHash"]);
+    out.equippingBlock = pick(def.equippingBlock, ["equipableItemSetHash", "ammoType"]);
   }
   if (def.plug) {
     const plug: Writable<ItemDefPlug> = {
@@ -208,4 +214,16 @@ export function projectItemDef(def: DestinyInventoryItemDefinition): ItemDef {
     ]);
   }
   return out;
+}
+
+/**
+ * The inventory manager's projection for items the app otherwise doesn't read
+ * (weapons, ghosts, ships, consumables, …): enough to draw and sort a tile. Sockets,
+ * stats, perks, and flavor text are dropped — they would roughly double the ~5 MB
+ * these items add to the cache.
+ */
+export function projectItemDefLean(def: DestinyInventoryItemDefinition): ItemDef {
+  const { sockets: _sockets, ...rest } = projectItemDef(def);
+  void _sockets;
+  return { ...rest, flavorText: "", investmentStats: [], perks: [] };
 }

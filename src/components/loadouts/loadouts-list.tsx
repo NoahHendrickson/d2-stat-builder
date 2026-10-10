@@ -4,17 +4,24 @@ import { TooltipLabel } from "@/components/ui/tooltip";
 import {
   useCallback,
   useDeferredValue,
-  useLayoutEffect,
   useMemo,
-  useRef,
   useState,
-  type ReactNode,
+  useSyncExternalStore,
 } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { ArrowsDownUp, FunnelSimple, MagnifyingGlass, X } from "@phosphor-icons/react";
-import { toast } from "@/lib/toast";
+import { HugeiconsIcon } from "@hugeicons/react";
+import {
+  Add01Icon,
+  ArrowUpDownIcon,
+  CheckListIcon,
+  Delete02Icon,
+  MoreVerticalIcon,
+  Search01Icon,
+} from "@hugeicons/core-free-icons";
+import { toast, type Notifier } from "@/lib/toast";
 import type { Armory } from "@/lib/armory/fetch";
+import type { RefreshResult } from "@/lib/armory/use-armory";
 import type { Manifest } from "@/lib/manifest/load";
 import { SUBCLASSES, type Subclass } from "@/lib/armory/fragments";
 import { CLASS_NAMES, STAT_HASH_TO_INDEX } from "@/lib/armory/stats";
@@ -45,20 +52,25 @@ import {
   buildShareUrl,
   parseShareParam,
   SHARE_PARAM,
+  shareParamFromHash,
 } from "@/lib/loadouts/share";
 import { countMajorStatMods, isMajorStatMod } from "@/lib/dim/mod-hashes";
 import { selectionsForLoadout } from "@/lib/loadouts/load-in-builder";
 import { loadoutSubclass, withLoadoutSubclass } from "@/lib/loadouts/subclass";
+import { weaponSlotOfHash } from "@/lib/armory/weapons";
+import { isArtifactHash } from "@/lib/armory/artifact-items";
+import { lastPlayedCharacter } from "@/lib/bungie/equip-client";
 import {
   LOADOUT_SCHEMA_VERSION,
   MAX_TAGS,
   type SavedLoadout,
   type SavedLoadoutData,
 } from "@/lib/loadouts/types";
-import { LoadoutTagFilterSubmenu } from "@/components/loadouts/loadout-tag-menu";
-import { Badge } from "@/components/ui/badge";
+import { FilterMultiselect } from "@/components/armor-table/filter-multiselect";
+import { SetFilterMenu } from "@/components/set-menu";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Input, SearchClearButton } from "@/components/ui/input";
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -67,11 +79,19 @@ import {
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import type { ActivitySet } from "@/lib/loadouts/activity-sets";
+import { useActivitySets } from "@/lib/loadouts/use-activity-sets";
+import {
+  runActivitySet,
+  stopActivitySet,
+  useActivitySetRun,
+} from "@/lib/loadouts/activity-set-run";
+import {
+  ActivitySetStrip,
+  useActivitySetDialogs,
+} from "@/components/loadouts/activity-set-strip";
 import { ConfirmDialog } from "@/components/loadouts/confirm-dialog";
 import { type ModsSection } from "@/lib/loadouts/mod-placement";
 import { commitLoadout, modsSectionForPieces } from "@/lib/loadouts/commit";
@@ -82,100 +102,60 @@ import {
   type LoadoutDetailsValues,
 } from "@/components/loadouts/loadout-editor-drawer";
 
-// Survives the list remounting (the sidebar moves between the desktop column and the
-// mobile drawer at the breakpoint) so a dismissed share-link import stays dismissed.
+// Survives the list remounting (leaving the page and coming back) so a dismissed
+// share-link import stays dismissed.
 let dismissedImportParam: string | null = null;
+
+// Share links carry the loadout in the URL fragment, which useSearchParams doesn't see.
+function subscribeHash(onChange: () => void) {
+  window.addEventListener("hashchange", onChange);
+  return () => window.removeEventListener("hashchange", onChange);
+}
+const readHashImport = () => shareParamFromHash(window.location.hash);
+const noHashImport = () => null;
 
 type DialogState =
   | { kind: "none" }
   | { kind: "edit"; loadout: SavedLoadout; mods?: ModsSection }
-  | { kind: "delete"; loadout: SavedLoadout };
+  | { kind: "delete"; loadout: SavedLoadout }
+  | { kind: "delete-many"; ids: string[] }
+  | { kind: "delete-all" };
 
-function toggleIn<T>(list: readonly T[], value: T): T[] {
-  return list.includes(value) ? list.filter((x) => x !== value) : [...list, value];
-}
+const SUBCLASS_OPTIONS = SUBCLASSES.map((sc) => ({ value: sc, label: sc }));
 
-function filterSummary(labels: string[]): string | undefined {
-  if (labels.length === 0) return undefined;
-  return labels.length === 1 ? labels[0] : `${labels[0]} +${labels.length - 1}`;
-}
-
-function FilterCascade({
-  label,
-  summary,
-  empty,
-  children,
-}: {
-  label: string;
-  summary?: string;
-  /** Shown in the submenu when there is nothing to pick. */
-  empty?: string;
-  children: ReactNode;
-}) {
-  return (
-    <DropdownMenuSub>
-      <DropdownMenuSubTrigger openOnHover>
-        <span className="min-w-0 flex-1 truncate">{label}</span>
-        {summary ? (
-          <span className="text-muted-foreground max-w-24 truncate text-xs">
-            {summary}
-          </span>
-        ) : null}
-      </DropdownMenuSubTrigger>
-      <DropdownMenuSubContent className="min-w-52">
-        {empty ? (
-          <p className="text-muted-foreground px-2 py-2.5 text-sm leading-5">
-            {empty}
-          </p>
-        ) : (
-          children
-        )}
-      </DropdownMenuSubContent>
-    </DropdownMenuSub>
-  );
-}
-
-/** Collapsed card height (Figma "Attachment", 1:1209); expanded cards are remeasured. */
-const ESTIMATED_ROW_HEIGHT_PX = 104;
+/** Card height with the breakdown closed (wide layout); every card is remeasured. */
+const ESTIMATED_ROW_HEIGHT_PX = 300;
 /** Vertical gap between cards. */
-const ROW_GAP_PX = 10;
+const ROW_GAP_PX = 12;
 
 /**
- * The sidebar's loadouts section (Figma 69:865): collapse + search, then the count
- * with sort / filter menus, and the virtualized card list. Rows scroll inside this
- * section — the sidebar itself never scrolls, so the armor summary stays pinned below.
+ * The loadouts page body (Figma 69:865): search, then the count with sort / filter
+ * menus, and the virtualized card list. Rows scroll inside this section, so the
+ * search and filters stay pinned above them.
  */
 export function LoadoutsList({
   armory,
   provisional = false,
   manifest,
   onArmoryChanged,
-  onNavigate,
-  headerAction,
+  refreshArmory,
 }: {
   armory: Armory;
   /** `armory` is last visit's copy; applying a loadout waits for the live profile. */
   provisional?: boolean;
   manifest: Manifest;
   onArmoryChanged: () => void;
-  /** Called after an action that switches views (the mobile drawer closes itself). */
-  onNavigate?: () => void;
-  /** Desktop collapse control — sits left of the search field (Figma 69:865). */
-  headerAction?: ReactNode;
+  /** Re-reads the profile and resolves with the new armory (an activity set runs on it). */
+  refreshArmory: () => Promise<RefreshResult>;
 }) {
   const router = useRouter();
   const pathname = usePathname();
-  // Read at click time only, via a ref, so a route change doesn't change
-  // optimizeLoadout's identity and re-render every visible row. Written in a layout
-  // effect rather than during render so a discarded render can't leave it stale.
-  const pathnameRef = useRef(pathname);
-  useLayoutEffect(() => {
-    pathnameRef.current = pathname;
-  });
   const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const loadouts = useLoadouts();
-  const { create, update, remove, setTag } = useLoadoutMutations();
+  const { create, update, remove, removeMany, setTag } = useLoadoutMutations();
+  const activitySets = useActivitySets();
+  const setRun = useActivitySetRun();
 
   const [query, setQuery] = useState("");
   // The filter pass runs on the deferred value so typing never waits on it.
@@ -184,8 +164,9 @@ export function LoadoutsList({
   const [subclassFilter, setSubclassFilter] = useState<Subclass[]>([]);
   const [setFilter, setSetFilter] = useState<number[]>([]);
   const [tagFilter, setTagFilter] = useState<string[]>([]);
-  const [sortKey, setSortKey] = useState<LoadoutListSortKey>("edited");
+  const [sortKey, setSortKey] = useState<LoadoutListSortKey>("created");
   const [dialog, setDialog] = useState<DialogState>({ kind: "none" });
+  const setDialogs = useActivitySetDialogs();
   // Expanded rows, by id — kept here (not in the row) so it survives virtualization.
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(
     () => new Set(),
@@ -198,8 +179,26 @@ export function LoadoutsList({
     });
   }, []);
 
-  // A share link lands here with ?import=<json>; offer to save a copy.
-  const importParam = searchParams.get(SHARE_PARAM);
+  // Select mode: cards grow checkboxes for bulk delete. Only picks that are still
+  // shown count, so a filter change never deletes something off screen.
+  const [selecting, setSelecting] = useState(false);
+  const [picked, setPicked] = useState<ReadonlySet<string>>(() => new Set());
+  const togglePicked = useCallback((id: string) => {
+    setPicked((prev) => {
+      const next = new Set(prev);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    });
+  }, []);
+  const stopSelecting = () => {
+    setSelecting(false);
+    setPicked(new Set());
+  };
+
+  // A share link lands here with #import=<json> (older ones with ?import=); offer to
+  // save a copy.
+  const hashImport = useSyncExternalStore(subscribeHash, readHashImport, noHashImport);
+  const importParam = hashImport ?? searchParams.get(SHARE_PARAM);
   const importData = useMemo(() => parseShareParam(importParam), [importParam]);
   const [importDismissed, setImportDismissed] = useState<string | null>(
     () => dismissedImportParam,
@@ -207,7 +206,8 @@ export function LoadoutsList({
   const importOpen =
     importData !== null &&
     importDismissed !== importParam &&
-    dialog.kind === "none";
+    dialog.kind === "none" &&
+    !setDialogs.open;
 
   const clearImportParam = () => {
     dismissedImportParam = importParam;
@@ -218,6 +218,10 @@ export function LoadoutsList({
   const pieceMap = useMemo(
     () => new Map(armory.pieces.map((p) => [p.instanceId, p])),
     [armory.pieces],
+  );
+  const weaponMap = useMemo(
+    () => new Map((armory.weapons ?? []).map((w) => [w.instanceId, w])),
+    [armory.weapons],
   );
   const statIcons = useMemo(() => statIconsFromManifest(manifest), [manifest]);
   const balancedTuningIcon = useMemo(
@@ -237,12 +241,18 @@ export function LoadoutsList({
   const [now] = useState(() => Date.now());
   const hashtags = useMemo(() => collectHashtags(all), [all]);
   const setBonusOptions = useMemo(() => {
+    // How many loadouts ask for each set, shown beside it in the menu.
+    const uses = new Map<number, number>();
+    for (const l of all) {
+      for (const hash of collectSetBonusHashes([l])) uses.set(hash, (uses.get(hash) ?? 0) + 1);
+    }
     return collectSetBonusHashes(all)
       .map((hash) => ({
         hash,
         name:
           manifest.def("DestinyEquipableItemSetDefinition", hash)?.displayProperties
             ?.name ?? `Set ${hash}`,
+        count: uses.get(hash) ?? 0,
       }))
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [all, manifest]);
@@ -263,9 +273,12 @@ export function LoadoutsList({
       ),
     [all, deferredQuery, classFilter, subclassFilter, setFilter, tagFilter, sortKey, manifest],
   );
-  const activeTag = query.trim().toLowerCase().startsWith("#")
-    ? query.trim().toLowerCase().slice(1)
-    : null;
+
+  const pickedShown = useMemo(
+    () => shown.filter((l) => picked.has(l.id)).map((l) => l.id),
+    [shown, picked],
+  );
+  const allShownPicked = shown.length > 0 && pickedShown.length === shown.length;
 
   // Rows are virtualized against the section's own scroller: only the visible slice
   // (plus overscan) resolves items and renders, however long the list gets.
@@ -279,8 +292,9 @@ export function LoadoutsList({
     getItemKey: (index) => shown[index].id,
   });
 
-  const onMutationError = (err: { notConfigured: boolean; message: string }) =>
-    toast.error(
+  /** Reports a failed save on the action's spinner toast. */
+  const mutationError = (pending: Notifier) => (err: { notConfigured: boolean; message: string }) =>
+    pending.error(
       err.notConfigured
         ? "Loadout storage isn't configured — set DATABASE_URL"
         : err.message,
@@ -292,7 +306,7 @@ export function LoadoutsList({
   /** Open Edit; the mod picker is available when every piece is still in the armory. */
   const openEdit = useCallback(
     (saved: SavedLoadout) => {
-      const resolved = resolveLoadout(saved.loadout, pieceMap, manifest);
+      const resolved = resolveLoadout(saved.loadout, pieceMap, manifest, weaponMap);
       let mods: ModsSection | undefined;
       if (resolved.armor.length > 0 && !resolved.missing) {
         const pieces = resolved.armor.map((a) => a.piece!);
@@ -306,7 +320,7 @@ export function LoadoutsList({
       }
       setDialog({ kind: "edit", loadout: saved, mods });
     },
-    [pieceMap, manifest, armory.insertablePlugs],
+    [pieceMap, weaponMap, manifest, armory.insertablePlugs],
   );
   const openDelete = useCallback(
     (saved: SavedLoadout) => setDialog({ kind: "delete", loadout: saved }),
@@ -319,6 +333,8 @@ export function LoadoutsList({
     placement,
     desiredStatMods,
     subclass,
+    weapons,
+    artifact,
     stats,
   }: LoadoutDetailsValues) => {
     if (dialog.kind !== "edit") return;
@@ -336,34 +352,52 @@ export function LoadoutsList({
         ? { modPlacement }
         : {}),
     };
+    const pending = toast.loading("Saving loadout");
     update.mutate(
       {
         id,
         data: commitLoadout(
           next,
           manifest,
-          { placement, desiredStatMods, subclass, stats },
+          { placement, desiredStatMods, subclass, weapons, artifact, stats },
           dialog.mods,
         ),
       },
       {
         onSuccess: () => {
           setDialog({ kind: "none" });
-          toast.success("Loadout updated");
+          pending.success("Loadout updated");
         },
-        onError: onMutationError,
+        onError: mutationError(pending),
       },
     );
   };
 
   const deleteLoadout = () => {
     if (dialog.kind !== "delete") return;
+    const pending = toast.loading("Deleting loadout");
     remove.mutate(dialog.loadout.id, {
       onSuccess: () => {
         setDialog({ kind: "none" });
-        toast.success("Loadout deleted");
+        pending.success("Loadout deleted");
       },
-      onError: onMutationError,
+      onError: mutationError(pending),
+    });
+  };
+
+  const deleteMany = () => {
+    if (dialog.kind !== "delete-many" && dialog.kind !== "delete-all") return;
+    const everything = dialog.kind === "delete-all";
+    const pending = toast.loading(everything ? "Deleting all loadouts" : "Deleting loadouts");
+    removeMany.mutate(everything ? "all" : dialog.ids, {
+      onSuccess: (deleted) => {
+        setDialog({ kind: "none" });
+        stopSelecting();
+        pending.success(
+          `${deleted.length} ${deleted.length === 1 ? "loadout" : "loadouts"} deleted`,
+        );
+      },
+      onError: mutationError(pending),
     });
   };
 
@@ -385,9 +419,10 @@ export function LoadoutsList({
         ...(saved.builder ? { builder: saved.builder } : {}),
         ...(saved.modPlacement ? { modPlacement: saved.modPlacement } : {}),
       };
+      const pending = toast.loading("Duplicating loadout");
       createMutate(data, {
-        onSuccess: () => toast.success("Loadout duplicated"),
-        onError: onMutationError,
+        onSuccess: () => pending.success("Loadout duplicated"),
+        onError: mutationError(pending),
       });
     },
     [createMutate, queryClient],
@@ -403,12 +438,13 @@ export function LoadoutsList({
         ...(notes ? { notes } : { notes: undefined }),
       },
     };
+    const pending = toast.loading("Importing loadout");
     create.mutate(withLoadoutSubclass(data, subclass, manifest), {
       onSuccess: () => {
         clearImportParam();
-        toast.success("Loadout imported");
+        pending.success("Loadout imported");
       },
-      onError: onMutationError,
+      onError: mutationError(pending),
     });
   };
 
@@ -459,14 +495,42 @@ export function LoadoutsList({
           ),
         }),
       );
-      if (pathnameRef.current !== "/") router.push("/");
-      onNavigate?.();
+      router.push("/");
     },
-    [manifest, pieceMap, router, onNavigate],
+    [manifest, pieceMap, router],
   );
 
   const editorLoadout = dialog.kind === "edit" ? dialog.loadout : undefined;
   const editorMods = dialog.kind === "edit" ? dialog.mods : undefined;
+  const editorWeapons = useMemo(() => {
+    // Without the weapon list (an armory cached before weapons were tracked) the pickers
+    // would be empty and a save would look like "remove every weapon" — so no section.
+    if (dialog.kind !== "edit" || !armory.weapons) return undefined;
+    return {
+      manifest,
+      owned: armory.weapons,
+      initial: dialog.loadout.loadout.equipped.filter(
+        (ref) => weaponSlotOfHash(manifest, ref.hash) !== undefined,
+      ),
+    };
+  }, [dialog, armory.weapons, manifest]);
+  const editorArtifact = useMemo(() => {
+    if (dialog.kind !== "edit") return undefined;
+    const { loadout } = dialog.loadout;
+    const classType =
+      loadout.classType < 3
+        ? loadout.classType
+        : loadout.equipped.map((ref) => pieceMap.get(ref.id ?? "")).find(Boolean)?.classType;
+    const owned = lastPlayedCharacter(armory.characters, classType)?.artifacts;
+    // No artifacts read (stale cache, no profile data): no section, so a save can't
+    // read as "remove the artifact".
+    if (!owned?.length) return undefined;
+    return {
+      manifest,
+      owned,
+      initial: loadout.equipped.find((ref) => isArtifactHash(manifest, ref.hash)),
+    };
+  }, [dialog, armory.characters, pieceMap, manifest]);
   const editorSubclass = useMemo(() => {
     if (!editorLoadout || editorLoadout.loadout.classType >= 3) return undefined;
     return {
@@ -484,14 +548,24 @@ export function LoadoutsList({
     };
   }, [importData, manifest]);
 
+  const runSet = (set: ActivitySet) =>
+    void runActivitySet({
+      set,
+      loadouts: all,
+      armory,
+      refreshArmory,
+      manifest,
+      queryClient,
+    });
+
   const sortLabel =
     LOADOUT_LIST_SORT_OPTIONS.find((o) => o.key === sortKey)?.label ?? "Sort";
-  const filterCount =
-    classFilter.length +
-    subclassFilter.length +
-    setFilter.length +
-    tagFilter.length +
-    (activeTag !== null ? 1 : 0);
+  const classOptions = ownedClasses.map((c) => ({ value: c, label: CLASS_NAMES[c] }));
+  const setOptions = setBonusOptions.map((o) => ({ value: o.hash, label: o.name, count: o.count }));
+  const tagOptions = [...new Set([...hashtags, ...tagFilter])].map((t) => ({
+    value: t,
+    label: `#${t}`,
+  }));
   const countLabel = loadouts.isPending
     ? "Loading…"
     : shown.length === all.length
@@ -500,205 +574,204 @@ export function LoadoutsList({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
-      <div className="flex flex-col gap-2 px-2">
-        <div className="flex items-start gap-2">
-          {headerAction}
-          <div className="relative min-w-0 flex-1">
-            <MagnifyingGlass
-              className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 z-10 size-4 -translate-y-1/2"
-              aria-hidden
-            />
-            <Input
-              type="search"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search your loadouts"
-              aria-label="Search loadouts (names, notes, set bonuses, or #hashtags)"
-              className="pl-8 pr-8 [&::-webkit-search-cancel-button]:hidden"
-            />
-            {query.length > 0 && (
-              <button
-                type="button"
-                aria-label="Clear search"
-                onClick={() => setQuery("")}
-                className="text-muted-foreground hover:text-foreground absolute top-1/2 right-1.5 flex size-5 -translate-y-1/2 cursor-pointer items-center justify-center rounded-none outline-none focus-visible:ring-1 focus-visible:ring-outline-strong"
-              >
-                <X weight="bold" className="size-3.5" aria-hidden />
-              </button>
-            )}
-          </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="relative min-w-0 flex-1 basis-60 sm:max-w-sm">
+          <HugeiconsIcon icon={Search01Icon}
+            className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 z-10 size-4 -translate-y-1/2"
+            aria-hidden
+          />
+          <Input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search your loadouts"
+            aria-label="Search loadouts (names, notes, set bonuses, or #hashtags)"
+            className="pl-8 pr-8"
+          />
+          {query.length > 0 && <SearchClearButton onClick={() => setQuery("")} />}
         </div>
 
-        <div className="flex items-center justify-between pl-1">
-          <span className="text-sm tabular-nums" aria-live="polite">
+        <FilterMultiselect
+          label="Class"
+          allLabel="All classes"
+          options={classOptions}
+          value={classFilter}
+          onChange={setClassFilter}
+          className="max-w-56"
+        />
+        <FilterMultiselect
+          label="Subclass"
+          allLabel="All subclasses"
+          options={SUBCLASS_OPTIONS}
+          value={subclassFilter}
+          onChange={setSubclassFilter}
+          className="max-w-56"
+        />
+        {(setBonusOptions.length > 0 || setFilter.length > 0) && (
+          <SetFilterMenu
+            label="Set bonus"
+            allLabel="All set bonuses"
+            options={setOptions}
+            value={setFilter}
+            onChange={setSetFilter}
+            className="max-w-64"
+          />
+        )}
+        {(hashtags.length > 0 || tagFilter.length > 0) && (
+          <FilterMultiselect
+            label="Tag"
+            allLabel="All tags"
+            searchable
+            options={tagOptions}
+            value={tagFilter}
+            onChange={setTagFilter}
+            className="max-w-56"
+          />
+        )}
+
+        <div className="ml-auto flex items-center gap-3">
+          <span className="text-muted-foreground text-sm tabular-nums" aria-live="polite">
             {countLabel}
           </span>
-          <div className="flex items-center gap-2">
-            <DropdownMenu>
-              <TooltipLabel label={`Sort by ${sortLabel}`}>
-                <DropdownMenuTrigger
-                  render={<Button variant="default" size="icon" />}
-                  aria-label={`Sort by ${sortLabel}`}
-                >
-                  <ArrowsDownUp aria-hidden />
-                </DropdownMenuTrigger>
-              </TooltipLabel>
-              <DropdownMenuContent align="end" className="w-48">
-                <DropdownMenuGroup>
-                  <DropdownMenuLabel>Sort by</DropdownMenuLabel>
-                  {LOADOUT_LIST_SORT_OPTIONS.map((o) => (
-                    <DropdownMenuCheckboxItem
-                      key={o.key}
-                      checked={sortKey === o.key}
-                      onCheckedChange={() => setSortKey(o.key)}
-                    >
-                      {o.label}
-                    </DropdownMenuCheckboxItem>
-                  ))}
-                </DropdownMenuGroup>
-              </DropdownMenuContent>
-            </DropdownMenu>
-
-            <DropdownMenu>
-              <TooltipLabel label="Filter loadouts">
-                <DropdownMenuTrigger
-                  render={
-                    <Button variant="default" size="icon" className="relative" />
-                  }
-                  aria-label={
-                    filterCount > 0
-                      ? `Filter loadouts, ${filterCount} active`
-                      : "Filter loadouts"
-                  }
-                >
-                  <FunnelSimple aria-hidden />
-                  {filterCount > 0 && (
-                    <Badge
-                      variant="emphatic"
-                      className="absolute top-0 right-0 h-3.5 min-w-3.5 px-1 text-[9px] leading-none tracking-normal"
-                    >
-                      {filterCount}
-                    </Badge>
-                  )}
-                </DropdownMenuTrigger>
-              </TooltipLabel>
-              <DropdownMenuContent align="end" className="w-44">
-                <FilterCascade
-                  label="Class"
-                  summary={filterSummary(classFilter.map((c) => CLASS_NAMES[c]))}
-                  empty={
-                    ownedClasses.length === 0 ? "No classes to filter" : undefined
-                  }
-                >
-                  {ownedClasses.map((c) => (
-                    <DropdownMenuCheckboxItem
-                      key={c}
-                      indicator="start"
-                      closeOnClick={false}
-                      checked={classFilter.includes(c)}
-                      onCheckedChange={() =>
-                        setClassFilter((prev) => toggleIn(prev, c))
-                      }
-                    >
-                      {CLASS_NAMES[c]}
-                    </DropdownMenuCheckboxItem>
-                  ))}
-                </FilterCascade>
-                <FilterCascade
-                  label="Subclass"
-                  summary={filterSummary(subclassFilter)}
-                >
-                  {SUBCLASSES.map((sc) => (
-                    <DropdownMenuCheckboxItem
-                      key={sc}
-                      indicator="start"
-                      closeOnClick={false}
-                      checked={subclassFilter.includes(sc)}
-                      onCheckedChange={() =>
-                        setSubclassFilter((prev) => toggleIn(prev, sc))
-                      }
-                    >
-                      {sc}
-                    </DropdownMenuCheckboxItem>
-                  ))}
-                </FilterCascade>
-                <FilterCascade
-                  label="Set bonuses"
-                  summary={filterSummary(
-                    setFilter.map(
-                      (hash) =>
-                        setBonusOptions.find((s) => s.hash === hash)?.name ??
-                        `Set ${hash}`,
-                    ),
-                  )}
-                  empty={
-                    setBonusOptions.length === 0
-                      ? "No loadouts with set bonuses"
-                      : undefined
-                  }
-                >
-                  {setBonusOptions.map((s) => (
-                    <DropdownMenuCheckboxItem
-                      key={s.hash}
-                      indicator="start"
-                      closeOnClick={false}
-                      checked={setFilter.includes(s.hash)}
-                      onCheckedChange={() =>
-                        setSetFilter((prev) => toggleIn(prev, s.hash))
-                      }
-                    >
-                      {s.name}
-                    </DropdownMenuCheckboxItem>
-                  ))}
-                </FilterCascade>
-                <LoadoutTagFilterSubmenu
-                  tags={hashtags}
-                  selected={tagFilter}
-                  onToggle={(tag, checked) =>
-                    setTagFilter((prev) =>
-                      checked ? [...new Set([...prev, tag])] : prev.filter((t) => t !== tag),
-                    )
-                  }
-                />
-                {filterCount > 0 && (
-                  <>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem
-                      onClick={() => {
-                        setClassFilter([]);
-                        setSubclassFilter([]);
-                        setSetFilter([]);
-                        setTagFilter([]);
-                        if (activeTag !== null) setQuery("");
-                      }}
-                    >
-                      Clear filters
-                    </DropdownMenuItem>
-                  </>
-                )}
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
+          <DropdownMenu>
+            <TooltipLabel label={`Sort by ${sortLabel}`}>
+              <DropdownMenuTrigger
+                render={<Button variant="default" size="icon" />}
+                aria-label={`Sort by ${sortLabel}`}
+              >
+                <HugeiconsIcon icon={ArrowUpDownIcon} aria-hidden />
+              </DropdownMenuTrigger>
+            </TooltipLabel>
+            <DropdownMenuContent align="end" className="w-48">
+              <DropdownMenuGroup>
+                <DropdownMenuLabel>Sort by</DropdownMenuLabel>
+                {LOADOUT_LIST_SORT_OPTIONS.map((o) => (
+                  <DropdownMenuCheckboxItem
+                    key={o.key}
+                    checked={sortKey === o.key}
+                    onCheckedChange={() => setSortKey(o.key)}
+                  >
+                    {o.label}
+                  </DropdownMenuCheckboxItem>
+                ))}
+              </DropdownMenuGroup>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <DropdownMenu>
+            <TooltipLabel label="New">
+              <DropdownMenuTrigger
+                render={<Button variant="default" size="icon" />}
+                aria-label="New"
+              >
+                <HugeiconsIcon icon={Add01Icon} aria-hidden />
+              </DropdownMenuTrigger>
+            </TooltipLabel>
+            <DropdownMenuContent align="end" className="w-48">
+              <DropdownMenuItem onClick={setDialogs.openNew}>
+                New activity set
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <DropdownMenu>
+            <TooltipLabel label="More">
+              <DropdownMenuTrigger
+                render={<Button variant="default" size="icon" />}
+                aria-label="More loadout actions"
+              >
+                <HugeiconsIcon icon={MoreVerticalIcon} strokeWidth={2} aria-hidden />
+              </DropdownMenuTrigger>
+            </TooltipLabel>
+            <DropdownMenuContent align="end" className="w-52">
+              <DropdownMenuItem
+                onClick={() => setSelecting(true)}
+                disabled={selecting || all.length === 0}
+              >
+                <HugeiconsIcon icon={CheckListIcon} aria-hidden />
+                Select loadouts
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                variant="destructive"
+                onClick={() => setDialog({ kind: "delete-all" })}
+                disabled={all.length === 0}
+              >
+                <HugeiconsIcon icon={Delete02Icon} aria-hidden />
+                Delete all loadouts
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
+      <ActivitySetStrip
+        sets={activitySets}
+        characters={armory.characters}
+        loadouts={all}
+        pieceMap={pieceMap}
+        manifest={manifest}
+        run={setRun}
+        canRun={!provisional && !loadouts.isPending}
+        dialogs={setDialogs}
+        onRun={runSet}
+        onStop={stopActivitySet}
+      />
+
+      {selecting && all.length > 0 && (
+        <div className="d2-reveal flex flex-wrap items-center gap-3">
+          <label className="flex items-center gap-2 text-sm">
+            <Checkbox
+              size="lg"
+              checked={allShownPicked}
+              disabled={shown.length === 0}
+              onCheckedChange={(checked) =>
+                setPicked((prev) => {
+                  const next = new Set(prev);
+                  for (const l of shown) {
+                    if (checked) next.add(l.id);
+                    else next.delete(l.id);
+                  }
+                  return next;
+                })
+              }
+            />
+            Select all
+          </label>
+          <span className="text-muted-foreground text-sm tabular-nums" aria-live="polite">
+            {pickedShown.length} selected
+          </span>
+          <div className="ml-auto flex items-center gap-2">
+            <Button variant="outline" onClick={stopSelecting}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={pickedShown.length === 0}
+              onClick={() => setDialog({ kind: "delete-many", ids: pickedShown })}
+            >
+              <HugeiconsIcon icon={Delete02Icon} aria-hidden />
+              Delete
+            </Button>
+          </div>
+        </div>
+      )}
+
       {loadouts.isError ? (
-        <p className="text-muted-foreground px-4 text-sm">
+        <p className="text-muted-foreground text-sm">
           {loadouts.error.notConfigured
             ? "Loadout storage isn't configured on this deployment yet — set DATABASE_URL (see .env.example)."
             : `Couldn't load your loadouts — ${loadouts.error.message}`}
         </p>
       ) : loadouts.isPending ? (
-        <p className="text-muted-foreground px-4 text-sm">
+        <p className="text-muted-foreground text-sm">
           Loading your loadouts…
         </p>
       ) : all.length === 0 ? (
-        <p className="text-muted-foreground px-4 text-sm">
+        <p className="text-muted-foreground text-sm">
           No saved loadouts yet. Expand a build in the optimizer and choose
           Save.
         </p>
       ) : shown.length === 0 ? (
-        <p className="text-muted-foreground px-4 text-sm">No loadouts match.</p>
+        <p className="text-muted-foreground text-sm">No loadouts match.</p>
       ) : (
         <div
           ref={setScrollEl}
@@ -723,7 +796,10 @@ export function LoadoutsList({
                     open={expanded.has(saved.id)}
                     onToggle={toggleExpanded}
                     pieceMap={pieceMap}
+                    weaponMap={weaponMap}
+                    weapons={armory.weapons}
                     provisional={provisional}
+                    setRunning={setRun !== null}
                     manifest={manifest}
                     characters={armory.characters}
                     statIcons={statIcons}
@@ -737,6 +813,8 @@ export function LoadoutsList({
                     onArmoryChanged={onArmoryChanged}
                     allTags={hashtags}
                     onSetTag={setLoadoutTag}
+                    selected={selecting ? picked.has(saved.id) : undefined}
+                    onSelect={togglePicked}
                   />
                 </div>
               );
@@ -762,6 +840,8 @@ export function LoadoutsList({
         }
         mods={editorMods}
         subclass={editorSubclass}
+        weapons={editorWeapons}
+        artifact={editorArtifact}
         busy={update.isPending}
         onSubmit={editLoadout}
       />
@@ -777,6 +857,25 @@ export function LoadoutsList({
         confirmLabel="Delete"
         busy={remove.isPending}
         onConfirm={deleteLoadout}
+      />
+      <ConfirmDialog
+        open={dialog.kind === "delete-many" || dialog.kind === "delete-all"}
+        onOpenChange={(open) => !open && setDialog({ kind: "none" })}
+        title={
+          dialog.kind === "delete-all"
+            ? `Delete all ${all.length} loadouts?`
+            : dialog.kind === "delete-many"
+              ? `Delete ${dialog.ids.length} ${dialog.ids.length === 1 ? "loadout" : "loadouts"}?`
+              : ""
+        }
+        description={
+          dialog.kind === "delete-all"
+            ? "Every saved loadout on your account will be removed. This can't be undone."
+            : "The selected loadouts will be removed. This can't be undone."
+        }
+        confirmLabel={dialog.kind === "delete-all" ? "Delete all" : "Delete"}
+        busy={removeMany.isPending}
+        onConfirm={deleteMany}
       />
       <LoadoutEditorDrawer
         open={importOpen}

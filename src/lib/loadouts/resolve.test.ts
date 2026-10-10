@@ -16,7 +16,8 @@ const manifest: DefLookup = {
     if (hash === 4282591831) {
       return { sockets: { socketEntries: [
         { singleInitialItemHash: 0, socketTypeHash: SUPER_TYPE },
-        { singleInitialItemHash: 0, socketTypeHash: GRENADE_TYPE },
+        // The default grenade: a loadout that picks it still lists it.
+        { singleInitialItemHash: 88, socketTypeHash: GRENADE_TYPE },
       ] } };
     }
     if (hash === 200) {
@@ -92,4 +93,68 @@ test("actionable only when every piece is live and none is synthetic", () => {
       manifest,
     ).actionable,
   ).toBe(false);
+});
+
+test("weapons resolve apart from armor, in slot order, and a missing one doesn't block equipping", () => {
+  const weaponManifest: DefLookup = {
+    def: (table, hash) =>
+      hash === 900
+        ? { displayProperties: { name: "Gone Rocket", icon: "/r.png" }, inventory: { bucketTypeHash: 953998645 } }
+        : manifest.def(table, hash),
+  };
+  const weaponMap = new Map([
+    ["w1", { instanceId: "w1", itemHash: 5, name: "live energy", slot: "energy" as const, typeName: "Fusion Rifle", isExotic: false, location: "vault" as const }],
+  ]);
+  const out = resolveLoadout(
+    {
+      id: "x",
+      name: "n",
+      classType: 1,
+      unequipped: [],
+      parameters: { mods: [], assumeArmorMasterwork: 3 },
+      equipped: [
+        { id: "gone-rocket", hash: 900 },
+        { id: "c1", hash: 1 },
+        { id: "w1", hash: 5 },
+      ],
+    },
+    pieceMap,
+    weaponManifest,
+    weaponMap,
+  );
+  expect(out.armor.map((a) => a.name)).toEqual(["live chest"]);
+  expect(out.weapons.map((w) => [w.name, w.slot, w.missing])).toEqual([
+    ["live energy", "energy", false],
+    ["Gone Rocket", "power", true],
+  ]);
+  expect(out.missing).toBe(true);
+  expect(out.actionable).toBe(true);
+});
+
+test("an artifact resolves on its own and never counts as missing", () => {
+  const artifactManifest: DefLookup = {
+    def: (table, hash) =>
+      table === "DestinyInventoryItemDefinition" && hash === 700
+        ? { displayProperties: { name: "Tablet of Ruin", icon: "/t.png" }, inventory: { bucketTypeHash: 1506418338 } }
+        : manifest.def(table, hash),
+  };
+  const out = resolveLoadout(
+    {
+      id: "x",
+      name: "n",
+      classType: 1,
+      unequipped: [],
+      parameters: { mods: [], assumeArmorMasterwork: 3 },
+      equipped: [
+        { id: "c1", hash: 1 },
+        { id: "art", hash: 700, socketOverrides: { 5: 30, 0: 10, 2: 20 } },
+      ],
+    },
+    pieceMap,
+    artifactManifest,
+  );
+  expect(out.armor.map((a) => a.name)).toEqual(["live chest"]);
+  expect(out.artifact).toMatchObject({ itemHash: 700, name: "Tablet of Ruin", perks: [10, 20, 30] });
+  expect(out.missing).toBe(false);
+  expect(out.actionable).toBe(true);
 });

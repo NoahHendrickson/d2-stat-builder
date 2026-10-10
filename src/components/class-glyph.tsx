@@ -25,6 +25,11 @@ const GLYPHS: Record<number, { viewBox: string; width: number; d: string }> = {
   },
 };
 
+/** How wide the sigil draws at `height` px (they differ per class); 0 for no sigil. */
+export function classGlyphWidth(classType: number, height: number): number {
+  return ((GLYPHS[classType]?.width ?? 0) * height) / 16;
+}
+
 export function ClassGlyph({
   classType,
   className,

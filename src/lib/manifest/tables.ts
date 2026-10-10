@@ -9,6 +9,8 @@ import type {
   DestinyDamageTypeDefinition,
   DestinySeasonDefinition,
   DestinyMaterialRequirementSetDefinition,
+  DestinyInventoryBucketDefinition,
+  DestinyBreakerTypeDefinition,
 } from "bungie-api-ts/destiny2";
 import type { ItemDef } from "./item-def";
 
@@ -27,6 +29,10 @@ export const MANIFEST_TABLES = [
   "DestinySeasonDefinition",
   // Tiny; what each armor masterwork level costs (glimmer, cores, prisms, shards).
   "DestinyMaterialRequirementSetDefinition",
+  // Tiny; inventory slot names and capacities (vault, postmaster, …) for the manager.
+  "DestinyInventoryBucketDefinition",
+  // Tiny (3 rows); champion icons for the manager tiles.
+  "DestinyBreakerTypeDefinition",
 ] as const;
 
 export type ManifestTableName = (typeof MANIFEST_TABLES)[number];
@@ -47,4 +53,6 @@ export interface ManifestTables {
   DestinyDamageTypeDefinition: DefinitionTable<DestinyDamageTypeDefinition>;
   DestinySeasonDefinition: DefinitionTable<DestinySeasonDefinition>;
   DestinyMaterialRequirementSetDefinition: DefinitionTable<DestinyMaterialRequirementSetDefinition>;
+  DestinyInventoryBucketDefinition: DefinitionTable<DestinyInventoryBucketDefinition>;
+  DestinyBreakerTypeDefinition: DefinitionTable<DestinyBreakerTypeDefinition>;
 }

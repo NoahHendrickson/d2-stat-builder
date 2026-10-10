@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import { Plus, TagSimple } from "@phosphor-icons/react";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { Add01Icon, Tag01Icon } from "@hugeicons/core-free-icons";
 import { normalizeTag } from "@/lib/loadouts/types";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -65,7 +66,7 @@ function TagPanel({
           }}
           placeholder={onCreate ? "Search or create…" : "Search…"}
           aria-label={onCreate ? "Search or create tags" : "Search tags"}
-          className="min-w-0 flex-1 [&::-webkit-search-cancel-button]:hidden"
+          className="min-w-0 flex-1"
         />
         {onCreate && (
           <Button
@@ -76,7 +77,7 @@ function TagPanel({
             aria-label={draft ? `Create tag ${draft}` : "Create tag"}
             onClick={create}
           >
-            <Plus weight="bold" aria-hidden />
+            <HugeiconsIcon icon={Add01Icon} strokeWidth={2} aria-hidden />
           </Button>
         )}
       </div>
@@ -127,7 +128,7 @@ function TagSubmenu({
       }}
     >
       <DropdownMenuSubTrigger openOnHover>
-        {showIcon ? <TagSimple weight="duotone" aria-hidden /> : null}
+        {showIcon ? <HugeiconsIcon icon={Tag01Icon} aria-hidden /> : null}
         <span className="min-w-0 flex-1 truncate">{label}</span>
         {summary ? (
           <span className="text-muted-foreground max-w-24 truncate text-xs">
@@ -170,41 +171,6 @@ export function LoadoutTagAssignSubmenu({
         onToggle={onToggle}
         onCreate={onCreate}
       />
-    </TagSubmenu>
-  );
-}
-
-/** Filter the loadouts list by tags that already exist. */
-export function LoadoutTagFilterSubmenu({
-  tags,
-  selected,
-  onToggle,
-}: {
-  tags: readonly string[];
-  selected: readonly string[];
-  onToggle: (tag: string, checked: boolean) => void;
-}) {
-  const [query, setQuery] = useState("");
-  const empty = tags.length === 0 && selected.length === 0;
-  return (
-    <TagSubmenu
-      label="Tag"
-      summary={filterSummary(selected)}
-      onClose={() => setQuery("")}
-    >
-      {empty ? (
-        <p className="text-muted-foreground px-2 py-2.5 text-sm leading-5">
-          No loadouts with tags
-        </p>
-      ) : (
-        <TagPanel
-          tags={tags}
-          selected={selected}
-          query={query}
-          onQueryChange={setQuery}
-          onToggle={onToggle}
-        />
-      )}
     </TagSubmenu>
   );
 }

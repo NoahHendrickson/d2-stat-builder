@@ -8,6 +8,7 @@ interface BungieErrorBody {
   ErrorCode?: number;
   ErrorStatus?: string;
   Message?: string;
+  ThrottleSeconds?: number;
 }
 
 /** A failed Bungie API response, carrying the HTTP status so callers can categorize it. */
@@ -20,6 +21,8 @@ export class BungieHttpError extends Error {
     /** Bungie's own `ErrorStatus` / `Message` from the body, when present. */
     public readonly errorStatus?: string,
     public readonly bungieMessage?: string,
+    /** Bungie's `ThrottleSeconds`: how long it asks us to back off (0 when not throttling). */
+    public readonly throttleSeconds?: number,
   ) {
     super(message);
     this.name = "BungieHttpError";
@@ -86,6 +89,7 @@ export function createBungieHttp(accessToken?: string): HttpClient {
         json?.ErrorCode,
         json?.ErrorStatus,
         json?.Message,
+        json?.ThrottleSeconds,
       );
       if (res.status < 500) break; // 4xx (and in-body errors on a 200) won't fix themselves
       await new Promise((r) => setTimeout(r, 600));

@@ -1,7 +1,8 @@
 "use client";
 
 import { memo } from "react";
-import { GridFour, PushPin } from "@phosphor-icons/react";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { GridViewIcon, Pin02Icon } from "@hugeicons/core-free-icons";
 import {
   Tooltip,
   TooltipContent,
@@ -41,14 +42,14 @@ export const SetRow = memo(function SetRow({
           onClick={() => onTogglePin(set.setHash)}
           aria-label={pinned ? "Unpin set" : "Pin set"}
           className={cn(
-            "absolute top-1/2 left-0 z-10 flex size-6 -translate-y-1/2 items-center justify-center rounded-none transition-opacity outline-none focus-visible:opacity-100 focus-visible:ring-1 focus-visible:ring-outline-strong",
+            "absolute top-1/2 left-0 z-10 flex size-6 -translate-y-1/2 items-center justify-center rounded-none normal:rounded-[6px] transition-opacity outline-none focus-visible:opacity-100 focus-visible:ring-1 focus-visible:ring-outline-strong",
             pinned
               ? "text-foreground"
               : "text-muted-foreground opacity-0 group-hover/set-row:opacity-100 group-focus-within/set-row:opacity-100 hover:text-foreground",
           )}
         >
-          <PushPin
-            weight={pinned ? "fill" : "regular"}
+          <HugeiconsIcon icon={Pin02Icon}
+            fill={pinned ? "currentColor" : "none"}
             className="size-4"
             aria-hidden
           />
@@ -74,9 +75,9 @@ export const SetRow = memo(function SetRow({
           type="button"
           onClick={() => onOpenGrid(set.setHash)}
           aria-label={`${set.name} rolls by archetype`}
-          className="text-muted-foreground hover:text-foreground focus-visible:ring-outline-strong flex size-6 cursor-pointer items-center justify-center rounded-none outline-none focus-visible:ring-1"
+          className="text-muted-foreground hover:text-foreground focus-visible:ring-outline-strong flex size-6 cursor-pointer items-center justify-center rounded-none normal:rounded-[6px] outline-none focus-visible:ring-1"
         >
-          <GridFour className="size-4" aria-hidden />
+          <HugeiconsIcon icon={GridViewIcon} className="size-4" aria-hidden />
         </button>
       </TooltipLabel>
     </div>

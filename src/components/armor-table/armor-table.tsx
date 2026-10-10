@@ -11,6 +11,9 @@ import {
 } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useArmory } from "@/lib/armory/use-armory";
+import { sessionMembershipId } from "@/lib/armory/use-profile";
+import { useSession } from "@/lib/auth/use-session";
+import { loadAnnotations } from "@/lib/inventory/annotations";
 import { useManifest } from "@/lib/manifest/use-manifest";
 import { availableSets } from "@/lib/armory/sets";
 import type { ArmoryCharacter } from "@/lib/armory/fetch";
@@ -34,11 +37,18 @@ import {
 import type { SortMode } from "@/lib/armor-table/sort";
 import { normalizeSearchText, tokenizeSearchQuery } from "@/lib/armor-table/search";
 import {
+  DEFAULT_DUPLICATE_MATCH,
+  duplicateMatchSummary,
+  groupDuplicates,
+  type DuplicateMatch,
+} from "@/lib/armor-table/duplicates";
+import {
   TABLE_SCHEMA_VERSION,
   loadTableState,
   saveTableState,
 } from "@/lib/armor-table/filter-storage";
 import { togglePinned, type FilterOption } from "@/lib/armor-table/pinned";
+import { adoptPinnedSets } from "@/lib/settings/pinned-sets";
 import {
   PINS_SCHEMA_VERSION,
   loadTablePins,
@@ -62,11 +72,7 @@ import { useArmorTableSort } from "@/components/armor-table/use-armor-table-sort
 /** Approximate single-row height; the virtualizer remeasures real rows on mount. */
 const ESTIMATED_ROW_HEIGHT_PX = 48;
 
-const TABLE_HEAD_CELL =
-  "d2-label border-b border-foreground/15 py-2.5 pr-3 whitespace-nowrap first:pl-3 " +
-  TABLE_HEADER_BG;
-
-/** Header-cell order → sort key; `undefined` marks unsortable columns (Actions). */
+/** Header-cell order → sort key. */
 const COLUMN_SORT_KEYS: readonly (SortKey | undefined)[] = [
   "name",
   "class",
@@ -75,7 +81,6 @@ const COLUMN_SORT_KEYS: readonly (SortKey | undefined)[] = [
   "tuned",
   "set",
   ...STAT_DISPLAY_ORDER.map((key) => `stat-${key}` as const),
-  undefined, // actions
 ];
 
 const HeaderRow = memo(function HeaderRow({
@@ -125,7 +130,7 @@ const HeaderRow = memo(function HeaderRow({
     hoveredCol !== null ? COLUMN_SORT_KEYS[hoveredCol] : undefined;
 
   return (
-    <thead className={cn("sticky top-0 z-10", TABLE_HEADER_BG)}>
+    <thead className={cn("sticky top-0 z-10 backdrop-blur-[20px]", TABLE_HEADER_BG)}>
       <tr className="text-muted-foreground text-left">
         <SortMenu
           label="Name"
@@ -216,7 +221,6 @@ const HeaderRow = memo(function HeaderRow({
             onUndoSort={undoSort}
           />
         ))}
-        <th className={cn(TABLE_HEAD_CELL, "text-left")}>Actions</th>
       </tr>
     </thead>
   );
@@ -224,6 +228,9 @@ const HeaderRow = memo(function HeaderRow({
 
 export function ArmorTable() {
   const armory = useArmory();
+  // Junk tags live in the Manager's tag store; point it at this account here too.
+  const membershipId = sessionMembershipId(useSession().data);
+  useEffect(() => loadAnnotations(membershipId), [membershipId]);
   const manifestStatus = useManifest();
   const manifest =
     manifestStatus.state === "ready" ? manifestStatus.manifest : undefined;
@@ -241,9 +248,8 @@ export function ArmorTable() {
   const [facets, setFacets] = useState<FacetFilters>(
     () => initialFilters?.facets ?? emptyFacets(),
   );
-  const [pinnedSets, setPinnedSets] = useState<number[]>(
-    () => initialPins?.sets ?? [],
-  );
+  // Set pins are the account's (shared by every set menu, see set-menu.tsx); only
+  // archetype pins live here.
   const [pinnedArchetypes, setPinnedArchetypes] = useState<string[]>(
     () => initialPins?.archetypes ?? [],
   );
@@ -307,17 +313,23 @@ export function ArmorTable() {
     [facets, search, sort, schedule],
   );
 
-  // Pins persist debounced like the filters above.
+  // The table used to keep its own set pins: fold them into the shared ones. The
+  // save below writes the table's copy back empty, so this runs once.
+  useEffect(() => {
+    if (initialPins?.sets.length) adoptPinnedSets(initialPins.sets);
+  }, [initialPins]);
+
+  // Archetype pins persist debounced like the filters above.
   useEffect(
     () =>
       schedule("pins", () =>
         saveTablePins({
           version: PINS_SCHEMA_VERSION,
-          sets: pinnedSets,
+          sets: [],
           archetypes: pinnedArchetypes,
         }),
       ),
-    [pinnedSets, pinnedArchetypes, schedule],
+    [pinnedArchetypes, schedule],
   );
   // Flush on unmount / Activity hide, and on pagehide (tab close, navigation away):
   // a change made inside the debounce window is written, not dropped.
@@ -357,13 +369,16 @@ export function ArmorTable() {
   }, []);
 
   const setOptions = useMemo<FilterOption<number>[]>(() => {
-    const seen = new Map<number, string>();
+    const seen = new Map<number, { name: string; count: number }>();
     for (const r of rows) {
-      if (r.piece.setHash && r.setName) seen.set(r.piece.setHash, r.setName);
+      if (!r.piece.setHash || !r.setName) continue;
+      const entry = seen.get(r.piece.setHash);
+      if (entry) entry.count++;
+      else seen.set(r.piece.setHash, { name: r.setName, count: 1 });
     }
     return [...seen]
-      .sort((a, b) => a[1].localeCompare(b[1]))
-      .map(([hash, name]) => ({ value: hash, label: name }));
+      .sort((a, b) => a[1].name.localeCompare(b[1].name))
+      .map(([hash, { name, count }]) => ({ value: hash, label: name, count }));
   }, [rows]);
 
   const archetypeOptions = useMemo<FilterOption<string>[]>(() => {
@@ -410,6 +425,21 @@ export function ArmorTable() {
     [sorted, facets, searchTokens],
   );
 
+  // Duplicates narrows the filtered list to pieces with a twin, each group together.
+  // Picking what has to match (the split button's menu) turns it on.
+  const [showDuplicates, setShowDuplicates] = useState(false);
+  const [duplicateMatch, setDuplicateMatch] = useState(DEFAULT_DUPLICATE_MATCH);
+  const toggleDuplicates = useCallback(() => setShowDuplicates((on) => !on), []);
+  const changeDuplicateMatch = useCallback((match: DuplicateMatch) => {
+    setDuplicateMatch(match);
+    setShowDuplicates(true);
+  }, []);
+  const duplicates = useMemo(
+    () => (showDuplicates ? groupDuplicates(filtered, duplicateMatch) : null),
+    [showDuplicates, filtered, duplicateMatch],
+  );
+  const visible = duplicates?.rows ?? filtered;
+
   const filtersActive = hasActiveFilters({ ...facets, search });
 
   const clearFilters = useCallback(() => {
@@ -423,11 +453,6 @@ export function ArmorTable() {
     [],
   );
 
-  const togglePinnedSet = useCallback(
-    (hash: number) => setPinnedSets((prev) => togglePinned(prev, hash)),
-    [],
-  );
-
   const togglePinnedArchetype = useCallback(
     (name: string) => setPinnedArchetypes((prev) => togglePinned(prev, name)),
     [],
@@ -438,7 +463,7 @@ export function ArmorTable() {
   // Virtualized rows: the scroller is the bounded-height container below.
   const [scrollerEl, setScrollerEl] = useState<HTMLDivElement | null>(null);
   const rowVirtualizer = useVirtualizer({
-    count: filtered.length,
+    count: visible.length,
     getScrollElement: () => scrollerEl,
     estimateSize: () => ESTIMATED_ROW_HEIGHT_PX,
     overscan: 10,
@@ -456,7 +481,7 @@ export function ArmorTable() {
   const refresh = useCallback(() => void refetch(), [refetch]);
 
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-none border border-foreground/12">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-none normal:rounded-[20px] border border-foreground/12">
       {/* Toolbar + column headers share one tinted header band. The toolbar
           sits outside the scroller so it survives horizontal scroll; thead
           stays sticky inside it. */}
@@ -470,11 +495,13 @@ export function ArmorTable() {
             setOptions={setOptions}
             archetypeOptions={archetypeOptions}
             statOptions={STAT_FILTER_OPTIONS}
-            pinnedSets={pinnedSets}
             pinnedArchetypes={pinnedArchetypes}
-            onTogglePinnedSet={togglePinnedSet}
             onTogglePinnedArchetype={togglePinnedArchetype}
-            filteredCount={filtered.length}
+            filteredCount={visible.length}
+            duplicateGroups={duplicates?.groupCount}
+            onToggleDuplicates={toggleDuplicates}
+            duplicateMatch={duplicateMatch}
+            onDuplicateMatchChange={changeDuplicateMatch}
             filtersActive={filtersActive}
             onClearFilters={clearFilters}
           />
@@ -503,7 +530,7 @@ export function ArmorTable() {
                 </tr>
               )}
               {virtualRows.map((vRow) => {
-                const row = filtered[vRow.index];
+                const row = visible[vRow.index];
                 return (
                   <ArmorRow
                     key={row.piece.instanceId}
@@ -512,6 +539,7 @@ export function ArmorTable() {
                     onRefresh={refresh}
                     provisional={armory.isProvisional}
                     dataIndex={vRow.index}
+                    group={duplicates?.groups[vRow.index]}
                     measureRef={rowVirtualizer.measureElement}
                   />
                 );
@@ -523,11 +551,13 @@ export function ArmorTable() {
               )}
             </tbody>
           </table>
-          {filtered.length === 0 && (
+          {visible.length === 0 && (
             <p className="text-muted-foreground border-t border-foreground/15 py-6 text-center text-sm">
               {rows.length === 0
                 ? "No armor pieces loaded yet."
-                : "No armor matches your filters."}
+                : filtered.length === 0
+                  ? "No armor matches your filters."
+                  : `No duplicates here: no two pieces share a ${duplicateMatchSummary(duplicateMatch)}.`}
             </p>
           )}
       </div>

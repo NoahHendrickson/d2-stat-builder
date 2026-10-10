@@ -3,9 +3,12 @@ import { Geist } from "next/font/google";
 import "./globals.css";
 import { AppShell } from "@/components/app-shell";
 import { LoadingScreen } from "@/components/loading/loading-screen";
+import { WhatsNewDialog } from "@/components/whats-new-dialog";
 import { Providers } from "@/components/providers";
-import { Analytics } from "@vercel/analytics/next";
+import { Analytics } from "@/components/analytics";
+import { SearchSelectOnRefocus } from "@/components/search-select-on-refocus";
 import { EARLY_FETCH_SCRIPT } from "@/lib/early-fetch";
+import { APP_THEME_SCRIPT, DEFAULT_APP_THEME } from "@/lib/app-theme-script";
 
 const geistSans = Geist({
   variable: "--font-sans",
@@ -26,6 +29,8 @@ export default function RootLayout({
   return (
     <html
       lang="en"
+      data-app-theme={DEFAULT_APP_THEME}
+      data-line-style="plain"
       suppressHydrationWarning
       className={geistSans.variable}
     >
@@ -36,6 +41,11 @@ export default function RootLayout({
             starts the session + profile requests before the bundle arrives
             (see early-fetch.ts). */}
         <script id="early-fetch" dangerouslySetInnerHTML={{ __html: EARLY_FETCH_SCRIPT }} />
+        <script id="app-theme" dangerouslySetInnerHTML={{ __html: APP_THEME_SCRIPT }} />
+        {/* Dev only: Figma's html-to-design capture script (Send to Figma). */}
+        {process.env.NODE_ENV === "development" && (
+          <script src="https://mcp.figma.com/mcp/html-to-design/capture.js" async />
+        )}
       </head>
       <body className="h-dvh antialiased">
         {/* The blurred scene every panel floats over. */}
@@ -43,7 +53,9 @@ export default function RootLayout({
         <Providers>
           <AppShell>{children}</AppShell>
           <LoadingScreen />
+          <WhatsNewDialog />
         </Providers>
+        <SearchSelectOnRefocus />
         <Analytics />
       </body>
     </html>

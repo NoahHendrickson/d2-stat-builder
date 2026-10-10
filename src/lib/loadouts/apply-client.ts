@@ -6,6 +6,7 @@ import { signOutForReauth } from "@/lib/auth/sign-out";
 import type { ArmoryCharacter } from "@/lib/armory/fetch";
 import { isFullyMasterworked } from "@/lib/armory/masterwork";
 import { armorPipTier, type ArmorPiece } from "@/lib/armory/normalize";
+import type { LoadoutWeapon } from "@/lib/armory/weapons";
 import type { Manifest } from "@/lib/manifest/load";
 import { ABILITY_KINDS } from "@/lib/dim/subclasses";
 import { equipItemRef, vaultedNote } from "@/lib/bungie/equip-client";
@@ -17,6 +18,8 @@ import { planLoadoutPlugs, type ApplyPlan, type SubclassPlugGroup } from "./appl
 import { subclassOptions, selectedSubclassPlugs, subclassFragmentCapacity } from "./subclass";
 import { planPiecesFromArmor } from "./plan-pieces";
 import { plugInfoFromManifest } from "./plug-info";
+import { planExoticWeaponSwap } from "./weapons";
+import { planArtifactApply } from "./artifact-apply";
 import {
   beginApplyProgress,
   finishApplyProgress,
@@ -32,6 +35,11 @@ export interface ApplyOutcome {
   plan: ApplyPlan;
   equip: ItemResult[];
   plugs: PlugResult[];
+  /**
+   * The user stopped it from the progress card. Some steps may have run (the card shows
+   * which), so gear has moved, but `equip` / `plugs` are empty: treat it as not applied.
+   */
+  cancelled?: boolean;
 }
 
 /**
@@ -44,24 +52,55 @@ export async function applySavedLoadout({
   resolved,
   character,
   armory,
+  weapons: ownedWeapons = [],
   manifest,
   queryClient,
+  batch,
 }: {
   saved: SavedLoadout;
   resolved: ResolvedLoadout;
   character: ArmoryCharacter;
   /** Every owned piece — picks same-slot spares to vault if a character's slot is full. */
   armory: Iterable<ArmorPiece>;
+  /** Every owned weapon — the same for weapon slots, plus the exotic swap (see below). */
+  weapons?: readonly LoadoutWeapon[];
   manifest: Manifest;
   queryClient: QueryClient;
+  /**
+   * Labels the progress card when this apply is one step of a run (an activity set);
+   * the run reports the result, so no outcome toast is shown here.
+   */
+  batch?: string;
 }): Promise<ApplyOutcome | null> {
   const pieces = resolved.armor.map((a) => a.piece!);
   const items: EquipItemState[] = pieces.map(equipItemRef);
   // Callers may hand over a one-shot iterator (e.g. `map.values()`); it's walked more
   // than once below.
   const owned = Array.isArray(armory) ? (armory as ArmorPiece[]) : [...armory];
-  const spares = planSpares(owned, items, character.id);
-  const pieceName = (id: string) => owned.find((p) => p.instanceId === id)?.name ?? "a piece";
+
+  // Weapons are optional, and one that has left the account is skipped (and reported)
+  // rather than holding back the armor. A legendary goes on first when the loadout's
+  // exotic would otherwise collide with the one already equipped.
+  const liveWeapons = resolved.weapons.flatMap((w) => (w.weapon ? [w.weapon] : []));
+  const exoticSwap = planExoticWeaponSwap(liveWeapons, ownedWeapons, character.id);
+  const equipWeapons = exoticSwap.swap ? [exoticSwap.swap, ...liveWeapons] : liveWeapons;
+  for (const w of equipWeapons) {
+    items.push({
+      itemInstanceId: w.instanceId,
+      itemHash: w.itemHash,
+      location: w.location,
+      characterId: w.characterId,
+      isExotic: w.isExotic,
+      slot: w.slot,
+      ...(w.postmaster ? { postmaster: true } : {}),
+    });
+  }
+
+  const spares = planSpares([...owned, ...ownedWeapons], items, character.id);
+  const pieceName = (id: string) =>
+    owned.find((p) => p.instanceId === id)?.name ??
+    ownedWeapons.find((w) => w.instanceId === id)?.name ??
+    "a piece";
 
   // Subclass: equip the loadout's subclass item if it isn't already, and plan fragments.
   const subclassItem = resolved.subclass
@@ -75,6 +114,14 @@ export async function applySavedLoadout({
       characterId: character.id,
     });
   }
+
+  // Artifact: the character's copy goes on (if it isn't already), then its perks move.
+  const nameOf = (hash: number | undefined) =>
+    manifest.def("DestinyInventoryItemDefinition", hash)?.displayProperties?.name ?? "Perk";
+  const artifactPlan = resolved.artifact
+    ? planArtifactApply(resolved.artifact, character.artifacts ?? [], character.id, manifest, nameOf)
+    : undefined;
+  if (artifactPlan?.equip) items.push(artifactPlan.equip);
 
   const groups: SubclassPlugGroup[] = [];
   if (subclassItem && resolved.subclass?.subclass) {
@@ -116,6 +163,16 @@ export async function applySavedLoadout({
         : undefined,
   });
   if (resolved.subclass && !subclassItem) plan.skipped.push("Subclass is not available on this character");
+  for (const w of resolved.weapons) {
+    if (w.missing) plan.skipped.push(`${w.name} is no longer in your inventory`);
+  }
+  if (exoticSwap.blocked) plan.skipped.push(exoticSwap.blocked);
+  if (artifactPlan) {
+    plan.plugs.push(...artifactPlan.plugs);
+    plan.inPlace.push(...artifactPlan.inPlace);
+    plan.alreadyApplied.push(...artifactPlan.inPlace.map((p) => p.label));
+    plan.skipped.push(...artifactPlan.skipped);
+  }
 
   const plugs: PlugRequest[] = plan.plugs.map(({ itemInstanceId, socketIndex, plugItemHash }) => ({
     itemInstanceId,
@@ -134,6 +191,23 @@ export async function applySavedLoadout({
       id: itemStepId(subclassItem.instanceId),
       name: subclassDef?.displayProperties?.name ?? "Subclass",
       icon: subclassDef?.displayProperties?.icon,
+      status: "pending",
+    });
+  }
+  if (artifactPlan?.equip && resolved.artifact) {
+    steps.push({
+      id: itemStepId(artifactPlan.equip.itemInstanceId),
+      name: resolved.artifact.name,
+      icon: resolved.artifact.icon,
+      status: "pending",
+    });
+  }
+  for (const w of equipWeapons) {
+    steps.push({
+      id: itemStepId(w.instanceId),
+      name: w.name,
+      icon: w.icon,
+      watermark: w.watermark,
       status: "pending",
     });
   }
@@ -167,8 +241,21 @@ export async function applySavedLoadout({
   }
 
   const showCard = steps.length > 0;
+  // Names this apply for the card's Cancel button (see apply-loadout/cancel).
+  const applyId = crypto.randomUUID();
+  const requestCancel = async () => {
+    const res = await fetch("/api/bungie/apply-loadout/cancel", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ applyId }),
+    });
+    if (!res.ok) throw new Error("Cancel failed");
+  };
   const session = showCard
-    ? beginApplyProgress({ name: saved.loadout.name, steps, skipped: plan.skipped })
+    ? beginApplyProgress(
+        { name: saved.loadout.name, batch, steps, skipped: plan.skipped },
+        requestCancel,
+      )
     : 0;
 
   const failCard = (message: string) => {
@@ -182,7 +269,7 @@ export async function applySavedLoadout({
     res = await fetch("/api/bungie/apply-loadout", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ characterId: character.id, items, plugs, spares }),
+      body: JSON.stringify({ characterId: character.id, items, plugs, spares, applyId }),
     });
   } catch {
     failCard("Apply failed");
@@ -206,6 +293,7 @@ export async function applySavedLoadout({
   let plugsOut: PlugResult[] = [];
   let streamError: string | undefined;
   let gotDone = false;
+  let cancelled = false;
   try {
     for await (const line of readNdjsonLines(res.body)) {
       let event = parseApplyStreamEvent(line);
@@ -220,6 +308,8 @@ export async function applySavedLoadout({
         equip = event.equip;
         plugsOut = event.plugs;
         gotDone = true;
+      } else if (event.type === "cancelled") {
+        cancelled = true;
       } else if (event.type === "error") {
         streamError = event.error;
         if (event.reauth) void signOutForReauth(queryClient);
@@ -230,6 +320,11 @@ export async function applySavedLoadout({
     // be partially changed — say so rather than leave the card spinning.
     streamError = "Connection lost while applying — refresh your gear to see what changed";
     if (showCard) patchApplyProgress(session, { type: "error", error: streamError });
+  }
+
+  if (cancelled) {
+    if (showCard) finishApplyProgress(session, "cancelled");
+    return { plan, equip: [], plugs: [], cancelled: true };
   }
 
   if (streamError || !gotDone) {
@@ -245,7 +340,7 @@ export async function applySavedLoadout({
 
   const outcome: ApplyOutcome = { plan, equip, plugs: plugsOut };
   if (showCard) finishApplyProgress(session, finishFromResults(equip, plugsOut));
-  else toastOutcome(outcome, pieces, character, pieceName);
+  else if (!batch) toastOutcome(outcome, [...pieces, ...equipWeapons], character, pieceName);
   return outcome;
 }
 

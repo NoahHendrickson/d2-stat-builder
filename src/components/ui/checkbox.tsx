@@ -18,14 +18,14 @@ function Checkbox({
       data-slot="checkbox"
       data-size={size}
       className={cn(
-        "peer group/checkbox relative flex shrink-0 items-center justify-center rounded-none d2-line d2-hover-ring bg-lifted transition-[background-color,border-color,color,box-shadow] outline-none group-has-disabled/field:opacity-40 after:absolute after:-inset-x-3 after:-inset-y-2 hover:[--line-alpha:1.6] hover:not-data-checked:bg-foreground/8 focus-visible:[--line-alpha:2.6] disabled:cursor-not-allowed disabled:opacity-40 aria-invalid:border-destructive data-[size=default]:size-4 data-[size=lg]:size-5",
+        "peer group/checkbox relative flex shrink-0 items-center justify-center rounded-none normal:rounded-[4px] d2-line d2-hover-ring bg-lifted transition-[background-color,border-color,color,box-shadow,outline-offset,--line-alpha] outline-none group-has-disabled/field:opacity-40 after:absolute after:-inset-x-3 after:-inset-y-2 hover:[--line-alpha:1.6] hover:not-data-checked:bg-foreground/8 focus-visible:[--line-alpha:2.6] disabled:cursor-not-allowed disabled:opacity-40 aria-invalid:border-destructive data-[size=default]:size-4 data-[size=lg]:size-5",
         className
       )}
       {...props}
     >
       <CheckboxPrimitive.Indicator
         data-slot="checkbox-indicator"
-        className="grid place-content-center text-current transition-none"
+        className="grid place-content-center text-current transition-[opacity,scale] duration-150 ease-[cubic-bezier(0.22,1,0.36,1)] data-starting-style:scale-50 data-starting-style:opacity-0 data-ending-style:scale-50 data-ending-style:opacity-0 motion-reduce:transition-none"
       >
         <CheckboxCheckIcon className="group-data-[size=lg]/checkbox:size-5" />
       </CheckboxPrimitive.Indicator>

@@ -6,14 +6,15 @@ import { Toast as ToastPrimitive } from "@base-ui/react/toast";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { HugeiconsIcon } from "@hugeicons/react";
 import {
-  XIcon,
-  CheckCircleIcon,
-  InfoIcon,
-  WarningIcon,
-  XCircleIcon,
-  SpinnerIcon,
-} from "@phosphor-icons/react";
+  Alert02Icon,
+  Cancel01Icon,
+  CancelCircleIcon,
+  CheckmarkCircle02Icon,
+  InformationCircleIcon,
+  Loading03Icon,
+} from "@hugeicons/core-free-icons";
 
 const toast = ToastPrimitive.createToastManager();
 
@@ -30,7 +31,7 @@ function ToastViewport({ className, ...props }: ToastPrimitive.Viewport.Props) {
     <ToastPrimitive.Viewport
       data-slot="toast-viewport"
       className={cn(
-        "pointer-events-none fixed inset-x-4 bottom-4 z-50 mx-auto w-auto max-w-sm outline-none sm:right-4 sm:left-auto sm:mx-0 sm:w-full",
+        "pointer-events-none fixed inset-x-4 bottom-4 z-50 mx-auto w-auto max-w-sm outline-none",
         className,
       )}
       {...props}
@@ -43,7 +44,7 @@ function Toast({ className, ...props }: ToastPrimitive.Root.Props) {
     <ToastPrimitive.Root
       data-slot="toast"
       className={cn(
-        "group/toast pointer-events-auto absolute right-0 bottom-0 z-[calc(1000-var(--toast-index))] d2-slate w-full origin-bottom rounded-none border border-foreground/8 text-popover-foreground shadow-[0_8px_24px_rgb(0_0_0/0.45)] will-change-transform outline-none select-none focus-visible:border-outline-strong",
+        "group/toast pointer-events-auto absolute right-0 bottom-0 z-[calc(1000-var(--toast-index))] d2-slate w-full origin-bottom rounded-none normal:rounded-[12px] border border-foreground/8 normal:border-foreground/12 text-popover-foreground shadow-[0_8px_24px_rgb(0_0_0/0.45)] will-change-transform outline-none select-none focus-visible:border-outline-strong",
         "[--gap:0.75rem] [--height:var(--toast-frontmost-height,var(--toast-height))] [--offset-y:calc(var(--toast-offset-y)*-1+calc(var(--toast-index)*var(--gap)*-1)+var(--toast-swipe-movement-y))] [--peek:0.75rem] [--scale:calc(max(0,1-(var(--toast-index)*0.1)))] [--shrink:calc(1-var(--scale))]",
         "h-(--height) [transform:translateX(var(--toast-swipe-movement-x))_translateY(calc(var(--toast-swipe-movement-y)-(var(--toast-index)*var(--peek))-(var(--shrink)*var(--height))))_scale(var(--scale))] [transition:transform_500ms_cubic-bezier(0.22,1,0.36,1),opacity_500ms,height_150ms]",
         "after:absolute after:top-full after:left-0 after:h-[calc(var(--gap)+1px)] after:w-full after:content-['']",
@@ -134,7 +135,7 @@ function ToastClose({
         )}
         {...props}
       >
-        {children ?? <XIcon aria-hidden="true" />}
+        {children ?? <HugeiconsIcon icon={Cancel01Icon} aria-hidden="true" />}
       </ToastPrimitive.Close>
     </TooltipLabel>
   );
@@ -144,23 +145,23 @@ function ToastIcon({ type }: { type: string | undefined }) {
   let icon: React.ReactNode = null;
 
   if (type === "success") {
-    icon = <CheckCircleIcon className="text-positive" aria-hidden="true" />;
+    icon = <HugeiconsIcon icon={CheckmarkCircle02Icon} className="text-positive" aria-hidden="true" />;
   }
 
   if (type === "info") {
-    icon = <InfoIcon aria-hidden="true" />;
+    icon = <HugeiconsIcon icon={InformationCircleIcon} aria-hidden="true" />;
   }
 
   if (type === "warning") {
-    icon = <WarningIcon className="text-warning" aria-hidden="true" />;
+    icon = <HugeiconsIcon icon={Alert02Icon} className="text-warning" aria-hidden="true" />;
   }
 
   if (type === "error") {
-    icon = <XCircleIcon className="text-destructive" aria-hidden="true" />;
+    icon = <HugeiconsIcon icon={CancelCircleIcon} className="text-destructive" aria-hidden="true" />;
   }
 
   if (type === "loading") {
-    icon = <SpinnerIcon className="animate-spin" aria-hidden="true" />;
+    icon = <HugeiconsIcon icon={Loading03Icon} className="animate-spin" aria-hidden="true" />;
   }
 
   if (!icon) {

@@ -9,6 +9,8 @@ import { nameMatchesSearch, tokenizeSearchQuery } from "./search";
 export interface FilterOption<V> {
   value: V;
   label: string;
+  /** Shown muted after the label (e.g. pieces owned of a set); never searched. */
+  count?: number;
 }
 
 /** Toggle membership; existing pins keep their order, new pins append last. */

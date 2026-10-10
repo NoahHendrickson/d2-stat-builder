@@ -3,7 +3,7 @@ import type { Manifest } from "../manifest/load";
 import type { DimLoadoutItem } from "../dim/loadout-link";
 import type { SavedLoadoutData } from "./types";
 import { buildDimLoadoutUrl } from "../dim/loadout-link";
-import { buildShareUrl, parseShareParam } from "./share";
+import { buildShareUrl, parseShareParam, shareParamFromHash } from "./share";
 import { resolveLoadout } from "./resolve";
 import { STAT_HASHES } from "../armory/stats";
 import { ABILITY_KINDS, SUPER_SOCKET_CATEGORY_HASH } from "../dim/subclasses";
@@ -130,7 +130,7 @@ test("each ability is optional, single-choice, class-checked, and survives shari
   expect(subclassSelectionValid({ manifest, classType: 0 }, withSubclassPlugs(carrier, options.abilities.melee, [432]))).toBe(false);
   const data = withLoadoutSubclass(base(), carrier, manifest);
   const saved = { ...data, id: "saved", createdAt: 1, updatedAt: 2 };
-  const imported = parseShareParam(new URL(buildShareUrl("https://example.com", saved)).searchParams.get("import"));
+  const imported = parseShareParam(shareParamFromHash(new URL(buildShareUrl("https://example.com", saved)).hash));
   expect(imported?.loadout.equipped).toEqual(data.loadout.equipped);
   const resolved = resolveLoadout(data.loadout, new Map(), manifest);
   expect(resolved.subclass?.abilityHashes).toEqual({ classAbility: 402, grenade: 432 });
@@ -187,7 +187,7 @@ test("aspects and fragments survive save parsing, sharing, DIM export, and displ
   );
   const data = withLoadoutSubclass(base(), carrier, manifest);
   const saved = { ...data, id: "saved", createdAt: 1, updatedAt: 2 };
-  const imported = parseShareParam(new URL(buildShareUrl("https://example.com", saved)).searchParams.get("import"));
+  const imported = parseShareParam(shareParamFromHash(new URL(buildShareUrl("https://example.com", saved)).hash));
   expect(imported?.loadout.equipped).toEqual(data.loadout.equipped);
   expect(JSON.parse(new URL(buildDimLoadoutUrl(data.loadout)).searchParams.get("loadout")!).equipped).toEqual(data.loadout.equipped);
   const resolved = resolveLoadout(data.loadout, new Map(), manifest);

@@ -2,7 +2,8 @@
 
 import { TooltipLabel } from "@/components/ui/tooltip";
 import { useState, type DragEvent } from "react";
-import { CaretDown, CaretUp, DotsSixVertical } from "@phosphor-icons/react";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { ArrowDown01Icon, ArrowUp01Icon, DragDropVerticalIcon } from "@hugeicons/core-free-icons";
 import { cn } from "@/lib/utils";
 
 /**
@@ -89,12 +90,12 @@ export function CustomOrderList({
             onDrop={(e) => onDrop(e, i)}
             onDragEnd={clearDrag}
             className={cn(
-              "group/row hover:bg-accent flex h-8 cursor-grab items-center gap-1.5 rounded-none pr-0.5 pl-1.5 text-sm active:cursor-grabbing",
+              "group/row hover:bg-accent flex h-8 cursor-grab items-center gap-1.5 rounded-none normal:rounded-[6px] pr-0.5 pl-1.5 text-sm active:cursor-grabbing",
               dragFrom === i && "bg-accent opacity-60",
             )}
           >
-            <DotsSixVertical
-              weight="bold"
+            <HugeiconsIcon icon={DragDropVerticalIcon}
+              strokeWidth={2}
               className="text-muted-foreground size-3.5 shrink-0"
               aria-hidden
             />
@@ -109,9 +110,9 @@ export function CustomOrderList({
                   aria-label={`Move ${value} up`}
                   disabled={i === 0}
                   onClick={() => onMove(i, i - 1)}
-                  className="text-muted-foreground hover:text-foreground flex size-6 cursor-pointer items-center justify-center rounded-none outline-none focus-visible:ring-1 focus-visible:ring-outline-strong disabled:pointer-events-none disabled:opacity-30"
+                  className="text-muted-foreground hover:text-foreground flex size-6 cursor-pointer items-center justify-center rounded-none normal:rounded-[6px] outline-none focus-visible:ring-1 focus-visible:ring-outline-strong disabled:pointer-events-none disabled:opacity-30"
                 >
-                  <CaretUp weight="bold" className="size-3.5" aria-hidden />
+                  <HugeiconsIcon icon={ArrowUp01Icon} strokeWidth={2} className="size-3.5" aria-hidden />
                 </button>
               </TooltipLabel>
               <TooltipLabel label={`Move ${value} down`}>
@@ -120,9 +121,9 @@ export function CustomOrderList({
                   aria-label={`Move ${value} down`}
                   disabled={i === values.length - 1}
                   onClick={() => onMove(i, i + 1)}
-                  className="text-muted-foreground hover:text-foreground flex size-6 cursor-pointer items-center justify-center rounded-none outline-none focus-visible:ring-1 focus-visible:ring-outline-strong disabled:pointer-events-none disabled:opacity-30"
+                  className="text-muted-foreground hover:text-foreground flex size-6 cursor-pointer items-center justify-center rounded-none normal:rounded-[6px] outline-none focus-visible:ring-1 focus-visible:ring-outline-strong disabled:pointer-events-none disabled:opacity-30"
                 >
-                  <CaretDown weight="bold" className="size-3.5" aria-hidden />
+                  <HugeiconsIcon icon={ArrowDown01Icon} strokeWidth={2} className="size-3.5" aria-hidden />
                 </button>
               </TooltipLabel>
             </span>

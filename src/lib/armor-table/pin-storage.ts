@@ -1,8 +1,8 @@
-// Persist the armor table's pinned filter options (Sets + Archetypes) to
-// localStorage, in pin order. Same best-effort pattern as filter-storage.ts:
-// malformed or stale data falls back to defaults, I/O never throws. Kept
-// separate from the builder's pinnedSets — those prioritize the set-bonus
-// picker; these order a filter dropdown.
+// Persist the armor table's pinned Archetypes to localStorage, in pin order. Same
+// best-effort pattern as filter-storage.ts: malformed or stale data falls back to
+// defaults, I/O never throws. Set pins moved to the account-wide `pinnedSets`
+// setting (components/set-menu.tsx); `sets` is only read once to carry old pins
+// over, and written back empty.
 //
 // Runtime imports are relative (not `@/`) — the vitest runner has no `@/` alias.
 
@@ -11,7 +11,7 @@ export const PINS_SCHEMA_VERSION = 1;
 
 export interface PersistedTablePins {
   version: number;
-  /** Set hashes pinned in the Sets filter, in pin order. */
+  /** Legacy: set pins from before they were shared. Read once, then written empty. */
   sets: number[];
   /** Archetype names pinned in the Archetypes filter, in pin order. */
   archetypes: string[];

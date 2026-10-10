@@ -1,7 +1,8 @@
 "use client";
 
 import { TooltipLabel } from "@/components/ui/tooltip";
-import { ArrowDown, ArrowUp } from "@phosphor-icons/react";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { ArrowDown02Icon, ArrowUp02Icon } from "@hugeicons/core-free-icons";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -26,7 +27,7 @@ export function LoadoutSortControls({
   sort: LoadoutSortState;
   onChange: (next: LoadoutSortState) => void;
 }) {
-  const DirectionIcon = sort.asc ? ArrowUp : ArrowDown;
+  const directionIcon = sort.asc ? ArrowUp02Icon : ArrowDown02Icon;
   const directionLabel = sort.asc ? "Low to high" : "High to low";
   const triggerLabel = loadoutSortLabel(sort.key);
 
@@ -35,11 +36,11 @@ export function LoadoutSortControls({
       <TooltipLabel label={`Sort by ${triggerLabel}, ${directionLabel}`}>
         <DropdownMenuTrigger
           aria-label={`Sort by ${triggerLabel}, ${directionLabel}`}
-          className="inline-flex h-8 w-fit shrink-0 cursor-pointer d2-line items-center gap-1.5 rounded-none bg-lifted pr-2 pl-2.5 text-sm whitespace-nowrap transition-colors outline-none select-none hover:[--line-alpha:1.6] focus-visible:[--line-alpha:2.6] data-popup-open:[--line-alpha:2.6]"
+          className="inline-flex h-8 w-fit shrink-0 cursor-pointer d2-line items-center gap-1.5 rounded-none normal:rounded-[10px] bg-lifted pr-2 pl-2.5 text-sm whitespace-nowrap transition-[color,background-color,--line-alpha] outline-none select-none hover:[--line-alpha:1.6] focus-visible:[--line-alpha:2.6] data-popup-open:[--line-alpha:2.6]"
         >
           <span className="text-muted-foreground">Sort:</span>
           <span className="truncate">{triggerLabel}</span>
-          <DirectionIcon className="size-4 shrink-0" aria-hidden />
+          <HugeiconsIcon icon={directionIcon} className="size-4 shrink-0" aria-hidden />
         </DropdownMenuTrigger>
       </TooltipLabel>
       <DropdownMenuContent
@@ -70,8 +71,8 @@ export function LoadoutSortControls({
                   className="size-7 justify-center gap-0 p-0"
                   onClick={() => onChange({ key: opt.key, asc: true })}
                 >
-                  <ArrowUp
-                    weight="bold"
+                  <HugeiconsIcon icon={ArrowUp02Icon}
+                    strokeWidth={2}
                     className={cn(
                       "size-4",
                       active && sort.asc
@@ -90,8 +91,8 @@ export function LoadoutSortControls({
                   className="size-7 justify-center gap-0 p-0"
                   onClick={() => onChange({ key: opt.key, asc: false })}
                 >
-                  <ArrowDown
-                    weight="bold"
+                  <HugeiconsIcon icon={ArrowDown02Icon}
+                    strokeWidth={2}
                     className={cn(
                       "size-4",
                       active && !sort.asc

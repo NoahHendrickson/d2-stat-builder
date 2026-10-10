@@ -58,17 +58,13 @@ import { FragmentPicker } from "@/components/builder/fragment-picker";
 import { ClassEmblemTabs } from "@/components/builder/class-emblem-tabs";
 import { SettingRow } from "@/components/builder/setting-row";
 import { PowerRangeControls } from "@/components/builder/power-range-controls";
+import { useBuilderSearchInputs } from "@/components/builder/use-builder-search-inputs";
 import { BuildsSurface } from "@/components/builder/builds-surface";
 import type { BuildsColumnContentProps } from "@/components/builder/builds-column-content";
 import { SetBonusesSection } from "@/components/builder/set-bonuses-section";
-import { dreamInputForBuild, type DreamSettings } from "@/lib/optimizer/dream-input";
-import { armorToOptimizerPiece } from "@/lib/optimizer/from-armory";
+import { dreamInputForBuild } from "@/lib/optimizer/dream-input";
 
-import type {
-  ExoticConstraint,
-  OptimizerInput,
-  OptimizerLoadout,
-} from "@/lib/optimizer/types";
+import type { OptimizerLoadout } from "@/lib/optimizer/types";
 import type { DreamInput } from "@/lib/optimizer/dream";
 import {
   DEFAULT_POWER_RANGE,
@@ -98,8 +94,8 @@ import { useApplyCurrentFragments } from "@/lib/armory/use-apply-current-fragmen
 import { useAutoSearch } from "@/lib/optimizer/use-auto-search";
 import { useOptimizerWarmup } from "@/lib/optimizer/use-optimizer-warmup";
 import { MAX_SET_BONUSES, type BuilderSnapshot, type QueryOrigin } from "@/lib/loadouts/types";
+import { togglePinnedSet, usePinnedSets } from "@/lib/settings/pinned-sets";
 
-const MAX_MODS = 5;
 // The Dream build modal is opened by few sessions; keep it out of the initial bundle.
 const DreamBuildDialog = dynamic(
   () => import("@/components/builder/dream-build-dialog").then((m) => m.DreamBuildDialog),
@@ -156,9 +152,8 @@ export function BuilderPanel({
   const [setReqs, setSetReqs] = useState<Record<number, 2 | 4>>(
     () => initialSaved?.setReqs ?? {},
   );
-  const [pinnedSets, setPinnedSets] = useState<number[]>(
-    () => initialSaved?.pinnedSets ?? [],
-  );
+  // Pins follow the account between computers (synced-settings.ts), not the selections.
+  const pinnedSets = usePinnedSets();
   const [setFilters, setSetFilters] = useState<SetFilters>(
     () => initialSaved?.setFilters ?? DEFAULT_SET_FILTERS,
   );
@@ -638,7 +633,6 @@ export function BuilderPanel({
       setTargets(saved.targets);
       setMajor(saved.major);
       setSetReqs(saved.setReqs);
-      setPinnedSets(saved.pinnedSets);
       setSetFilters(saved.setFilters);
       setUseBalancedTuning(saved.balancedTuning);
       setUseLegacyExotics(saved.legacyExotics);
@@ -673,7 +667,6 @@ export function BuilderPanel({
         targets,
         major,
         setReqs: persistedSetReqs,
-        pinnedSets,
         setFilters,
         exoticName:
           selectedExotic === null
@@ -697,7 +690,6 @@ export function BuilderPanel({
     targets,
     major,
     persistedSetReqs,
-    pinnedSets,
     setFilters,
     selectedExotic,
     exotics,
@@ -771,35 +763,19 @@ export function BuilderPanel({
     return shown.origin;
   }, [getSnapshot]);
 
-  // The builder's search settings (everything but pieces, targets and the exotic) —
-  // shared by the regular search and the dream search.
-  const searchSettings = useMemo(
-    (): DreamSettings => ({
-      mods: { major, minor: MAX_MODS - major },
-      setRequirements,
-      allowTuning: true,
-      allowBalancedTuning: useBalancedTuning,
-      fragmentBonus,
-      powerRange: toOptimizerPowerRange(powerRange),
-    }),
-    [major, setRequirements, useBalancedTuning, fragmentBonus, powerRange],
-  );
-
-  // The regular search input over owned pieces.
-  const optimizerInput = useMemo((): OptimizerInput | null => {
-    if (classType === null) return null;
-    const exotic: ExoticConstraint =
-      selectedExotic === null
-        ? { mode: "any" }
-        : { mode: "specific", hashes: exotics[selectedExotic]?.hashes ?? [] };
-    return {
-      ...searchSettings,
-      slots: slotPieces.map((pieces) => pieces.map(armorToOptimizerPiece)),
-      minimums: targets,
-      exotic,
-      maxResults: 200,
-    };
-  }, [slotPieces, classType, targets, selectedExotic, exotics, searchSettings]);
+  // The search settings, the regular search input, and the weapon-mix scan.
+  const { searchSettings, optimizerInput, weaponPlan } = useBuilderSearchInputs({
+    classType,
+    slotPieces,
+    targets,
+    major,
+    setRequirements,
+    useBalancedTuning,
+    fragmentBonus,
+    powerRange,
+    selectedExotic,
+    exotics,
+  });
 
   const runOptimizer = useCallback(() => {
     if (!optimizerInput) return;
@@ -943,13 +919,6 @@ export function BuilderPanel({
   );
 
   const onMajorChange = useCallback((v: string) => setMajor(Number(v)), []);
-  const togglePin = useCallback((setHash: number) => {
-    setPinnedSets((prev) =>
-      prev.includes(setHash)
-        ? prev.filter((h) => h !== setHash)
-        : [...prev, setHash],
-    );
-  }, []);
 
   const refetchArmory = armoryQuery.refetch;
   const onEquipped = useCallback(() => {
@@ -1085,7 +1054,7 @@ export function BuilderPanel({
                 setReqs={setReqs}
                 onToggleSet={toggleSet}
                 pinnedSets={pinnedSets}
-                onTogglePin={togglePin}
+                onTogglePin={togglePinnedSet}
                 setFilters={setFilters}
                 onSetFilterChange={setSetFilter}
                 pieces={pool}
@@ -1141,6 +1110,7 @@ export function BuilderPanel({
                 value={powerRange}
                 onChange={onPowerRangeChange}
                 slotPieces={powerSlotPieces}
+                weaponPlan={weaponPlan}
                 dreamersItemName={dreamersClassItemName(classType ?? 2)}
               />
             </Section>
@@ -1203,7 +1173,7 @@ function Section({
   return (
     <section
       className={cn(
-        "d2-card-frame relative flex flex-col gap-3 rounded-none p-3 [--card-line-width:1.5px] hover:[--line-alpha:1.6]",
+        "d2-card-frame relative flex flex-col gap-3 rounded-none p-3 transition-[--line-alpha] duration-200 hover:[--line-alpha:1.6] normal:gap-4 normal:p-6 normal:hover:[--line-alpha:1]",
         className,
       )}
     >

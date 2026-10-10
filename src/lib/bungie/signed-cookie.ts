@@ -55,6 +55,23 @@ export async function encodeSigned(value: unknown, secret: string): Promise<stri
 }
 
 /**
+ * The payload of a value shaped like `encodeSigned` output, WITHOUT checking the
+ * signature. Only for callers that confirm the contents some other way (e.g. with
+ * Bungie) before trusting them.
+ */
+export function readUnverified<T = unknown>(raw: string | undefined): T | null {
+  if (!raw) return null;
+  const dot = raw.lastIndexOf(".");
+  const payload = fromBase64Url(dot > 0 ? raw.slice(0, dot) : raw);
+  if (!payload) return null;
+  try {
+    return JSON.parse(new TextDecoder().decode(payload)) as T;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Verify + parse a value produced by `encodeSigned`. Returns null for anything that
  * isn't a well-formed, correctly signed payload (including legacy unsigned cookies).
  */

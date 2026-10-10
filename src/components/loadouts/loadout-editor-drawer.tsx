@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  memo,
   useCallback,
   useDeferredValue,
   useId,
@@ -12,13 +11,9 @@ import {
   type FormEvent,
   type MutableRefObject,
 } from "react";
-import { Tooltip as BaseTooltip } from "@base-ui/react/tooltip";
-import Image from "next/image";
-import { CircleNotch, Check, X } from "@phosphor-icons/react";
-import { armorPipTier, type ArmorPiece, type ArmorSocket } from "@/lib/armory/normalize";
-import { isFullyMasterworked } from "@/lib/armory/masterwork";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { Cancel01Icon, Loading03Icon, Tick02Icon } from "@hugeicons/core-free-icons";
 import {
-  SLOT_LABELS,
   STAT_DISPLAY_ORDER,
   STAT_LABELS,
   STAT_ORDER,
@@ -26,15 +21,8 @@ import {
 import { StatGlyph } from "@/components/stat-glyph";
 import { statIconsFromManifest } from "@/lib/manifest/stat-icons";
 import { sumEditorStats } from "@/lib/loadouts/editor-stats";
-import { clearsLeftover } from "@/lib/loadouts/energy";
-import { BUNGIE_IMAGE_BASE } from "@/lib/bungie/constants";
-import { ArmorThumb } from "@/components/armor-thumb";
-import { PowerValue } from "@/components/power-value";
-import type { ModOption, ModOptionCatalog } from "@/lib/loadouts/mod-options";
+import type { ModOption } from "@/lib/loadouts/mod-options";
 import {
-  chosenCount,
-  cycleModStack,
-  toggleExclusiveMod,
   pieceEnergyUsed,
   placementWithStatMods,
   slotStatMod,
@@ -62,15 +50,29 @@ import {
   DrawerTitle,
 } from "@/components/ui/drawer";
 import { Input } from "@/components/ui/input";
+import { TooltipLabel } from "@/components/ui/tooltip";
 import {
-  TooltipContent,
-  TooltipLabel,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+  EDITOR_COLUMN_CLASS,
+  ItemIcon,
+  PiecePanel,
+  type PieceChosenUpdate,
+} from "@/components/loadouts/loadout-piece-editor";
 import {
   LoadoutSubclassEditor,
   type SubclassSection,
 } from "@/components/loadouts/loadout-subclass-editor";
+import {
+  LoadoutWeaponsEditor,
+  initialWeaponPicks,
+  weaponPickRefs,
+  type WeaponsSection,
+} from "@/components/loadouts/loadout-weapons-editor";
+import {
+  LoadoutArtifactEditor,
+  artifactPickRef,
+  initialArtifactPick,
+  type ArtifactSection,
+} from "@/components/loadouts/loadout-artifact-editor";
 import type { DimLoadoutItem } from "@/lib/dim/loadout-link";
 import type { EditorTotals } from "@/lib/loadouts/editor-stats";
 import { cn } from "@/lib/utils";
@@ -83,19 +85,16 @@ export interface LoadoutDetailsValues {
   /** Current wishlist after explicit stat-mod replacements/removals. */
   desiredStatMods?: number[];
   subclass?: DimLoadoutItem | null;
+  /** Present only when a `weapons` section was shown; empty means armor-only. */
+  weapons?: DimLoadoutItem[];
+  /** Present only when an `artifact` section was shown; null means no artifact. */
+  artifact?: DimLoadoutItem | null;
   /**
    * Armor + placed mods + fragments as the header showed them. Present only when every
    * piece was known (a `mods` section), so the total is complete.
    */
   stats?: EditorTotals;
 }
-
-const KIND_LABEL: Record<ArmorSocket["kind"], string> = {
-  general: "Stat mod",
-  other: "Armor mod",
-  tuning: "Tuning",
-  artifice: "Artifice",
-};
 
 const NO_FRAGMENTS: number[] = [];
 const STAT_COLS = STAT_DISPLAY_ORDER.map((key) => ({
@@ -111,67 +110,13 @@ interface EditorProps {
   initialNotes?: string;
   mods?: ModsSection;
   subclass?: SubclassSection;
+  weapons?: WeaponsSection;
+  artifact?: ArtifactSection;
   busy?: boolean;
   /** Piece/subclass grids; deferred so the header can paint during the slide. */
   showGrids?: boolean;
   onSubmit: (values: LoadoutDetailsValues) => void;
   onCancel: () => void;
-}
-
-/** A Bungie icon, or a muted square when the item has none. */
-function ItemIcon({
-  icon,
-  watermark,
-  className,
-  size = 32,
-}: {
-  icon?: string;
-  watermark?: string;
-  className?: string;
-  size?: 24 | 32 | 40 | 48 | 64;
-}) {
-  const sizeClass =
-    size === 64
-      ? "size-16"
-      : size === 48
-        ? "size-12"
-        : size === 40
-          ? "size-10"
-          : size === 24
-            ? "size-6"
-            : "size-8";
-  return (
-    <span
-      className={cn(
-        "relative inline-block shrink-0 overflow-hidden rounded-none",
-        sizeClass,
-        className,
-      )}
-    >
-      {icon ? (
-        <Image
-          src={`${BUNGIE_IMAGE_BASE}${icon}`}
-          alt=""
-          width={size}
-          height={size}
-          className="size-full"
-          unoptimized
-        />
-      ) : (
-        <span className="bg-muted block size-full" aria-hidden />
-      )}
-      {watermark && (
-        <Image
-          src={`${BUNGIE_IMAGE_BASE}${watermark}`}
-          alt=""
-          width={size}
-          height={size}
-          className="absolute inset-0 size-full"
-          unoptimized
-        />
-      )}
-    </span>
-  );
 }
 
 /**
@@ -226,343 +171,15 @@ function StatModChip({
           aria-hidden
         >
           {slotted ? (
-            <Check weight="bold" className="size-2.5" />
+            <HugeiconsIcon icon={Tick02Icon} strokeWidth={2} className="size-2.5" />
           ) : (
-            <X weight="bold" className="size-2.5" />
+            <HugeiconsIcon icon={Cancel01Icon} strokeWidth={2} className="size-2.5" />
           )}
         </span>
       </button>
     </TooltipLabel>
   );
 }
-
-/** Square piece art: watermark when supplied, pip rail from gear tier, gold frame when fully masterworked. */
-function PieceThumb({ piece }: { piece: ArmorPiece }) {
-  return (
-    <ArmorThumb
-      icon={piece.icon}
-      watermark={piece.watermark}
-      size={64}
-      masterworked={isFullyMasterworked(piece)}
-      gearTier={armorPipTier(piece)}
-    />
-  );
-}
-
-/**
- * One 56px mod cell with a 48px icon (Figma 22:8202): chosen = emphatic outline on a
- * 6% emphatic fill; blocked (no socket or energy left for it) = 40% and not clickable.
- * `count` > 1 shows how many copies are stacked on the piece.: chosen = emphatic outline on a 6% emphatic fill.
- * Once something in the group is chosen the other mods drop to 40% so the picks stand
- * out; an untouched group stays at full strength. `count` > 1 shows how many copies
- * are stacked on the piece. `problem` marks a loadout mod the planner couldn't place
- * (red badge).
- */
-const ModCell = memo(function ModCell({
-  option,
-  count,
-  blocked,
-  problem,
-  onPick,
-  tooltipHandle,
-}: {
-  option: ModOption;
-  count: number;
-  /** No socket or energy left for this mod (clicking a chosen one still clears it). */
-  blocked: boolean;
-  problem?: string;
-  onPick: (option: ModOption) => void;
-  tooltipHandle: BaseTooltip.Handle<string>;
-}) {
-  const chosen = count > 0;
-  const cost = option.cost > 0 ? `${option.cost} energy` : undefined;
-  const state = chosen
-    ? count > 1
-      ? `${count} equipped`
-      : "equipped"
-    : blocked && !problem
-      ? "won't fit"
-      : undefined;
-  const label = [option.name, cost, state, problem && `not placed: ${problem}`]
-    .filter(Boolean)
-    .join(" · ");
-  return (
-    <TooltipTrigger
-      handle={tooltipHandle}
-      payload={option.name}
-      render={
-        <button
-          type="button"
-          aria-pressed={chosen}
-          aria-label={label}
-          aria-disabled={!chosen && blocked}
-          onClick={() => onPick(option)}
-          className={cn(
-            "relative flex size-14 shrink-0 items-center justify-center rounded-none border p-1 transition-[opacity,border-color,background-color,box-shadow] outline-none focus-visible:d2-tile-selected",
-            chosen
-              ? "border-foreground bg-foreground/10 cursor-pointer d2-tile-selected"
-              : blocked
-                ? // Flagged mods stay at full strength so the badge reads.
-                  cn("cursor-not-allowed border-foreground/20", !problem && "opacity-40")
-                : "hover:border-foreground/70 hover:bg-foreground/6 focus-visible:bg-foreground/6 cursor-pointer border-foreground/25",
-          )}
-        >
-          <ItemIcon icon={option.icon} size={48} className="rounded-none" />
-          {count > 1 && (
-            <span className="bg-foreground text-background absolute -top-1 -right-1 rounded-none px-1 text-[9px] leading-3 font-medium tabular-nums">
-              ×{count}
-            </span>
-          )}
-          {problem && (
-            <span
-              className="bg-destructive absolute -top-1 -left-1 flex size-3.5 items-center justify-center rounded-none text-[9px] leading-none font-bold text-white"
-              aria-hidden
-            >
-              !
-            </span>
-          )}
-        </button>
-      }
-    />
-  );
-});
-
-/**
- * One grid for every socket of a kind on the piece ("Armor mods" = the three helmet
- * sockets). Armor mods stack another copy into the next free socket; at the limit the
- * click clears that mod. Stat and tuning are exclusive — clicking a different option
- * replaces the current pick. Options are those the sockets' plug set lists, so only
- * mods that fit this slot appear.
- */
-function KindGrid({
-  piece,
-  sockets,
-  catalog,
-  insertable,
-  chosen,
-  energyLeft,
-  costOf,
-  problems,
-  onChange,
-}: {
-  piece: ArmorPiece;
-  sockets: ArmorSocket[];
-  catalog: ModOptionCatalog;
-  insertable?: ReadonlySet<number>;
-  chosen: Record<number, number> | undefined;
-  /** Armor energy the piece has left with the current choices (undefined = unknown). */
-  energyLeft: number | undefined;
-  costOf: (hash: number) => number;
-  /** Mod name → why the planner couldn't place it (see `unplacedProblems`). */
-  problems: ReadonlyMap<number | string, string>;
-  /** Functional so back-to-back clicks each build on the latest choices. */
-  onChange: (update: (chosen: Record<number, number> | undefined) => Record<number, number>) => void;
-}) {
-  const kind = sockets[0].kind;
-  const options = useMemo(() => {
-    // Same-kind sockets share a plug set; merge anyway in case one differs.
-    const seen = new Set<number>();
-    const out: ModOption[] = [];
-    for (const socket of sockets) {
-      for (const o of catalog.optionsFor(piece, socket, insertable)) {
-        if (seen.has(o.hash)) continue;
-        seen.add(o.hash);
-        out.push(o);
-      }
-    }
-    return out.sort((a, b) => a.cost - b.cost || a.name.localeCompare(b.name));
-  }, [catalog, piece, sockets, insertable]);
-  const used = sockets.filter((s) => chosen?.[s.index] !== undefined).length;
-  const full = used >= sockets.length;
-  // Stat / tuning: one pick per group; a new click replaces it. Armor mods stack.
-  const exclusive = kind === "general" || kind === "tuning";
-  // Replacing an exclusive pick frees its loadout cost. Stacking fills an empty
-  // socket, so vault plugs don't credit anything.
-  const occupied = sockets.find((s) => chosen?.[s.index] !== undefined);
-  const outgoing = exclusive && occupied ? chosen?.[occupied.index] : undefined;
-  const credit = outgoing ? costOf(outgoing) : 0;
-  const fits = (o: ModOption) =>
-    (exclusive || !full) && (energyLeft === undefined || o.cost <= energyLeft + credit);
-  const heading = sockets.length > 1 ? `${KIND_LABEL[kind]}s` : KIND_LABEL[kind];
-  // Sockets nothing was chosen for: apply clears an energy-costing leftover, keeps the rest.
-  const unchosen = sockets.filter(
-    (s) => chosen?.[s.index] === undefined && s.plugHash && s.plugHash !== s.emptyPlugHash,
-  );
-  const removing = unchosen.filter((s) => clearsLeftover(s.plugHash, s.emptyPlugHash, costOf)).length;
-  const keeping = unchosen.length - removing;
-
-  const tooltipHandle = useMemo(() => BaseTooltip.createHandle<string>(), []);
-
-  const onPick = useCallback(
-    (o: ModOption) => {
-      const count = chosenCount(chosen, sockets, o.hash);
-      const canAdd =
-        (exclusive || !full) &&
-        (energyLeft === undefined || o.cost <= energyLeft + credit);
-      if (count === 0 && !canAdd) return;
-      if (exclusive) {
-        onChange((prev) => toggleExclusiveMod(prev, sockets, o.hash));
-        return;
-      }
-      // No room for another copy → the click clears instead.
-      const limit = canAdd ? (o.stackable ? sockets.length : 1) : count;
-      onChange((prev) => cycleModStack(prev, sockets, o.hash, limit));
-    },
-    [chosen, credit, energyLeft, exclusive, full, onChange, sockets],
-  );
-
-  return (
-    <section
-      aria-label={`${heading} on ${piece.name}`}
-      className="space-y-1 text-xs"
-    >
-      <div className="flex flex-wrap items-baseline justify-between gap-x-2">
-        <span className="d2-label text-[10px]">{heading}</span>
-        <span className="text-muted-foreground flex items-baseline gap-1.5 tabular-nums">
-          {sockets.length > 1 ? `${used}/${sockets.length} sockets` : used ? "1/1" : removing ? "Removes current" : "Keeps current"}
-          {keeping > 0 && sockets.length > 1 && ` · ${keeping} kept`}
-          {used > 0 && (
-            <button
-              type="button"
-              onClick={() =>
-                onChange((prev) => {
-                  const next = { ...(prev ?? {}) };
-                  for (const s of sockets) delete next[s.index];
-                  return next;
-                })
-              }
-              className="text-foreground/70 hover:text-foreground cursor-pointer underline-offset-2 hover:underline"
-            >
-              Clear
-            </button>
-          )}
-        </span>
-      </div>
-      <div className="flex flex-wrap gap-0.5">
-        {options.map((o) => {
-          const count = chosenCount(chosen, sockets, o.hash);
-          const canAdd = fits(o);
-          return (
-            <ModCell
-              key={o.hash}
-              option={o}
-              count={count}
-              blocked={count === 0 && !canAdd}
-              problem={problems.get(o.hash) ?? problems.get(o.name)}
-              onPick={onPick}
-              tooltipHandle={tooltipHandle}
-            />
-          );
-        })}
-      </div>
-      <BaseTooltip.Root handle={tooltipHandle} disableHoverablePopup>
-        {({ payload }) =>
-          payload !== undefined ? <TooltipContent>{payload}</TooltipContent> : null
-        }
-      </BaseTooltip.Root>
-    </section>
-  );
-}
-
-type PieceChosenUpdate = (
-  chosen: Record<number, number> | undefined,
-) => Record<number, number>;
-
-/** One armor piece: compact header (icon, name, energy used/capacity) and a group per socket kind. */
-const PiecePanel = memo(function PiecePanel({
-  piece,
-  catalog,
-  insertable,
-  placement,
-  problems,
-  costOf,
-  onChange,
-}: {
-  piece: ArmorPiece;
-  catalog: ModOptionCatalog;
-  insertable?: ReadonlySet<number>;
-  placement: Record<number, number> | undefined;
-  problems: ReadonlyMap<number | string, string>;
-  costOf: (hash: number) => number;
-  onChange: (instanceId: string, update: PieceChosenUpdate) => void;
-}) {
-  const handleChange = useCallback(
-    (update: PieceChosenUpdate) => onChange(piece.instanceId, update),
-    [onChange, piece.instanceId],
-  );
-  const used = pieceEnergyUsed(piece, placement, costOf);
-  const usedWithoutStat = pieceEnergyUsed(piece, placement, costOf, "general");
-  const capacity = piece.energy?.capacity;
-  const over = capacity !== undefined && used > capacity;
-  // One group per socket kind, in first-socket order (stat mod, armor mods, tuning…).
-  const groups = useMemo(() => {
-    const byKind = new Map<ArmorSocket["kind"], ArmorSocket[]>();
-    for (const s of piece.armorSockets ?? []) byKind.set(s.kind, [...(byKind.get(s.kind) ?? []), s]);
-    return [...byKind.values()];
-  }, [piece.armorSockets]);
-
-  return (
-    <section
-      aria-label={`${piece.name}, ${SLOT_LABELS[piece.slot]}`}
-      className="flex min-h-0 min-w-0 flex-col gap-3 px-7 py-2.5"
-    >
-      <div className="flex min-w-0 shrink-0 items-center gap-2.5">
-        <PieceThumb piece={piece} />
-        <div className="flex min-w-0 flex-1 flex-col">
-          <span className="truncate text-sm font-medium">{piece.name}</span>
-          {(piece.power !== undefined || capacity !== undefined) && (
-            <span className="flex items-center gap-2">
-              {piece.power !== undefined && (
-                <PowerValue
-                  value={piece.power}
-                  size="xs"
-                  tone="gold"
-                  className="shrink-0 items-center gap-0.5 text-xs"
-                  title="Power"
-                />
-              )}
-              {capacity !== undefined && (
-                <span
-                  className={cn(
-                    "text-muted-foreground text-xs tabular-nums",
-                    over && "text-destructive font-medium",
-                  )}
-                >
-                  Energy {used}/{capacity}
-                </span>
-              )}
-            </span>
-          )}
-        </div>
-      </div>
-      {/* Mods scroll inside the column, not the drawer. */}
-      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto overscroll-contain">
-        {groups.length === 0 ? (
-          <p className="text-muted-foreground text-xs">No mod sockets.</p>
-        ) : (
-          groups.map((group) => (
-            <KindGrid
-              key={group[0].kind}
-              piece={piece}
-              sockets={group}
-              catalog={catalog}
-              insertable={insertable}
-              chosen={placement}
-              energyLeft={
-                capacity === undefined
-                  ? undefined
-                  : capacity - (group[0].kind === "other" ? usedWithoutStat : used)
-              }
-              costOf={costOf}
-              problems={problems}
-              onChange={handleChange}
-            />
-          ))
-        )}
-      </div>
-    </section>
-  );
-});
 
 function nameIsValid(name: string) {
   const trimmed = name.trim();
@@ -580,7 +197,8 @@ function EditorStatsRow({
 }) {
   return (
     <div
-      className="flex shrink-0 items-center gap-3 px-7 pb-2 text-xs leading-4 tabular-nums"
+      role="group"
+      className="flex shrink-0 items-center gap-3 px-1 text-sm leading-5 tabular-nums"
       aria-label="Loadout stats"
     >
       <TooltipLabel label="Total stats">
@@ -653,7 +271,7 @@ function EditorIdentityFields({
         maxLength={MAX_NAME_LENGTH}
         placeholder="Loadout name"
         aria-label="Loadout name"
-        className="h-9 w-full bg-transparent text-sm sm:w-80 dark:bg-transparent"
+        className="h-9 w-full bg-transparent text-sm sm:w-64 lg:w-full dark:bg-transparent"
         autoFocus
         onFocus={(e) => e.target.select()}
       />
@@ -666,7 +284,7 @@ function EditorIdentityFields({
         onChange={(e) => setNotesValue(e.target.value)}
         maxLength={MAX_NOTES_LENGTH}
         placeholder="Notes (optional — #hashtags become filters)"
-        className="h-9 min-w-0 flex-1 bg-transparent text-sm sm:max-w-md sm:min-w-60 dark:bg-transparent"
+        className="h-9 min-w-0 flex-1 bg-transparent text-sm sm:max-w-md sm:min-w-48 lg:max-w-none lg:min-w-0 dark:bg-transparent"
       />
     </>
   );
@@ -680,6 +298,8 @@ function EditorForm({
   initialNotes = "",
   mods,
   subclass,
+  weapons,
+  artifact,
   busy = false,
   showGrids = true,
   onSubmit,
@@ -693,6 +313,12 @@ function EditorForm({
   }));
   const { placement, desiredStatMods } = modEditor;
   const [subclassItem, setSubclassItem] = useState(subclass?.initial ?? null);
+  const [weaponPicks, setWeaponPicks] = useState(() =>
+    weapons ? initialWeaponPicks(weapons) : {},
+  );
+  const [artifactPick, setArtifactPick] = useState(() =>
+    artifact ? initialArtifactPick(artifact) : null,
+  );
   const nameId = useId();
   const notesId = useId();
 
@@ -808,6 +434,8 @@ function EditorForm({
       notes: identityRef.current.notes.trim(),
       ...(mods ? { placement, desiredStatMods } : {}),
       ...(subclass ? { subclass: subclassItem } : {}),
+      ...(weapons ? { weapons: weaponPickRefs(weaponPicks) } : {}),
+      ...(artifact ? { artifact: artifactPickRef(artifact, artifactPick) } : {}),
       ...(mods && totals ? { stats: totals } : {}),
     });
   };
@@ -833,8 +461,11 @@ function EditorForm({
         <DrawerDescription className="sr-only">{description}</DrawerDescription>
       )}
 
-      {/* Header: name (Figma "Select Trigger" 22:8019), notes, and the actions. */}
-      <div className="flex shrink-0 flex-wrap items-center gap-2 px-4 pt-4 pb-3 sm:gap-3">
+      {/* Header: name (Figma "Select Trigger" 22:8019), notes, the build's stat mods and
+          stats, and the actions. From `lg` it is one grid row: name and notes give up width
+          first, and the mods + stats cluster wraps inside its own cell, so the actions never
+          drop to a second line. */}
+      <div className="flex shrink-0 flex-wrap items-center gap-2 px-4 pt-4 pb-3 sm:gap-3 lg:grid lg:grid-cols-[minmax(10rem,0.6fr)_minmax(10rem,1fr)_auto_auto]">
         <EditorIdentityFields
           initialName={initialName}
           initialNotes={initialNotes}
@@ -843,23 +474,32 @@ function EditorForm({
           valuesRef={identityRef}
           onNameValidChange={setNameValid}
         />
-        {mods && desiredStatMods.length > 0 && (
-          <div
-            role="group"
-            aria-label="Stat mods"
-            className="flex flex-wrap items-center gap-0.5"
-          >
-            {desiredStatMods.map((hash, i) => (
-              <StatModChip
-                key={`${hash}-${i}`}
-                option={mods.catalog.option(hash)}
-                slotted={slotted[i] ?? false}
-                blocked={statModBlocked[i]}
-                onSlot={() => slotDesiredStatMod(hash)}
-              />
-            ))}
-          </div>
-        )}
+        <div className="flex min-w-0 flex-wrap items-center gap-x-5 gap-y-2">
+          {mods && desiredStatMods.length > 0 && (
+            <div
+              role="group"
+              aria-label="Stat mods"
+              className="flex flex-wrap items-center gap-0.5"
+            >
+              {desiredStatMods.map((hash, i) => (
+                <StatModChip
+                  key={`${hash}-${i}`}
+                  option={mods.catalog.option(hash)}
+                  slotted={slotted[i] ?? false}
+                  blocked={statModBlocked[i]}
+                  onSlot={() => slotDesiredStatMod(hash)}
+                />
+              ))}
+            </div>
+          )}
+          {totals && (
+            <EditorStatsRow
+              total={totals.total}
+              stats={totals.stats}
+              statIcons={statIcons}
+            />
+          )}
+        </div>
         <div className="ml-auto flex items-center gap-2">
           {overEnergy && (
             <span className="text-destructive text-xs">
@@ -870,7 +510,7 @@ function EditorForm({
             Cancel
           </Button>
           <Button type="submit" variant="emphatic" disabled={!canSubmit}>
-            {busy ? <CircleNotch className="animate-spin" aria-hidden /> : null}
+            {busy ? <HugeiconsIcon icon={Loading03Icon} className="animate-spin" aria-hidden /> : null}
             {submitLabel}
           </Button>
         </div>
@@ -883,24 +523,32 @@ function EditorForm({
         {description && !mods && (
           <p className="text-muted-foreground mb-3 text-xs">{description}</p>
         )}
-        {totals && (
-          <EditorStatsRow
-            total={totals.total}
-            stats={totals.stats}
-            statIcons={statIcons}
-          />
+        {(weapons || artifact) && (
+          // One row of equal equipment slots: kinetic, energy, power, artifact.
+          <div className="grid shrink-0 grid-cols-1 gap-2 pb-2 sm:grid-cols-2 xl:grid-cols-4">
+            {weapons && (
+              <LoadoutWeaponsEditor section={weapons} value={weaponPicks} onChange={setWeaponPicks} />
+            )}
+            {artifact && (
+              <LoadoutArtifactEditor
+                section={artifact}
+                value={artifactPick}
+                onChange={setArtifactPick}
+              />
+            )}
+          </div>
         )}
         {/* Subclass first, then the five pieces; at `lg` every column shares the width.
             Gated so the header can paint before ~550 tooltip roots and images mount. */}
         {showGrids && (
           <div
-            className="divide-border grid min-h-0 flex-1 grid-cols-[repeat(auto-fit,minmax(11rem,1fr))] divide-x lg:grid-cols-[repeat(var(--editor-cols),minmax(0,1fr))]"
+            className="grid min-h-0 flex-1 grid-cols-[repeat(auto-fit,minmax(11rem,1fr))] gap-2 lg:grid-cols-[repeat(var(--editor-cols),minmax(0,1fr))]"
             style={{ "--editor-cols": (mods?.pieces.length ?? 0) + (subclass ? 1 : 0) } as CSSProperties}
           >
             {subclass && (
               <section
                 aria-label="Subclass"
-                className="flex min-h-0 min-w-0 flex-col gap-3 px-7 py-2.5"
+                className={EDITOR_COLUMN_CLASS}
               >
                 <div className="flex min-w-0 shrink-0 items-center gap-2.5">
                   <ItemIcon icon={subclassDef?.displayProperties?.icon} size={24} />
@@ -977,7 +625,8 @@ export function LoadoutEditorDrawer({
     >
       <DrawerContent
         aria-label={form.title}
-        className="d2-sidebar d2-line bg-glass rounded-none border-[1.5px] border-transparent shadow-none [--line-width:1.5px] data-[swipe-axis=y]:[--drawer-content-max-height:min(80dvh,60rem)] [--bleed:0px] [--drawer-bleed-background:var(--glass)]"
+        // No left edge: the sidebar's own border-r already draws that line.
+        className="d2-sidebar d2-line bg-glass rounded-none border border-transparent border-l-0! shadow-none data-[swipe-axis=y]:[--drawer-content-max-height:min(80dvh,60rem)] [--bleed:0px] [--drawer-bleed-background:var(--glass)]"
         // Over the main column only — past the sidebar. `--app-sidebar-width` is 0 below `lg`.
         style={{
           left: "var(--app-sidebar-width, 0px)",

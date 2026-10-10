@@ -5,15 +5,31 @@
 // Runtime imports are relative (not `@/`) so the module also runs under vitest.
 import type { SavedLoadout, SavedLoadoutData } from "./types";
 
+/** Most loadouts one account may keep — far past real use, but bounds what one account can store. */
+export const MAX_LOADOUTS_PER_ACCOUNT = 1000;
+
+/** Thrown by `create` when the owner already has MAX_LOADOUTS_PER_ACCOUNT rows. */
+export class LoadoutLimitError extends Error {
+  constructor() {
+    super(`Loadout limit reached (${MAX_LOADOUTS_PER_ACCOUNT})`);
+    this.name = "LoadoutLimitError";
+  }
+}
+
 export interface LoadoutStore {
   list(membershipId: string): Promise<SavedLoadout[]>;
   get(membershipId: string, id: string): Promise<SavedLoadout | null>;
-  /** `id` lets an import keep a caller-chosen UUID; otherwise one is minted. */
+  /**
+   * `id` lets an import keep a caller-chosen UUID; otherwise one is minted. Throws
+   * LoadoutLimitError when the owner is at MAX_LOADOUTS_PER_ACCOUNT.
+   */
   create(membershipId: string, data: SavedLoadoutData, id?: string): Promise<SavedLoadout>;
   /** Returns null when the row doesn't exist for this owner. */
   update(membershipId: string, id: string, data: SavedLoadoutData): Promise<SavedLoadout | null>;
   /** Returns false when the row doesn't exist for this owner. */
   delete(membershipId: string, id: string): Promise<boolean>;
+  /** Deletes the given rows (or every row with "all"); returns the ids actually removed. */
+  deleteMany(membershipId: string, ids: readonly string[] | "all"): Promise<string[]>;
 }
 
 /** In-memory store — unit tests and a fallback when no database is configured. */
@@ -41,6 +57,7 @@ export class MemoryLoadoutStore implements LoadoutStore {
   }
 
   async create(membershipId: string, data: SavedLoadoutData, id = crypto.randomUUID()) {
+    if (this.bucket(membershipId).size >= MAX_LOADOUTS_PER_ACCOUNT) throw new LoadoutLimitError();
     const t = this.now();
     const row: SavedLoadout = { ...data, id, createdAt: t, updatedAt: t };
     this.bucket(membershipId).set(id, row);
@@ -62,5 +79,11 @@ export class MemoryLoadoutStore implements LoadoutStore {
 
   async delete(membershipId: string, id: string) {
     return this.bucket(membershipId).delete(id);
+  }
+
+  async deleteMany(membershipId: string, ids: readonly string[] | "all") {
+    const bucket = this.bucket(membershipId);
+    const targets = ids === "all" ? [...bucket.keys()] : ids;
+    return targets.filter((id) => bucket.delete(id));
   }
 }

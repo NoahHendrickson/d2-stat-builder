@@ -1,7 +1,8 @@
 "use client";
 
 import { Fragment, useState } from "react";
-import { ArrowRight } from "@phosphor-icons/react";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { ArrowRight02Icon } from "@hugeicons/core-free-icons";
 import { Button } from "@/components/ui/button";
 import { ArmorThumb } from "@/components/armor-thumb";
 import { StatGlyph } from "@/components/stat-glyph";
@@ -119,7 +120,7 @@ function FarmLine({
       {farm.exotic && exoticIcon ? (
         <ArmorThumb icon={exoticIcon} alt={farm.exoticName} size={48} gearTier={5} />
       ) : (
-        <span className="d2-brackets text-muted-foreground flex size-12 shrink-0 items-center justify-center bg-black/25 text-[10px] font-medium tracking-wider uppercase">
+        <span className="d2-brackets text-muted-foreground flex size-12 shrink-0 items-center justify-center bg-black/25 text-[10px] font-medium tracking-wider uppercase normal:normal-case normal:tracking-normal">
           {slot === "Class Item" ? "Class" : slot}
         </span>
       )}
@@ -403,7 +404,7 @@ export function DreamComparison({
 
       {options.length > 1 && (
         <div
-          className={cn("flex flex-wrap gap-2", running && "pointer-events-none opacity-50")}
+          className={cn("flex flex-wrap gap-2 transition-opacity", running && "pointer-events-none opacity-50")}
           role="group"
           aria-label="Ways to get there"
         >
@@ -444,21 +445,21 @@ export function DreamComparison({
                 icons={statIcons}
               />
               <span className="text-muted-foreground flex justify-center" aria-hidden>
-                {v.kind === "replace" && <ArrowRight className="text-foreground size-4" />}
+                {v.kind === "replace" && <HugeiconsIcon icon={ArrowRight02Icon} className="text-foreground size-4" />}
               </span>
               {v.kind === "keep" && (
                 <div className="flex items-center gap-3">
                   <span className="opacity-40">
                     <PieceThumb piece={piece} size={40} />
                   </span>
-                  <span className="text-muted-foreground text-xs font-medium tracking-wider uppercase">
+                  <span className="text-muted-foreground text-xs font-medium tracking-wider uppercase normal:normal-case normal:tracking-normal">
                     Keep
                   </span>
                 </div>
               )}
               {v.kind === "replace" && (
                 <div className="border-positive/40 bg-positive/8 flex flex-col gap-2 border p-2">
-                  <span className="text-positive text-xs font-medium tracking-wider uppercase">
+                  <span className="text-positive text-xs font-medium tracking-wider uppercase normal:normal-case normal:tracking-normal">
                     Replace
                   </span>
                   <FarmLine farm={v.farm} icons={statIcons} exoticIcon={exoticIcon} />

@@ -12,7 +12,7 @@ export function BuilderPageShell() {
 
   if (!authed) {
     return (
-      <main className="mx-auto max-w-md px-6 py-6">
+      <main className="mx-auto flex h-full max-w-md flex-col items-center justify-center px-6 py-6">
         <SignInCard />
       </main>
     );

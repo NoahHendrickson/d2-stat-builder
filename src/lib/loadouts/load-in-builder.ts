@@ -44,7 +44,6 @@ export function selectionsForLoadout(
     targets: [0, 0, 0, 0, 0, 0],
     major,
     setReqs: {},
-    pinnedSets: existing?.pinnedSets ?? [],
     setFilters: existing?.setFilters ?? DEFAULT_SET_FILTERS,
     exoticName: null,
     exoticPerks: [null, null],

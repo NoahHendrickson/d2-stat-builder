@@ -1,5 +1,15 @@
 import type { ArmorLocation } from "@/lib/armory/normalize";
-import type { ArmorSlot } from "@/lib/armory/stats";
+import { ARMOR_SLOTS, SLOT_BUCKETS, type ArmorSlot } from "@/lib/armory/stats";
+import { WEAPON_SLOTS, WEAPON_SLOT_BUCKETS, type WeaponSlot } from "@/lib/armory/weapons";
+
+/** A slot the equip flow can make room in: an armor slot or a weapon slot. */
+export type EquipSlot = ArmorSlot | WeaponSlot;
+export const EQUIP_SLOTS: readonly EquipSlot[] = [...ARMOR_SLOTS, ...WEAPON_SLOTS];
+/** Slot → its character inventory bucket hash. */
+export const EQUIP_SLOT_BUCKETS: Record<EquipSlot, number> = {
+  ...SLOT_BUCKETS,
+  ...WEAPON_SLOT_BUCKETS,
+};
 
 /** What the client knows about a piece's whereabouts when it asks to equip. */
 export interface EquipItemState {
@@ -8,29 +18,41 @@ export interface EquipItemState {
   location: ArmorLocation;
   characterId?: string;
   /**
-   * Armor exotic. EquipItems rejects a new exotic (1641) while another is still on a
-   * different slot, so we equip legendaries first to swap that piece off.
+   * Exotic armor or weapon. EquipItems rejects a new exotic (1641) while another of its
+   * kind is still on a different slot, so we equip legendaries first to swap that one off.
    */
   isExotic?: boolean;
   /**
-   * Armor slot. Lets the server look in the character's live inventory for a piece to
-   * vault when the client's spares run out (see pickLiveSpares). Absent for the subclass.
+   * Armor or weapon slot. Lets the server look in the character's live inventory for a
+   * piece to vault when the client's spares run out (see pickLiveSpares). Absent for the
+   * subclass.
    */
-  slot?: ArmorSlot;
+  slot?: EquipSlot;
+  /**
+   * In `characterId`'s postmaster. It reports as inventory, but TransferItem and
+   * EquipItems can't touch it until it's pulled onto that character.
+   */
+  postmaster?: boolean;
 }
 
-/** One TransferItem call: move `itemId` to/from the vault for `characterId`. */
+/**
+ * One TransferItem call: move `itemId` to/from the vault for `characterId`. With `pull`,
+ * a PullFromPostmaster onto `characterId` instead (`transferToVault` is false: like a
+ * hop from the vault, it lands on the character and can hit a full slot).
+ */
 export interface TransferAction {
   itemId: string;
   itemReferenceHash: number;
   transferToVault: boolean;
   characterId: string;
+  pull?: true;
 }
 
 /**
  * The ordered TransferItem calls that stage every piece on the target character.
  * Bungie only moves items vault↔character, so: already on the target → nothing;
- * in the vault → one hop; on another character → two hops through the vault.
+ * in the vault → one hop; on another character → two hops through the vault. A
+ * postmaster piece is first pulled onto the character whose postmaster holds it.
  *
  * A piece *equipped* on another character can't be transferred at all (Bungie
  * rejects moving equipped items) — planning it anyway lets the per-item error
@@ -42,8 +64,11 @@ export function planTransfers(
 ): TransferAction[] {
   const actions: TransferAction[] = [];
   for (const item of items) {
-    if (item.characterId === targetCharacterId) continue;
     const base = { itemId: item.itemInstanceId, itemReferenceHash: item.itemHash };
+    if (item.postmaster && item.characterId) {
+      actions.push({ ...base, transferToVault: false, characterId: item.characterId, pull: true });
+    }
+    if (item.characterId === targetCharacterId) continue;
     if (item.location !== "vault" && item.characterId) {
       actions.push({ ...base, transferToVault: true, characterId: item.characterId });
     }
@@ -140,7 +165,8 @@ export function planSpares(
   const staged = new Set(items.map((i) => i.itemInstanceId));
   const spares: SpareItems = {};
   for (const item of items) {
-    if (item.characterId === targetCharacterId) continue;
+    // A postmaster piece on the target still needs room: the pull lands in its slot.
+    if (item.characterId === targetCharacterId && !item.postmaster) continue;
     const piece = byId.get(item.itemInstanceId);
     if (!piece) continue;
     const candidates: SparePiece[] = [];

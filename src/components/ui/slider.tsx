@@ -161,13 +161,13 @@ function Slider({
           // (vertical) on the Indicator, so the track's declared size must be its
           // inner size. The 10px well; the frame is a ::before 3px outside it
           // (2px gap + the 1px line).
-          className="relative box-content grow rounded-none select-none before:pointer-events-none before:absolute before:-inset-[3px] before:d2-line before:content-[''] data-horizontal:h-2.5 data-horizontal:w-full data-vertical:h-full data-vertical:w-2.5"
+          className="relative box-content grow rounded-none select-none before:pointer-events-none before:absolute before:-inset-[3px] before:d2-line before:content-[''] normal:overflow-hidden normal:rounded-full normal:bg-foreground/16 normal:before:content-none data-horizontal:normal:h-2 data-horizontal:h-2.5 data-horizontal:w-full data-vertical:h-full data-vertical:w-2.5"
         >
           {ceiling != null && (
             <div
               data-slot="slider-ceiling"
               aria-hidden
-              className="absolute top-0 left-0 h-full bg-foreground/12 transition-[width] duration-300 ease-out"
+              className="absolute top-0 left-0 h-full bg-foreground/12 normal:bg-foreground/24 transition-[width] duration-300 ease-out"
               style={{
                 width: sliderFillWidth(ceiling, min, max),
               }}
@@ -175,7 +175,7 @@ function Slider({
           )}
           <SliderPrimitive.Indicator
             data-slot="slider-range"
-            className="d2-line-white d2-fill select-none data-horizontal:h-full data-vertical:w-full data-vertical:[--fill-to:top]"
+            className="d2-line-white d2-fill select-none normal:rounded-full data-horizontal:h-full data-vertical:w-full data-vertical:[--fill-to:top]"
           />
         </SliderPrimitive.Track>
         {hover != null && (
@@ -192,7 +192,7 @@ function Slider({
           <SliderPrimitive.Thumb
             data-slot="slider-thumb"
             key={index}
-            className="relative block h-4 w-0.5 shrink-0 rounded-none bg-foreground transition-[box-shadow] select-none after:absolute after:-inset-x-3 after:-inset-y-2 hover:shadow-[0_0_6px_color-mix(in_srgb,var(--foreground)_60%,transparent)] focus-visible:shadow-[0_0_0_1px_var(--foreground),0_0_8px_color-mix(in_srgb,var(--foreground)_60%,transparent)] focus-visible:outline-hidden active:shadow-[0_0_8px_color-mix(in_srgb,var(--foreground)_80%,transparent)] disabled:pointer-events-none disabled:opacity-50"
+            className="relative block h-4 w-0.5 shrink-0 rounded-none bg-foreground normal:h-3.5 normal:w-1 normal:rounded-full transition-[box-shadow] select-none after:absolute after:-inset-x-3 after:-inset-y-2 hover:shadow-[0_0_6px_color-mix(in_srgb,var(--foreground)_60%,transparent)] focus-visible:shadow-[0_0_0_1px_var(--foreground),0_0_8px_color-mix(in_srgb,var(--foreground)_60%,transparent)] focus-visible:outline-hidden active:shadow-[0_0_8px_color-mix(in_srgb,var(--foreground)_80%,transparent)] disabled:pointer-events-none disabled:opacity-50"
           />
         ))}
       </SliderPrimitive.Control>

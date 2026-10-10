@@ -13,7 +13,9 @@ import {
 import { abilitySocketIndex } from "@/lib/loadouts/subclass";
 import { ABILITY_KINDS } from "@/lib/dim/subclasses";
 import { normalizeArmory, type ArmorPiece } from "./normalize";
+import { normalizeWeapons, type LoadoutWeapon } from "./weapons";
 import { artifactUnlocksForCharacter } from "./artifact";
+import { artifactsForCharacter, type OwnedArtifact } from "./artifact-items";
 import type { DimArtifactUnlocks } from "@/lib/dim/loadout-link";
 
 export interface ArmoryCharacter {
@@ -30,12 +32,19 @@ export interface ArmoryCharacter {
   equippedSubclass?: EquippedSubclass;
   /** Currently unlocked seasonal-artifact perks (dim-api shape); omitted if unavailable. */
   artifactUnlocks?: DimArtifactUnlocks;
+  /** The character's artifacts (Artifacts 2.0), equipped first, with their live perks. */
+  artifacts?: OwnedArtifact[];
   /** The character's subclass items with live fragment sockets (for applying loadouts). */
   subclassItems: SubclassItem[];
 }
 
 export interface Armory {
   pieces: ArmorPiece[];
+  /**
+   * Every owned weapon, for saved loadouts that carry weapons. Absent on an armory
+   * cached before weapons were tracked; the live profile fills it in.
+   */
+  weapons?: LoadoutWeapon[];
   characters: ArmoryCharacter[];
   /**
    * Plug hashes the player can socket right now (profile + character plug sets,
@@ -90,6 +99,25 @@ export async function fetchProfile(): Promise<DestinyProfileResponse> {
   return (await res.json()) as DestinyProfileResponse;
 }
 
+/**
+ * The profile to keep after a fetch: `next`, unless Bungie minted it no later than the
+ * one already held. Bungie serves profiles from a cache, so a refetch can come back
+ * older than what's on screen (and roll it back); one minted at the same moment is the
+ * same snapshot, and keeping the old object spares everything derived from it.
+ */
+export function newerProfile(
+  prev: DestinyProfileResponse | undefined,
+  next: DestinyProfileResponse,
+): DestinyProfileResponse {
+  if (!prev) return next;
+  // A missing or unreadable timestamp is NaN, which never compares as older.
+  const notNewer = (key: "responseMintedTimestamp" | "secondaryComponentsMintedTimestamp") =>
+    Date.parse(next[key]) <= Date.parse(prev[key]);
+  return notNewer("responseMintedTimestamp") && notNewer("secondaryComponentsMintedTimestamp")
+    ? prev
+    : next;
+}
+
 const derived = new WeakMap<DestinyProfileResponse, WeakMap<Manifest, Armory>>();
 
 /**
@@ -141,6 +169,7 @@ export function buildArmory(
       dateLastPlayed: c.dateLastPlayed,
       ...(equippedSubclass ? { equippedSubclass } : {}),
       ...(artifactUnlocks ? { artifactUnlocks } : {}),
+      artifacts: artifactsForCharacter(profile, c.characterId, manifest),
       subclassItems: subclassItemsForCharacter(profile, c.characterId, (hash) =>
         ABILITY_KINDS.flatMap((kind) => {
           const index = abilitySocketIndex(manifest, hash, kind);
@@ -151,5 +180,10 @@ export function buildArmory(
   });
 
   const insertablePlugs = insertablePlugsFromProfile(profile);
-  return { pieces, characters, ...(insertablePlugs ? { insertablePlugs } : {}) };
+  return {
+    pieces,
+    weapons: normalizeWeapons(profile, manifest),
+    characters,
+    ...(insertablePlugs ? { insertablePlugs } : {}),
+  };
 }

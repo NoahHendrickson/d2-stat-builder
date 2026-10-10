@@ -15,12 +15,21 @@ import {
   seedPowerRange,
 } from "@/lib/builder/power-span";
 import { DREAMERS_BOND_POWER } from "@/lib/armory/dreamers-bond";
+import {
+  COMMON_WEAPON_POWERS,
+  assignWeaponMix,
+  isCurrentMix,
+  rankWeaponMixes,
+} from "@/lib/optimizer/weapon-plan";
+import type { WeaponPlanState } from "@/lib/optimizer/use-weapon-plan";
 import { cn } from "@/lib/utils";
 import { PowerValue } from "@/components/power-value";
 
 const WEAPON_SLOTS = ["Kinetic", "Energy", "Heavy"] as const;
 /** Upper bound on what a power input accepts — generous, the game's cap moves. */
 const POWER_INPUT_MAX = 9999;
+/** How many suggested weapon mixes to list. */
+const SUGGESTED_MIXES = 3;
 
 /** A typed power: a non-negative integer, else null. */
 function parsePower(raw: string): number | null {
@@ -41,6 +50,7 @@ export const PowerRangeControls = memo(function PowerRangeControls({
   value,
   onChange,
   slotPieces,
+  weaponPlan,
   dreamersItemName,
 }: {
   value: PowerRangeSelection;
@@ -51,6 +61,8 @@ export const PowerRangeControls = memo(function PowerRangeControls({
    * class-item slot only once it's enabled). Only power and exotic-ness are read.
    */
   slotPieces: readonly (readonly { power?: number; isExotic: boolean }[])[];
+  /** The weapon-mix scan for the current range and stats (see useWeaponPlan). */
+  weaponPlan: WeaponPlanState;
   /** Class-specific collections item: Dreamer's Bond / Cloak / Mark. */
   dreamersItemName: string;
 }) {
@@ -182,7 +194,7 @@ export const PowerRangeControls = memo(function PowerRangeControls({
 
             <SettingRow
               title="Choose the weapons you want to use"
-              description="Figure out what you want to run, then input their light level. Ideally have at least one 10-power weapon and the others at 300 or below. The lower your weapons, the better stats you'll get — the armor can sit higher."
+              description="Input the light level of the weapons you'll run, or pick a suggested mix below. Each mix of 10, 300 and 550 power weapons is tried against your stats and range, best build first. Lower weapons usually win — the armor can sit higher."
             >
               <p className="text-muted-foreground text-xs">
                 Leave a slot blank to skip it
@@ -202,6 +214,18 @@ export const PowerRangeControls = memo(function PowerRangeControls({
                   </label>
                 ))}
               </div>
+              {bounds && (
+                <WeaponSuggestions
+                  plan={weaponPlan}
+                  weapons={weapons}
+                  onApply={(mix) =>
+                    emit({
+                      ...value,
+                      weapons: assignWeaponMix(weapons, mix) as PowerRangeSelection["weapons"],
+                    })
+                  }
+                />
+              )}
             </SettingRow>
 
             <SettingRow
@@ -229,6 +253,104 @@ export const PowerRangeControls = memo(function PowerRangeControls({
     </div>
   );
 });
+
+/**
+ * The weapon-mix scan's best few mixes, best first; clicking one fills the weapon slots.
+ * The mix already entered stays listed (filled, "In use") even when it ranks lower, so
+ * the gap to the best mix is visible.
+ */
+function WeaponSuggestions({
+  plan,
+  weapons,
+  onApply,
+}: {
+  plan: WeaponPlanState;
+  weapons: PowerRangeSelection["weapons"];
+  onApply: (mix: number[]) => void;
+}) {
+  const ranked = useMemo(
+    () => (plan.results ? rankWeaponMixes(plan.results, weapons) : null),
+    [plan.results, weapons],
+  );
+  const tiers = COMMON_WEAPON_POWERS.join(", ");
+
+  let body;
+  if (ranked === null) {
+    body = (
+      <p className="text-muted-foreground text-xs" role="status">
+        {plan.running ? "Trying weapon mixes…" : "No suggestion for this range."}
+      </p>
+    );
+  } else if (ranked.length === 0) {
+    body = (
+      <p className="text-muted-foreground text-xs" role="status">
+        No mix of {tiers} power weapons lands a build in this range with these
+        stats.
+      </p>
+    );
+  } else {
+    const shown = ranked.slice(0, SUGGESTED_MIXES);
+    const current = ranked.find((r) => isCurrentMix(weapons, r.weapons));
+    if (current && !shown.includes(current)) shown.push(current);
+    body = (
+      <ul className="flex flex-col">
+        {shown.map((mix) => {
+          const inUse = mix === current;
+          return (
+            <li key={mix.weapons.join("-")}>
+              <button
+                type="button"
+                onClick={() => onApply(mix.weapons)}
+                aria-pressed={inUse}
+                className={cn(
+                  "flex w-full cursor-pointer items-center gap-3 px-2 py-1.5 text-left transition-colors hover:bg-foreground/5",
+                  inUse && "bg-foreground/8 hover:bg-foreground/8",
+                )}
+              >
+                <span className="grid flex-1 grid-cols-3 gap-2">
+                  {mix.weapons.map((w, i) => (
+                    <PowerValue key={i} value={w} size="xs" />
+                  ))}
+                </span>
+                <span className="text-muted-foreground text-xs tabular-nums">
+                  {inUse ? "In use" : mix.best === ranked[0].best ? "Best" : null}
+                </span>
+                <span
+                  className="w-10 text-right text-xs font-medium tabular-nums"
+                  title={
+                    mix.capped
+                      ? "Stat total of the best build found (the search ran out of time, so there may be better)"
+                      : "Stat total of the best build this mix allows"
+                  }
+                >
+                  {mix.best}
+                  {mix.capped && "+"}
+                </span>
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    );
+  }
+
+  return (
+    <div
+      className={cn(
+        "mt-3 space-y-1.5 transition-opacity",
+        plan.running && ranked !== null && "opacity-60",
+      )}
+    >
+      <div className="flex items-baseline justify-between gap-2">
+        <span className="d2-label text-[10px]">Suggested weapons</span>
+        {ranked !== null && ranked.length > 0 && (
+          <span className="d2-label text-[10px]">Stat total</span>
+        )}
+      </div>
+      {body}
+    </div>
+  );
+}
 
 /**
  * An uncontrolled numeric field that commits on blur / Enter. Keyed on the committed
