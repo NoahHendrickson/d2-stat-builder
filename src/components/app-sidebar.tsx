@@ -8,6 +8,7 @@ import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
 import {
   Add01Icon,
   Delete02Icon,
+  DiscordIcon,
   GarageIcon,
   Layers01Icon,
   LayoutTable01Icon,
@@ -29,6 +30,7 @@ import { SidebarStatus } from "@/components/armory/armory-status";
 import { LinkDialog } from "@/components/links/link-dialog";
 import { LinkFavicon } from "@/components/links/link-favicon";
 import { addLink, removeLink, updateLink, useLinks } from "@/lib/links/use-links";
+import { DISCORD_INVITE_URL } from "@/lib/discord";
 import { useSiteIcon } from "@/lib/site-icon";
 import type { SavedLink } from "@/lib/links/links";
 import { cn } from "@/lib/utils";
@@ -174,6 +176,8 @@ export const AppSidebar = memo(function AppSidebar({
 
       <LinksSection collapsed={collapsed} />
 
+      {DISCORD_INVITE_URL && <DiscordLink collapsed={collapsed} />}
+
       <SidebarStatus collapsed={collapsed} onNavigate={onNavigate} />
     </nav>
   );
@@ -229,6 +233,36 @@ function NavItem({
     <TooltipLabel label={soon ? `${label} (soon)` : label}>{link}</TooltipLabel>
   ) : (
     link
+  );
+}
+
+/** Join the community server: the invite opens the Discord app where there is one. */
+function DiscordLink({ collapsed }: { collapsed: boolean }) {
+  const anchor = (
+    <a
+      href={DISCORD_INVITE_URL}
+      target="_blank"
+      rel="noopener noreferrer"
+      aria-label={collapsed ? "Join the Discord (opens in a new tab)" : undefined}
+      className={cn(
+        rowClass,
+        "text-muted-foreground hover:bg-foreground/5 hover:text-foreground",
+        collapsed ? "w-9 justify-center" : "px-2.5",
+      )}
+    >
+      <HugeiconsIcon icon={DiscordIcon} strokeWidth={1.5} className="size-5 shrink-0" aria-hidden />
+      {!collapsed && (
+        <>
+          <span className="min-w-0 flex-1 truncate">Join the Discord</span>
+          <span className="sr-only"> (opens in a new tab)</span>
+        </>
+      )}
+    </a>
+  );
+  return (
+    <div className={cn("flex shrink-0 flex-col pb-2", collapsed ? "items-center px-2.5" : "px-2")}>
+      {collapsed ? <TooltipLabel label="Join the Discord">{anchor}</TooltipLabel> : anchor}
+    </div>
   );
 }
 
