@@ -6,6 +6,7 @@ import { useSession } from "@/lib/auth/use-session";
 import type { StoredSettings } from "@/lib/settings/keys";
 import {
   flushSettingPushes,
+  getSetting,
   reconcileSettings,
   setSyncAccount,
 } from "@/lib/settings/synced-settings";
@@ -35,6 +36,12 @@ export function SettingsSync() {
       return settings;
     },
   });
+
+  // Reading the pins copies them out of the builder's old selections blob. Do it on
+  // load: "Optimize" on a loadout rewrites that blob, and could otherwise run first.
+  useEffect(() => {
+    getSetting("pinnedSets");
+  }, []);
 
   useEffect(() => {
     if (signedOut) setSyncAccount(null);
