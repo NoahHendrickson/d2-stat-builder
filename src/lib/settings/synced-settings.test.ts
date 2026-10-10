@@ -151,4 +151,39 @@ describe("reconcile", () => {
     expect(puts).toEqual([{ key: "pinnedSets", value: [9] }]);
     expect(getSetting("pinnedSets")).toEqual([9]);
   });
+
+  test("another tab's edit during a push keeps the key dirty", async () => {
+    vi.useFakeTimers();
+    await reconcileSettings("me", { pinnedSets: { value: [1], updatedAt: 500 } });
+    // Tab A pushes [1, 2]; its response is held back.
+    let respond!: () => void;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        (_url: string, init?: RequestInit) =>
+          new Promise<Response>((resolve) => {
+            const { value } = JSON.parse(String(init?.body)) as { value: unknown };
+            respond = () => resolve(new Response(JSON.stringify({ value, updatedAt: 600 }), { status: 200 }));
+          }),
+      ),
+    );
+    setSetting("pinnedSets", [1, 2]);
+    await vi.advanceTimersByTimeAsync(1000);
+    // Tab B (its own module copy, same storage) edits, and its push fails.
+    vi.resetModules();
+    const tabB = await import("./synced-settings");
+    const failing = vi.fn(async () => new Response("{}", { status: 502 }));
+    vi.stubGlobal("fetch", failing);
+    tabB.setSyncAccount("me");
+    tabB.setSetting("pinnedSets", [1, 2, 3]);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(failing).toHaveBeenCalled();
+    // A's older response lands: B's edit must still go up on the next pull.
+    respond();
+    await vi.runAllTimersAsync();
+    resetSyncedSettingsForTests();
+    const puts = stubServer();
+    await reconcileSettings("me", { pinnedSets: { value: [1, 2], updatedAt: 600 } });
+    expect(puts).toEqual([{ key: "pinnedSets", value: [1, 2, 3] }]);
+  });
 });

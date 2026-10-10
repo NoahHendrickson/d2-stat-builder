@@ -114,7 +114,16 @@ export function planSmartMove(
     item.tierType === TIER_EXOTIC &&
     targetChar !== undefined &&
     equippedExoticBesides(targetChar, item.bucketHash) !== undefined;
-  if (direct === null && !exoticClash) return { ok: true, steps: [{ item, place, to }] };
+  // A postmaster item is pulled onto its owner first, wherever it's headed; moveProblem
+  // only checks the destination, so a full slot on the owner needs step 2 below.
+  const owner =
+    place.kind === "postmaster" ? inventory.characters.find((c) => c.id === place.characterId) : undefined;
+  const ownerFull =
+    owner !== undefined &&
+    MOVABLE_BUCKETS.has(item.bucketHash) &&
+    Boolean(item.instanceId) &&
+    (owner.inventory[item.bucketHash]?.length ?? 0) >= CHARACTER_SLOTS;
+  if (direct === null && !exoticClash && !ownerFull) return { ok: true, steps: [{ item, place, to }] };
   if (direct === "Already there") return { ok: false, problem: direct };
 
   let sim = inventory;
@@ -181,11 +190,12 @@ export function planSmartMove(
   /**
    * Equip something else in `bucket` on `c` (so what's there can leave): the best item
    * already on the character, else one from the vault. `exoticOk` is false when another
-   * slot keeps an exotic equipped.
+   * slot keeps an exotic equipped, or when this slot is being cleared for an exotic
+   * that's about to be equipped elsewhere (`exoticIncoming`).
    */
-  const equipReplacement = (c: ManagerCharacter, bucket: number) => {
+  const equipReplacement = (c: ManagerCharacter, bucket: number, exoticIncoming = false) => {
     const current = character(c.id).equipped[bucket];
-    const exoticOk = !equippedExoticBesides(character(c.id), bucket);
+    const exoticOk = !exoticIncoming && !equippedExoticBesides(character(c.id), bucket);
     const fits = (i: InventoryItem) =>
       movable(i) && usableBy(i, c) && (exoticOk || i.tierType !== TIER_EXOTIC);
     const better = (a: InventoryItem, b: InventoryItem) => {
@@ -244,7 +254,7 @@ export function planSmartMove(
     // 4. Equipping an exotic: take off the exotic equipped in another slot.
     if (target && to.kind === "character" && to.equipped && item.tierType === TIER_EXOTIC) {
       const other = equippedExoticBesides(character(target.id), bucket);
-      if (other) equipReplacement(character(target.id), other.bucketHash);
+      if (other) equipReplacement(character(target.id), other.bucketHash, true);
     }
 
     const finalFrom = where(item);

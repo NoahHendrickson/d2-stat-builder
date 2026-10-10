@@ -142,3 +142,29 @@ test("reports why when nothing can make room", () => {
   );
   expect(classPlan).toEqual({ ok: false, problem: "Titan gear can't be equipped by a Hunter" });
 });
+
+test("clearing an exotic for an incoming exotic equips a legendary, not another exotic", () => {
+  const t = character("T", 0, {
+    equipped: {
+      [BUCKETS.kinetic]: item("ace", { tierType: 6 }),
+      [BUCKETS.energy]: item("energy-eq", { bucketHash: BUCKETS.energy }),
+    },
+    inventory: {
+      [BUCKETS.kinetic]: [item("legendary", { power: 400 }), item("other-exotic", { tierType: 6, power: 410 })],
+    },
+  });
+  const exotic = item("xeno", { bucketHash: BUCKETS.energy, tierType: 6 });
+  const plan = planSmartMove(inv([t], [exotic]), exotic, { kind: "vault" }, { kind: "character", characterId: "T", equipped: true }, {
+    annotations: {},
+  });
+  expect(plan.ok && summary(plan.steps)).toEqual(["legendary->T!", "xeno->T!"]);
+});
+
+test("a postmaster item makes room on its owner before leaving for the vault", () => {
+  const mail = item("mail");
+  const t = character("T", 0, { inventory: { [BUCKETS.kinetic]: full("t") }, postmaster: [mail] });
+  const plan = planSmartMove(inv([t]), mail, { kind: "postmaster", characterId: "T" }, { kind: "vault" }, {
+    annotations: {},
+  });
+  expect(plan.ok && summary(plan.steps)).toEqual(["t0->vault", "mail->vault"]);
+});

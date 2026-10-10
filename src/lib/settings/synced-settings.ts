@@ -219,11 +219,12 @@ async function push(key: SettingKey, keepalive: boolean): Promise<void> {
   const acct = account;
   if (!acct) return;
   const version = localVersion[key];
+  const sent = getSetting(key);
   try {
     const res = await fetch(`/api/settings/${key}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ value: getSetting(key) }),
+      body: JSON.stringify({ value: sent }),
       cache: "no-store",
       keepalive,
     });
@@ -231,8 +232,13 @@ async function push(key: SettingKey, keepalive: boolean): Promise<void> {
     if (!res.ok) return;
     const { updatedAt } = (await res.json()) as { updatedAt: number };
     if (account !== acct || typeof updatedAt !== "number") return;
-    // Edited again while this was in flight: still dirty, and that edit's push is queued.
-    setKeyMeta(key, { dirty: localVersion[key] !== version, syncedAt: updatedAt });
+    // Edited again while this was in flight, here or in another tab (the stored copy no
+    // longer matches what went up): still dirty, so that edit is pushed too.
+    const stored = parseSettingValue(key, readJson(STORAGE_KEYS[key])) ?? EMPTY;
+    setKeyMeta(key, {
+      dirty: localVersion[key] !== version || !same(stored, sent),
+      syncedAt: updatedAt,
+    });
   } catch {
     // Offline / navigated away — same as a failure.
   }

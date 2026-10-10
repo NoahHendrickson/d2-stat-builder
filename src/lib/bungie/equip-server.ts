@@ -14,11 +14,8 @@ import {
 } from "bungie-api-ts/destiny2";
 import { BungieHttpError } from "./http";
 import {
-  MAX_THROTTLE_RETRIES,
-  THROTTLE_CODES,
   THROTTLED_MESSAGE,
   isThrottled,
-  throttleWait,
   withThrottleRetry,
 } from "./throttle";
 import {
@@ -401,7 +398,23 @@ export async function stageAndEquip({
     const collect = async (ids: string[]) => {
       if (ids.length === 0) return;
       for (const id of ids) start(id);
-      const res = await equipItems(http, { itemIds: ids, characterId, membershipType });
+      let res;
+      try {
+        res = await withThrottleRetry(() =>
+          equipItems(http, { itemIds: ids, characterId, membershipType }),
+        );
+      } catch (err) {
+        // A batch-level error (a throttle that outlasted the retries, an activity
+        // lock) fails each piece in it, keeping the spares already vaulted for them.
+        if (err instanceof BungieHttpError && err.status === 401) throw err;
+        const message = equipMessage(err);
+        for (const id of ids) {
+          const result = withVaulted({ itemInstanceId: id, ok: false, message });
+          results.push(result);
+          emitResult(result);
+        }
+        return;
+      }
       for (const r of res.Response.equipResults ?? []) {
         const result = withVaulted({
           itemInstanceId: r.itemInstanceId,
@@ -468,16 +481,18 @@ export async function insertPlugs({
       continue;
     }
     try {
-      await insertSocketPlugFree(http, {
-        plug: {
-          socketIndex: plug.socketIndex,
-          socketArrayType: 0, // DestinySocketArrayType.Default
-          plugItemHash: plug.plugItemHash,
-        },
-        itemId: plug.itemInstanceId,
-        characterId,
-        membershipType,
-      });
+      await withThrottleRetry(() =>
+        insertSocketPlugFree(http, {
+          plug: {
+            socketIndex: plug.socketIndex,
+            socketArrayType: 0, // DestinySocketArrayType.Default
+            plugItemHash: plug.plugItemHash,
+          },
+          itemId: plug.itemInstanceId,
+          characterId,
+          membershipType,
+        }),
+      );
       emitResult({ ...plug, ok: true });
     } catch (err) {
       if (err instanceof BungieHttpError && err.status === 401) throw err;
@@ -490,9 +505,10 @@ export async function insertPlugs({
       emitResult({
         ...plug,
         ok: false,
-        message:
-          (code !== undefined ? PLUG_MESSAGES[code] : undefined) ??
-          (err instanceof Error ? err.message : "Mod insert failed"),
+        message: isThrottled(err)
+          ? THROTTLED_MESSAGE
+          : ((code !== undefined ? PLUG_MESSAGES[code] : undefined) ??
+            (err instanceof Error ? err.message : "Mod insert failed")),
       });
     }
     if (i < plugs.length - 1) await sleep(PLUG_SPACING_MS);

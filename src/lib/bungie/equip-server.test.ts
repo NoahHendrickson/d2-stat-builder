@@ -367,3 +367,41 @@ describe("cancel checkpoints", () => {
     expect(done).toEqual([1, 2]);
   });
 });
+
+describe("stageAndEquip equip errors", () => {
+  const throttled = () => new BungieHttpError(200, "raw", 1672);
+
+  test("a throttled equip is retried before it fails", async () => {
+    transferItem.mockResolvedValue({});
+    equipItems.mockRejectedValueOnce(throttled());
+    const results = await run({ http, membershipType: 3, membershipId: "m", characterId: TARGET, items: [helm] });
+    expect(equipItems).toHaveBeenCalledTimes(2);
+    expect(results).toEqual([{ itemInstanceId: "helm", ok: true }]);
+  });
+
+  test("a batch error fails each piece and still reports the spares vaulted for it", async () => {
+    transferItem
+      .mockRejectedValueOnce(noRoom()) // helm → character: full
+      .mockResolvedValueOnce({}) // spare-1 → vault
+      .mockResolvedValueOnce({}); // helm → character
+    equipItems.mockRejectedValue(throttled());
+    const results = await run({ http, membershipType: 3, membershipId: "m", characterId: TARGET, items: [helm], spares });
+    expect(results).toEqual([
+      {
+        itemInstanceId: "helm",
+        ok: false,
+        message: "Moved, but Bungie is limiting equips — apply again in a moment",
+        vaulted: ["spare-1"],
+      },
+    ]);
+  });
+
+  test("a 401 on the equip is still thrown", async () => {
+    transferItem.mockResolvedValue({});
+    equipItems.mockRejectedValue(new BungieHttpError(401, "unauthorized"));
+    const p = stageAndEquip({ http, membershipType: 3, membershipId: "m", characterId: TARGET, items: [helm] });
+    const assertion = expect(p).rejects.toMatchObject({ status: 401 });
+    await vi.runAllTimersAsync();
+    await assertion;
+  });
+});
