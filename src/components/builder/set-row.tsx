@@ -45,7 +45,7 @@ export const SetRow = memo(function SetRow({
             "absolute top-1/2 left-0 z-10 flex size-6 -translate-y-1/2 items-center justify-center rounded-none normal:rounded-[6px] transition-opacity outline-none focus-visible:opacity-100 focus-visible:ring-1 focus-visible:ring-outline-strong",
             pinned
               ? "text-foreground"
-              : "text-muted-foreground opacity-0 group-hover/set-row:opacity-100 group-focus-within/set-row:opacity-100 hover:text-foreground",
+              : "text-muted-foreground opacity-0 group-hover/set-row:opacity-100 group-has-[:focus-visible]/set-row:opacity-100 hover:text-foreground",
           )}
         >
           <HugeiconsIcon icon={Pin02Icon}

@@ -24,11 +24,12 @@ import { cn } from "@/lib/utils";
 type Action = "move" | "equip";
 
 /**
- * Takes no room until its row is hovered or holds focus (sr-only keeps it tabbable), so
+ * Takes no room until its row is hovered or holds keyboard focus (sr-only keeps it tabbable;
+ * focus-visible, so a clicked button doesn't pin the actions open after the mouse leaves), so
  * piece names get the whole name cell otherwise. Always shown on touch screens.
  */
 const REVEAL_ON_ROW_HOVER =
-  "sr-only group-hover/row:not-sr-only group-focus-within/row:not-sr-only pointer-coarse:not-sr-only";
+  "sr-only group-hover/row:not-sr-only group-has-[:focus-visible]/row:not-sr-only pointer-coarse:not-sr-only";
 
 function moveDisabledReason(
   piece: ArmorPiece,
