@@ -43,6 +43,22 @@ test("piece on another character takes two hops through the vault", () => {
   ]);
 });
 
+test("postmaster piece on the target is pulled, then needs nothing else", () => {
+  expect(
+    planTransfers([item({ itemInstanceId: "p1", itemHash: 5, location: "inventory", characterId: TARGET, postmaster: true })], TARGET),
+  ).toEqual([{ itemId: "p1", itemReferenceHash: 5, transferToVault: false, characterId: TARGET, pull: true }]);
+});
+
+test("postmaster piece on another character is pulled there, then hops through the vault", () => {
+  expect(
+    planTransfers([item({ itemInstanceId: "p2", itemHash: 5, location: "inventory", characterId: "char-B", postmaster: true })], TARGET),
+  ).toEqual([
+    { itemId: "p2", itemReferenceHash: 5, transferToVault: false, characterId: "char-B", pull: true },
+    { itemId: "p2", itemReferenceHash: 5, transferToVault: true, characterId: "char-B" },
+    { itemId: "p2", itemReferenceHash: 5, transferToVault: false, characterId: TARGET },
+  ]);
+});
+
 test("mixed set plans each piece independently, in order", () => {
   const actions = planTransfers(
     [
@@ -110,6 +126,14 @@ describe("planSpares", () => {
         { itemInstanceId: "leg-2", itemHash: 1, location: "inventory", characterId: TARGET },
         { itemInstanceId: "leg-3", itemHash: 1, location: "inventory", characterId: TARGET },
       ],
+    });
+  });
+
+  test("a postmaster piece on the target gets spares: the pull lands in its slot", () => {
+    const mail = item({ itemInstanceId: "mail", location: "inventory", characterId: TARGET, postmaster: true });
+    const pieces = [piece({ instanceId: "mail", postmaster: true }), piece({ instanceId: "leg-1" })];
+    expect(planSpares(pieces, [mail], TARGET)).toEqual({
+      mail: [{ itemInstanceId: "leg-1", itemHash: 1, location: "inventory", characterId: TARGET }],
     });
   });
 

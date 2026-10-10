@@ -28,6 +28,7 @@ export function parseEquipItems(
       typeof i.itemHash !== "number" ||
       (i.characterId !== undefined && !isBungieId(i.characterId)) ||
       (i.isExotic !== undefined && typeof i.isExotic !== "boolean") ||
+      (i.postmaster !== undefined && typeof i.postmaster !== "boolean") ||
       (i.slot !== undefined && !EQUIP_SLOTS.includes(i.slot))
     )
       return null;

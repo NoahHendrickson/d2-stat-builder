@@ -92,6 +92,7 @@ export async function applySavedLoadout({
       characterId: w.characterId,
       isExotic: w.isExotic,
       slot: w.slot,
+      ...(w.postmaster ? { postmaster: true } : {}),
     });
   }
 

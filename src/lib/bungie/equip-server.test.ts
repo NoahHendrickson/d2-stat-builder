@@ -5,8 +5,10 @@ import { BungieHttpError } from "./http";
 const transferItem = vi.fn();
 const equipItems = vi.fn();
 const getCharacter = vi.fn();
+const pullFromPostmaster = vi.fn();
 vi.mock("bungie-api-ts/destiny2", () => ({
   transferItem: (...args: unknown[]) => transferItem(...args),
+  pullFromPostmaster: (...args: unknown[]) => pullFromPostmaster(...args),
   equipItems: (...args: unknown[]) => equipItems(...args),
   getCharacter: (...args: unknown[]) => getCharacter(...args),
   insertSocketPlugFree: vi.fn(),
@@ -31,6 +33,8 @@ beforeEach(() => {
   transferItem.mockReset();
   equipItems.mockReset();
   getCharacter.mockReset();
+  pullFromPostmaster.mockReset();
+  pullFromPostmaster.mockResolvedValue({});
   getCharacter.mockResolvedValue({ Response: { inventory: { data: { items: [] } } } });
   equipItems.mockImplementation((_http: unknown, body: { itemIds: string[] }) =>
     Promise.resolve({ Response: { equipResults: body.itemIds.map((id) => ({ itemInstanceId: id, equipStatus: 1 })) } }),
@@ -245,6 +249,83 @@ describe("stageAndEquip make-room from the live inventory", () => {
     const results = await run({ http, membershipType: 3, membershipId: "m", characterId: TARGET, items: [slottedHelm], spares });
     expect(moved()).toEqual([["helm", false], ["spare-1", true], ["spare-2", true], ["live-1", true]]);
     expect(results[0]).toEqual({ itemInstanceId: "helm", ok: false, message: "Couldn't make room: That item can't be transferred" });
+  });
+});
+
+describe("stageAndEquip postmaster", () => {
+  const HELMET_BUCKET = 3448274439;
+  const mail = (characterId: string) => ({
+    itemInstanceId: "mail",
+    itemHash: 9,
+    location: "inventory" as const,
+    characterId,
+    slot: "helmet" as const,
+    postmaster: true,
+  });
+  const pulled = () =>
+    pullFromPostmaster.mock.calls.map((call) => (call[1] as { characterId: string }).characterId);
+
+  test("pulls a piece from the target's postmaster, then equips it", async () => {
+    const results = await run({ http, membershipType: 3, membershipId: "m", characterId: TARGET, items: [mail(TARGET)] });
+    expect(pullFromPostmaster.mock.calls[0][1]).toMatchObject({ itemId: "mail", itemReferenceHash: 9, stackSize: 1, characterId: TARGET });
+    expect(transferItem).not.toHaveBeenCalled();
+    expect(equipItems.mock.calls[0][1]).toMatchObject({ itemIds: ["mail"], characterId: TARGET });
+    expect(results).toEqual([{ itemInstanceId: "mail", ok: true }]);
+  });
+
+  test("pulls onto the owning character, then hops through the vault", async () => {
+    const results = await run({ http, membershipType: 3, membershipId: "m", characterId: TARGET, items: [mail("char-B")] });
+    expect(pulled()).toEqual(["char-B"]);
+    expect(transferItem.mock.calls.map((c) => [(c[1] as { transferToVault: boolean }).transferToVault, (c[1] as { characterId: string }).characterId])).toEqual([
+      [true, "char-B"],
+      [false, TARGET],
+    ]);
+    expect(results).toEqual([{ itemInstanceId: "mail", ok: true }]);
+  });
+
+  test("a full slot on the target uses the client's spares, then pulls again", async () => {
+    pullFromPostmaster.mockRejectedValueOnce(noRoom()).mockResolvedValueOnce({});
+    const results = await run({
+      http,
+      membershipType: 3,
+      membershipId: "m",
+      characterId: TARGET,
+      items: [mail(TARGET)],
+      spares: { mail: spares.helm },
+    });
+    expect(pulled()).toEqual([TARGET, TARGET]);
+    expect(moved()).toEqual([["spare-1", true]]);
+    expect(results).toEqual([{ itemInstanceId: "mail", ok: true, vaulted: ["spare-1"] }]);
+  });
+
+  test("a full slot on another character makes room from that character's live inventory", async () => {
+    getCharacter.mockResolvedValue({
+      Response: { inventory: { data: { items: [{ itemHash: 1, itemInstanceId: "b-helm", bucketHash: HELMET_BUCKET, state: 0, transferStatus: 0 }] } } },
+    });
+    pullFromPostmaster.mockRejectedValueOnce(noRoom()).mockResolvedValueOnce({});
+    const results = await run({
+      http,
+      membershipType: 3,
+      membershipId: "m",
+      characterId: TARGET,
+      items: [mail("char-B")],
+      // Target-side spares are for the hop onto the target, never the pull onto char-B.
+      spares: { mail: spares.helm },
+      mode: "move",
+    });
+    expect(getCharacter.mock.calls[0][1]).toMatchObject({ characterId: "char-B" });
+    expect(transferItem.mock.calls[0][1]).toMatchObject({ itemId: "b-helm", transferToVault: true, characterId: "char-B" });
+    expect(pulled()).toEqual(["char-B", "char-B"]);
+    expect(results).toEqual([{ itemInstanceId: "mail", ok: true, vaulted: ["b-helm"] }]);
+  });
+
+  test("says the piece is stuck in the postmaster when nothing can make room", async () => {
+    pullFromPostmaster.mockRejectedValue(noRoom());
+    const results = await run({ http, membershipType: 3, membershipId: "m", characterId: TARGET, items: [mail(TARGET)] });
+    expect(equipItems).not.toHaveBeenCalled();
+    expect(results).toEqual([
+      { itemInstanceId: "mail", ok: false, message: "Stuck in the postmaster — no room on that character to pull it" },
+    ]);
   });
 });
 

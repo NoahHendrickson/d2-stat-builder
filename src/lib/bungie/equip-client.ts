@@ -41,6 +41,7 @@ export function equipItemRef(piece: ArmorPiece) {
     characterId: piece.characterId,
     isExotic: piece.isExotic,
     slot: piece.slot,
+    ...(piece.postmaster ? { postmaster: true } : {}),
   };
 }
 

@@ -1,6 +1,8 @@
 "use client";
 
 import type { CSSProperties, ReactNode } from "react";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { Mail01Icon } from "@hugeicons/core-free-icons";
 import { subclassFromPlug } from "@/lib/armory/fragments";
 import { isFullyMasterworked } from "@/lib/armory/masterwork";
 import { armorPipTier } from "@/lib/armory/normalize";
@@ -27,6 +29,7 @@ import {
 } from "@/components/item-tile-parts";
 import { ManifestIcon, PlugIcon, TILE_FRAME } from "@/components/loadouts/loadout-row-details";
 import { LOADOUT_SLOT_WELL_CLASS } from "@/components/loadouts/loadout-weapons-editor";
+import { TooltipLabel } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 /** Mod tiles: 44px on the wide card, 36px in the compact icon columns. */
@@ -92,6 +95,15 @@ function TileRow({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
+/** Marks a piece sitting in the postmaster; Apply pulls it out before equipping. */
+function PostmasterMark({ size }: { size: number }) {
+  return (
+    <TooltipLabel label="In the postmaster. Apply pulls it out first.">
+      <HugeiconsIcon icon={Mail01Icon} size={size} strokeWidth={2} aria-label="In the postmaster" />
+    </TooltipLabel>
+  );
+}
+
 /** A saved weapon as the editor's slot shows it: art, slot, name, type. */
 function WeaponSlot({ item }: { item: ResolvedWeaponItem }) {
   const label = WEAPON_SLOT_LABELS[item.slot];
@@ -112,7 +124,16 @@ function WeaponSlot({ item }: { item: ResolvedWeaponItem }) {
           {item.name}
         </span>
         <span className="text-muted-foreground truncate text-xs leading-4">
-          {item.missing ? <span className="text-warning">Missing</span> : item.weapon?.typeName}
+          {item.missing ? (
+            <span className="text-warning">Missing</span>
+          ) : item.weapon?.postmaster ? (
+            <span className="flex items-center gap-1">
+              <PostmasterMark size={12} />
+              In postmaster
+            </span>
+          ) : (
+            item.weapon?.typeName
+          )}
         </span>
       </span>
     </div>
@@ -304,6 +325,7 @@ function PieceTile({ item, manifest }: { item: ResolvedArmorItem; manifest: Mani
         className="flex items-center gap-0.5 px-0.5 text-[11px] leading-none font-medium text-black tabular-nums"
         style={{ height: ITEM_TILE_FOOTER_PX }}
       >
+        {piece?.postmaster && <PostmasterMark size={11} />}
         <span className="flex-1" />
         {archetypeIcon && <ArchetypeGlyph icon={archetypeIcon} />}
         {piece?.power}

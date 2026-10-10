@@ -28,20 +28,31 @@ export interface EquipItemState {
    * subclass.
    */
   slot?: EquipSlot;
+  /**
+   * In `characterId`'s postmaster. It reports as inventory, but TransferItem and
+   * EquipItems can't touch it until it's pulled onto that character.
+   */
+  postmaster?: boolean;
 }
 
-/** One TransferItem call: move `itemId` to/from the vault for `characterId`. */
+/**
+ * One TransferItem call: move `itemId` to/from the vault for `characterId`. With `pull`,
+ * a PullFromPostmaster onto `characterId` instead (`transferToVault` is false: like a
+ * hop from the vault, it lands on the character and can hit a full slot).
+ */
 export interface TransferAction {
   itemId: string;
   itemReferenceHash: number;
   transferToVault: boolean;
   characterId: string;
+  pull?: true;
 }
 
 /**
  * The ordered TransferItem calls that stage every piece on the target character.
  * Bungie only moves items vault↔character, so: already on the target → nothing;
- * in the vault → one hop; on another character → two hops through the vault.
+ * in the vault → one hop; on another character → two hops through the vault. A
+ * postmaster piece is first pulled onto the character whose postmaster holds it.
  *
  * A piece *equipped* on another character can't be transferred at all (Bungie
  * rejects moving equipped items) — planning it anyway lets the per-item error
@@ -53,8 +64,11 @@ export function planTransfers(
 ): TransferAction[] {
   const actions: TransferAction[] = [];
   for (const item of items) {
-    if (item.characterId === targetCharacterId) continue;
     const base = { itemId: item.itemInstanceId, itemReferenceHash: item.itemHash };
+    if (item.postmaster && item.characterId) {
+      actions.push({ ...base, transferToVault: false, characterId: item.characterId, pull: true });
+    }
+    if (item.characterId === targetCharacterId) continue;
     if (item.location !== "vault" && item.characterId) {
       actions.push({ ...base, transferToVault: true, characterId: item.characterId });
     }
@@ -151,7 +165,8 @@ export function planSpares(
   const staged = new Set(items.map((i) => i.itemInstanceId));
   const spares: SpareItems = {};
   for (const item of items) {
-    if (item.characterId === targetCharacterId) continue;
+    // A postmaster piece on the target still needs room: the pull lands in its slot.
+    if (item.characterId === targetCharacterId && !item.postmaster) continue;
     const piece = byId.get(item.itemInstanceId);
     if (!piece) continue;
     const candidates: SparePiece[] = [];

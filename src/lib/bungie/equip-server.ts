@@ -6,6 +6,7 @@ import {
   equipItems,
   getCharacter,
   insertSocketPlugFree,
+  pullFromPostmaster,
   transferItem,
   type BungieMembershipType,
   type DestinyComponentType,
@@ -78,6 +79,13 @@ export function transferMessage(err: unknown, toVault: boolean): string {
     (code !== undefined ? TRANSFER_MESSAGES[code] : undefined) ??
     (err instanceof Error ? err.message : "Transfer failed")
   );
+}
+
+/** A failed pull leaves the piece in the postmaster; say so, since that's where to look. */
+function pullMessage(message: string): string {
+  if (message === CHARACTER_FULL_MESSAGE) return "Stuck in the postmaster — no room on that character to pull it";
+  if (message === VAULT_FULL_MESSAGE) return "Stuck in the postmaster — vault is full, so nothing could make room";
+  return `Stuck in the postmaster: ${message}`;
 }
 
 /**
@@ -261,44 +269,53 @@ export async function stageAndEquip({
     characterId,
   );
   const transfer = (action: TransferAction) =>
-    withThrottleRetry(() =>
-      transferItem(http, {
+    withThrottleRetry(() => {
+      const base = {
         itemReferenceHash: action.itemReferenceHash,
         stackSize: 1,
-        transferToVault: action.transferToVault,
         itemId: action.itemId,
         characterId: action.characterId,
         membershipType,
-      }),
-    );
+      };
+      return action.pull
+        ? pullFromPostmaster(http, base)
+        : transferItem(http, { ...base, transferToVault: action.transferToVault });
+    });
   const isNoRoom = (err: unknown) => err instanceof BungieHttpError && err.code === NO_ROOM;
 
   const slotOf = new Map(items.map((i) => [i.itemInstanceId, i.slot]));
   /** Staged items plus every spare we've tried to vault — never offered again. */
   const tried = new Set(items.map((i) => i.itemInstanceId));
   /**
-   * The target's unequipped inventory, read on the first slot the client's spares can't
-   * clear and shared by later ones. A failed read isn't kept, so the next slot retries.
+   * A character's unequipped inventory, read on the first slot the client's spares can't
+   * clear there and shared by later ones. Usually the target; a postmaster pull onto
+   * another character reads that one. A failed read isn't kept, so the next slot retries.
    */
-  let liveInventory: DestinyItemComponent[] | undefined;
-  const liveSpares = async (itemId: string, limit: number): Promise<EquipItemState[]> => {
+  const liveInventory = new Map<string, DestinyItemComponent[]>();
+  const liveSpares = async (
+    itemId: string,
+    onCharacter: string,
+    limit: number,
+  ): Promise<EquipItemState[]> => {
     const slot = slotOf.get(itemId);
     if (!slot) return [];
-    if (!liveInventory) {
+    let inventory = liveInventory.get(onCharacter);
+    if (!inventory) {
       try {
         const res = await getCharacter(http, {
           destinyMembershipId: membershipId,
           membershipType,
-          characterId,
+          characterId: onCharacter,
           components: [201 as DestinyComponentType], // CharacterInventories
         });
-        liveInventory = res.Response?.inventory?.data?.items ?? [];
+        inventory = res.Response?.inventory?.data?.items ?? [];
+        liveInventory.set(onCharacter, inventory);
       } catch (err) {
         if (err instanceof BungieHttpError && err.status === 401) throw err;
         return [];
       }
     }
-    return pickLiveSpares(liveInventory, EQUIP_SLOT_BUCKETS[slot], characterId, tried, limit);
+    return pickLiveSpares(inventory, EQUIP_SLOT_BUCKETS[slot], onCharacter, tried, limit);
   };
 
   /** Attach the spares vaulted for this item — on failures too, so nothing moves unreported. */
@@ -315,12 +332,13 @@ export async function stageAndEquip({
     // same-slot spare (see spareSource) and retry, until the spares run out. A spare
     // Bungie won't move (e.g. it turned out to be untransferable) is skipped for the next
     // one; a full vault (or any other error on the piece itself) ends the attempt. Hops
-    // into the vault never make room.
+    // into the vault never make room. The client's spares sit on the target, so a pull
+    // onto another character makes room from that character's live inventory alone.
     const source = action.transferToVault
       ? undefined
       : spareSource(
-          spares?.[action.itemId] ?? [],
-          (limit) => liveSpares(action.itemId, limit),
+          action.characterId === characterId ? (spares?.[action.itemId] ?? []) : [],
+          (limit) => liveSpares(action.itemId, action.characterId, limit),
           tried,
         );
     let message: string | undefined;
@@ -362,6 +380,7 @@ export async function stageAndEquip({
       await sleep(ACTION_SPACING_MS);
     }
     if (message !== undefined) {
+      if (action.pull) message = pullMessage(message);
       failed.set(action.itemId, message);
       emitResult(withVaulted({ itemInstanceId: action.itemId, ok: false, message }));
     }
