@@ -696,7 +696,7 @@ export function ArmorTable() {
                       ? "Loading your optimizer history."
                       : cleanupTiers.length === 0
                         ? "Pick a rating in the Cleanup menu to see pieces."
-                        : `Nothing to clean up here. A piece gets a rating after ${MIN_ELIGIBLE_QUERIES} optimizer searches that could use it.`
+                        : `No cleanup suggestions yet. Keep using the optimizer like normal: a piece gets a rating after ${MIN_ELIGIBLE_QUERIES} searches that could use it.`
                     : `No duplicates here: no two pieces share a ${duplicateMatchSummary(duplicateMatch)}.`}
             </p>
           )}

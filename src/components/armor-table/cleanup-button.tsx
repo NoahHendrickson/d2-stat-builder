@@ -90,10 +90,16 @@ export function CleanupButton({
           <HugeiconsIcon icon={ArrowDown01Icon} aria-hidden />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-64">
-          <p className="text-foreground px-1.5 py-2 text-sm">
-            We track when a piece of armor is &lsquo;used&rsquo; in a build. So you can identify
-            pieces that never make it into a build and possibly delete them.
-          </p>
+          <div className="text-foreground flex flex-col gap-2 px-1.5 py-2 text-sm">
+            <p>
+              We track when a piece of armor is &lsquo;used&rsquo; in a build. So you can identify
+              pieces that never make it into a build and possibly delete them.
+            </p>
+            <p>
+              Nothing to set up: just use the optimizer like normal, and cleanup suggestions build
+              up here as you search.
+            </p>
+          </div>
           <DropdownMenuSeparator />
           <DropdownMenuGroup>
             <DropdownMenuLabel>Show pieces that are</DropdownMenuLabel>
