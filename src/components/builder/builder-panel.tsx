@@ -47,6 +47,7 @@ import {
 import { itemWatermark } from "@/lib/armory/normalize";
 import { getArchetypes } from "@/lib/armory/archetypes";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { StatTargetRow } from "@/components/builder/stat-target-row";
 import { SectionHeading } from "@/components/section-heading";
@@ -852,6 +853,9 @@ export function BuilderPanel({
       setTargets((prev) => prev.map((v, idx) => (idx === i ? value : v))),
     [],
   );
+  // Section Reset buttons: each shows only while its section differs from the default.
+  const resetTargets = useCallback(() => setTargets([0, 0, 0, 0, 0, 0]), []);
+  const targetsSet = targets.some((v) => v > 0);
 
   const onClassChange = useCallback((next: number) => {
     setClassType(next);
@@ -919,6 +923,26 @@ export function BuilderPanel({
   );
 
   const onMajorChange = useCallback((v: string) => setMajor(Number(v)), []);
+
+  const resetSetReqs = useCallback(() => setSetReqs({}), []);
+  const resetFragments = useCallback(
+    () => setFragSel((prev) => ({ ...prev, [activeSubclass]: new Set<number>() })),
+    [activeSubclass],
+  );
+  const advancedChanged =
+    !useBalancedTuning || !useLegacyExotics || useLowerTierArmor;
+  const resetAdvanced = useCallback(() => {
+    setUseBalancedTuning(true);
+    setUseLegacyExotics(true);
+    setUseLowerTierArmor(false);
+  }, []);
+  const powerRangeChanged =
+    powerRange.enabled ||
+    powerRange.bounds !== null ||
+    powerRange.weapons.some((w) => w !== null) ||
+    powerRange.dreamersBond ||
+    powerRange.legacyArmor;
+  const resetPowerRange = useCallback(() => setPowerRange(DEFAULT_POWER_RANGE), []);
 
   const refetchArmory = armoryQuery.refetch;
   const onEquipped = useCallback(() => {
@@ -1000,7 +1024,10 @@ export function BuilderPanel({
               />
             )}
 
-            <Section title="Stats">
+            <Section
+              title="Stats"
+              trailing={targetsSet && <SectionReset onClick={resetTargets} />}
+            >
               <div className="space-y-7">
                 {STAT_DISPLAY_ORDER.map((key) => {
                   const i = STAT_ORDER.indexOf(key);
@@ -1053,6 +1080,9 @@ export function BuilderPanel({
                 sets={sets}
                 setReqs={setReqs}
                 onToggleSet={toggleSet}
+                onReset={
+                  Object.keys(ownedSetReqs).length > 0 ? resetSetReqs : undefined
+                }
                 pinnedSets={pinnedSets}
                 onTogglePin={togglePinnedSet}
                 setFilters={setFilters}
@@ -1072,6 +1102,7 @@ export function BuilderPanel({
                   onSubclassChange={setActiveSubclass}
                   selected={fragSel[activeSubclass]}
                   onToggle={toggleFragment}
+                  onReset={resetFragments}
                   statIcons={statIcons}
                   onApplyCurrent={onApplyCurrentFragments}
                   applyDisabled={!canApplyCurrentFragments}
@@ -1080,7 +1111,10 @@ export function BuilderPanel({
               )}
             </Section>
 
-            <Section title="Advanced settings">
+            <Section
+              title="Advanced settings"
+              trailing={advancedChanged && <SectionReset onClick={resetAdvanced} />}
+            >
               <div className="flex flex-col gap-4">
                 <SettingRow
                   checkbox
@@ -1105,7 +1139,12 @@ export function BuilderPanel({
                 />
               </div>
             </Section>
-            <Section title="Underlight settings">
+            <Section
+              title="Underlight settings"
+              trailing={
+                powerRangeChanged && <SectionReset onClick={resetPowerRange} />
+              }
+            >
               <PowerRangeControls
                 value={powerRange}
                 onChange={onPowerRangeChange}
@@ -1160,13 +1199,27 @@ export function BuilderPanel({
   );
 }
 
+/** A section header's Reset button, sized like "Save as loadout". */
+function SectionReset({ onClick }: { onClick: () => void }) {
+  return (
+    <Button variant="outline" onClick={onClick}>
+      Reset
+    </Button>
+  );
+}
 
 function Section({
   title,
+  trailing,
   className,
   children,
 }: {
   title?: string;
+  /**
+   * Right-aligned header slot, e.g. a Reset button. Passing it at all (even `false`)
+   * makes the header button-height, so it doesn't grow when the button appears.
+   */
+  trailing?: ReactNode;
   className?: string;
   children: ReactNode;
 }) {
@@ -1177,7 +1230,17 @@ function Section({
         className,
       )}
     >
-      {title ? <SectionHeading>{title}</SectionHeading> : null}
+      {title ? (
+        <SectionHeading
+          trailing={trailing || null}
+          className={cn(
+            "justify-between",
+            trailing !== undefined && "flex min-h-8 items-center",
+          )}
+        >
+          {title}
+        </SectionHeading>
+      ) : null}
       {children}
     </section>
   );

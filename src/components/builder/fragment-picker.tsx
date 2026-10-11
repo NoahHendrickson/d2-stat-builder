@@ -25,7 +25,8 @@ import {
 
 /**
  * Figma 17:5835 — "Fragments" label over the subclass tabs, with the emphatic
- * "Apply current" button bottom-aligned on the right. Below (not in the design,
+ * "Apply current" button bottom-aligned on the right (with a Reset before it while
+ * any fragment is picked). Below (not in the design,
  * kept from before): a grid of the active subclass's stat-affecting fragments
  * (Name + six stat columns). Toggle a fragment to fold its stats into the build.
  * Only the active subclass's selection applies (you run one subclass at a time).
@@ -36,6 +37,7 @@ export const FragmentPicker = memo(function FragmentPicker({
   onSubclassChange,
   selected,
   onToggle,
+  onReset,
   statIcons,
   onApplyCurrent,
   applyDisabled,
@@ -46,6 +48,8 @@ export const FragmentPicker = memo(function FragmentPicker({
   onSubclassChange: (s: Subclass) => void;
   selected: Set<number>;
   onToggle: (hash: number) => void;
+  /** Clears the active subclass's picks. */
+  onReset: () => void;
   statIcons: StatIconMap;
   onApplyCurrent: () => void;
   applyDisabled: boolean;
@@ -71,22 +75,29 @@ export const FragmentPicker = memo(function FragmentPicker({
           </Tabs>
         </div>
 
-        <TooltipLabel
-          label="Match your equipped subclass and fragments"
-          disabled={applyDisabled}
-        >
-          <Button
-            type="button"
-            variant="emphatic"
-            disabled={applyDisabled || applyLoading}
-            onClick={onApplyCurrent}
+        <div className="flex items-center gap-2">
+          {selected.size > 0 && (
+            <Button type="button" variant="outline" onClick={onReset}>
+              Reset
+            </Button>
+          )}
+          <TooltipLabel
+            label="Match your equipped subclass and fragments"
+            disabled={applyDisabled}
           >
-            {applyLoading ? (
-              <HugeiconsIcon icon={Loading03Icon} className="animate-spin" aria-hidden />
-            ) : null}
-            Apply current
-          </Button>
-        </TooltipLabel>
+            <Button
+              type="button"
+              variant="emphatic"
+              disabled={applyDisabled || applyLoading}
+              onClick={onApplyCurrent}
+            >
+              {applyLoading ? (
+                <HugeiconsIcon icon={Loading03Icon} className="animate-spin" aria-hidden />
+              ) : null}
+              Apply current
+            </Button>
+          </TooltipLabel>
+        </div>
       </div>
 
       {rows.length === 0 ? (
