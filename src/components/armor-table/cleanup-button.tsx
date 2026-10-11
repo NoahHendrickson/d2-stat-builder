@@ -42,8 +42,8 @@ export interface CleanupButtonProps {
 
 /**
  * Cleanup as a split button: the left half shows only the pieces the optimizer rarely
- * or never uses, grouped by class and slot; the arrow picks the ratings, tags them all
- * as junk, and explains the feature.
+ * or never uses, grouped by class and slot; the arrow explains the feature, picks the
+ * ratings, and tags them all as junk.
  */
 export function CleanupButton({
   on,
@@ -89,7 +89,12 @@ export function CleanupButton({
         >
           <HugeiconsIcon icon={ArrowDown01Icon} aria-hidden />
         </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" className="w-60">
+        <DropdownMenuContent align="end" className="w-64">
+          <p className="text-foreground px-1.5 py-2 text-sm">
+            We track when a piece of armor is &lsquo;used&rsquo; in a build. So you can identify
+            pieces that never make it into a build and possibly delete them.
+          </p>
+          <DropdownMenuSeparator />
           <DropdownMenuGroup>
             <DropdownMenuLabel>Show pieces that are</DropdownMenuLabel>
             {CLEANUP_TIERS.map((tier) => (
@@ -118,11 +123,6 @@ export function CleanupButton({
               {junkable === 1 ? "piece" : "pieces"} as junk
             </DropdownMenuItem>
           )}
-          <DropdownMenuSeparator />
-          <p className="text-muted-foreground px-1.5 py-2 text-xs">
-            We track when a piece of armor is &lsquo;used&rsquo; in a build. So you can identify
-            pieces that never make it into a build and possibly delete them.
-          </p>
         </DropdownMenuContent>
       </DropdownMenu>
     </div>
