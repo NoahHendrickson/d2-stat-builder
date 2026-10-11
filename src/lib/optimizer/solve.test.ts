@@ -730,6 +730,36 @@ describe("dedupe grouping", () => {
     expect(withReq.loadouts.length).toBeGreaterThan(0);
     expect(withReq.loadouts[0].pieceIds[0]).toBe("coda");
   });
+
+  test("a set-0 piece is not merged into a stat-identical piece with no set", () => {
+    // Both key as "set 0" if a missing set defaults to 0; the no-set piece listed first
+    // then stands in for both and can't meet the set-0 requirement.
+    const slots = [
+      [piece("noset", [10, 0, 0, 0, 0, 0]), { ...piece("set0", [10, 0, 0, 0, 0, 0]), setHash: 0 }],
+      ...restSlots,
+    ] as OptimizerPiece[][];
+    const out = solve(input(slots, { setRequirements: [{ setHash: 0, count: 1 }] }));
+    expect(out.loadouts.map((lo) => lo.pieceIds[0])).toEqual(["set0"]);
+  });
+
+  test("a Balanced-only exotic is not merged into its directional twin", () => {
+    // Same exotic, same stats; only B may take a directional. Melee 55 needs B's +5
+    // melee (Balanced touches weapons/health/class only) — with A listed first and both
+    // keyed as one exotic, B's directionals were lost and the query came back empty.
+    const flat = [10, 10, 10, 10, 10, 10];
+    const tuning = { tuned: 0, offStats: [0, 1, 2] };
+    const slots = [
+      [
+        { id: "A", stats: flat, exotic: true, hash: 1, tuning: { ...tuning, directional: false as const } },
+        { id: "B", stats: flat, exotic: true, hash: 1, tuning },
+      ],
+      ...[1, 2, 3, 4].map((k) => [piece(`p${k}`, flat)]),
+    ] as OptimizerPiece[][];
+    const out = solve(input(slots, { allowTuning: true, minimums: [0, 0, 0, 0, 0, 55] }));
+    expect(out.loadouts.map((lo) => lo.pieceIds[0])).toEqual(["B"]);
+    expect(out.ceilings).toEqual([50, 50, 50, 50, 50, 55]);
+    expect(out.ceilingsExact).toBe(true);
+  });
 });
 
 describe("exotic pre-filter", () => {
