@@ -418,11 +418,35 @@ describe("solve() seeding (ceilingSeed / ceilingUpperSeed / heapSeed)", () => {
 
 describe("runSolveSession() under an adversarial clock", () => {
   test("every post is honest; the final post keeps the frozen list", () => {
+    sessionProperty(arbCase, arbClockPlan, RUNS * 2, "session");
+  });
+  test("same, on long-leaf pools with timeouts aimed into the tuners (phase 2 capped)", () => {
+    sessionProperty(
+      arbQuerySpec(["tunerBig", "big"]),
+      fc.record({
+        incs: fc.constantFrom([0], [0, 0, 1]),
+        jumps: fc.array(
+          fc.record({
+            frac: fc.integer({ min: 0, max: 1000 }).map((x) => x / 1000),
+            by: fc.constant(1e7),
+            site: fc.constantFrom<ClockSite>("topn-tuner", "probe-tuner", "topn-walk"),
+          }),
+          { minLength: 1, maxLength: 3 },
+        ),
+      }),
+      RUNS,
+      "sessionAimed",
+    );
+  });
+});
+
+function sessionProperty(arbSpec: fc.Arbitrary<QuerySpec>, arbPlan: fc.Arbitrary<ClockPlan>, runs: number, label: string): void {
+  {
     const m: Record<string, number> = {};
     fc.assert(
       fc.property(
-        arbCase,
-        arbClockPlan,
+        arbSpec,
+        arbPlan,
         fc.record({
           topNBudgetMs: arbBudget,
           ceilingBudgetMs: arbBudget,
@@ -454,6 +478,7 @@ describe("runSolveSession() under an adversarial clock", () => {
           if (!final || final.refining) v.push("no final post");
           stat(m, `posts:${posts.length}`);
           if (better.length) stat(m, "onBetter");
+          if (posts.length > 1 && !final?.verified) stat(m, "finalUnverified");
           const coldTotals = c.cold.loadouts.map((l) => l.total).join();
           for (const p of posts) {
             v.push(...ceilingViolations(p.out, c).map((x) => `post: ${x}`));
@@ -476,11 +501,11 @@ describe("runSolveSession() under an adversarial clock", () => {
           fail(v, { input, plan, budgets });
         },
       ),
-      fcOpts(RUNS * 2),
+      fcOpts(runs),
     );
-    log({ session: m });
-  });
-});
+    log({ [label]: m });
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Targeted: timeouts aimed at the leaf tuner's onTick (mid-leaf), on pools whose leaves
