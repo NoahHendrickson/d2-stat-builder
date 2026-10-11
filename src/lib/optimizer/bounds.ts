@@ -41,19 +41,23 @@ function dedupe(
   for (const p of pieces) {
     // Two pieces with the same stats but different tuned stats aren't interchangeable
     // (except exotics, whose flexible slot makes the rolled tuned stat irrelevant).
-    // offStats only feed the Balanced option, so with Balanced disallowed they drop
-    // out of the key (pieces differing only in offStats become interchangeable).
+    // A Balanced-only piece has no directionals at all, so it never stands in for one
+    // that does — exotic or not. offStats only feed the Balanced option, so with
+    // Balanced disallowed they drop out of the key (pieces differing only in offStats
+    // become interchangeable).
     const tuneKey =
       allowTuning && p.tuning
-        ? (p.exotic ? "X" : p.tuning.directional === false ? "B" : `${p.tuning.tuned}`) +
+        ? (p.tuning.directional === false ? "B" : p.exotic ? "X" : `${p.tuning.tuned}`) +
           (allowBalanced ? `:${p.tuning.offStats.join(".")}` : "")
         : "-";
-    // Power only tells pieces apart while a power range is being enforced — without one
+    // "No set" and set hash 0 are different keys: only the latter counts toward a
+    // requirement on set 0. Power only tells pieces apart while a power range is being
+    // enforced — without one
     // the solver never reads it, so two same-stat pieces at different power stay one.
     const key =
       (p.exotic ? `E${p.hash ?? 0}` : "L") +
       (p.artifice ? "A" : "") +
-      (keyIncludesSet ? `|${p.setHash ?? 0}|` : "|") +
+      (keyIncludesSet ? `|${p.setHash ?? "-"}|` : "|") +
       (keyIncludesPower ? `P${p.power ?? "?"}|` : "") +
       `T${tuneKey}|` +
       p.stats.join(",");
