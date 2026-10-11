@@ -35,7 +35,11 @@ import {
   type SortState,
 } from "@/lib/armor-table/filters";
 import type { SortMode } from "@/lib/armor-table/sort";
-import { normalizeSearchText, tokenizeSearchQuery } from "@/lib/armor-table/search";
+import {
+  filterBySearch,
+  normalizeSearchText,
+  tokenizeSearchQuery,
+} from "@/lib/armor-table/search";
 import {
   DEFAULT_DUPLICATE_MATCH,
   duplicateMatchSummary,
@@ -413,14 +417,10 @@ export function ArmorTable() {
   );
   const filtered = useMemo(
     () =>
-      sorted.filter((r) =>
-        pieceMatchesFilters(
-          r.piece,
-          r.tertiary,
-          facets,
-          searchTokens,
-          r.searchName,
-        ),
+      filterBySearch(
+        sorted.filter((r) => pieceMatchesFilters(r.piece, r.tertiary, facets)),
+        (r) => r.searchName,
+        searchTokens,
       ),
     [sorted, facets, searchTokens],
   );

@@ -4,7 +4,11 @@
 // partition so results read as one flat list.
 //
 // Runtime imports are relative (not `@/`) — the vitest runner has no `@/` alias.
-import { nameMatchesSearch, tokenizeSearchQuery } from "./search";
+import {
+  filterBySearch,
+  normalizeSearchText,
+  tokenizeSearchQuery,
+} from "./search";
 
 export interface FilterOption<V> {
   value: V;
@@ -42,7 +46,7 @@ export function partitionByPin<V>(
   if (tokens.length > 0) {
     return {
       pinned: [],
-      rest: options.filter((o) => nameMatchesSearch(o.label, tokens)),
+      rest: filterBySearch(options, (o) => normalizeSearchText(o.label), tokens),
     };
   }
   const byValue = new Map(options.map((o) => [o.value, o]));
