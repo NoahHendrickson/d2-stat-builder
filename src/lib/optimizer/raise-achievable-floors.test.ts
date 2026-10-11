@@ -12,12 +12,12 @@ describe("raiseAchievableFloors", () => {
     const floors = [0, 0, 0, 0, 0, 0];
     const rose = raiseAchievableFloors(
       floors,
-      [50, 40, 0, 0, 0, 0],
+      [50, 40, 5, 5, 5, 5],
       { major: 2, minor: 0 },
       { major: 5, minor: 0 },
     );
     expect(rose).toBe(true);
-    expect(floors).toEqual([80, 70, 30, 30, 30, 30]);
+    expect(floors).toEqual([80, 70, 35, 35, 35, 35]);
   });
 
   test("counts spare minors too", () => {
@@ -25,12 +25,12 @@ describe("raiseAchievableFloors", () => {
     const floors = [0, 0, 0, 0, 0, 0];
     const rose = raiseAchievableFloors(
       floors,
-      [10, 20, 30, 0, 0, 0],
+      [10, 20, 30, 1, 1, 1],
       { major: 1, minor: 1 },
       { major: 2, minor: 3 },
     );
     expect(rose).toBe(true);
-    expect(floors).toEqual([30, 40, 50, 20, 20, 20]);
+    expect(floors).toEqual([30, 40, 50, 21, 21, 21]);
   });
 
   test("clamps each floor at STAT_CAP (200)", () => {
@@ -38,7 +38,7 @@ describe("raiseAchievableFloors", () => {
     // Stat 0 is already 190; +30 spare would be 220 → clamp to 200.
     const rose = raiseAchievableFloors(
       floors,
-      [190, 0, 0, 0, 0, 0],
+      [190, 5, 5, 5, 5, 5],
       { major: 0, minor: 0 },
       { major: 3, minor: 0 },
     );
@@ -77,11 +77,24 @@ describe("raiseAchievableFloors", () => {
     // spare = 1 major = +10. Stat 0: max(100, 30+10=40) → stays 100. Others rise.
     const rose = raiseAchievableFloors(
       floors,
-      [30, 20, 0, 0, 0, 0],
+      [30, 20, 5, 5, 5, 5],
       { major: 0, minor: 0 },
       { major: 1, minor: 0 },
     );
     expect(rose).toBe(true);
-    expect(floors).toEqual([100, 30, 10, 10, 10, 10]);
+    expect(floors).toEqual([100, 30, 15, 15, 15, 15]);
+  });
+
+  test("a stat shown at 0 takes no spare — it may be clamped up from below zero", () => {
+    // Weapons is 0 after the clamp but could have been −10 (a −10 fragment): one spare
+    // major lifts −10 only to 0, so 10 would be an unachievable floor.
+    const floors = [0, 0, 0, 0, 0, 0];
+    raiseAchievableFloors(
+      floors,
+      [0, 50, 50, 50, 50, 50],
+      { major: 0, minor: 0 },
+      { major: 1, minor: 0 },
+    );
+    expect(floors).toEqual([0, 60, 60, 60, 60, 60]);
   });
 });
