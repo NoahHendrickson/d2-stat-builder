@@ -10,7 +10,7 @@ import type {
   FacetFilters,
   TuningFilter,
 } from "@/lib/armor-table/filters";
-import { MIN_ELIGIBLE_QUERIES, type UsageBucket } from "@/lib/build-usage/buckets";
+import type { UsageBucket } from "@/lib/build-usage/buckets";
 import {
   STAT_DISPLAY_ORDER,
   STAT_LABELS,
@@ -51,16 +51,12 @@ export const TUNING_FILTER_OPTIONS: FilterOption<TuningFilter>[] = [
   { value: "none", label: "Not tunable" },
 ];
 
-/** Under the Searches options: what the counts mean (the column shows used/eligible). */
+/** Under the Searches options: what the filter is for. */
 export const SEARCHES_FILTER_EXPLAINER = (
-  <div className="text-muted-foreground flex w-60 flex-col gap-1.5 px-1.5 py-2 text-xs">
+  <div className="text-muted-foreground w-60 px-1.5 py-2 text-xs">
     <p>
-      Tracks which pieces make it into the builds the optimizer shows you. 3/40 means a piece
-      was in the builds for 3 of the 40 searches it could have joined.
-    </p>
-    <p>
-      A piece still unused after {MIN_ELIGIBLE_QUERIES}+ searches is a good candidate to clear
-      out of your vault.
+      We track when a piece of armor is &lsquo;used&rsquo; in a build. So you can identify
+      pieces that never make it into a build and possibly delete them.
     </p>
   </div>
 );
