@@ -9,6 +9,7 @@ import {
   type SessionUser,
 } from "@/lib/bungie/session";
 import { createBungieHttp } from "@/lib/bungie/http";
+import { resolveDestinyAccount } from "@/lib/bungie/destiny-account";
 import { APP_URL } from "@/lib/bungie/constants";
 
 /** Bungie redirects here with `code` + `state`. Exchange tokens server-side. */
@@ -40,11 +41,16 @@ export async function GET(req: NextRequest) {
     const primary =
       memberships.find((m) => m.membershipId === data?.primaryMembershipId) ??
       memberships[0];
+    // The membership list can lead with an account that has no D2 profile; fall back to
+    // the list pick only if Bungie can't answer LinkedProfiles.
+    const account =
+      (await resolveDestinyAccount(http, tokens.membershipId).catch(() => undefined)) ??
+      (primary ? { membershipId: primary.membershipId, membershipType: primary.membershipType } : undefined);
 
     const user: SessionUser = {
       membershipId: tokens.membershipId,
-      destinyMembershipId: primary?.membershipId,
-      destinyMembershipType: primary?.membershipType,
+      destinyMembershipId: account?.membershipId,
+      destinyMembershipType: account?.membershipType,
       displayName:
         data?.bungieNetUser?.uniqueName ??
         (primary

@@ -14,6 +14,7 @@ const PROFILE_ERROR_MESSAGES: Record<number, string> = {
   11: "Destiny profile not found for this account",
   12: "Bungie denied access — check your Destiny privacy settings (inventory must be visible to third-party apps)",
   31: "Bungie rate limit hit — wait a moment and refresh your gear",
+  1601: "No Destiny 2 account on this Bungie.net login — sign in with the account linked to the platform you play on",
 };
 
 /** User-facing text for a failed GetProfile platform response. */

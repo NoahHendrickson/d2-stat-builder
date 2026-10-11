@@ -10,7 +10,11 @@ import {
   profileErrorMessage,
   shouldClearSessionOnBungieError,
 } from "@/lib/bungie/platform-response";
-import { clearSession, getValidAccessToken, readUser } from "@/lib/bungie/session";
+import {
+  DESTINY_ACCOUNT_NOT_FOUND,
+  resolveDestinyAccount,
+} from "@/lib/bungie/destiny-account";
+import { clearSession, getValidAccessToken, readUser, writeUser } from "@/lib/bungie/session";
 
 // 100 Profiles (currentSeasonHash) · 102 Vault · 103 ProfileCurrencies · 200 Characters · 201 CharacterInventories
 // 202 CharacterProgressions (seasonal artifact unlocks, for saved loadouts)
@@ -49,7 +53,7 @@ function slimProfile(profile: DestinyProfileResponse): DestinyProfileResponse {
  * server. Returns the raw DestinyProfileResponse for the client to normalize.
  */
 export async function GET() {
-  const user = await readUser();
+  let user = await readUser();
   const token = await getValidAccessToken();
   if (!user?.destinyMembershipId || user.destinyMembershipType == null || !token) {
     return NextResponse.json({ error: "Not signed in" }, { status: 401 });
@@ -63,11 +67,29 @@ export async function GET() {
 
   try {
     const http = createBungieHttp(token);
-    const res = await getProfile(http, {
-      destinyMembershipId: user.destinyMembershipId,
-      membershipType: user.destinyMembershipType,
-      components: COMPONENTS,
-    });
+    const load = (destinyMembershipId: string, membershipType: number) =>
+      getProfile(http, {
+        destinyMembershipId,
+        membershipType,
+        components: COMPONENTS,
+      });
+    let res;
+    try {
+      res = await load(user.destinyMembershipId, user.destinyMembershipType);
+    } catch (err) {
+      // Sessions from before resolveDestinyAccount can point at a membership with no D2
+      // profile. Re-pick from LinkedProfiles once and remember the answer.
+      if (!(err instanceof BungieHttpError && err.code === DESTINY_ACCOUNT_NOT_FOUND)) throw err;
+      const account = await resolveDestinyAccount(http, user.membershipId).catch(() => undefined);
+      if (!account || account.membershipId === user.destinyMembershipId) throw err;
+      user = {
+        ...user,
+        destinyMembershipId: account.membershipId,
+        destinyMembershipType: account.membershipType,
+      };
+      res = await load(account.membershipId, account.membershipType);
+      await writeUser(user);
+    }
 
     if (res.Response == null) {
       logBungiePlatformError("GET /api/bungie/profile", res, {
