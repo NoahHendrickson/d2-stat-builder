@@ -786,9 +786,15 @@ export function BuilderPanel({
       // getBuilderState). Snapshot/subclass are deps too: an edit that changes them
       // without changing the optimizer input (a fragment swap with the same stat
       // effect) still re-dispatches, and the store refreshes the bound state in place.
-      { targets, builderSnapshot, setBonuses: ownedSetReqs, subclass: dimSubclass },
+      {
+        targets,
+        builderSnapshot,
+        setBonuses: ownedSetReqs,
+        subclass: dimSubclass,
+        classType: classType ?? undefined,
+      },
     );
-  }, [optimizerInput, targets, builderSnapshot, ownedSetReqs, dimSubclass, run]);
+  }, [optimizerInput, targets, builderSnapshot, ownedSetReqs, dimSubclass, classType, run]);
 
   const authed = session.data?.authenticated ?? false;
   // Last visit's gear (provisional) drives the controls and lists, but never a search

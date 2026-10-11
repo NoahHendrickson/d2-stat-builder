@@ -10,6 +10,7 @@ import {
 } from "@hugeicons/core-free-icons";
 import type { FilterOption } from "@/lib/armor-table/pinned";
 import type { ArmorVersion, FacetFilters } from "@/lib/armor-table/filters";
+import type { UsageBucket } from "@/lib/build-usage/buckets";
 import { duplicateMatchSummary, type DuplicateMatch } from "@/lib/armor-table/duplicates";
 import { CLASS_NAMES } from "@/lib/armory/stats";
 import { cn } from "@/lib/utils";
@@ -40,7 +41,7 @@ const ARMOR_VERSION_OPTIONS: FilterOption<ArmorVersion>[] = [
   { value: "2.0", label: "Armor 2.0" },
 ];
 
-const OVERFLOW_FACETS = ["archetypes", "tunings", "tertiaries"] as const;
+const OVERFLOW_FACETS = ["archetypes", "tunings", "tertiaries", "usage"] as const;
 
 /**
  * Both halves of the Duplicates split button turn amber while it's on, outline included:
@@ -129,6 +130,7 @@ export const ArmorTableToolbar = memo(function ArmorTableToolbar({
   onFacetChange,
   setOptions,
   archetypeOptions,
+  usageOptions,
   statOptions,
   pinnedArchetypes,
   onTogglePinnedArchetype,
@@ -150,6 +152,8 @@ export const ArmorTableToolbar = memo(function ArmorTableToolbar({
   ) => void;
   setOptions: FilterOption<number>[];
   archetypeOptions: FilterOption<string>[];
+  /** Optimizer usage buckets, with how many pieces fall in each. */
+  usageOptions: FilterOption<UsageBucket>[];
   statOptions: FilterOption<number>[];
   pinnedArchetypes: string[];
   onTogglePinnedArchetype: (name: string) => void;
@@ -168,6 +172,7 @@ export const ArmorTableToolbar = memo(function ArmorTableToolbar({
     onFacetChange,
     setOptions,
     archetypeOptions,
+    usageOptions,
     statOptions,
     pinnedArchetypes,
     onTogglePinnedArchetype,
@@ -261,6 +266,13 @@ export const ArmorTableToolbar = memo(function ArmorTableToolbar({
           value={facets.tertiaries}
           onChange={(v) => onFacetChange("tertiaries", v)}
           options={statOptions}
+        />
+        <FilterMultiselect
+          label="Builds"
+          allLabel="Any usage"
+          value={facets.usage}
+          onChange={(v) => onFacetChange("usage", v)}
+          options={usageOptions}
         />
       </div>
       <div className="hidden shrink-0 @[58rem]/toolbar:block @[82.5rem]/toolbar:hidden">

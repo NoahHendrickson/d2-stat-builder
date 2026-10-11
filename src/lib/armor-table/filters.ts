@@ -4,6 +4,7 @@
 // Runtime imports are relative (not `@/`) — the vitest runner has no `@/` alias,
 // matching the convention in normalize.ts / solve.ts.
 import { STAT_ORDER, type StatKey } from "../armory/stats";
+import type { UsageBucket } from "../build-usage/buckets";
 import { nameMatchesNormalized, nameMatchesSearch } from "./search";
 
 /** A tuning facet value: a tuned-stat index, or "none" for untunable pieces. */
@@ -23,6 +24,8 @@ export interface FacetFilters {
   /** Tertiary stat indices (0–5 in STAT_ORDER). */
   tertiaries: number[];
   armorVersions: ArmorVersion[];
+  /** Optimizer usage history buckets (see build-usage/buckets.ts). */
+  usage: UsageBucket[];
 }
 
 /** Facets + search: the full filter state as persisted. */
@@ -38,6 +41,7 @@ export function emptyFacets(): FacetFilters {
     tunings: [],
     tertiaries: [],
     armorVersions: [],
+    usage: [],
   };
 }
 
@@ -53,7 +57,8 @@ export function hasActiveFilters(f: TableFilters): boolean {
     f.archetypes.length > 0 ||
     f.tunings.length > 0 ||
     f.tertiaries.length > 0 ||
-    f.armorVersions.length > 0
+    f.armorVersions.length > 0 ||
+    f.usage.length > 0
   );
 }
 
@@ -82,7 +87,10 @@ export function pieceMatchesFilters(
   searchTokens: readonly string[],
   /** Pre-normalized name; when omitted the piece name is normalized here. */
   normalizedName?: string,
+  /** The piece's optimizer usage bucket; no history reads as "unknown". */
+  usage: UsageBucket = "unknown",
 ): boolean {
+  if (f.usage.length > 0 && !f.usage.includes(usage)) return false;
   if (f.classes.length > 0 && !f.classes.includes(piece.classType)) return false;
   if (
     f.armorVersions.length > 0 &&
@@ -119,7 +127,8 @@ export type ColumnKey =
   | "archetype"
   | "tertiary"
   | "tuned"
-  | "set";
+  | "set"
+  | "builds";
 
 /** Stat columns are namespaced ("stat-class") so they can't collide with the class column. */
 export type SortKey = ColumnKey | `stat-${StatKey}`;
@@ -163,6 +172,7 @@ const COLUMN_KEYS: ColumnKey[] = [
   "tertiary",
   "tuned",
   "set",
+  "builds",
 ];
 
 export const SORT_KEYS = new Set<string>([

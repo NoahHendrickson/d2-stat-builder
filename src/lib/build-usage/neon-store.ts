@@ -1,0 +1,109 @@
+// Neon store for the optimizer's armor usage history. Server-only.
+//
+// One row per (account, query, piece the query could use): whether a shown build used
+// it, and whether a non-dominated one did. Recording a query replaces that query's rows,
+// so re-running it never counts twice. The schema is created lazily, like loadouts.
+import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
+import type { BuildUsageSummary, PieceUsageCounts } from "./buckets";
+import type { PieceUsage } from "./summarize";
+
+/** Queries kept per account; the least recently run go first. */
+export const MAX_QUERIES_PER_ACCOUNT = 1000;
+/** Prune on roughly one record in this many (it groups the account's whole history). */
+const PRUNE_EVERY = 10;
+
+export class NeonBuildUsageStore {
+  private readonly sql: NeonQueryFunction<false, false>;
+  private schemaReady: Promise<void> | null = null;
+
+  constructor(databaseUrl: string) {
+    this.sql = neon(databaseUrl);
+  }
+
+  private ensureSchema(): Promise<void> {
+    if (!this.schemaReady) {
+      this.schemaReady = (async () => {
+        await this.sql`
+          CREATE TABLE IF NOT EXISTS armor_build_usage (
+            membership_id text NOT NULL,
+            query_key text NOT NULL,
+            instance_id text NOT NULL,
+            used boolean NOT NULL,
+            optimal boolean NOT NULL,
+            seen_at timestamptz NOT NULL DEFAULT now(),
+            PRIMARY KEY (membership_id, query_key, instance_id)
+          )`;
+      })().catch((err) => {
+        this.schemaReady = null; // let the next call retry
+        throw err;
+      });
+    }
+    return this.schemaReady;
+  }
+
+  async summary(membershipId: string): Promise<BuildUsageSummary> {
+    await this.ensureSchema();
+    const [rows, counted] = await this.sql.transaction([
+      this.sql`
+        SELECT instance_id,
+          count(*)::int AS eligible,
+          count(*) FILTER (WHERE used)::int AS used,
+          count(*) FILTER (WHERE optimal)::int AS optimal
+        FROM armor_build_usage WHERE membership_id = ${membershipId}
+        GROUP BY instance_id`,
+      this.sql`
+        SELECT count(DISTINCT query_key)::int AS queries
+        FROM armor_build_usage WHERE membership_id = ${membershipId}`,
+    ]);
+    const pieces: Record<string, PieceUsageCounts> = {};
+    for (const r of rows as { instance_id: string; eligible: number; used: number; optimal: number }[]) {
+      pieces[r.instance_id] = { eligible: r.eligible, used: r.used, optimal: r.optimal };
+    }
+    return { queries: (counted as { queries: number }[])[0]?.queries ?? 0, pieces };
+  }
+
+  /** Replace one query's record with the pieces of its latest run. */
+  async record(membershipId: string, queryKey: string, pieces: readonly PieceUsage[]) {
+    await this.ensureSchema();
+    const ids = pieces.map((p) => p.id);
+    const statements = [
+      // Pieces that left the query's pool (deleted, or a pool toggle) drop out of it.
+      this.sql`
+        DELETE FROM armor_build_usage
+        WHERE membership_id = ${membershipId} AND query_key = ${queryKey}
+          AND NOT (instance_id = ANY(${ids}::text[]))`,
+      this.sql`
+        INSERT INTO armor_build_usage (membership_id, query_key, instance_id, used, optimal)
+        SELECT ${membershipId}, ${queryKey}, u.id, u.used, u.optimal
+        FROM unnest(
+          ${ids}::text[],
+          ${pieces.map((p) => p.used)}::boolean[],
+          ${pieces.map((p) => p.optimal)}::boolean[]
+        ) AS u(id, used, optimal)
+        ON CONFLICT (membership_id, query_key, instance_id)
+        DO UPDATE SET used = excluded.used, optimal = excluded.optimal, seen_at = now()`,
+    ];
+    if (Math.random() < 1 / PRUNE_EVERY) {
+      statements.push(this.sql`
+        DELETE FROM armor_build_usage
+        WHERE membership_id = ${membershipId} AND query_key IN (
+          SELECT query_key FROM armor_build_usage
+          WHERE membership_id = ${membershipId}
+          GROUP BY query_key
+          ORDER BY max(seen_at) DESC
+          OFFSET ${MAX_QUERIES_PER_ACCOUNT}
+        )`);
+    }
+    await this.sql.transaction(statements);
+  }
+}
+
+let singleton: NeonBuildUsageStore | null | undefined;
+
+/** The server's usage store, or null when `DATABASE_URL` isn't set. */
+export function getServerBuildUsageStore(): NeonBuildUsageStore | null {
+  if (singleton !== undefined) return singleton;
+  const url = process.env.DATABASE_URL;
+  singleton = url ? new NeonBuildUsageStore(url) : null;
+  return singleton;
+}

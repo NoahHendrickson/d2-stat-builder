@@ -14,6 +14,13 @@ import { useArmory } from "@/lib/armory/use-armory";
 import { sessionMembershipId } from "@/lib/armory/use-profile";
 import { useSession } from "@/lib/auth/use-session";
 import { loadAnnotations } from "@/lib/inventory/annotations";
+import { useBuildUsage } from "@/lib/build-usage/use-build-usage";
+import {
+  USAGE_BUCKETS,
+  USAGE_BUCKET_LABELS,
+  usageBucket,
+  type UsageBucket,
+} from "@/lib/build-usage/buckets";
 import { useManifest } from "@/lib/manifest/use-manifest";
 import { availableSets } from "@/lib/armory/sets";
 import type { ArmoryCharacter } from "@/lib/armory/fetch";
@@ -80,6 +87,7 @@ const COLUMN_SORT_KEYS: readonly (SortKey | undefined)[] = [
   "tertiary",
   "tuned",
   "set",
+  "builds",
   ...STAT_DISPLAY_ORDER.map((key) => `stat-${key}` as const),
 ];
 
@@ -204,6 +212,18 @@ const HeaderRow = memo(function HeaderRow({
           onReorderCustom={reorderCustom}
           onUndoSort={undoSort}
         />
+        <SortMenu
+          label="Builds"
+          title="Builds: optimizer searches whose shown builds used this piece"
+          sortKey="builds"
+          sort={sort}
+          hovered={hoveredSortKey === "builds"}
+          sortUndo={sortUndo}
+          onApplyMode={applyMode}
+          onClearLevel={clearLevel}
+          onReorderCustom={reorderCustom}
+          onUndoSort={undoSort}
+        />
         {STAT_DISPLAY_ORDER.map((key) => (
           <SortMenu
             key={key}
@@ -256,6 +276,7 @@ export function ArmorTable() {
   const searchRef = useRef<HTMLInputElement>(null);
 
   const pieces = armory.data?.pieces;
+  const usage = useBuildUsage()?.pieces;
   const characters: ArmoryCharacter[] = armory.data?.characters ?? [];
 
   const rows = useMemo<Row[]>(() => {
@@ -265,6 +286,8 @@ export function ArmorTable() {
     );
     return pieces.map((piece) => ({
       piece,
+      usage: usage?.[piece.instanceId],
+      usageBucket: usageBucket(usage?.[piece.instanceId]),
       setName: piece.setHash ? setNames.get(piece.setHash) : undefined,
       // The archetype shape (30/25/20) only exists on Armor 3.0 rolls; a tuning
       // socket implies Armor 3.0 even if the archetype plug wasn't resolved.
@@ -274,7 +297,7 @@ export function ArmorTable() {
           : undefined,
       searchName: normalizeSearchText(piece.name),
     }));
-  }, [pieces, manifest]);
+  }, [pieces, manifest, usage]);
 
   const {
     sort,
@@ -387,6 +410,16 @@ export function ArmorTable() {
     return [...seen].sort().map((name) => ({ value: name, label: name }));
   }, [rows]);
 
+  const usageOptions = useMemo<FilterOption<UsageBucket>[]>(() => {
+    const counts = new Map<UsageBucket, number>();
+    for (const r of rows) counts.set(r.usageBucket, (counts.get(r.usageBucket) ?? 0) + 1);
+    return USAGE_BUCKETS.map((bucket) => ({
+      value: bucket,
+      label: USAGE_BUCKET_LABELS[bucket],
+      count: counts.get(bucket) ?? 0,
+    }));
+  }, [rows]);
+
   const statIcons = useMemo(() => {
     const out = {} as StatIconMap;
     if (manifest) {
@@ -420,6 +453,7 @@ export function ArmorTable() {
           facets,
           searchTokens,
           r.searchName,
+          r.usageBucket,
         ),
       ),
     [sorted, facets, searchTokens],
@@ -494,6 +528,7 @@ export function ArmorTable() {
             onFacetChange={setFacet}
             setOptions={setOptions}
             archetypeOptions={archetypeOptions}
+            usageOptions={usageOptions}
             statOptions={STAT_FILTER_OPTIONS}
             pinnedArchetypes={pinnedArchetypes}
             onTogglePinnedArchetype={togglePinnedArchetype}
@@ -509,7 +544,7 @@ export function ArmorTable() {
       <div ref={setScrollerEl} className="min-h-0 flex-1 overflow-auto">
           <table
             ref={setTableEl}
-            className="w-full min-w-[66rem] table-fixed text-sm"
+            className="w-full min-w-[70.5rem] table-fixed text-sm"
           >
             {TABLE_COLGROUP}
             <HeaderRow

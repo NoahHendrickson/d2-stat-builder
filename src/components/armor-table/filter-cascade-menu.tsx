@@ -10,6 +10,7 @@ import type {
   FacetFilters,
   TuningFilter,
 } from "@/lib/armor-table/filters";
+import type { UsageBucket } from "@/lib/build-usage/buckets";
 import {
   STAT_DISPLAY_ORDER,
   STAT_LABELS,
@@ -57,6 +58,7 @@ const ALL_FACET_KEYS = [
   "archetypes",
   "tunings",
   "tertiaries",
+  "usage",
 ] as const satisfies readonly (keyof FacetFilters)[];
 
 function countFacetSelections(
@@ -137,6 +139,7 @@ export function FilterCascadeMenu({
   onFacetChange,
   setOptions,
   archetypeOptions,
+  usageOptions,
   statOptions,
   pinnedArchetypes,
   onTogglePinnedArchetype,
@@ -155,6 +158,7 @@ export function FilterCascadeMenu({
   ) => void;
   setOptions: FilterOption<number>[];
   archetypeOptions: FilterOption<string>[];
+  usageOptions: FilterOption<UsageBucket>[];
   statOptions: FilterOption<number>[];
   pinnedArchetypes: string[];
   onTogglePinnedArchetype: (name: string) => void;
@@ -289,6 +293,16 @@ export function FilterCascadeMenu({
             options={statOptions}
             value={facets.tertiaries}
             onChange={(v) => onFacetChange("tertiaries", v)}
+            toggleOnClick={toggleSubmenusOnClick}
+          />
+        )}
+        {includes("usage") && (
+          <CascadeFacetSubmenu<UsageBucket>
+            label="Builds"
+            allLabel="Any usage"
+            options={usageOptions}
+            value={facets.usage}
+            onChange={(v) => onFacetChange("usage", v)}
             toggleOnClick={toggleSubmenusOnClick}
           />
         )}

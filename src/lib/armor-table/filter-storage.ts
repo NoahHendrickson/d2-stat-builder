@@ -17,6 +17,7 @@ import {
   type TableFilters,
   type TuningFilter,
 } from "./filters";
+import { isUsageBucket } from "../build-usage/buckets";
 
 export const TABLE_STATE_KEY = "stat-builder:armor-table";
 /**
@@ -137,6 +138,7 @@ function parseFilters(f: Record<string, unknown>): TableFilters {
       : [],
     tertiaries: numbers(f.tertiaries),
     armorVersions: armorVersions(f.armorVersions),
+    usage: strings(f.usage).filter(isUsageBucket),
   };
 }
 
