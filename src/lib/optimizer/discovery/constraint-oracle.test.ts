@@ -133,11 +133,11 @@ describe("F1 — floor harvest adds spare mods to a CLAMPED stat", () => {
   test("oracle: the weapons ceiling is 0", () => {
     expect(oracle(input).ceilings).toEqual([0, 10, 10, 10, 10, 10]);
   });
-  test.fails("solve() returns the true ceilings without throwing", () => {
+  test("solve() returns the true ceilings without throwing", () => {
     const out = solve(input, GENEROUS);
     expect(out.ceilings).toEqual([0, 10, 10, 10, 10, 10]);
   });
-  test.fails("silent variant: a loose suffix upper lets the over-report be certified EXACT", () => {
+  test("silent variant: a loose suffix upper lets the over-report be certified EXACT", () => {
     // A second, unused piece in slot 0 with weapons 20 loosens the suffix upper to 20
     // (so no invariant throw), but the build that must be used is pinned by a set
     // requirement to the weapons-0 piece. Truth: weapons −10 + 10 = 0. Observed:
