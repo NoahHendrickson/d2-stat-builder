@@ -1,4 +1,4 @@
-// The crafted and enhanced glyphs drawn at the foot of an item's strip (CraftedGlyph in
+// The crafted and enhanced glyphs drawn in an item's bottom-right corner (CraftedGlyph in
 // armor-thumb.tsx): the user's own SVGs (customdeepsight.svg, customenhanceddeepsight.svg),
 // paths as exported, each with its viewBox size.
 

@@ -34,20 +34,14 @@ const ITEM_GLYPH_SHIFT = "-translate-x-[1.5625%] -translate-y-[1.5625%]";
  * luminance mask over white, so its black goes transparent and only the glyph stays
  * (every current glyph is greyscale). In its place goes our own strip, flush with the
  * art's top and left (x 0–25) and fading out like Bungie's (from 75% black), with the
- * glyph, the tier pips and the crafted / enhanced glyph all centred on its x 12.5 axis.
- * Under a crafted / enhanced glyph the fade runs on into the glyph's red at the foot.
+ * glyph and the tier pips centred on its x 12.5 axis.
  */
-export function ItemWatermark({ watermark, craft }: { watermark: string; craft?: CraftKind }) {
+export function ItemWatermark({ watermark }: { watermark: string }) {
   return (
     <>
       <span
         aria-hidden
-        className={cn(
-          "pointer-events-none absolute inset-y-0 left-0 w-[26.042%] bg-linear-to-b from-black/75",
-          craft
-            ? "via-transparent via-55% to-[rgb(219_100_75/0.55)]"
-            : "to-transparent to-95%",
-        )}
+        className="pointer-events-none absolute inset-y-0 left-0 w-[26.042%] bg-linear-to-b from-black/75 to-transparent to-95%"
       />
       <span
         aria-hidden
@@ -69,14 +63,16 @@ export type CraftKind = keyof typeof CRAFT_GLYPHS;
  * touch larger: its points leave more empty space in the box than the square does.
  */
 const CRAFT_GLYPH_SIZE = { crafted: 14.7, enhanced: 17 } as const;
+/** The glyph's centre: the strip's x 12.5 / y 80.5 mirrored into the bottom-right corner. */
+const CRAFT_GLYPH_X = 96 - 12.5;
 const CRAFT_GLYPH_Y = 80.5;
 
 /**
- * The crafted (shaped) or enhanced glyph at the foot of the strip, as vectors (the
+ * The crafted (shaped) or enhanced glyph in the bottom-right corner, as vectors (the
  * user's own designs, craft-glyph-paths.ts): Bungie's overlay PNGs are 96px with an
- * 18px glyph, which blurs when scaled. Fitted to its box centred on the strip's x 12.5
- * axis (Bungie's sit at x 14, y 82). Bungie's fill is #F19B83 with a rim shading down
- * to #DB644B; this is a step deeper than the fill, glowing in the rim's colour.
+ * 18px glyph, which blurs when scaled. Fitted to its box, over a red glow that fades
+ * out from the corner. Bungie's fill is #F19B83 with a rim shading down to #DB644B;
+ * this is a step deeper than the fill, glowing in the rim's colour.
  */
 export function CraftedGlyph({ kind }: { kind: CraftKind }) {
   const glyph = CRAFT_GLYPHS[kind];
@@ -84,24 +80,30 @@ export function CraftedGlyph({ kind }: { kind: CraftKind }) {
   const w = glyph.width * scale;
   const h = glyph.height * scale;
   return (
-    <svg
-      aria-hidden
-      viewBox="0 0 96 96"
-      className="pointer-events-none absolute inset-0 size-full drop-shadow-[0_0_2px_rgb(219_100_75/0.75)]"
-    >
+    <>
+      <span
+        aria-hidden
+        className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_100%_100%,rgb(219_100_75/0.55),transparent_32%)]"
+      />
       <svg
-        x={PIP_X - w / 2}
-        y={CRAFT_GLYPH_Y - h / 2}
-        width={w}
-        height={h}
-        viewBox={`0 0 ${glyph.width} ${glyph.height}`}
-        fill="#E7806A"
+        aria-hidden
+        viewBox="0 0 96 96"
+        className="pointer-events-none absolute inset-0 size-full drop-shadow-[0_0_2px_rgb(219_100_75/0.75)]"
       >
-        {glyph.paths.map((d) => (
-          <path key={d} d={d} />
-        ))}
+        <svg
+          x={CRAFT_GLYPH_X - w / 2}
+          y={CRAFT_GLYPH_Y - h / 2}
+          width={w}
+          height={h}
+          viewBox={`0 0 ${glyph.width} ${glyph.height}`}
+          fill="#E7806A"
+        >
+          {glyph.paths.map((d) => (
+            <path key={d} d={d} />
+          ))}
+        </svg>
       </svg>
-    </svg>
+    </>
   );
 }
 
@@ -178,7 +180,7 @@ export function ArmorThumb({
   masterworked?: boolean;
   /** Armor 3.0 / weapon gear tier (1–5); 2–5 get pips (`TierPips`). */
   gearTier?: number;
-  /** A crafted or enhanced weapon: its glyph at the foot of the strip, which turns red there. */
+  /** A crafted or enhanced weapon: its glyph and a red glow in the bottom-right corner. */
   craft?: CraftKind;
   className?: string;
   /** Extra overlays (e.g. a tile frame): over the watermark, under the tier pips and masterwork frame. */
@@ -204,7 +206,7 @@ export function ArmorThumb({
       ) : (
         <span className="bg-muted block size-full" aria-hidden />
       )}
-      {watermark && <ItemWatermark watermark={watermark} craft={craft} />}
+      {watermark && <ItemWatermark watermark={watermark} />}
       {craft && <CraftedGlyph kind={craft} />}
       {children}
       {gearTier !== undefined && <TierPips tier={gearTier} />}
