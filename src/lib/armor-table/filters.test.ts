@@ -16,6 +16,8 @@ const piece = (overrides: Partial<FilterablePiece> = {}): FilterablePiece => ({
 
 test("empty filters match everything", () => {
   expect(hasActiveFilters(emptyFilters())).toBe(false);
+  expect(hasActiveFilters({ ...emptyFilters(), search: " - " })).toBe(false);
+  expect(hasActiveFilters({ ...emptyFilters(), search: "ferro" })).toBe(true);
   expect(pieceMatchesFilters(piece(), 3, emptyFilters())).toBe(true);
 });
 

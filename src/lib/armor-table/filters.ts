@@ -4,6 +4,7 @@
 // Runtime imports are relative (not `@/`) — the vitest runner has no `@/` alias,
 // matching the convention in normalize.ts / solve.ts.
 import { STAT_ORDER, type StatKey } from "../armory/stats";
+import { tokenizeSearchQuery } from "./search";
 
 /** A tuning facet value: a tuned-stat index, or "none" for untunable pieces. */
 export type TuningFilter = number | "none";
@@ -46,7 +47,7 @@ export function emptyFilters(): TableFilters {
 
 export function hasActiveFilters(f: TableFilters): boolean {
   return (
-    f.search.trim() !== "" ||
+    tokenizeSearchQuery(f.search).length > 0 ||
     f.classes.length > 0 ||
     f.setHashes.length > 0 ||
     f.archetypes.length > 0 ||
@@ -70,8 +71,8 @@ function pieceArmorVersion(piece: FilterablePiece): ArmorVersion {
 
 /**
  * AND across facets; a piece missing a field (no set, no archetype) fails that
- * facet when it's active. Search isn't a per-piece test (the best match tier
- * depends on the whole list) — run filterBySearch over the survivors.
+ * facet when it's active. Search isn't a per-piece test (what counts as a match
+ * depends on the whole list) — AND this with a searchMatcher predicate.
  */
 export function pieceMatchesFilters(
   piece: FilterablePiece,

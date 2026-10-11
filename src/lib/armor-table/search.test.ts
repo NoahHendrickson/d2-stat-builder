@@ -3,6 +3,7 @@ import {
   filterBySearch,
   looseNameMatch,
   normalizeSearchText,
+  searchMatcher,
   tokenizeSearchQuery,
 } from "./search";
 
@@ -31,33 +32,54 @@ const VAULT = [
   "No Backup Plans",
   "No Backup Plans",
   "Ferropotent Helm",
-  "Smokejumper Boots",
-  "Iron Will Suit",
-  // Loose subsequence hits for "no" and "plans" — the old OR search let these in.
+  "Smoke Jumper Boots",
+  "Aeon Safe",
+  "Mask of the Quiet One",
+  // "no" spans a word gap here ("crow-n o-f") or sits inside a word.
+  "Crown of Tempests",
+  "Wishful Ignorance",
   "Nothing Manacles",
-  "Sunbracers",
-  "Phoenix Cradle",
+  // Loose subsequence hits for "plans" — the old OR search let these in.
   "Plate of Transcendence",
+  "Sunbracers",
 ];
+const NBP = ["No Backup Plans", "No Backup Plans"];
 
 test("filterBySearch keeps only names that contain every word when any do", () => {
-  expect(search(VAULT, "no backup plans")).toEqual(["No Backup Plans", "No Backup Plans"]);
-  expect(search(VAULT, "backup plans")).toEqual(["No Backup Plans", "No Backup Plans"]);
-  expect(search(VAULT, "plans")).toEqual(["No Backup Plans", "No Backup Plans"]);
-  expect(search(VAULT, "No-Backup")).toEqual(["No Backup Plans", "No Backup Plans"]);
+  expect(search(VAULT, "no backup plans")).toEqual(NBP);
+  expect(search(VAULT, "backup plans")).toEqual(NBP);
+  expect(search(VAULT, "plans")).toEqual(NBP);
+  expect(search(VAULT, "No-Backup")).toEqual(NBP);
 });
 
-test("filterBySearch falls back to subsequence for typos and partial typing", () => {
-  expect(search(VAULT, "nbkp")).toEqual(["No Backup Plans", "No Backup Plans"]);
+test("filterBySearch survives a typo in one word of several", () => {
+  expect(search(VAULT, "no bakcup plans")).toEqual(NBP);
+  expect(search(VAULT, "no backup plnas")).toEqual(NBP);
+  expect(search(VAULT, "no backup plansx")).toEqual(NBP);
+});
+
+test("filterBySearch only loosely matches words no name contains", () => {
+  expect(search(VAULT, "nbkp")).toEqual(NBP);
   expect(search(VAULT, "frpot")).toEqual(["Ferropotent Helm"]);
+  // "aeon" is spelled right, so it doesn't loosely match "Mask of the Quiet One".
+  expect(search(VAULT, "aeon sfe")).toEqual(["Aeon Safe"]);
 });
 
 test("filterBySearch ORs words when no name has them all", () => {
-  expect(search(VAULT, "ferro smoke")).toEqual(["Ferropotent Helm", "Smokejumper Boots"]);
+  expect(search(VAULT, "ferro smoke")).toEqual(["Ferropotent Helm", "Smoke Jumper Boots"]);
+  expect(search(VAULT, "ferro smokjmpr")).toEqual(["Ferropotent Helm", "Smoke Jumper Boots"]);
   expect(search(VAULT, "ferro zzz")).toEqual(["Ferropotent Helm"]);
 });
 
 test("filterBySearch with no words keeps everything; with no hits, nothing", () => {
   expect(search(VAULT, "  ")).toEqual(VAULT);
+  expect(search(VAULT, "-")).toEqual(VAULT);
   expect(search(VAULT, "qqqq")).toEqual([]);
+});
+
+test("searchMatcher scoped to the whole list lets other filters only narrow", () => {
+  const matches = searchMatcher(VAULT, normalizeSearchText, tokenizeSearchQuery("no backup plans"));
+  // Another filter already dropped No Backup Plans: nothing left matches.
+  expect(VAULT.filter((n) => !n.startsWith("No Backup") && matches(n))).toEqual([]);
+  expect(VAULT.filter(matches)).toEqual(NBP);
 });

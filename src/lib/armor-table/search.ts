@@ -1,8 +1,9 @@
 // Loose name search for the armor table, ported (functionally) from Noah's
 // armorset-tracker: each whitespace token matches by normalized substring,
-// falling back to ordered subsequence (typo-tolerant partial typing). Names that
-// match every token win; with none, tokens combine with OR — "ferro smoke"
-// surfaces both Ferropotent and Smokejumper pieces. See filterBySearch.
+// falling back to ordered subsequence (typo-tolerant partial typing) when no
+// name contains it. Names matching the most tokens win, so with no name matching
+// them all, tokens combine with OR — "ferro smoke" surfaces both Ferropotent and
+// Smokejumper pieces. See searchMatcher.
 
 /**
  * Split a search box value into normalized tokens (whitespace-separated).
@@ -43,41 +44,50 @@ export function looseNameMatch(token: string, name: string): boolean {
   return looseNormalizedMatch(token, normalizeSearchText(name));
 }
 
-// Match tiers, strictest first. Each token as a plain substring beats a loose
-// (subsequence) hit, and every token matching beats any one token matching.
-const ALL_EXACT = 0;
-const ALL_LOOSE = 1;
-const ANY_EXACT = 2;
-const ANY_LOOSE = 3;
-const NO_MATCH = 4;
-
-function matchTier(normalizedName: string, tokens: readonly string[]): number {
-  if (tokens.every((t) => normalizedName.includes(t))) return ALL_EXACT;
-  if (tokens.every((t) => looseNormalizedMatch(t, normalizedName))) return ALL_LOOSE;
-  if (tokens.some((t) => normalizedName.includes(t))) return ANY_EXACT;
-  if (tokens.some((t) => looseNormalizedMatch(t, normalizedName))) return ANY_LOOSE;
-  return NO_MATCH;
+/**
+ * Build the search predicate for a list. A word only loosely matches
+ * (subsequence) when no name in `scope` contains it outright — short words
+ * loosely match nearly everything ("no" is a subsequence of most names), so a
+ * word that's spelled right should never take the loose path. Then the names
+ * matching the most words win: "no backup plans" keeps only No Backup Plans,
+ * a typo in one word ("no bakcup plans") still leaves it ahead on the other
+ * two, and "ferro smoke" (no name has both) keeps either set.
+ *
+ * Pass the whole list as `scope` and test only the rows that survive the other
+ * filters, so a filter can only narrow results: "no backup plans" on Hunter
+ * shows nothing instead of every Hunter piece containing "no".
+ */
+export function searchMatcher<T>(
+  scope: readonly T[],
+  normalizedName: (item: T) => string,
+  tokens: readonly string[],
+): (item: T) => boolean {
+  if (tokens.length === 0) return () => true;
+  const names = scope.map(normalizedName);
+  const exact = tokens.map((t) => names.some((name) => name.includes(t)));
+  const matchCount = (name: string) => {
+    let count = 0;
+    for (let i = 0; i < tokens.length; i++) {
+      if (
+        exact[i]
+          ? name.includes(tokens[i])
+          : looseNormalizedMatch(tokens[i], name)
+      )
+        count++;
+    }
+    return count;
+  };
+  let best = 0;
+  for (const name of names) best = Math.max(best, matchCount(name));
+  if (best === 0) return () => false;
+  return (item) => matchCount(normalizedName(item)) === best;
 }
 
-/**
- * Filter by search, keeping only the strictest tier that has any hits. Short
- * words loosely match nearly everything ("no" is a subsequence of most names),
- * so "no backup plans" must not OR its way to the whole vault: when some name
- * contains every word, only those names survive. Typo tolerance and the OR
- * ("ferro smoke" → both sets) still apply when nothing stricter matches.
- */
+/** searchMatcher scoped to `items` itself. */
 export function filterBySearch<T>(
   items: readonly T[],
   normalizedName: (item: T) => string,
   tokens: readonly string[],
 ): T[] {
-  if (tokens.length === 0) return [...items];
-  let best = NO_MATCH;
-  const tiers = items.map((item) => {
-    const tier = matchTier(normalizedName(item), tokens);
-    if (tier < best) best = tier;
-    return tier;
-  });
-  if (best === NO_MATCH) return [];
-  return items.filter((_, i) => tiers[i] === best);
+  return items.filter(searchMatcher(items, normalizedName, tokens));
 }

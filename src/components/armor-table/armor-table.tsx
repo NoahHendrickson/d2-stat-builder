@@ -36,8 +36,8 @@ import {
 } from "@/lib/armor-table/filters";
 import type { SortMode } from "@/lib/armor-table/sort";
 import {
-  filterBySearch,
   normalizeSearchText,
+  searchMatcher,
   tokenizeSearchQuery,
 } from "@/lib/armor-table/search";
 import {
@@ -415,14 +415,18 @@ export function ArmorTable() {
     () => sortRows([...rows]),
     [rows, sortRows],
   );
+  // Scoped to every row, not the facet survivors, so a facet can only narrow.
+  const matchesSearch = useMemo(
+    () => searchMatcher(rows, (r) => r.searchName, searchTokens),
+    [rows, searchTokens],
+  );
   const filtered = useMemo(
     () =>
-      filterBySearch(
-        sorted.filter((r) => pieceMatchesFilters(r.piece, r.tertiary, facets)),
-        (r) => r.searchName,
-        searchTokens,
+      sorted.filter(
+        (r) =>
+          pieceMatchesFilters(r.piece, r.tertiary, facets) && matchesSearch(r),
       ),
-    [sorted, facets, searchTokens],
+    [sorted, facets, matchesSearch],
   );
 
   // Duplicates narrows the filtered list to pieces with a twin, each group together.
