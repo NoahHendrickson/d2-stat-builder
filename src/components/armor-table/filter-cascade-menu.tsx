@@ -55,12 +55,12 @@ export const TUNING_FILTER_OPTIONS: FilterOption<TuningFilter>[] = [
 export const SEARCHES_FILTER_EXPLAINER = (
   <div className="text-muted-foreground flex w-60 flex-col gap-1.5 px-1.5 py-2 text-xs">
     <p>
-      Counts the optimizer searches you stopped on where a shown build used the piece, out of
-      the searches it could have been in.
+      Tracks which pieces make it into the builds the optimizer shows you. 3/40 means a piece
+      was in the builds for 3 of the 40 searches it could have joined.
     </p>
     <p>
-      A piece only counts as never used after {MIN_ELIGIBLE_QUERIES} of those searches, so new
-      pieces and classes you rarely optimize aren&apos;t flagged.
+      A piece still unused after {MIN_ELIGIBLE_QUERIES}+ searches is a good candidate to clear
+      out of your vault.
     </p>
   </div>
 );
