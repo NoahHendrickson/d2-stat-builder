@@ -541,6 +541,8 @@ export interface CaseOptions {
   noSetHash0?: boolean;
   /** Exotics never carry `directional: false` (looks past finding F3). */
   noExoticBalancedOnly?: boolean;
+  /** Base pieces per slot (before twins); default 3. Larger pools make top-N pruning bite. */
+  maxPerSlot?: number;
 }
 
 const setDomain = (opts: CaseOptions): readonly number[] => (opts.noSetHash0 ? SET_DOMAIN_NO0 : SET_DOMAIN);
@@ -551,7 +553,7 @@ export const makeCaseArb = (opts: CaseOptions = {}): fc.Arbitrary<GenCase> => fc
     templates: fc.array(statVecArb(!!opts.nonNegative), { minLength: 1, maxLength: 3 }),
     // Per query: how many of 20 power rolls mean "unknown" (mostly known … mostly unknown).
     undefCut: fc.constantFrom(2, 4, 8, 18),
-    slots: fc.array(fc.array(pieceSpecArb(setDomain(opts)), { minLength: 1, maxLength: 3 }), {
+    slots: fc.array(fc.array(pieceSpecArb(setDomain(opts)), { minLength: 1, maxLength: opts.maxPerSlot ?? 3 }), {
       minLength: NUM_SLOTS,
       maxLength: NUM_SLOTS,
     }),

@@ -12,7 +12,7 @@ const SEED = Number(process.env.PROP_SEED ?? 12345);
 
 describe.runIf(process.env.SURVEY)("survey", () => {
   test("tabulate", () => {
-    const cases = fc.sample(fc.tuple(makeCaseArb({ nonNegative: !!process.env.NONNEG, noSetHash0: !!process.env.NOSET0, noExoticBalancedOnly: !!process.env.NOEXB }), fc.integer({ min: 1, max: 5 })), { seed: SEED, numRuns: RUNS });
+    const cases = fc.sample(fc.tuple(makeCaseArb({ nonNegative: !!process.env.NONNEG, noSetHash0: !!process.env.NOSET0, noExoticBalancedOnly: !!process.env.NOEXB, maxPerSlot: Number(process.env.PER_SLOT ?? 3) }), fc.integer({ min: 1, max: 5 })), { seed: SEED, numRuns: RUNS });
     const labels = new Map<string, number>();
     const kinds = new Map<string, { n: number; ex: string; input: string }>();
     let capped = 0;

@@ -31,7 +31,7 @@ import { GENEROUS, checkCase } from "./check-case";
 
 const RUNS = Number(process.env.PROP_RUNS ?? 2000);
 const SEED = Number(process.env.PROP_SEED ?? 0x5eed);
-const params = { numRuns: RUNS, seed: SEED, endOnFailure: true };
+const params = { numRuns: RUNS, seed: SEED };
 
 const kinds = (input: OptimizerInput, n: number) =>
   checkCase(input, n).violations.map((v) => `${v.kind}: ${v.detail}`);
@@ -50,6 +50,20 @@ describe("constraint oracle — properties", () => {
     );
   }, 300_000);
 
+  test("with negative fragments / zero rolls, everything except F1's ceiling symptoms holds", () => {
+    // F1 only ever RAISES the reported ceiling (and, via reconcile, the upper to match),
+    // so its symptoms are exactly these kinds; every other property must hold.
+    const F1_KINDS = new Set(["throw", "ceiling-over", "exact-mismatch", "ceiling-infeasible-over", "exact-infeasible-mismatch"]);
+    const arb = fc.tuple(makeCaseArb({ noSetHash0: true, noExoticBalancedOnly: true }), fc.integer({ min: 1, max: 5 }));
+    fc.assert(
+      fc.property(arb, ([c, n]) => {
+        const rest = checkCase(c.input, n).violations.filter((v) => !F1_KINDS.has(v.kind));
+        expect(rest.map((v) => `${v.kind}: ${v.detail}`)).toEqual([]);
+      }),
+      params,
+    );
+  }, 300_000);
+
   // The unsteered generator finds F1/F2/F3 within a few hundred cases. Kept as an
   // expected failure so it starts passing (and must be flipped) once all three are fixed.
   test.fails("all properties hold on the unsteered generator (fails: F1, F2, F3)", () => {
@@ -58,7 +72,8 @@ describe("constraint oracle — properties", () => {
       fc.property(arb, ([c, n]) => {
         expect(kinds(c.input, n)).toEqual([]);
       }),
-      { ...params, numRuns: Math.max(RUNS, 2000) },
+      // endOnFailure: an expected failure needs no shrinking.
+      { ...params, numRuns: Math.max(RUNS, 2000), endOnFailure: true },
     );
   }, 300_000);
 
