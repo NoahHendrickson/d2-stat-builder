@@ -461,19 +461,26 @@ export function ArmorTable() {
     () => sortRows([...rows]),
     [rows, sortRows],
   );
+  // A restored Searches filter waits for the usage history: until it loads (or if it
+  // can't), every row reads "unknown", and the filter would empty the table.
+  const usageLoaded = usage !== undefined;
+  const effectiveFacets = useMemo(
+    () => (usageLoaded || facets.usage.length === 0 ? facets : { ...facets, usage: [] }),
+    [facets, usageLoaded],
+  );
   const filtered = useMemo(
     () =>
       sorted.filter((r) =>
         pieceMatchesFilters(
           r.piece,
           r.tertiary,
-          facets,
+          effectiveFacets,
           searchTokens,
           r.searchName,
           r.usageBucket,
         ),
       ),
-    [sorted, facets, searchTokens],
+    [sorted, effectiveFacets, searchTokens],
   );
 
   // Duplicates narrows the filtered list to pieces with a twin, each group together.

@@ -1,7 +1,10 @@
 // Which armor pieces one optimizer result used, for the /armor "Searches" history.
 //
 // A piece counts as USED when it (or a piece the search treated as interchangeable with
-// it, see makeInterchangeKey) is in one of the builds the builder displays. Every piece
+// it, see makeInterchangeKey) is in one of the builds the builder displays, or in any
+// returned build at least as good (by total) as the worst one displayed. Armor 3.0
+// totals tie a lot, and which tied builds make the list is the solver's tie-break, not
+// merit, so a piece that ties the shown builds isn't recorded as unused. Every piece
 // the query could have used is reported too, so "never used" can be told apart from
 // "never had the chance". Exotics only count in queries that picked that exotic: with
 // "any", a build holds one of many, and what an exotic is worth is its perk, not its
@@ -16,17 +19,23 @@ export interface PieceUsage {
   used: boolean;
 }
 
-/** Live armor instance ids only; synthetic pieces (theoretical exotic class items) are skipped. */
-const INSTANCE_ID = /^\d{1,20}$/;
-export const isInstanceId = (id: string) => INSTANCE_ID.test(id);
+/**
+ * Live armor instance ids only (Bungie's are int64, stored as bigint); synthetic pieces
+ * (theoretical exotic class items) are skipped.
+ */
+const INSTANCE_ID = /^\d{1,19}$/;
+const INT64_MAX = BigInt("9223372036854775807");
+export const isInstanceId = (id: string) => INSTANCE_ID.test(id) && BigInt(id) <= INT64_MAX;
 
 /**
- * Every piece the query could have used, flagged with whether one of `displayed` (the
- * builds on screen, in the order and number the builder shows them) used it.
+ * Every piece the query could have used, flagged with whether it's in one of
+ * `displayed` (the builds on screen, as the builder shows them) or in a `returned`
+ * build (the whole result) whose total ties or beats the lowest displayed total.
  */
 export function summarizeRun(
   input: OptimizerInput,
   displayed: readonly OptimizerLoadout[],
+  returned: readonly OptimizerLoadout[] = displayed,
 ): PieceUsage[] {
   const pieceById = new Map<string, OptimizerPiece>();
   for (const slot of input.slots) for (const p of slot) pieceById.set(p.id, p);
@@ -47,9 +56,11 @@ export function summarizeRun(
   const eligible = (p: OptimizerPiece, s: number) =>
     exoticEligible(p) && (p.exotic ? picked : s !== takenSlot);
 
-  // Per slot: the interchange keys a displayed build used.
+  // Per slot: the interchange keys a counted build used.
   const usedKeys = input.slots.map(() => new Set<string>());
-  for (const l of displayed) {
+  const floor = Math.min(...displayed.map((l) => l.total));
+  const counted = [...displayed, ...returned.filter((l) => l.total >= floor)];
+  for (const l of counted) {
     l.pieceIds.forEach((id, slot) => {
       const p = pieceById.get(id);
       if (p && usedKeys[slot]) usedKeys[slot].add(keyOf(p));

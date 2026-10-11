@@ -33,16 +33,17 @@ async function sha256Hex(text: string): Promise<string> {
 }
 
 /**
- * Record one query with the builds displayed for it. Resolves false when there was
- * nothing to record.
+ * Record one query with the builds displayed for it (and the whole result, for the
+ * builds that tie them; see summarizeRun). Resolves false when there was nothing to record.
  */
 export async function recordDisplayedBuilds(
   input: OptimizerInput,
   classType: number,
   displayed: readonly OptimizerLoadout[],
+  returned: readonly OptimizerLoadout[],
 ): Promise<boolean> {
   if (displayed.length === 0) return false;
-  const pieces = summarizeRun(input, displayed);
+  const pieces = summarizeRun(input, displayed, returned);
   if (pieces.length === 0) return false;
   const key = await sha256Hex(queryIdentity(input, classType));
   const res = await fetch("/api/build-usage", {

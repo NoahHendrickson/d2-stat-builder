@@ -241,7 +241,7 @@ export const ArmorTableToolbar = memo(function ArmorTableToolbar({
           options={setOptions}
         />
       </div>
-      <div className="hidden min-w-0 items-center gap-2 @[82.5rem]/toolbar:flex">
+      <div className="hidden min-w-0 items-center gap-2 @[91rem]/toolbar:flex">
         <FilterMultiselect
           label="Archetype"
           allLabel="All archetypes"
@@ -275,7 +275,7 @@ export const ArmorTableToolbar = memo(function ArmorTableToolbar({
           options={usageOptions}
         />
       </div>
-      <div className="hidden shrink-0 @[58rem]/toolbar:block @[82.5rem]/toolbar:hidden">
+      <div className="hidden shrink-0 @[58rem]/toolbar:block @[91rem]/toolbar:hidden">
         <FilterCascadeMenu
           {...cascadeMenuProps}
           includedFacets={OVERFLOW_FACETS}

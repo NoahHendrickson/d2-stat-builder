@@ -6,7 +6,7 @@ import { notConfigured, storageError } from "@/lib/loadouts/api-responses";
 import { rejectCrossSite } from "@/lib/http/same-origin";
 
 /** ~30 bytes per piece at MAX_RECORD_PIECES, with room to spare. */
-const MAX_BODY_LENGTH = 256 * 1024;
+const MAX_BODY_BYTES = 64 * 1024;
 const WHAT = "Armor usage";
 
 /** Per armor piece: how many recorded optimizer queries it could join, and was used in. */
@@ -31,10 +31,13 @@ export async function POST(request: Request) {
   const store = getServerBuildUsageStore();
   if (!store) return notConfigured(WHAT);
 
-  const text = await request.text().catch(() => "");
-  if (text.length > MAX_BODY_LENGTH) {
-    return NextResponse.json({ error: "Record too large" }, { status: 413 });
-  }
+  // Refuse an oversized body from its header before buffering it; the byte check after
+  // covers a request that didn't declare its length.
+  const tooLarge = () => NextResponse.json({ error: "Record too large" }, { status: 413 });
+  if (Number(request.headers.get("content-length") ?? 0) > MAX_BODY_BYTES) return tooLarge();
+  const bytes = await request.arrayBuffer().catch(() => new ArrayBuffer(0));
+  if (bytes.byteLength > MAX_BODY_BYTES) return tooLarge();
+  const text = new TextDecoder().decode(bytes);
   let body: unknown;
   try {
     body = JSON.parse(text);

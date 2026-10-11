@@ -31,15 +31,14 @@ const NUM_MASKS = 1 << NUM_STATS;
  */
 function dedupe(
   pieces: OptimizerPiece[],
-  keyIncludesSet: boolean,
-  keyIncludesPower: boolean,
+  keyOf: (p: OptimizerPiece) => string,
   allowTuning: boolean,
   allowBalanced: boolean,
   mins: number[],
 ): InternalPiece[] {
   const map = new Map<string, InternalPiece>();
   for (const p of pieces) {
-    const key = interchangeKey(p, keyIncludesSet, keyIncludesPower, allowTuning, allowBalanced);
+    const key = keyOf(p);
     if (!map.has(key)) {
       map.set(key, makeInternalPiece(p, allowTuning, allowBalanced, mins));
     }
@@ -79,7 +78,10 @@ function interchangeKey(
   );
 }
 
-/** `interchangeKey` with the options `buildSlots` derives from a query. */
+/**
+ * `interchangeKey` with the options a query implies. The one source of the dedupe rule:
+ * buildSlots dedupes with it, and the armor usage history credits twins with it.
+ */
 export function makeInterchangeKey(input: OptimizerInput): (p: OptimizerPiece) => string {
   const keyIncludesSet = (input.setRequirements ?? []).length > 0;
   const keyIncludesPower = input.powerRange !== undefined;
@@ -530,19 +532,14 @@ export function makeJointMinCheck(
  * pruning — and slot sizes), then dedupe, sorted by total.
  */
 export function buildSlots(input: OptimizerInput): InternalPiece[][] {
-  const reqs = input.setRequirements ?? [];
   const allowTuning = input.allowTuning ?? true;
   const allowBalanced = input.allowBalancedTuning ?? true;
   const eligible = makeExoticEligible(input);
+  const keyOf = makeInterchangeKey(input);
   return input.slots.map((s) =>
-    dedupe(
-      s.filter(eligible),
-      reqs.length > 0,
-      input.powerRange !== undefined,
-      allowTuning,
-      allowBalanced,
-      input.minimums,
-    ).sort((a, b) => b.total - a.total),
+    dedupe(s.filter(eligible), keyOf, allowTuning, allowBalanced, input.minimums).sort(
+      (a, b) => b.total - a.total,
+    ),
   );
 }
 

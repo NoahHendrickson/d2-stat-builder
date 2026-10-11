@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest";
 import { solve } from "../optimizer/solve";
-import type { OptimizerInput, OptimizerPiece } from "../optimizer/types";
+import type { OptimizerInput, OptimizerLoadout, OptimizerPiece } from "../optimizer/types";
 import { MIN_ELIGIBLE_QUERIES, usageBucket } from "./buckets";
 import { queryIdentity, summarizeRun } from "./summarize";
 import { decodeRecord, encodeRecord } from "./wire";
@@ -26,8 +26,11 @@ const rest = [
   [piece("501", [0, 0, 0, 0, 10, 0])],
 ];
 
-const usageOf = (q: OptimizerInput, displayed = solve(q).loadouts) =>
-  new Map(summarizeRun(q, displayed).map((u) => [u.id, u.used]));
+const usageOf = (
+  q: OptimizerInput,
+  displayed = solve(q).loadouts,
+  returned: readonly OptimizerLoadout[] = displayed,
+) => new Map(summarizeRun(q, displayed, returned).map((u) => [u.id, u.used]));
 
 describe("summarizeRun", () => {
   test("flags used and twin pieces from a real solve", () => {
@@ -45,18 +48,33 @@ describe("summarizeRun", () => {
   });
 
   test("counts the displayed builds, not the solver's order", () => {
+    // Weapons and total disagree, so a Weapons sort shows a different 50 than the solver's.
+    const helmets = Array.from({ length: 60 }, (_, i) =>
+      piece(String(1000 + i), [(i * 37) % 60, 0, 0, 0, 0, i]),
+    );
+    const q = input([helmets, ...rest]);
+    const returned = solve(q).loadouts;
+    const displayed = [...returned].sort((a, b) => b.stats[0] - a.stats[0]).slice(0, 50);
+    const floor = Math.min(...displayed.map((l) => l.total));
+    const credited = new Set(
+      [...displayed, ...returned.filter((l) => l.total >= floor)].map((l) => l.pieceIds[0]),
+    );
+    const usage = usageOf(q, displayed, returned);
+    expect([...usage.keys()].filter((id) => id.startsWith("1"))).toHaveLength(60);
+    for (const h of helmets) expect(usage.get(h.id)).toBe(credited.has(h.id));
+    // Every displayed helmet is credited, and the rule still leaves some out.
+    for (const l of displayed) expect(usage.get(l.pieceIds[0])).toBe(true);
+    expect(helmets.some((h) => !usage.get(h.id))).toBe(true);
+  });
+
+  test("builds that tie the displayed ones count even when the list cut them", () => {
     const helmets = Array.from({ length: 60 }, (_, i) =>
       piece(String(1000 + i), [i, 0, 0, 0, 0, 60 - i]),
     );
     const q = input([helmets, ...rest]);
-    // The builder sorted by Weapons high to low and shows its first 50.
-    const displayed = [...solve(q).loadouts]
-      .sort((a, b) => b.stats[0] - a.stats[0])
-      .slice(0, 50);
-    const shown = new Set(displayed.map((l) => l.pieceIds[0]));
-    const usage = usageOf(q, displayed);
-    expect([...usage.keys()].filter((id) => id.startsWith("1"))).toHaveLength(60);
-    for (const h of helmets) expect(usage.get(h.id)).toBe(shown.has(h.id));
+    const returned = solve(q).loadouts; // 60 builds, every total equal
+    const usage = usageOf(q, returned.slice(0, 50), returned);
+    for (const h of helmets) expect(usage.get(h.id)).toBe(true);
   });
 
   test("exotics count only when the query picked them", () => {

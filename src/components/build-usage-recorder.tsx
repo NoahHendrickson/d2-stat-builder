@@ -54,7 +54,7 @@ export function BuildUsageRecorder() {
       if (signature === lastRecorded) return;
       timer = setTimeout(() => {
         lastRecorded = signature;
-        recordDisplayedBuilds(shown.input, classType, displayed.loadouts)
+        recordDisplayedBuilds(shown.input, classType, displayed.loadouts, shown.result.loadouts)
           .then((ok) => {
             if (ok) void queryClient.invalidateQueries({ queryKey: buildUsageKey(membershipId) });
           })

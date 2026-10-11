@@ -4,8 +4,8 @@
 // Runtime imports are relative (not `@/`) — the vitest runner has no `@/` alias.
 import { isInstanceId, type PieceUsage } from "./summarize";
 
-/** Most pieces one record accepts — a full vault is 600 pieces across every class. */
-export const MAX_RECORD_PIECES = 3000;
+/** Most pieces one record accepts: one class's pool, with room (a full vault is 600 slots). */
+export const MAX_RECORD_PIECES = 1000;
 
 export interface RecordBody {
   key: string;
