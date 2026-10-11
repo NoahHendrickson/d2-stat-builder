@@ -1,7 +1,7 @@
 "use client";
 
 import { TooltipLabel } from "@/components/ui/tooltip";
-import { useState, type ReactNode } from "react";
+import { useState } from "react";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { UnfoldMoreIcon } from "@hugeicons/core-free-icons";
 import type { FilterOption } from "@/lib/armor-table/pinned";
@@ -10,7 +10,6 @@ import type {
   FacetFilters,
   TuningFilter,
 } from "@/lib/armor-table/filters";
-import type { UsageBucket } from "@/lib/build-usage/buckets";
 import {
   STAT_DISPLAY_ORDER,
   STAT_LABELS,
@@ -51,16 +50,6 @@ export const TUNING_FILTER_OPTIONS: FilterOption<TuningFilter>[] = [
   { value: "none", label: "Not tunable" },
 ];
 
-/** Under the Searches options: what the filter is for. */
-export const SEARCHES_FILTER_EXPLAINER = (
-  <div className="text-muted-foreground w-60 px-1.5 py-2 text-xs">
-    <p>
-      We track when a piece of armor is &lsquo;used&rsquo; in a build. So you can identify
-      pieces that never make it into a build and possibly delete them.
-    </p>
-  </div>
-);
-
 const ALL_FACET_KEYS = [
   "classes",
   "armorVersions",
@@ -68,7 +57,6 @@ const ALL_FACET_KEYS = [
   "archetypes",
   "tunings",
   "tertiaries",
-  "usage",
 ] as const satisfies readonly (keyof FacetFilters)[];
 
 function countFacetSelections(
@@ -89,7 +77,6 @@ function CascadeFacetSubmenu<V extends string | number>({
   pinned = [],
   onTogglePin,
   toggleOnClick = false,
-  footer,
 }: {
   label: string;
   allLabel: string;
@@ -101,7 +88,6 @@ function CascadeFacetSubmenu<V extends string | number>({
   pinned?: V[];
   onTogglePin?: (value: V) => void;
   toggleOnClick?: boolean;
-  footer?: ReactNode;
 }) {
   const [query, setQuery] = useState("");
   const active = value.length > 0;
@@ -136,7 +122,6 @@ function CascadeFacetSubmenu<V extends string | number>({
           pinnable={pinnable}
           pinned={pinned}
           onTogglePin={onTogglePin}
-          footer={footer}
         />
       </DropdownMenuSubContent>
     </DropdownMenuSub>
@@ -152,7 +137,6 @@ export function FilterCascadeMenu({
   onFacetChange,
   setOptions,
   archetypeOptions,
-  usageOptions,
   statOptions,
   pinnedArchetypes,
   onTogglePinnedArchetype,
@@ -171,7 +155,6 @@ export function FilterCascadeMenu({
   ) => void;
   setOptions: FilterOption<number>[];
   archetypeOptions: FilterOption<string>[];
-  usageOptions: FilterOption<UsageBucket>[];
   statOptions: FilterOption<number>[];
   pinnedArchetypes: string[];
   onTogglePinnedArchetype: (name: string) => void;
@@ -307,17 +290,6 @@ export function FilterCascadeMenu({
             value={facets.tertiaries}
             onChange={(v) => onFacetChange("tertiaries", v)}
             toggleOnClick={toggleSubmenusOnClick}
-          />
-        )}
-        {includes("usage") && (
-          <CascadeFacetSubmenu<UsageBucket>
-            label="Searches"
-            allLabel="Any usage"
-            options={usageOptions}
-            value={facets.usage}
-            onChange={(v) => onFacetChange("usage", v)}
-            toggleOnClick={toggleSubmenusOnClick}
-            footer={SEARCHES_FILTER_EXPLAINER}
           />
         )}
         {showClearAll && filtersActive && (

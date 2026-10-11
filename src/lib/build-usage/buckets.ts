@@ -1,5 +1,5 @@
-// The /armor "Searches" column and filter: one piece's optimizer history, and the
-// bucket the filter sorts it into. Pure — shared by the table and its tests.
+// The /armor "Searches" column and Cleanup view: one piece's optimizer history, and the
+// rating it gets. Pure — shared by the table and its tests.
 
 /** One piece's history across the account's recorded optimizer queries. */
 export interface PieceUsageCounts {
@@ -17,7 +17,7 @@ export interface BuildUsageSummary {
 /**
  * A piece seen in fewer distinct queries than this hasn't had a fair chance yet (it's
  * new, its class is rarely optimized, or the searches so far were a few variations on
- * one idea), so it gets no rating. Deliberately high: the filter exists to inform deletes.
+ * one idea), so it gets no rating. Deliberately high: Cleanup exists to inform deletes.
  */
 export const MIN_ELIGIBLE_QUERIES = 20;
 
@@ -36,18 +36,6 @@ export const USAGE_BUCKET_LABELS: Record<UsageBucket, string> = {
 export const RARELY_BELOW = 0.1;
 /** At or above this share it's "often"; between the two, "sometimes". */
 export const OFTEN_FROM = 0.35;
-
-/** The buckets the Searches filter offers; "unknown" is explained under it, not picked. */
-export const USAGE_FILTER_BUCKETS = [
-  "never",
-  "rarely",
-  "sometimes",
-  "often",
-] as const satisfies readonly UsageBucket[];
-
-export function isUsageFilterBucket(v: unknown): v is UsageBucket {
-  return typeof v === "string" && (USAGE_FILTER_BUCKETS as readonly string[]).includes(v);
-}
 
 /**
  * How much the optimizer reaches for a piece, by the share of its searches whose shown

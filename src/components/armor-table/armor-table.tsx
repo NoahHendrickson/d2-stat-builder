@@ -13,16 +13,25 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { useArmory } from "@/lib/armory/use-armory";
 import { sessionMembershipId } from "@/lib/armory/use-profile";
 import { useSession } from "@/lib/auth/use-session";
-import { loadAnnotations } from "@/lib/inventory/annotations";
+import {
+  annotationsStore,
+  loadAnnotations,
+  setTag,
+  type ItemTag,
+} from "@/lib/inventory/annotations";
 import { useBuildUsage } from "@/lib/build-usage/use-build-usage";
 import { useLoadouts } from "@/lib/loadouts/use-loadouts";
 import {
-  USAGE_BUCKET_LABELS,
-  USAGE_FILTER_BUCKETS,
+  MIN_ELIGIBLE_QUERIES,
   loadoutPieceIds,
   usageBucket,
-  type UsageBucket,
 } from "@/lib/build-usage/buckets";
+import {
+  CLEANUP_TIERS,
+  DEFAULT_CLEANUP_TIERS,
+  groupCleanup,
+  type CleanupTier,
+} from "@/lib/armor-table/cleanup";
 import { useManifest } from "@/lib/manifest/use-manifest";
 import { availableSets } from "@/lib/armory/sets";
 import type { ArmoryCharacter } from "@/lib/armory/fetch";
@@ -440,16 +449,6 @@ export function ArmorTable() {
     return [...seen].sort().map((name) => ({ value: name, label: name }));
   }, [rows]);
 
-  const usageOptions = useMemo<FilterOption<UsageBucket>[]>(() => {
-    const counts = new Map<UsageBucket, number>();
-    for (const r of rows) counts.set(r.usageBucket, (counts.get(r.usageBucket) ?? 0) + 1);
-    return USAGE_FILTER_BUCKETS.map((bucket) => ({
-      value: bucket,
-      label: USAGE_BUCKET_LABELS[bucket],
-      count: counts.get(bucket) ?? 0,
-    }));
-  }, [rows]);
-
   const statIcons = useMemo(() => {
     const out = {} as StatIconMap;
     if (manifest) {
@@ -474,42 +473,104 @@ export function ArmorTable() {
     () => sortRows([...rows]),
     [rows, sortRows],
   );
-  // A restored Searches filter waits for the usage history: until it loads (or if it
-  // can't), every row reads "unknown", and the filter would empty the table.
-  const usageLoaded = usage !== undefined;
-  const effectiveFacets = useMemo(
-    () => (usageLoaded || facets.usage.length === 0 ? facets : { ...facets, usage: [] }),
-    [facets, usageLoaded],
-  );
   const filtered = useMemo(
     () =>
       sorted.filter((r) =>
         pieceMatchesFilters(
           r.piece,
           r.tertiary,
-          effectiveFacets,
+          facets,
           searchTokens,
           r.searchName,
-          r.usageBucket,
         ),
       ),
-    [sorted, effectiveFacets, searchTokens],
+    [sorted, facets, searchTokens],
   );
 
-  // Duplicates narrows the filtered list to pieces with a twin, each group together.
-  // Picking what has to match (the split button's menu) turns it on.
-  const [showDuplicates, setShowDuplicates] = useState(false);
+  // Duplicates and Cleanup each narrow the filtered list to groups of rows; turning one
+  // on turns the other off. Picking options in either split button's menu turns it on.
+  const [view, setView] = useState<"all" | "duplicates" | "cleanup">("all");
   const [duplicateMatch, setDuplicateMatch] = useState(DEFAULT_DUPLICATE_MATCH);
-  const toggleDuplicates = useCallback(() => setShowDuplicates((on) => !on), []);
+  const toggleDuplicates = useCallback(
+    () => setView((v) => (v === "duplicates" ? "all" : "duplicates")),
+    [],
+  );
   const changeDuplicateMatch = useCallback((match: DuplicateMatch) => {
     setDuplicateMatch(match);
-    setShowDuplicates(true);
+    setView("duplicates");
   }, []);
   const duplicates = useMemo(
-    () => (showDuplicates ? groupDuplicates(filtered, duplicateMatch) : null),
-    [showDuplicates, filtered, duplicateMatch],
+    () => (view === "duplicates" ? groupDuplicates(filtered, duplicateMatch) : null),
+    [view, filtered, duplicateMatch],
   );
-  const visible = duplicates?.rows ?? filtered;
+
+  // Cleanup: the pieces the optimizer rarely or never uses, by class and slot.
+  const [cleanupTiers, setCleanupTiers] = useState<readonly CleanupTier[]>(DEFAULT_CLEANUP_TIERS);
+  // What the last "Mark as junk" replaced, so Undo can put each piece's tag back.
+  const [junkUndo, setJunkUndo] = useState<{ id: string; tag?: ItemTag }[] | null>(null);
+  const toggleCleanup = useCallback(() => {
+    setView((v) => (v === "cleanup" ? "all" : "cleanup"));
+    setJunkUndo(null);
+  }, []);
+  const changeCleanupTiers = useCallback((tiers: CleanupTier[]) => {
+    setCleanupTiers(tiers);
+    setView("cleanup");
+  }, []);
+  const cleanup = useMemo(
+    () => (view === "cleanup" ? groupCleanup(filtered, cleanupTiers) : null),
+    [view, filtered, cleanupTiers],
+  );
+  const cleanupCounts = useMemo(() => {
+    const counts = Object.fromEntries(CLEANUP_TIERS.map((t) => [t, 0])) as Record<
+      CleanupTier,
+      number
+    >;
+    for (const r of filtered) {
+      if (r.usageBucket in counts) counts[r.usageBucket as CleanupTier]++;
+    }
+    return counts;
+  }, [filtered]);
+  const cleanupIds = useMemo(
+    () => cleanup?.rows.map((r) => r.piece.instanceId) ?? [],
+    [cleanup],
+  );
+  const markCleanupJunk = useCallback(() => {
+    const tags = annotationsStore.get();
+    setJunkUndo(cleanupIds.map((id) => ({ id, tag: tags[id]?.tag })));
+    setTag(cleanupIds, "junk");
+  }, [cleanupIds]);
+  const undoCleanupJunk = useCallback(() => {
+    if (!junkUndo) return;
+    const byTag = new Map<ItemTag | undefined, string[]>();
+    for (const { id, tag } of junkUndo) byTag.set(tag, [...(byTag.get(tag) ?? []), id]);
+    for (const [tag, ids] of byTag) setTag(ids, tag);
+    setJunkUndo(null);
+  }, [junkUndo]);
+  const cleanupProps = useMemo(
+    () => ({
+      onToggle: toggleCleanup,
+      tiers: cleanupTiers,
+      onTiersChange: changeCleanupTiers,
+      counts: cleanupCounts,
+      junkable: cleanupIds.length,
+      onMarkJunk: markCleanupJunk,
+      undoable: junkUndo?.length ?? 0,
+      onUndoJunk: undoCleanupJunk,
+    }),
+    [
+      toggleCleanup,
+      cleanupTiers,
+      changeCleanupTiers,
+      cleanupCounts,
+      cleanupIds,
+      markCleanupJunk,
+      junkUndo,
+      undoCleanupJunk,
+    ],
+  );
+
+  const grouped = duplicates ?? cleanup;
+  const visible = grouped?.rows ?? filtered;
 
   const filtersActive = hasActiveFilters({ ...facets, search });
 
@@ -565,12 +626,13 @@ export function ArmorTable() {
             onFacetChange={setFacet}
             setOptions={setOptions}
             archetypeOptions={archetypeOptions}
-            usageOptions={usageOptions}
             statOptions={STAT_FILTER_OPTIONS}
             pinnedArchetypes={pinnedArchetypes}
             onTogglePinnedArchetype={togglePinnedArchetype}
             filteredCount={visible.length}
             duplicateGroups={duplicates?.groupCount}
+            cleanupGroups={cleanup?.groupCount}
+            cleanup={cleanupProps}
             onToggleDuplicates={toggleDuplicates}
             duplicateMatch={duplicateMatch}
             onDuplicateMatchChange={changeDuplicateMatch}
@@ -611,7 +673,7 @@ export function ArmorTable() {
                     onRefresh={refresh}
                     provisional={armory.isProvisional}
                     dataIndex={vRow.index}
-                    group={duplicates?.groups[vRow.index]}
+                    group={grouped?.groups[vRow.index]}
                     measureRef={rowVirtualizer.measureElement}
                   />
                 );
@@ -629,7 +691,13 @@ export function ArmorTable() {
                 ? "No armor pieces loaded yet."
                 : filtered.length === 0
                   ? "No armor matches your filters."
-                  : `No duplicates here: no two pieces share a ${duplicateMatchSummary(duplicateMatch)}.`}
+                  : view === "cleanup"
+                    ? usage === undefined
+                      ? "Loading your optimizer history."
+                      : cleanupTiers.length === 0
+                        ? "Pick a rating in the Cleanup menu to see pieces."
+                        : `Nothing to clean up here. A piece gets a rating after ${MIN_ELIGIBLE_QUERIES} optimizer searches that could use it.`
+                    : `No duplicates here: no two pieces share a ${duplicateMatchSummary(duplicateMatch)}.`}
             </p>
           )}
       </div>

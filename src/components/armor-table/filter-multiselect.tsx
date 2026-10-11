@@ -1,7 +1,7 @@
 "use client";
 
 import { TooltipLabel } from "@/components/ui/tooltip";
-import { useRef, useState, type ReactNode } from "react";
+import { useRef, useState } from "react";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Cancel01Icon, Pin02Icon, Search01Icon, UnfoldMoreIcon } from "@hugeicons/core-free-icons";
 import { partitionByPin, type FilterOption } from "@/lib/armor-table/pinned";
@@ -65,8 +65,6 @@ type FilterMultiselectPanelProps<V extends string | number> = {
    * option lists (hundreds of perks) otherwise mount every row on open.
    */
   maxVisible?: number;
-  /** Shown under the list, past a divider: what the filter means. */
-  footer?: ReactNode;
 };
 
 /** Checkbox list body shared by FilterMultiselect and FilterCascadeMenu submenus. */
@@ -84,7 +82,6 @@ export function FilterMultiselectPanel<V extends string | number>({
   pinned = [],
   onTogglePin,
   maxVisible,
-  footer,
 }: FilterMultiselectPanelProps<V>) {
   const active = value.length > 0;
   const partition = partitionByPin(options, pinnable ? pinned : [], query);
@@ -219,12 +216,6 @@ export function FilterMultiselectPanel<V extends string | number>({
           </DropdownMenuItem>
         </>
       )}
-      {footer && (
-        <>
-          <DropdownMenuSeparator />
-          {footer}
-        </>
-      )}
     </>
   );
 }
@@ -247,7 +238,6 @@ export function FilterMultiselect<V extends string | number>({
   pinned = [],
   onTogglePin,
   maxVisible,
-  footer,
   className,
 }: {
   label: string;
@@ -266,8 +256,6 @@ export function FilterMultiselect<V extends string | number>({
   onTogglePin?: (value: V) => void;
   /** See {@link FilterMultiselectPanel}. */
   maxVisible?: number;
-  /** See {@link FilterMultiselectPanel}. */
-  footer?: ReactNode;
   className?: string;
 }) {
   const [query, setQuery] = useState("");
@@ -375,7 +363,6 @@ export function FilterMultiselect<V extends string | number>({
             pinned={pinned}
             onTogglePin={onTogglePin}
             maxVisible={maxVisible}
-            footer={footer}
           />
         </DropdownMenuContent>
       </DropdownMenu>
