@@ -25,8 +25,10 @@ import {
   bruteCoverExists,
   bruteFeasible,
   expectOutcomeLegal,
+  highLeafArb,
   internal,
   leafArb,
+  referenceMaximize,
   relabelLeaf,
   showLeaf as show,
   tune,
@@ -118,6 +120,22 @@ describe("leaf tuner: policy-independent relations", () => {
     console.log(`[coverage] artifice dump cases=${dumped}`);
     expect(dumped).toBeGreaterThan(50);
   });
+
+  test("maximize total = the unpruned search tree's max (normal and near-cap loadouts)", () => {
+    let slow = 0;
+    fc.assert(
+      fc.property(fc.oneof(leafArb, highLeafArb), (c) => {
+        const o = tune(c, "maximize");
+        const want = referenceMaximize(c);
+        expect(o === null, show(c)).toBe(want === null);
+        if (!o) return;
+        if (o.applied.some((a) => a?.kind === "directional")) slow++;
+        expect(o.total, `pruned vs unpruned: ${show(c)}`).toBe(want);
+      }),
+      PARAMS(3000),
+    );
+    console.log(`[coverage] unpruned reference: directional winners=${slow}`);
+  }, 120_000);
 
   test("nullability is monotone: lower minimums / bigger mod budget never lose feasibility", () => {
     fc.assert(

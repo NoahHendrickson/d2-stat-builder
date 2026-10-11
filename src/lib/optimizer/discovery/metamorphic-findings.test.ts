@@ -120,7 +120,7 @@ describe("QUESTION Q2: mod covering (and so the total) depends on stat order", (
 });
 
 // ---------------------------------------------------------------------------
-// FINDING D1 (latent) — dedupe merges an exotic Balanced-only roll with a directional one
+// D1 — independently rediscovered known F3 (fixed by 0221eea, cherry-picked here)
 // ---------------------------------------------------------------------------
 
 /**
@@ -130,7 +130,7 @@ describe("QUESTION Q2: mod covering (and so the total) depends on stat order", (
  * Feasibility then depends on the order of pieces inside a slot ("merging must never
  * change feasibility"). Latent: dream.ts:279-281 never builds a Balanced-only exotic.
  */
-describe("FINDING D1 (latent): exotic dedupe key ignores directional:false", () => {
+describe("D1 = known F3 (fixed in 0221eea): exotic dedupe key ignored directional:false", () => {
   const base = (exotic: OptimizerPiece[]): OptimizerInput => ({
     slots: [
       exotic,
@@ -155,7 +155,7 @@ describe("FINDING D1 (latent): exotic dedupe key ignores directional:false", () 
   test("directional exotic first: feasible", () => {
     expect(solve(base([flex, balOnly]), GENEROUS).loadouts.length).toBeGreaterThan(0);
   });
-  test.fails("Balanced-only exotic first: should still be feasible (the merge drops the flexible one)", () => {
+  test("Balanced-only exotic first: still feasible (regression for the dedupe fix 0221eea)", () => {
     expect(solve(base([balOnly, flex]), GENEROUS).loadouts.length).toBeGreaterThan(0);
   });
 });

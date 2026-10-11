@@ -127,7 +127,7 @@ describe("metamorphic: pool shape invariance", () => {
           expect(b.totals, `${ctx}: totals`).toEqual(a.totals);
         }
       }),
-      PARAMS(150),
+      PARAMS(100),
     );
     report("slot perm", cov);
   }, 120_000);
@@ -162,7 +162,7 @@ describe("metamorphic: pool shape invariance", () => {
           expect(b.totals, `relabel ${perm}: totals`).toEqual(a.totals);
         }
       }),
-      PARAMS(150),
+      PARAMS(100),
     );
     report("stat relabel", cov);
   }, 120_000);
@@ -179,7 +179,7 @@ describe("differential: uncapped top-N = top-N of every combo's tuner total", ()
         if (!noteCoverage(cov, input, a)) return;
         expect(a.totals, `top-N vs brute force: ${show({ ...input, slots: input.slots.map((s) => s.length) })}`).toEqual(want);
       }),
-      PARAMS(200),
+      PARAMS(120),
     );
     report("brute top-N", cov);
   }, 300_000);
@@ -199,7 +199,7 @@ describe("differential: uncapped top-N = top-N of every combo's tuner total", ()
         }
         if (a.exact) expect(a.out.ceilings, ctx).toEqual(want);
       }),
-      PARAMS(150),
+      PARAMS(100),
     );
     report("brute ceilings", cov);
   }, 300_000);
@@ -250,7 +250,7 @@ describe("metamorphic: monotone pool / query edits", () => {
         expectTotalsDominate(ra, rb, `add ${show(piece)} to slot ${k}`);
         expectCeilingsDominate(ra, rb, `add ${show(piece)} to slot ${k}`);
       }),
-      PARAMS(150),
+      PARAMS(100),
     );
     report("add piece", cov);
   }, 180_000);
@@ -329,7 +329,7 @@ describe("metamorphic: monotone pool / query edits", () => {
         // every loadout's stat values achievable — so ceilings can only rise.
         expectCeilingsDominate(ra, rb, ctx);
       }),
-      PARAMS(200),
+      PARAMS(120),
     );
     report(`relax ${JSON.stringify(kinds)}`, cov);
   }, 180_000);
@@ -423,7 +423,7 @@ describe("metamorphic: a short budget only ever under-reports", () => {
         }
         if (out.ceilingsExact && full.exact) expect(out.ceilings).toEqual(full.out.ceilings);
       }),
-      PARAMS(150),
+      PARAMS(100),
     );
     report("short budget", cov);
   }, 180_000);

@@ -8,6 +8,7 @@ import fc from "fast-check";
 import { expect } from "vitest";
 import { NUM_SLOTS, NUM_STATS, clamp } from "../floors";
 import {
+  assignMods,
   createTuningSearcher,
   makeInternalPiece,
   type InternalPiece,
@@ -201,4 +202,74 @@ export function relabelLeaf(c: LeafCase, perm: number[]): LeafCase {
     mins: permuteStats(c.mins, perm),
     frag: permuteStats(c.frag, perm),
   };
+}
+
+/**
+ * Loadouts pushed toward the 200 cap: every piece gets the same per-stat boost (0–30),
+ * so five-piece sums land near/over 200 and the cap arm of the tuner's pruning (the
+ * plain-minus cap condition, the artifice dump's clamped gains) is exercised.
+ */
+export const highLeafArb: fc.Arbitrary<LeafCase> = fc
+  .tuple(leafArb, fc.noBias(fc.array(fc.constantFrom(0, 10, 20, 30), { minLength: 6, maxLength: 6 })))
+  .map(([c, boost]) => ({
+    ...c,
+    pieces: c.pieces.map((p) => ({ ...p, stats: p.stats.map((v, s) => v + boost[s]) })),
+    mins: c.mins.map((m, s) => (m > 0 && m < 200 ? Math.min(200, m + 5 * boost[s]) : m)),
+  }));
+
+/**
+ * The tuner's search tree with NO pruning (no plain-minus dominance, no branch-and-bound,
+ * no joint prune): default-everywhere first; if that is infeasible, every combination
+ * where each directional passes the same per-node "could still be short" rule. Leaf total
+ * = assignMods covering + leftover artifice placed by exhaustive search. Returns the max
+ * total (the tuner keeps the first maximum, so totals must match exactly).
+ */
+export function referenceMaximize(c: LeafCase, order?: number[]): number | null {
+  const { chosen, sum } = internal(c, order);
+  const art = chosen.filter((p) => p.artifice).length;
+  const aug = sum.map((v, s) => v + c.frag[s]);
+  const leaf = (): number | null => {
+    const d = aug.map((v, s) => (c.mins[s] > 0 && v < c.mins[s] ? c.mins[s] - v : 0));
+    const asg = assignMods(d, c.mods.major, c.mods.minor, art);
+    if (!asg) return null;
+    const base = aug.map((v, s) => v + asg.points[s] + asg.artificePoints[s]);
+    let best = -Infinity;
+    const rec = (s: number, left: number, acc: number): void => {
+      if (s === NUM_STATS) {
+        if (acc > best) best = acc;
+        return;
+      }
+      for (let k = 0; k <= left; k++) rec(s + 1, left - k, acc + clamp(base[s] + 3 * k));
+    };
+    rec(0, art - asg.usedArtifice, 0);
+    return best;
+  };
+  for (const p of chosen) for (let s = 0; s < NUM_STATS; s++) aug[s] += p.tuneOpts[0].vec[s];
+  const fast = leaf();
+  if (fast !== null) return fast;
+  for (const p of chosen) for (let s = 0; s < NUM_STATS; s++) aug[s] -= p.tuneOpts[0].vec[s];
+  const down: number[][] = Array.from({ length: NUM_SLOTS + 1 }, () => new Array(NUM_STATS).fill(0));
+  for (let i = NUM_SLOTS - 1; i >= 0; i--)
+    for (let s = 0; s < NUM_STATS; s++) down[i][s] = down[i + 1][s] + chosen[i].tuneStatDownside[s];
+  let best: number | null = null;
+  const rec = (i: number): void => {
+    if (i === NUM_SLOTS) {
+      const t = leaf();
+      if (t !== null && (best === null || t > best)) best = t;
+      return;
+    }
+    const def = chosen[i].tuneOpts[0].vec;
+    for (const opt of chosen[i].tuneOpts) {
+      const ap = opt.applied;
+      if (ap && ap.kind === "directional") {
+        const m = c.mins[ap.plus];
+        if (m <= 0 || aug[ap.plus] + def[ap.plus] + down[i + 1][ap.plus] >= m) continue;
+      }
+      for (let s = 0; s < NUM_STATS; s++) aug[s] += opt.vec[s];
+      rec(i + 1);
+      for (let s = 0; s < NUM_STATS; s++) aug[s] -= opt.vec[s];
+    }
+  };
+  rec(0);
+  return best;
 }
