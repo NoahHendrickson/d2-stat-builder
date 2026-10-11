@@ -853,9 +853,12 @@ export function BuilderPanel({
       setTargets((prev) => prev.map((v, idx) => (idx === i ? value : v))),
     [],
   );
-  // Section Reset buttons: each shows only while its section differs from the default.
-  const resetTargets = useCallback(() => setTargets([0, 0, 0, 0, 0, 0]), []);
-  const targetsSet = targets.some((v) => v > 0);
+  // Section Reset buttons: always clickable. A section already at its default keeps
+  // its state object, so the click is a no-op (no re-render, no new search).
+  const resetTargets = useCallback(
+    () => setTargets((prev) => (prev.some((v) => v > 0) ? [0, 0, 0, 0, 0, 0] : prev)),
+    [],
+  );
 
   const onClassChange = useCallback((next: number) => {
     setClassType(next);
@@ -924,25 +927,37 @@ export function BuilderPanel({
 
   const onMajorChange = useCallback((v: string) => setMajor(Number(v)), []);
 
-  const resetSetReqs = useCallback(() => setSetReqs({}), []);
+  const resetSetReqs = useCallback(
+    () => setSetReqs((prev) => (Object.keys(prev).length > 0 ? {} : prev)),
+    [],
+  );
   const resetFragments = useCallback(
-    () => setFragSel((prev) => ({ ...prev, [activeSubclass]: new Set<number>() })),
+    () =>
+      setFragSel((prev) =>
+        prev[activeSubclass].size > 0
+          ? { ...prev, [activeSubclass]: new Set<number>() }
+          : prev,
+      ),
     [activeSubclass],
   );
-  const advancedChanged =
-    !useBalancedTuning || !useLegacyExotics || useLowerTierArmor;
   const resetAdvanced = useCallback(() => {
     setUseBalancedTuning(true);
     setUseLegacyExotics(true);
     setUseLowerTierArmor(false);
   }, []);
-  const powerRangeChanged =
-    powerRange.enabled ||
-    powerRange.bounds !== null ||
-    powerRange.weapons.some((w) => w !== null) ||
-    powerRange.dreamersBond ||
-    powerRange.legacyArmor;
-  const resetPowerRange = useCallback(() => setPowerRange(DEFAULT_POWER_RANGE), []);
+  const resetPowerRange = useCallback(
+    () =>
+      setPowerRange((prev) =>
+        prev.enabled ||
+        prev.bounds !== null ||
+        prev.weapons.some((w) => w !== null) ||
+        prev.dreamersBond ||
+        prev.legacyArmor
+          ? DEFAULT_POWER_RANGE
+          : prev,
+      ),
+    [],
+  );
 
   const refetchArmory = armoryQuery.refetch;
   const onEquipped = useCallback(() => {
@@ -1026,7 +1041,7 @@ export function BuilderPanel({
 
             <Section
               title="Stats"
-              trailing={targetsSet && <SectionReset onClick={resetTargets} />}
+              trailing={<SectionReset onClick={resetTargets} />}
             >
               <div className="space-y-7">
                 {STAT_DISPLAY_ORDER.map((key) => {
@@ -1080,9 +1095,7 @@ export function BuilderPanel({
                 sets={sets}
                 setReqs={setReqs}
                 onToggleSet={toggleSet}
-                onReset={
-                  Object.keys(ownedSetReqs).length > 0 ? resetSetReqs : undefined
-                }
+                onReset={resetSetReqs}
                 pinnedSets={pinnedSets}
                 onTogglePin={togglePinnedSet}
                 setFilters={setFilters}
@@ -1113,7 +1126,7 @@ export function BuilderPanel({
 
             <Section
               title="Advanced settings"
-              trailing={advancedChanged && <SectionReset onClick={resetAdvanced} />}
+              trailing={<SectionReset onClick={resetAdvanced} />}
             >
               <div className="flex flex-col gap-4">
                 <SettingRow
@@ -1141,9 +1154,7 @@ export function BuilderPanel({
             </Section>
             <Section
               title="Underlight settings"
-              trailing={
-                powerRangeChanged && <SectionReset onClick={resetPowerRange} />
-              }
+              trailing={<SectionReset onClick={resetPowerRange} />}
             >
               <PowerRangeControls
                 value={powerRange}
@@ -1215,10 +1226,7 @@ function Section({
   children,
 }: {
   title?: string;
-  /**
-   * Right-aligned header slot, e.g. a Reset button. Passing it at all (even `false`)
-   * makes the header button-height, so it doesn't grow when the button appears.
-   */
+  /** Right-aligned header slot, e.g. a Reset button. */
   trailing?: ReactNode;
   className?: string;
   children: ReactNode;
@@ -1231,13 +1239,7 @@ function Section({
       )}
     >
       {title ? (
-        <SectionHeading
-          trailing={trailing || null}
-          className={cn(
-            "justify-between",
-            trailing !== undefined && "flex min-h-8 items-center",
-          )}
-        >
+        <SectionHeading trailing={trailing} className="justify-between">
           {title}
         </SectionHeading>
       ) : null}

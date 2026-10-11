@@ -25,8 +25,8 @@ import {
 
 /**
  * Figma 17:5835 — "Fragments" label over the subclass tabs, with the emphatic
- * "Apply current" button bottom-aligned on the right (with a Reset before it while
- * any fragment is picked). Below (not in the design,
+ * "Apply current" button bottom-aligned on the right, with a Reset before it.
+ * Below (not in the design,
  * kept from before): a grid of the active subclass's stat-affecting fragments
  * (Name + six stat columns). Toggle a fragment to fold its stats into the build.
  * Only the active subclass's selection applies (you run one subclass at a time).
@@ -76,11 +76,9 @@ export const FragmentPicker = memo(function FragmentPicker({
         </div>
 
         <div className="flex items-center gap-2">
-          {selected.size > 0 && (
-            <Button type="button" variant="outline" onClick={onReset}>
-              Reset
-            </Button>
-          )}
+          <Button type="button" variant="outline" onClick={onReset}>
+            Reset
+          </Button>
           <TooltipLabel
             label="Match your equipped subclass and fragments"
             disabled={applyDisabled}

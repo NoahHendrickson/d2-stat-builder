@@ -46,8 +46,8 @@ export function SetBonusesSection({
   sets: ArmorSetInfo[];
   setReqs: Record<number, 2 | 4>;
   onToggleSet: (setHash: number, count: 2 | 4) => void;
-  /** Clears every set requirement; omitted while none is picked (hides the button). */
-  onReset?: () => void;
+  /** Clears every set requirement. */
+  onReset: () => void;
   pinnedSets: number[];
   onTogglePin: (setHash: number) => void;
   setFilters: SetFilters;

@@ -35,7 +35,7 @@ import { cn } from "@/lib/utils";
  * left, two 24px icon buttons on the right: sort (ArrowsDownUp) and the list
  * settings (FunnelSimple). The settings button is tinted while any filter is
  * on — i.e. while sets are being hidden — so a narrowed list is never a surprise.
- * A Reset button leads the icons while any set bonus is picked.
+ * A Reset button leads the icons.
  */
 export const SetListControls = memo(function SetListControls({
   count,
@@ -50,7 +50,7 @@ export const SetListControls = memo(function SetListControls({
   onSortChange: (key: SetSortKey) => void;
   filters: SetFilters;
   onFilterChange: (key: keyof SetFilters, value: boolean) => void;
-  onReset?: () => void;
+  onReset: () => void;
 }) {
   const activeFilters = hasActiveSetFilters(filters);
   return (
@@ -59,12 +59,9 @@ export const SetListControls = memo(function SetListControls({
         {count} Set {count === 1 ? "bonus" : "bonuses"}
       </span>
       <div className="flex items-center gap-px">
-        {onReset && (
-          // Full size like "Save as loadout"; the negative margin keeps the line's height.
-          <Button variant="outline" onClick={onReset} className="-my-1 mr-2">
-            Reset
-          </Button>
-        )}
+        <Button variant="outline" onClick={onReset} className="mr-2">
+          Reset
+        </Button>
         <DropdownMenu>
           <TooltipLabel label={`Sort: ${setSortLabel(sort)}`}>
             <DropdownMenuTrigger
