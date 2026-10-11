@@ -182,19 +182,21 @@ describe("ceiling refinement", () => {
     // Five identical weapons-10 pieces; weapons 60 forces 1 major, leaving 1 major spare.
     // With no refinement budget the ceilings ARE the seeds — they must reflect that the
     // spare major could be socketed into any one stat, not just echo the targets back.
+    // (Off-stats are 1, not 0: a stat shown at 0 may be clamped up from below zero, so it
+    // takes no spare — see raiseAchievableFloors.)
     const slots = [
-      [piece("h", [10, 0, 0, 0, 0, 0])],
-      [piece("a", [10, 0, 0, 0, 0, 0])],
-      [piece("c", [10, 0, 0, 0, 0, 0])],
-      [piece("l", [10, 0, 0, 0, 0, 0])],
-      [piece("k", [10, 0, 0, 0, 0, 0])],
+      [piece("h", [10, 1, 1, 1, 1, 1])],
+      [piece("a", [10, 1, 1, 1, 1, 1])],
+      [piece("c", [10, 1, 1, 1, 1, 1])],
+      [piece("l", [10, 1, 1, 1, 1, 1])],
+      [piece("k", [10, 1, 1, 1, 1, 1])],
     ];
     const out = solve(
       input(slots, { mods: { major: 2, minor: 0 }, minimums: [60, 0, 0, 0, 0, 0] }),
       { ceilingBudgetMs: 0 },
     );
     // Build: weapons 50 + 1 major = 60; the spare major lifts every stat's seed by 10.
-    expect(out.ceilings).toEqual([70, 10, 10, 10, 10, 10]);
+    expect(out.ceilings).toEqual([70, 15, 15, 15, 15, 15]);
   });
 
   test("ceilingsExact: proven on easy pools, false when refinement runs out of budget", () => {

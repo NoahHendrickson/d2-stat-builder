@@ -408,7 +408,7 @@ describe("computeCeilingCarry", () => {
       const withSpare = output({
         loadouts: [
           // meets [15,15,...]; 2 unused minor mods = 10 spare points → each stat +10
-          loadout([15, 15, 10, 40, 15, 0], { major: 0, minor: 0 }),
+          loadout([15, 15, 10, 40, 15, 5], { major: 0, minor: 0 }),
         ],
       });
       const tightMods = baseInput({
@@ -421,7 +421,7 @@ describe("computeCeilingCarry", () => {
       });
       const carry = computeCeilingCarry(prevWithMods, withSpare, tightMods);
       // spare = 2 minor * 5 = 10, added to every stat (clamped at 200)
-      expect(carry?.ceilingSeed).toEqual([25, 25, 20, 50, 25, 10]);
+      expect(carry?.ceilingSeed).toEqual([25, 25, 20, 50, 25, 15]);
     });
   });
 });
