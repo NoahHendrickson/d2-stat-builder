@@ -7,19 +7,14 @@ import { isInstanceId, type PieceUsage } from "./summarize";
 /** Most pieces one record accepts — a full vault is 600 pieces across every class. */
 export const MAX_RECORD_PIECES = 3000;
 
-/** 0 = not used, 1 = used only in beaten builds, 2 = used in a build nothing beat. */
-type UsageFlag = 0 | 1 | 2;
-
 export interface RecordBody {
   key: string;
-  pieces: [string, UsageFlag][];
+  /** [instance id, 1 if a displayed build used it else 0]. */
+  pieces: [string, 0 | 1][];
 }
 
 export function encodeRecord(key: string, pieces: readonly PieceUsage[]): RecordBody {
-  return {
-    key,
-    pieces: pieces.map((p) => [p.id, p.optimal ? 2 : p.used ? 1 : 0]),
-  };
+  return { key, pieces: pieces.map((p) => [p.id, p.used ? 1 : 0]) };
 }
 
 /** SHA-256 hex of the query identity (see `queryIdentity`). */
@@ -36,13 +31,11 @@ export function decodeRecord(body: unknown): { key: string; pieces: PieceUsage[]
   const out: PieceUsage[] = [];
   for (const entry of pieces) {
     if (!Array.isArray(entry) || entry.length !== 2) return null;
-    const [id, flag] = entry as unknown[];
-    if (typeof id !== "string" || !isInstanceId(id) || (flag !== 0 && flag !== 1 && flag !== 2)) {
-      return null;
-    }
+    const [id, used] = entry as unknown[];
+    if (typeof id !== "string" || !isInstanceId(id) || (used !== 0 && used !== 1)) return null;
     if (seen.has(id)) continue;
     seen.add(id);
-    out.push({ id, used: flag > 0, optimal: flag === 2 });
+    out.push({ id, used: used === 1 });
   }
   return { key, pieces: out };
 }

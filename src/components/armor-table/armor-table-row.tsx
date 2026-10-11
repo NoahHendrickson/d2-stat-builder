@@ -34,7 +34,7 @@ export const TABLE_COLGROUP = (
     <col /* tertiary — flexible */ />
     <col /* tuned — flexible */ />
     <col /* set — flexible */ />
-    <col style={{ width: "4.5rem" }} /* builds */ />
+    <col style={{ width: "5.5rem" }} /* searches */ />
     {STAT_DISPLAY_ORDER.map((key) => (
       <col key={key} style={{ width: "3.25rem" }} />
     ))}
@@ -147,11 +147,17 @@ export const ArmorRow = memo(function ArmorRow({
         className={cn(
           "py-2 text-center text-sm tabular-nums",
           row.usageBucket === "unknown" && "text-muted-foreground",
-          // Used, but only ever in builds another build beat on every stat.
-          row.usageBucket === "nonOptimal" && "text-amber-700 dark:text-amber-300",
         )}
       >
-        {row.usage?.eligible ? row.usage.used : "—"}
+        {/* Used in / could have joined: the second number is what makes a 0 mean something. */}
+        {row.usage?.eligible ? (
+          <>
+            {row.usage.used}
+            <span className="text-muted-foreground">/{row.usage.eligible}</span>
+          </>
+        ) : (
+          "—"
+        )}
       </td>
       {STAT_DISPLAY_ORDER.map((key) => (
         <td key={key} className="py-2 text-center text-sm tabular-nums">

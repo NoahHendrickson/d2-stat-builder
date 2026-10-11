@@ -3,8 +3,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useSession } from "@/lib/auth/use-session";
 import { sessionMembershipId } from "@/lib/armory/use-profile";
-import type { ShownResult } from "@/lib/optimizer/optimizer-store";
-import type { OptimizerInput } from "@/lib/optimizer/types";
+import type { OptimizerInput, OptimizerLoadout } from "@/lib/optimizer/types";
 import type { BuildUsageSummary } from "./buckets";
 import { queryIdentity, summarizeRun } from "./summarize";
 import { encodeRecord } from "./wire";
@@ -33,13 +32,17 @@ async function sha256Hex(text: string): Promise<string> {
   return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-/** Record one shown result's query. Resolves false when there was nothing to record. */
-export async function recordShownResult(shown: ShownResult): Promise<boolean> {
-  const classType = shown.origin.classType;
-  if (classType === undefined || shown.result.loadouts.length === 0) return false;
-  // The store's key is the serialized optimizer input, so the query's pool comes with it.
-  const input = JSON.parse(shown.key) as OptimizerInput;
-  const pieces = summarizeRun(input, shown.result);
+/**
+ * Record one query with the builds displayed for it. Resolves false when there was
+ * nothing to record.
+ */
+export async function recordDisplayedBuilds(
+  input: OptimizerInput,
+  classType: number,
+  displayed: readonly OptimizerLoadout[],
+): Promise<boolean> {
+  if (displayed.length === 0) return false;
+  const pieces = summarizeRun(input, displayed);
   if (pieces.length === 0) return false;
   const key = await sha256Hex(queryIdentity(input, classType));
   const res = await fetch("/api/build-usage", {
@@ -47,5 +50,11 @@ export async function recordShownResult(shown: ShownResult): Promise<boolean> {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(encodeRecord(key, pieces)),
   });
+  return res.ok;
+}
+
+/** Forget the account's usage history. Resolves whether the server did. */
+export async function clearBuildUsage(): Promise<boolean> {
+  const res = await fetch("/api/build-usage", { method: "DELETE" });
   return res.ok;
 }

@@ -268,7 +268,7 @@ export const ArmorTableToolbar = memo(function ArmorTableToolbar({
           options={statOptions}
         />
         <FilterMultiselect
-          label="Builds"
+          label="Searches"
           allLabel="Any usage"
           value={facets.usage}
           onChange={(v) => onFacetChange("usage", v)}

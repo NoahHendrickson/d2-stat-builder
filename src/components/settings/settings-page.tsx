@@ -1,6 +1,7 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
+import { useState, useSyncExternalStore } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import Image from "next/image";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { useTheme } from "next-themes";
@@ -9,8 +10,18 @@ import { APP_THEMES, setAppTheme, useAppTheme, type AppThemeId } from "@/lib/app
 import { SITE_ICONS, setSiteIcon, useSiteIcon } from "@/lib/site-icon";
 import { THEME_OPTIONS } from "@/lib/theme-options";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
+import { toast } from "@/lib/toast";
+import { useSession } from "@/lib/auth/use-session";
+import { sessionMembershipId } from "@/lib/armory/use-profile";
+import { buildUsageKey, clearBuildUsage } from "@/lib/build-usage/use-build-usage";
+import {
+  setBuildUsageRecording,
+  useBuildUsageRecording,
+} from "@/lib/build-usage/recording-pref";
 
-/** Appearance, theme, and site icon, all kept per device. */
+/** Appearance, theme, site icon, and armor usage recording, all kept per device. */
 export function SettingsPage() {
   return (
     <main className="mx-auto flex w-full max-w-2xl flex-col gap-8 px-4 py-6 lg:px-6">
@@ -38,6 +49,19 @@ export function SettingsPage() {
           </p>
         </div>
         <SiteIconPicker />
+      </section>
+      <div className="d2-rule" />
+      <section aria-labelledby="settings-armor-usage" className="flex flex-col gap-3">
+        <div className="flex flex-col gap-1">
+          <h2 id="settings-armor-usage" className="d2-label">
+            Armor usage history
+          </h2>
+          <p className="text-muted-foreground text-sm">
+            Optimizer searches you stop on are saved to your account, so the Searches column
+            on Armor can show which pieces never make a build.
+          </p>
+        </div>
+        <ArmorUsageSettings />
       </section>
     </main>
   );
@@ -137,6 +161,43 @@ function SiteIconPicker() {
           </button>
         );
       })}
+    </div>
+  );
+}
+
+function ArmorUsageSettings() {
+  const recording = useBuildUsageRecording();
+  const membershipId = sessionMembershipId(useSession().data);
+  const queryClient = useQueryClient();
+  const [clearing, setClearing] = useState(false);
+
+  const clear = async () => {
+    setClearing(true);
+    try {
+      if (!(await clearBuildUsage())) throw new Error("Clear failed");
+      await queryClient.invalidateQueries({ queryKey: buildUsageKey(membershipId) });
+      toast.success("Armor usage history cleared");
+    } catch {
+      toast.error("Couldn't clear the history", "Try again in a moment.");
+    } finally {
+      setClearing(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-wrap items-center gap-4">
+      <label className="flex items-center gap-2 text-sm">
+        <Switch checked={recording} onCheckedChange={setBuildUsageRecording} />
+        Record searches on this device
+      </label>
+      <Button
+        type="button"
+        variant="outline"
+        disabled={!membershipId || clearing}
+        onClick={() => void clear()}
+      >
+        Clear history
+      </Button>
     </div>
   );
 }

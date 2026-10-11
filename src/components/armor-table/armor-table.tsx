@@ -76,6 +76,9 @@ import {
 } from "@/components/armor-table/sort-menu";
 import { useArmorTableSort } from "@/components/armor-table/use-armor-table-sort";
 
+/** Each base row's last usage-layered row, reused while its counts are unchanged. */
+const rowWithUsage = new WeakMap<Row, Row>();
+
 /** Approximate single-row height; the virtualizer remeasures real rows on mount. */
 const ESTIMATED_ROW_HEIGHT_PX = 48;
 
@@ -213,8 +216,8 @@ const HeaderRow = memo(function HeaderRow({
           onUndoSort={undoSort}
         />
         <SortMenu
-          label="Builds"
-          title="Builds: optimizer searches whose shown builds used this piece"
+          label="Searches"
+          title="Searches: optimizer searches whose shown builds used this piece, out of those it could join"
           sortKey="builds"
           sort={sort}
           hovered={hoveredSortKey === "builds"}
@@ -279,15 +282,14 @@ export function ArmorTable() {
   const usage = useBuildUsage()?.pieces;
   const characters: ArmoryCharacter[] = armory.data?.characters ?? [];
 
-  const rows = useMemo<Row[]>(() => {
+  const baseRows = useMemo<Row[]>(() => {
     if (!pieces || !manifest) return [];
     const setNames = new Map(
       availableSets(pieces, manifest).map((s) => [s.setHash, s.name]),
     );
     return pieces.map((piece) => ({
       piece,
-      usage: usage?.[piece.instanceId],
-      usageBucket: usageBucket(usage?.[piece.instanceId]),
+      usageBucket: usageBucket(undefined),
       setName: piece.setHash ? setNames.get(piece.setHash) : undefined,
       // The archetype shape (30/25/20) only exists on Armor 3.0 rolls; a tuning
       // socket implies Armor 3.0 even if the archetype plug wasn't resolved.
@@ -297,7 +299,22 @@ export function ArmorTable() {
           : undefined,
       searchName: normalizeSearchText(piece.name),
     }));
-  }, [pieces, manifest, usage]);
+  }, [pieces, manifest]);
+
+  // Usage is layered over the base rows, and a row whose counts didn't change keeps its
+  // object: a refetch after each recorded search re-renders only the rows it moved.
+  const rows = useMemo<Row[]>(
+    () =>
+      baseRows.map((base) => {
+        const u = usage?.[base.piece.instanceId];
+        const old = rowWithUsage.get(base);
+        if (old && old.usage?.eligible === u?.eligible && old.usage?.used === u?.used) return old;
+        const row = { ...base, usage: u, usageBucket: usageBucket(u) };
+        rowWithUsage.set(base, row);
+        return row;
+      }),
+    [baseRows, usage],
+  );
 
   const {
     sort,

@@ -298,7 +298,7 @@ export function FilterCascadeMenu({
         )}
         {includes("usage") && (
           <CascadeFacetSubmenu<UsageBucket>
-            label="Builds"
+            label="Searches"
             allLabel="Any usage"
             options={usageOptions}
             value={facets.usage}
