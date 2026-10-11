@@ -16,8 +16,8 @@ import { useSession } from "@/lib/auth/use-session";
 import { loadAnnotations } from "@/lib/inventory/annotations";
 import { useBuildUsage } from "@/lib/build-usage/use-build-usage";
 import {
-  USAGE_BUCKETS,
   USAGE_BUCKET_LABELS,
+  USAGE_FILTER_BUCKETS,
   usageBucket,
   type UsageBucket,
 } from "@/lib/build-usage/buckets";
@@ -430,7 +430,7 @@ export function ArmorTable() {
   const usageOptions = useMemo<FilterOption<UsageBucket>[]>(() => {
     const counts = new Map<UsageBucket, number>();
     for (const r of rows) counts.set(r.usageBucket, (counts.get(r.usageBucket) ?? 0) + 1);
-    return USAGE_BUCKETS.map((bucket) => ({
+    return USAGE_FILTER_BUCKETS.map((bucket) => ({
       value: bucket,
       label: USAGE_BUCKET_LABELS[bucket],
       count: counts.get(bucket) ?? 0,

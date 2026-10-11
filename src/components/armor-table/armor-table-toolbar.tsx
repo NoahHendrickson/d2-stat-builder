@@ -26,6 +26,7 @@ import {
 import { Input, SearchClearButton } from "@/components/ui/input";
 import {
   FilterCascadeMenu,
+  SEARCHES_FILTER_EXPLAINER,
   TUNING_FILTER_OPTIONS,
 } from "@/components/armor-table/filter-cascade-menu";
 import { FilterMultiselect } from "@/components/armor-table/filter-multiselect";
@@ -273,6 +274,7 @@ export const ArmorTableToolbar = memo(function ArmorTableToolbar({
           value={facets.usage}
           onChange={(v) => onFacetChange("usage", v)}
           options={usageOptions}
+          footer={SEARCHES_FILTER_EXPLAINER}
         />
       </div>
       <div className="hidden shrink-0 @[58rem]/toolbar:block @[91rem]/toolbar:hidden">

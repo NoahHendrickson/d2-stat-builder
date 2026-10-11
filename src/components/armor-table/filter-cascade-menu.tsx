@@ -1,7 +1,7 @@
 "use client";
 
 import { TooltipLabel } from "@/components/ui/tooltip";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { UnfoldMoreIcon } from "@hugeicons/core-free-icons";
 import type { FilterOption } from "@/lib/armor-table/pinned";
@@ -10,7 +10,7 @@ import type {
   FacetFilters,
   TuningFilter,
 } from "@/lib/armor-table/filters";
-import type { UsageBucket } from "@/lib/build-usage/buckets";
+import { MIN_ELIGIBLE_QUERIES, type UsageBucket } from "@/lib/build-usage/buckets";
 import {
   STAT_DISPLAY_ORDER,
   STAT_LABELS,
@@ -51,6 +51,20 @@ export const TUNING_FILTER_OPTIONS: FilterOption<TuningFilter>[] = [
   { value: "none", label: "Not tunable" },
 ];
 
+/** Under the Searches options: what the counts mean (the column shows used/eligible). */
+export const SEARCHES_FILTER_EXPLAINER = (
+  <div className="text-muted-foreground flex w-60 flex-col gap-1.5 px-1.5 py-2 text-xs">
+    <p>
+      Counts the optimizer searches you stopped on where a shown build used the piece, out of
+      the searches it could have been in.
+    </p>
+    <p>
+      A piece only counts as never used after {MIN_ELIGIBLE_QUERIES} of those searches, so new
+      pieces and classes you rarely optimize aren&apos;t flagged.
+    </p>
+  </div>
+);
+
 const ALL_FACET_KEYS = [
   "classes",
   "armorVersions",
@@ -79,6 +93,7 @@ function CascadeFacetSubmenu<V extends string | number>({
   pinned = [],
   onTogglePin,
   toggleOnClick = false,
+  footer,
 }: {
   label: string;
   allLabel: string;
@@ -90,6 +105,7 @@ function CascadeFacetSubmenu<V extends string | number>({
   pinned?: V[];
   onTogglePin?: (value: V) => void;
   toggleOnClick?: boolean;
+  footer?: ReactNode;
 }) {
   const [query, setQuery] = useState("");
   const active = value.length > 0;
@@ -124,6 +140,7 @@ function CascadeFacetSubmenu<V extends string | number>({
           pinnable={pinnable}
           pinned={pinned}
           onTogglePin={onTogglePin}
+          footer={footer}
         />
       </DropdownMenuSubContent>
     </DropdownMenuSub>
@@ -304,6 +321,7 @@ export function FilterCascadeMenu({
             value={facets.usage}
             onChange={(v) => onFacetChange("usage", v)}
             toggleOnClick={toggleSubmenusOnClick}
+            footer={SEARCHES_FILTER_EXPLAINER}
           />
         )}
         {showClearAll && filtersActive && (

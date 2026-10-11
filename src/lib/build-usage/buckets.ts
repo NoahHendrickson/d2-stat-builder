@@ -32,8 +32,11 @@ export const USAGE_BUCKET_LABELS: Record<UsageBucket, string> = {
   unknown: "Not enough searches",
 };
 
-export function isUsageBucket(v: unknown): v is UsageBucket {
-  return typeof v === "string" && (USAGE_BUCKETS as readonly string[]).includes(v);
+/** The buckets the Searches filter offers; "unknown" is explained under it, not picked. */
+export const USAGE_FILTER_BUCKETS = ["never", "few", "many"] as const satisfies readonly UsageBucket[];
+
+export function isUsageFilterBucket(v: unknown): v is UsageBucket {
+  return typeof v === "string" && (USAGE_FILTER_BUCKETS as readonly string[]).includes(v);
 }
 
 export function usageBucket(u: PieceUsageCounts | undefined): UsageBucket {
