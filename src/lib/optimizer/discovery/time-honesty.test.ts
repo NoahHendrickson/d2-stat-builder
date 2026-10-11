@@ -636,3 +636,24 @@ describe("the leaf tuner's onTick reaches the caller's deadline", () => {
     fail(ceilingViolations({ ceilings: r.ceilings, ceilingUppers: r.uppers, ceilingsExact: r.exact }, c), {});
   });
 });
+
+describe("QUESTION: infeasible queries do not yield all-zero ceilings", () => {
+  // runCeilings' doc says "An infeasible query (no build meets the minimums) yields
+  // zeros", but probes below a stat's own (unreachable) minimum still find that stat's
+  // true max subject to the other five — which matches the oracle's definition and is
+  // what this suite checks. Pinned so a change to either the code or the doc is visible.
+  test("one unreachable target: its ceiling is the true max, certified exact", () => {
+    const p = (id: string) => ({ id, stats: [30, 25, 20, 5, 5, 5], exotic: false });
+    const input: OptimizerInput = {
+      slots: [0, 1, 2, 3, 4].map((k) => [p(`s${k}`)]),
+      minimums: [151, 0, 0, 0, 0, 0],
+      mods: { major: 0, minor: 0 },
+      allowTuning: false,
+    };
+    const out = withClock(new FakeClock(null), () => solve(input, GENEROUS));
+    expect(out.loadouts).toHaveLength(0);
+    expect(out.ceilings).toEqual([150, 0, 0, 0, 0, 0]);
+    expect(out.ceilingsExact).toBe(true);
+    expect(oracle(input).ceilings).toEqual([150, 0, 0, 0, 0, 0]);
+  });
+});
