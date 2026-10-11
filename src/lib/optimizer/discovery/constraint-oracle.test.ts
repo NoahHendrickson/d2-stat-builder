@@ -66,7 +66,7 @@ describe("constraint oracle — properties", () => {
 
   // The unsteered generator finds F1/F2/F3 within a few hundred cases. Kept as an
   // expected failure so it starts passing (and must be flipped) once all three are fixed.
-  test.fails("all properties hold on the unsteered generator (fails: F1, F2, F3)", () => {
+  test("all properties hold on the unsteered generator (F1–F3 fixed)", () => {
     const arb = fc.tuple(makeCaseArb(), fc.integer({ min: 1, max: 5 }));
     fc.assert(
       fc.property(arb, ([c, n]) => {
@@ -166,7 +166,7 @@ describe("F2 — dedupe: setHash 0 and undefined share a key", () => {
   test("oracle: feasible via z", () => {
     expect(oracle(input).feasible).toBe(true);
   });
-  test.fails("solve() returns the build using z", () => {
+  test("solve() returns the build using z", () => {
     const out = solve(input, GENEROUS);
     expect(out.loadouts.map((l) => l.pieceIds)).toEqual([["z", "b", "c", "d", "e"]]);
   });
@@ -191,7 +191,7 @@ describe("F3 — dedupe: balanced-only exotic merged with a directional twin", (
     expect(oracle(input).feasible).toBe(true);
     expect(oracle(input).ceilings).toEqual([50, 50, 50, 50, 50, 55]);
   });
-  test.fails("solve() returns the B build and exact ceilings", () => {
+  test("solve() returns the B build and exact ceilings", () => {
     const out = solve(input, GENEROUS);
     expect(out.loadouts.map((l) => l.pieceIds[0])).toEqual(["B"]);
     expect(out.ceilings).toEqual([50, 50, 50, 50, 50, 55]);
