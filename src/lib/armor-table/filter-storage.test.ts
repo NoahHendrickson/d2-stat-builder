@@ -47,7 +47,7 @@ function sampleState(): PersistedTableState {
       tunings: ["none", 4],
       tertiaries: [3],
       armorVersions: ["3.0"],
-      usage: ["never", "few"],
+      usage: ["never", "rarely"],
     },
     sort: [
       {

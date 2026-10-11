@@ -64,6 +64,8 @@ export interface Row {
   searchName: string;
   /** Optimizer usage history; absent until a recorded query included the piece. */
   usage?: PieceUsageCounts;
+  /** In a saved loadout: rated "often" whatever its count. */
+  inLoadout: boolean;
   usageBucket: UsageBucket;
 }
 
@@ -143,7 +145,7 @@ export const ArmorRow = memo(function ArmorRow({
       </td>
       <td className="truncate py-2 pr-3 text-sm">{row.setName ?? "—"}</td>
       <td
-        title={usageTitle(row.usage)}
+        title={usageTitle(row.usage, row.inLoadout)}
         className={cn(
           "py-2 text-center text-sm tabular-nums",
           row.usageBucket === "unknown" && "text-muted-foreground",

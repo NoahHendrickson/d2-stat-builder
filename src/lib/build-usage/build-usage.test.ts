@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
 import { solve } from "../optimizer/solve";
 import type { OptimizerInput, OptimizerLoadout, OptimizerPiece } from "../optimizer/types";
-import { MIN_ELIGIBLE_QUERIES, usageBucket } from "./buckets";
+import { MIN_ELIGIBLE_QUERIES, loadoutPieceIds, usageBucket } from "./buckets";
 import { queryIdentity, summarizeRun } from "./summarize";
 import { decodeRecord, encodeRecord } from "./wire";
 
@@ -162,11 +162,31 @@ describe("record wire format", () => {
 });
 
 describe("usageBucket", () => {
-  test("unused pieces need enough searches before they read as never used", () => {
+  const n = MIN_ELIGIBLE_QUERIES;
+  test("no rating until a piece has had enough searches", () => {
     expect(usageBucket(undefined)).toBe("unknown");
-    expect(usageBucket({ eligible: MIN_ELIGIBLE_QUERIES - 1, used: 0 })).toBe("unknown");
-    expect(usageBucket({ eligible: MIN_ELIGIBLE_QUERIES, used: 0 })).toBe("never");
-    expect(usageBucket({ eligible: 1, used: 1 })).toBe("few");
-    expect(usageBucket({ eligible: 9, used: 3 })).toBe("many");
+    expect(usageBucket({ eligible: n - 1, used: 0 })).toBe("unknown");
+    expect(usageBucket({ eligible: n - 1, used: n - 1 })).toBe("unknown");
+  });
+
+  test("rates by the share of searches that used the piece", () => {
+    expect(usageBucket({ eligible: 40, used: 0 })).toBe("never");
+    expect(usageBucket({ eligible: 40, used: 3 })).toBe("rarely"); // 7.5%
+    expect(usageBucket({ eligible: 40, used: 4 })).toBe("sometimes"); // 10%
+    expect(usageBucket({ eligible: 40, used: 13 })).toBe("sometimes"); // 32.5%
+    expect(usageBucket({ eligible: 40, used: 14 })).toBe("often"); // 35%
+  });
+
+  test("a piece in a saved loadout is often used, whatever its count", () => {
+    expect(usageBucket(undefined, true)).toBe("often");
+    expect(usageBucket({ eligible: 40, used: 0 }, true)).toBe("often");
+  });
+
+  test("loadoutPieceIds collects equipped items and optimizer builds", () => {
+    const ids = loadoutPieceIds([
+      { loadout: { equipped: [{ id: "1" }, {}] }, optimizer: { pieceIds: ["2"] } },
+      { loadout: { equipped: [{ id: "3" }] } },
+    ]);
+    expect([...ids].sort()).toEqual(["1", "2", "3"]);
   });
 });

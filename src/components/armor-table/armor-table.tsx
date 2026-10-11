@@ -15,9 +15,11 @@ import { sessionMembershipId } from "@/lib/armory/use-profile";
 import { useSession } from "@/lib/auth/use-session";
 import { loadAnnotations } from "@/lib/inventory/annotations";
 import { useBuildUsage } from "@/lib/build-usage/use-build-usage";
+import { useLoadouts } from "@/lib/loadouts/use-loadouts";
 import {
   USAGE_BUCKET_LABELS,
   USAGE_FILTER_BUCKETS,
+  loadoutPieceIds,
   usageBucket,
   type UsageBucket,
 } from "@/lib/build-usage/buckets";
@@ -280,6 +282,8 @@ export function ArmorTable() {
 
   const pieces = armory.data?.pieces;
   const usage = useBuildUsage()?.pieces;
+  const savedLoadouts = useLoadouts().data;
+  const inLoadouts = useMemo(() => loadoutPieceIds(savedLoadouts ?? []), [savedLoadouts]);
   const characters: ArmoryCharacter[] = armory.data?.characters ?? [];
 
   const baseRows = useMemo<Row[]>(() => {
@@ -289,6 +293,7 @@ export function ArmorTable() {
     );
     return pieces.map((piece) => ({
       piece,
+      inLoadout: false,
       usageBucket: usageBucket(undefined),
       setName: piece.setHash ? setNames.get(piece.setHash) : undefined,
       // The archetype shape (30/25/20) only exists on Armor 3.0 rolls; a tuning
@@ -307,13 +312,21 @@ export function ArmorTable() {
     () =>
       baseRows.map((base) => {
         const u = usage?.[base.piece.instanceId];
+        const inLoadout = inLoadouts.has(base.piece.instanceId);
         const old = rowWithUsage.get(base);
-        if (old && old.usage?.eligible === u?.eligible && old.usage?.used === u?.used) return old;
-        const row = { ...base, usage: u, usageBucket: usageBucket(u) };
+        if (
+          old &&
+          old.inLoadout === inLoadout &&
+          old.usage?.eligible === u?.eligible &&
+          old.usage?.used === u?.used
+        ) {
+          return old;
+        }
+        const row = { ...base, usage: u, inLoadout, usageBucket: usageBucket(u, inLoadout) };
         rowWithUsage.set(base, row);
         return row;
       }),
-    [baseRows, usage],
+    [baseRows, usage, inLoadouts],
   );
 
   const {
