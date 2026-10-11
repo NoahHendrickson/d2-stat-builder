@@ -293,7 +293,7 @@ export function BuildActions({
         <RevealAction className="mr-auto">
           <Button variant="outline" onClick={() => onDream(loadout)} className="gap-0 px-2">
             <HugeiconsIcon icon={SparklesIcon} aria-hidden />
-            <RevealLabel>Dream build</RevealLabel>
+            <RevealLabel touch>Dream build</RevealLabel>
           </Button>
         </RevealAction>
       )}
@@ -356,7 +356,10 @@ export function BuildActions({
         disabled={!canSave}
       >
         <Button variant="emphatic" onClick={openSave} disabled={!canSave}>
-          Save as loadout
+          {/* Room for the Dream build label, which stays open on touch screens. */}
+          <span>
+            Save<span className="pointer-coarse:@max-[26rem]/build:hidden"> as loadout</span>
+          </span>
         </Button>
       </TooltipLabel>
       {saveSession > 0 && manifest && saveContext && (
@@ -390,10 +393,21 @@ function RevealAction({ children, className }: { children: ReactElement; classNa
   return <span className={cn("group/reveal inline-flex", className)}>{children}</span>;
 }
 
-/** The label of a RevealAction button: zero-width until hovered or focused. */
-function RevealLabel({ children }: { children: ReactNode }) {
+/**
+ * The label of a RevealAction button: zero-width until hovered or focused. Touch screens
+ * can't hover, so there the labels stay open once the build card is wide enough for all
+ * of them, and a `touch` label (Dream build, which has no other way in) always does.
+ */
+function RevealLabel({ children, touch = false }: { children: ReactNode; touch?: boolean }) {
   return (
-    <span className="grid grid-cols-[0fr] transition-[grid-template-columns] duration-200 ease-out group-has-focus-visible/reveal:grid-cols-[1fr] group-hover/reveal:grid-cols-[1fr] motion-reduce:transition-none">
+    <span
+      className={cn(
+        "grid grid-cols-[0fr] transition-[grid-template-columns] duration-200 ease-out group-has-focus-visible/reveal:grid-cols-[1fr] group-hover/reveal:grid-cols-[1fr] motion-reduce:transition-none",
+        touch
+          ? "pointer-coarse:grid-cols-[1fr]"
+          : "pointer-coarse:@min-[44rem]/build:grid-cols-[1fr]",
+      )}
+    >
       <span className="overflow-hidden">
         <span className="block pr-1 pl-1.5">{children}</span>
       </span>

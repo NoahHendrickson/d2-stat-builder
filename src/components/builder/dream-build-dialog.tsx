@@ -94,69 +94,73 @@ function DreamBuildBody({
       <DialogHeader className="pr-8">
         <DialogTitle>Dream build</DialogTitle>
       </DialogHeader>
-      <ol className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <DreamStep
-          step={1}
-          icon={ArrowDown02Icon}
-          title="Lower the stats you don't care about"
-          body="Every point you give up frees room for the stats you do want."
-        />
-        <DreamStep
-          step={2}
-          icon={ArrowUp02Icon}
-          title="Raise the stats you want"
-          body="We'll find which pieces of this build to replace, and with what, to get there."
-        />
-      </ol>
-      <div className="grid min-h-0 flex-1 grid-cols-1 gap-6 overflow-y-auto md:grid-cols-[minmax(0,20rem)_minmax(0,1fr)] md:overflow-hidden">
-        <section className="border-foreground/8 flex flex-col gap-4 md:overflow-y-auto md:border-r md:pr-6">
-          <div className="flex min-h-5 items-center justify-between">
-            <span className="d2-label">Stat targets</span>
-            {changed && (
-              <Button
-                variant="link"
-                onClick={() => setTargets(build.stats)}
-                className="text-muted-foreground hover:text-foreground h-auto p-0 text-xs font-normal"
-              >
-                Reset
-              </Button>
+      {/* Below md everything under the title scrolls as one, so the how-to cards don't pin a
+          third of a phone screen; -mx-2/px-2 leaves room for the sliders' end ticks. */}
+      <div className="d2-scroll -mx-2 flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto px-2 md:overflow-hidden">
+        <ol className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <DreamStep
+            step={1}
+            icon={ArrowDown02Icon}
+            title="Lower the stats you don't care about"
+            body="Every point you give up frees room for the stats you do want."
+          />
+          <DreamStep
+            step={2}
+            icon={ArrowUp02Icon}
+            title="Raise the stats you want"
+            body="We'll find which pieces of this build to replace, and with what, to get there."
+          />
+        </ol>
+        <div className="grid grid-cols-1 gap-6 md:min-h-0 md:flex-1 md:grid-cols-[minmax(0,20rem)_minmax(0,1fr)] md:overflow-hidden">
+          <section className="border-foreground/8 flex flex-col gap-4 md:overflow-y-auto md:border-r md:pr-6">
+            <div className="flex min-h-5 items-center justify-between">
+              <span className="d2-label">Stat targets</span>
+              {changed && (
+                <Button
+                  variant="link"
+                  onClick={() => setTargets(build.stats)}
+                  className="text-muted-foreground hover:text-foreground h-auto p-0 text-xs font-normal"
+                >
+                  Reset
+                </Button>
+              )}
+            </div>
+            <div className="space-y-7">
+              {STAT_DISPLAY_ORDER.map((key) => {
+                const i = STAT_ORDER.indexOf(key);
+                return (
+                  <StatTargetRow
+                    key={key}
+                    statKey={key}
+                    index={i}
+                    icon={statIcons[key]}
+                    value={targets[i]}
+                    onChange={setTarget}
+                    stepper
+                  />
+                );
+              })}
+            </div>
+          </section>
+          <section className="d2-scroll flex min-h-0 flex-col gap-6 md:overflow-y-auto md:pr-2">
+            {input ? (
+              <DreamComparison
+                build={build}
+                state={state}
+                pieceMap={pieceMap}
+                statIcons={statIcons}
+                exoticIcon={exoticIcon}
+                setNames={setNames}
+              />
+            ) : (
+              <p className="text-muted-foreground text-sm">
+                Some of this build&apos;s pieces are no longer in the search (a setting
+                changed or your gear refreshed). Close this and pick a build from the
+                current list.
+              </p>
             )}
-          </div>
-          <div className="space-y-7">
-            {STAT_DISPLAY_ORDER.map((key) => {
-              const i = STAT_ORDER.indexOf(key);
-              return (
-                <StatTargetRow
-                  key={key}
-                  statKey={key}
-                  index={i}
-                  icon={statIcons[key]}
-                  value={targets[i]}
-                  onChange={setTarget}
-                  stepper
-                />
-              );
-            })}
-          </div>
-        </section>
-        <section className="d2-scroll flex min-h-0 flex-col gap-6 md:overflow-y-auto md:pr-2">
-          {input ? (
-            <DreamComparison
-              build={build}
-              state={state}
-              pieceMap={pieceMap}
-              statIcons={statIcons}
-              exoticIcon={exoticIcon}
-              setNames={setNames}
-            />
-          ) : (
-            <p className="text-muted-foreground text-sm">
-              Some of this build&apos;s pieces are no longer in the search (a setting
-              changed or your gear refreshed). Close this and pick a build from the
-              current list.
-            </p>
-          )}
-        </section>
+          </section>
+        </div>
       </div>
     </>
   );
