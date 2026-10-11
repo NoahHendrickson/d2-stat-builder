@@ -344,7 +344,8 @@ export function arbQuerySpec(shapes: PoolShape[] = ["tiny", "tiny", "tiny", "wid
       minDelta: fc.array(fc.integer({ min: -14, max: 10 }), { minLength: 6, maxLength: 6 }),
       major: fc.integer({ min: 0, max: 4 }),
       minor: fc.integer({ min: 0, max: 2 }),
-      frag: fc.array(fc.oneof({ weight: 3, arbitrary: fc.constant(0) }, { weight: 1, arbitrary: fc.integer({ min: -2, max: 2 }).map((x) => x * 10) }), { minLength: 6, maxLength: 6 }),
+      // Deeply negative fragments push a stat below 0 before the clamp (the F1 path).
+      frag: fc.array(fc.oneof({ weight: 6, arbitrary: fc.constant(0) }, { weight: 2, arbitrary: fc.integer({ min: -2, max: 2 }).map((x) => x * 10) }, { weight: 1, arbitrary: fc.integer({ min: -7, max: -3 }).map((x) => x * 10) }), { minLength: 6, maxLength: 6 }),
       allowTuning: fc.oneof({ weight: 9, arbitrary: fc.constant(true) }, { weight: 1, arbitrary: fc.constant(false) }),
       allowBalanced: fc.oneof({ weight: 4, arbitrary: fc.constant(true) }, { weight: 1, arbitrary: fc.constant(false) }),
       exoticMode: fc.constantFrom("any", "any", "require", "specific", "none"),

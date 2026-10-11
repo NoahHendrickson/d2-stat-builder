@@ -43,6 +43,9 @@ const VERBOSE = !!process.env.PROP_VERBOSE;
 const SEED = process.env.PROP_SEED ? Number(process.env.PROP_SEED) : undefined;
 const fcOpts = (numRuns: number) => ({ numRuns, seed: SEED, endOnFailure: !!process.env.PROP_NOSHRINK });
 
+// Property runs are synchronous and can take tens of seconds under PROP_RUNS.
+vi.setConfig({ testTimeout: 600_000 });
+
 afterEach(() => {
   vi.restoreAllMocks();
 });
@@ -279,6 +282,76 @@ describe("solveCeilings() seeding under an adversarial clock", () => {
       }),
       fcOpts(RUNS * 2),
     );
+  });
+
+  test("a single transient stall costs at most one probe (timeouts are per-probe)", () => {
+    const m: Record<string, number> = {};
+    fc.assert(
+      fc.property(
+        arbQuerySpec(["tunerBig", "big", "wide", "huge"]),
+        fc.constantFrom<ClockSite>("probe-walk", "probe-tuner", "probe-loop"),
+        fc.integer({ min: 0, max: 1000 }),
+        (spec, site, frac) => {
+          const input = buildQuery(spec);
+          const c = prepare(input, spec.shape);
+          // Frozen clock except ONE 500 s stall (> any probe share once ≥2 stats are pending);
+          // the 1000 s budget is never exhausted, so every later probe runs to completion.
+          const plan: ClockPlan = { incs: [0], jumps: [{ frac: frac / 1000, by: 5e5, site }] };
+          const { out: r } = adversarial(plan, () => solveCeilings(input, [0, 0, 0, 0, 0, 0], 1e6));
+          stat(m, `timedOut:${r.stats.timedOut}`);
+          const v = ceilingViolations({ ceilings: r.ceilings, ceilingUppers: r.uppers, ceilingsExact: r.exact }, c);
+          if (r.stats.timedOut > 1) v.push(`${r.stats.timedOut} probes timed out from one stall`);
+          fail(v, { input, plan });
+        },
+      ),
+      fcOpts(RUNS),
+    );
+    log({ transientStall: m });
+  });
+
+  test("documented defence: an upperSeed below the (true) seed is lifted to the seed", () => {
+    // Contract: upperSeed MUST be proven; this pins the documented defence anyway ("never
+    // below the seed's own achievable ceiling"). Seed = truth, so nothing can be harvested
+    // above it and the defended result is exact with no probes.
+    fc.assert(
+      fc.property(arbCase, fc.array(fc.integer({ min: 0, max: 4 }), { minLength: 6, maxLength: 6 }), arbClockPlan, arbBudget, (spec, fr, plan, budget) => {
+        const input = buildQuery(spec);
+        const c = prepare(input, spec.shape);
+        const seed = c.truth.ceilings.slice();
+        const bogus = seed.map((t, i) => Math.floor((t * fr[i]) / 5));
+        const { out: r } = adversarial(plan, () => solveCeilings(input, seed, budget, { upperSeed: bogus }));
+        if (r.uppers.every((u) => u === 200) && r.stats.probes === 0 && !r.exact) return; // degenerate pool
+        const v: string[] = [];
+        for (let s = 0; s < NUM_STATS; s++) if (r.ceilings[s] > r.uppers[s]) v.push(`ceiling[${s}] > upper`);
+        if (!r.exact) v.push("not exact");
+        fail(v, { input, seed, bogus, plan, budget });
+      }),
+      fcOpts(RUNS),
+    );
+  });
+
+  test("QUESTION: an upperSeed below the TRUTH (but ≥ seed) throws the invariant in dev", () => {
+    // Out of contract (upperSeed must be proven) — recorded to document behaviour: a
+    // witness harvest lifts a stat past the bogus upper and reconcileCeilingBounds throws
+    // outside production. Not a finding unless some caller can produce such a seed.
+    const outcomes: Record<string, number> = {};
+    fc.assert(
+      fc.property(arbCase, arbSeeds, fc.array(fc.integer({ min: 0, max: 200 }), { minLength: 6, maxLength: 6 }), (spec, sd, bogus) => {
+        const input = buildQuery(spec);
+        const c = prepare(input, spec.shape);
+        const { seed } = mkSeeds(c.truth.ceilings, sd);
+        try {
+          const r = withClock(new FakeClock(null), () => solveCeilings(input, seed, 1e12, { upperSeed: bogus }));
+          for (let s = 0; s < NUM_STATS; s++) expect(r.ceilings[s]).toBeLessThanOrEqual(c.truth.ceilings[s]);
+          stat(outcomes, "returned");
+        } catch (e) {
+          expect(String(e)).toContain("ceiling invariant violated");
+          stat(outcomes, "invariant-throw");
+        }
+      }),
+      fcOpts(RUNS),
+    );
+    log({ bogusUpperSeed: outcomes });
   });
 
   test("generous budget closes from any valid seeds (upperSeed == truth included)", () => {
