@@ -25,7 +25,12 @@ export const clamp = (v: number): number =>
  * mods are only auto-assigned to cover deficits — so its unspent capacity could genuinely
  * be re-socketed into any single stat while the other five keep their achieved values
  * (still ≥ their minimums). This is the shared primitive behind both the top-N seed dump
- * and the ceiling witness harvest. (Feasible-mode witnesses don't dump leftover artifice
+ * and the ceiling witness harvest.
+ *
+ * A stat the build shows at 0 gets no spare: the final stats are clamped, so a 0 may hide
+ * a value BELOW zero (negative fragments, a −5 tune), and the spare mods would first have
+ * to climb back to 0 — e.g. −10 plus one spare major is still 0, not 10. The true value
+ * isn't recoverable from the clamped stats, so the floor stays at the proven 0. (Feasible-mode witnesses don't dump leftover artifice
  * +3s, so a harvested value can slightly UNDER-state the true max — it stays a valid lower
  * bound, never an over-report.)
  */
@@ -39,7 +44,7 @@ export function raiseAchievableFloors(
     (mods.major - modsUsed.major) * 10 + (mods.minor - modsUsed.minor) * 5;
   let rose = false;
   for (let s = 0; s < NUM_STATS; s++) {
-    const v = clamp(stats[s] + spare);
+    const v = stats[s] > 0 ? clamp(stats[s] + spare) : 0;
     if (v > floors[s]) {
       floors[s] = v;
       rose = true;
