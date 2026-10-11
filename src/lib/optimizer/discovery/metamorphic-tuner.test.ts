@@ -18,7 +18,7 @@
 import fc from "fast-check";
 import { describe, expect, test } from "vitest";
 import { MAX_MOD_OVERSHOOT } from "../bounds";
-import { NUM_STATS } from "../floors";
+import { NUM_STATS, clamp } from "../floors";
 import { assignMods, createTuningSearcher } from "../tuning";
 import { NUM_RUNS } from "./metamorphic-gen";
 import {
@@ -77,6 +77,46 @@ describe("leaf tuner: policy-independent relations", () => {
       }),
       PARAMS(800),
     );
+  });
+
+  /**
+   * Given the tuning the tuner chose, its mods and artifice are the policy's: stat mods are
+   * exactly assignMods' covering of the deficits, and the leftover artifice +3s sit where
+   * they gain the most CLAMPED total (exhaustive placement of ≤5 leftovers over 6 stats).
+   */
+  test("maximize: mods = assignMods covering, leftover artifice placed optimally", () => {
+    let dumped = 0;
+    fc.assert(
+      fc.property(leafArb, (c) => {
+        const o = tune(c, "maximize");
+        if (!o) return;
+        const art = c.pieces.filter((p) => p.artifice).length;
+        const aug = new Array(NUM_STATS).fill(0);
+        for (let s = 0; s < NUM_STATS; s++) {
+          aug[s] = c.frag[s] + o.tuningBonus[s];
+          for (const p of c.pieces) aug[s] += p.stats[s];
+        }
+        const d = aug.map((v, s) => (c.mins[s] > 0 && v < c.mins[s] ? c.mins[s] - v : 0));
+        const asg = assignMods(d, c.mods.major, c.mods.minor, art)!;
+        expect(asg, show(c)).not.toBeNull();
+        expect(o.modBonus, show(c)).toEqual(asg.points);
+        const base = aug.map((v, s) => v + asg.points[s] + asg.artificePoints[s]);
+        let best = -Infinity;
+        const rec = (s: number, left: number, acc: number): void => {
+          if (s === NUM_STATS) {
+            if (acc > best) best = acc;
+            return;
+          }
+          for (let k = 0; k <= left; k++) rec(s + 1, left - k, acc + clamp(base[s] + 3 * k));
+        };
+        rec(0, art - asg.usedArtifice, 0);
+        if (art - asg.usedArtifice > 0) dumped++;
+        expect(o.total, `artifice dump: ${show(c)}`).toBe(best);
+      }),
+      PARAMS(1500),
+    );
+    console.log(`[coverage] artifice dump cases=${dumped}`);
+    expect(dumped).toBeGreaterThan(50);
   });
 
   test("nullability is monotone: lower minimums / bigger mod budget never lose feasibility", () => {

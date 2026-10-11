@@ -57,7 +57,7 @@ export const pieceSpecArb = (o: { exoticRate: number; artificeRate: number; t5On
   fc.record({
     kind: o.t5Only ? fc.constant<PieceKind>("t5") : fc.constantFrom<PieceKind>("t5", "t5", "t5", "t5", "legacy", "lowroll"),
     perm: permArb,
-    legacy: fc.array(fc.integer({ min: 2, max: 30 }), { minLength: 6, maxLength: 6 }),
+    legacy: fc.array(fc.integer({ min: 0, max: 30 }), { minLength: 6, maxLength: 6 }),
     exotic: unit.map((x) => x < o.exoticRate),
     // Exotic intrinsic-looking bonus: up to two stats get +2..+10 on top of the roll.
     intrinsic: fc.array(fc.constantFrom(0, 0, 0, 0, 2, 5, 10), { minLength: 6, maxLength: 6 }),
@@ -164,7 +164,7 @@ export function queryArb(o: GenOpts): fc.Arbitrary<OptimizerInput> {
     minOff: fc.array(fc.integer({ min: -20, max: 15 }), { minLength: NUM_STATS, maxLength: NUM_STATS }),
     major: fc.integer({ min: 0, max: 5 }),
     minor: fc.integer({ min: 0, max: 5 }),
-    frag: fc.array(o.clean ? fc.constantFrom(0, 0, 0, 10, 20) : fc.constantFrom(0, 0, 0, 0, 10, 20, -10, -20, -30), {
+    frag: fc.array(o.clean ? fc.constantFrom(0, 0, 0, 10, 20) : fc.constantFrom(0, 0, 0, 0, 0, 10, 20, -10, -20, -30, -60, -100), {
       minLength: NUM_STATS,
       maxLength: NUM_STATS,
     }),
