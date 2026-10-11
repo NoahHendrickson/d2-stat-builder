@@ -155,6 +155,7 @@ function checkSession(
     }
     expect(better.length, `${ctx}: offer iff cold strictly beats the frozen list`).toBe(shouldOffer ? 1 : 0);
   }
+  if (first.o.capped && !first.o.ceilingsExact && budgets.refineCeilingBudgetMs === 0 && final.o.ceilingsExact) bump("phase 2 closed the ceiling gap");
   // A generous background ceiling phase must prove every ceiling.
   if (results.length === 2 && (budgets.refineCeilingBudgetMs ?? 15_000) >= 1e9)
     expect(final.o.ceilingsExact, `${ctx}: generous refinement left ceilings inexact`).toBe(true);
@@ -244,6 +245,8 @@ describe("session discovery", () => {
         const budgets = { ...randomBudgets(r), topNBudgetMs: pick(r, [0, 0, 0, ri(r, 0, 20), ri(r, 0, 200), 1e9]) };
         if (chance(r, 0.5)) budgets.refineTopNBudgetMs = 1e9;
         else if (chance(r, 0.5)) budgets.refineTopNBudgetMs = 0;
+        // Profile: phase 1 gets nothing, phase 2 is exhaustive — phase 2 alone must close ceilings.
+        if (chance(r, 0.25)) Object.assign(budgets, { topNBudgetMs: 0, ceilingBudgetMs: ri(r, 0, 30), refineCeilingBudgetMs: 0, refineTopNBudgetMs: 1e9 });
         const step = pick(r, [0.25, 1, 5, 0]);
         const ev = runSession(input, budgets, step);
         checkSession(input, ev, `large seed=${seed} budgets=${JSON.stringify(budgets)} step=${step}`, undefined, budgets);
@@ -316,14 +319,4 @@ describe("session discovery", () => {
     );
     console.log(`carry-vs-cold sessions with a carry: ${carried}`);
   }, 300_000);
-});
-
-describe("boundaries", () => {
-  // Policy QUESTION, not asserted: maxResults 0 is never sent by the UI (it sends 200; the
-  // weapon planner sends 1). Recorded so a change in behaviour is visible.
-  test.skip("maxResults 0 (TopNHeap with capacity 0) — see report", () => {
-    const r = rng(1);
-    const input = { ...randomQuery(r, 2), minimums: [0, 0, 0, 0, 0, 0], maxResults: 0 };
-    expect(() => solve(input, GEN)).not.toThrow();
-  });
 });

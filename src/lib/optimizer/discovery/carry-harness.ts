@@ -326,7 +326,7 @@ export function randomQuery(r: Rnd, maxPerSlot = 3, minPerSlot = 1, maxTunable =
   if (er < 0.3) {
     // leave undefined
   } else {
-    const mode = pick(r, ["any", "none", "require", "specific"] as const);
+    const mode = pick(r, ["any", "none", "require", "specific", "specific"] as const);
     input.exotic = { mode };
     if (mode === "specific" || chance(r, 0.3)) {
       const exHashes = slots.flat().filter((p) => p.exotic).map((p) => p.hash!);
@@ -512,7 +512,12 @@ function fieldEdit(r: Rnd, prev: OptimizerInput): Edit {
     "pieceAdd",
     "hashOnLegendary",
   ] as const;
-  const kind = pick(r, kinds);
+  // State-aware bias: edits that only bite when their constraint is active get extra weight.
+  const targeted: (typeof kinds)[number][] = [];
+  if (prev.powerRange) targeted.push("weaponsExtreme", "powerExtreme", "powerValue", "powerUndef0", "powerBounds");
+  if (prev.exotic?.mode === "specific") targeted.push("exoticHashesInPool", "exoticHashes");
+  if (prev.mods) targeted.push("modsMinorOnly", "modsMajorOnly");
+  const kind = targeted.length && chance(r, 0.35) ? pick(r, targeted) : pick(r, kinds);
   let next = cloneInput(prev);
   let noop = false;
   switch (kind) {
@@ -548,7 +553,8 @@ function fieldEdit(r: Rnd, prev: OptimizerInput): Edit {
     }
     case "weaponsExtreme": {
       const base = next.powerRange ?? { min: 1995, max: 2005 };
-      next.powerRange = { ...base, weapons: [pick(r, [1950, 2050, 2002])] };
+      const w = base.weapons ?? [];
+      next.powerRange = { ...base, weapons: w.length && chance(r, 0.5) ? w.map((x) => x + pick(r, [-40, 40])) : [pick(r, [1950, 2050, 2002])] };
       break;
     }
     case "modsChange":

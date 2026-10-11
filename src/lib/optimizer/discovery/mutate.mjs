@@ -44,7 +44,7 @@ let restore = null;
 for (const sig of ["SIGINT", "SIGTERM"]) process.on(sig, () => { if (restore) restore(); process.exit(1); });
 const results = [];
 for (const [name, file, from, to] of M) {
-  if (filter && !name.includes(filter)) continue;
+  if (filter && !new RegExp(filter).test(name)) continue;
   const orig = readFileSync(file, "utf8");
   const n = orig.split(from).length - 1;
   if (n !== 1) {

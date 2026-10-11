@@ -120,6 +120,7 @@ function runChain(seed: number, steps: number): void {
     const next = edit.next;
     const same = sameQueryExceptMinimums(input, next);
     bump(`edit ${edit.kind.split("+")[0].split(":")[0]} same=${same}`);
+    if (process.env.PROP_EDIT_STATS) bump(`kind ${edit.kind.split("+")[0]}${input.powerRange ? " [range]" : ""}`);
     if (edit.minsOnly) expect(same, `${ctx()} mins-only edit reported different`).toBe(true);
     if (edit.noop && !edit.minsOnly) {
       bump(same ? "noop recognised" : "noop missed");
@@ -133,6 +134,7 @@ function runChain(seed: number, steps: number): void {
       const sig = (o: OptimizerOutput) => ({
         totals: o.loadouts.map((l) => l.total),
         stats: o.loadouts.map((l) => l.stats.join(",")),
+        power: o.loadouts.map((l) => l.power),
         ceilings: o.ceilings,
         uppers: o.ceilingUppers,
         exact: o.ceilingsExact,
