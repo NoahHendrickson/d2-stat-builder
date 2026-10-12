@@ -7,6 +7,7 @@ import type { MoveStep } from "@/lib/inventory/smart-moves";
 import type { MoveOutcome } from "@/lib/inventory/move-queue";
 import type { PendingToast } from "@/lib/toast";
 import { createValueStore } from "@/lib/value-store";
+import type { TileMetrics } from "@/lib/inventory/vault-layout";
 
 /** The item being dragged and where it came from; drop zones subscribe to this. */
 export interface DragInfo {
@@ -47,4 +48,14 @@ export const ManagerActionsContext = createContext<ManagerActions | null>(null);
 
 export function useManagerActions(): ManagerActions | null {
   return useContext(ManagerActionsContext);
+}
+
+/**
+ * Phones: the tile size and spacing that fill the page's width (see phoneTileMetrics).
+ * Null on wider screens, where tiles keep their fixed 60px.
+ */
+export const TileMetricsContext = createContext<TileMetrics | null>(null);
+
+export function usePhoneTiles(): TileMetrics | null {
+  return useContext(TileMetricsContext);
 }

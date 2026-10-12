@@ -13,6 +13,7 @@ import type { ArmorVersion, FacetFilters } from "@/lib/armor-table/filters";
 import { duplicateMatchSummary, type DuplicateMatch } from "@/lib/armor-table/duplicates";
 import { CLASS_NAMES } from "@/lib/armory/stats";
 import { cn } from "@/lib/utils";
+import { useMinWidth } from "@/lib/use-min-width";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -77,7 +78,7 @@ function DuplicatesButton({
         onClick={onToggle}
       >
         <HugeiconsIcon icon={Copy01Icon} data-icon="inline-start" aria-hidden />
-        Duplicates
+        <span className="max-md:sr-only">Duplicates</span>
       </Button>
       <DropdownMenu>
         <DropdownMenuTrigger
@@ -171,6 +172,9 @@ export const ArmorTableToolbar = memo(function ArmorTableToolbar({
 }) {
   // Duplicates and Cleanup are never on together; whichever is shows its groups.
   const groupCount = duplicateGroups ?? cleanupGroups;
+  // Phones have no F key to press. The table mounts after the armory loads, never
+  // while hydrating, so this reads the real viewport on its first render.
+  const keyboard = useMinWidth(768);
   const cascadeMenuProps = {
     facets,
     onFacetChange,
@@ -186,15 +190,16 @@ export const ArmorTableToolbar = memo(function ArmorTableToolbar({
   };
 
   return (
-    <div className="@container/toolbar flex items-center gap-2 px-4 py-5">
+    // Phones: search and Filters on the first line, the count and views on the second.
+    <div className="@container/toolbar flex items-center gap-2 px-4 py-5 max-md:flex-wrap max-md:gap-y-3 max-md:px-3 max-md:py-3">
       <span
-        className="shrink-0 text-sm font-medium tabular-nums"
+        className="shrink-0 text-sm font-medium tabular-nums max-md:order-4 max-md:mr-auto"
         aria-label={`${filteredCount} results`}
       >
         {filteredCount} {filteredCount === 1 ? "piece" : "pieces"}
         {groupCount !== undefined && ` in ${groupCount} ${groupCount === 1 ? "group" : "groups"}`}
       </span>
-      <div className="relative h-8 min-w-0 flex-1 @[58rem]/toolbar:w-[272px] @[58rem]/toolbar:flex-none">
+      <div className="relative h-8 min-w-0 flex-1 max-md:order-1 @[58rem]/toolbar:w-[272px] @[58rem]/toolbar:flex-none">
         <HugeiconsIcon icon={Search01Icon}
           className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 z-10 size-4 -translate-y-1/2"
           aria-hidden
@@ -209,7 +214,7 @@ export const ArmorTableToolbar = memo(function ArmorTableToolbar({
             if (search) onSearchChange("");
             else e.currentTarget.blur();
           }}
-          placeholder="Press F to search"
+          placeholder={keyboard ? "Press F to search" : "Search armor"}
           aria-label="Search armor by name"
           className="h-8 pr-8 pl-8"
         />
@@ -277,10 +282,11 @@ export const ArmorTableToolbar = memo(function ArmorTableToolbar({
           triggerLabel="More filters"
         />
       </div>
-      <div className="h-8 shrink-0 @[58rem]/toolbar:hidden">
+      <div className="h-8 shrink-0 max-md:order-2 @[58rem]/toolbar:hidden">
         <FilterCascadeMenu {...cascadeMenuProps} toggleSubmenusOnClick />
       </div>
-      <div className="ml-auto flex shrink-0 items-center gap-2">
+      <div aria-hidden className="hidden basis-full max-md:order-3 max-md:block" />
+      <div className="ml-auto flex shrink-0 items-center gap-2 max-md:order-5">
         <CleanupButton on={cleanupGroups !== undefined} {...cleanup} />
         <DuplicatesButton
           on={duplicateGroups !== undefined}
@@ -293,7 +299,7 @@ export const ArmorTableToolbar = memo(function ArmorTableToolbar({
         <Button
           type="button"
           variant="outline"
-          className="shrink-0"
+          className="shrink-0 max-md:order-6"
           onClick={onClearFilters}
         >
           <HugeiconsIcon icon={Cancel01Icon} data-icon="inline-start" aria-hidden />

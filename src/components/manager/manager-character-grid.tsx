@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import Image from "next/image";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { PlantIcon } from "@hugeicons/core-free-icons";
@@ -30,11 +30,13 @@ import { useStoreValue } from "@/lib/value-store";
 import { EmptyTile, ItemTile } from "./item-tile";
 import { farmingStore } from "./farming";
 import { useItemComparator } from "./view-menu";
-import { dragStore, useManagerActions } from "./manager-context";
+import { dragStore, useManagerActions, usePhoneTiles } from "./manager-context";
 import { DropZone, canLand } from "./manager-drop-zone";
 import { AlignedVault, SLOT_ROWS } from "./manager-vault";
 
 const POSTMASTER_FALLBACK_CAPACITY = 21;
+/** The phone vault tab's value: never a character id (those are long numbers). */
+const VAULT_TAB = "vault";
 
 /**
  * Every character side by side, or (when `compact`) one at a time under a tab strip,
@@ -47,10 +49,16 @@ export function InventoryGrid({
   inventory,
   compact,
   aligned,
+  vault,
 }: {
   inventory: ManagerInventory;
   compact: boolean;
   aligned: boolean;
+  /**
+   * Phones: the vault as one more tab after the characters, its pane in place of theirs
+   * while picked. The tab strip stays pinned over both.
+   */
+  vault?: { open: boolean; onOpenChange: (open: boolean) => void; pane: ReactNode };
 }) {
   const { characters } = inventory;
   const [picked, setPicked] = useState<string | null>(null);
@@ -70,16 +78,38 @@ export function InventoryGrid({
   const statIcons = useMemo(() => statIconsFromManifest(manifest), [manifest]);
   const compare = useItemComparator();
 
+  const vaultOpen = vault?.open ?? false;
   const tabs = compact && shown && (
     <Tabs
-      value={shown.id}
-      onValueChange={(id) => setPicked(id as string)}
-      className={cn("pb-3", aligned && "col-[1/-2] row-start-1 self-end")}
+      value={vaultOpen ? VAULT_TAB : shown.id}
+      onValueChange={(id) => {
+        vault?.onOpenChange(id === VAULT_TAB);
+        if (id !== VAULT_TAB) setPicked(id as string);
+      }}
+      className={cn(
+        "pb-3",
+        aligned && "col-[1/-2] row-start-1 self-end",
+        // Pinned under the search bar (as the nameplates are on wider screens), filled once
+        // something scrolls under it.
+        vault && "sticky top-8 z-20 -mx-4 -mt-3 px-4 pt-3 group-data-scrolled/manager:bg-glass-opaque",
+      )}
     >
       <TabsList variant="line" aria-label="Characters" className="w-full justify-start">
         {characters.map((c) => (
-          <CharacterTab key={c.id} character={c} onPick={() => setPicked(c.id)} />
+          <CharacterTab
+            key={c.id}
+            character={c}
+            onPick={() => {
+              vault?.onOpenChange(false);
+              setPicked(c.id);
+            }}
+          />
         ))}
+        {vault && (
+          <TabsTrigger value={VAULT_TAB} className="flex-none px-1.5">
+            Vault
+          </TabsTrigger>
+        )}
       </TabsList>
     </Tabs>
   );
@@ -87,7 +117,8 @@ export function InventoryGrid({
   return (
     <section aria-label={aligned ? "Characters and vault" : "Characters"} className="flex flex-col">
       {!aligned && tabs}
-      <div className="grid" style={columns}>
+      {vaultOpen && vault?.pane}
+      <div className={cn("grid", vaultOpen && "hidden")} style={columns}>
         {aligned && tabs}
         {characters.map((c) => (
           // The whole column is one target (padding splits the gap between columns), so a
@@ -175,6 +206,7 @@ function CharacterHeader({
   statIcons: StatIconMap;
 }) {
   const [imgFailed, setImgFailed] = useState(false);
+  const phone = usePhoneTiles() !== null;
   const farming = useStoreValue(farmingStore) === character.id;
   const name = CLASS_NAMES[character.classType] ?? "Guardian";
   const fallbackColor = character.emblemColor
@@ -183,7 +215,12 @@ function CharacterHeader({
 
   return (
     // pt-3 is a filled gap under the search bar once pinned; -mt-3 keeps it out of the layout.
-    <div className="sticky top-8 z-10 -mt-3 py-3 group-data-scrolled/manager:bg-glass-opaque">
+    // Phones pin the tab strip instead: a nameplate there would take a fifth of the screen.
+    <div
+      className={cn(
+        phone ? "pb-3" : "sticky top-8 z-10 -mt-3 py-3 group-data-scrolled/manager:bg-glass-opaque",
+      )}
+    >
         <DropdownMenu>
           <DropdownMenuTrigger
             render={
@@ -294,21 +331,33 @@ function CharacterCell({
   const unsorted = character.inventory[row.hash];
   const items = useMemo(() => [...(unsorted ?? [])].sort(compare), [unsorted, compare]);
   const empty = Math.max(0, CHARACTER_SLOTS - items.length);
+  // Phones: the rest of the slot in as many columns as fill the width (two rows, not three),
+  // a double gap after the equipped tile, and no drop padding (touch doesn't drag).
+  const phone = usePhoneTiles();
 
   return (
     // Tiles keep to the top: an aligned row grows with the vault's slot beside it.
-    <div className={cn("flex items-start gap-2 pb-2", groupStart && "pt-5")} aria-label={row.label}>
+    <div
+      className={cn("flex items-start gap-2 pb-2", groupStart && "pt-5")}
+      style={phone ? { columnGap: phone.gap * 2, paddingBottom: phone.gap } : undefined}
+      aria-label={row.label}
+    >
       <DropZone
         to={{ kind: "character", characterId: character.id, equipped: true }}
         bucket={row.hash}
-        className="self-start p-1"
+        className={cn("self-start p-1", phone && "p-0")}
       >
         {equipped ? <ItemTile item={equipped} /> : <EmptyTile />}
       </DropZone>
       <DropZone
         to={{ kind: "character", characterId: character.id }}
         bucket={row.hash}
-        className="grid grid-cols-[repeat(3,60px)] content-start gap-2 p-1"
+        className={cn("grid grid-cols-[repeat(3,60px)] content-start gap-2 p-1", phone && "p-0")}
+        style={
+          phone
+            ? { gridTemplateColumns: `repeat(${phone.cols - 1}, ${phone.tile}px)`, gap: phone.gap }
+            : undefined
+        }
       >
         {items.map((item) => (
           <ItemTile key={item.key} item={item} />
@@ -324,6 +373,7 @@ function CharacterCell({
 function PostmasterCell({ items, capacity }: { items: InventoryItem[]; capacity: number }) {
   // The game warns once the postmaster is close to overflowing (and losing items).
   const nearlyFull = items.length >= capacity - 3;
+  const phone = usePhoneTiles();
   return (
     <div className="flex flex-col gap-2 pt-2">
       <div className="flex items-baseline justify-between gap-2 text-xs">
@@ -337,7 +387,15 @@ function PostmasterCell({ items, capacity }: { items: InventoryItem[]; capacity:
       {items.length > 0 && (
         // Full-size tiles like every slot row (smaller ones clip the Power); four across
         // keeps the grid inside the column width the slot rows set.
-        <div className="grid grid-cols-[repeat(4,60px)] gap-2">
+        <div
+          className="grid grid-cols-[repeat(4,60px)] gap-2"
+          // Phones: a full line of tiles, like the slots under it.
+          style={
+            phone
+              ? { gridTemplateColumns: `repeat(${phone.cols}, ${phone.tile}px)`, gap: phone.gap }
+              : undefined
+          }
+        >
           {items.map((item) => (
             <ItemTile key={item.key} item={item} />
           ))}

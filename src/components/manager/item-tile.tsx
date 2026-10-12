@@ -1,6 +1,6 @@
 "use client";
 
-import { memo } from "react";
+import { memo, type CSSProperties } from "react";
 import Image from "next/image";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { ArmorThumb, type ArmorThumbSize } from "@/components/armor-thumb";
@@ -14,7 +14,7 @@ import { BREAKER_NAMES, type InventoryItem } from "@/lib/inventory/build";
 import { TAG_LABELS, useAnnotation } from "@/lib/inventory/annotations";
 import { useMovePending } from "@/lib/inventory/move-queue";
 import { cn } from "@/lib/utils";
-import { useManagerActions } from "./manager-context";
+import { useManagerActions, usePhoneTiles } from "./manager-context";
 import { useSearchState } from "./search-store";
 import { TAG_ICONS } from "./tag-icons";
 
@@ -42,6 +42,9 @@ export const ItemTile = memo(function ItemTile({
   size?: ArmorThumbSize;
 }) {
   const actions = useManagerActions();
+  // Phones size the page's full-size tiles to fill its width (smaller sizes are deliberate).
+  const phone = usePhoneTiles();
+  const fluid = size === 60 ? phone?.tile : undefined;
   const pending = useMovePending(item.key);
   const tag = useAnnotation(item.instanceId)?.tag;
   const search = useSearchState(item.key);
@@ -77,7 +80,11 @@ export const ItemTile = memo(function ItemTile({
             ? "opacity-50"
             : search === "none" && tag === "archive" && "opacity-60",
       )}
-      style={{ width: size }}
+      style={
+        fluid
+          ? ({ width: fluid, "--tile-inner": `${fluid - 2}px` } as CSSProperties)
+          : { width: size }
+      }
       title={label}
       aria-label={label.replaceAll("\n", ", ")}
       aria-busy={pending || undefined}
@@ -102,7 +109,7 @@ export const ItemTile = memo(function ItemTile({
         icon={item.icon}
         watermark={item.watermark}
         size={size}
-        className={cn("bg-item-backing", INNER_SIZE_CLASS[size])}
+        className={cn("bg-item-backing", INNER_SIZE_CLASS[size], fluid && "size-(--tile-inner)")}
         gearTier={item.gearTier}
         craft={item.enhanced ? "enhanced" : item.crafted ? "crafted" : undefined}
       >
@@ -128,7 +135,11 @@ export const ItemTile = memo(function ItemTile({
         )}
       </ArmorThumb>
       <span
-        className="flex items-center gap-0.5 px-0.5 text-[11px] leading-none font-medium text-black tabular-nums"
+        className={cn(
+          "flex items-center gap-0.5 px-0.5 text-[11px] leading-none font-medium text-black tabular-nums",
+          // A narrower phone tile clips a crowded bar (champion + element + Power) at its edge.
+          fluid && "overflow-hidden",
+        )}
         style={{ height: FOOTER_PX }}
       >
         <span className="flex-1" />
@@ -163,11 +174,13 @@ export const ItemTile = memo(function ItemTile({
 
 /** An empty cell, drawn as the game's bracket corners, the same size as a tile. */
 export function EmptyTile({ size = 60 }: { size?: ArmorThumbSize }) {
+  const phone = usePhoneTiles();
+  const width = (size === 60 ? phone?.tile : undefined) ?? size;
   return (
     <span
       aria-hidden
       className="d2-brackets block shrink-0 self-start opacity-50"
-      style={{ width: size, height: size + FOOTER_PX }}
+      style={{ width, height: width + FOOTER_PX }}
     />
   );
 }

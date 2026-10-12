@@ -669,7 +669,7 @@ export function ArmorTable() {
       <div ref={setScrollerEl} className="min-h-0 flex-1 overflow-auto">
           <table
             ref={setTableEl}
-            className="w-full min-w-[70.5rem] table-fixed text-sm"
+            className="w-full min-w-[70.5rem] table-fixed text-sm max-md:min-w-[61.5rem]"
           >
             {TABLE_COLGROUP}
             <HeaderRow

@@ -283,7 +283,7 @@ export function ManagerSearch({ inventory }: { inventory: ManagerInventory }) {
             >
               <span className="invisible">{query}</span>
               <span className="text-muted-foreground/70">{ghost}</span>
-              <kbd className="text-muted-foreground border-foreground/20 ml-2 flex h-5 shrink-0 items-center border px-1 font-sans text-[11px]">
+              <kbd className="text-muted-foreground border-foreground/20 ml-2 flex h-5 shrink-0 items-center border px-1 font-sans text-[11px] max-md:hidden">
                 Tab
               </kbd>
             </span>
@@ -347,7 +347,7 @@ export function ManagerSearch({ inventory }: { inventory: ManagerInventory }) {
       {fullQuery.length === 0 && (
         <kbd
           aria-hidden
-          className="text-muted-foreground border-foreground/20 flex h-5 min-w-5 shrink-0 items-center justify-center border px-1 font-sans text-xs peer-focus-within:hidden"
+          className="text-muted-foreground border-foreground/20 flex h-5 min-w-5 shrink-0 items-center justify-center border px-1 font-sans text-xs peer-focus-within:hidden max-md:hidden"
         >
           F
         </kbd>

@@ -60,12 +60,12 @@ export const FragmentPicker = memo(function FragmentPicker({
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-3">
-        <div className="space-y-2">
+        <div className="space-y-2 max-md:max-w-full">
           <Tabs
             value={activeSubclass}
             onValueChange={(v) => onSubclassChange(v as Subclass)}
           >
-            <TabsList variant="default" aria-label="Subclass">
+            <TabsList variant="default" aria-label="Subclass" className="max-md:max-w-full max-md:overflow-x-auto">
               {SUBCLASSES.map((s) => (
                 <TabsTrigger key={s} value={s}>
                   {s}
@@ -104,8 +104,10 @@ export const FragmentPicker = memo(function FragmentPicker({
         </p>
       ) : (
         <div className="overflow-x-auto">
-          <div className="min-w-max divide-y divide-foreground/10">
-            <div className="grid grid-cols-[1fr_repeat(6,2rem)] items-center gap-x-2 py-1.5">
+          {/* Phones drop the six stat columns (they only fit by scrolling sideways) for
+              each fragment's nonzero stats, with their icons, at the end of its row. */}
+          <div className="min-w-max divide-y divide-foreground/10 max-md:min-w-0">
+            <div className="grid grid-cols-[1fr_repeat(6,2rem)] items-center gap-x-2 py-1.5 max-md:hidden">
               <span aria-hidden />
               {STAT_ORDER.map((key) => (
                 <span key={key} className="flex justify-center">
@@ -154,7 +156,7 @@ export const FragmentPicker = memo(function FragmentPicker({
               return (
                 <div
                   key={f.hash}
-                  className="grid grid-cols-[1fr_repeat(6,2rem)] items-center gap-x-2 py-1.5"
+                  className="grid grid-cols-[1fr_repeat(6,2rem)] items-center gap-x-2 py-1.5 max-md:grid-cols-[minmax(0,1fr)_auto] max-md:py-2"
                 >
                   <label
                     className={cn(
@@ -184,11 +186,37 @@ export const FragmentPicker = memo(function FragmentPicker({
                       identity
                     )}
                   </label>
+                  <span className="flex shrink-0 items-center gap-3 md:hidden">
+                    {STAT_ORDER.map((key, i) =>
+                      f.stats[i] ? (
+                        <span
+                          key={key}
+                          className={cn(
+                            "flex items-center gap-1 text-xs tabular-nums",
+                            f.stats[i] > 0 ? "text-positive" : "text-destructive",
+                          )}
+                        >
+                          {statIcons[key] && (
+                            <Image
+                              src={`${BUNGIE_IMAGE_BASE}${statIcons[key]}`}
+                              alt=""
+                              width={14}
+                              height={14}
+                              className="size-3.5 shrink-0 opacity-80 invert dark:invert-0"
+                              unoptimized
+                            />
+                          )}
+                          {`${f.stats[i] > 0 ? "+" : "−"}${Math.abs(f.stats[i])}`}
+                          <span className="sr-only">{STAT_LABELS[key]}</span>
+                        </span>
+                      ) : null,
+                    )}
+                  </span>
                   {STAT_ORDER.map((key, i) => (
                     <span
                       key={key}
                       className={cn(
-                        "text-center text-xs tabular-nums",
+                        "text-center text-xs tabular-nums max-md:hidden",
                         f.stats[i] > 0 && "text-positive",
                         f.stats[i] < 0 && "text-destructive",
                       )}

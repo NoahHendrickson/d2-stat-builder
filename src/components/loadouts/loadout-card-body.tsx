@@ -306,7 +306,9 @@ function PieceTile({ item, manifest }: { item: ResolvedArmorItem; manifest: Mani
   return (
     <div
       className={cn(
-        "flex w-15 shrink-0 flex-col self-start p-px @6xl:row-span-2",
+        // Phones: five 60px tiles don't fit a card's width, so the tile fills its column
+        // up to that size instead.
+        "flex w-15 shrink-0 flex-col self-start p-px max-md:w-full max-md:max-w-15 @6xl:row-span-2",
         masterworked ? "bg-item-frame-masterwork" : "bg-item-frame",
         item.missing && "opacity-50",
       )}
@@ -317,7 +319,7 @@ function PieceTile({ item, manifest }: { item: ResolvedArmorItem; manifest: Mani
         alt={item.name}
         size={60}
         gearTier={armorPipTier(piece)}
-        className="bg-item-backing size-[58px]"
+        className="bg-item-backing size-[58px] max-md:aspect-square max-md:size-auto max-md:w-full"
       >
         {masterworked && <MasterworkGlow />}
       </ArmorThumb>
@@ -373,12 +375,12 @@ function PieceColumn({
   const slotLabel = item.slot ? SLOT_LABELS[item.slot] : "Armor";
   // A missing piece's empty slot, the tile's size; from @6xl it spans both rows of the
   // box's grid, at the top.
-  const artClass = "h-[76px] w-15 @6xl:row-span-2";
+  const artClass = "h-[76px] w-15 max-md:w-full max-md:max-w-15 @6xl:row-span-2";
 
   return (
     <section
       aria-label={`${item.name}, ${slotLabel}`}
-      className={cn(COLUMN_WELL_CLASS, "gap-2")}
+      className={cn(COLUMN_WELL_CLASS, "gap-2 max-md:p-1")}
     >
       <div className="hidden min-w-0 flex-col @6xl:flex">
         <span
@@ -437,7 +439,7 @@ export function LoadoutCardBody({
   return (
     <div className="flex flex-col gap-3">
       <div
-        className="grid gap-2 [grid-template-columns:repeat(var(--pieces),minmax(0,1fr))] @3xl:[grid-template-columns:minmax(18.5rem,1.25fr)_repeat(var(--pieces),minmax(0,1fr))]"
+        className="grid gap-2 max-md:gap-1.5 [grid-template-columns:repeat(var(--pieces),minmax(0,1fr))] @3xl:[grid-template-columns:minmax(18.5rem,1.25fr)_repeat(var(--pieces),minmax(0,1fr))]"
         style={{ "--pieces": pieceCols } as CSSProperties}
       >
         <div className={cn("col-span-full @3xl:col-span-1", hasWeapons && "@3xl:row-span-2")}>

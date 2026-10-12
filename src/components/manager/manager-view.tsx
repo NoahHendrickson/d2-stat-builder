@@ -22,9 +22,12 @@ import { FarmingBanner, FarmingRunner } from "./farming";
 import { ManagerSearch } from "./manager-search";
 import {
   ManagerActionsContext,
+  TileMetricsContext,
   dragStore,
   type ManagerActions,
 } from "./manager-context";
+import { phoneTileMetrics } from "@/lib/inventory/vault-layout";
+import { useMinWidth } from "@/lib/use-min-width";
 import { characterDropStore } from "./manager-drop-zone";
 import { InventoryGrid } from "./manager-character-grid";
 import { VaultPane } from "./manager-vault";
@@ -40,6 +43,9 @@ const ALL_CHARACTERS_MIN_PX = 1580;
  * as that slot on the characters. Narrower, it goes below them in one list.
  */
 const ALIGNED_MIN_PX = 760;
+
+/** Below Tailwind `md` the page is laid out for phones (see phoneTileMetrics). */
+const PHONE_MAX_PX = 768;
 
 /**
  * The inventory manager: one column per character on the left (postmaster, then
@@ -65,18 +71,31 @@ export function ManagerView({
   const layoutRef = useRef<HTMLDivElement>(null);
   const [compact, setCompact] = useState(false);
   const [aligned, setAligned] = useState(true);
+  const [layoutWidth, setLayoutWidth] = useState(0);
   useLayoutEffect(() => {
     const el = layoutRef.current;
     if (!el) return;
-    const observer = new ResizeObserver(() => {
+    const measure = () => {
       // Hidden along with its view (the router keeps recent views mounted): keep what it had.
       if (el.clientWidth === 0) return;
       setCompact(el.clientWidth < ALL_CHARACTERS_MIN_PX);
       setAligned(el.clientWidth >= ALIGNED_MIN_PX);
-    });
+      setLayoutWidth(el.clientWidth);
+    };
+    // Now, before paint, so a phone's first frame already has its tile size.
+    measure();
+    const observer = new ResizeObserver(measure);
     observer.observe(el);
     return () => observer.disconnect();
   }, []);
+  // Phones: tiles sized to fill the width, and the vault behind a tab of its own instead
+  // of below every character slot.
+  const phone = !useMinWidth(PHONE_MAX_PX);
+  const tiles = useMemo(
+    () => (phone && layoutWidth > 0 ? phoneTileMetrics(layoutWidth) : null),
+    [phone, layoutWidth],
+  );
+  const [vaultOpen, setVaultOpen] = useState(false);
   /** The weapon (by name) whose copies are open in Compare. */
   const [comparing, setComparing] = useState<string | null>(null);
   useEffect(loadViewSettings, []);
@@ -153,10 +172,25 @@ export function ManagerView({
           <ManagerSearch inventory={inventory} />
         </div>
         <FarmingBanner inventory={inventory} />
-        <div ref={layoutRef} className="flex flex-col gap-6">
-          <InventoryGrid inventory={inventory} compact={compact} aligned={aligned} />
-          {!aligned && <VaultPane inventory={inventory} />}
-        </div>
+        <TileMetricsContext value={tiles}>
+          <div ref={layoutRef} className="flex flex-col gap-6">
+            <InventoryGrid
+              inventory={inventory}
+              compact={compact}
+              aligned={aligned}
+              vault={
+                tiles
+                  ? {
+                      open: vaultOpen,
+                      onOpenChange: setVaultOpen,
+                      pane: <VaultPane inventory={inventory} />,
+                    }
+                  : undefined
+              }
+            />
+            {!aligned && !tiles && <VaultPane inventory={inventory} />}
+          </div>
+        </TileMetricsContext>
       </div>
       <ItemDetails
         inventory={inventory}
@@ -164,6 +198,7 @@ export function ManagerView({
         onClose={() => setMenu(null)}
         onLock={(item, locked) => actions.lock([item], locked)}
         onCompare={actions.compare}
+        phone={tiles !== null}
       />
       <CompareDrawer inventory={inventory} name={comparing} onClose={() => setComparing(null)} />
     </ManagerActionsContext.Provider>

@@ -32,7 +32,7 @@ export const SetRow = memo(function SetRow({
   const perk2Info = set.perks.find((p) => p.requiredCount === 2);
   const perk4Info = set.perks.find((p) => p.requiredCount === 4);
   return (
-    <div className="group/set-row relative col-span-full grid grid-cols-subgrid items-center">
+    <div className="group/set-row relative col-span-full grid grid-cols-subgrid items-center max-md:gap-y-2">
       {/* Pin sits in a reserved gutter inside the name column. Floating it
           outside the row (Figma 17:5828) gets clipped by the card padding and
           the settings pane's overflow-y-auto. */}
@@ -42,10 +42,11 @@ export const SetRow = memo(function SetRow({
           onClick={() => onTogglePin(set.setHash)}
           aria-label={pinned ? "Unpin set" : "Pin set"}
           className={cn(
-            "absolute top-1/2 left-0 z-10 flex size-6 -translate-y-1/2 items-center justify-center rounded-none normal:rounded-[6px] transition-opacity outline-none focus-visible:opacity-100 focus-visible:ring-1 focus-visible:ring-outline-strong",
+            "absolute top-1/2 left-0 z-10 flex size-6 -translate-y-1/2 max-md:top-1 max-md:translate-y-0 items-center justify-center rounded-none normal:rounded-[6px] transition-opacity outline-none focus-visible:opacity-100 focus-visible:ring-1 focus-visible:ring-outline-strong",
             pinned
               ? "text-foreground"
-              : "text-muted-foreground opacity-0 group-hover/set-row:opacity-100 group-has-[:focus-visible]/set-row:opacity-100 hover:text-foreground",
+              : // No hover on phones, so the pin is always there.
+                "text-muted-foreground opacity-0 group-hover/set-row:opacity-100 group-has-[:focus-visible]/set-row:opacity-100 hover:text-foreground max-md:opacity-100",
           )}
         >
           <HugeiconsIcon icon={Pin02Icon}
@@ -55,7 +56,7 @@ export const SetRow = memo(function SetRow({
           />
         </button>
       </TooltipLabel>
-      <span className="truncate pl-7 text-sm">
+      <span className="truncate pl-7 text-sm max-md:font-medium">
         {set.name} ({set.ownedCount})
       </span>
       <SetPerkCell
@@ -63,19 +64,21 @@ export const SetRow = memo(function SetRow({
         disabled={set.ownedCount < 2}
         perk={perk2Info}
         onToggle={() => onToggleSet(set.setHash, 2)}
+        className="max-md:col-span-2 max-md:col-start-1 max-md:row-start-2 max-md:pl-7"
       />
       <SetPerkCell
         active={req === 4}
         disabled={set.ownedCount < 4}
         perk={perk4Info}
         onToggle={() => onToggleSet(set.setHash, 4)}
+        className="max-md:col-span-2 max-md:col-start-1 max-md:row-start-3 max-md:pl-7"
       />
       <TooltipLabel label={`${set.name} rolls by archetype`}>
         <button
           type="button"
           onClick={() => onOpenGrid(set.setHash)}
           aria-label={`${set.name} rolls by archetype`}
-          className="text-muted-foreground hover:text-foreground focus-visible:ring-outline-strong flex size-6 cursor-pointer items-center justify-center rounded-none normal:rounded-[6px] outline-none focus-visible:ring-1"
+          className="text-muted-foreground hover:text-foreground focus-visible:ring-outline-strong flex size-6 cursor-pointer items-center justify-center rounded-none normal:rounded-[6px] outline-none focus-visible:ring-1 max-md:col-start-2 max-md:row-start-1 max-md:size-8"
         >
           <HugeiconsIcon icon={GridViewIcon} className="size-4" aria-hidden />
         </button>
@@ -98,11 +101,13 @@ function SetPerkCell({
   disabled,
   perk,
   onToggle,
+  className,
 }: {
   active: boolean;
   disabled: boolean;
   perk: SetPerkInfo | undefined;
   onToggle: () => void;
+  className?: string;
 }) {
   const tooltipContent = perkTooltipContent(perk);
   const label = (
@@ -120,7 +125,7 @@ function SetPerkCell({
     </button>
   );
   return (
-    <div className="flex min-w-0 items-center gap-2">
+    <div className={cn("flex min-w-0 items-center gap-2", className)}>
       <Checkbox
         checked={active}
         disabled={disabled}
