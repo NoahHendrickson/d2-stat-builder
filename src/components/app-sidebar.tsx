@@ -7,6 +7,7 @@ import { usePathname } from "next/navigation";
 import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
 import {
   Add01Icon,
+  Bug01Icon,
   Delete02Icon,
   DiscordIcon,
   GarageIcon,
@@ -27,6 +28,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { TooltipLabel } from "@/components/ui/tooltip";
 import { SidebarStatus } from "@/components/armory/armory-status";
+import { BugReportDialog } from "@/components/bug-report/bug-report-dialog";
 import { LinkDialog } from "@/components/links/link-dialog";
 import { LinkFavicon } from "@/components/links/link-favicon";
 import { addLink, removeLink, updateLink, useLinks } from "@/lib/links/use-links";
@@ -176,7 +178,15 @@ export const AppSidebar = memo(function AppSidebar({
 
       <LinksSection collapsed={collapsed} />
 
-      {DISCORD_INVITE_URL && <DiscordLink collapsed={collapsed} />}
+      <div
+        className={cn(
+          "flex shrink-0 flex-col gap-0.5 pb-2",
+          collapsed ? "items-center px-2.5" : "px-2",
+        )}
+      >
+        {DISCORD_INVITE_URL && <DiscordLink collapsed={collapsed} />}
+        <BugReportButton collapsed={collapsed} />
+      </div>
 
       <SidebarStatus collapsed={collapsed} onNavigate={onNavigate} />
     </nav>
@@ -259,10 +269,32 @@ function DiscordLink({ collapsed }: { collapsed: boolean }) {
       )}
     </a>
   );
+  return collapsed ? <TooltipLabel label="Join the Discord">{anchor}</TooltipLabel> : anchor;
+}
+
+/** Opens the "Report a bug" form. */
+function BugReportButton({ collapsed }: { collapsed: boolean }) {
+  const [open, setOpen] = useState(false);
+  const button = (
+    <button
+      type="button"
+      onClick={() => setOpen(true)}
+      aria-label={collapsed ? "Report a bug" : undefined}
+      className={cn(
+        rowClass,
+        "text-muted-foreground hover:bg-foreground/5 hover:text-foreground",
+        collapsed ? "w-9 justify-center" : "px-2.5",
+      )}
+    >
+      <HugeiconsIcon icon={Bug01Icon} strokeWidth={1.5} className="size-5 shrink-0" aria-hidden />
+      {!collapsed && <span className="min-w-0 flex-1 truncate text-left">Report a bug</span>}
+    </button>
+  );
   return (
-    <div className={cn("flex shrink-0 flex-col pb-2", collapsed ? "items-center px-2.5" : "px-2")}>
-      {collapsed ? <TooltipLabel label="Join the Discord">{anchor}</TooltipLabel> : anchor}
-    </div>
+    <>
+      {collapsed ? <TooltipLabel label="Report a bug">{button}</TooltipLabel> : button}
+      <BugReportDialog open={open} onOpenChange={setOpen} />
+    </>
   );
 }
 

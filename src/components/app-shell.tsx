@@ -12,6 +12,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Cancel01Icon, Menu01Icon } from "@hugeicons/core-free-icons";
 import { AppSidebar, NAV_ITEMS, pageTitle } from "@/components/app-sidebar";
+import { SignInCard } from "@/components/auth/sign-in-card";
 import { ArmoryDiagnosticsGate } from "@/components/armory/armory-diagnostics-gate";
 import { ApplyProgressSection } from "@/components/loadouts/apply-progress-card";
 import { loadLoadoutsList } from "@/components/loadouts/loadouts-list-chunk";
@@ -78,6 +79,7 @@ export function useDesktopLayout(): boolean {
 
 /**
  * App frame: a navigation sidebar (views + saved links) beside the active page.
+ * Signed out, every route is just the sign-in screen: no sidebar, no menu.
  * The sidebar collapses to an icon rail on desktop; on narrow viewports it becomes
  * a left drawer behind a top bar. The armor / game-data / account cluster lives at
  * the sidebar's foot, so on desktop the page starts at the top of the main column.
@@ -88,7 +90,10 @@ export function AppShell({ children }: { children: ReactNode }) {
   useLoadouts();
   // Its code too: the list is a chunk of its own, and a first visit that had to wait
   // for it sat on the placeholder for ~300ms (see ReadyLoadoutsList).
-  const authed = useSession().data?.authenticated === true;
+  const authenticated = useSession().data?.authenticated;
+  const authed = authenticated === true;
+  // Known signed out (not still loading, not a failed check): nothing but sign-in.
+  const signedOut = authenticated === false;
   useEffect(() => {
     if (!authed) return;
     return whenIdle(() => void loadLoadoutsList());
@@ -132,11 +137,24 @@ export function AppShell({ children }: { children: ReactNode }) {
   // not the sidebar. Publish the width so anything under <html> can inset.
   useEffect(() => {
     const root = document.documentElement;
-    root.style.setProperty("--app-sidebar-width", `${desktop ? sidebarWidth : 0}px`);
+    root.style.setProperty(
+      "--app-sidebar-width",
+      `${desktop && !signedOut ? sidebarWidth : 0}px`,
+    );
     return () => {
       root.style.removeProperty("--app-sidebar-width");
     };
-  }, [desktop, sidebarWidth]);
+  }, [desktop, signedOut, sidebarWidth]);
+
+  if (signedOut) {
+    return (
+      <main className="bg-shell-main flex h-full w-full items-center justify-center overflow-y-auto px-6 py-6">
+        <div className="w-full max-w-md">
+          <SignInCard />
+        </div>
+      </main>
+    );
+  }
 
   return (
     <div className="relative flex h-full w-full">
