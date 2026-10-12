@@ -197,6 +197,27 @@ describe("ceiling refinement", () => {
     expect(out.ceilings).toEqual([70, 10, 10, 10, 10, 10]);
   });
 
+  test("a stat clamped up from below zero seeds without the spare", () => {
+    // Same pool and targets plus a −10 health fragment: health sits at −10, shown as 0, so
+    // the spare major only lifts it back to 0 — while a stat at exactly 0 still gains 10.
+    const slots = [
+      [piece("h", [10, 0, 0, 0, 0, 0])],
+      [piece("a", [10, 0, 0, 0, 0, 0])],
+      [piece("c", [10, 0, 0, 0, 0, 0])],
+      [piece("l", [10, 0, 0, 0, 0, 0])],
+      [piece("k", [10, 0, 0, 0, 0, 0])],
+    ];
+    const out = solve(
+      input(slots, {
+        mods: { major: 2, minor: 0 },
+        minimums: [60, 0, 0, 0, 0, 0],
+        fragmentBonus: [0, -10, 0, 0, 0, 0],
+      }),
+      { ceilingBudgetMs: 0 },
+    );
+    expect(out.ceilings).toEqual([70, 0, 10, 10, 10, 10]);
+  });
+
   test("ceilingsExact: proven on easy pools, false when refinement runs out of budget", () => {
     // Single-loadout pool: optimistic bounds equal the seeds, nothing to probe — exact.
     const easy = solve(
