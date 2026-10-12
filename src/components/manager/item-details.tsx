@@ -590,17 +590,15 @@ function ArmorView({ instanceId, itemHash }: { instanceId: string; itemHash: num
           )}
         </div>
       )}
-      {details.intrinsic && (
-        <div className="flex items-start gap-2.5">
-          <PlugIcon plug={details.intrinsic} size={28} />
+      {details.intrinsics.map((perk) => (
+        <div key={perk.hash} className="flex items-start gap-2.5">
+          <PlugIcon plug={perk} size={28} />
           <div className="flex flex-col gap-0.5 text-[13px]">
-            <span className="font-medium">{details.intrinsic.name}</span>
-            {details.intrinsic.description && (
-              <span className="text-muted-foreground">{details.intrinsic.description}</span>
-            )}
+            <span className="font-medium">{perk.name}</span>
+            {perk.description && <span className="text-muted-foreground">{perk.description}</span>}
           </div>
         </div>
-      )}
+      ))}
       {details.set && (
         <div className="flex flex-col gap-1 text-[13px]">
           <span className="d2-label">{details.set.name}</span>
