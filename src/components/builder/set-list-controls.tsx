@@ -113,19 +113,27 @@ export const SetListControls = memo(function SetListControls({
           {/* Figma 18:6255 — "Select Menu": titled header, then a checkbox list. */}
           <PopoverContent
             align="end"
-            className="w-58 gap-0 overflow-hidden p-0"
+            className="w-auto max-w-[calc(100vw-1rem)] gap-0 overflow-hidden p-0"
           >
             <PopoverTitle className="text-text-secondary border-b border-foreground/10 px-3 py-2 text-sm font-medium">
               Filter sets
             </PopoverTitle>
             <div className="flex flex-col gap-3 p-3">
               <SetListSettingRow
-                checked={!filters.hideLessThan2}
+                checked={filters.hideLessThan2}
                 onCheckedChange={(checked) =>
-                  onFilterChange("hideLessThan2", !checked)
+                  onFilterChange("hideLessThan2", checked)
                 }
               >
-                Show sets I have less than 2 pieces of
+                Hide armor sets I have less than 2 pieces for
+              </SetListSettingRow>
+              <SetListSettingRow
+                checked={filters.hideLessThan4}
+                onCheckedChange={(checked) =>
+                  onFilterChange("hideLessThan4", checked)
+                }
+              >
+                Hide armor sets I have less than 4 pieces for
               </SetListSettingRow>
             </div>
           </PopoverContent>
@@ -146,16 +154,14 @@ function SetListSettingRow({
 }) {
   const id = useId();
   return (
-    <div className="flex items-start gap-2">
-      <Checkbox
-        id={id}
-        checked={checked}
-        onCheckedChange={onCheckedChange}
-        className="mt-0.5"
-      />
-      <label htmlFor={id} className="cursor-pointer text-sm leading-5">
+    <div className="flex items-center justify-between gap-3">
+      <label
+        htmlFor={id}
+        className="cursor-pointer whitespace-nowrap text-sm leading-5"
+      >
         {children}
       </label>
+      <Checkbox id={id} checked={checked} onCheckedChange={onCheckedChange} />
     </div>
   );
 }

@@ -12,11 +12,19 @@ describe("passesSetFilters", () => {
     expect(passesSetFilters(2, DEFAULT_SET_FILTERS)).toBe(true);
   });
 
-  test("passes all sets when sets under two pieces are shown", () => {
-    const open = { hideLessThan2: false };
+  test("passes all sets when no sets are hidden", () => {
+    const open = { hideLessThan2: false, hideLessThan4: false };
     expect(passesSetFilters(0, open)).toBe(true);
     expect(passesSetFilters(1, open)).toBe(true);
     expect(passesSetFilters(4, open)).toBe(true);
+  });
+
+  test("hides sets under four pieces when that option is on", () => {
+    const four = { hideLessThan2: false, hideLessThan4: true };
+    expect(passesSetFilters(1, four)).toBe(false);
+    expect(passesSetFilters(3, four)).toBe(false);
+    expect(passesSetFilters(4, four)).toBe(true);
+    expect(passesSetFilters(3, { ...four, hideLessThan2: true })).toBe(false);
   });
 });
 
@@ -25,7 +33,15 @@ describe("hasActiveSetFilters", () => {
     expect(hasActiveSetFilters(DEFAULT_SET_FILTERS)).toBe(true);
   });
 
-  test("returns false when sets under two pieces are shown", () => {
-    expect(hasActiveSetFilters({ hideLessThan2: false })).toBe(false);
+  test("returns true when only sets under four pieces are hidden", () => {
+    expect(
+      hasActiveSetFilters({ hideLessThan2: false, hideLessThan4: true }),
+    ).toBe(true);
+  });
+
+  test("returns false when no sets are hidden", () => {
+    expect(
+      hasActiveSetFilters({ hideLessThan2: false, hideLessThan4: false }),
+    ).toBe(false);
   });
 });

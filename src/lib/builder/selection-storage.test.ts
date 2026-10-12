@@ -64,7 +64,7 @@ function sampleSelections(): PersistedSelections {
     targets: [100, 0, 50, 0, 0, 30],
     major: 3,
     setReqs: { 987654: 4, 123456: 2 },
-    setFilters: { hideLessThan2: false },
+    setFilters: { hideLessThan2: false, hideLessThan4: false },
     exoticName: "Gyrfalcon's Hauberk",
     exoticPerks: [null, null],
     allowTuning: true,
@@ -264,7 +264,7 @@ test("load keeps hideLessThan2 and drops hideZero from the old two-toggle schema
       setFilters: { hideZero: true, hideLessThan2: false },
     }),
   );
-  expect(loadSelections()?.setFilters).toEqual({ hideLessThan2: false });
+  expect(loadSelections()?.setFilters).toEqual({ hideLessThan2: false, hideLessThan4: false });
 });
 
 test("load returns null when the shape is malformed (targets wrong length)", () => {

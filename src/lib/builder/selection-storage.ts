@@ -204,12 +204,16 @@ function parseSetFilters(v: unknown): SetFilters {
   }
 
   // A stored `hideZero` (from the old two-toggle schema) is dropped: the single
-  // "show sets under 2 pieces" option either hides both 0- and 1-piece sets or neither.
+  // "hide sets under 2 pieces" option either hides both 0- and 1-piece sets or neither.
   return {
     hideLessThan2:
       typeof raw.hideLessThan2 === "boolean"
         ? raw.hideLessThan2
         : DEFAULT_SET_FILTERS.hideLessThan2,
+    hideLessThan4:
+      typeof raw.hideLessThan4 === "boolean"
+        ? raw.hideLessThan4
+        : DEFAULT_SET_FILTERS.hideLessThan4,
   };
 }
 
