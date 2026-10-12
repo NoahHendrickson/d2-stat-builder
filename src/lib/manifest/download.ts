@@ -80,6 +80,14 @@ const MANAGER_BUCKETS = new Set([
 const UNDEFINED_BUCKET = 2422292810;
 const POSTMASTER_BUCKET = 215593132;
 
+function isGearPreview(def: DestinyInventoryItemDefinition): boolean {
+  return (
+    def.itemType === ITEM_TYPE_NONE &&
+    def.inventory?.bucketTypeHash === UNDEFINED_BUCKET &&
+    def.inventory.recoveryBucketTypeHash !== POSTMASTER_BUCKET
+  );
+}
+
 /**
  * Anything else a player can hold, so the manager can name it in the postmaster, which
  * takes items from any bucket (packages, seasonal materials, keycards, quest steps, …).
@@ -89,11 +97,7 @@ function isHoldable(def: DestinyInventoryItemDefinition): boolean {
     !!def.inventory &&
     !!def.displayProperties?.name &&
     def.itemType !== ITEM_TYPE_DUMMY &&
-    !(
-      def.itemType === ITEM_TYPE_NONE &&
-      def.inventory.bucketTypeHash === UNDEFINED_BUCKET &&
-      def.inventory.recoveryBucketTypeHash !== POSTMASTER_BUCKET
-    )
+    !isGearPreview(def)
   );
 }
 
