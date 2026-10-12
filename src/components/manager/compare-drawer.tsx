@@ -32,6 +32,8 @@ import { usePerkFinder } from "@/lib/inventory/use-perk-finder";
 import { weaponRoll, weaponStats, type ItemStat, type WeaponRoll } from "@/lib/inventory/weapon-details";
 import { useManifest } from "@/lib/manifest/use-manifest";
 import { cn } from "@/lib/utils";
+import { catalogStatCurves } from "@/lib/weapons/catalog";
+import { useWeaponCatalog } from "@/lib/weapons/use-weapon-catalog";
 import { ItemTile } from "./item-tile";
 import { PerkFinder } from "./perk-finder";
 import { TagButtons } from "./tag-buttons";
@@ -92,15 +94,16 @@ function CompareBody({
   const { query: profile } = useProfile();
   const manifestStatus = useManifest();
   const manifest = manifestStatus.state === "ready" ? manifestStatus.manifest : undefined;
+  const catalog = useWeaponCatalog().data;
   const copies = useMemo<Copy[]>(() => {
     if (!profile.data || !manifest) return [];
     return weaponCopies(inventory, name).map(({ item, place }) => ({
       item,
       place,
       roll: weaponRoll(profile.data, manifest, item.instanceId!),
-      stats: weaponStats(profile.data, manifest, item.instanceId!),
+      stats: weaponStats(profile.data, manifest, item.instanceId!, catalogStatCurves(catalog, item)),
     }));
-  }, [inventory, name, profile.data, manifest]);
+  }, [inventory, name, profile.data, manifest, catalog]);
   return <CompareView inventory={inventory} name={name} copies={copies} onClose={onClose} />;
 }
 

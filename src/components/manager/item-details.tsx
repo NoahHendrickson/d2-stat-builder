@@ -28,6 +28,7 @@ import {
   type WeaponRoll,
 } from "@/lib/inventory/weapon-details";
 import { useManifest } from "@/lib/manifest/use-manifest";
+import { catalogStatCurves, catalogWeaponFor } from "@/lib/weapons/catalog";
 import { clarityLines, type ClarityMap } from "@/lib/weapons/clarity";
 import { weaponDisplayStats } from "@/lib/weapons/display-stats";
 import { WEAPON_STAT_NUMBERS } from "@/lib/weapons/stat-order";
@@ -253,13 +254,17 @@ function WeaponRollView({
   const queryClient = useQueryClient();
   const manifestStatus = useManifest();
   const manifest = manifestStatus.state === "ready" ? manifestStatus.manifest : undefined;
+  const catalog = useWeaponCatalog().data;
   const roll = useMemo(
     () => (profile.data && manifest ? weaponRoll(profile.data, manifest, instanceId) : undefined),
     [profile.data, manifest, instanceId],
   );
   const stats = useMemo(
-    () => (profile.data && manifest ? weaponStats(profile.data, manifest, instanceId) : []),
-    [profile.data, manifest, instanceId],
+    () =>
+      profile.data && manifest
+        ? weaponStats(profile.data, manifest, instanceId, catalogStatCurves(catalog, item))
+        : [],
+    [profile.data, manifest, instanceId, catalog, item],
   );
   if (!roll) return null;
   return (
@@ -310,14 +315,7 @@ export function WeaponRollPanel({
     }
     return map;
   }, [catalog]);
-  // Owned copies are often an older or reissued version the catalog lists under another
-  // hash; a same-name version shares the stat curves and perk bonuses the preview needs.
-  const catalogWeapon = useMemo(
-    () =>
-      catalog?.weapons.find((w) => w.hash === item.itemHash) ??
-      catalog?.weapons.find((w) => w.name === item.name),
-    [catalog, item.itemHash, item.name],
-  );
+  const catalogWeapon = useMemo(() => catalogWeaponFor(catalog, item), [catalog, item]);
 
   const refFor = (plug: DetailPlug): PerkRef =>
     perkRefs.get(plug.hash) ?? {

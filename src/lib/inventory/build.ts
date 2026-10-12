@@ -21,6 +21,7 @@ import {
 import { ACCOUNT_ROWS, BUCKETS, VAULT_ROW_HASHES } from "./buckets";
 import { maxPower } from "./max-power";
 import { weaponTypeOf } from "./weapon-types";
+import { addInvestment, tieredMasterworkBonus } from "./weapon-details";
 
 /** One item anywhere on the account, drawn as a tile by the manager. */
 export interface InventoryItem {
@@ -337,10 +338,15 @@ function itemStats(
 ): Record<string, number> | undefined {
   const live = profile.itemComponents?.stats?.data?.[instanceId]?.stats;
   if (!live) return undefined;
+  const bonus = tieredMasterworkBonus(profile, manifest, instanceId);
   const out: Record<string, number> = {};
   for (const stat of Object.values(live)) {
     const name = manifest.def("DestinyStatDefinition", stat.statHash)?.displayProperties?.name;
-    if (name) out[name.toLowerCase().replace(/[^a-z0-9]+/g, "")] = stat.value;
+    if (!name) continue;
+    const extra = bonus.get(stat.statHash);
+    out[name.toLowerCase().replace(/[^a-z0-9]+/g, "")] = extra
+      ? addInvestment(name, stat.value, extra)
+      : stat.value;
   }
   if (itemType === ITEM_TYPE_ARMOR) {
     out.total = STAT_ORDER.reduce((sum, key) => sum + (live[STAT_HASHES[key]]?.value ?? 0), 0);

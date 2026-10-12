@@ -1,7 +1,7 @@
 import { expect, test } from "vitest";
 import type { DestinyProfileResponse } from "bungie-api-ts/destiny2";
 import type { Manifest } from "@/lib/manifest/load";
-import { weaponRoll, weaponStats } from "./weapon-details";
+import { addInvestment, weaponRoll, weaponStats } from "./weapon-details";
 
 const plug = (name: string, category: string) => ({
   displayProperties: { name, icon: `/${name}.png` },
@@ -109,4 +109,89 @@ test("keeps a crossbow's rail and bolt columns", () => {
     ["bolts", "Explosive Bolts"],
     ["frames", "Chaos Reshaped"],
   ]);
+});
+
+test("adds a tiered weapon's full-masterwork bonus that the live stats leave out", () => {
+  // Cusp Sempiternal, Tier 5, Masterworked: Range: the API says 66 Range, in-game shows 71.
+  const RANGE = 1240592695;
+  const STABILITY = 155624089;
+  const HANDLING = 943549884;
+  const AIM_ASSIST = 1345609583;
+  const DRAW_TIME = 447667954;
+  const tieredItems: Record<number, object> = {
+    ...items,
+    61: {
+      ...plug("Masterworked: Range", "v400.plugs.weapons.masterworks.stat.range"),
+      investmentStats: [
+        { statTypeHash: RANGE, value: 10, isConditionallyActive: false },
+        { statTypeHash: STABILITY, value: 0, isConditionallyActive: true },
+        { statTypeHash: RANGE, value: 0, isConditionallyActive: true },
+        { statTypeHash: HANDLING, value: 0, isConditionallyActive: true },
+        { statTypeHash: DRAW_TIME, value: 0, isConditionallyActive: true },
+      ],
+    },
+    62: {
+      ...plug("Tier 2: Range", "v400.plugs.weapons.masterworks.stat.range"),
+      investmentStats: [{ statTypeHash: RANGE, value: 2, isConditionallyActive: false }],
+    },
+  };
+  const tieredStats: Record<number, object> = {
+    [RANGE]: { displayProperties: { name: "Range" } },
+    [STABILITY]: { displayProperties: { name: "Stability" } },
+    [HANDLING]: { displayProperties: { name: "Handling" } },
+    [AIM_ASSIST]: { displayProperties: { name: "Aim Assistance" } },
+    [DRAW_TIME]: { displayProperties: { name: "Draw Time" } },
+  };
+  const tieredManifest = {
+    def: (table: string, hash: number | null | undefined) =>
+      hash == null ? undefined : table === "DestinyStatDefinition" ? tieredStats[hash] : tieredItems[hash],
+  } as unknown as Manifest;
+  const weapon = (masterworkPlug: number, gearTier: number) =>
+    ({
+      itemComponents: {
+        instances: { data: { w: { gearTier } } },
+        sockets: { data: { w: { sockets: [10, masterworkPlug].map((plugHash) => ({ plugHash, isVisible: true })) } } },
+        stats: {
+          data: {
+            w: {
+              stats: {
+                [RANGE]: { statHash: RANGE, value: 66 },
+                [STABILITY]: { statHash: STABILITY, value: 98 },
+                [HANDLING]: { statHash: HANDLING, value: 64 },
+                [AIM_ASSIST]: { statHash: AIM_ASSIST, value: 74 },
+                [DRAW_TIME]: { statHash: DRAW_TIME, value: 600 },
+              },
+            },
+          },
+        },
+      },
+    }) as unknown as DestinyProfileResponse;
+  const read = (profile: DestinyProfileResponse, curves?: Parameters<typeof weaponStats>[3]) =>
+    Object.fromEntries(weaponStats(profile, tieredManifest, "w", curves).map((s) => [s.name, s.value]));
+
+  // +5 on each conditional stat, capped at 100; Aim Assistance isn't listed; a time
+  // without its curve stays put.
+  expect(read(weapon(61, 5))).toEqual({
+    Range: 71,
+    Stability: 100,
+    Handling: 69,
+    "Aim Assistance": 74,
+    "Draw Time": 600,
+  });
+  // With the curve, a time moves the way the game interpolates it (833ms → 500ms).
+  expect(read(weapon(61, 5), { "Draw Time": { max: 100, points: [[0, 833], [100, 500]] } })["Draw Time"]).toBe(583);
+  // Part-masterworked or untiered: nothing to add.
+  expect(read(weapon(62, 5)).Range).toBe(66);
+  expect(read(weapon(61, 0)).Range).toBe(66);
+});
+
+test("leaves a bottomed-out stat and non-bar stats alone when adding investment", () => {
+  const linear = { max: 100, points: [[0, 0], [100, 100]] as [number, number][] };
+  // Disorienting Grenades take Blast Radius to -100: it reads 0, and +5 doesn't move it.
+  expect(addInvestment("Blast Radius", 0, 5, linear)).toBe(0);
+  expect(addInvestment("Blast Radius", 0, 5)).toBe(0);
+  // Without a curve, only the game's 0–100 bars move: Cooling Efficiency reads 320.
+  expect(addInvestment("Cooling Efficiency", 320, 5)).toBe(320);
+  expect(addInvestment("Charge Time", 533, 5)).toBe(533);
+  expect(addInvestment("Range", 97, 5)).toBe(100);
 });

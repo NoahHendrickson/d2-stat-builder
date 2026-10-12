@@ -18,7 +18,7 @@ import {
   type WeaponFilters,
   type WeaponSort,
 } from "./search";
-import type { WeaponIndex, WeaponSummary } from "./types";
+import type { StatCurve, WeaponIndex, WeaponSummary } from "./types";
 
 const collator = new Intl.Collator();
 
@@ -112,3 +112,29 @@ export function createWeaponCatalog(raw: WeaponIndex) {
 }
 
 export type WeaponCatalog = ReturnType<typeof createWeaponCatalog>;
+
+/**
+ * The catalog entry for an owned weapon. Owned copies are often an older or reissued
+ * version the catalog lists under another hash; a same-name version shares the stat
+ * curves and perk bonuses.
+ */
+export function catalogWeaponFor(
+  catalog: WeaponCatalog | undefined,
+  item: { itemHash: number; name: string },
+): WeaponSummary | undefined {
+  return (
+    catalog?.weapons.find((w) => w.hash === item.itemHash) ??
+    catalog?.weapons.find((w) => w.name === item.name)
+  );
+}
+
+/** An owned weapon's display curves by stat name, when the catalog knows it. */
+export function catalogStatCurves(
+  catalog: WeaponCatalog | undefined,
+  item: { itemHash: number; name: string },
+): Record<string, StatCurve> | undefined {
+  const weapon = catalogWeaponFor(catalog, item);
+  return weapon?.statGroupHash != null
+    ? catalog?.statCurves?.[String(weapon.statGroupHash)]
+    : undefined;
+}
