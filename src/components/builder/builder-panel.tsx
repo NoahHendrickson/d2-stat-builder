@@ -478,6 +478,17 @@ export function BuilderPanel({
         : null,
     [manifest, selectedClassItemHash],
   );
+  // Spirit pairs of the owned rolls of the selected class item, for the picker's
+  // owned counts and its "you don't own this pair" notice.
+  const ownedSpiritPairs = useMemo(
+    () =>
+      classPieces.flatMap((p) =>
+        p.itemHash === selectedClassItemHash && p.exoticPerkHashes
+          ? [{ perks: p.exoticPerkHashes, tiered: p.tunedStat !== undefined }]
+          : [],
+      ),
+    [classPieces, selectedClassItemHash],
+  );
 
   // The Dreamer's Bond piece whenever its box is checked — even while Power matters is
   // off and it's inert, so the power controls can seed from the pool the toggle will use.
@@ -1113,6 +1124,9 @@ export function BuilderPanel({
                   selected={exoticPerks}
                   onChange={setExoticPerks}
                   statIcons={statIcons}
+                  itemName={selectedExoticOption?.name ?? "this class item"}
+                  owned={ownedSpiritPairs}
+                  legacyExotics={useLegacyExotics}
                 />
               )}
             </Section>

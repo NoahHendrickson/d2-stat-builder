@@ -13,12 +13,15 @@ import {
 import { displayedBuildsStore } from "@/lib/build-usage/displayed-builds";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
+  Alert02Icon,
   ArrowDown01Icon,
   Cancel01Icon,
   CheckmarkCircle02Icon,
   Loading03Icon,
 } from "@hugeicons/core-free-icons";
 import { armorPipTier, type ArmorPiece } from "@/lib/armory/normalize";
+import { isSyntheticClassItemId } from "@/lib/armory/exotic-class-perks";
+import { isDreamersBondId } from "@/lib/armory/dreamers-bond";
 import {
   isFullyMasterworked,
   materialScore,
@@ -185,27 +188,47 @@ function TotalsRow({
 const SET_BADGE_CLASS =
   "h-5 rounded-full border-transparent bg-[#41a6ff] px-2 font-sans text-xs font-medium tracking-normal text-foreground normal-case";
 
+/**
+ * A made-up exotic class item roll (a Spirit pair the player doesn't own). Dreamer's
+ * Bond is synthetic too, but it's a real collections item.
+ */
+const isTheoretical = (piece: ArmorPiece) =>
+  isSyntheticClassItemId(piece.instanceId) && !isDreamersBondId(piece.instanceId);
+
+const NOT_OWNED_TITLE = "You don't own this Spirit pair. The stats are a theoretical roll, so this build can't be equipped.";
+
 /** Vertical rule between collapsed-header clusters (Figma 86:862). */
 function HeaderRule() {
   return <span className="h-[15px] w-px shrink-0 bg-foreground/16" aria-hidden />;
 }
 
 /**
- * Second line of a collapsed build card: 2pc set pills, gold light level, and
- * remaining masterwork materials (rarest first).
+ * Second line of a collapsed build card: a "Not owned" flag for a theoretical
+ * class item, 2pc set pills, gold light level, and remaining masterwork materials
+ * (rarest first).
  */
 function BuildHeaderMeta({
+  notOwned,
   setBadges,
   power,
   masterwork,
   manifest,
 }: {
+  notOwned: boolean;
   setBadges: { name: string; count: number }[];
   power: number | null;
   masterwork: LoadoutMasterworkSummary;
   manifest?: Manifest;
 }) {
   const clusters: ReactNode[] = [];
+  if (notOwned) {
+    clusters.push(
+      <span key="owned" className="text-warning inline-flex items-center gap-1 text-xs" title={NOT_OWNED_TITLE}>
+        <HugeiconsIcon icon={Alert02Icon} className="size-3.5 shrink-0" aria-hidden />
+        Not owned
+      </span>,
+    );
+  }
   if (setBadges.length > 0) {
     clusters.push(
       <span key="sets" className="flex items-center gap-2">
@@ -366,6 +389,7 @@ const BuildRow = memo(function BuildRow({
               </div>
             </div>
             <BuildHeaderMeta
+              notOwned={pieces.some((p) => p !== undefined && isTheoretical(p))}
               setBadges={setBadges}
               power={loadout.power}
               masterwork={masterwork}
@@ -432,10 +456,16 @@ const BuildRow = memo(function BuildRow({
                       )}
                       <div className="flex min-w-0 flex-col justify-center">
                         <span className="truncate text-sm">{piece.name}</span>
-                        {(piece.power !== undefined ||
+                        {(isTheoretical(piece) ||
+                          piece.power !== undefined ||
                           (piece.masterwork &&
                             piece.masterwork.level < piece.masterwork.max)) && (
                           <div className="flex items-center gap-2">
+                            {isTheoretical(piece) && (
+                              <span className="text-warning shrink-0 text-xs" title={NOT_OWNED_TITLE}>
+                                Not owned
+                              </span>
+                            )}
                             {piece.power !== undefined && (
                               <PowerValue
                                 value={piece.power}
