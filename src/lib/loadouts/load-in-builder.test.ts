@@ -10,7 +10,7 @@ const existing: PersistedSelections = {
   targets: [9, 9, 9, 9, 9, 9],
   major: 5,
   setReqs: { 1: 2 },
-  setFilters: { hideLessThan2: false },
+  setFilters: { minOwned: 0 },
   exoticName: "Old",
   exoticPerks: [1, 2],
   allowTuning: false,
