@@ -31,7 +31,7 @@ const NUM_MASKS = 1 << NUM_STATS;
  */
 function dedupe(
   pieces: OptimizerPiece[],
-  keyIncludesSet: boolean,
+  keyOf: (p: OptimizerPiece) => string,
   keyIncludesPower: boolean,
   allowTuning: boolean,
   allowBalanced: boolean,
@@ -39,36 +39,7 @@ function dedupe(
 ): InternalPiece[] {
   const map = new Map<string, InternalPiece>();
   for (const p of pieces) {
-    // Two pieces with the same stats but different tuned stats aren't interchangeable
-    // (except exotics, whose flexible slot makes the rolled tuned stat irrelevant).
-    // A Balanced-only piece has no directionals at all, so it never stands in for one
-    // that does — exotic or not; with Balanced disallowed it has no options left and is
-    // an untunable piece ("-"). offStats only feed the Balanced option, so with
-    // Balanced disallowed they drop out of the key (pieces differing only in offStats
-    // become interchangeable).
-    const tuneKey =
-      allowTuning && p.tuning
-        ? (p.tuning.directional === false
-            ? allowBalanced
-              ? "B"
-              : "-"
-            : p.exotic
-              ? "X"
-              : `${p.tuning.tuned}`) + (allowBalanced ? `:${p.tuning.offStats.join(".")}` : "")
-        : "-";
-    // A missing hash or set is "-", never a real value: set hash 0 counts toward a
-    // requirement on set 0, "no set" doesn't. Power splits the key only while a power
-    // range is enforced; without one, same-stat pieces at different power are
-    // interchangeable to the search — but each build reports its gear power, so the
-    // class is represented by its highest-power piece (known power above unknown),
-    // whatever order the armory listed them in.
-    const key =
-      (p.exotic ? `E${p.hash ?? "-"}` : "L") +
-      (p.artifice ? "A" : "") +
-      (keyIncludesSet ? `|${p.setHash ?? "-"}|` : "|") +
-      (keyIncludesPower ? `P${p.power ?? "?"}|` : "") +
-      `T${tuneKey}|` +
-      p.stats.join(",");
+    const key = keyOf(p);
     const kept = map.get(key);
     if (
       kept === undefined ||
@@ -79,6 +50,74 @@ function dedupe(
     }
   }
   return Array.from(map.values());
+}
+
+/**
+ * The identity dedupe collapses on: two pieces with the same key are interchangeable
+ * for the query, so the search keeps one and a result never names the other.
+ */
+function interchangeKey(
+  p: OptimizerPiece,
+  keyIncludesSet: boolean,
+  keyIncludesPower: boolean,
+  allowTuning: boolean,
+  allowBalanced: boolean,
+): string {
+  // Two pieces with the same stats but different tuned stats aren't interchangeable
+  // (except exotics, whose flexible slot makes the rolled tuned stat irrelevant).
+  // A Balanced-only piece has no directionals at all, so it never stands in for one
+  // that does — exotic or not; with Balanced disallowed it has no options left and is
+  // an untunable piece ("-"). offStats only feed the Balanced option, so with
+  // Balanced disallowed they drop out of the key (pieces differing only in offStats
+  // become interchangeable).
+  const tuneKey =
+    allowTuning && p.tuning
+      ? (p.tuning.directional === false
+          ? allowBalanced
+            ? "B"
+            : "-"
+          : p.exotic
+            ? "X"
+            : `${p.tuning.tuned}`) + (allowBalanced ? `:${p.tuning.offStats.join(".")}` : "")
+      : "-";
+  // A missing hash or set is "-", never a real value: set hash 0 counts toward a
+  // requirement on set 0, "no set" doesn't. Power splits the key only while a power
+  // range is enforced; without one, same-stat pieces at different power are
+  // interchangeable to the search — but each build reports its gear power, so dedupe
+  // represents the class by its highest-power piece (known power above unknown),
+  // whatever order the armory listed them in.
+  return (
+    (p.exotic ? `E${p.hash ?? "-"}` : "L") +
+    (p.artifice ? "A" : "") +
+    (keyIncludesSet ? `|${p.setHash ?? "-"}|` : "|") +
+    (keyIncludesPower ? `P${p.power ?? "?"}|` : "") +
+    `T${tuneKey}|` +
+    p.stats.join(",")
+  );
+}
+
+/**
+ * `interchangeKey` with the options a query implies. The one source of the dedupe rule:
+ * buildSlots dedupes with it, and the armor usage history credits twins with it.
+ */
+export function makeInterchangeKey(input: OptimizerInput): (p: OptimizerPiece) => string {
+  const keyIncludesSet = (input.setRequirements ?? []).length > 0;
+  const keyIncludesPower = input.powerRange !== undefined;
+  const allowTuning = input.allowTuning ?? true;
+  const allowBalanced = input.allowBalancedTuning ?? true;
+  return (p) => interchangeKey(p, keyIncludesSet, keyIncludesPower, allowTuning, allowBalanced);
+}
+
+/** Whether the query's exotic constraint lets a piece into the search pool at all. */
+export function makeExoticEligible(input: OptimizerInput): (p: OptimizerPiece) => boolean {
+  const exoticMode = input.exotic?.mode ?? "any";
+  const exoticHashes = input.exotic?.hashes;
+  return (p) =>
+    !p.exotic ||
+    (exoticMode === "none"
+      ? false
+      : exoticMode !== "specific" ||
+        (p.hash !== undefined && !!exoticHashes?.includes(p.hash)));
 }
 
 /**
@@ -511,26 +550,21 @@ export function makeJointMinCheck(
  * pruning — and slot sizes), then dedupe, sorted by total.
  */
 export function buildSlots(input: OptimizerInput): InternalPiece[][] {
-  const reqs = input.setRequirements ?? [];
   const allowTuning = input.allowTuning ?? true;
   const allowBalanced = input.allowBalancedTuning ?? true;
-  const exoticMode = input.exotic?.mode ?? "any";
-  const exoticHashes = input.exotic?.hashes;
-  const eligible = (p: OptimizerPiece): boolean =>
-    !p.exotic ||
-    (exoticMode === "none"
-      ? false
-      : exoticMode !== "specific" ||
-        (p.hash !== undefined && !!exoticHashes?.includes(p.hash)));
+  const eligible = makeExoticEligible(input);
+  const keyOf = makeInterchangeKey(input);
   return input.slots.map((s) =>
     dedupe(
       s.filter(eligible),
-      reqs.length > 0,
+      keyOf,
       input.powerRange !== undefined,
       allowTuning,
       allowBalanced,
       input.minimums,
-    ).sort((a, b) => b.total - a.total),
+    ).sort(
+      (a, b) => b.total - a.total,
+    ),
   );
 }
 

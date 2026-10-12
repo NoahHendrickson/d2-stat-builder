@@ -492,4 +492,6 @@ export interface QueryOrigin {
   setBonuses?: Record<number, 2 | 4>;
   /** The subclass + fragments the query's stats assumed. */
   subclass?: DimSubclassInput;
+  /** The class the query searched (the armor usage history keys queries on it). */
+  classType?: number;
 }

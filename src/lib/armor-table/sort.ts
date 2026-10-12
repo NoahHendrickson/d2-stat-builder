@@ -9,6 +9,7 @@ import {
   STAT_LABELS,
   STAT_ORDER,
 } from "../armory/stats";
+import type { PieceUsageCounts } from "../build-usage/buckets";
 import {
   isCustomOrderColumn,
   sortLevelAsc,
@@ -29,13 +30,19 @@ const STAT_SORT_INDEX = new Map<SortKey, number>(
   STAT_ORDER.map((key, i) => [`stat-${key}` as const, i]),
 );
 
-/** Stat columns default to descending (high rolls first); text columns to ascending. */
-export const DESC_FIRST: ReadonlySet<SortKey> = new Set<SortKey>(
-  STAT_ORDER.map((key) => `stat-${key}` as const),
-);
+/** Number columns default to descending (high rolls first); text columns to ascending. */
+export const DESC_FIRST: ReadonlySet<SortKey> = new Set<SortKey>([
+  ...STAT_ORDER.map((key) => `stat-${key}` as const),
+  "builds",
+]);
 
 export function isStatSortKey(key: SortKey): boolean {
   return key.startsWith("stat-");
+}
+
+/** Columns that sort by number (menu reads "High to low", not "Z to A"). */
+export function isNumericSortKey(key: SortKey): boolean {
+  return DESC_FIRST.has(key);
 }
 
 /** Preferred direction for hover preview when the column is not in the chain. */
@@ -184,6 +191,8 @@ export interface SortableRow {
   setName?: string;
   /** Tertiary archetype stat index — Armor 3.0 pieces only. */
   tertiary?: number;
+  /** Optimizer usage history; absent until a recorded query included the piece. */
+  usage?: PieceUsageCounts;
 }
 
 export function sortValue(
@@ -207,6 +216,8 @@ export function sortValue(
         : undefined;
     case "set":
       return row.setName;
+    case "builds":
+      return row.usage?.eligible ? row.usage.used : undefined;
     default: {
       const exhaustive: never = key as never;
       return exhaustive;

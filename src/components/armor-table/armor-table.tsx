@@ -8,12 +8,32 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
 } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useArmory } from "@/lib/armory/use-armory";
 import { sessionMembershipId } from "@/lib/armory/use-profile";
 import { useSession } from "@/lib/auth/use-session";
-import { loadAnnotations } from "@/lib/inventory/annotations";
+import {
+  annotationsStore,
+  loadAnnotations,
+  setTag,
+  type Annotations,
+  type ItemTag,
+} from "@/lib/inventory/annotations";
+import { useBuildUsage } from "@/lib/build-usage/use-build-usage";
+import { useLoadouts } from "@/lib/loadouts/use-loadouts";
+import {
+  MIN_ELIGIBLE_QUERIES,
+  loadoutPieceIds,
+  usageBucket,
+} from "@/lib/build-usage/buckets";
+import {
+  CLEANUP_TIERS,
+  DEFAULT_CLEANUP_TIERS,
+  groupCleanup,
+  type CleanupTier,
+} from "@/lib/armor-table/cleanup";
 import { useManifest } from "@/lib/manifest/use-manifest";
 import { availableSets } from "@/lib/armory/sets";
 import type { ArmoryCharacter } from "@/lib/armory/fetch";
@@ -69,6 +89,10 @@ import {
 } from "@/components/armor-table/sort-menu";
 import { useArmorTableSort } from "@/components/armor-table/use-armor-table-sort";
 
+/** Each base row's last usage-layered row, reused while its counts are unchanged. */
+const rowWithUsage = new WeakMap<Row, Row>();
+const NO_ANNOTATIONS: Annotations = {};
+
 /** Approximate single-row height; the virtualizer remeasures real rows on mount. */
 const ESTIMATED_ROW_HEIGHT_PX = 48;
 
@@ -80,6 +104,7 @@ const COLUMN_SORT_KEYS: readonly (SortKey | undefined)[] = [
   "tertiary",
   "tuned",
   "set",
+  "builds",
   ...STAT_DISPLAY_ORDER.map((key) => `stat-${key}` as const),
 ];
 
@@ -204,6 +229,18 @@ const HeaderRow = memo(function HeaderRow({
           onReorderCustom={reorderCustom}
           onUndoSort={undoSort}
         />
+        <SortMenu
+          label="Searches"
+          title="Searches: optimizer searches whose shown builds used this piece, out of those it could join"
+          sortKey="builds"
+          sort={sort}
+          hovered={hoveredSortKey === "builds"}
+          sortUndo={sortUndo}
+          onApplyMode={applyMode}
+          onClearLevel={clearLevel}
+          onReorderCustom={reorderCustom}
+          onUndoSort={undoSort}
+        />
         {STAT_DISPLAY_ORDER.map((key) => (
           <SortMenu
             key={key}
@@ -256,15 +293,27 @@ export function ArmorTable() {
   const searchRef = useRef<HTMLInputElement>(null);
 
   const pieces = armory.data?.pieces;
+  const buildUsage = useBuildUsage();
+  const savedLoadouts = useLoadouts();
+  // Ratings wait for the saved loadouts too: a piece in one is always "often used", so
+  // rating before they load would offer it up for cleanup.
+  const usage = savedLoadouts.isSuccess ? buildUsage.data?.pieces : undefined;
+  const usageFailed = buildUsage.isError || savedLoadouts.isError;
+  const inLoadouts = useMemo(
+    () => loadoutPieceIds(savedLoadouts.data ?? []),
+    [savedLoadouts.data],
+  );
   const characters: ArmoryCharacter[] = armory.data?.characters ?? [];
 
-  const rows = useMemo<Row[]>(() => {
+  const baseRows = useMemo<Row[]>(() => {
     if (!pieces || !manifest) return [];
     const setNames = new Map(
       availableSets(pieces, manifest).map((s) => [s.setHash, s.name]),
     );
     return pieces.map((piece) => ({
       piece,
+      inLoadout: false,
+      usageBucket: usageBucket(undefined),
       setName: piece.setHash ? setNames.get(piece.setHash) : undefined,
       // The archetype shape (30/25/20) only exists on Armor 3.0 rolls; a tuning
       // socket implies Armor 3.0 even if the archetype plug wasn't resolved.
@@ -275,6 +324,29 @@ export function ArmorTable() {
       searchName: normalizeSearchText(piece.name),
     }));
   }, [pieces, manifest]);
+
+  // Usage is layered over the base rows, and a row whose counts didn't change keeps its
+  // object: a refetch after each recorded search re-renders only the rows it moved.
+  const rows = useMemo<Row[]>(
+    () =>
+      baseRows.map((base) => {
+        const u = usage?.[base.piece.instanceId];
+        const inLoadout = inLoadouts.has(base.piece.instanceId);
+        const old = rowWithUsage.get(base);
+        if (
+          old &&
+          old.inLoadout === inLoadout &&
+          old.usage?.eligible === u?.eligible &&
+          old.usage?.used === u?.used
+        ) {
+          return old;
+        }
+        const row = { ...base, usage: u, inLoadout, usageBucket: usageBucket(u, inLoadout) };
+        rowWithUsage.set(base, row);
+        return row;
+      }),
+    [baseRows, usage, inLoadouts],
+  );
 
   const {
     sort,
@@ -425,20 +497,102 @@ export function ArmorTable() {
     [sorted, facets, searchTokens],
   );
 
-  // Duplicates narrows the filtered list to pieces with a twin, each group together.
-  // Picking what has to match (the split button's menu) turns it on.
-  const [showDuplicates, setShowDuplicates] = useState(false);
+  // Duplicates and Cleanup each narrow the filtered list to groups of rows; turning one
+  // on turns the other off. Picking options in either split button's menu turns it on.
+  const [view, setView] = useState<"all" | "duplicates" | "cleanup">("all");
   const [duplicateMatch, setDuplicateMatch] = useState(DEFAULT_DUPLICATE_MATCH);
-  const toggleDuplicates = useCallback(() => setShowDuplicates((on) => !on), []);
+  const toggleDuplicates = useCallback(
+    () => setView((v) => (v === "duplicates" ? "all" : "duplicates")),
+    [],
+  );
   const changeDuplicateMatch = useCallback((match: DuplicateMatch) => {
     setDuplicateMatch(match);
-    setShowDuplicates(true);
+    setView("duplicates");
   }, []);
   const duplicates = useMemo(
-    () => (showDuplicates ? groupDuplicates(filtered, duplicateMatch) : null),
-    [showDuplicates, filtered, duplicateMatch],
+    () => (view === "duplicates" ? groupDuplicates(filtered, duplicateMatch) : null),
+    [view, filtered, duplicateMatch],
   );
-  const visible = duplicates?.rows ?? filtered;
+
+  // Cleanup: the pieces the optimizer rarely or never uses, by class and slot.
+  const [cleanupTiers, setCleanupTiers] = useState<readonly CleanupTier[]>(DEFAULT_CLEANUP_TIERS);
+  // What the last "Mark as junk" replaced, so Undo can put each piece's tag back.
+  const [junkUndo, setJunkUndo] = useState<{ id: string; tag?: ItemTag }[] | null>(null);
+  const toggleCleanup = useCallback(() => {
+    setView((v) => (v === "cleanup" ? "all" : "cleanup"));
+    setJunkUndo(null);
+  }, []);
+  const changeCleanupTiers = useCallback((tiers: CleanupTier[]) => {
+    setCleanupTiers(tiers);
+    setView("cleanup");
+  }, []);
+  const cleanup = useMemo(
+    () => (view === "cleanup" ? groupCleanup(filtered, cleanupTiers) : null),
+    [view, filtered, cleanupTiers],
+  );
+  const cleanupCounts = useMemo(() => {
+    const counts = Object.fromEntries(CLEANUP_TIERS.map((t) => [t, 0])) as Record<
+      CleanupTier,
+      number
+    >;
+    for (const r of filtered) {
+      if (r.usageBucket in counts) counts[r.usageBucket as CleanupTier]++;
+    }
+    return counts;
+  }, [filtered]);
+  const annotations = useSyncExternalStore(
+    annotationsStore.subscribe,
+    annotationsStore.get,
+    () => NO_ANNOTATIONS,
+  );
+  // Like the Compare drawer's bulk junk, never overwrite a tag someone chose on purpose.
+  const cleanupIds = useMemo(
+    () =>
+      cleanup?.rows
+        .map((r) => r.piece.instanceId)
+        .filter((id) => {
+          const tag = annotations[id]?.tag;
+          return tag !== "favorite" && tag !== "keep" && tag !== "junk";
+        }) ?? [],
+    [cleanup, annotations],
+  );
+  const markCleanupJunk = useCallback(() => {
+    const tags = annotationsStore.get();
+    setJunkUndo(cleanupIds.map((id) => ({ id, tag: tags[id]?.tag })));
+    setTag(cleanupIds, "junk");
+  }, [cleanupIds]);
+  const undoCleanupJunk = useCallback(() => {
+    if (!junkUndo) return;
+    const byTag = new Map<ItemTag | undefined, string[]>();
+    for (const { id, tag } of junkUndo) byTag.set(tag, [...(byTag.get(tag) ?? []), id]);
+    for (const [tag, ids] of byTag) setTag(ids, tag);
+    setJunkUndo(null);
+  }, [junkUndo]);
+  const cleanupProps = useMemo(
+    () => ({
+      onToggle: toggleCleanup,
+      tiers: cleanupTiers,
+      onTiersChange: changeCleanupTiers,
+      counts: cleanupCounts,
+      junkable: cleanupIds.length,
+      onMarkJunk: markCleanupJunk,
+      undoable: junkUndo?.length ?? 0,
+      onUndoJunk: undoCleanupJunk,
+    }),
+    [
+      toggleCleanup,
+      cleanupTiers,
+      changeCleanupTiers,
+      cleanupCounts,
+      cleanupIds,
+      markCleanupJunk,
+      junkUndo,
+      undoCleanupJunk,
+    ],
+  );
+
+  const grouped = duplicates ?? cleanup;
+  const visible = grouped?.rows ?? filtered;
 
   const filtersActive = hasActiveFilters({ ...facets, search });
 
@@ -499,6 +653,8 @@ export function ArmorTable() {
             onTogglePinnedArchetype={togglePinnedArchetype}
             filteredCount={visible.length}
             duplicateGroups={duplicates?.groupCount}
+            cleanupGroups={cleanup?.groupCount}
+            cleanup={cleanupProps}
             onToggleDuplicates={toggleDuplicates}
             duplicateMatch={duplicateMatch}
             onDuplicateMatchChange={changeDuplicateMatch}
@@ -509,7 +665,7 @@ export function ArmorTable() {
       <div ref={setScrollerEl} className="min-h-0 flex-1 overflow-auto">
           <table
             ref={setTableEl}
-            className="w-full min-w-[66rem] table-fixed text-sm"
+            className="w-full min-w-[70.5rem] table-fixed text-sm"
           >
             {TABLE_COLGROUP}
             <HeaderRow
@@ -539,7 +695,7 @@ export function ArmorTable() {
                     onRefresh={refresh}
                     provisional={armory.isProvisional}
                     dataIndex={vRow.index}
-                    group={duplicates?.groups[vRow.index]}
+                    group={grouped?.groups[vRow.index]}
                     measureRef={rowVirtualizer.measureElement}
                   />
                 );
@@ -557,7 +713,15 @@ export function ArmorTable() {
                 ? "No armor pieces loaded yet."
                 : filtered.length === 0
                   ? "No armor matches your filters."
-                  : `No duplicates here: no two pieces share a ${duplicateMatchSummary(duplicateMatch)}.`}
+                  : view === "cleanup"
+                    ? usage === undefined
+                      ? usageFailed
+                        ? "Couldn't load your optimizer history."
+                        : "Loading your optimizer history."
+                      : cleanupTiers.length === 0
+                        ? "Pick a rating in the Cleanup menu to see pieces."
+                        : `No cleanup suggestions yet. Keep using the optimizer like normal: a piece gets a rating after ${MIN_ELIGIBLE_QUERIES} searches that could use it.`
+                    : `No duplicates here: no two pieces share a ${duplicateMatchSummary(duplicateMatch)}.`}
             </p>
           )}
       </div>
