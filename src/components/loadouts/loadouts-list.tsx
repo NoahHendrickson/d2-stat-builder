@@ -93,6 +93,7 @@ import {
   useActivitySetDialogs,
 } from "@/components/loadouts/activity-set-strip";
 import { ConfirmDialog } from "@/components/loadouts/confirm-dialog";
+import { InGameImportDialog } from "@/components/loadouts/ingame-import-dialog";
 import { type ModsSection } from "@/lib/loadouts/mod-placement";
 import { commitLoadout, modsSectionForPieces } from "@/lib/loadouts/commit";
 import { resolveLoadout } from "@/lib/loadouts/resolve";
@@ -119,7 +120,8 @@ type DialogState =
   | { kind: "edit"; loadout: SavedLoadout; mods?: ModsSection }
   | { kind: "delete"; loadout: SavedLoadout }
   | { kind: "delete-many"; ids: string[] }
-  | { kind: "delete-all" };
+  | { kind: "delete-all" }
+  | { kind: "import-ingame" };
 
 const SUBCLASS_OPTIONS = SUBCLASSES.map((sc) => ({ value: sc, label: sc }));
 
@@ -428,6 +430,26 @@ export function LoadoutsList({
     [createMutate, queryClient],
   );
 
+  // One request per loadout, in slot order, so they land in the list in that order.
+  const createAsync = create.mutateAsync;
+  const importInGame = async (datas: SavedLoadoutData[]) => {
+    const pending = toast.loading(
+      datas.length === 1 ? "Importing loadout" : `Importing ${datas.length} loadouts`,
+    );
+    let saved = 0;
+    try {
+      for (const data of datas) {
+        await createAsync(data);
+        saved++;
+      }
+      pending.success(saved === 1 ? "Loadout imported" : `${saved} loadouts imported`);
+    } catch (err) {
+      const e = err as { notConfigured: boolean; message: string };
+      if (saved === 0) mutationError(pending)(e);
+      else pending.error(`Imported ${saved} of ${datas.length}`, e.message);
+    }
+  };
+
   const importLoadout = ({ name, notes, subclass }: LoadoutDetailsValues) => {
     if (!importData) return;
     const data: SavedLoadoutData = {
@@ -670,6 +692,12 @@ export function LoadoutsList({
               <DropdownMenuItem onClick={setDialogs.openNew}>
                 New activity set
               </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => setDialog({ kind: "import-ingame" })}
+                disabled={provisional}
+              >
+                Import in-game loadout
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
           <DropdownMenu>
@@ -877,6 +905,17 @@ export function LoadoutsList({
         busy={removeMany.isPending}
         onConfirm={deleteMany}
       />
+      {dialog.kind === "import-ingame" && (
+        <InGameImportDialog
+          open
+          onOpenChange={(open) => !open && setDialog({ kind: "none" })}
+          characters={armory.characters}
+          pieceMap={pieceMap}
+          weaponMap={weaponMap}
+          manifest={manifest}
+          onImport={(datas) => void importInGame(datas)}
+        />
+      )}
       <LoadoutEditorDrawer
         open={importOpen}
         onOpenChange={(open) => !open && clearImportParam()}

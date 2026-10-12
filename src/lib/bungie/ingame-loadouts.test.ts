@@ -4,6 +4,7 @@ import {
   defaultIdentifiers,
   parseSnapshotRequest,
   toSlots,
+  UNSET_PLUG_HASH,
   type InGameLoadoutIdentifiers,
 } from "./ingame-loadouts";
 
@@ -43,6 +44,27 @@ describe("toSlots", () => {
     expect(slot.items).toEqual([
       { itemInstanceId: "111" },
       { itemInstanceId: "6917529", itemHash: 42 },
+    ]);
+  });
+
+  test("plugs keep their socket index and drop the sockets the slot leaves alone", () => {
+    const [slot] = toSlots(
+      [
+        {
+          nameHash: 1,
+          iconHash: 1,
+          colorHash: 1,
+          items: [
+            { itemInstanceId: "6917529", plugItemHashes: [UNSET_PLUG_HASH, 500, 0, 600] },
+            { itemInstanceId: "111", plugItemHashes: [UNSET_PLUG_HASH] },
+          ],
+        },
+      ],
+      hashOf,
+    );
+    expect(slot.items).toEqual([
+      { itemInstanceId: "6917529", itemHash: 42, plugs: { 1: 500, 3: 600 } },
+      { itemInstanceId: "111" },
     ]);
   });
 });

@@ -54,7 +54,8 @@ export interface SavedLoadoutData {
   modPlacement?: ModPlacement;
   /**
    * The optimizer result the loadout was saved from (per-slot tuning/artifice picks,
-   * stat breakdown). Absent for loadouts created another way (import, snapshot).
+   * stat breakdown). Absent for loadouts created another way (import, snapshot); an
+   * in-game import fills in the stat parts from the live armor (see ingame-import.ts).
    */
   optimizer?: OptimizerLoadout;
   builder?: BuilderSnapshot;
