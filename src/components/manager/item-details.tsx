@@ -311,7 +311,11 @@ export function WeaponRollPanel({
     }
     return map;
   }, [catalog]);
-  const catalogWeapon = useMemo(() => catalogWeaponFor(catalog, item), [catalog, item]);
+  // `item` is rebuilt on every profile refresh; the catalog scans only need its hash and name.
+  const catalogWeapon = useMemo(
+    () => catalogWeaponFor(catalog, { itemHash: item.itemHash, name: item.name }),
+    [catalog, item.itemHash, item.name],
+  );
 
   const refFor = (plug: DetailPlug): PerkRef =>
     perkRefs.get(plug.hash) ?? {

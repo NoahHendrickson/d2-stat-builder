@@ -338,12 +338,14 @@ function itemStats(
 ): Record<string, number> | undefined {
   const live = profile.itemComponents?.stats?.data?.[instanceId]?.stats;
   if (!live) return undefined;
-  const bonus = tieredMasterworkBonus(profile, manifest, instanceId);
+  // Weapons only: Armor 3.0 has a gear tier too, and this runs for every instanced item.
+  const bonus =
+    itemType === ITEM_TYPE_WEAPON ? tieredMasterworkBonus(profile, manifest, instanceId) : undefined;
   const out: Record<string, number> = {};
   for (const stat of Object.values(live)) {
     const name = manifest.def("DestinyStatDefinition", stat.statHash)?.displayProperties?.name;
     if (!name) continue;
-    const extra = bonus.get(stat.statHash);
+    const extra = bonus?.get(stat.statHash);
     out[name.toLowerCase().replace(/[^a-z0-9]+/g, "")] = extra
       ? addInvestment(name, stat.value, extra)
       : stat.value;
