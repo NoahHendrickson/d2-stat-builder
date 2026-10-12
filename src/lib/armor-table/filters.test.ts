@@ -5,6 +5,7 @@ import {
   pieceMatchesFilters,
   type FilterablePiece,
 } from "./filters";
+import { normalizeSearchText, searchMatcher, tokenizeSearchQuery } from "./search";
 
 const piece = (overrides: Partial<FilterablePiece> = {}): FilterablePiece => ({
   classType: 1,
@@ -58,4 +59,30 @@ test("armor version facet filters by tuning socket", () => {
   const both = { ...emptyFilters(), armorVersions: ["2.0" as const, "3.0" as const] };
   expect(pieceMatchesFilters(piece({ tunedStat: 0 }), 3, both)).toBe(true);
   expect(pieceMatchesFilters(piece({ tunedStat: undefined }), 3, both)).toBe(true);
+});
+
+test("search ANDs with the facets, and a facet only narrows it", () => {
+  // The armor table's pipeline: search scoped to every row, ANDed with the facets.
+  const rows = [
+    { name: "No Backup Plans", piece: piece({ classType: 1 }) },
+    { name: "Nothing Manacles", piece: piece({ classType: 1 }) },
+    { name: "Crown of Tempests", piece: piece({ classType: 2 }) },
+  ];
+  const visible = (query: string, classes: number[]) => {
+    const matches = searchMatcher(
+      rows,
+      (r) => normalizeSearchText(r.name),
+      tokenizeSearchQuery(query),
+    );
+    const f = { ...emptyFilters(), classes };
+    return rows
+      .filter((r) => pieceMatchesFilters(r.piece, 3, f) && matches(r))
+      .map((r) => r.name);
+  };
+  expect(visible("no backup plans", [])).toEqual(["No Backup Plans"]);
+  expect(visible("no backup plans", [1])).toEqual(["No Backup Plans"]);
+  // The best match is a Hunter piece, so on Warlock nothing is left — not every
+  // Warlock name with "no" in it.
+  expect(visible("no backup plans", [2])).toEqual([]);
+  expect(visible("no", [2])).toEqual(["Crown of Tempests"]);
 });

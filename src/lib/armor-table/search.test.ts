@@ -83,3 +83,28 @@ test("searchMatcher scoped to the whole list lets other filters only narrow", ()
   expect(VAULT.filter((n) => !n.startsWith("No Backup") && matches(n))).toEqual([]);
   expect(VAULT.filter(matches)).toEqual(NBP);
 });
+
+test("filterBySearch doesn't flood for a piece that isn't in the list", () => {
+  const withoutNbp = VAULT.filter((n) => !n.startsWith("No Backup"));
+  // "no" alone is in Crown of Tempests and Nothing Manacles, but a two-letter word
+  // doesn't keep a name in a longer search on its own. No name contains "plans", so
+  // it matches loosely, and that's all that's left.
+  expect(search(withoutNbp, "no backup plans")).toEqual(["Plate of Transcendence"]);
+  expect(search(withoutNbp, "an assembler")).toEqual([]);
+});
+
+test("short words still search by substring when they're all there is", () => {
+  expect(search(VAULT, "no")).toEqual([
+    ...NBP,
+    "Crown of Tempests",
+    "Wishful Ignorance",
+    "Nothing Manacles",
+  ]);
+  // Too short to match loosely: "pp" only finds names that contain it.
+  expect(search(VAULT, "pp")).toEqual(NBP);
+});
+
+test("tokenizeSearchQuery drops repeated words", () => {
+  expect(tokenizeSearchQuery("no NO backup no")).toEqual(["no", "backup"]);
+  expect(search(VAULT, "ferro ferro smoke")).toEqual(["Ferropotent Helm", "Smoke Jumper Boots"]);
+});

@@ -36,3 +36,10 @@ test("blank-ish queries do not suppress the partition", () => {
   const { pinned } = partitionByPin(options, [4], "   ");
   expect(pinned.map((o) => o.value)).toEqual([4]);
 });
+
+test("a multi-word query keeps the labels matching the most words", () => {
+  const { rest } = partitionByPin(options, [], "last discipline");
+  expect(rest.map((o) => o.value)).toEqual([3]);
+  // No label has both words, so either one keeps a label.
+  expect(partitionByPin(options, [], "bushido techsec").rest.map((o) => o.value)).toEqual([1, 4]);
+});
