@@ -18,7 +18,7 @@ import { applyPerks, type PerkChange } from "@/lib/inventory/apply-perks";
 import { armorDetails } from "@/lib/inventory/armor-details";
 import { BUNGIE_IMAGE_BASE } from "@/lib/bungie/constants";
 import { BREAKER_NAMES, type InventoryItem, type ManagerInventory } from "@/lib/inventory/build";
-import { characterName, isAt, locate, type Landing, type Place } from "@/lib/inventory/moves";
+import { locate, moveOptions, type Place } from "@/lib/inventory/moves";
 import { weaponCopies } from "@/lib/inventory/search";
 import {
   weaponRoll,
@@ -69,7 +69,8 @@ export function ItemDetails({
   onClose,
   onLock,
   onCompare,
-  phone = false,
+  sheet = false,
+  moves = false,
 }: {
   inventory: ManagerInventory;
   target: ItemDetailsTarget | null;
@@ -77,11 +78,10 @@ export function ItemDetails({
   onLock: (item: InventoryItem, locked: boolean) => void;
   /** Open Compare for every copy of this weapon. */
   onCompare: (item: InventoryItem) => void;
-  /**
-   * Phones: a bottom sheet rather than a panel beside the tile, with move buttons under the
-   * header (touch can't drag a tile to another character's tab).
-   */
-  phone?: boolean;
+  /** Phones: a bottom sheet rather than a panel beside the tile. */
+  sheet?: boolean;
+  /** Touch: move buttons under the header, since a tile can't be dragged. */
+  moves?: boolean;
 }) {
   const found = target ? locate(inventory, target.key) : undefined;
   const copies =
@@ -89,7 +89,7 @@ export function ItemDetails({
   const body = found && (
     <>
       <Header item={found.item} onLock={onLock} />
-      {phone && (
+      {moves && (
         <MoveButtons inventory={inventory} item={found.item} place={found.place} onDone={onClose} />
       )}
       {found.item.itemType === ITEM_TYPE_WEAPON && found.item.instanceId ? (
@@ -121,7 +121,7 @@ export function ItemDetails({
       )}
     </>
   );
-  if (phone) {
+  if (sheet) {
     return (
       <Drawer
         open={Boolean(found)}
@@ -162,9 +162,9 @@ export function ItemDetails({
 }
 
 /**
- * Phones: what a drag does on wider screens, as buttons. Equip on or move to each
- * character, or store in the vault; each greyed out when the item is already there or
- * the move can't happen. Nothing for items that never move (account-wide stacks).
+ * What a drag does, as buttons, for touch: pull from the postmaster, equip on or send to
+ * each character, or send to the vault. A move that can't happen is greyed out with why.
+ * Nothing for items that never move (account-wide stacks).
  */
 function MoveButtons({
   inventory,
@@ -178,46 +178,28 @@ function MoveButtons({
   onDone: () => void;
 }) {
   const actions = useManagerActions();
-  if (!actions || place.kind === "account") return null;
-  const option = (to: Landing) => ({
-    to,
-    here: isAt(place, to),
-    problem: isAt(place, to) ? null : actions.problem(item, place, to),
-  });
-  const rows = inventory.characters.map((c) => ({
-    key: c.id,
-    name: characterName(c),
-    equip: option({ kind: "character", characterId: c.id, equipped: true }),
-    move: option({ kind: "character", characterId: c.id }),
-  }));
-  const vault = option({ kind: "vault" });
-  if ([...rows.flatMap((r) => [r.equip, r.move]), vault].every((o) => o.here || o.problem)) return null;
-
-  const button = (o: ReturnType<typeof option>, label: string) => (
-    <Button
-      variant="outline"
-      size="sm"
-      disabled={o.here || o.problem !== null}
-      onClick={() => {
-        actions.move(item, place, o.to);
-        onDone();
-      }}
-    >
-      {o.here ? (o.to.kind === "vault" ? "In vault" : label === "Equip" ? "Equipped" : "Here") : label}
-    </Button>
-  );
+  if (!actions) return null;
+  const options = moveOptions(inventory, item, place, actions.problem);
+  if (options.every((o) => o.problem)) return null;
   return (
-    <div className={cn(SECTION, "grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-x-2 gap-y-1.5")}>
-      {rows.map((r) => (
-        <div key={r.key} className="contents">
-          <span className="truncate text-sm">{r.name}</span>
-          {button(r.equip, "Equip")}
-          {button(r.move, "Move")}
-        </div>
+    // Equips on the left and sends on the right, so a character's two share a line.
+    <div className={cn(SECTION, "grid grid-cols-2 gap-1.5")}>
+      {options.map((o) => (
+        <Button
+          key={o.label}
+          variant="outline"
+          size="sm"
+          className={cn("min-w-0", o.to.kind === "character" && o.to.equipped ? "col-start-1" : "col-start-2")}
+          disabled={o.problem !== null}
+          title={o.problem ?? undefined}
+          onClick={() => {
+            actions.move(item, place, o.to);
+            onDone();
+          }}
+        >
+          <span className="truncate">{o.label}</span>
+        </Button>
       ))}
-      <span className="text-sm">Vault</span>
-      <span />
-      {button(vault, "Store")}
     </div>
   );
 }

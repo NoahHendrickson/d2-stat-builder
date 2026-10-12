@@ -217,3 +217,15 @@ test("phone captions name the bucket and each group above its own lines", () => 
     HEADING_HEIGHT_PX + 3 * CAPTION_HEIGHT_PX + 3 * m.height + m.gap + 10,
   );
 });
+
+test("on phones, a bucket with nothing to name keeps its padding", () => {
+  const m = phoneTileMetrics(358);
+  const { lines } = layoutVault(
+    [{ heading: "Other", buckets: [bucket([group("a", 3)], { label: undefined, captions: true })] }],
+    358,
+    4,
+    m,
+  );
+  expect(lines.map((line) => line.kind)).toEqual(["heading", "tiles"]);
+  expect((lines[1] as VaultTileLine).padTop).toBe(4);
+});

@@ -22,12 +22,13 @@ import { FarmingBanner, FarmingRunner } from "./farming";
 import { ManagerSearch } from "./manager-search";
 import {
   ManagerActionsContext,
-  TileMetricsContext,
+  ManagerLayoutContext,
   dragStore,
   type ManagerActions,
+  type ManagerLayout,
 } from "./manager-context";
 import { phoneTileMetrics } from "@/lib/inventory/vault-layout";
-import { useMinWidth } from "@/lib/use-min-width";
+import { usePhoneWidth, useTouchFirst } from "@/lib/use-min-width";
 import { characterDropStore } from "./manager-drop-zone";
 import { InventoryGrid } from "./manager-character-grid";
 import { VaultPane } from "./manager-vault";
@@ -44,8 +45,8 @@ const ALL_CHARACTERS_MIN_PX = 1580;
  */
 const ALIGNED_MIN_PX = 760;
 
-/** Below Tailwind `md` the page is laid out for phones (see phoneTileMetrics). */
-const PHONE_MAX_PX = 768;
+/** Phone tiles before the page is first measured (it is before the first paint). */
+const UNMEASURED_PHONE_PX = 360;
 
 /**
  * The inventory manager: one column per character on the left (postmaster, then
@@ -90,11 +91,16 @@ export function ManagerView({
   }, []);
   // Phones: tiles sized to fill the width, and the vault behind a tab of its own instead
   // of below every character slot.
-  const phone = !useMinWidth(PHONE_MAX_PX);
-  const tiles = useMemo(
-    () => (phone && layoutWidth > 0 ? phoneTileMetrics(layoutWidth) : null),
+  const phone = usePhoneWidth();
+  const layout = useMemo<ManagerLayout>(
+    () =>
+      phone
+        ? { phone, tiles: phoneTileMetrics(layoutWidth || UNMEASURED_PHONE_PX) }
+        : { phone },
     [phone, layoutWidth],
   );
+  // Touch can't drag a tile, so its details offer the moves as buttons.
+  const touch = useTouchFirst();
   const [vaultOpen, setVaultOpen] = useState(false);
   /** The weapon (by name) whose copies are open in Compare. */
   const [comparing, setComparing] = useState<string | null>(null);
@@ -172,14 +178,14 @@ export function ManagerView({
           <ManagerSearch inventory={inventory} />
         </div>
         <FarmingBanner inventory={inventory} />
-        <TileMetricsContext value={tiles}>
+        <ManagerLayoutContext value={layout}>
           <div ref={layoutRef} className="flex flex-col gap-6">
             <InventoryGrid
               inventory={inventory}
               compact={compact}
               aligned={aligned}
               vault={
-                tiles
+                phone
                   ? {
                       open: vaultOpen,
                       onOpenChange: setVaultOpen,
@@ -188,9 +194,9 @@ export function ManagerView({
                   : undefined
               }
             />
-            {!aligned && !tiles && <VaultPane inventory={inventory} />}
+            {!aligned && !phone && <VaultPane inventory={inventory} />}
           </div>
-        </TileMetricsContext>
+        </ManagerLayoutContext>
       </div>
       <ItemDetails
         inventory={inventory}
@@ -198,7 +204,8 @@ export function ManagerView({
         onClose={() => setMenu(null)}
         onLock={(item, locked) => actions.lock([item], locked)}
         onCompare={actions.compare}
-        phone={tiles !== null}
+        sheet={phone}
+        moves={phone || touch}
       />
       <CompareDrawer inventory={inventory} name={comparing} onClose={() => setComparing(null)} />
     </ManagerActionsContext.Provider>

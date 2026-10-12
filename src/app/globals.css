@@ -383,16 +383,20 @@ input[type="number"] {
   appearance: textfield;
 }
 
-/* Phones: iOS Safari zooms the page into any field typed in under 16px and leaves it
-   zoomed. Unlayered so it beats the text-sm / text-xs on compact fields. */
+/* Phones (below Tailwind `md`, PHONE_MAX_PX): iOS Safari zooms the page into any field
+   typed in under 16px and leaves it zoomed. Unlayered so it beats the text-sm / text-xs
+   on compact fields. */
 @media (width < 48rem) {
   input:not([type="checkbox"], [type="radio"], [type="range"]),
   textarea,
   select {
     font-size: 16px;
   }
-  /* A held finger opens a tooltip (see ui/tooltip.tsx), so keep iOS from also
-     selecting the label or offering to save the icon. */
+}
+
+/* A held finger opens a tooltip (see ui/tooltip.tsx), so keep iOS from also selecting
+   the label or offering to save the icon. */
+@media (pointer: coarse) {
   [data-slot="tooltip-trigger"] {
     -webkit-touch-callout: none;
     -webkit-user-select: none;

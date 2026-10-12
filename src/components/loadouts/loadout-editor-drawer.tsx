@@ -76,7 +76,7 @@ import {
 import type { DimLoadoutItem } from "@/lib/dim/loadout-link";
 import type { EditorTotals } from "@/lib/loadouts/editor-stats";
 import { cn } from "@/lib/utils";
-import { useMinWidth } from "@/lib/use-min-width";
+import { useTouchFirst } from "@/lib/use-min-width";
 
 export interface LoadoutDetailsValues {
   name: string;
@@ -244,9 +244,9 @@ function EditorIdentityFields({
 }) {
   const [name, setName] = useState(initialName);
   const [notes, setNotes] = useState(initialNotes);
-  // A phone's keyboard would cover half the drawer before the loadout is even in view.
-  // The form mounts when the drawer opens, never while hydrating, so this is the real width.
-  const focusName = useMinWidth(768);
+  // An on-screen keyboard would cover half the drawer before the loadout is even in view.
+  // The form mounts when the drawer opens, never while hydrating, so this is the real device.
+  const focusName = !useTouchFirst();
   const validRef = useRef(nameIsValid(initialName));
 
   const setNameValue = (next: string) => {

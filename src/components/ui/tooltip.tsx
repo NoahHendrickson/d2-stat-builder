@@ -3,8 +3,6 @@
 import {
   createContext,
   use,
-  useEffect,
-  useRef,
   useState,
   type PointerEvent,
   type ReactElement,
@@ -14,13 +12,6 @@ import {
 import { Tooltip as TooltipPrimitive } from "@base-ui/react/tooltip";
 
 import { cn } from "@/lib/utils";
-
-/** How long a finger rests on a trigger before its tooltip opens. */
-const TOUCH_HOLD_MS = 450;
-/** Drift past this and the press is a scroll, not a hold. */
-const TOUCH_HOLD_SLOP_PX = 10;
-/** Phones only (Tailwind `max-md`); tablets and up keep hover and focus alone. */
-const TOUCH_HOLD_QUERY = "(width < 48rem)";
 
 function TooltipProvider({
   delay = 150,
@@ -35,107 +26,122 @@ function TooltipProvider({
   );
 }
 
-/** Lets a trigger open its own tooltip from a touch hold. Null when the caller controls `open`. */
-const TooltipHoldContext = createContext<((open: boolean) => void) | null>(null);
+type Handle = TooltipPrimitive.Handle<unknown>;
+
+/** The handle of the enclosing `Tooltip`, so a press-and-hold on its trigger can open it. */
+const TooltipHandleContext = createContext<Handle | null>(null);
 
 /**
- * Controlled internally (mirroring Base UI's own open/close) so a press-and-hold on a
- * phone can open it too: touch never hovers, so without this a description that only
- * lives in a tooltip is out of reach there.
+ * Base UI's own Root, left uncontrolled. It gets a handle so a touch hold (touch never
+ * hovers) can open it through Base UI rather than a second open state.
  */
-function Tooltip({ open, onOpenChange, ...props }: TooltipPrimitive.Root.Props) {
-  const [ownOpen, setOwnOpen] = useState(false);
-  const controlled = open !== undefined;
+function Tooltip({ handle, ...props }: TooltipPrimitive.Root.Props) {
+  const [ownHandle] = useState(() => handle ?? TooltipPrimitive.createHandle());
+  const bound = handle ?? ownHandle;
   return (
-    <TooltipHoldContext value={controlled ? null : setOwnOpen}>
-      <TooltipPrimitive.Root
-        data-slot="tooltip"
-        {...props}
-        open={controlled ? open : ownOpen}
-        onOpenChange={(next, details) => {
-          if (!controlled) setOwnOpen(next);
-          onOpenChange?.(next, details);
-        }}
-        disableHoverablePopup
-      />
-    </TooltipHoldContext>
+    <TooltipHandleContext value={bound}>
+      <TooltipPrimitive.Root data-slot="tooltip" {...props} handle={bound} disableHoverablePopup />
+    </TooltipHandleContext>
   );
 }
 
+/** How long a finger rests on a trigger before its tooltip opens. */
+const TOUCH_HOLD_MS = 450;
+/** Drift past this and the press is a scroll, not a hold. */
+const TOUCH_HOLD_SLOP_PX = 10;
+/** The click that ends a hold follows the pointerup; anything later is a new press. */
+const HOLD_CLICK_MS = 400;
+
 /**
- * Press-and-hold for phones: a still finger opens the tooltip, the tap that ends the
- * hold is swallowed (so holding a perk shows it without also picking it), and the next
- * touch anywhere closes it.
+ * Press-and-hold for touch, shared by every trigger through one set of document
+ * listeners: a still finger opens the tooltip, the tap that ends the hold is swallowed
+ * (so holding a perk shows it without also picking it), and the next touch or scroll
+ * closes it.
  */
-function useTouchHold(setOpen: ((open: boolean) => void) | null) {
-  const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const start = useRef<{ x: number; y: number } | null>(null);
-  const held = useRef(false);
-  const [open, setHeldOpen] = useState(false);
+const touchHold = {
+  press: null as { x: number; y: number; timer: ReturnType<typeof setTimeout> } | null,
+  /** The tooltip a hold opened. */
+  open: null as Handle | null,
+  swallowClick: false,
+  listening: false,
 
-  useEffect(() => () => clearTimeout(timer.current), []);
-  useEffect(() => {
-    if (!open || !setOpen) return;
-    const close = () => {
-      setHeldOpen(false);
-      setOpen(false);
+  start(handle: Handle, trigger: HTMLElement, e: PointerEvent) {
+    this.listen();
+    this.cancel();
+    const { id } = trigger;
+    this.press = {
+      x: e.clientX,
+      y: e.clientY,
+      timer: setTimeout(() => {
+        this.press = null;
+        if (!trigger.isConnected) return;
+        handle.open(id);
+        this.open = handle;
+        this.swallowClick = true;
+      }, TOUCH_HOLD_MS),
     };
-    // Deferred past the touch that opened it, which is still in flight.
-    const id = setTimeout(() => {
-      document.addEventListener("pointerdown", close, { capture: true, once: true });
-      document.addEventListener("scroll", close, { capture: true, once: true });
+  },
+  cancel() {
+    if (this.press) clearTimeout(this.press.timer);
+    this.press = null;
+  },
+  close() {
+    this.open?.close();
+    this.open = null;
+  },
+  listen() {
+    if (this.listening) return;
+    this.listening = true;
+    const capture = { capture: true };
+    document.addEventListener("pointerdown", () => this.close(), capture);
+    document.addEventListener("scroll", () => this.close(), capture);
+    document.addEventListener("pointermove", (e) => {
+      const p = this.press;
+      if (p && Math.hypot(e.clientX - p.x, e.clientY - p.y) > TOUCH_HOLD_SLOP_PX) this.cancel();
     });
-    return () => {
-      clearTimeout(id);
-      document.removeEventListener("pointerdown", close, { capture: true });
-      document.removeEventListener("scroll", close, { capture: true });
+    const release = () => {
+      this.cancel();
+      if (this.swallowClick) setTimeout(() => (this.swallowClick = false), HOLD_CLICK_MS);
     };
-  }, [open, setOpen]);
+    document.addEventListener("pointerup", release);
+    document.addEventListener("pointercancel", release);
+    document.addEventListener(
+      "click",
+      (e) => {
+        if (!this.swallowClick) return;
+        this.swallowClick = false;
+        e.preventDefault();
+        e.stopPropagation();
+      },
+      capture,
+    );
+    document.addEventListener(
+      "contextmenu",
+      (e) => {
+        // Android's long-press menu would land on top of the tooltip.
+        if (this.press || this.swallowClick) e.preventDefault();
+      },
+      capture,
+    );
+  },
+};
 
-  if (!setOpen) return undefined;
-  const cancel = () => {
-    clearTimeout(timer.current);
-    start.current = null;
-  };
-  return {
-    onPointerDown(e: PointerEvent) {
-      held.current = false;
-      if (e.pointerType !== "touch" || !window.matchMedia(TOUCH_HOLD_QUERY).matches) return;
-      start.current = { x: e.clientX, y: e.clientY };
-      clearTimeout(timer.current);
-      timer.current = setTimeout(() => {
-        held.current = true;
-        setHeldOpen(true);
-        setOpen(true);
-      }, TOUCH_HOLD_MS);
-    },
-    onPointerMove(e: PointerEvent) {
-      const s = start.current;
-      if (s && Math.hypot(e.clientX - s.x, e.clientY - s.y) > TOUCH_HOLD_SLOP_PX) cancel();
-    },
-    onPointerUp() {
-      cancel();
-      // The click that ends a hold follows the pointerup; anything later is a new press.
-      if (held.current) setTimeout(() => (held.current = false), 400);
-    },
-    onPointerCancel: cancel,
-    onClickCapture(e: { preventDefault(): void; stopPropagation(): void }) {
-      if (!held.current) return;
-      held.current = false;
-      e.preventDefault();
-      e.stopPropagation();
-    },
-    onContextMenu(e: { preventDefault(): void }) {
-      // Android's long-press menu would land on top of the tooltip.
-      if (start.current || held.current) e.preventDefault();
-    },
-  };
-}
-
-function TooltipTrigger({ ...props }: TooltipPrimitive.Trigger.Props) {
-  const hold = useTouchHold(use(TooltipHoldContext));
+function TooltipTrigger({ onPointerDown, ...props }: TooltipPrimitive.Trigger.Props) {
+  const handle = props.handle ?? use(TooltipHandleContext);
   return (
-    <TooltipPrimitive.Trigger data-slot="tooltip-trigger" {...hold} {...props} closeDelay={0} />
+    <TooltipPrimitive.Trigger
+      data-slot="tooltip-trigger"
+      onPointerDown={(e) => {
+        onPointerDown?.(e);
+        const trigger = e.currentTarget as HTMLElement;
+        // `data-trigger-disabled` covers a disabled trigger and a disabled Root alike.
+        if (e.pointerType === "touch" && handle && !trigger.hasAttribute("data-trigger-disabled")) {
+          touchHold.start(handle, trigger, e);
+        }
+      }}
+      {...props}
+      closeDelay={0}
+    />
   );
 }
 

@@ -48,7 +48,7 @@ import { weaponTypeIcon } from "@/lib/weapons/weapon-type-icon-paths";
 import { useStoreValue } from "@/lib/value-store";
 import { ItemTile } from "./item-tile";
 import { useItemComparator } from "./view-menu";
-import { dragStore, usePhoneTiles } from "./manager-context";
+import { dragStore, usePhoneLayout, usePhoneTiles } from "./manager-context";
 import { DropZone } from "./manager-drop-zone";
 
 /** Above and below a slot's tiles: the slot rows' drop zones are padded this much. */
@@ -93,10 +93,11 @@ function vaultSections(
     label,
     groupBy,
     groups: groupItems([...(items ?? [])].sort(compare), groupBy),
-    // No text labels: groups sit side by side, except types, which get a line each.
-    stacked: groupBy === "type",
-    markerWidth: (group) => markerWidth(groupBy, group),
-    captions: phone,
+    ...(phone
+      ? // Each group on its own lines under its name.
+        { stacked: true, markerWidth: () => 0, captions: true }
+      : // No text labels: groups sit side by side, except types, which get a line each.
+        { stacked: groupBy === "type", markerWidth: (group: ItemGroup) => markerWidth(groupBy, group) }),
   });
   // Weapons and armor each follow their own grouping; the rest isn't grouped.
   const groupFor = (label: string): GroupKey =>
@@ -129,7 +130,7 @@ function vaultSections(
 function useVaultSections(inventory: ManagerInventory) {
   const view = useViewSettings();
   const compare = useItemComparator();
-  const phone = usePhoneTiles() !== null;
+  const phone = usePhoneLayout();
   return useMemo(
     () => vaultSections(inventory, compare, view, phone),
     [inventory, compare, view, phone],
@@ -210,7 +211,7 @@ export function VaultPane({ inventory }: { inventory: ManagerInventory }) {
  */
 function VaultTabs({ inventory }: { inventory: ManagerInventory }) {
   const view = useViewSettings();
-  const phone = usePhoneTiles() !== null;
+  const phone = usePhoneLayout();
   const { vault } = inventory;
   const count = (tab: VaultTab) =>
     VAULT_GROUPS.find((g) => g.label === VAULT_TAB_LABELS[tab])?.rows.reduce(

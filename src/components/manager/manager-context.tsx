@@ -51,11 +51,20 @@ export function useManagerActions(): ManagerActions | null {
 }
 
 /**
- * Phones: the tile size and spacing that fill the page's width (see phoneTileMetrics).
- * Null on wider screens, where tiles keep their fixed 60px.
+ * Whether the page is laid out for a phone (below Tailwind `md`), and there, the tile
+ * size and spacing that fill its width (see phoneTileMetrics). Wider screens keep fixed
+ * 60px tiles.
  */
-export const TileMetricsContext = createContext<TileMetrics | null>(null);
+export type ManagerLayout = { phone: false } | { phone: true; tiles: TileMetrics };
 
+export const ManagerLayoutContext = createContext<ManagerLayout>({ phone: false });
+
+export function usePhoneLayout(): boolean {
+  return useContext(ManagerLayoutContext).phone;
+}
+
+/** Phones: the tile size that fills the page's width. Null on wider screens. */
 export function usePhoneTiles(): TileMetrics | null {
-  return useContext(TileMetricsContext);
+  const layout = useContext(ManagerLayoutContext);
+  return layout.phone ? layout.tiles : null;
 }

@@ -13,7 +13,7 @@ import type { ArmorVersion, FacetFilters } from "@/lib/armor-table/filters";
 import { duplicateMatchSummary, type DuplicateMatch } from "@/lib/armor-table/duplicates";
 import { CLASS_NAMES } from "@/lib/armory/stats";
 import { cn } from "@/lib/utils";
-import { useMinWidth } from "@/lib/use-min-width";
+import { useTouchFirst } from "@/lib/use-min-width";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -172,9 +172,9 @@ export const ArmorTableToolbar = memo(function ArmorTableToolbar({
 }) {
   // Duplicates and Cleanup are never on together; whichever is shows its groups.
   const groupCount = duplicateGroups ?? cleanupGroups;
-  // Phones have no F key to press. The table mounts after the armory loads, never
-  // while hydrating, so this reads the real viewport on its first render.
-  const keyboard = useMinWidth(768);
+  // Touch screens likely have no F key to press. The table mounts after the armory
+  // loads, never while hydrating, so this reads the real device on its first render.
+  const keyboard = !useTouchFirst();
   const cascadeMenuProps = {
     facets,
     onFacetChange,
@@ -190,7 +190,7 @@ export const ArmorTableToolbar = memo(function ArmorTableToolbar({
   };
 
   return (
-    // Phones: search and Filters on the first line, the count and views on the second.
+    // Phones: search and Filters on the first line, the count and views after.
     <div className="@container/toolbar flex items-center gap-2 px-4 py-5 max-md:flex-wrap max-md:gap-y-3 max-md:px-3 max-md:py-3">
       <span
         className="shrink-0 text-sm font-medium tabular-nums max-md:order-4 max-md:mr-auto"
@@ -199,93 +199,96 @@ export const ArmorTableToolbar = memo(function ArmorTableToolbar({
         {filteredCount} {filteredCount === 1 ? "piece" : "pieces"}
         {groupCount !== undefined && ` in ${groupCount} ${groupCount === 1 ? "group" : "groups"}`}
       </span>
-      <div className="relative h-8 min-w-0 flex-1 max-md:order-1 @[58rem]/toolbar:w-[272px] @[58rem]/toolbar:flex-none">
-        <HugeiconsIcon icon={Search01Icon}
-          className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 z-10 size-4 -translate-y-1/2"
-          aria-hidden
-        />
-        <Input
-          ref={searchRef}
-          type="search"
-          value={search}
-          onChange={(e) => onSearchChange(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key !== "Escape") return;
-            if (search) onSearchChange("");
-            else e.currentTarget.blur();
-          }}
-          placeholder={keyboard ? "Press F to search" : "Search armor"}
-          aria-label="Search armor by name"
-          className="h-8 pr-8 pl-8"
-        />
-        {search.length > 0 && (
-          <SearchClearButton
-            onClick={() => {
-              onSearchChange("");
-              searchRef.current?.focus();
-            }}
+      {/* Phones: search and Filters on a line of their own (the inline filters between them
+          are hidden there). Wider, the wrapper adds no box. */}
+      <div className="flex min-w-0 basis-full items-center gap-2 md:contents">
+        <div className="relative h-8 min-w-0 flex-1 @[58rem]/toolbar:w-[272px] @[58rem]/toolbar:flex-none">
+          <HugeiconsIcon icon={Search01Icon}
+            className="text-muted-foreground pointer-events-none absolute top-1/2 left-2.5 z-10 size-4 -translate-y-1/2"
+            aria-hidden
           />
-        )}
+          <Input
+            ref={searchRef}
+            type="search"
+            value={search}
+            onChange={(e) => onSearchChange(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key !== "Escape") return;
+              if (search) onSearchChange("");
+              else e.currentTarget.blur();
+            }}
+            placeholder={keyboard ? "Press F to search" : "Search armor"}
+            aria-label="Search armor by name"
+            className="h-8 pr-8 pl-8"
+          />
+          {search.length > 0 && (
+            <SearchClearButton
+              onClick={() => {
+                onSearchChange("");
+                searchRef.current?.focus();
+              }}
+            />
+          )}
+        </div>
+        <div className="hidden min-w-0 items-center gap-2 @[58rem]/toolbar:flex">
+          <FilterMultiselect
+            label="Class"
+            allLabel="All classes"
+            value={facets.classes}
+            onChange={(v) => onFacetChange("classes", v)}
+            options={CLASS_OPTIONS}
+          />
+          <FilterMultiselect
+            label="Armor"
+            allLabel="All armor"
+            value={facets.armorVersions}
+            onChange={(v) => onFacetChange("armorVersions", v)}
+            options={ARMOR_VERSION_OPTIONS}
+          />
+          <SetFilterMenu
+            value={facets.setHashes}
+            onChange={(v) => onFacetChange("setHashes", v)}
+            options={setOptions}
+          />
+        </div>
+        <div className="hidden min-w-0 items-center gap-2 @[82.5rem]/toolbar:flex">
+          <FilterMultiselect
+            label="Archetype"
+            allLabel="All archetypes"
+            value={facets.archetypes}
+            onChange={(v) => onFacetChange("archetypes", v)}
+            options={archetypeOptions}
+            searchable
+            pinnable
+            pinned={pinnedArchetypes}
+            onTogglePin={onTogglePinnedArchetype}
+          />
+          <FilterMultiselect
+            label="Tuning"
+            allLabel="Any tuning"
+            value={facets.tunings}
+            onChange={(v) => onFacetChange("tunings", v)}
+            options={TUNING_FILTER_OPTIONS}
+          />
+          <FilterMultiselect
+            label="Tertiary"
+            allLabel="Any tertiary"
+            value={facets.tertiaries}
+            onChange={(v) => onFacetChange("tertiaries", v)}
+            options={statOptions}
+          />
+        </div>
+        <div className="hidden shrink-0 @[58rem]/toolbar:block @[82.5rem]/toolbar:hidden">
+          <FilterCascadeMenu
+            {...cascadeMenuProps}
+            includedFacets={OVERFLOW_FACETS}
+            triggerLabel="More filters"
+          />
+        </div>
+        <div className="h-8 shrink-0 @[58rem]/toolbar:hidden">
+          <FilterCascadeMenu {...cascadeMenuProps} toggleSubmenusOnClick />
+        </div>
       </div>
-      <div className="hidden min-w-0 items-center gap-2 @[58rem]/toolbar:flex">
-        <FilterMultiselect
-          label="Class"
-          allLabel="All classes"
-          value={facets.classes}
-          onChange={(v) => onFacetChange("classes", v)}
-          options={CLASS_OPTIONS}
-        />
-        <FilterMultiselect
-          label="Armor"
-          allLabel="All armor"
-          value={facets.armorVersions}
-          onChange={(v) => onFacetChange("armorVersions", v)}
-          options={ARMOR_VERSION_OPTIONS}
-        />
-        <SetFilterMenu
-          value={facets.setHashes}
-          onChange={(v) => onFacetChange("setHashes", v)}
-          options={setOptions}
-        />
-      </div>
-      <div className="hidden min-w-0 items-center gap-2 @[82.5rem]/toolbar:flex">
-        <FilterMultiselect
-          label="Archetype"
-          allLabel="All archetypes"
-          value={facets.archetypes}
-          onChange={(v) => onFacetChange("archetypes", v)}
-          options={archetypeOptions}
-          searchable
-          pinnable
-          pinned={pinnedArchetypes}
-          onTogglePin={onTogglePinnedArchetype}
-        />
-        <FilterMultiselect
-          label="Tuning"
-          allLabel="Any tuning"
-          value={facets.tunings}
-          onChange={(v) => onFacetChange("tunings", v)}
-          options={TUNING_FILTER_OPTIONS}
-        />
-        <FilterMultiselect
-          label="Tertiary"
-          allLabel="Any tertiary"
-          value={facets.tertiaries}
-          onChange={(v) => onFacetChange("tertiaries", v)}
-          options={statOptions}
-        />
-      </div>
-      <div className="hidden shrink-0 @[58rem]/toolbar:block @[82.5rem]/toolbar:hidden">
-        <FilterCascadeMenu
-          {...cascadeMenuProps}
-          includedFacets={OVERFLOW_FACETS}
-          triggerLabel="More filters"
-        />
-      </div>
-      <div className="h-8 shrink-0 max-md:order-2 @[58rem]/toolbar:hidden">
-        <FilterCascadeMenu {...cascadeMenuProps} toggleSubmenusOnClick />
-      </div>
-      <div aria-hidden className="hidden basis-full max-md:order-3 max-md:block" />
       <div className="ml-auto flex shrink-0 items-center gap-2 max-md:order-5">
         <CleanupButton on={cleanupGroups !== undefined} {...cleanup} />
         <DuplicatesButton

@@ -71,8 +71,8 @@ export interface VaultBucket {
   /** Width of the marker drawn beside a group's tiles, or 0 when it has none. */
   markerWidth(group: ItemGroup): number;
   /**
-   * Phones: name the bucket and each of its groups on lines of their own (no markers),
-   * every group starting a new line.
+   * Phones: name the bucket and each of its groups on a line of their own above their
+   * tiles. Pair with `stacked` and no markers, so each group starts its own line.
    */
   captions?: boolean;
 }
@@ -155,11 +155,11 @@ function bucketRows(bucket: VaultBucket, width: number, m: TileMetrics): BucketR
 
   for (const group of bucket.groups) {
     if (group.items.length === 0) continue;
-    const markerWidth = bucket.captions ? 0 : bucket.markerWidth(group);
+    const markerWidth = bucket.markerWidth(group);
     const lead = markerWidth > 0 ? markerWidth + MARKER_GAP_PX : 0;
     const natural = lead + group.items.length * pitch - m.gap;
 
-    if (!bucket.stacked && !bucket.captions && natural <= width) {
+    if (!bucket.stacked && natural <= width) {
       if (shared.length > 0 && used + GROUP_GAP_X_PX + natural > width) flush();
       used += (shared.length > 0 ? GROUP_GAP_X_PX : 0) + natural;
       shared.push({ key: group.key, markerWidth, marker: group.items[0], items: group.items });
@@ -220,19 +220,22 @@ export function layoutVault(
 
     for (const bucket of section.buckets) {
       const rows = bucketRows(bucket, width, m);
+      // Tiles sit right under a caption (its line has room above the text); otherwise
+      // they're padded as usual.
+      let captioned = false;
+      const pushCaption = (key: string, level: VaultCaptionLine["level"], label: string, count: number) => {
+        lines.push({ kind: "caption", key, level, label, count, top, height: CAPTION_HEIGHT_PX });
+        top += CAPTION_HEIGHT_PX;
+        captioned = true;
+      };
       if (bucket.captions && bucket.label && rows.length > 0) {
         const count = bucket.groups.reduce((n, g) => n + g.items.length, 0);
-        lines.push(caption(`${bucket.key}:caption`, "bucket", bucket.label, count, top));
-        top += CAPTION_HEIGHT_PX;
+        pushCaption(`${bucket.key}:caption`, "bucket", bucket.label, count);
       }
       rows.forEach((row, i) => {
-        // A captioned group's gap goes above its caption; its tiles sit right under it.
-        let padTop = i === 0 && !bucket.captions ? pad : row.opens ? GROUP_GAP_Y_PX : m.gap;
-        if (row.caption) {
-          lines.push(caption(`${row.key}:caption`, "group", row.caption.label, row.caption.count, top));
-          top += CAPTION_HEIGHT_PX;
-          padTop = 0;
-        } else if (i === 0 && bucket.captions) padTop = 0;
+        if (row.caption) pushCaption(`${row.key}:caption`, "group", row.caption.label, row.caption.count);
+        const padTop = captioned ? 0 : i === 0 ? pad : row.opens ? GROUP_GAP_Y_PX : m.gap;
+        captioned = false;
         const height = padTop + m.height + (i === rows.length - 1 ? pad : 0);
         lines.push({
           kind: "tiles",
@@ -251,15 +254,6 @@ export function layoutVault(
   return { lines, height: top };
 }
 
-function caption(
-  key: string,
-  level: VaultCaptionLine["level"],
-  label: string,
-  count: number,
-  top: number,
-): VaultCaptionLine {
-  return { kind: "caption", key, level, label, count, top, height: CAPTION_HEIGHT_PX };
-}
 
 /** The lines overlapping `from`…`to` (list offsets), as a half-open index range. */
 export function linesBetween(lines: readonly VaultLine[], from: number, to: number): [number, number] {

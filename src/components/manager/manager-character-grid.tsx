@@ -30,7 +30,7 @@ import { useStoreValue } from "@/lib/value-store";
 import { EmptyTile, ItemTile } from "./item-tile";
 import { farmingStore } from "./farming";
 import { useItemComparator } from "./view-menu";
-import { dragStore, useManagerActions, usePhoneTiles } from "./manager-context";
+import { dragStore, useManagerActions, usePhoneLayout, usePhoneTiles } from "./manager-context";
 import { DropZone, canLand } from "./manager-drop-zone";
 import { AlignedVault, SLOT_ROWS } from "./manager-vault";
 
@@ -79,6 +79,11 @@ export function InventoryGrid({
   const compare = useItemComparator();
 
   const vaultOpen = vault?.open ?? false;
+  // Once opened, the vault pane stays mounted, hidden while a character shows: dragging a
+  // vault tile onto a character tab switches to that character, and a drag source that
+  // unmounts never gets its dragend.
+  const [vaultMounted, setVaultMounted] = useState(false);
+  if (vaultOpen && !vaultMounted) setVaultMounted(true);
   const tabs = compact && shown && (
     <Tabs
       value={vaultOpen ? VAULT_TAB : shown.id}
@@ -117,7 +122,7 @@ export function InventoryGrid({
   return (
     <section aria-label={aligned ? "Characters and vault" : "Characters"} className="flex flex-col">
       {!aligned && tabs}
-      {vaultOpen && vault?.pane}
+      {vault && vaultMounted && <div className={cn(!vaultOpen && "hidden")}>{vault.pane}</div>}
       <div className={cn("grid", vaultOpen && "hidden")} style={columns}>
         {aligned && tabs}
         {characters.map((c) => (
@@ -206,7 +211,7 @@ function CharacterHeader({
   statIcons: StatIconMap;
 }) {
   const [imgFailed, setImgFailed] = useState(false);
-  const phone = usePhoneTiles() !== null;
+  const phone = usePhoneLayout();
   const farming = useStoreValue(farmingStore) === character.id;
   const name = CLASS_NAMES[character.classType] ?? "Guardian";
   const fallbackColor = character.emblemColor
