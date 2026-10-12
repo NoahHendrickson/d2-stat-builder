@@ -4,7 +4,7 @@
 // Runtime imports are relative (not `@/`) — the vitest runner has no `@/` alias,
 // matching the convention in normalize.ts / solve.ts.
 import { STAT_ORDER, type StatKey } from "../armory/stats";
-import { nameMatchesNormalized, nameMatchesSearch } from "./search";
+import { tokenizeSearchQuery } from "./search";
 
 /** A tuning facet value: a tuned-stat index, or "none" for untunable pieces. */
 export type TuningFilter = number | "none";
@@ -47,7 +47,7 @@ export function emptyFilters(): TableFilters {
 
 export function hasActiveFilters(f: TableFilters): boolean {
   return (
-    f.search.trim() !== "" ||
+    tokenizeSearchQuery(f.search).length > 0 ||
     f.classes.length > 0 ||
     f.setHashes.length > 0 ||
     f.archetypes.length > 0 ||
@@ -59,7 +59,6 @@ export function hasActiveFilters(f: TableFilters): boolean {
 
 /** The piece fields the filters read (structural subset of ArmorPiece). */
 export interface FilterablePiece {
-  name: string;
   classType: number;
   setHash?: number;
   archetype?: string;
@@ -72,16 +71,13 @@ function pieceArmorVersion(piece: FilterablePiece): ArmorVersion {
 
 /**
  * AND across facets; a piece missing a field (no set, no archetype) fails that
- * facet when it's active. Search tokens are pre-computed by the caller (they're
- * shared across the whole pass).
+ * facet when it's active. Search isn't a per-piece test (what counts as a match
+ * depends on the whole list) — AND this with a searchMatcher predicate.
  */
 export function pieceMatchesFilters(
   piece: FilterablePiece,
   tertiary: number | undefined,
   f: FacetFilters,
-  searchTokens: readonly string[],
-  /** Pre-normalized name; when omitted the piece name is normalized here. */
-  normalizedName?: string,
 ): boolean {
   if (f.classes.length > 0 && !f.classes.includes(piece.classType)) return false;
   if (
@@ -101,14 +97,10 @@ export function pieceMatchesFilters(
     return false;
   if (f.tunings.length > 0 && !f.tunings.includes(piece.tunedStat ?? "none"))
     return false;
-  if (
-    f.tertiaries.length > 0 &&
-    (tertiary === undefined || !f.tertiaries.includes(tertiary))
-  )
-    return false;
-  return normalizedName !== undefined
-    ? nameMatchesNormalized(normalizedName, searchTokens)
-    : nameMatchesSearch(piece.name, searchTokens);
+  return (
+    f.tertiaries.length === 0 ||
+    (tertiary !== undefined && f.tertiaries.includes(tertiary))
+  );
 }
 
 // --- sorting ---

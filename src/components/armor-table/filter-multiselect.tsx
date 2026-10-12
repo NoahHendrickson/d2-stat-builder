@@ -5,6 +5,7 @@ import { useRef, useState } from "react";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Cancel01Icon, Pin02Icon, Search01Icon, UnfoldMoreIcon } from "@hugeicons/core-free-icons";
 import { partitionByPin, type FilterOption } from "@/lib/armor-table/pinned";
+import { tokenizeSearchQuery } from "@/lib/armor-table/search";
 import {
   fieldControlInnerTriggerClasses,
   fieldFilterActiveEdgeClasses,
@@ -85,8 +86,10 @@ export function FilterMultiselectPanel<V extends string | number>({
 }: FilterMultiselectPanelProps<V>) {
   const active = value.length > 0;
   const partition = partitionByPin(options, pinnable ? pinned : [], query);
+  // Same test the search uses: a punctuation-only query isn't a search.
+  const searching = tokenizeSearchQuery(query).length > 0;
   const capped =
-    maxVisible != null && !query.trim() && partition.rest.length > maxVisible;
+    maxVisible != null && !searching && partition.rest.length > maxVisible;
   const rest = capped
     ? [
         ...partition.rest.filter((opt) => value.includes(opt.value)),
@@ -176,7 +179,7 @@ export function FilterMultiselectPanel<V extends string | number>({
           </div>
         </div>
       )}
-      {noneLabel && !query.trim() && (
+      {noneLabel && !searching && (
         <>
           <DropdownMenuCheckboxItem
             indicator="start"

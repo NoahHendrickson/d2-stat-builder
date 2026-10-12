@@ -55,7 +55,11 @@ import {
   type SortState,
 } from "@/lib/armor-table/filters";
 import type { SortMode } from "@/lib/armor-table/sort";
-import { normalizeSearchText, tokenizeSearchQuery } from "@/lib/armor-table/search";
+import {
+  normalizeSearchText,
+  searchMatcher,
+  tokenizeSearchQuery,
+} from "@/lib/armor-table/search";
 import {
   DEFAULT_DUPLICATE_MATCH,
   duplicateMatchSummary,
@@ -483,18 +487,18 @@ export function ArmorTable() {
     () => sortRows([...rows]),
     [rows, sortRows],
   );
+  // Scoped to every row, not the facet survivors, so a facet can only narrow.
+  const matchesSearch = useMemo(
+    () => searchMatcher(rows, (r) => r.searchName, searchTokens),
+    [rows, searchTokens],
+  );
   const filtered = useMemo(
     () =>
-      sorted.filter((r) =>
-        pieceMatchesFilters(
-          r.piece,
-          r.tertiary,
-          facets,
-          searchTokens,
-          r.searchName,
-        ),
+      sorted.filter(
+        (r) =>
+          pieceMatchesFilters(r.piece, r.tertiary, facets) && matchesSearch(r),
       ),
-    [sorted, facets, searchTokens],
+    [sorted, facets, matchesSearch],
   );
 
   // Duplicates and Cleanup each narrow the filtered list to groups of rows; turning one
