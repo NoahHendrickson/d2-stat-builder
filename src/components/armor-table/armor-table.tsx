@@ -8,6 +8,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
 } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useArmory } from "@/lib/armory/use-armory";
@@ -17,6 +18,7 @@ import {
   annotationsStore,
   loadAnnotations,
   setTag,
+  type Annotations,
   type ItemTag,
 } from "@/lib/inventory/annotations";
 import { useBuildUsage } from "@/lib/build-usage/use-build-usage";
@@ -89,6 +91,7 @@ import { useArmorTableSort } from "@/components/armor-table/use-armor-table-sort
 
 /** Each base row's last usage-layered row, reused while its counts are unchanged. */
 const rowWithUsage = new WeakMap<Row, Row>();
+const NO_ANNOTATIONS: Annotations = {};
 
 /** Approximate single-row height; the virtualizer remeasures real rows on mount. */
 const ESTIMATED_ROW_HEIGHT_PX = 48;
@@ -290,9 +293,16 @@ export function ArmorTable() {
   const searchRef = useRef<HTMLInputElement>(null);
 
   const pieces = armory.data?.pieces;
-  const usage = useBuildUsage()?.pieces;
-  const savedLoadouts = useLoadouts().data;
-  const inLoadouts = useMemo(() => loadoutPieceIds(savedLoadouts ?? []), [savedLoadouts]);
+  const buildUsage = useBuildUsage();
+  const savedLoadouts = useLoadouts();
+  // Ratings wait for the saved loadouts too: a piece in one is always "often used", so
+  // rating before they load would offer it up for cleanup.
+  const usage = savedLoadouts.isSuccess ? buildUsage.data?.pieces : undefined;
+  const usageFailed = buildUsage.isError || savedLoadouts.isError;
+  const inLoadouts = useMemo(
+    () => loadoutPieceIds(savedLoadouts.data ?? []),
+    [savedLoadouts.data],
+  );
   const characters: ArmoryCharacter[] = armory.data?.characters ?? [];
 
   const baseRows = useMemo<Row[]>(() => {
@@ -530,9 +540,21 @@ export function ArmorTable() {
     }
     return counts;
   }, [filtered]);
+  const annotations = useSyncExternalStore(
+    annotationsStore.subscribe,
+    annotationsStore.get,
+    () => NO_ANNOTATIONS,
+  );
+  // Like the Compare drawer's bulk junk, never overwrite a tag someone chose on purpose.
   const cleanupIds = useMemo(
-    () => cleanup?.rows.map((r) => r.piece.instanceId) ?? [],
-    [cleanup],
+    () =>
+      cleanup?.rows
+        .map((r) => r.piece.instanceId)
+        .filter((id) => {
+          const tag = annotations[id]?.tag;
+          return tag !== "favorite" && tag !== "keep" && tag !== "junk";
+        }) ?? [],
+    [cleanup, annotations],
   );
   const markCleanupJunk = useCallback(() => {
     const tags = annotationsStore.get();
@@ -693,7 +715,9 @@ export function ArmorTable() {
                   ? "No armor matches your filters."
                   : view === "cleanup"
                     ? usage === undefined
-                      ? "Loading your optimizer history."
+                      ? usageFailed
+                        ? "Couldn't load your optimizer history."
+                        : "Loading your optimizer history."
                       : cleanupTiers.length === 0
                         ? "Pick a rating in the Cleanup menu to see pieces."
                         : `No cleanup suggestions yet. Keep using the optimizer like normal: a piece gets a rating after ${MIN_ELIGIBLE_QUERIES} searches that could use it.`

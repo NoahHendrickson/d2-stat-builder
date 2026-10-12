@@ -58,7 +58,14 @@ export function summarizeRun(
 
   // Per slot: the interchange keys a counted build used.
   const usedKeys = input.slots.map(() => new Set<string>());
-  const floor = Math.min(...displayed.map((l) => l.total));
+  // The tie cut-off is the lowest total in the top `displayed.length` by total, whatever
+  // the build sort: under a stat or cost sort the displayed builds can sit far down the
+  // totals, and crediting everything above the lowest of them would count most returns.
+  const byTotal = returned.map((l) => l.total).sort((a, b) => b - a);
+  const floor = Math.max(
+    Math.min(...displayed.map((l) => l.total)),
+    byTotal[displayed.length - 1] ?? -Infinity,
+  );
   const counted = [...displayed, ...returned.filter((l) => l.total >= floor)];
   for (const l of counted) {
     l.pieceIds.forEach((id, slot) => {

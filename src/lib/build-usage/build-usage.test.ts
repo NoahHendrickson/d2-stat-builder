@@ -55,7 +55,13 @@ describe("summarizeRun", () => {
     const q = input([helmets, ...rest]);
     const returned = solve(q).loadouts;
     const displayed = [...returned].sort((a, b) => b.stats[0] - a.stats[0]).slice(0, 50);
-    const floor = Math.min(...displayed.map((l) => l.total));
+    // Ties are cut at the 50th-best total, not the lowest displayed one, which a
+    // Weapons sort drags far down the totals.
+    const floor = Math.max(
+      Math.min(...displayed.map((l) => l.total)),
+      returned.map((l) => l.total).sort((x, y) => y - x)[displayed.length - 1],
+    );
+    expect(floor).toBeGreaterThan(Math.min(...displayed.map((l) => l.total)));
     const credited = new Set(
       [...displayed, ...returned.filter((l) => l.total >= floor)].map((l) => l.pieceIds[0]),
     );

@@ -10,8 +10,8 @@ import { encodeRecord } from "./wire";
 
 export const buildUsageKey = (membershipId: string | undefined) => ["build-usage", membershipId] as const;
 
-/** The account's armor usage history (see /api/build-usage), or undefined until it loads. */
-export function useBuildUsage(): BuildUsageSummary | undefined {
+/** The account's armor usage history (see /api/build-usage). */
+export function useBuildUsage() {
   const membershipId = sessionMembershipId(useSession().data);
   return useQuery<BuildUsageSummary>({
     queryKey: buildUsageKey(membershipId),
@@ -24,7 +24,7 @@ export function useBuildUsage(): BuildUsageSummary | undefined {
       if (!res.ok) throw new Error(`Build usage request failed (${res.status})`);
       return (await res.json()) as BuildUsageSummary;
     },
-  }).data;
+  });
 }
 
 async function sha256Hex(text: string): Promise<string> {

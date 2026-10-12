@@ -58,7 +58,7 @@ export function SettingsPage() {
           </h2>
           <p className="text-muted-foreground text-sm">
             Optimizer searches you stop on are saved to your account, so the Searches column
-            on Armor can show which pieces never make a build.
+            and Cleanup on Armor can show which pieces never make a build.
           </p>
         </div>
         <ArmorUsageSettings />
