@@ -96,8 +96,8 @@ export function CleanupButton({
               pieces that never make it into a build and possibly delete them.
             </p>
             <p>
-              Nothing to set up: just use the optimizer like normal, and cleanup suggestions build
-              up here as you search.
+              Just use the optimizer like normal, and cleanup suggestions build up here as you
+              search.
             </p>
           </div>
           <DropdownMenuSeparator />
