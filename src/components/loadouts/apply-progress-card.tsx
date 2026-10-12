@@ -106,12 +106,16 @@ export function ApplyProgressSection() {
       role="status"
       aria-live="polite"
       aria-label={title}
-      // Pinned to the main column's bottom-left (its contain-layout is the containing
-      // block): top-left sat on the Items search and every page's filter row. On a phone
-      // it lifts clear of the Builds bar when that's showing. A fixed 6-across grid keeps
-      // it square-ish. On Slate the menu fill reads too blue for a card this big: same
-      // lift, less hue.
-      className="d2-glass [.dark[data-app-theme=slate]_&]:[--glass-raised:rgb(68_76_92/92%)] animate-in fade-in-0 slide-in-from-bottom-2 absolute left-3 bottom-[calc(0.75rem+env(safe-area-inset-bottom))] z-40 flex w-60 flex-col gap-3 p-3 text-popover-foreground motion-reduce:animate-none max-lg:[html:has([data-slot=builds-mobile-bar])_&]:bottom-[calc(5.5rem+env(safe-area-inset-bottom))] lg:left-4 lg:bottom-4"
+      className={cn(
+        // A fixed 6-across grid keeps it square-ish. On Slate the menu fill reads too
+        // blue for a card this big: same lift, less hue.
+        "d2-glass [.dark[data-app-theme=slate]_&]:[--glass-raised:rgb(68_76_92/92%)] flex w-60 flex-col gap-3 p-3 text-popover-foreground",
+        // Pinned to the main column's bottom-left (its contain-layout is the containing
+        // block): top-left sat on the Items search and every page's filter row. Sits
+        // above whatever publishes --app-bottom-inset (the phone Builds bar).
+        "absolute bottom-[calc(max(var(--app-bottom-inset,0px),env(safe-area-inset-bottom))+0.75rem)] left-3 z-40 lg:bottom-4 lg:left-4",
+        "animate-in fade-in-0 slide-in-from-bottom-2 motion-reduce:animate-none",
+      )}
     >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">

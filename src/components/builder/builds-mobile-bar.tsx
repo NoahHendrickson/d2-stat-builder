@@ -43,6 +43,22 @@ function ProgressFill({ store, className }: { store: ValueStore<number>; classNa
   );
 }
 
+/**
+ * Publishes the bar's height on <html> as --app-bottom-inset so floating surfaces
+ * (toasts, the apply card) sit above it. lg:hidden measures as 0.
+ */
+function publishBottomInset(el: HTMLDivElement) {
+  const root = document.documentElement;
+  const observer = new ResizeObserver(([entry]) => {
+    root.style.setProperty("--app-bottom-inset", `${entry.borderBoxSize[0].blockSize}px`);
+  });
+  observer.observe(el);
+  return () => {
+    observer.disconnect();
+    root.style.removeProperty("--app-bottom-inset");
+  };
+}
+
 export function BuildsMobileBar({
   ready,
   showLoading,
@@ -59,7 +75,7 @@ export function BuildsMobileBar({
 
   return (
     <div
-      data-slot="builds-mobile-bar"
+      ref={publishBottomInset}
       className="pointer-events-none fixed inset-x-0 bottom-0 z-40 lg:hidden"
     >
       <button
