@@ -8,6 +8,12 @@ export interface InGameLoadoutItem {
   itemInstanceId: string;
   /** Absent when the item is no longer in the inventory (dismantled since it was saved). */
   itemHash?: number;
+  /**
+   * Socket index → the plug the slot puts there (mods, aspects, fragments, abilities).
+   * Sockets the slot leaves as they are are absent. Missing on responses cached before
+   * plugs were sent.
+   */
+  plugs?: Record<number, number>;
 }
 
 /** One in-game loadout slot on a character. */
@@ -51,6 +57,18 @@ export interface SnapshotRequest extends SlotIdentifiers {
 /** Generous: the game has 10 slots per character today (DestinyLoadoutConstantsDefinition). */
 const MAX_LOADOUT_INDEX = 31;
 
+/** The plug hash a loadout uses for "leave this socket as it is" (DIM's UNSET_PLUG_HASH). */
+export const UNSET_PLUG_HASH = 2166136261;
+
+/** `plugItemHashes` is in socket order; keep only the sockets the slot actually sets. */
+function slotPlugs(plugItemHashes: readonly number[] | undefined): Record<number, number> {
+  const out: Record<number, number> = {};
+  (plugItemHashes ?? []).forEach((hash, i) => {
+    if (hash && hash !== UNSET_PLUG_HASH) out[i] = hash;
+  });
+  return out;
+}
+
 /**
  * Bungie sends an unfilled slot as items with instance id 0 (or none at all); those
  * are dropped. `hashOf` resolves an instance id to its item hash from the inventory.
@@ -61,11 +79,15 @@ export function toSlots(
 ): InGameLoadoutSlot[] {
   return loadouts.map((l, index) => {
     const items = (l.items ?? [])
-      .map((i) => String(i.itemInstanceId ?? "0"))
-      .filter((id) => id !== "0")
-      .map((id) => {
+      .map((i) => ({ id: String(i.itemInstanceId ?? "0"), plugs: slotPlugs(i.plugItemHashes) }))
+      .filter(({ id }) => id !== "0")
+      .map(({ id, plugs }): InGameLoadoutItem => {
         const itemHash = hashOf(id);
-        return itemHash === undefined ? { itemInstanceId: id } : { itemInstanceId: id, itemHash };
+        return {
+          itemInstanceId: id,
+          ...(itemHash === undefined ? {} : { itemHash }),
+          ...(Object.keys(plugs).length > 0 ? { plugs } : {}),
+        };
       });
     return {
       index,

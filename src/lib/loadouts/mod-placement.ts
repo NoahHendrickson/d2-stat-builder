@@ -90,7 +90,8 @@ export function cycleModStack(
 ): Record<number, number> {
   const next: Record<number, number> = { ...(chosen ?? {}) };
   const count = chosenCount(chosen, sockets, hash);
-  const free = sockets.find((s) => next[s.index] === undefined);
+  // An imported loadout may name a socket's empty plug (see ingame-import.ts): free too.
+  const free = sockets.find((s) => next[s.index] === undefined || next[s.index] === s.emptyPlugHash);
   if (count >= maxStack || !free) {
     for (const s of sockets) if (next[s.index] === hash) delete next[s.index];
     return next;

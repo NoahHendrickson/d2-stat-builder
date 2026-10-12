@@ -356,7 +356,12 @@ function PieceColumn({
   const bottom: SocketTile[] = [];
   if (piece?.armorSockets) {
     for (const s of piece.armorSockets) {
-      (s.kind === "other" ? bottom : top).push({ index: s.index, hash: placement?.[s.index] });
+      // A socket saved as its empty plug shows as empty.
+      const hash = placement?.[s.index];
+      (s.kind === "other" ? bottom : top).push({
+        index: s.index,
+        hash: hash === s.emptyPlugHash ? undefined : hash,
+      });
     }
   } else {
     // Missing piece: no socket kinds to sort by, so the placement in socket order.
