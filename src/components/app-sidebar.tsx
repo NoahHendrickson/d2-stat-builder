@@ -28,7 +28,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { TooltipLabel } from "@/components/ui/tooltip";
 import { SidebarStatus } from "@/components/armory/armory-status";
-import { BugReportDialog } from "@/components/bug-report/bug-report-dialog";
+import { openBugReport } from "@/components/bug-report/bug-report-dialog";
 import { LinkDialog } from "@/components/links/link-dialog";
 import { LinkFavicon } from "@/components/links/link-favicon";
 import { addLink, removeLink, updateLink, useLinks } from "@/lib/links/use-links";
@@ -185,7 +185,7 @@ export const AppSidebar = memo(function AppSidebar({
         )}
       >
         {DISCORD_INVITE_URL && <DiscordLink collapsed={collapsed} />}
-        <BugReportButton collapsed={collapsed} />
+        <BugReportButton collapsed={collapsed} onNavigate={onNavigate} />
       </div>
 
       <SidebarStatus collapsed={collapsed} onNavigate={onNavigate} />
@@ -272,13 +272,21 @@ function DiscordLink({ collapsed }: { collapsed: boolean }) {
   return collapsed ? <TooltipLabel label="Join the Discord">{anchor}</TooltipLabel> : anchor;
 }
 
-/** Opens the "Report a bug" form. */
-function BugReportButton({ collapsed }: { collapsed: boolean }) {
-  const [open, setOpen] = useState(false);
+/** Opens the "Report a bug" form (AppShell owns it); on mobile, closes the menu first. */
+function BugReportButton({
+  collapsed,
+  onNavigate,
+}: {
+  collapsed: boolean;
+  onNavigate?: () => void;
+}) {
   const button = (
     <button
       type="button"
-      onClick={() => setOpen(true)}
+      onClick={() => {
+        onNavigate?.();
+        openBugReport();
+      }}
       aria-label={collapsed ? "Report a bug" : undefined}
       className={cn(
         rowClass,
@@ -290,12 +298,7 @@ function BugReportButton({ collapsed }: { collapsed: boolean }) {
       {!collapsed && <span className="min-w-0 flex-1 truncate text-left">Report a bug</span>}
     </button>
   );
-  return (
-    <>
-      {collapsed ? <TooltipLabel label="Report a bug">{button}</TooltipLabel> : button}
-      <BugReportDialog open={open} onOpenChange={setOpen} />
-    </>
-  );
+  return collapsed ? <TooltipLabel label="Report a bug">{button}</TooltipLabel> : button;
 }
 
 type LinkDialogState = { kind: "closed" } | { kind: "add" } | { kind: "edit"; link: SavedLink };

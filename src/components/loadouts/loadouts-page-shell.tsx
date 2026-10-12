@@ -2,7 +2,6 @@
 
 import { Suspense, useCallback, useEffect, useState, type ComponentProps } from "react";
 import dynamic from "next/dynamic";
-import { SignInCard } from "@/components/auth/sign-in-card";
 import type { LoadoutsList } from "@/components/loadouts/loadouts-list";
 import { loadLoadoutsList, loadedLoadoutsList } from "@/components/loadouts/loadouts-list-chunk";
 import { useSession } from "@/lib/auth/use-session";
@@ -56,17 +55,9 @@ export function LoadoutsPageShell() {
   const { refetch: refetchArmory } = armory;
   const onArmoryChanged = useCallback(() => void refetchArmory(), [refetchArmory]);
 
-  if (!authed) {
-    return (
-      <main className="mx-auto flex h-full max-w-md flex-col items-center justify-center px-6 py-6">
-        {session.isPending ? (
-          <p className="text-muted-foreground text-sm">Checking your session…</p>
-        ) : (
-          <SignInCard />
-        )}
-      </main>
-    );
-  }
+  // AppShell owns sign-in: it shows the sign-in screen itself, and keeps the page hidden
+  // until the session is confirmed. Nothing to draw before that.
+  if (!authed) return null;
 
   // Cards lay out like the editor drawer (subclass + five piece columns), so they take
   // the main column's width, capped so columns don't sprawl on very wide screens.

@@ -1,6 +1,5 @@
 "use client";
 
-import { SignInCard } from "@/components/auth/sign-in-card";
 import { useSession } from "@/lib/auth/use-session";
 import { useInventory } from "@/lib/inventory/use-inventory";
 import { ManagerView } from "./manager-view";
@@ -10,17 +9,9 @@ export function ManagerPageShell() {
   const { data, profile, manifestStatus, membershipId } = useInventory();
   const authed = session.data?.authenticated ?? false;
 
-  if (!authed) {
-    return (
-      <main className="mx-auto flex h-full max-w-md flex-col items-center justify-center px-6 py-6">
-        {session.isPending ? (
-          <p className="text-muted-foreground text-sm">Checking your session…</p>
-        ) : (
-          <SignInCard />
-        )}
-      </main>
-    );
-  }
+  // AppShell owns sign-in: it shows the sign-in screen itself, and keeps the page hidden
+  // until the session is confirmed. Nothing to draw before that.
+  if (!authed) return null;
 
   let status: string | undefined;
   if (!data) {

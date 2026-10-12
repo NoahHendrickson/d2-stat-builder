@@ -20,20 +20,27 @@ export interface BugReportInput {
   title: string;
   description: string;
   context: BugReportContext;
-  /** A field people never see; a bot that fills it gets a quiet success and no report. */
-  website: string;
 }
 
+/**
+ * What Postgres `text` can store: no NUL (a pasted log can carry one, and the insert
+ * would fail on every retry), and no unpaired surrogate halves.
+ */
+const storable = (s: string) =>
+  s
+    .replace(/\u0000/g, "")
+    .replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, "\uFFFD");
+
 const text = (value: unknown, max: number) =>
-  typeof value === "string" ? value.trim().slice(0, max) : "";
+  typeof value === "string" ? storable(value).trim().slice(0, max) : "";
 
 /** A well-formed report, or null. Title and description are required; context is best effort. */
 export function decodeBugReport(body: unknown): BugReportInput | null {
   if (!body || typeof body !== "object") return null;
   const b = body as Record<string, unknown>;
   if (typeof b.title !== "string" || typeof b.description !== "string") return null;
-  const title = b.title.trim().replace(/\s+/g, " ");
-  const description = b.description.trim();
+  const title = storable(b.title).trim().replace(/\s+/g, " ");
+  const description = storable(b.description).trim();
   if (!title || !description) return null;
   if (title.length > MAX_TITLE_LENGTH || description.length > MAX_DESCRIPTION_LENGTH) return null;
   const c = (b.context && typeof b.context === "object" ? b.context : {}) as Record<string, unknown>;
@@ -46,7 +53,6 @@ export function decodeBugReport(body: unknown): BugReportInput | null {
       viewport: text(c.viewport, MAX_SHORT_FIELD_LENGTH),
       theme: text(c.theme, MAX_SHORT_FIELD_LENGTH),
     },
-    website: text(b.website, MAX_SHORT_FIELD_LENGTH),
   };
 }
 

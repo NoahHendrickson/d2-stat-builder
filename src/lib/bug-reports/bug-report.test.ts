@@ -7,7 +7,7 @@ describe("decodeBugReport", () => {
   it("trims the text and keeps the context", () => {
     expect(
       decodeBugReport({ title: "  Equip   skips\nhelmet ", description: " It skips it. ", context }),
-    ).toEqual({ title: "Equip skips helmet", description: "It skips it.", context, website: "" });
+    ).toEqual({ title: "Equip skips helmet", description: "It skips it.", context });
   });
 
   it("needs a title and a description", () => {
@@ -29,9 +29,13 @@ describe("decodeBugReport", () => {
     expect(decodeBugReport({ title: "x", description: "y" })?.context.path).toBe("");
   });
 
-  it("passes the honeypot through for the route to act on", () => {
-    expect(decodeBugReport({ title: "x", description: "y", website: "spam.biz" })?.website).toBe(
-      "spam.biz",
+  it("drops what Postgres text can't store", () => {
+    const r = decodeBugReport({ title: "a\u0000b", description: "log\u0000 line \ud800!" });
+    expect(r?.title).toBe("ab");
+    expect(r?.description).toBe("log line \uFFFD!");
+    expect(decodeBugReport({ title: "\u0000", description: "y" })).toBeNull();
+    expect(decodeBugReport({ title: "x", description: "ok \ud83d\ude00" })?.description).toBe(
+      "ok \ud83d\ude00",
     );
   });
 });

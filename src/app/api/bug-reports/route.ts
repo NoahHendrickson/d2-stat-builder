@@ -7,12 +7,12 @@ import { notConfigured, storageError } from "@/lib/loadouts/api-responses";
 import { rejectCrossSite } from "@/lib/http/same-origin";
 
 /** A 4000-character description, with room for JSON escaping and the context. */
-const MAX_BODY_LENGTH = 32 * 1024;
+const MAX_BODY_BYTES = 32 * 1024;
 const WHAT = "Bug report";
 
 /**
  * Save a signed-in account's bug report, then post it to Discord when a webhook is set.
- * Body: `{ title, description, context, website }` (see `decodeBugReport`).
+ * Body: `{ title, description, context }` (see `decodeBugReport`).
  */
 export async function POST(request: Request) {
   const refused = rejectCrossSite(request);
@@ -22,20 +22,20 @@ export async function POST(request: Request) {
   const store = getServerBugReportStore();
   if (!store) return notConfigured(WHAT);
 
-  const text = await request.text().catch(() => "");
-  if (text.length > MAX_BODY_LENGTH) {
-    return NextResponse.json({ error: "Report too long" }, { status: 413 });
-  }
+  // Refuse an oversized body from its header before buffering it; the byte check after
+  // covers a request that didn't declare its length.
+  const tooLarge = () => NextResponse.json({ error: "Report too long" }, { status: 413 });
+  if (Number(request.headers.get("content-length") ?? 0) > MAX_BODY_BYTES) return tooLarge();
+  const bytes = await request.arrayBuffer().catch(() => new ArrayBuffer(0));
+  if (bytes.byteLength > MAX_BODY_BYTES) return tooLarge();
   let body: unknown;
   try {
-    body = JSON.parse(text);
+    body = JSON.parse(new TextDecoder().decode(bytes));
   } catch {
     body = null;
   }
   const input = decodeBugReport(body);
   if (!input) return NextResponse.json({ error: "Add a title and a description" }, { status: 400 });
-  // The honeypot: only a bot fills a field nobody can see. Tell it everything went fine.
-  if (input.website) return new NextResponse(null, { status: 204 });
 
   const report: NewBugReport = {
     title: input.title,

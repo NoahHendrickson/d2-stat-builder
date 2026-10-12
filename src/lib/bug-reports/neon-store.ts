@@ -1,15 +1,21 @@
 // Neon store for "Report a bug". Server-only.
 //
-// One row per report, from a signed-in account. Inserts are capped: a few per account
-// an hour and a ceiling across everyone per day, checked in the same statement as the
-// insert. The schema is created lazily, like loadouts.
+// One row per report, from a signed-in account. Inserts are capped per account (an hour
+// and a day) and across everyone (a day). The caps are checked in the insert itself,
+// behind a lock every insert takes, so parallel requests can't all read the same count
+// and slip past. The schema is created lazily, like loadouts.
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
 import type { BugReportContext } from "./bug-report";
 
 /** Reports one account can make in an hour. */
 export const MAX_REPORTS_PER_ACCOUNT_HOUR = 5;
-/** Reports everyone together can make in a day, so a flood can't fill the database. */
-export const MAX_REPORTS_PER_DAY = 200;
+/** Reports one account can make in a day. */
+export const MAX_REPORTS_PER_ACCOUNT_DAY = 10;
+/**
+ * Reports everyone together can make in a day, so a flood can't fill the database. High
+ * enough that using it up takes a hundred accounts at their daily cap.
+ */
+export const MAX_REPORTS_PER_DAY = 1000;
 
 export interface NewBugReport {
   title: string;
@@ -66,20 +72,32 @@ export class NeonBugReportStore {
   /** Save a report. Its id, or null when the account or the day is over its cap. */
   async add(r: NewBugReport): Promise<string | null> {
     await this.ensureSchema();
-    const rows = (await this.sql`
-      INSERT INTO bug_reports (title, description, path, viewport, theme, user_agent, host,
-        build, membership_id, display_name)
-      SELECT ${r.title}, ${r.description}, ${r.context.path}, ${r.context.viewport},
-        ${r.context.theme}, ${r.userAgent}, ${r.host}, ${r.build}, ${r.membershipId},
-        ${r.displayName}
-      WHERE (
-        SELECT count(*) FROM bug_reports
-        WHERE membership_id = ${r.membershipId} AND created_at > now() - interval '1 hour'
-      ) < ${MAX_REPORTS_PER_ACCOUNT_HOUR}
-      AND (
-        SELECT count(*) FROM bug_reports WHERE created_at > now() - interval '1 day'
-      ) < ${MAX_REPORTS_PER_DAY}
-      RETURNING id::text AS id`) as { id: string }[];
+    // Read committed: the insert's counts see every report committed by whoever held the
+    // lock before. Bug reports are rare, so one lock for all of them costs nothing.
+    const [, rows] = (await this.sql.transaction(
+      [
+        this.sql`SELECT pg_advisory_xact_lock(hashtext('bug_reports'))`,
+        this.sql`
+          INSERT INTO bug_reports (title, description, path, viewport, theme, user_agent, host,
+            build, membership_id, display_name)
+          SELECT ${r.title}, ${r.description}, ${r.context.path}, ${r.context.viewport},
+            ${r.context.theme}, ${r.userAgent}, ${r.host}, ${r.build}, ${r.membershipId},
+            ${r.displayName}
+          WHERE (
+            SELECT count(*) FROM bug_reports
+            WHERE membership_id = ${r.membershipId} AND created_at > now() - interval '1 hour'
+          ) < ${MAX_REPORTS_PER_ACCOUNT_HOUR}
+          AND (
+            SELECT count(*) FROM bug_reports
+            WHERE membership_id = ${r.membershipId} AND created_at > now() - interval '1 day'
+          ) < ${MAX_REPORTS_PER_ACCOUNT_DAY}
+          AND (
+            SELECT count(*) FROM bug_reports WHERE created_at > now() - interval '1 day'
+          ) < ${MAX_REPORTS_PER_DAY}
+          RETURNING id::text AS id`,
+      ],
+      { isolationLevel: "ReadCommitted" },
+    )) as [unknown, { id: string }[]];
     return rows[0]?.id ?? null;
   }
 }

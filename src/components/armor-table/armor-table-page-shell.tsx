@@ -1,6 +1,5 @@
 "use client";
 
-import { SignInCard } from "@/components/auth/sign-in-card";
 import { useSession } from "@/lib/auth/use-session";
 import { useArmory } from "@/lib/armory/use-armory";
 import { ArmoryStatus } from "@/components/armory/armory-status";
@@ -14,13 +13,9 @@ export function ArmorTablePageShell() {
   const authed = session.data?.authenticated ?? false;
   const desktop = useDesktopLayout();
 
-  if (!authed) {
-    return (
-      <main className="mx-auto flex h-full max-w-md flex-col items-center justify-center px-6 py-6">
-        <SignInCard />
-      </main>
-    );
-  }
+  // AppShell owns sign-in: it shows the sign-in screen itself, and keeps the page hidden
+  // until the session is confirmed. Nothing to draw before that.
+  if (!authed) return null;
 
   // While the manifest downloads / the armory loads, show the same status cards
   // the builder uses instead of an empty table. Desktop already has the header

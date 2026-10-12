@@ -12,7 +12,8 @@ import { usePathname, useRouter } from "next/navigation";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Cancel01Icon, Menu01Icon } from "@hugeicons/core-free-icons";
 import { AppSidebar, NAV_ITEMS, pageTitle } from "@/components/app-sidebar";
-import { SignInCard } from "@/components/auth/sign-in-card";
+import { SignInCard, useAuthResultToast } from "@/components/auth/sign-in-card";
+import { BugReportDialog } from "@/components/bug-report/bug-report-dialog";
 import { ArmoryDiagnosticsGate } from "@/components/armory/armory-diagnostics-gate";
 import { ApplyProgressSection } from "@/components/loadouts/apply-progress-card";
 import { loadLoadoutsList } from "@/components/loadouts/loadouts-list-chunk";
@@ -79,7 +80,11 @@ export function useDesktopLayout(): boolean {
 
 /**
  * App frame: a navigation sidebar (views + saved links) beside the active page.
- * Signed out, every route is just the sign-in screen: no sidebar, no menu.
+ * Only a signed-in player gets the sidebar and the page. Everyone else gets just the
+ * sign-in screen, decided here once for every route: signed out, or a session check that
+ * failed. While the check is still out (and in the prerender), the page renders but stays
+ * invisible and the sidebar pane stays empty, so a signed-out visit never flashes either;
+ * the loader covers that moment on the gear views.
  * The sidebar collapses to an icon rail on desktop; on narrow viewports it becomes
  * a left drawer behind a top bar. The armor / game-data / account cluster lives at
  * the sidebar's foot, so on desktop the page starts at the top of the main column.
@@ -90,10 +95,10 @@ export function AppShell({ children }: { children: ReactNode }) {
   useLoadouts();
   // Its code too: the list is a chunk of its own, and a first visit that had to wait
   // for it sat on the placeholder for ~300ms (see ReadyLoadoutsList).
-  const authenticated = useSession().data?.authenticated;
-  const authed = authenticated === true;
-  // Known signed out (not still loading, not a failed check): nothing but sign-in.
-  const signedOut = authenticated === false;
+  const session = useSession();
+  const authed = session.data?.authenticated === true;
+  const checked = session.data !== undefined || session.isError;
+  useAuthResultToast();
   useEffect(() => {
     if (!authed) return;
     return whenIdle(() => void loadLoadoutsList());
@@ -139,14 +144,14 @@ export function AppShell({ children }: { children: ReactNode }) {
     const root = document.documentElement;
     root.style.setProperty(
       "--app-sidebar-width",
-      `${desktop && !signedOut ? sidebarWidth : 0}px`,
+      `${desktop && authed ? sidebarWidth : 0}px`,
     );
     return () => {
       root.style.removeProperty("--app-sidebar-width");
     };
-  }, [desktop, signedOut, sidebarWidth]);
+  }, [desktop, authed, sidebarWidth]);
 
-  if (signedOut) {
+  if (checked && !authed) {
     return (
       <main className="bg-shell-main flex h-full w-full items-center justify-center overflow-y-auto px-6 py-6">
         <div className="w-full max-w-md">
@@ -169,14 +174,14 @@ export function AppShell({ children }: { children: ReactNode }) {
         )}
         style={{ width: sidebarWidth }}
       >
-        {desktop && <AppSidebar collapsed={collapsed} onToggle={toggleSidebar} />}
+        {desktop && authed && <AppSidebar collapsed={collapsed} onToggle={toggleSidebar} />}
       </aside>
 
       {/* contain-layout stands in for the dropped backdrop-filter: a stacking
           context plus the containing block the fixed mobile builds bar sits in. */}
       <div className="bg-shell-main flex min-h-0 min-w-0 flex-1 flex-col contain-layout">
         <header className="flex h-14 shrink-0 items-stretch gap-2 border-b border-foreground/8 pr-2 pl-1 lg:hidden">
-          <div className="flex items-center">
+          <div className={cn("flex items-center", !authed && "invisible")}>
             <TooltipLabel label="Open menu">
               <Button
                 variant="ghost"
@@ -191,15 +196,15 @@ export function AppShell({ children }: { children: ReactNode }) {
           <h1 className="flex min-w-0 flex-1 items-center truncate text-sm font-medium">
             {title}
           </h1>
-          <div className="flex items-center">
+          <div className={cn("flex items-center", !authed && "invisible")}>
             <ThemeToggle />
           </div>
         </header>
         {desktop && <h1 className="sr-only">{title}</h1>}
         {/* No fade on a view change: a kept view is ready the moment it's shown, and a
             fade from nothing held it back ~170ms on every tab swap. */}
-        <div className="min-h-0 flex-1 overflow-y-auto">
-          {desktop && (
+        <div className={cn("min-h-0 flex-1 overflow-y-auto", !authed && "invisible")}>
+          {desktop && authed && (
             <div className="px-6 pt-6 empty:hidden">
               <ArmoryDiagnosticsGate />
             </div>
@@ -211,8 +216,9 @@ export function AppShell({ children }: { children: ReactNode }) {
       <SiteIconSync />
       <SettingsSync />
       <BuildUsageRecorder />
+      {authed && <BugReportDialog />}
 
-      {!desktop && (
+      {!desktop && authed && (
         <Drawer
           open={drawerOpen}
           onOpenChange={setDrawerOpen}
