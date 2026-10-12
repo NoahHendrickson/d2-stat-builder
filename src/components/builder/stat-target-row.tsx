@@ -209,18 +209,24 @@ export const StatTargetRow = memo(function StatTargetRow({
             const tickAria = isCeilingTick
               ? capText!.tickAria
               : `Set ${label} to ${t}`;
+            const isLast = t === STAT_SLIDER_MAX;
             return (
               <TooltipLabel label={tickAria} key={t}>
                 <button
                   type="button"
                   onClick={() => onChange(index, tickValue)}
                   aria-label={tickAria}
-                  style={{
-                    left: sliderValueLeft(t, 0, STAT_SLIDER_MAX),
-                  }}
+                  style={
+                    isLast
+                      ? undefined
+                      : { left: sliderValueLeft(t, 0, STAT_SLIDER_MAX) }
+                  }
                   className={cn(
-                    // Centered under the thumb (sliderValueLeft is the thumb's center).
-                    "absolute top-0 -translate-x-1/2 cursor-pointer text-[10px] leading-4 font-medium tracking-wider uppercase tabular-nums normal:text-xs normal:font-normal normal:tracking-normal normal:normal-case transition-colors after:absolute after:-inset-x-2 after:-inset-y-1.5 after:content-[''] focus-visible:outline-1 focus-visible:outline-outline-strong",
+                    // Centered under the thumb (sliderValueLeft is the thumb's
+                    // center); the last one sits flush with the row's right
+                    // edge, under the "/ max" above (-3px undoes the padding).
+                    isLast ? "-right-[3px]" : "-translate-x-1/2",
+                    "absolute top-0 cursor-pointer text-[10px] leading-4 font-medium tracking-wider uppercase tabular-nums normal:text-xs normal:font-normal normal:tracking-normal normal:normal-case transition-colors after:absolute after:-inset-x-2 after:-inset-y-1.5 after:content-[''] focus-visible:outline-1 focus-visible:outline-outline-strong",
                     value === tickValue
                       ? "text-foreground"
                       : "text-muted-foreground hover:text-foreground",
