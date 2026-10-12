@@ -112,3 +112,18 @@ export function createWeaponCatalog(raw: WeaponIndex) {
 }
 
 export type WeaponCatalog = ReturnType<typeof createWeaponCatalog>;
+
+/**
+ * The catalog entry for an owned weapon. Owned copies are often an older or reissued
+ * version the catalog lists under another hash; a same-name version shares the stat
+ * curves and perk bonuses.
+ */
+export function catalogWeaponFor(
+  catalog: WeaponCatalog | undefined,
+  item: { itemHash: number; name: string },
+): WeaponSummary | undefined {
+  return (
+    catalog?.weapons.find((w) => w.hash === item.itemHash) ??
+    catalog?.weapons.find((w) => w.name === item.name)
+  );
+}

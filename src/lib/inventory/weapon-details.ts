@@ -142,13 +142,54 @@ export function weaponRoll(
   return roll;
 }
 
-/** The instance's live stats (304) that the game shows for weapons, in its order. */
+/**
+ * Tiered weapons at full masterwork get +tier to each stat their masterwork plug lists
+ * as a conditional 0 ("additional stats equal to the weapon's tier"). Bungie's live
+ * stats (304) leave this out, so a Tier 5 gun read 5 short. Stat hash → investment
+ * bonus; empty when it doesn't apply. Lower-tier masterwork plugs carry no conditional
+ * stats, so a part-masterworked weapon gets nothing, as in-game.
+ */
+export function tieredMasterworkBonus(
+  profile: DestinyProfileResponse,
+  manifest: Manifest,
+  instanceId: string,
+): Map<number, number> {
+  const bonus = new Map<number, number>();
+  const tier = profile.itemComponents?.instances?.data?.[instanceId]?.gearTier ?? 0;
+  if (tier <= 0) return bonus;
+  for (const socket of profile.itemComponents?.sockets?.data?.[instanceId]?.sockets ?? []) {
+    if (!socket.plugHash || socket.isEnabled === false) continue;
+    const def = manifest.def("DestinyInventoryItemDefinition", socket.plugHash);
+    if (!def?.plug?.plugCategoryIdentifier?.includes("weapons.masterworks.stat")) continue;
+    for (const s of def.investmentStats ?? []) {
+      if (s.isConditionallyActive && s.value === 0) bonus.set(s.statTypeHash, tier);
+    }
+  }
+  return bonus;
+}
+
+/**
+ * A displayed stat with `bonus` investment added, 1:1 capped at 100 on the 0–100 bars
+ * the game lists (every Range, Stability, and Handling curve is 1:1). Times and counts
+ * (Charge Time, a heat weapon's Cooling Efficiency) stay at the live value. So does a
+ * stat at 0: its investment may sit far below (a grenade launcher's Disorienting
+ * Grenades sink Blast Radius to -100, and +5 keeps it at 0).
+ */
+export function addInvestment(name: string, value: number, bonus: number): number {
+  return WEAPON_STAT_ORDER.includes(name) && value > 0 ? Math.min(100, value + bonus) : value;
+}
+
+/**
+ * The instance's stats that the game shows for weapons, in its order: the live values
+ * (304) plus the tiered masterwork bonus they leave out.
+ */
 export function weaponStats(
   profile: DestinyProfileResponse,
   manifest: Manifest,
   instanceId: string,
 ): ItemStat[] {
   const stats = profile.itemComponents?.stats?.data?.[instanceId]?.stats ?? {};
+  const bonus = tieredMasterworkBonus(profile, manifest, instanceId);
   const rank = (name: string) => {
     const at = WEAPON_STAT_ORDER.indexOf(name);
     if (at >= 0) return at;
@@ -159,7 +200,9 @@ export function weaponStats(
   for (const stat of Object.values(stats)) {
     const name = manifest.def("DestinyStatDefinition", stat.statHash)?.displayProperties?.name;
     if (!name || rank(name) < 0) continue;
-    out.push({ hash: stat.statHash, name, value: stat.value });
+    const extra = bonus.get(stat.statHash);
+    const value = extra ? addInvestment(name, stat.value, extra) : stat.value;
+    out.push({ hash: stat.statHash, name, value });
   }
   return out.sort((a, b) => rank(a.name) - rank(b.name));
 }

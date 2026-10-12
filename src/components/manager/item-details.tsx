@@ -28,6 +28,7 @@ import {
   type WeaponRoll,
 } from "@/lib/inventory/weapon-details";
 import { useManifest } from "@/lib/manifest/use-manifest";
+import { catalogWeaponFor } from "@/lib/weapons/catalog";
 import { clarityLines, type ClarityMap } from "@/lib/weapons/clarity";
 import { weaponDisplayStats } from "@/lib/weapons/display-stats";
 import { WEAPON_STAT_NUMBERS } from "@/lib/weapons/stat-order";
@@ -310,12 +311,9 @@ export function WeaponRollPanel({
     }
     return map;
   }, [catalog]);
-  // Owned copies are often an older or reissued version the catalog lists under another
-  // hash; a same-name version shares the stat curves and perk bonuses the preview needs.
+  // `item` is rebuilt on every profile refresh; the catalog scans only need its hash and name.
   const catalogWeapon = useMemo(
-    () =>
-      catalog?.weapons.find((w) => w.hash === item.itemHash) ??
-      catalog?.weapons.find((w) => w.name === item.name),
+    () => catalogWeaponFor(catalog, { itemHash: item.itemHash, name: item.name }),
     [catalog, item.itemHash, item.name],
   );
 
