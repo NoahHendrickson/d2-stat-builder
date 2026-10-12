@@ -16,7 +16,8 @@ import {
   type SlotIdentifiers,
 } from "@/lib/bungie/ingame-loadouts";
 import { fetchInGameLoadouts, type InGameSlotChoice } from "@/lib/loadouts/ingame-save";
-import { ArmorThumb } from "@/components/armor-thumb";
+import { slotItemOrder } from "@/lib/loadouts/ingame-import";
+import { ArmorThumb, type ArmorThumbSize } from "@/components/armor-thumb";
 import { TooltipLabel } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import {
@@ -140,11 +141,28 @@ function SlotPicker({
   );
 }
 
-/** The gear a filled slot holds now — what saving over it will replace. */
-function SlotContents({ slot, manifest }: { slot: InGameLoadoutSlot; manifest: Manifest }) {
+/**
+ * The gear a filled slot holds, subclass first, named on hover. With `countMissing`,
+ * items the player no longer has are counted in a note instead of shown as blanks.
+ */
+export function SlotContents({
+  slot,
+  manifest,
+  size = 40,
+  countMissing = false,
+}: {
+  slot: InGameLoadoutSlot;
+  manifest: Manifest;
+  size?: ArmorThumbSize;
+  countMissing?: boolean;
+}) {
+  const items = slot.items
+    .filter((item) => !countMissing || item.itemHash !== undefined)
+    .sort((a, b) => slotItemOrder(manifest, a.itemHash ?? 0) - slotItemOrder(manifest, b.itemHash ?? 0));
+  const gone = slot.items.length - items.length;
   return (
-    <div role="list" className="flex flex-wrap gap-1.5">
-      {slot.items.map((item) => {
+    <div role="list" aria-label="Gear in this loadout" className="flex flex-wrap items-center gap-1.5">
+      {items.map((item) => {
         const def = manifest.def("DestinyInventoryItemDefinition", item.itemHash);
         const name = def?.displayProperties.name || "An item you no longer have";
         return (
@@ -153,12 +171,17 @@ function SlotContents({ slot, manifest }: { slot: InGameLoadoutSlot; manifest: M
               <ArmorThumb
                 icon={def?.displayProperties.icon}
                 watermark={def?.iconWatermark}
-                size={40}
+                size={size}
               />
             </span>
           </TooltipLabel>
         );
       })}
+      {gone > 0 && (
+        <span className="text-muted-foreground pl-1 text-xs">
+          {gone} {gone === 1 ? "item" : "items"} no longer owned
+        </span>
+      )}
     </div>
   );
 }

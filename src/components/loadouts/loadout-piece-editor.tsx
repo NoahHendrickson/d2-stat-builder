@@ -209,13 +209,18 @@ function KindGrid({
     }
     return out.sort((a, b) => a.cost - b.cost || a.name.localeCompare(b.name));
   }, [catalog, piece, sockets, insertable]);
-  const used = sockets.filter((s) => chosen?.[s.index] !== undefined).length;
+  // A socket set to its empty plug (an in-game import's explicit clear) counts as free.
+  const picked = (s: ArmorSocket) => {
+    const hash = chosen?.[s.index];
+    return hash !== undefined && hash !== s.emptyPlugHash;
+  };
+  const used = sockets.filter(picked).length;
   const full = used >= sockets.length;
   // Stat / tuning: one pick per group; a new click replaces it. Armor mods stack.
   const exclusive = kind === "general" || kind === "tuning";
   // Replacing an exclusive pick frees its loadout cost. Stacking fills an empty
   // socket, so vault plugs don't credit anything.
-  const occupied = sockets.find((s) => chosen?.[s.index] !== undefined);
+  const occupied = sockets.find(picked);
   const outgoing = exclusive && occupied ? chosen?.[occupied.index] : undefined;
   const credit = outgoing ? costOf(outgoing) : 0;
   const fits = (o: ModOption) =>

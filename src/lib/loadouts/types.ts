@@ -54,7 +54,9 @@ export interface SavedLoadoutData {
   modPlacement?: ModPlacement;
   /**
    * The optimizer result the loadout was saved from (per-slot tuning/artifice picks,
-   * stat breakdown). Absent for loadouts created another way (import, snapshot).
+   * stat breakdown), or the Edit drawer's totals for one built from live armor (see
+   * `optimizerFromEditorTotals`). Absent when nothing computed totals (share import,
+   * snapshot).
    */
   optimizer?: OptimizerLoadout;
   builder?: BuilderSnapshot;

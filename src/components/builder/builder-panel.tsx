@@ -15,7 +15,11 @@ import { useManifest } from "@/lib/manifest/use-manifest";
 import { useOptimizer } from "@/lib/optimizer/use-optimizer";
 import { useSmoothedProgress } from "@/lib/use-smoothed-progress";
 import { availableSets } from "@/lib/armory/sets";
-import { DEFAULT_SET_FILTERS, type SetFilters } from "@/lib/armory/set-filters";
+import {
+  DEFAULT_SET_FILTERS,
+  type SetFilters,
+  type SetMinOwned,
+} from "@/lib/armory/set-filters";
 import {
   availableFragments,
   SUBCLASSES,
@@ -900,9 +904,11 @@ export function BuilderPanel({
     [powerRange, selectedClassItemHash],
   );
 
-  const setSetFilter = useCallback(
-    (key: keyof SetFilters, value: boolean) =>
-      setSetFilters((prev) => ({ ...prev, [key]: value })),
+  const setSetMinOwned = useCallback(
+    (minOwned: SetMinOwned) =>
+      setSetFilters((prev) =>
+        prev.minOwned === minOwned ? prev : { ...prev, minOwned },
+      ),
     [],
   );
 
@@ -1105,7 +1111,7 @@ export function BuilderPanel({
                 pinnedSets={pinnedSets}
                 onTogglePin={togglePinnedSet}
                 setFilters={setFilters}
-                onSetFilterChange={setSetFilter}
+                onSetMinOwnedChange={setSetMinOwned}
                 pieces={pool}
                 manifest={manifest}
                 classType={classType}

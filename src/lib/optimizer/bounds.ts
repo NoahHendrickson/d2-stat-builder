@@ -32,6 +32,7 @@ const NUM_MASKS = 1 << NUM_STATS;
 function dedupe(
   pieces: OptimizerPiece[],
   keyOf: (p: OptimizerPiece) => string,
+  keyIncludesPower: boolean,
   allowTuning: boolean,
   allowBalanced: boolean,
   mins: number[],
@@ -39,7 +40,12 @@ function dedupe(
   const map = new Map<string, InternalPiece>();
   for (const p of pieces) {
     const key = keyOf(p);
-    if (!map.has(key)) {
+    const kept = map.get(key);
+    if (
+      kept === undefined ||
+      (!keyIncludesPower && (p.power ?? -Infinity) > (kept.power ?? -Infinity))
+    ) {
+      // Replacing an existing key keeps its position in the Map, so pool order is stable.
       map.set(key, makeInternalPiece(p, allowTuning, allowBalanced, mins));
     }
   }
@@ -48,7 +54,7 @@ function dedupe(
 
 /**
  * The identity dedupe collapses on: two pieces with the same key are interchangeable
- * for the query, so the search keeps only the first and a result never names the other.
+ * for the query, so the search keeps one and a result never names the other.
  */
 function interchangeKey(
   p: OptimizerPiece,
@@ -59,19 +65,31 @@ function interchangeKey(
 ): string {
   // Two pieces with the same stats but different tuned stats aren't interchangeable
   // (except exotics, whose flexible slot makes the rolled tuned stat irrelevant).
-  // offStats only feed the Balanced option, so with Balanced disallowed they drop
-  // out of the key (pieces differing only in offStats become interchangeable).
+  // A Balanced-only piece has no directionals at all, so it never stands in for one
+  // that does — exotic or not; with Balanced disallowed it has no options left and is
+  // an untunable piece ("-"). offStats only feed the Balanced option, so with
+  // Balanced disallowed they drop out of the key (pieces differing only in offStats
+  // become interchangeable).
   const tuneKey =
     allowTuning && p.tuning
-      ? (p.exotic ? "X" : p.tuning.directional === false ? "B" : `${p.tuning.tuned}`) +
-        (allowBalanced ? `:${p.tuning.offStats.join(".")}` : "")
+      ? (p.tuning.directional === false
+          ? allowBalanced
+            ? "B"
+            : "-"
+          : p.exotic
+            ? "X"
+            : `${p.tuning.tuned}`) + (allowBalanced ? `:${p.tuning.offStats.join(".")}` : "")
       : "-";
-  // Power only tells pieces apart while a power range is being enforced — without one
-  // the solver never reads it, so two same-stat pieces at different power stay one.
+  // A missing hash or set is "-", never a real value: set hash 0 counts toward a
+  // requirement on set 0, "no set" doesn't. Power splits the key only while a power
+  // range is enforced; without one, same-stat pieces at different power are
+  // interchangeable to the search — but each build reports its gear power, so dedupe
+  // represents the class by its highest-power piece (known power above unknown),
+  // whatever order the armory listed them in.
   return (
-    (p.exotic ? `E${p.hash ?? 0}` : "L") +
+    (p.exotic ? `E${p.hash ?? "-"}` : "L") +
     (p.artifice ? "A" : "") +
-    (keyIncludesSet ? `|${p.setHash ?? 0}|` : "|") +
+    (keyIncludesSet ? `|${p.setHash ?? "-"}|` : "|") +
     (keyIncludesPower ? `P${p.power ?? "?"}|` : "") +
     `T${tuneKey}|` +
     p.stats.join(",")
@@ -537,7 +555,14 @@ export function buildSlots(input: OptimizerInput): InternalPiece[][] {
   const eligible = makeExoticEligible(input);
   const keyOf = makeInterchangeKey(input);
   return input.slots.map((s) =>
-    dedupe(s.filter(eligible), keyOf, allowTuning, allowBalanced, input.minimums).sort(
+    dedupe(
+      s.filter(eligible),
+      keyOf,
+      input.powerRange !== undefined,
+      allowTuning,
+      allowBalanced,
+      input.minimums,
+    ).sort(
       (a, b) => b.total - a.total,
     ),
   );

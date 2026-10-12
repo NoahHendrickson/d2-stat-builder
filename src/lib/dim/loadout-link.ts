@@ -20,7 +20,7 @@ const DIM_LOADOUT_URL = "https://app.destinyitemmanager.com/loadouts?loadout=";
 const SUBCLASS_FAKE_ID = "12345";
 
 /** dim-api AssumeArmorMasterwork.All — matches this app's assumed-MW5 stat model. */
-const ASSUME_MASTERWORK_ALL = 3;
+export const ASSUME_MASTERWORK_ALL = 3;
 
 export interface DimLoadoutItem {
   id?: string;

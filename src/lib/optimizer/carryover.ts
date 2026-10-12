@@ -1,6 +1,6 @@
 // Import from the leaf floors.ts (not ./solve or ./tuning): keeps the whole solver + tuner
 // out of the main-thread bundle that pulls in carryover.ts (see use-optimizer.ts).
-import { NUM_STATS, raiseAchievableFloors } from "./floors";
+import { NUM_STATS, preClampStats, raiseAchievableFloors } from "./floors";
 import type {
   CeilingCarry,
   ExoticConstraint,
@@ -291,7 +291,8 @@ function classifyMinimums(prev: number[], next: number[]): MinDirection {
  *    so we DON'T carry `prev.ceilings`; instead we re-derive lows arithmetically from the
  *    stored loadouts: any loadout whose recorded final `stats` still meets EVERY new
  *    minimum is a legal build in the shrunk region (pure re-check, no search), and
- *    `raiseAchievableFloors` turns each survivor into a per-stat achievable-low seed. Omit
+ *    `raiseAchievableFloors` turns each survivor's pre-clamp stats (`preClampStats` — a
+ *    stat shown at 0 may be below zero) into a per-stat achievable-low seed. Omit
  *    `ceilingSeed` entirely if no stored loadout survives.
  *
  *  - LOOSENED (every new min ≤ old, ≥1 strictly smaller): the feasible region GREW, so
@@ -354,7 +355,8 @@ export function computeCeilingCarry(
     }
     if (!survives) continue;
     anySurvivor = true;
-    raiseAchievableFloors(seed, lo.stats, lo.modsUsed, mods);
+    // Same fragments as prev (only the minimums changed), so the rebuild is prev's own.
+    raiseAchievableFloors(seed, preClampStats(lo, nextInput.fragmentBonus), lo.modsUsed, mods);
   }
 
   const carry: CeilingCarry = { ceilingUpperSeed: prevOutput.ceilingUppers };

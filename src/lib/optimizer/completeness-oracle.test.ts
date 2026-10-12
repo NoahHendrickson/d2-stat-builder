@@ -21,6 +21,7 @@
 import { describe, expect, test } from "vitest";
 import { mulberry32, randInt } from "./test-rng";
 import { solve } from "./solve";
+import { solveCeilings } from "./ceilings";
 import { NUM_SLOTS, NUM_STATS, clamp } from "./floors";
 import { createTuningSearcher, makeInternalPiece } from "./tuning";
 import type {
@@ -552,5 +553,78 @@ describe("review finding 6 — the build budget is checked on internal nodes", (
     const out = solve(input, { topNBudgetMs: 0, ceilingBudgetMs: 0, heapSeed });
     expect(out.combosTried).toBe(0);
     expect(out.capped).toBe(true);
+  });
+});
+
+describe("spare mods on a stat clamped up from below zero", () => {
+  // Five blank pieces and a −10 weapons fragment: weapons sits at −10 before the clamp,
+  // so one major lifts it only to 0 — the true weapons ceiling is 0. The seed used to
+  // add the build's spare major to its CLAMPED 0 and claim 10.
+  const blank = (id: string, setHash?: number): OptimizerPiece => ({
+    id,
+    stats: [0, 0, 0, 0, 0, 0],
+    exotic: false,
+    setHash,
+  });
+  const base: OptimizerInput = {
+    slots: [[blank("h")], [blank("a")], [blank("c")], [blank("l")], [blank("ci")]],
+    minimums: [0, 0, 0, 0, 0, 0],
+    mods: { major: 1, minor: 0 },
+    fragmentBonus: [-10, 0, 0, 0, 0, 0],
+  };
+
+  test("the ceiling is the oracle's 0, not the seed's 10", () => {
+    const out = solve(base, GENEROUS);
+    const truth = oracle(base);
+    expect(truth.ceilings[0]).toBe(0);
+    expect(out.ceilings).toEqual(truth.ceilings);
+    expect(out.ceilingsExact).toBe(true);
+  });
+
+  test("a bad seed is not certified exact when probes can only disprove above it", () => {
+    // An unused 20-weapons helmet keeps the suffix bound above the bad seed, and the set
+    // requirement forces the blank helmet — so every probe above 10 was disproven and the
+    // window closed on 10 with ceilingsExact: true.
+    const input: OptimizerInput = {
+      ...base,
+      slots: [
+        [{ id: "w", stats: [20, 0, 0, 0, 0, 0], exotic: false }, blank("h", 1)],
+        ...base.slots.slice(1),
+      ],
+      setRequirements: [{ setHash: 1, count: 1 }],
+    };
+    const out = solve(input, GENEROUS);
+    expect(out.loadouts.map((lo) => lo.pieceIds[0])).toEqual(["h"]);
+    expect(out.ceilings[0]).toBe(0);
+    expect(out.ceilingUppers[0]).toBe(0);
+    expect(out.ceilingsExact).toBe(true);
+    expect(out.ceilings).toEqual(oracle(input).ceilings);
+  });
+
+  test("a probe's witness harvests its pre-clamp stats, not the clamped ones", () => {
+    // Health ≥ 15 forces the 25-health helmet, leaving weapons at 20 − 30 = −10: the true
+    // weapons ceiling is 0. From a zero seed, the health probe finds that build and harvests
+    // it into every stat's floor — adding its spare major to the CLAMPED weapons 0 claimed
+    // 10, and later weapons probes, only ever testing values above it, certified 10.
+    const input: OptimizerInput = {
+      slots: [
+        [
+          { id: "w", stats: [40, 0, 0, 0, 0, 0], exotic: false },
+          { id: "h", stats: [0, 25, 0, 0, 0, 0], exotic: false },
+        ],
+        [{ id: "a", stats: [20, 0, 0, 0, 0, 0], exotic: false }],
+        [blank("c")],
+        [blank("l")],
+        [blank("ci")],
+      ],
+      minimums: [0, 15, 0, 0, 0, 0],
+      mods: { major: 1, minor: 0 },
+      fragmentBonus: [-30, 0, 0, 0, 0, 0],
+    };
+    const truth = oracle(input);
+    expect(truth.ceilings[0]).toBe(0);
+    const out = solveCeilings(input, [0, 0, 0, 0, 0, 0], 20_000);
+    expect(out.ceilings).toEqual(truth.ceilings);
+    expect(out.exact).toBe(true);
   });
 });

@@ -46,9 +46,11 @@ function emblemPerClass(characters: ArmoryCharacter[]): ArmoryCharacter[] {
 
 /** A single class tab, rendered as the character's equipped emblem nameplate. */
 function EmblemTab({
+  value,
   character,
   active,
 }: {
+  value: string;
   character: ArmoryCharacter;
   active: boolean;
 }) {
@@ -61,7 +63,7 @@ function EmblemTab({
 
   return (
     <TabsPrimitive.Tab
-      value={String(character.classType)}
+      value={value}
       aria-label={`${name}, Power ${character.light}`}
       className={cn(tabBase, active ? tabSelected : tabInactive)}
     >
@@ -126,8 +128,44 @@ export const ClassEmblemTabs = memo(function ClassEmblemTabs({
         {tabs.map((character) => (
           <EmblemTab
             key={character.classType}
+            value={String(character.classType)}
             character={character}
             active={character.classType === value}
+          />
+        ))}
+      </TabsPrimitive.List>
+    </TabsPrimitive.Root>
+  );
+});
+
+/**
+ * The same nameplates, one per character rather than per class — for what belongs to a
+ * character (its in-game loadouts), so two characters of one class are two tabs.
+ */
+export const CharacterEmblemTabs = memo(function CharacterEmblemTabs({
+  characters,
+  value,
+  onChange,
+}: {
+  characters: ArmoryCharacter[];
+  /** Selected character id. */
+  value: string;
+  onChange: (characterId: string) => void;
+}) {
+  const tabs = characters.filter((c) => CLASS_NAMES[c.classType] !== undefined);
+  return (
+    <TabsPrimitive.Root
+      className="w-full min-w-0"
+      value={value}
+      onValueChange={(v) => onChange(String(v))}
+    >
+      <TabsPrimitive.List className="flex w-full min-w-0 gap-3">
+        {tabs.map((character) => (
+          <EmblemTab
+            key={character.id}
+            value={character.id}
+            character={character}
+            active={character.id === value}
           />
         ))}
       </TabsPrimitive.List>

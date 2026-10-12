@@ -102,6 +102,11 @@ test("cycleModStack fills the next free socket, then clears at the limit", () =>
   expect(cycleModStack(chosen, sockets, 7, 3)).toEqual({});
 });
 
+test("cycleModStack fills a socket set to its empty plug", () => {
+  const artifice = [{ index: 4, kind: "artifice", category: "", emptyPlugHash: 820 }] as const;
+  expect(cycleModStack({ 4: 820 }, artifice, 821, 1)).toEqual({ 4: 821 });
+});
+
 test("cycleModStack respects a non-stackable mod and leaves other mods alone", () => {
   const once = cycleModStack({ 2: 9 }, sockets, 7, 1);
   expect(once).toEqual({ 1: 7, 2: 9 });

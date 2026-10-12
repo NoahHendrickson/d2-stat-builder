@@ -9,6 +9,7 @@ import { Analytics } from "@/components/analytics";
 import { SearchSelectOnRefocus } from "@/components/search-select-on-refocus";
 import { EARLY_FETCH_SCRIPT } from "@/lib/early-fetch";
 import { APP_THEME_SCRIPT, DEFAULT_APP_THEME } from "@/lib/app-theme-script";
+import { SITE_NAME, tabTitle } from "@/lib/site";
 
 const geistSans = Geist({
   variable: "--font-sans",
@@ -16,7 +17,10 @@ const geistSans = Geist({
 });
 
 export const metadata: Metadata = {
-  title: "D2 Conflux",
+  title: {
+    default: SITE_NAME,
+    template: tabTitle("%s"),
+  },
   description:
     "Sign in with Bungie, set your six Armor 3.0 stat targets, set bonuses, fragments, and mods, and find which of your armor pieces to equip.",
 };
