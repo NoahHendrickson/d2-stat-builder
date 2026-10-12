@@ -17,11 +17,13 @@ import { MANIFEST_TABLES, type ManifestTableName, type ManifestTables } from "./
 
 const BUNGIE_ROOT = "https://www.bungie.net";
 
-// DestinyItemType values we keep from the (huge) item table.
+// DestinyItemType values the (huge) item table is filtered on.
+const ITEM_TYPE_NONE = 0;
 const ITEM_TYPE_ARMOR = 2;
 const ITEM_TYPE_MOD = 19;
 const ITEM_TYPE_SUBCLASS = 16;
 const ITEM_TYPE_CURRENCY = 1;
+const ITEM_TYPE_DUMMY = 20;
 
 /** `jsonWorldComponentContentPaths.en` from the manifest info: table name → path. */
 export type TablePaths = Record<ManifestTableName, string>;
@@ -70,6 +72,32 @@ const MANAGER_BUCKETS = new Set([
 ]);
 
 /**
+ * A bucket with no bucket definition. Its itemType None items are ~3,500 gear previews
+ * (vendor and Portal rewards that can't be held) and ~5,000 real engrams (tiered
+ * Distorted Engrams, Focused Umbral Engrams, …), told apart by whether they recover to
+ * the postmaster.
+ */
+const UNDEFINED_BUCKET = 2422292810;
+const POSTMASTER_BUCKET = 215593132;
+
+/**
+ * Anything else a player can hold, so the manager can name it in the postmaster, which
+ * takes items from any bucket (packages, seasonal materials, keycards, quest steps, …).
+ */
+function isHoldable(def: DestinyInventoryItemDefinition): boolean {
+  return (
+    !!def.inventory &&
+    !!def.displayProperties?.name &&
+    def.itemType !== ITEM_TYPE_DUMMY &&
+    !(
+      def.itemType === ITEM_TYPE_NONE &&
+      def.inventory.bucketTypeHash === UNDEFINED_BUCKET &&
+      def.inventory.recoveryBucketTypeHash !== POSTMASTER_BUCKET
+    )
+  );
+}
+
+/**
  * Keep armor, subclasses, artifacts, plugs/mods, Festival of the Lost masks, and upgrade materials,
  * projected down to the fields the app reads (`ItemDef`), plus a lean copy of anything
  * else the inventory manager can show.
@@ -98,7 +126,8 @@ export function filterInventoryItems(
       !def.redacted &&
       (MANAGER_BUCKETS.has(def.inventory?.bucketTypeHash as number) ||
         // The vault header lists the profile currencies (Bright Dust, …).
-        def.itemType === ITEM_TYPE_CURRENCY)
+        def.itemType === ITEM_TYPE_CURRENCY ||
+        isHoldable(def))
     ) {
       out[key as unknown as number] = projectItemDefLean(def);
     }
