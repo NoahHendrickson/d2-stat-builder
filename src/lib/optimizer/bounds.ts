@@ -41,23 +41,40 @@ function dedupe(
   for (const p of pieces) {
     // Two pieces with the same stats but different tuned stats aren't interchangeable
     // (except exotics, whose flexible slot makes the rolled tuned stat irrelevant).
-    // offStats only feed the Balanced option, so with Balanced disallowed they drop
-    // out of the key (pieces differing only in offStats become interchangeable).
+    // A Balanced-only piece has no directionals at all, so it never stands in for one
+    // that does — exotic or not; with Balanced disallowed it has no options left and is
+    // an untunable piece ("-"). offStats only feed the Balanced option, so with
+    // Balanced disallowed they drop out of the key (pieces differing only in offStats
+    // become interchangeable).
     const tuneKey =
       allowTuning && p.tuning
-        ? (p.exotic ? "X" : p.tuning.directional === false ? "B" : `${p.tuning.tuned}`) +
-          (allowBalanced ? `:${p.tuning.offStats.join(".")}` : "")
+        ? (p.tuning.directional === false
+            ? allowBalanced
+              ? "B"
+              : "-"
+            : p.exotic
+              ? "X"
+              : `${p.tuning.tuned}`) + (allowBalanced ? `:${p.tuning.offStats.join(".")}` : "")
         : "-";
-    // Power only tells pieces apart while a power range is being enforced — without one
-    // the solver never reads it, so two same-stat pieces at different power stay one.
+    // A missing hash or set is "-", never a real value: set hash 0 counts toward a
+    // requirement on set 0, "no set" doesn't. Power splits the key only while a power
+    // range is enforced; without one, same-stat pieces at different power are
+    // interchangeable to the search — but each build reports its gear power, so the
+    // class is represented by its highest-power piece (known power above unknown),
+    // whatever order the armory listed them in.
     const key =
-      (p.exotic ? `E${p.hash ?? 0}` : "L") +
+      (p.exotic ? `E${p.hash ?? "-"}` : "L") +
       (p.artifice ? "A" : "") +
-      (keyIncludesSet ? `|${p.setHash ?? 0}|` : "|") +
+      (keyIncludesSet ? `|${p.setHash ?? "-"}|` : "|") +
       (keyIncludesPower ? `P${p.power ?? "?"}|` : "") +
       `T${tuneKey}|` +
       p.stats.join(",");
-    if (!map.has(key)) {
+    const kept = map.get(key);
+    if (
+      kept === undefined ||
+      (!keyIncludesPower && (p.power ?? -Infinity) > (kept.power ?? -Infinity))
+    ) {
+      // Replacing an existing key keeps its position in the Map, so pool order is stable.
       map.set(key, makeInternalPiece(p, allowTuning, allowBalanced, mins));
     }
   }

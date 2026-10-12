@@ -1,8 +1,8 @@
 import { describe, expect, test } from "vitest";
-import { raiseAchievableFloors } from "./floors";
+import { preClampStats, raiseAchievableFloors } from "./floors";
 
-// `raiseAchievableFloors(floors, stats, modsUsed, mods)` raises each of `floors` to the
-// build's final `stats[s]` PLUS the build's spare mod capacity dumped into that one stat,
+// `raiseAchievableFloors(floors, raw, modsUsed, mods)` raises each of `floors` to the
+// build's pre-clamp final `raw[s]` PLUS the build's spare mod capacity dumped into that one stat,
 // clamped to STAT_CAP (200). It mutates `floors` in place and returns whether any rose.
 // This is the shared seed/harvest primitive: every raised value is achievable because the
 // spare mods could genuinely be socketed into any ONE stat while the others' minimums hold.
@@ -83,5 +83,40 @@ describe("raiseAchievableFloors", () => {
     );
     expect(rose).toBe(true);
     expect(floors).toEqual([100, 30, 10, 10, 10, 10]);
+  });
+
+  test("a stat below zero climbs back to 0 before the spare counts", () => {
+    // Weapons is −10 before the clamp (shown as 0): one spare major lifts it only to 0.
+    const floors = [0, 0, 0, 0, 0, 0];
+    raiseAchievableFloors(
+      floors,
+      [-10, 50, 50, 50, 50, -4],
+      { major: 0, minor: 0 },
+      { major: 1, minor: 0 },
+    );
+    expect(floors).toEqual([0, 60, 60, 60, 60, 6]);
+  });
+});
+
+describe("preClampStats", () => {
+  const lo = (stats: number[], baseStats: number[]) => ({
+    stats,
+    baseStats,
+    tuningBonus: [0, -5, 0, 0, 0, 5],
+    modBonus: [0, 0, 0, 0, 10, 0],
+    artificeBonus: [0, 0, 0, 3, 0, 0],
+  });
+
+  test("a positive stat is exact as recorded", () => {
+    expect(preClampStats(lo([40, 15, 10, 23, 30, 25], [40, 20, 10, 20, 20, 20]), undefined)).toEqual([
+      40, 15, 10, 23, 30, 25,
+    ]);
+  });
+
+  test("a stat shown at 0 is rebuilt from base + fragment + bonuses", () => {
+    // Health: base 3 − 5 tune − 10 fragment = −12; weapons: base 0, no bonus = exactly 0.
+    expect(
+      preClampStats(lo([0, 0, 10, 23, 30, 25], [0, 3, 10, 20, 20, 20]), [0, -10, 0, 0, 0, 0]),
+    ).toEqual([0, -12, 10, 23, 30, 25]);
   });
 });

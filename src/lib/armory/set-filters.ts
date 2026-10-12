@@ -1,17 +1,27 @@
+/**
+ * The fewest owned pieces a set needs to stay in the list. The hide-below-N options
+ * nest (hiding under 4 also hides under 2), so they're one threshold, not a flag each.
+ */
+export type SetMinOwned = 0 | 2 | 4;
+
 export interface SetFilters {
-  hideLessThan2: boolean;
+  minOwned: SetMinOwned;
 }
 
 export const DEFAULT_SET_FILTERS: SetFilters = {
-  hideLessThan2: true,
+  minOwned: 2,
 };
+
+export function isSetMinOwned(v: unknown): v is SetMinOwned {
+  return v === 0 || v === 2 || v === 4;
+}
 
 /** Whether the list settings are currently hiding any sets. */
 export function hasActiveSetFilters(filters: SetFilters): boolean {
-  return filters.hideLessThan2;
+  return filters.minOwned > 0;
 }
 
 /** Returns whether a set with `ownedCount` pieces passes the active list settings. */
 export function passesSetFilters(ownedCount: number, filters: SetFilters): boolean {
-  return !(filters.hideLessThan2 && ownedCount < 2);
+  return ownedCount >= filters.minOwned;
 }
