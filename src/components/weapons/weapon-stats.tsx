@@ -50,23 +50,34 @@ export function WeaponStats({
             </dd>
             <dd aria-hidden className="min-w-0">
               {bar && (
-                // A solid green fill on a faint, outlined track (the Normal
-                // theme's own green there). A preview's change continues the
-                // fill as its own piece: light for a gain (green would vanish
-                // against the fill), red for a loss.
-                <div className="relative h-2.5 border border-foreground/50 bg-foreground/18 normal:h-2 normal:overflow-hidden normal:rounded-full normal:bg-foreground/16">
+                // The stat in the primary buttons' green, framed in a paler green
+                // line that is brightest across its middle, whatever the line
+                // style; the rest of the track a faint grey. A preview's change
+                // runs between them as its own piece: a fainter green for a gain,
+                // red for a loss. The Normal theme rounds the bar, so it drops
+                // the line.
+                <div className="relative h-2.5 normal:h-2 normal:overflow-hidden normal:rounded-full">
                   <div
-                    className="absolute inset-y-0 left-0 bg-(--emphatic-bright) transition-[width] duration-150 motion-reduce:transition-none normal:rounded-full normal:bg-(--normal-green)"
+                    className={cn(
+                      "absolute inset-y-0 left-0 border border-transparent bg-emphatic [border-image:linear-gradient(to_right,color-mix(in_srgb,var(--emphatic-bright)_40%,transparent),color-mix(in_srgb,var(--emphatic-bright)_75%,white)_50%,color-mix(in_srgb,var(--emphatic-bright)_40%,transparent))_1] transition-[width] duration-150 motion-reduce:transition-none normal:rounded-full normal:border-0",
+                      low === 0 && "border-0",
+                    )}
                     style={{ width: `${low}%` }}
                   />
                   {/* Always drawn (hidden at rest) so a preview slides in. */}
                   <div
                     className={cn(
                       "absolute inset-y-0 transition-[left,width] duration-150 motion-reduce:transition-none normal:rounded-full",
-                      delta > 0 ? "bg-foreground/55" : "bg-destructive",
+                      delta > 0
+                        ? "bg-[color-mix(in_srgb,var(--emphatic)_45%,transparent)]"
+                        : "bg-destructive",
                       delta === 0 && "opacity-0",
                     )}
                     style={{ left: `${low}%`, width: `${high - low}%` }}
+                  />
+                  <div
+                    className="absolute inset-y-0 right-0 bg-foreground/18 transition-[left] duration-150 motion-reduce:transition-none normal:bg-foreground/16"
+                    style={{ left: `${high}%` }}
                   />
                 </div>
               )}
