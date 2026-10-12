@@ -21,6 +21,7 @@
 import { describe, expect, test } from "vitest";
 import { mulberry32, randInt } from "./test-rng";
 import { solve } from "./solve";
+import { solveCeilings } from "./ceilings";
 import { NUM_SLOTS, NUM_STATS, clamp } from "./floors";
 import { createTuningSearcher, makeInternalPiece } from "./tuning";
 import type {
@@ -595,6 +596,35 @@ describe("spare mods on a stat clamped up from below zero", () => {
     const out = solve(input, GENEROUS);
     expect(out.loadouts.map((lo) => lo.pieceIds[0])).toEqual(["h"]);
     expect(out.ceilings[0]).toBe(0);
+    expect(out.ceilingUppers[0]).toBe(0);
+    expect(out.ceilingsExact).toBe(true);
     expect(out.ceilings).toEqual(oracle(input).ceilings);
+  });
+
+  test("a probe's witness harvests its pre-clamp stats, not the clamped ones", () => {
+    // Health ≥ 15 forces the 25-health helmet, leaving weapons at 20 − 30 = −10: the true
+    // weapons ceiling is 0. From a zero seed, the health probe finds that build and harvests
+    // it into every stat's floor — adding its spare major to the CLAMPED weapons 0 claimed
+    // 10, and later weapons probes, only ever testing values above it, certified 10.
+    const input: OptimizerInput = {
+      slots: [
+        [
+          { id: "w", stats: [40, 0, 0, 0, 0, 0], exotic: false },
+          { id: "h", stats: [0, 25, 0, 0, 0, 0], exotic: false },
+        ],
+        [{ id: "a", stats: [20, 0, 0, 0, 0, 0], exotic: false }],
+        [blank("c")],
+        [blank("l")],
+        [blank("ci")],
+      ],
+      minimums: [0, 15, 0, 0, 0, 0],
+      mods: { major: 1, minor: 0 },
+      fragmentBonus: [-30, 0, 0, 0, 0, 0],
+    };
+    const truth = oracle(input);
+    expect(truth.ceilings[0]).toBe(0);
+    const out = solveCeilings(input, [0, 0, 0, 0, 0, 0], 20_000);
+    expect(out.ceilings).toEqual(truth.ceilings);
+    expect(out.exact).toBe(true);
   });
 });

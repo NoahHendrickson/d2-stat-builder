@@ -1,8 +1,8 @@
 import { describe, expect, test } from "vitest";
-import { raiseAchievableFloors } from "./floors";
+import { preClampStats, raiseAchievableFloors } from "./floors";
 
-// `raiseAchievableFloors(floors, stats, modsUsed, mods)` raises each of `floors` to the
-// build's final `stats[s]` PLUS the build's spare mod capacity dumped into that one stat,
+// `raiseAchievableFloors(floors, raw, modsUsed, mods)` raises each of `floors` to the
+// build's pre-clamp final `raw[s]` PLUS the build's spare mod capacity dumped into that one stat,
 // clamped to STAT_CAP (200). It mutates `floors` in place and returns whether any rose.
 // This is the shared seed/harvest primitive: every raised value is achievable because the
 // spare mods could genuinely be socketed into any ONE stat while the others' minimums hold.
@@ -12,12 +12,12 @@ describe("raiseAchievableFloors", () => {
     const floors = [0, 0, 0, 0, 0, 0];
     const rose = raiseAchievableFloors(
       floors,
-      [50, 40, 5, 5, 5, 5],
+      [50, 40, 0, 0, 0, 0],
       { major: 2, minor: 0 },
       { major: 5, minor: 0 },
     );
     expect(rose).toBe(true);
-    expect(floors).toEqual([80, 70, 35, 35, 35, 35]);
+    expect(floors).toEqual([80, 70, 30, 30, 30, 30]);
   });
 
   test("counts spare minors too", () => {
@@ -25,12 +25,12 @@ describe("raiseAchievableFloors", () => {
     const floors = [0, 0, 0, 0, 0, 0];
     const rose = raiseAchievableFloors(
       floors,
-      [10, 20, 30, 1, 1, 1],
+      [10, 20, 30, 0, 0, 0],
       { major: 1, minor: 1 },
       { major: 2, minor: 3 },
     );
     expect(rose).toBe(true);
-    expect(floors).toEqual([30, 40, 50, 21, 21, 21]);
+    expect(floors).toEqual([30, 40, 50, 20, 20, 20]);
   });
 
   test("clamps each floor at STAT_CAP (200)", () => {
@@ -38,7 +38,7 @@ describe("raiseAchievableFloors", () => {
     // Stat 0 is already 190; +30 spare would be 220 → clamp to 200.
     const rose = raiseAchievableFloors(
       floors,
-      [190, 5, 5, 5, 5, 5],
+      [190, 0, 0, 0, 0, 0],
       { major: 0, minor: 0 },
       { major: 3, minor: 0 },
     );
@@ -77,24 +77,46 @@ describe("raiseAchievableFloors", () => {
     // spare = 1 major = +10. Stat 0: max(100, 30+10=40) → stays 100. Others rise.
     const rose = raiseAchievableFloors(
       floors,
-      [30, 20, 5, 5, 5, 5],
+      [30, 20, 0, 0, 0, 0],
       { major: 0, minor: 0 },
       { major: 1, minor: 0 },
     );
     expect(rose).toBe(true);
-    expect(floors).toEqual([100, 30, 15, 15, 15, 15]);
+    expect(floors).toEqual([100, 30, 10, 10, 10, 10]);
   });
 
-  test("a stat shown at 0 takes no spare — it may be clamped up from below zero", () => {
-    // Weapons is 0 after the clamp but could have been −10 (a −10 fragment): one spare
-    // major lifts −10 only to 0, so 10 would be an unachievable floor.
+  test("a stat below zero climbs back to 0 before the spare counts", () => {
+    // Weapons is −10 before the clamp (shown as 0): one spare major lifts it only to 0.
     const floors = [0, 0, 0, 0, 0, 0];
     raiseAchievableFloors(
       floors,
-      [0, 50, 50, 50, 50, 50],
+      [-10, 50, 50, 50, 50, -4],
       { major: 0, minor: 0 },
       { major: 1, minor: 0 },
     );
-    expect(floors).toEqual([0, 60, 60, 60, 60, 60]);
+    expect(floors).toEqual([0, 60, 60, 60, 60, 6]);
+  });
+});
+
+describe("preClampStats", () => {
+  const lo = (stats: number[], baseStats: number[]) => ({
+    stats,
+    baseStats,
+    tuningBonus: [0, -5, 0, 0, 0, 5],
+    modBonus: [0, 0, 0, 0, 10, 0],
+    artificeBonus: [0, 0, 0, 3, 0, 0],
+  });
+
+  test("a positive stat is exact as recorded", () => {
+    expect(preClampStats(lo([40, 15, 10, 23, 30, 25], [40, 20, 10, 20, 20, 20]), undefined)).toEqual([
+      40, 15, 10, 23, 30, 25,
+    ]);
+  });
+
+  test("a stat shown at 0 is rebuilt from base + fragment + bonuses", () => {
+    // Health: base 3 − 5 tune − 10 fragment = −12; weapons: base 0, no bonus = exactly 0.
+    expect(
+      preClampStats(lo([0, 0, 10, 23, 30, 25], [0, 3, 10, 20, 20, 20]), [0, -10, 0, 0, 0, 0]),
+    ).toEqual([0, -12, 10, 23, 30, 25]);
   });
 });
