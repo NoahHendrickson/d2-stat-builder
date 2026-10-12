@@ -152,7 +152,7 @@ const ModCell = memo(function ModCell({
           )}
           {problem && (
             <span
-              className="bg-destructive absolute -top-1 -left-1 flex size-3.5 items-center justify-center rounded-none text-[9px] leading-none font-bold text-white"
+              className="bg-destructive absolute -top-1 -left-1 flex size-3.5 items-center justify-center rounded-none text-[9px] leading-none font-bold text-white dark:text-black"
               aria-hidden
             >
               !

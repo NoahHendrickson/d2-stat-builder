@@ -167,7 +167,7 @@ function StatModChip({
             "absolute -top-1 -right-1 flex size-3.5 items-center justify-center rounded-none",
             slotted
               ? "bg-positive text-black"
-              : "bg-destructive text-white",
+              : "bg-destructive text-white dark:text-black",
           )}
           aria-hidden
         >

@@ -19,6 +19,8 @@ const defs: Record<string, Record<number, object>> = {
     12: { displayProperties: { name: "Empty Mod Socket" }, plug: { plugCategoryIdentifier: "enhancements.v2_general" } },
     13: { displayProperties: { name: "Weapons Mod", description: "+10" }, plug: { plugCategoryIdentifier: "enhancements.v2_general" } },
     14: { displayProperties: { name: "Default Shader" }, plug: { plugCategoryIdentifier: "shader" } },
+    15: { displayProperties: { name: "Spirit of the Star-Eater" }, plug: { plugCategoryIdentifier: "intrinsics" } },
+    16: { displayProperties: { name: "Spirit of Inmost Light" }, plug: { plugCategoryIdentifier: "intrinsics" } },
     // Tuning: +5 to the tuned stat and −5 to another, or Balanced (+1 to three).
     20: tuning(STAT_HASHES.grenade, STAT_HASHES.weapons),
     21: tuning(STAT_HASHES.grenade, STAT_HASHES.health),
@@ -60,6 +62,16 @@ test("reads live stats, archetype, set bonus, energy, and real plugs", () => {
   expect(details.set).toEqual({ name: "Techsec", perks: [{ count: 2, name: "Overclocked", description: "Faster" }] });
   expect(details.energy).toEqual({ used: 3, capacity: 11 });
   expect(details.plugs.map((p) => p.name)).toEqual(["Weapons Mod"]);
+});
+
+test("keeps both Spirits on an exotic class item", () => {
+  const profile = {
+    itemComponents: { sockets: { data: { a: { sockets: [{ plugHash: 15 }, { plugHash: 16 }] } } } },
+  } as unknown as DestinyProfileResponse;
+  expect(armorDetails(profile, manifest, "a", 1).intrinsics.map((p) => p.name)).toEqual([
+    "Spirit of the Star-Eater",
+    "Spirit of Inmost Light",
+  ]);
 });
 
 describe("tunable", () => {

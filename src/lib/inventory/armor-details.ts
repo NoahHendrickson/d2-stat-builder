@@ -25,8 +25,8 @@ export interface SetPerk {
 export interface ArmorDetails {
   stats: { key: StatKey; value: number }[];
   archetype?: DetailPlug;
-  /** The exotic's (or other intrinsic) perk. */
-  intrinsic?: DetailPlug;
+  /** The exotic's (or other intrinsic) perks — exotic class items roll two Spirits. */
+  intrinsics: DetailPlug[];
   set?: { name: string; perks: SetPerk[] };
   energy?: { used: number; capacity: number };
   /**
@@ -91,6 +91,7 @@ export function armorDetails(
   const stats = STAT_DISPLAY_ORDER.map((key) => ({ key, value: live[STAT_HASHES[key]]?.value ?? 0 }));
   const details: ArmorDetails = {
     stats,
+    intrinsics: [],
     plugs: [],
   };
 
@@ -124,7 +125,7 @@ export function armorDetails(
     const plug = plugInfo(manifest, socket.plugHash);
     if (!plug || isPlaceholder(plug.name)) continue;
     if (category === ARMOR_ARCHETYPE_PLUG_CATEGORY) details.archetype ??= plug;
-    else if (category === INTRINSIC_CATEGORY) details.intrinsic ??= plug;
+    else if (category === INTRINSIC_CATEGORY) details.intrinsics.push(plug);
     else details.plugs.push(plug);
   }
   return details;

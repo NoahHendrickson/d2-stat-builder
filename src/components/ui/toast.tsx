@@ -31,7 +31,9 @@ function ToastViewport({ className, ...props }: ToastPrimitive.Viewport.Props) {
     <ToastPrimitive.Viewport
       data-slot="toast-viewport"
       className={cn(
-        "pointer-events-none fixed inset-x-4 bottom-4 z-50 mx-auto w-auto max-w-sm outline-none",
+        // Clears --app-bottom-inset (the phone Builds bar), the home indicator, and
+        // --apply-card-lift (the apply card, which it would otherwise cover).
+        "pointer-events-none fixed inset-x-4 bottom-[calc(max(var(--app-bottom-inset,0px),env(safe-area-inset-bottom))+1rem+var(--apply-card-lift,0px))] z-50 mx-auto w-auto max-w-sm outline-none",
         className,
       )}
       {...props}

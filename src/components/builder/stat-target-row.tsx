@@ -20,9 +20,13 @@ import {
   type ValueStore,
 } from "@/lib/value-store";
 
-/** Clickable preset markers under each stat slider. */
-const STAT_TARGET_TICKS = [0, 50, 100, 150, 200] as const;
-const STAT_SLIDER_MAX = STAT_TARGET_TICKS[STAT_TARGET_TICKS.length - 1];
+const STAT_SLIDER_MAX = 200;
+/**
+ * Clickable preset markers under each stat slider, centred under the thumb.
+ * The two ends (0 and the max) aren't in here: they sit flush with the row's
+ * edges instead.
+ */
+const STAT_PRESET_TICKS = [50, 100, 150] as const;
 /** Stand-in store for rows without a ceiling overlay (hooks can't be conditional). */
 const NO_CEILINGS = createValueStore<CeilingsView>({ values: null, exact: false });
 
@@ -63,6 +67,47 @@ function StepButton({
   );
 }
 
+/**
+ * One clickable marker under the bar. The caller places it (`style` /
+ * `className`) and sets its hit area's sides (`after:` insets), so the end
+ * ticks can grow theirs outwards only.
+ */
+function Tick({
+  label,
+  aria,
+  active,
+  onClick,
+  className,
+  style,
+}: {
+  label: string;
+  aria: string;
+  active: boolean;
+  onClick: () => void;
+  className: string;
+  style?: React.CSSProperties;
+}) {
+  return (
+    <TooltipLabel label={aria}>
+      <button
+        type="button"
+        onClick={onClick}
+        aria-label={aria}
+        style={style}
+        className={cn(
+          "absolute cursor-pointer text-[10px] leading-4 font-medium tracking-wider uppercase tabular-nums normal:text-xs normal:font-normal normal:tracking-normal normal:normal-case transition-colors after:absolute after:-inset-y-1.5 after:content-[''] focus-visible:outline-1 focus-visible:outline-outline-strong",
+          active
+            ? "text-foreground"
+            : "text-muted-foreground hover:text-foreground",
+          className,
+        )}
+      >
+        {label}
+      </button>
+    </TooltipLabel>
+  );
+}
+
 export const StatTargetRow = memo(function StatTargetRow({
   statKey,
   index,
@@ -96,21 +141,28 @@ export const StatTargetRow = memo(function StatTargetRow({
   // is a lower bound ("81+" — achievable, but possibly more out there, e.g.
   // while a refinement is still probing or its budget expired). Both render
   // "/ n" inline; only the tick label and accessible wording mark the
-  // difference.
+  // difference. Without a ceiling the top tick and "/ n" fall back to 200.
   const ceilingValue = cap ?? undefined;
-  const capText =
+  const maxTick =
     cap === null
-      ? null
+      ? {
+          value: STAT_SLIDER_MAX,
+          srText: null,
+          label: ceilingsView ? "Max" : String(STAT_SLIDER_MAX),
+          aria: `Set ${label} to ${STAT_SLIDER_MAX}`,
+        }
       : ceilingsExact
         ? {
+            value: cap,
             srText: `${label} achievable max: ${cap}`,
-            tickLabel: "Max",
-            tickAria: `Set ${label} to its max (${cap})`,
+            label: "Max",
+            aria: `Set ${label} to its max (${cap})`,
           }
         : {
+            value: cap,
             srText: `${label} achievable: at least ${cap}`,
-            tickLabel: `${cap}+`,
-            tickAria: `Set ${label} to its highest proven value (${cap})`,
+            label: `${cap}+`,
+            aria: `Set ${label} to its highest proven value (${cap})`,
           };
   return (
     <div className="space-y-1">
@@ -175,64 +227,63 @@ export const StatTargetRow = memo(function StatTargetRow({
               <HugeiconsIcon icon={Add01Icon} aria-hidden />
             </StepButton>
           )}
-          {capText && <span className="sr-only">{capText.srText}</span>}
+          {maxTick.srText && (
+            <span className="sr-only">{maxTick.srText}</span>
+          )}
           <span
             className="text-[11px] leading-5 font-medium text-foreground/50 tabular-nums whitespace-nowrap"
             aria-hidden
           >
-            / {cap ?? STAT_SLIDER_MAX}
+            / {maxTick.value}
           </span>
         </div>
       </div>
-      {/* 3px side padding makes room for the bar's frame, which sits 2px + 1px outside the well. */}
-      <div className="min-w-0 px-[3px]">
-        <Slider
-          min={0}
-          max={STAT_SLIDER_MAX}
-          step={1}
-          value={[value]}
-          onValueChange={(v) => onChange(index, Array.isArray(v) ? v[0] : v)}
-          ceiling={ceilingValue}
-          aria-label={`${label} target`}
-          className="cursor-pointer"
-        />
-        <div className="relative mt-0.5 h-4">
-          {STAT_TARGET_TICKS.map((t) => {
-            // Once a ceiling is known, the top tick jumps the target to
-            // that achievable value instead of 200 (labels per capText).
-            const isCeilingTick = t === STAT_SLIDER_MAX && cap !== null;
-            const tickValue = isCeilingTick ? cap : t;
-            const tickLabel = isCeilingTick
-              ? capText!.tickLabel
-              : t === STAT_SLIDER_MAX && ceilingsView
-                ? "Max"
-                : String(t);
-            const tickAria = isCeilingTick
-              ? capText!.tickAria
-              : `Set ${label} to ${t}`;
-            return (
-              <TooltipLabel label={tickAria} key={t}>
-                <button
-                  type="button"
-                  onClick={() => onChange(index, tickValue)}
-                  aria-label={tickAria}
-                  style={{
-                    left: sliderValueLeft(t, 0, STAT_SLIDER_MAX),
-                  }}
-                  className={cn(
-                    // Centered under the thumb (sliderValueLeft is the thumb's center).
-                    "absolute top-0 -translate-x-1/2 cursor-pointer text-[10px] leading-4 font-medium tracking-wider uppercase tabular-nums normal:text-xs normal:font-normal normal:tracking-normal normal:normal-case transition-colors after:absolute after:-inset-x-2 after:-inset-y-1.5 after:content-[''] focus-visible:outline-1 focus-visible:outline-outline-strong",
-                    value === tickValue
-                      ? "text-foreground"
-                      : "text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  {tickLabel}
-                </button>
-              </TooltipLabel>
-            );
-          })}
+      {/* The end ticks sit on this unpadded box, flush with the header's
+          edges: 0 under the glyph, the max under "/ max". */}
+      <div className="relative min-w-0">
+        {/* 3px side padding makes room for the bar's frame, which sits 2px + 1px outside the well. */}
+        <div className="px-[3px]">
+          <Slider
+            min={0}
+            max={STAT_SLIDER_MAX}
+            step={1}
+            value={[value]}
+            onValueChange={(v) => onChange(index, Array.isArray(v) ? v[0] : v)}
+            ceiling={ceilingValue}
+            aria-label={`${label} target`}
+            className="cursor-pointer"
+          />
+          <div className="relative mt-0.5 h-4">
+            {STAT_PRESET_TICKS.map((t) => (
+              <Tick
+                key={t}
+                label={String(t)}
+                aria={`Set ${label} to ${t}`}
+                active={value === t}
+                onClick={() => onChange(index, t)}
+                // Centred under the thumb (sliderValueLeft is the thumb's centre).
+                style={{ left: sliderValueLeft(t, 0, STAT_SLIDER_MAX) }}
+                className="top-0 -translate-x-1/2 after:-inset-x-2"
+              />
+            ))}
+          </div>
         </div>
+        <Tick
+          label="0"
+          aria={`Set ${label} to 0`}
+          active={value === 0}
+          onClick={() => onChange(index, 0)}
+          className="bottom-0 left-0 after:-left-2 after:right-0"
+        />
+        {/* Uppercase tracking leaves 0.05em after the last glyph; the
+            negative margin pulls that past the edge so "MAX" ends flush. */}
+        <Tick
+          label={maxTick.label}
+          aria={maxTick.aria}
+          active={value === maxTick.value}
+          onClick={() => onChange(index, maxTick.value)}
+          className="right-0 bottom-0 -mr-[0.05em] normal:mr-0 after:-right-2 after:left-0"
+        />
       </div>
     </div>
   );

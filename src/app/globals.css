@@ -237,7 +237,9 @@
   --muted-foreground: rgb(255 255 255 / 0.7);
   --accent: rgb(252 252 245 / 7%);
   --accent-foreground: #fcfcf5;
-  --destructive: #e05a50;
+  /* Light enough to read on the lightest dark surface (Slate's blue menus
+     at 3:1); fills under it take dark text, like bg-positive. */
+  --destructive: #ff8f84;
   --border: rgb(252 252 245 / 8%);
   --input: rgb(252 252 245 / 12%);
   --ring: rgb(252 252 245 / 70%);
