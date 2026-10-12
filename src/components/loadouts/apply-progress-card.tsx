@@ -69,7 +69,7 @@ function Cell({ step }: { step: ApplyStep }) {
           </span>
         )}
         {step.status === "fail" && (
-          <span className="bg-destructive absolute -top-0.5 -right-1 flex size-3 items-center justify-center rounded-none text-white">
+          <span className="bg-destructive absolute -top-0.5 -right-1 flex size-3 items-center justify-center rounded-none text-white dark:text-black">
             <HugeiconsIcon icon={Cancel01Icon} strokeWidth={2} className="size-2" aria-hidden />
           </span>
         )}
