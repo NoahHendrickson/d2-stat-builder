@@ -1,16 +1,19 @@
 // Turn one of the game's own loadout slots (profile component 206) into a saved
 // loadout: the subclass with its abilities / aspects / fragments, the weapons, the
-// armor, and the armor mods the slot puts on each piece.
+// armor, the armor mods the slot puts on each piece, and the artifact with its perks.
 //
 // Runtime imports are relative so the module runs under vitest.
-import type { ArmorPiece } from "../armory/normalize";
-import { ARMOR_BUCKETS, ARMOR_SLOTS, plugKindForCategory, type StatArray } from "../armory/stats";
+import { ARTIFACT_BUCKET, artifactPerkSockets } from "../armory/artifact-items";
+import type { ArmorPiece, ArmorSocket } from "../armory/normalize";
+import { ARMOR_BUCKETS, ARMOR_SLOTS, plugKindForCategory } from "../armory/stats";
 import { WEAPON_BUCKETS, WEAPON_SLOTS, type LoadoutWeapon } from "../armory/weapons";
 import type { InGameLoadoutItem, InGameLoadoutSlot } from "../bungie/ingame-loadouts";
-import type { DimLoadoutItem } from "../dim/loadout-link";
+import { ASSUME_MASTERWORK_ALL, type DimLoadoutItem } from "../dim/loadout-link";
 import { subclassFromItemHash } from "../dim/subclasses";
 import type { Manifest } from "../manifest/load";
-import { sumEditorStats, withEditorTotals } from "./editor-stats";
+import { loadoutPower } from "../optimizer/power";
+import { optimizerFromEditorTotals, sumEditorStats } from "./editor-stats";
+import { isPlaceholderPlug } from "./mod-options";
 import { placementToMods } from "./mod-placement";
 import { selectedSubclassPlugs, subclassOptions } from "./subclass";
 import {
@@ -20,13 +23,25 @@ import {
   type SavedLoadoutData,
 } from "./types";
 
-/** dim-api AssumeArmorMasterwork.All — what every other saved loadout here uses. */
-const ASSUME_MASTERWORK_ALL = 3;
-
 /** What a slot is saved as unless the player renames it: the name the game shows. */
 export function inGameImportName(slot: InGameLoadoutSlot, names: { hash: number; name: string }[]): string {
   const name = names.find((n) => n.hash === slot.nameHash)?.name;
   return (name || `Loadout ${slot.index + 1}`).slice(0, MAX_NAME_LENGTH);
+}
+
+/**
+ * Where an item sits when a loadout's gear is listed: subclass, then weapons, then
+ * armor, each in slot order, then the artifact; anything else last.
+ */
+export function slotItemOrder(manifest: Manifest, itemHash: number): number {
+  if (subclassFromItemHash(itemHash)) return 0;
+  const bucket = manifest.def("DestinyInventoryItemDefinition", itemHash)?.inventory?.bucketTypeHash ?? 0;
+  const weapon = WEAPON_BUCKETS[bucket];
+  if (weapon) return 1 + WEAPON_SLOTS.indexOf(weapon);
+  const armor = ARMOR_BUCKETS[bucket as keyof typeof ARMOR_BUCKETS];
+  if (armor) return 1 + WEAPON_SLOTS.length + ARMOR_SLOTS.indexOf(armor);
+  if (bucket === ARTIFACT_BUCKET) return 1 + WEAPON_SLOTS.length + ARMOR_SLOTS.length;
+  return 99;
 }
 
 /**
@@ -52,12 +67,42 @@ function subclassRef(item: InGameLoadoutItem, itemHash: number, classType: numbe
   return Object.keys(socketOverrides).length > 0 ? { hash: itemHash, socketOverrides } : { hash: itemHash };
 }
 
-/** The mods the slot puts on a piece, by socket — empty plugs and cosmetics left out. */
+/** The artifact with the perks the slot puts in its perk sockets (the editor's shape). */
+function artifactRef(item: InGameLoadoutItem, itemHash: number, manifest: Manifest): DimLoadoutItem {
+  const socketOverrides: Record<number, number> = {};
+  for (const socket of artifactPerkSockets(manifest, itemHash)) {
+    const hash = item.plugs?.[socket.index];
+    if (hash !== undefined && socket.options.includes(hash)) socketOverrides[socket.index] = hash;
+  }
+  return { id: item.itemInstanceId, hash: itemHash, socketOverrides };
+}
+
+/** Is `hash` this socket's empty plug ("Empty Mod Socket" and the like)? */
+function isEmptyPlug(socket: ArmorSocket, hash: number, manifest: Manifest): boolean {
+  if (hash === socket.emptyPlugHash) return true;
+  // Not every socket definition names its empty plug; those are known by doing nothing.
+  const def = manifest.def("DestinyInventoryItemDefinition", hash);
+  return !!def && isPlaceholderPlug(def);
+}
+
+/**
+ * The mods the slot puts on a piece, by socket. A socket the slot leaves alone keeps
+ * what is socketed now, the way equipping the slot in-game does. An empty mod socket is
+ * left out — Apply clears energy-costing leftovers anyway — but an empty tuning or
+ * artifice socket is kept as its empty plug: Apply leaves those 0-cost plugs in place
+ * unless the loadout names the socket. Cosmetics (shaders, ornaments) are left out.
+ */
 function piecePlacement(item: InGameLoadoutItem, piece: ArmorPiece, manifest: Manifest): Record<number, number> {
   const out: Record<number, number> = {};
   for (const socket of piece.armorSockets ?? []) {
-    const hash = item.plugs?.[socket.index];
-    if (hash === undefined || hash === socket.emptyPlugHash) continue;
+    const set = item.plugs?.[socket.index];
+    const hash = set ?? socket.plugHash;
+    if (hash === undefined) continue;
+    if (isEmptyPlug(socket, hash, manifest)) {
+      const zeroCost = socket.kind === "tuning" || socket.kind === "artifice";
+      if (zeroCost && set !== undefined && hash === socket.emptyPlugHash) out[socket.index] = hash;
+      continue;
+    }
     const category = manifest.def("DestinyInventoryItemDefinition", hash)?.plug?.plugCategoryIdentifier;
     if (category && plugKindForCategory(category)) out[socket.index] = hash;
   }
@@ -91,6 +136,7 @@ export function inGameSlotToLoadout({
   const bucketOf = (hash: number) =>
     manifest.def("DestinyInventoryItemDefinition", hash)?.inventory?.bucketTypeHash ?? 0;
   let subclass: DimLoadoutItem | undefined;
+  let artifact: DimLoadoutItem | undefined;
   const weapons: DimLoadoutItem[] = [];
   const armor: { ref: DimLoadoutItem; piece?: ArmorPiece }[] = [];
   const placement: ModPlacement = {};
@@ -103,6 +149,10 @@ export function inGameSlotToLoadout({
       continue;
     }
     const bucket = bucketOf(hash);
+    if (bucket === ARTIFACT_BUCKET) {
+      artifact = artifactRef(item, hash, manifest);
+      continue;
+    }
     const ref = { id: item.itemInstanceId, hash };
     if (WEAPON_BUCKETS[bucket] || weaponMap.has(item.itemInstanceId)) {
       weapons.push(ref);
@@ -118,16 +168,9 @@ export function inGameSlotToLoadout({
   }
 
   // The game's own order varies; saved loadouts list armor and weapons in slot order.
-  const armorOrder = (a: (typeof armor)[number]) => {
-    const slot = a.piece?.slot ?? ARMOR_BUCKETS[bucketOf(a.ref.hash) as keyof typeof ARMOR_BUCKETS];
-    return slot ? ARMOR_SLOTS.indexOf(slot) : ARMOR_SLOTS.length;
-  };
-  armor.sort((a, b) => armorOrder(a) - armorOrder(b));
-  const weaponOrder = (ref: DimLoadoutItem) => {
-    const slot = weaponMap.get(ref.id ?? "")?.slot ?? WEAPON_BUCKETS[bucketOf(ref.hash)];
-    return slot ? WEAPON_SLOTS.indexOf(slot) : WEAPON_SLOTS.length;
-  };
-  weapons.sort((a, b) => weaponOrder(a) - weaponOrder(b));
+  const order = (ref: DimLoadoutItem) => slotItemOrder(manifest, ref.hash);
+  armor.sort((a, b) => order(a.ref) - order(b.ref));
+  weapons.sort((a, b) => order(a) - order(b));
 
   const pieces = armor.flatMap((a) => (a.piece ? [a.piece] : []));
   const exotic = pieces.find((p) => p.isExotic);
@@ -137,7 +180,12 @@ export function inGameSlotToLoadout({
       id: crypto.randomUUID(),
       name: name.trim().slice(0, MAX_NAME_LENGTH),
       classType,
-      equipped: [...armor.map((a) => a.ref), ...weapons, ...(subclass ? [subclass] : [])],
+      equipped: [
+        ...armor.map((a) => a.ref),
+        ...weapons,
+        ...(artifact ? [artifact] : []),
+        ...(subclass ? [subclass] : []),
+      ],
       unequipped: [],
       parameters: {
         mods: placementToMods(placement, pieces),
@@ -158,32 +206,16 @@ export function inGameSlotToLoadout({
   const totals = sumEditorStats(pieces, placement, fragmentHashes, classType, (hash) =>
     manifest.def("DestinyInventoryItemDefinition", hash)?.investmentStats,
   );
-  const baseStats = [0, 0, 0, 0, 0, 0] as StatArray;
-  for (const p of pieces) for (let i = 0; i < 6; i++) baseStats[i] += p.stats[i];
   // The game averages power over everything equipped; the weapons count when known.
-  const powers = [
-    ...pieces.map((p) => p.power),
-    ...weapons.map((w) => weaponMap.get(w.id ?? "")?.power),
-  ].filter((p): p is number => p !== undefined);
-  const none = pieces.map(() => null);
-  return withEditorTotals(
-    {
-      ...data,
-      optimizer: {
-        pieceIds: pieces.map((p) => p.instanceId),
-        baseStats: baseStats.map((v) => Math.min(200, v)) as StatArray,
-        stats: totals.stats,
-        tuningBonus: [0, 0, 0, 0, 0, 0],
-        tuning: none,
-        modBonus: [0, 0, 0, 0, 0, 0],
-        modsUsed: { major: 0, minor: 0 },
-        artificeBonus: [0, 0, 0, 0, 0, 0],
-        artifice: none,
-        total: totals.total,
-        exotic: !!exotic,
-        power: powers.length > 0 ? Math.floor(powers.reduce((a, b) => a + b, 0) / powers.length) : null,
-      },
-    },
-    totals,
-  );
+  const weaponPowers = weapons.flatMap((w) => {
+    const power = weaponMap.get(w.id ?? "")?.power;
+    return power === undefined ? [] : [power];
+  });
+  return {
+    ...data,
+    optimizer: optimizerFromEditorTotals(pieces, totals, {
+      exotic: !!exotic,
+      power: loadoutPower(pieces, weaponPowers),
+    }),
+  };
 }

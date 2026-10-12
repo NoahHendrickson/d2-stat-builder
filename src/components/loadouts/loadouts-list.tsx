@@ -430,7 +430,8 @@ export function LoadoutsList({
     [createMutate, queryClient],
   );
 
-  // One request per loadout, in slot order, so they land in the list in that order.
+  // One request per loadout, last slot first: the list shows the newest on top, so the
+  // first slot lands on top and the rest follow in slot order.
   const createAsync = create.mutateAsync;
   const importInGame = async (datas: SavedLoadoutData[]) => {
     const pending = toast.loading(
@@ -438,7 +439,7 @@ export function LoadoutsList({
     );
     let saved = 0;
     try {
-      for (const data of datas) {
+      for (const data of [...datas].reverse()) {
         await createAsync(data);
         saved++;
       }

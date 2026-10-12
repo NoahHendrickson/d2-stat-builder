@@ -6,7 +6,7 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { Cancel01Icon, Loading03Icon } from "@hugeicons/core-free-icons";
 import type { ArmoryCharacter } from "@/lib/armory/fetch";
 import type { ArmorPiece } from "@/lib/armory/normalize";
-import { characterForClass } from "@/lib/armory/character-for-class";
+import { characterForClass, mostRecentCharacter } from "@/lib/armory/character-for-class";
 import { CLASS_NAMES } from "@/lib/armory/stats";
 import type { Manifest } from "@/lib/manifest/load";
 import type { InGameLoadoutIdentifiers, InGameLoadoutSlot } from "@/lib/bungie/ingame-loadouts";
@@ -213,10 +213,7 @@ export function ActivitySetEditor({
   const [name, setName] = useState(initial?.name ?? "");
   const [classType, setClassType] = useState(
     () =>
-      initial?.classType ??
-      [...characters].sort((a, b) => b.dateLastPlayed.localeCompare(a.dateLastPlayed))[0]
-        ?.classType ??
-      0,
+      initial?.classType ?? mostRecentCharacter(characters)?.classType ?? 0,
   );
   // slot index → loadout id
   const [assigned, setAssigned] = useState<ReadonlyMap<number, string>>(

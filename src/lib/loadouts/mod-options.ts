@@ -37,16 +37,25 @@ export function isExcludedModName(name: string): boolean {
   return n.includes("curse of riven") || n.includes("riven's curse");
 }
 
+/**
+ * "Locked Armor Mod" / "Empty Mod Socket" placeholders sit in every plug set. They are
+ * the only entries that neither grant a perk nor move a stat.
+ */
+export function isPlaceholderPlug(def: {
+  perks?: unknown[];
+  investmentStats?: { statTypeHash: number }[];
+}): boolean {
+  return (
+    (def.perks?.length ?? 0) === 0 &&
+    !(def.investmentStats ?? []).some((s) => s.statTypeHash !== ENERGY_COST_STAT_HASH)
+  );
+}
+
 function optionFor(manifest: Manifest, hash: number): ModOption | undefined {
   const def = manifest.def("DestinyInventoryItemDefinition", hash);
   if (!def || def.redacted || !def.displayProperties?.name || def.plug?.isDummyPlug) return undefined;
   if (isExcludedModName(def.displayProperties.name)) return undefined;
-  // "Locked Armor Mod" / "Empty Mod Socket" placeholders sit in every plug set. They
-  // are the only entries that neither grant a perk nor move a stat.
-  const doesSomething =
-    (def.perks?.length ?? 0) > 0 ||
-    (def.investmentStats ?? []).some((s) => s.statTypeHash !== ENERGY_COST_STAT_HASH);
-  if (!doesSomething) return undefined;
+  if (isPlaceholderPlug(def)) return undefined;
   const rules = def.plug?.insertionRules ?? [];
   return {
     hash,

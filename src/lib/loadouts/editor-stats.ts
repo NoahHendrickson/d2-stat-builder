@@ -6,7 +6,7 @@ import {
   isBalancedTuningPlug,
   type StatArray,
 } from "../armory/stats";
-import type { AppliedTuning } from "../optimizer/types";
+import type { AppliedTuning, OptimizerLoadout } from "../optimizer/types";
 import type { ModPlacement, SavedLoadoutData } from "./types";
 
 type InvestmentStat = {
@@ -174,6 +174,25 @@ export function sumEditorStats(
   };
 }
 
+/** The parts of a loadout's displayed totals the editor computes, for `pieceIds`. */
+function totalsFields(
+  totals: EditorTotals,
+  pieceIds: readonly string[],
+): Partial<OptimizerLoadout> {
+  const { breakdown } = totals;
+  if (!breakdown) return { stats: totals.stats, total: totals.total };
+  return {
+    stats: totals.stats,
+    total: totals.total,
+    modBonus: breakdown.modBonus,
+    tuningBonus: breakdown.tuningBonus,
+    artificeBonus: breakdown.artificeBonus,
+    modsUsed: breakdown.modsUsed,
+    tuning: pieceIds.map((id) => breakdown.piece[id]?.tuning ?? null),
+    artifice: pieceIds.map((id) => breakdown.piece[id]?.artifice ?? null),
+  };
+}
+
 /**
  * The displayed totals of a saved loadout are what the editor last showed.
  * When a breakdown is present, Mods/Tuning/Artifice are rebuilt from placement
@@ -184,23 +203,39 @@ export function withEditorTotals(
   totals: EditorTotals | undefined,
 ): SavedLoadoutData {
   if (!totals || !data.optimizer) return data;
-  const { breakdown } = totals;
-  const optimizer = {
-    ...data.optimizer,
-    stats: totals.stats,
-    total: totals.total,
+  return {
+    ...data,
+    optimizer: { ...data.optimizer, ...totalsFields(totals, data.optimizer.pieceIds) },
   };
-  if (breakdown) {
-    optimizer.modBonus = breakdown.modBonus;
-    optimizer.tuningBonus = breakdown.tuningBonus;
-    optimizer.artificeBonus = breakdown.artificeBonus;
-    optimizer.modsUsed = breakdown.modsUsed;
-    optimizer.tuning = data.optimizer.pieceIds.map(
-      (id) => breakdown.piece[id]?.tuning ?? null,
-    );
-    optimizer.artifice = data.optimizer.pieceIds.map(
-      (id) => breakdown.piece[id]?.artifice ?? null,
-    );
-  }
-  return { ...data, optimizer };
+}
+
+/**
+ * Displayed totals for a loadout built from live armor rather than saved from an
+ * optimizer result: the five `pieces` in slot order and the editor's `totals` over
+ * them. Base stats are the pieces' stats as the optimizer reads them, capped at 200.
+ */
+export function optimizerFromEditorTotals(
+  pieces: readonly EditorStatPiece[],
+  totals: EditorTotals,
+  { exotic, power }: { exotic: boolean; power: number | null },
+): OptimizerLoadout {
+  const pieceIds = pieces.map((p) => p.instanceId);
+  const baseStats = empty();
+  for (const p of pieces) addStats(baseStats, p.stats);
+  const none = pieceIds.map(() => null);
+  return {
+    pieceIds,
+    baseStats: baseStats.map((v) => Math.min(200, v)) as StatArray,
+    stats: totals.stats,
+    tuningBonus: empty(),
+    tuning: none,
+    modBonus: empty(),
+    modsUsed: { major: 0, minor: 0 },
+    artificeBonus: empty(),
+    artifice: none,
+    total: totals.total,
+    exotic,
+    power,
+    ...totalsFields(totals, pieceIds),
+  };
 }

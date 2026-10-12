@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import { STAT_HASHES } from "../armory/stats";
-import { sumEditorStats, withEditorTotals } from "./editor-stats";
+import { optimizerFromEditorTotals, sumEditorStats, withEditorTotals } from "./editor-stats";
 import type { SavedLoadoutData } from "./types";
 
 const H = STAT_HASHES;
@@ -196,4 +196,44 @@ test("withEditorTotals replaces headline totals and the breakdown when present",
   expect(withEditorTotals(data, undefined)).toBe(data);
   const noOptimizer: SavedLoadoutData = { version: data.version, loadout: data.loadout };
   expect(withEditorTotals(noOptimizer, { stats: zero as never, total: 0 })).toBe(noOptimizer);
+});
+
+test("optimizerFromEditorTotals builds the display totals from live pieces", () => {
+  const zero = [0, 0, 0, 0, 0, 0] as never;
+  const pieces = ["helm", "arms"].map((instanceId) => ({
+    instanceId,
+    stats: [120, 0, 0, 0, 0, 0] as [number, number, number, number, number, number],
+    baseStats: [120, 0, 0, 0, 0, 0] as [number, number, number, number, number, number],
+  }));
+  const optimizer = optimizerFromEditorTotals(
+    pieces,
+    {
+      stats: [200, 10, 0, 0, 0, 0],
+      total: 210,
+      breakdown: {
+        modBonus: [0, 10, 0, 0, 0, 0],
+        tuningBonus: zero,
+        artificeBonus: zero,
+        modsUsed: { major: 1, minor: 0 },
+        piece: { arms: { tuning: { kind: "balanced" }, artifice: 1 } },
+      },
+    },
+    { exotic: true, power: 400 },
+  );
+  expect(optimizer).toMatchObject({
+    pieceIds: ["helm", "arms"],
+    baseStats: [200, 0, 0, 0, 0, 0],
+    stats: [200, 10, 0, 0, 0, 0],
+    total: 210,
+    modBonus: [0, 10, 0, 0, 0, 0],
+    modsUsed: { major: 1, minor: 0 },
+    tuning: [null, { kind: "balanced" }],
+    artifice: [null, 1],
+    exotic: true,
+    power: 400,
+  });
+  // Pieces without socket data have no breakdown: the rows stay at zero.
+  const bare = optimizerFromEditorTotals(pieces, { stats: zero, total: 0 }, { exotic: false, power: null });
+  expect(bare.modsUsed).toEqual({ major: 0, minor: 0 });
+  expect(bare.tuning).toEqual([null, null]);
 });
