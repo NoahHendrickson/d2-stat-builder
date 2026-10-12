@@ -5,10 +5,12 @@ import {
   Fragment,
   memo,
   useCallback,
+  useEffect,
   useMemo,
   useState,
   type ReactNode,
 } from "react";
+import { displayedBuildsStore } from "@/lib/build-usage/displayed-builds";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
   ArrowDown01Icon,
@@ -822,6 +824,9 @@ export function BuildResults({
     () => sortLoadouts(result.loadouts, sort, costOf),
     [result.loadouts, sort, costOf],
   );
+  const displayed = useMemo(() => sortedLoadouts.slice(0, MAX_SHOWN), [sortedLoadouts]);
+  // What's on screen, for the armor usage history (see BuildUsageRecorder).
+  useEffect(() => displayedBuildsStore.set({ result, loadouts: displayed }), [result, displayed]);
   // New results cascade in; a re-sort only reorders (see useEntrance).
   const entering = useEntrance(result.loadouts);
   const status = (
@@ -861,7 +866,7 @@ export function BuildResults({
     <div className="space-y-3">
       {status}
       <div className={cn(BUILD_LIST_WELL_CLASS, entering && "d2-stagger")}>
-        {sortedLoadouts.slice(0, MAX_SHOWN).map((loadout) => (
+        {displayed.map((loadout) => (
           <BuildRow
             key={loadout.pieceIds.join("|")}
             loadout={loadout}

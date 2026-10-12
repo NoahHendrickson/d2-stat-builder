@@ -28,7 +28,7 @@ import {
 } from "@/lib/armor-table/filters";
 import {
   activeSortMode,
-  isStatSortKey,
+  isNumericSortKey,
   preferredAsc,
   type SortMode,
 } from "@/lib/armor-table/sort";
@@ -95,7 +95,7 @@ export const SortMenu = memo(function SortMenu({
   const mode = activeSortMode(sort, sortKey);
   const asc = active ? sortLevelAsc(level!) : preferredAsc(sortKey);
   const arrow = asc ? ArrowUp02Icon : ArrowDown02Icon;
-  const numeric = isStatSortKey(sortKey);
+  const numeric = isNumericSortKey(sortKey);
   const canCustom = isCustomOrderColumn(sortKey);
   const primary = sort[0];
   const isPrimary = primary?.key === sortKey;

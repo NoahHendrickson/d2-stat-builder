@@ -111,7 +111,8 @@ export type ColumnKey =
   | "archetype"
   | "tertiary"
   | "tuned"
-  | "set";
+  | "set"
+  | "builds";
 
 /** Stat columns are namespaced ("stat-class") so they can't collide with the class column. */
 export type SortKey = ColumnKey | `stat-${StatKey}`;
@@ -155,6 +156,7 @@ const COLUMN_KEYS: ColumnKey[] = [
   "tertiary",
   "tuned",
   "set",
+  "builds",
 ];
 
 export const SORT_KEYS = new Set<string>([

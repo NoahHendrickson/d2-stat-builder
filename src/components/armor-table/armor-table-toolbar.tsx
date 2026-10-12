@@ -28,6 +28,7 @@ import {
   TUNING_FILTER_OPTIONS,
 } from "@/components/armor-table/filter-cascade-menu";
 import { FilterMultiselect } from "@/components/armor-table/filter-multiselect";
+import { CleanupButton, type CleanupButtonProps } from "@/components/armor-table/cleanup-button";
 import { SetFilterMenu } from "@/components/set-menu";
 
 const CLASS_OPTIONS: FilterOption<number>[] = [0, 1, 2].map((c) => ({
@@ -66,7 +67,7 @@ function DuplicatesButton({
   onMatchChange: (match: DuplicateMatch) => void;
 }) {
   return (
-    <div className="ml-auto flex shrink-0">
+    <div className="flex shrink-0">
       <Button
         type="button"
         variant="outline"
@@ -137,6 +138,8 @@ export const ArmorTableToolbar = memo(function ArmorTableToolbar({
   onToggleDuplicates,
   duplicateMatch,
   onDuplicateMatchChange,
+  cleanupGroups,
+  cleanup,
   filtersActive,
   onClearFilters,
 }: {
@@ -160,9 +163,14 @@ export const ArmorTableToolbar = memo(function ArmorTableToolbar({
   duplicateMatch: DuplicateMatch;
   /** Changes what twins must share, and shows duplicates. */
   onDuplicateMatchChange: (match: DuplicateMatch) => void;
+  /** Set while the table shows Cleanup: how many class + slot groups it found. */
+  cleanupGroups?: number;
+  cleanup: Omit<CleanupButtonProps, "on">;
   filtersActive: boolean;
   onClearFilters: () => void;
 }) {
+  // Duplicates and Cleanup are never on together; whichever is shows its groups.
+  const groupCount = duplicateGroups ?? cleanupGroups;
   const cascadeMenuProps = {
     facets,
     onFacetChange,
@@ -184,8 +192,7 @@ export const ArmorTableToolbar = memo(function ArmorTableToolbar({
         aria-label={`${filteredCount} results`}
       >
         {filteredCount} {filteredCount === 1 ? "piece" : "pieces"}
-        {duplicateGroups !== undefined &&
-          ` in ${duplicateGroups} ${duplicateGroups === 1 ? "group" : "groups"}`}
+        {groupCount !== undefined && ` in ${groupCount} ${groupCount === 1 ? "group" : "groups"}`}
       </span>
       <div className="relative h-8 min-w-0 flex-1 @[58rem]/toolbar:w-[272px] @[58rem]/toolbar:flex-none">
         <HugeiconsIcon icon={Search01Icon}
@@ -273,12 +280,15 @@ export const ArmorTableToolbar = memo(function ArmorTableToolbar({
       <div className="h-8 shrink-0 @[58rem]/toolbar:hidden">
         <FilterCascadeMenu {...cascadeMenuProps} toggleSubmenusOnClick />
       </div>
-      <DuplicatesButton
-        on={duplicateGroups !== undefined}
-        match={duplicateMatch}
-        onToggle={onToggleDuplicates}
-        onMatchChange={onDuplicateMatchChange}
-      />
+      <div className="ml-auto flex shrink-0 items-center gap-2">
+        <CleanupButton on={cleanupGroups !== undefined} {...cleanup} />
+        <DuplicatesButton
+          on={duplicateGroups !== undefined}
+          match={duplicateMatch}
+          onToggle={onToggleDuplicates}
+          onMatchChange={onDuplicateMatchChange}
+        />
+      </div>
       {filtersActive && (
         <Button
           type="button"

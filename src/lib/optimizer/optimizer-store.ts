@@ -34,12 +34,14 @@ export type CeilingsView = {
  * its targets/fragments from `origin`, never from the live builder state — and the two
  * can never drift apart because they only ever change together. `key` is the query's
  * serialized identity, so a re-run of the same query can refresh `origin` in place
- * without ever touching a result that belongs to a different query.
+ * without ever touching a result that belongs to a different query. `input` is the
+ * query itself, for readers that need its pool or constraints (the armor usage history).
  */
 export interface ShownResult {
   result: OptimizerOutput;
   origin: QueryOrigin;
   key: string;
+  input: OptimizerInput;
 }
 
 export interface OptimizerSnapshot {
@@ -171,6 +173,7 @@ export function createOptimizerStore(
     result,
     origin: inFlightOrigin as QueryOrigin,
     key: inFlightKey as string,
+    input: inFlightInput as OptimizerInput,
   });
 
   const getWorker = () => {
