@@ -16,7 +16,12 @@ const geistSans = Geist({
 });
 
 export const metadata: Metadata = {
-  title: "D2 Conflux",
+  title: {
+    default: "D2 Conflux",
+    // Browser tab: "D2 Conflux - Items". The / page sets its full title itself, since a
+    // layout's template only applies to child segments.
+    template: "D2 Conflux - %s",
+  },
   description:
     "Sign in with Bungie, set your six Armor 3.0 stat targets, set bonuses, fragments, and mods, and find which of your armor pieces to equip.",
 };
