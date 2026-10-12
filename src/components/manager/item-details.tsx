@@ -28,7 +28,7 @@ import {
   type WeaponRoll,
 } from "@/lib/inventory/weapon-details";
 import { useManifest } from "@/lib/manifest/use-manifest";
-import { catalogStatCurves, catalogWeaponFor } from "@/lib/weapons/catalog";
+import { catalogWeaponFor } from "@/lib/weapons/catalog";
 import { clarityLines, type ClarityMap } from "@/lib/weapons/clarity";
 import { weaponDisplayStats } from "@/lib/weapons/display-stats";
 import { WEAPON_STAT_NUMBERS } from "@/lib/weapons/stat-order";
@@ -254,17 +254,13 @@ function WeaponRollView({
   const queryClient = useQueryClient();
   const manifestStatus = useManifest();
   const manifest = manifestStatus.state === "ready" ? manifestStatus.manifest : undefined;
-  const catalog = useWeaponCatalog().data;
   const roll = useMemo(
     () => (profile.data && manifest ? weaponRoll(profile.data, manifest, instanceId) : undefined),
     [profile.data, manifest, instanceId],
   );
   const stats = useMemo(
-    () =>
-      profile.data && manifest
-        ? weaponStats(profile.data, manifest, instanceId, catalogStatCurves(catalog, item))
-        : [],
-    [profile.data, manifest, instanceId, catalog, item],
+    () => (profile.data && manifest ? weaponStats(profile.data, manifest, instanceId) : []),
+    [profile.data, manifest, instanceId],
   );
   if (!roll) return null;
   return (

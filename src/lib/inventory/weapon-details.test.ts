@@ -166,11 +166,11 @@ test("adds a tiered weapon's full-masterwork bonus that the live stats leave out
         },
       },
     }) as unknown as DestinyProfileResponse;
-  const read = (profile: DestinyProfileResponse, curves?: Parameters<typeof weaponStats>[3]) =>
-    Object.fromEntries(weaponStats(profile, tieredManifest, "w", curves).map((s) => [s.name, s.value]));
+  const read = (profile: DestinyProfileResponse) =>
+    Object.fromEntries(weaponStats(profile, tieredManifest, "w").map((s) => [s.name, s.value]));
 
   // +5 on each conditional stat, capped at 100; Aim Assistance isn't listed; a time
-  // without its curve stays put.
+  // stays at the live value.
   expect(read(weapon(61, 5))).toEqual({
     Range: 71,
     Stability: 100,
@@ -178,19 +178,15 @@ test("adds a tiered weapon's full-masterwork bonus that the live stats leave out
     "Aim Assistance": 74,
     "Draw Time": 600,
   });
-  // With the curve, a time moves the way the game interpolates it (833ms → 500ms).
-  expect(read(weapon(61, 5), { "Draw Time": { max: 100, points: [[0, 833], [100, 500]] } })["Draw Time"]).toBe(583);
   // Part-masterworked or untiered: nothing to add.
   expect(read(weapon(62, 5)).Range).toBe(66);
   expect(read(weapon(61, 0)).Range).toBe(66);
 });
 
 test("leaves a bottomed-out stat and non-bar stats alone when adding investment", () => {
-  const linear = { max: 100, points: [[0, 0], [100, 100]] as [number, number][] };
   // Disorienting Grenades take Blast Radius to -100: it reads 0, and +5 doesn't move it.
-  expect(addInvestment("Blast Radius", 0, 5, linear)).toBe(0);
   expect(addInvestment("Blast Radius", 0, 5)).toBe(0);
-  // Without a curve, only the game's 0–100 bars move: Cooling Efficiency reads 320.
+  // Only the game's 0–100 bars move: Cooling Efficiency reads 320.
   expect(addInvestment("Cooling Efficiency", 320, 5)).toBe(320);
   expect(addInvestment("Charge Time", 533, 5)).toBe(533);
   expect(addInvestment("Range", 97, 5)).toBe(100);

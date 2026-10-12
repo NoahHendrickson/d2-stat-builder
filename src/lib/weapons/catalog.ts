@@ -18,7 +18,7 @@ import {
   type WeaponFilters,
   type WeaponSort,
 } from "./search";
-import type { StatCurve, WeaponIndex, WeaponSummary } from "./types";
+import type { WeaponIndex, WeaponSummary } from "./types";
 
 const collator = new Intl.Collator();
 
@@ -126,15 +126,4 @@ export function catalogWeaponFor(
     catalog?.weapons.find((w) => w.hash === item.itemHash) ??
     catalog?.weapons.find((w) => w.name === item.name)
   );
-}
-
-/** An owned weapon's display curves by stat name, when the catalog knows it. */
-export function catalogStatCurves(
-  catalog: WeaponCatalog | undefined,
-  item: { itemHash: number; name: string },
-): Record<string, StatCurve> | undefined {
-  const weapon = catalogWeaponFor(catalog, item);
-  return weapon?.statGroupHash != null
-    ? catalog?.statCurves?.[String(weapon.statGroupHash)]
-    : undefined;
 }
