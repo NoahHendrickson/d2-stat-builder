@@ -58,7 +58,10 @@ export function BuildsMobileBar({
   const statusLabel = getBuildsStatusLabel({ ready, showLoading, result });
 
   return (
-    <div className="pointer-events-none fixed inset-x-0 bottom-0 z-40 lg:hidden">
+    <div
+      data-slot="builds-mobile-bar"
+      className="pointer-events-none fixed inset-x-0 bottom-0 z-40 lg:hidden"
+    >
       <button
         type="button"
         onClick={onOpen}
