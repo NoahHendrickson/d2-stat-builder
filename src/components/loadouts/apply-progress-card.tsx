@@ -86,6 +86,22 @@ function titleFor(name: string, finished: ApplyProgressState["finished"]) {
   return `Applying ${name}`;
 }
 
+/**
+ * Publishes the card's height plus a 12px gap on <html> as --apply-card-lift, so the
+ * toast stack sits above the card instead of over its Cancel button and step grid.
+ */
+function publishCardLift(el: HTMLDivElement) {
+  const root = document.documentElement;
+  const observer = new ResizeObserver(([entry]) => {
+    root.style.setProperty("--apply-card-lift", `${entry.borderBoxSize[0].blockSize + 12}px`);
+  });
+  observer.observe(el);
+  return () => {
+    observer.disconnect();
+    root.style.removeProperty("--apply-card-lift");
+  };
+}
+
 /** Apply-loadout progress — floats on the main column so it outlives a collapsed sidebar / closed drawer. */
 export function ApplyProgressSection() {
   const state = useSyncExternalStore(subscribeApplyProgress, getApplyProgress, () => null);
@@ -103,6 +119,7 @@ export function ApplyProgressSection() {
 
   return (
     <div
+      ref={publishCardLift}
       role="status"
       aria-live="polite"
       aria-label={title}
