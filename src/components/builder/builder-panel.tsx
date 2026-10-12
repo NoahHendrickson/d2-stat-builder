@@ -41,11 +41,13 @@ import {
   inDefaultOptimizerPool,
 } from "@/lib/armory/optimizer-pool";
 import {
+  ARMOR_SLOTS,
   BALANCED_TUNING_PLUG_HASH,
   CLASS_NAMES,
   STAT_DISPLAY_ORDER,
   STAT_HASHES,
   STAT_ORDER,
+  type ArmorSlot,
   type StatIconMap,
 } from "@/lib/armory/stats";
 import { itemWatermark } from "@/lib/armory/normalize";
@@ -401,14 +403,22 @@ export function BuilderPanel({
   // Dedupe by name — the same exotic can exist in multiple versions (Armor 2.0 vs 3.0)
   // with different hashes; the optimizer picks whichever version builds best.
   // Exotic class items are always listed (from the manifest) even when unowned.
+  // Ordered by slot (helmet, arms, chest, legs, class item), then name.
   const exotics = useMemo(() => {
     const map = new Map<
       string,
-      { hashes: number[]; icon?: string; watermark?: string; isTier5?: boolean }
+      {
+        slot: ArmorSlot;
+        hashes: number[];
+        icon?: string;
+        watermark?: string;
+        isTier5?: boolean;
+      }
     >();
     for (const p of pool) {
       if (!p.isExotic) continue;
       const entry = map.get(p.name) ?? {
+        slot: p.slot,
         hashes: [],
         icon: p.icon,
         watermark: p.watermark,
@@ -423,6 +433,7 @@ export function BuilderPanel({
     if (manifest && classType !== null) {
       for (const item of availableExoticClassItems(manifest, classType)) {
         const entry = map.get(item.name) ?? {
+          slot: "classItem" as const,
           hashes: [],
           icon: item.icon,
           watermark: itemWatermark(
@@ -442,7 +453,11 @@ export function BuilderPanel({
     }
     return [...map]
       .map(([name, rest]) => ({ name, ...rest }))
-      .sort((a, b) => a.name.localeCompare(b.name));
+      .sort(
+        (a, b) =>
+          ARMOR_SLOTS.indexOf(a.slot) - ARMOR_SLOTS.indexOf(b.slot) ||
+          a.name.localeCompare(b.name),
+      );
   }, [pool, manifest, classType]);
 
   // An exotic that a pool toggle removed resolves to null (any exotic) and comes back
