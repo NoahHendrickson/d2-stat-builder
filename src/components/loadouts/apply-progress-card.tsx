@@ -86,6 +86,22 @@ function titleFor(name: string, finished: ApplyProgressState["finished"]) {
   return `Applying ${name}`;
 }
 
+/**
+ * Publishes the card's height plus a 12px gap on <html> as --apply-card-lift, so the
+ * toast stack sits above the card instead of over its Cancel button and step grid.
+ */
+function publishCardLift(el: HTMLDivElement) {
+  const root = document.documentElement;
+  const observer = new ResizeObserver(([entry]) => {
+    root.style.setProperty("--apply-card-lift", `${entry.borderBoxSize[0].blockSize + 12}px`);
+  });
+  observer.observe(el);
+  return () => {
+    observer.disconnect();
+    root.style.removeProperty("--apply-card-lift");
+  };
+}
+
 /** Apply-loadout progress — floats on the main column so it outlives a collapsed sidebar / closed drawer. */
 export function ApplyProgressSection() {
   const state = useSyncExternalStore(subscribeApplyProgress, getApplyProgress, () => null);
@@ -103,13 +119,20 @@ export function ApplyProgressSection() {
 
   return (
     <div
+      ref={publishCardLift}
       role="status"
       aria-live="polite"
       aria-label={title}
-      // Pinned to the main column's top-left (its contain-layout is the containing
-      // block), clear of the mobile header. A fixed 6-across grid keeps it square-ish.
-      // On Slate the menu fill reads too blue for a card this big: same lift, less hue.
-      className="d2-glass [.dark[data-app-theme=slate]_&]:[--glass-raised:rgb(68_76_92/92%)] animate-in fade-in-0 slide-in-from-top-2 absolute top-[4.25rem] left-3 z-40 flex w-60 flex-col gap-3 p-3 text-popover-foreground motion-reduce:animate-none lg:top-3"
+      className={cn(
+        // A fixed 6-across grid keeps it square-ish. On Slate the menu fill reads too
+        // blue for a card this big: same lift, less hue.
+        "d2-glass [.dark[data-app-theme=slate]_&]:[--glass-raised:rgb(68_76_92/92%)] flex w-60 flex-col gap-3 p-3 text-popover-foreground",
+        // Pinned to the main column's bottom-left (its contain-layout is the containing
+        // block): top-left sat on the Items search and every page's filter row. Sits
+        // above whatever publishes --app-bottom-inset (the phone Builds bar).
+        "absolute bottom-[calc(max(var(--app-bottom-inset,0px),env(safe-area-inset-bottom))+0.75rem)] left-3 z-40 lg:bottom-4 lg:left-4",
+        "animate-in fade-in-0 slide-in-from-bottom-2 motion-reduce:animate-none",
+      )}
     >
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
