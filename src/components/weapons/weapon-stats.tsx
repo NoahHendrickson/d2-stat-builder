@@ -53,7 +53,7 @@ export function WeaponStats({
                 // The stat in the primary buttons' green, framed in a paler green
                 // line that is brightest across its middle, whatever the line
                 // style; the rest of the track a faint grey. A preview's change
-                // runs between them as its own piece: a fainter green for a gain,
+                // runs between them as its own piece: a brighter green for a gain,
                 // red for a loss. The Normal theme rounds the bar, so it drops
                 // the line.
                 <div className="relative h-2.5 normal:h-2 normal:overflow-hidden normal:rounded-full">
@@ -69,7 +69,7 @@ export function WeaponStats({
                     className={cn(
                       "absolute inset-y-0 transition-[left,width] duration-150 motion-reduce:transition-none normal:rounded-full",
                       delta > 0
-                        ? "bg-[color-mix(in_srgb,var(--emphatic)_45%,transparent)]"
+                        ? "bg-[color-mix(in_srgb,var(--emphatic-bright)_80%,transparent)]"
                         : "bg-destructive",
                       delta === 0 && "opacity-0",
                     )}
