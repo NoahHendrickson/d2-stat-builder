@@ -6,7 +6,11 @@
 // Runtime imports are relative (not `@/`) — the vitest runner has no `@/` alias, matching
 // the convention in normalize.ts / solve.ts.
 import { SUBCLASSES, type Subclass } from "../armory/fragments";
-import { DEFAULT_SET_FILTERS, type SetFilters } from "../armory/set-filters";
+import {
+  DEFAULT_SET_FILTERS,
+  isSetMinOwned,
+  type SetFilters,
+} from "../armory/set-filters";
 import type { PowerRange } from "../optimizer/types";
 
 export const SELECTIONS_KEY = "stat-builder:selections";
@@ -203,18 +207,14 @@ function parseSetFilters(v: unknown): SetFilters {
     return DEFAULT_SET_FILTERS;
   }
 
-  // A stored `hideZero` (from the old two-toggle schema) is dropped: the single
-  // "hide sets under 2 pieces" option either hides both 0- and 1-piece sets or neither.
-  return {
-    hideLessThan2:
-      typeof raw.hideLessThan2 === "boolean"
-        ? raw.hideLessThan2
-        : DEFAULT_SET_FILTERS.hideLessThan2,
-    hideLessThan4:
-      typeof raw.hideLessThan4 === "boolean"
-        ? raw.hideLessThan4
-        : DEFAULT_SET_FILTERS.hideLessThan4,
-  };
+  if (isSetMinOwned(raw.minOwned)) return { minOwned: raw.minOwned };
+
+  // The one-toggle schema stored `hideLessThan2`; a stored `hideZero` (from the
+  // two-toggle schema before it) is dropped, since hiding under 2 covers it.
+  if (typeof raw.hideLessThan2 === "boolean") {
+    return { minOwned: raw.hideLessThan2 ? 2 : 0 };
+  }
+  return DEFAULT_SET_FILTERS;
 }
 
 /** Parse + validate a stored string. Returns null on any malformed / stale / corrupt input. */

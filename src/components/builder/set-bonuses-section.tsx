@@ -13,6 +13,7 @@ import {
   hasActiveSetFilters,
   passesSetFilters,
   type SetFilters,
+  type SetMinOwned,
 } from "@/lib/armory/set-filters";
 import { DEFAULT_SET_SORT, sortSets, type SetSortKey } from "@/lib/armory/set-sort";
 import { setSlotIcons, type ArmorSetInfo } from "@/lib/armory/sets";
@@ -37,7 +38,7 @@ export function SetBonusesSection({
   pinnedSets,
   onTogglePin,
   setFilters,
-  onSetFilterChange,
+  onSetMinOwnedChange,
   pieces,
   manifest,
   classType,
@@ -51,7 +52,7 @@ export function SetBonusesSection({
   pinnedSets: number[];
   onTogglePin: (setHash: number) => void;
   setFilters: SetFilters;
-  onSetFilterChange: (key: keyof SetFilters, value: boolean) => void;
+  onSetMinOwnedChange: (minOwned: SetMinOwned) => void;
   /** The optimizer pool (what the roll grid counts). */
   pieces: ArmorPiece[];
   manifest?: Manifest;
@@ -141,7 +142,7 @@ export function SetBonusesSection({
           sort={sort}
           onSortChange={setSort}
           filters={setFilters}
-          onFilterChange={onSetFilterChange}
+          onMinOwnedChange={onSetMinOwnedChange}
           onReset={onReset}
         />
       </div>

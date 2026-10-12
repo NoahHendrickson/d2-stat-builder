@@ -22,6 +22,7 @@ import {
 import {
   hasActiveSetFilters,
   type SetFilters,
+  type SetMinOwned,
 } from "@/lib/armory/set-filters";
 import {
   SET_SORT_OPTIONS,
@@ -42,14 +43,14 @@ export const SetListControls = memo(function SetListControls({
   sort,
   onSortChange,
   filters,
-  onFilterChange,
+  onMinOwnedChange,
   onReset,
 }: {
   count: number;
   sort: SetSortKey;
   onSortChange: (key: SetSortKey) => void;
   filters: SetFilters;
-  onFilterChange: (key: keyof SetFilters, value: boolean) => void;
+  onMinOwnedChange: (minOwned: SetMinOwned) => void;
   onReset: () => void;
 }) {
   const activeFilters = hasActiveSetFilters(filters);
@@ -119,19 +120,16 @@ export const SetListControls = memo(function SetListControls({
               Filter sets
             </PopoverTitle>
             <div className="flex flex-col gap-3 p-3">
+              {/* Both boxes read one threshold, so hiding under 4 also ticks "under 2". */}
               <SetListSettingRow
-                checked={filters.hideLessThan2}
-                onCheckedChange={(checked) =>
-                  onFilterChange("hideLessThan2", checked)
-                }
+                checked={filters.minOwned >= 2}
+                onCheckedChange={(checked) => onMinOwnedChange(checked ? 2 : 0)}
               >
                 Hide armor sets I have less than 2 pieces for
               </SetListSettingRow>
               <SetListSettingRow
-                checked={filters.hideLessThan4}
-                onCheckedChange={(checked) =>
-                  onFilterChange("hideLessThan4", checked)
-                }
+                checked={filters.minOwned >= 4}
+                onCheckedChange={(checked) => onMinOwnedChange(checked ? 4 : 2)}
               >
                 Hide armor sets I have less than 4 pieces for
               </SetListSettingRow>
@@ -157,7 +155,7 @@ function SetListSettingRow({
     <div className="flex items-center justify-between gap-3">
       <label
         htmlFor={id}
-        className="cursor-pointer whitespace-nowrap text-sm leading-5"
+        className="min-w-0 cursor-pointer text-sm leading-5 sm:whitespace-nowrap"
       >
         {children}
       </label>

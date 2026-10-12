@@ -64,7 +64,7 @@ function sampleSelections(): PersistedSelections {
     targets: [100, 0, 50, 0, 0, 30],
     major: 3,
     setReqs: { 987654: 4, 123456: 2 },
-    setFilters: { hideLessThan2: false, hideLessThan4: false },
+    setFilters: { minOwned: 0 },
     exoticName: "Gyrfalcon's Hauberk",
     exoticPerks: [null, null],
     allowTuning: true,
@@ -255,7 +255,7 @@ test("load upgrades legacy all-false hide toggles to new defaults", () => {
   expect(loadSelections()?.setFilters).toEqual(DEFAULT_SET_FILTERS);
 });
 
-test("load keeps hideLessThan2 and drops hideZero from the old two-toggle schema", () => {
+test("load maps the old hideLessThan2 toggle to a threshold and drops hideZero", () => {
   const old = sampleSelections();
   localStorage.setItem(
     SELECTIONS_KEY,
@@ -264,7 +264,21 @@ test("load keeps hideLessThan2 and drops hideZero from the old two-toggle schema
       setFilters: { hideZero: true, hideLessThan2: false },
     }),
   );
-  expect(loadSelections()?.setFilters).toEqual({ hideLessThan2: false, hideLessThan4: false });
+  expect(loadSelections()?.setFilters).toEqual({ minOwned: 0 });
+});
+
+test("load keeps a stored set threshold and defaults an invalid one", () => {
+  const old = sampleSelections();
+  localStorage.setItem(
+    SELECTIONS_KEY,
+    JSON.stringify({ ...old, setFilters: { minOwned: 4 } }),
+  );
+  expect(loadSelections()?.setFilters).toEqual({ minOwned: 4 });
+  localStorage.setItem(
+    SELECTIONS_KEY,
+    JSON.stringify({ ...old, setFilters: { minOwned: 3 } }),
+  );
+  expect(loadSelections()?.setFilters).toEqual(DEFAULT_SET_FILTERS);
 });
 
 test("load returns null when the shape is malformed (targets wrong length)", () => {
