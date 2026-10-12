@@ -2,7 +2,18 @@
 
 import Image from "next/image";
 import { useSearchParams } from "next/navigation";
-import { memo, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import {
+  createContext,
+  memo,
+  type CSSProperties,
+  type ReactNode,
+  useContext,
+  useDeferredValue,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { ArrowUpDownIcon } from "@hugeicons/core-free-icons";
@@ -58,6 +69,32 @@ import { ItemWatermark } from "@/components/armor-thumb";
 const SORT_ITEMS: Record<string, string> = Object.fromEntries(SORTS);
 /** Tailwind `lg`: from here the details sit beside the list instead of in a dialog. */
 const SPLIT_MIN_PX = 1024;
+/** A result row's nameplate height, and the gap left between plates. */
+const ROW_PX = 40;
+const ROW_GAP_PX = 4;
+
+/** Each element's tint, as RGB channels: the chip colours from the search box. */
+const ELEMENT_PLATE: Record<string, string> = {
+  Arc: "40 180 220",
+  Solar: "255 120 40",
+  Void: "125 88 194",
+  Stasis: "60 140 220",
+  Strand: "60 200 120",
+  Kinetic: "180 180 180",
+};
+
+/**
+ * A row's look, a pane of tinted glass over the page: its element's colour,
+ * easing off to the right. The open weapon's row doesn't ease off but
+ * brightens toward its end instead.
+ */
+function nameplate(element: string, current: boolean): CSSProperties {
+  const tint = ELEMENT_PLATE[element] ?? ELEMENT_PLATE.Kinetic;
+  const [from, to] = current ? [0.3, 0.42] : [0.28, 0.12];
+  return {
+    background: `linear-gradient(90deg, rgb(${tint} / ${from}), rgb(${tint} / ${to}))`,
+  };
+}
 
 function WeaponIcon({
   weapon,
@@ -107,7 +144,6 @@ function ElementIcon({
       )}
       src={`https://www.bungie.net${icon}`}
       alt={element}
-      title={element}
       width={size}
       height={size}
       unoptimized
@@ -122,13 +158,18 @@ const AMMO_COLOR: Record<string, string> = {
   Heavy: "text-[#7d58c2]",
 };
 
-/** Ammo HUD icon used as a mask so it takes the ammo color; falls back to the name. */
+/**
+ * Ammo HUD icon used as a mask so it takes the ammo color; falls back to the name.
+ * `tight` trims the empty margin Bungie's square art leaves either side of the glyph.
+ */
 function AmmoIcon({
   ammo,
   ammoTypes,
+  tight = false,
 }: {
   ammo: string;
   ammoTypes: readonly AmmoTypeRef[] | undefined;
+  tight?: boolean;
 }) {
   const icon = ammoTypes?.find((type) => type.name === ammo)?.icon;
   if (!icon) return <span>{ammo}</span>;
@@ -137,9 +178,9 @@ function AmmoIcon({
     <span
       role="img"
       aria-label={ammo}
-      title={ammo}
       className={cn(
         "-my-1.5 inline-block size-[30px] shrink-0 bg-current",
+        tight && "-mx-1.5",
         AMMO_COLOR[ammo],
       )}
       style={{ mask, WebkitMask: mask }}
@@ -162,7 +203,6 @@ function ChampionIcon({
       className="shrink-0 invert dark:invert-0"
       src={`https://www.bungie.net${icon}`}
       alt={`Anti-${champion}`}
-      title={`Anti-${champion}`}
       width={18}
       height={18}
       unoptimized
@@ -170,20 +210,169 @@ function ChampionIcon({
   );
 }
 
-/** The weapon type's silhouette, as a mask so it takes the text colour. */
-function TypeSilhouette({ weapon }: { weapon: WeaponSummary }) {
+/**
+ * The weapon type's silhouette, as a mask so it takes the text colour. In a
+ * list row it fills a set slot so the icons after it line up; `tight` sizes it
+ * to the silhouette instead, by an invisible copy of the art at the same height.
+ */
+function TypeSilhouette({
+  weapon,
+  tight = false,
+}: {
+  weapon: WeaponSummary;
+  tight?: boolean;
+}) {
   const icon = weaponTypeIcon(weapon.type, AMMO_TYPE[weapon.ammo]);
   // A type without a silhouette keeps its slot, so the icons after it stay in line.
   if (!icon) return <span className="w-11 shrink-0" />;
   const mask = `url("${icon}") center / contain no-repeat`;
+  if (tight) {
+    return (
+      <span
+        role="img"
+        aria-label={weapon.type}
+        className="relative h-3 shrink-0"
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={icon} alt="" className="invisible h-full w-auto" />
+        <span
+          className="absolute inset-0 bg-foreground"
+          style={{ mask, WebkitMask: mask }}
+        />
+      </span>
+    );
+  }
   return (
     <span
       role="img"
       aria-label={weapon.type}
-      title={weapon.type}
       className="h-3 w-11 shrink-0 bg-foreground"
       style={{ mask, WebkitMask: mask }}
     />
+  );
+}
+
+type RevealRow = {
+  /** The chip whose name is open, by label, and that name's full width. */
+  open: { label: string; width: number } | null;
+  /** Room held before the chip under the pointer, so it stays put as the rest settle. */
+  hold: { label: string; px: number } | null;
+  register: (label: string, chip: HTMLElement) => () => void;
+  enter: (label: string, width: number, chip: HTMLElement, pointerX: number) => void;
+  leave: () => void;
+};
+
+const RevealRowContext = createContext<RevealRow | null>(null);
+
+/**
+ * The details header's chips, opened one at a time. A name stays open until
+ * the pointer reaches another chip or leaves the row, so crossing the gap
+ * between two chips doesn't close it under the pointer. Entering a chip sends
+ * every other chip back to its place and closes their names. If that would
+ * carry the entered chip out from under the pointer, it holds room before it
+ * for exactly what goes away to its left, easing in step, so it stays put;
+ * otherwise it slides along with the rest. Leaving the row lets the room go.
+ */
+function useRevealRow(): RevealRow {
+  const [open, setOpen] = useState<RevealRow["open"]>(null);
+  const [hold, setHold] = useState<RevealRow["hold"]>(null);
+  const chips = useRef(new Map<string, HTMLElement>());
+  const current = useRef<string | null>(null);
+  return {
+    open,
+    hold,
+    register(label, chip) {
+      chips.current.set(label, chip);
+      return () => {
+        if (chips.current.get(label) === chip) chips.current.delete(label);
+      };
+    },
+    enter(label, width, chip, pointerX) {
+      if (current.current === label) return;
+      current.current = label;
+      // What sits to its left right now, even part way through easing: held
+      // room (a margin) and open names.
+      let px = 0;
+      for (const other of chips.current.values()) {
+        const before =
+          other === chip ||
+          Boolean(other.compareDocumentPosition(chip) & Node.DOCUMENT_POSITION_FOLLOWING);
+        if (!before) continue;
+        px += parseFloat(getComputedStyle(other).marginLeft) || 0;
+        const name = other.lastElementChild;
+        if (other !== chip && name) px += name.getBoundingClientRect().width;
+      }
+      // Where its right edge lands with nothing held: its frame, closed, plus
+      // the full name. Short of the pointer (with some slack), it must hold.
+      const box = chip.getBoundingClientRect();
+      const name = chip.lastElementChild?.getBoundingClientRect().width ?? 0;
+      const right = box.left - px + box.width - name + width;
+      setOpen({ label, width });
+      setHold(px > 0.5 && pointerX > right - 8 ? { label, px } : null);
+    },
+    leave() {
+      current.current = null;
+      setOpen(null);
+      setHold(null);
+    },
+  };
+}
+
+/**
+ * One of the details header's icons, whose name slides open beside it in a
+ * frame on hover, like the build card's icon actions. Names and held room ease
+ * over the same time, in px, so a chip held in place stays exactly there.
+ */
+function RevealChip({ label, children }: { label: string; children: ReactNode }) {
+  const row = useContext(RevealRowContext);
+  const text = useRef<HTMLSpanElement>(null);
+  const open = row?.open?.label === label ? row.open : null;
+  return (
+    <span
+      ref={(chip) => (row && chip ? row.register(label, chip) : undefined)}
+      data-open={open ? true : undefined}
+      onPointerEnter={(event) => {
+        if (text.current) {
+          row?.enter(
+            label,
+            text.current.offsetWidth,
+            event.currentTarget,
+            event.clientX,
+          );
+        }
+      }}
+      className="inline-flex shrink-0 items-center border border-transparent px-1.5 py-1 transition-[background-color,border-color,color,margin-left] duration-200 ease-out motion-reduce:transition-none data-open:border-foreground/24 data-open:bg-foreground/4 data-open:text-foreground normal:rounded-md"
+      style={{ marginLeft: row?.hold?.label === label ? row.hold.px : 0 }}
+    >
+      {children}
+      {/* The name; last in the chip, where the row reads its width. */}
+      <span
+        className="overflow-hidden transition-[width] duration-200 ease-out motion-reduce:transition-none"
+        style={{ width: open?.width ?? 0 }}
+      >
+        <span ref={text} className="block w-max pl-2 text-sm whitespace-nowrap">
+          {label}
+        </span>
+      </span>
+    </span>
+  );
+}
+
+/**
+ * A list row icon's name in the site's tooltip, quick to open. The trigger is
+ * a span, as the icon already sits inside the row's button.
+ */
+function IconTip({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        delay={100}
+        render={<span className="flex shrink-0 items-center" />}
+      >
+        {children}
+      </TooltipTrigger>
+      <TooltipContent>{label}</TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -247,13 +436,21 @@ const WeaponDetails = memo(function WeaponDetails({
   }
   const masterworks = weapon.masterworks ?? [];
   const hasIntrinsic = weapon.columns.some((c) => c.kind === "Intrinsic");
+  // A frame (or exotic intrinsic) with no alternatives can't be picked, so it
+  // stays in the header alone, its tooltip with it, and the masterworks move
+  // up into its column.
+  const fixedFrame = weapon.columns.find(
+    (c) => c.kind === "Intrinsic" && c.perkIndices.length === 1,
+  );
+  const framePerk = fixedFrame && catalog.perks[fixedFrame.perkIndices[0]];
+  const frame = framePerk?.icon ?? frameIcon(weapon, catalog.perks);
+  const frameName = framePerk?.name ?? weapon.frame ?? "Frame";
 
   /**
    * One perk's tile. `columnKey` is the column it picks in (MASTERWORK for
-   * masterworks). A frame that is the only option in its column can't be
-   * picked, so it draws as a bare icon rather than a cell.
+   * masterworks).
    */
-  function perkTile(columnKey: number, index: number, fixed = false) {
+  function perkTile(columnKey: number, index: number) {
     const perk = catalog.perks[index];
     if (!perk) return null;
     const selected = picked[columnKey] === index;
@@ -264,7 +461,7 @@ const WeaponDetails = memo(function WeaponDetails({
     // the enhanced arrow in the top-left for perks with an enhanced tier. The
     // name lives in the tooltip. Masterwork art is its own framed square, so it
     // goes without a cell; once one is picked, the others dim.
-    const iconSize = masterwork || fixed ? 44 : 34;
+    const iconSize = masterwork ? 44 : 34;
     const content = (
       <>
         {perk.icon && (
@@ -287,12 +484,7 @@ const WeaponDetails = memo(function WeaponDetails({
         ) : null}
       </>
     );
-    const trigger = fixed ? (
-      <span
-        aria-label={label}
-        className="relative flex size-14 shrink-0 items-center justify-center"
-      />
-    ) : (
+    const trigger = (
       <button
         type="button"
         aria-label={label}
@@ -338,11 +530,14 @@ const WeaponDetails = memo(function WeaponDetails({
   }
 
   const poolLabel = catalog.poolLabel(weapon.hash);
-  const frame = frameIcon(weapon, catalog.perks);
-  const origin = [
-    poolLabel !== weapon.source ? weapon.source : undefined,
-    weapon.seasonName,
-  ].filter(Boolean);
+  // Where it drops from, each part named so the bare values read.
+  const origin = (
+    [
+      ["Source", poolLabel !== weapon.source ? weapon.source : undefined],
+      ["Season", weapon.seasonName],
+    ] satisfies [string, string | undefined][]
+  ).filter((part): part is [string, string] => Boolean(part[1]));
+  const reveal = useRevealRow();
   const Title = inDialog ? DialogTitle : "h2";
   const Description = inDialog ? DialogDescription : "div";
   return (
@@ -370,48 +565,94 @@ const WeaponDetails = memo(function WeaponDetails({
               </span>
             )}
           </Title>
-          <Description className="flex items-center gap-4 text-muted-foreground">
-            {weaponTypeIcon(weapon.type, AMMO_TYPE[weapon.ammo]) && (
-              <TypeSilhouette weapon={weapon} />
-            )}
-            <ElementIcon
-              element={weapon.element}
-              damageTypes={catalog.damageTypes}
-              size={18}
-            />
-            {frame && (
-              <Image
-                className="shrink-0"
-                src={`https://www.bungie.net${frame}`}
-                alt={weapon.frame ?? ""}
-                title={weapon.frame}
-                width={20}
-                height={20}
-                unoptimized
-              />
-            )}
-            <AmmoIcon ammo={weapon.ammo} ammoTypes={catalog.ammoTypes} />
-            {weapon.champions?.map((champion) => (
-              <ChampionIcon
-                key={champion}
-                champion={champion}
-                championTypes={catalog.championTypes}
-              />
-            ))}
-            {/* Last on the line and the one part that gives way, so the
-                header stays two lines in a narrow pane. */}
-            {origin.length > 0 && (
-              <span className="ml-2 min-w-0 truncate" title={origin.join(", ")}>
-                {origin.map((part) => (
-                  <span key={part} className="mr-4 last:mr-0">
-                    {part}
-                  </span>
-                ))}
-              </span>
-            )}
+          {/* Pulled left by a chip's padding and border, so the first icon
+              lines up under the name. */}
+          <Description
+            className="-ml-[7px] flex items-center gap-1.5 text-muted-foreground"
+            onPointerLeave={reveal.leave}
+          >
+            <RevealRowContext value={reveal}>
+              {weaponTypeIcon(weapon.type, AMMO_TYPE[weapon.ammo]) && (
+                <RevealChip label={weapon.type}>
+                  <TypeSilhouette weapon={weapon} tight />
+                </RevealChip>
+              )}
+              <RevealChip label={weapon.element}>
+                <ElementIcon
+                  element={weapon.element}
+                  damageTypes={catalog.damageTypes}
+                  size={18}
+                />
+              </RevealChip>
+              {frame && (
+                <Tooltip>
+                  <TooltipTrigger
+                    // Its full description and Clarity insight, which no perk
+                    // tile carries once a fixed frame leaves the grid.
+                    disabled={!framePerk}
+                    render={<span className="inline-flex shrink-0" />}
+                  >
+                    <RevealChip label={frameName}>
+                      <Image
+                        className="shrink-0"
+                        src={`https://www.bungie.net${frame}`}
+                        alt={frameName}
+                        width={20}
+                        height={20}
+                        unoptimized
+                      />
+                    </RevealChip>
+                  </TooltipTrigger>
+                  {framePerk && (
+                    <TooltipContent
+                      side="bottom"
+                      align="start"
+                      className="max-w-sm"
+                    >
+                      <PerkTooltip
+                        perk={framePerk}
+                        insight={clarityLines(clarity, framePerk)}
+                      />
+                    </TooltipContent>
+                  )}
+                </Tooltip>
+              )}
+              <RevealChip label={`${weapon.ammo} ammo`}>
+                <AmmoIcon
+                  ammo={weapon.ammo}
+                  ammoTypes={catalog.ammoTypes}
+                  tight
+                />
+              </RevealChip>
+              {weapon.champions?.map((champion) => (
+                <RevealChip key={champion} label={`Anti-${champion}`}>
+                  <ChampionIcon
+                    champion={champion}
+                    championTypes={catalog.championTypes}
+                  />
+                </RevealChip>
+              ))}
+              {/* Last on the line and the one part that gives way, so the
+                  header stays two lines in a narrow pane. */}
+              {origin.length > 0 && (
+                <span
+                  className="ml-2 min-w-0 truncate"
+                  title={origin
+                    .map(([name, value]) => `${name}: ${value}`)
+                    .join(", ")}
+                >
+                  {origin.map(([name, value]) => (
+                    <span key={name} className="mr-4 last:mr-0">
+                      {name}: {value}
+                    </span>
+                  ))}
+                </span>
+              )}
+            </RevealRowContext>
           </Description>
         </div>
       </div>
+      <div aria-hidden className="d2-rule" />
       {/* Perks first, the stats they move beside them on the right; the stats
           take what width is left, dropping below once that is under 16rem. */}
       <div className="flex flex-wrap items-start gap-6">
@@ -424,31 +665,32 @@ const WeaponDetails = memo(function WeaponDetails({
               {masterworks.map((index) => perkTile(MASTERWORK, index))}
             </section>
           )}
-          {weapon.columns.map((column, i) => (
-            <section
-              key={i}
-              aria-label={column.kind}
-              className="flex shrink-0 flex-col gap-2.5"
-            >
-              {column.perkIndices.map((index) =>
-                perkTile(
-                  i,
-                  index,
-                  column.kind === "Intrinsic" && column.perkIndices.length === 1,
-                ),
-              )}
-              {column.kind === "Intrinsic" && masterworks.length > 0 && (
-                // Masterworks sit under the frame, a step apart from it.
-                <div
-                  role="group"
-                  aria-label="Masterwork"
-                  className="mt-2.5 flex flex-col gap-2.5"
-                >
-                  {masterworks.map((index) => perkTile(MASTERWORK, index))}
-                </div>
-              )}
-            </section>
-          ))}
+          {weapon.columns.map((column, i) =>
+            column === fixedFrame && masterworks.length === 0 ? null : (
+              <section
+                key={i}
+                aria-label={column.kind}
+                className="flex shrink-0 flex-col gap-2.5"
+              >
+                {column !== fixedFrame &&
+                  column.perkIndices.map((index) => perkTile(i, index))}
+                {column.kind === "Intrinsic" && masterworks.length > 0 && (
+                  // Masterworks sit under a pickable frame, a step apart from
+                  // it, or top the column when the frame is fixed.
+                  <div
+                    role="group"
+                    aria-label="Masterwork"
+                    className={cn(
+                      "flex flex-col gap-2.5",
+                      column !== fixedFrame && "mt-2.5",
+                    )}
+                  >
+                    {masterworks.map((index) => perkTile(MASTERWORK, index))}
+                  </div>
+                )}
+              </section>
+            ),
+          )}
         </div>
         {Object.keys(current).length > 0 && (
           <div className="min-w-64 flex-1 basis-64">
@@ -502,7 +744,7 @@ export function WeaponBrowser() {
   const virtualizer = useVirtualizer({
     count: results.length,
     getScrollElement: () => scrollRef.current,
-    estimateSize: () => 50,
+    estimateSize: () => ROW_PX + ROW_GAP_PX,
     overscan: 8,
     getItemKey: (index) => results[index].hash,
   });
@@ -616,9 +858,9 @@ export function WeaponBrowser() {
           <div
             ref={scrollRef}
             className={cn(
-              // Out into the page padding by the row's padding and border, so the
+              // Out into the page padding by the row's border, so the
               // thumbnails line up with the heading and the search bar's icon.
-              "-mx-[9px] min-h-40 flex-1 overflow-y-auto",
+              "-mx-px min-h-40 flex-1 overflow-y-auto",
               state !== deferred && "opacity-60",
             )}
             aria-busy={query.isPending || state !== deferred}
@@ -651,17 +893,22 @@ export function WeaponBrowser() {
                     className="absolute top-0 left-0 w-full"
                     style={{
                       height: row.size,
+                      paddingBottom: ROW_GAP_PX,
                       transform: `translateY(${row.start}px)`,
                     }}
                   >
-                    {/* One compact line (Figma 120:146): icon and name, the type's
-                        silhouette, then element, frame, ammo, and champion icons. */}
+                    {/* A nameplate, like the game's roster: the icon square at the
+                        left edge, then the name, the type's silhouette, and element,
+                        frame, ammo, and champion icons, on a faint wash of the
+                        element's colour. */}
                     <button
                       type="button"
+                      // The open weapon keeps the hover frame.
                       className={cn(
-                        "flex h-full w-full items-center gap-3 border border-transparent px-2 text-left outline-none hover:bg-foreground/5 focus-visible:bg-foreground/8 normal:rounded-[10px]",
-                        current && "border-foreground/16 bg-foreground/4",
+                        "flex h-full w-full items-center gap-3 overflow-hidden border border-transparent pr-3 text-left outline-none dark:[text-shadow:0_1px_2px_rgb(0_0_0/0.5)] hover:border-foreground/50 focus-visible:border-foreground/50 normal:rounded-[10px]",
+                        current && "border-foreground/50",
                       )}
+                      style={nameplate(weapon.element, current)}
                       onClick={() => {
                         setPicked(weapon);
                         setDialogOpen(!split);
@@ -669,56 +916,61 @@ export function WeaponBrowser() {
                       aria-current={current || undefined}
                       aria-label={`View ${weapon.name} perks`}
                     >
-                      <WeaponIcon
-                        weapon={weapon}
-                        size={32}
-                        className="outline-1 -outline-offset-1 outline-foreground/24"
-                      />
+                      <WeaponIcon weapon={weapon} size={ROW_PX - 2} />
                       <p
-                        className={cn(
-                          // A set width (shrinking alike on every row) so the icons after it line up.
-                          "min-w-0 shrink basis-60 truncate text-sm font-medium",
-                          weapon.rarity === "Exotic" && "text-amber-300",
-                        )}
+                        // A set width (shrinking alike on every row) so the icons after it line up.
+                        className="min-w-0 shrink basis-60 truncate text-[15px]"
                       >
                         {weapon.name}
                         {poolLabel && (
-                          <span className="ml-1.5 font-normal text-muted-foreground">
+                          <span className="ml-1.5 text-muted-foreground">
                             {poolLabel}
                           </span>
                         )}
                       </p>
-                      <TypeSilhouette weapon={weapon} />
+                      {weaponTypeIcon(weapon.type, AMMO_TYPE[weapon.ammo]) ? (
+                        <IconTip label={weapon.type}>
+                          <TypeSilhouette weapon={weapon} />
+                        </IconTip>
+                      ) : (
+                        <TypeSilhouette weapon={weapon} />
+                      )}
                       <span className="flex shrink-0 items-center gap-4">
-                        <ElementIcon
-                          element={weapon.element}
-                          damageTypes={data?.damageTypes}
-                          size={18}
-                        />
+                        <IconTip label={weapon.element}>
+                          <ElementIcon
+                            element={weapon.element}
+                            damageTypes={data?.damageTypes}
+                            size={18}
+                          />
+                        </IconTip>
                         {/* Kept as an empty slot when missing, so the columns hold. */}
                         <span className="flex size-5 shrink-0">
                           {frame && (
-                            <Image
-                              src={`https://www.bungie.net${frame}`}
-                              alt={weapon.frame ?? ""}
-                              title={weapon.frame}
-                              width={20}
-                              height={20}
-                              unoptimized
-                            />
+                            <IconTip label={weapon.frame ?? "Frame"}>
+                              <Image
+                                src={`https://www.bungie.net${frame}`}
+                                alt={weapon.frame ?? ""}
+                                width={20}
+                                height={20}
+                                unoptimized
+                              />
+                            </IconTip>
                           )}
                         </span>
-                        <AmmoIcon
-                          ammo={weapon.ammo}
-                          ammoTypes={data?.ammoTypes}
-                        />
+                        <IconTip label={`${weapon.ammo} ammo`}>
+                          <AmmoIcon
+                            ammo={weapon.ammo}
+                            ammoTypes={data?.ammoTypes}
+                          />
+                        </IconTip>
                         <span className="flex items-center gap-1.5">
                           {weapon.champions?.map((champion) => (
-                            <ChampionIcon
-                              key={champion}
-                              champion={champion}
-                              championTypes={data?.championTypes}
-                            />
+                            <IconTip key={champion} label={`Anti-${champion}`}>
+                              <ChampionIcon
+                                champion={champion}
+                                championTypes={data?.championTypes}
+                              />
+                            </IconTip>
                           ))}
                         </span>
                       </span>
