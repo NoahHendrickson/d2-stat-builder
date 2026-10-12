@@ -436,12 +436,15 @@ const WeaponDetails = memo(function WeaponDetails({
   }
   const masterworks = weapon.masterworks ?? [];
   const hasIntrinsic = weapon.columns.some((c) => c.kind === "Intrinsic");
-  // A frame with no alternatives can't be picked, so it stays in the header
-  // alone and the masterworks move up into its column.
+  // A frame (or exotic intrinsic) with no alternatives can't be picked, so it
+  // stays in the header alone, its tooltip with it, and the masterworks move
+  // up into its column.
   const fixedFrame = weapon.columns.find(
     (c) => c.kind === "Intrinsic" && c.perkIndices.length === 1,
   );
-  const frame = frameIcon(weapon, catalog.perks);
+  const framePerk = fixedFrame && catalog.perks[fixedFrame.perkIndices[0]];
+  const frame = framePerk?.icon ?? frameIcon(weapon, catalog.perks);
+  const frameName = framePerk?.name ?? weapon.frame ?? "Frame";
 
   /**
    * One perk's tile. `columnKey` is the column it picks in (MASTERWORK for
@@ -582,16 +585,37 @@ const WeaponDetails = memo(function WeaponDetails({
                 />
               </RevealChip>
               {frame && (
-                <RevealChip label={weapon.frame ?? "Frame"}>
-                  <Image
-                    className="shrink-0"
-                    src={`https://www.bungie.net${frame}`}
-                    alt={weapon.frame ?? ""}
-                    width={20}
-                    height={20}
-                    unoptimized
-                  />
-                </RevealChip>
+                <Tooltip>
+                  <TooltipTrigger
+                    // Its full description and Clarity insight, which no perk
+                    // tile carries once a fixed frame leaves the grid.
+                    disabled={!framePerk}
+                    render={<span className="inline-flex shrink-0" />}
+                  >
+                    <RevealChip label={frameName}>
+                      <Image
+                        className="shrink-0"
+                        src={`https://www.bungie.net${frame}`}
+                        alt={frameName}
+                        width={20}
+                        height={20}
+                        unoptimized
+                      />
+                    </RevealChip>
+                  </TooltipTrigger>
+                  {framePerk && (
+                    <TooltipContent
+                      side="bottom"
+                      align="start"
+                      className="max-w-sm"
+                    >
+                      <PerkTooltip
+                        perk={framePerk}
+                        insight={clarityLines(clarity, framePerk)}
+                      />
+                    </TooltipContent>
+                  )}
+                </Tooltip>
               )}
               <RevealChip label={`${weapon.ammo} ammo`}>
                 <AmmoIcon
