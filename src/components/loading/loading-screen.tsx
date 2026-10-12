@@ -59,7 +59,7 @@ function useEasedProgress(target: number, done: boolean): number {
 }
 
 /**
- * Views that don't wait for the player's gear: the public weapon catalog loads on its
+ * Views that don't wait for the player's gear: the weapon catalog loads on its
  * own, and Settings only reads this device's preferences.
  */
 const UNGATED_PATHS: ReadonlySet<string> = new Set(["/weapons", "/settings"]);

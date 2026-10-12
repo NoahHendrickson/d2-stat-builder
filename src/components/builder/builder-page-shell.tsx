@@ -1,6 +1,5 @@
 "use client";
 
-import { SignInCard } from "@/components/auth/sign-in-card";
 import { useSession } from "@/lib/auth/use-session";
 import { BuilderPanel } from "@/components/builder/builder-panel";
 import { useDesktopLayout } from "@/components/app-shell";
@@ -10,13 +9,9 @@ export function BuilderPageShell() {
   const authed = session.data?.authenticated ?? false;
   const desktop = useDesktopLayout();
 
-  if (!authed) {
-    return (
-      <main className="mx-auto flex h-full max-w-md flex-col items-center justify-center px-6 py-6">
-        <SignInCard />
-      </main>
-    );
-  }
+  // AppShell owns sign-in: it shows the sign-in screen itself, and keeps the page hidden
+  // until the session is confirmed. Nothing to draw before that.
+  if (!authed) return null;
 
   // Desktop shows armor/account in the main-column header. Inline cards are
   // only for the narrow-viewport drawer. Bottom padding is for the mobile
