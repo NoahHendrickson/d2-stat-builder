@@ -5,7 +5,13 @@ import type {
   OptimizerOutput,
   SetRequirement,
 } from "./types";
-import { NUM_SLOTS, NUM_STATS, STAT_CAP, raiseAchievableFloors } from "./floors";
+import {
+  NUM_SLOTS,
+  NUM_STATS,
+  STAT_CAP,
+  preClampStats,
+  raiseAchievableFloors,
+} from "./floors";
 import {
   createTuningSearcher,
   type InternalPiece,
@@ -372,10 +378,11 @@ export function solve(
   // hard (it only explores combos that could beat what the top-N already found). Mods are
   // only auto-assigned to cover target deficits, so a build's stats alone would just echo
   // the targets back; its unspent mod capacity could genuinely be socketed into any ONE
-  // stat, so each stat's seed gets the full spare added (still achievable per stat).
+  // stat, so each stat's seed gets the full spare added to its PRE-clamp value (a stat
+  // shown at 0 may be below zero — see raiseAchievableFloors / preClampStats).
   const seed = new Array(NUM_STATS).fill(0);
   for (const lo of loadouts) {
-    raiseAchievableFloors(seed, lo.stats, lo.modsUsed, mods);
+    raiseAchievableFloors(seed, preClampStats(lo, frag), lo.modsUsed, mods);
   }
   if (opts.ceilingSeed) {
     for (let s = 0; s < NUM_STATS; s++) {

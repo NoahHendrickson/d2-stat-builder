@@ -197,6 +197,9 @@ export function runCeilings(
   // The full outcome of the build the probe found (stats + mods used), captured so the
   // probe loop can harvest it into EVERY stat's floor (witness harvest). Null until found.
   let witness: TuningOutcome | null = null;
+  // The witness's final stats BEFORE the clamp, captured at its leaf while `sum` is live:
+  // the harvest adds spare mods to these, since a stat shown at 0 may be below zero.
+  const witnessRaw = new Array(NUM_STATS).fill(0);
   // Long probes must still stream progress ticks — probe-completion granularity alone
   // can sit silent for a probe's whole fair share (seconds on hard pools).
   let lastTickAt = 0;
@@ -236,6 +239,10 @@ export function runCeilings(
       if (w) {
         found = true;
         witness = w;
+        for (let s = 0; s < NUM_STATS; s++) {
+          witnessRaw[s] =
+            sum[s] + frag[s] + w.tuningBonus[s] + w.modBonus[s] + w.artificeBonus[s];
+        }
       }
       return;
     }
@@ -346,7 +353,7 @@ export function runCeilings(
         // legal build and we must not harvest it into the other stats. `exact` is untouched
         // either way: harvest only lifts the proven low side, never `optimistic`.
         if (mid >= min[t]) {
-          raiseAchievableFloors(ceiling, w.stats, w.modsUsed, mods);
+          raiseAchievableFloors(ceiling, witnessRaw, w.modsUsed, mods);
         }
         onProgress?.(ceiling.slice(0, NUM_STATS)); // stream each improvement for animation
       } else {

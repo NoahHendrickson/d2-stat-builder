@@ -408,7 +408,7 @@ describe("computeCeilingCarry", () => {
       const withSpare = output({
         loadouts: [
           // meets [15,15,...]; 2 unused minor mods = 10 spare points → each stat +10
-          loadout([15, 15, 10, 40, 15, 5], { major: 0, minor: 0 }),
+          loadout([15, 15, 10, 40, 15, 0], { major: 0, minor: 0 }),
         ],
       });
       const tightMods = baseInput({
@@ -421,7 +421,28 @@ describe("computeCeilingCarry", () => {
       });
       const carry = computeCeilingCarry(prevWithMods, withSpare, tightMods);
       // spare = 2 minor * 5 = 10, added to every stat (clamped at 200)
-      expect(carry?.ceilingSeed).toEqual([25, 25, 20, 50, 25, 15]);
+      expect(carry?.ceilingSeed).toEqual([25, 25, 20, 50, 25, 10]);
+    });
+
+    test("a survivor's stat clamped up from below zero takes no spare", () => {
+      // Same survivor, but a −10 melee fragment: its recorded melee 0 is really −10 before
+      // the clamp, so the 10 spare points only climb back to 0. The other stats still gain.
+      const frag = [0, 0, 0, 0, 0, -10];
+      const withSpare = output({
+        loadouts: [loadout([15, 15, 10, 40, 15, 0], { major: 0, minor: 0 })],
+      });
+      const prevWithMods = baseInput({
+        minimums: [10, 10, 0, 0, 0, 0],
+        mods: { major: 0, minor: 2 },
+        fragmentBonus: frag,
+      });
+      const tightMods = baseInput({
+        minimums: [15, 15, 0, 0, 0, 0],
+        mods: { major: 0, minor: 2 },
+        fragmentBonus: frag,
+      });
+      const carry = computeCeilingCarry(prevWithMods, withSpare, tightMods);
+      expect(carry?.ceilingSeed).toEqual([25, 25, 20, 50, 25, 0]);
     });
   });
 });
