@@ -728,6 +728,78 @@ describe("dedupe grouping", () => {
     expect(withReq.loadouts.length).toBeGreaterThan(0);
     expect(withReq.loadouts[0].pieceIds[0]).toBe("coda");
   });
+
+  test("a set-0 piece is not merged into a stat-identical piece with no set", () => {
+    // Both key as "set 0" if a missing set defaults to 0; the no-set piece listed first
+    // then stands in for both and can't meet the set-0 requirement.
+    const slots = [
+      [piece("noset", [10, 0, 0, 0, 0, 0]), { ...piece("set0", [10, 0, 0, 0, 0, 0]), setHash: 0 }],
+      ...restSlots,
+    ] as OptimizerPiece[][];
+    const out = solve(input(slots, { setRequirements: [{ setHash: 0, count: 1 }] }));
+    expect(out.loadouts.map((lo) => lo.pieceIds[0])).toEqual(["set0"]);
+  });
+
+  test("a Balanced-only exotic is not merged into its directional twin", () => {
+    // Same exotic, same stats; only B may take a directional. Melee 55 needs B's +5
+    // melee (Balanced touches weapons/health/class only) — with A listed first and both
+    // keyed as one exotic, B's directionals were lost and the query came back empty.
+    const flat = [10, 10, 10, 10, 10, 10];
+    const tuning = { tuned: 0, offStats: [0, 1, 2] };
+    const slots = [
+      [
+        { id: "A", stats: flat, exotic: true, hash: 1, tuning: { ...tuning, directional: false as const } },
+        { id: "B", stats: flat, exotic: true, hash: 1, tuning },
+      ],
+      ...[1, 2, 3, 4].map((k) => [piece(`p${k}`, flat)]),
+    ] as OptimizerPiece[][];
+    const out = solve(input(slots, { allowTuning: true, minimums: [0, 0, 0, 0, 0, 55] }));
+    expect(out.loadouts.map((lo) => lo.pieceIds[0])).toEqual(["B"]);
+    expect(out.ceilings).toEqual([50, 50, 50, 50, 50, 55]);
+    expect(out.ceilingsExact).toBe(true);
+  });
+
+  test("a Balanced-only legendary is not merged into its directional twin", () => {
+    // Legendary copy of the exotic case: B's rolled tuned stat is melee, so melee 55 needs
+    // B's +5 melee; A (Balanced-only, listed first) must not stand in for it.
+    const flat = [10, 10, 10, 10, 10, 10];
+    const slots = [
+      [
+        { id: "A", stats: flat, exotic: false, tuning: { tuned: 5, offStats: [0, 1, 2], directional: false as const } },
+        { id: "B", stats: flat, exotic: false, tuning: { tuned: 5, offStats: [0, 1, 2] } },
+      ],
+      ...[1, 2, 3, 4].map((k) => [piece(`p${k}`, flat)]),
+    ] as OptimizerPiece[][];
+    const out = solve(input(slots, { allowTuning: true, minimums: [0, 0, 0, 0, 0, 55] }));
+    expect(out.loadouts.map((lo) => lo.pieceIds[0])).toEqual(["B"]);
+    expect(out.ceilings).toEqual([50, 50, 50, 50, 50, 55]);
+  });
+
+  test("with Balanced off, a Balanced-only piece merges with an untunable twin", () => {
+    // Neither has any tuning option left, so they are one candidate, not two.
+    const flat = [10, 10, 10, 10, 10, 10];
+    const slots = [
+      [
+        { id: "bal", stats: flat, exotic: false, tuning: { tuned: 0, offStats: [0, 1, 2], directional: false as const } },
+        piece("plain", flat),
+      ],
+      ...[1, 2, 3, 4].map((k) => [piece(`p${k}`, flat)]),
+    ] as OptimizerPiece[][];
+    const out = solve(input(slots, { allowTuning: true, allowBalancedTuning: false }));
+    expect(out.loadouts).toHaveLength(1);
+  });
+
+  test("without a power range, stat-identical twins are represented by the higher power", () => {
+    // Power doesn't split the key without a range, but every build reports its gear
+    // power — so the shown piece must not depend on which twin the armory listed first.
+    const twin = (id: string, power: number): OptimizerPiece => ({ ...piece(id, [10, 0, 0, 0, 0, 0]), power });
+    const rest = [1, 2, 3, 4].map((k) => [{ ...piece(`p${k}`, [0, 0, 0, 0, 0, 0]), power: 2000 }]);
+    for (const first of [[twin("low", 1990), twin("high", 2010)], [twin("high", 2010), twin("low", 1990)]]) {
+      const out = solve(input([first, ...rest] as OptimizerPiece[][]));
+      expect(out.loadouts.map((lo) => lo.pieceIds[0])).toEqual(["high"]);
+      expect(out.loadouts[0].power).toBe(2002);
+    }
+  });
 });
 
 describe("exotic pre-filter", () => {
