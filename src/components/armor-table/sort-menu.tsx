@@ -42,7 +42,10 @@ import { CustomOrderList } from "@/components/armor-table/custom-order-list";
 export const TABLE_HEADER_BG = "bg-foreground/8";
 
 const TABLE_HEAD_CELL =
-  "border-b border-foreground/15 py-2.5 pr-3 text-sm font-normal whitespace-nowrap first:pl-3";
+  "border-b border-foreground/15 py-2.5 pr-3 text-sm font-normal whitespace-nowrap first:pl-3 " +
+  // Phones pin the name column (see armor-table-row.tsx): the header cell over it
+  // needs the band's wash on a solid fill.
+  "max-md:first:sticky max-md:first:left-0 max-md:first:z-[1] max-md:first:shadow-[1px_0_0_var(--border)] max-md:first:[background:linear-gradient(color-mix(in_oklab,var(--foreground)_8%,transparent),color-mix(in_oklab,var(--foreground)_8%,transparent)),var(--glass-opaque)]";
 
 /**
  * Sortable column header: owns the `<th>` chrome and a dropdown for

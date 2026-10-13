@@ -10,6 +10,7 @@ import { ItemWatermark, TierPips } from "@/components/armor-thumb";
 import { PowerValue } from "@/components/power-value";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent } from "@/components/ui/popover";
+import { Drawer, DrawerContent } from "@/components/ui/drawer";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { STAT_LABELS } from "@/lib/armory/stats";
 import { useProfile } from "@/lib/armory/use-profile";
@@ -17,7 +18,7 @@ import { applyPerks, type PerkChange } from "@/lib/inventory/apply-perks";
 import { armorDetails } from "@/lib/inventory/armor-details";
 import { BUNGIE_IMAGE_BASE } from "@/lib/bungie/constants";
 import { BREAKER_NAMES, type InventoryItem, type ManagerInventory } from "@/lib/inventory/build";
-import { locate } from "@/lib/inventory/moves";
+import { locate, moveOptions, type Place } from "@/lib/inventory/moves";
 import { weaponCopies } from "@/lib/inventory/search";
 import {
   weaponRoll,
@@ -37,6 +38,7 @@ import { useClarity } from "@/lib/weapons/use-clarity";
 import { useWeaponCatalog } from "@/lib/weapons/use-weapon-catalog";
 import { cn } from "@/lib/utils";
 import { TAG_BUTTON, TagButtons } from "./tag-buttons";
+import { useManagerActions } from "./manager-context";
 
 const ITEM_TYPE_ARMOR = 2;
 const ITEM_TYPE_WEAPON = 3;
@@ -67,6 +69,8 @@ export function ItemDetails({
   onClose,
   onLock,
   onCompare,
+  sheet = false,
+  moves = false,
 }: {
   inventory: ManagerInventory;
   target: ItemDetailsTarget | null;
@@ -74,10 +78,63 @@ export function ItemDetails({
   onLock: (item: InventoryItem, locked: boolean) => void;
   /** Open Compare for every copy of this weapon. */
   onCompare: (item: InventoryItem) => void;
+  /** Phones: a bottom sheet rather than a panel beside the tile. */
+  sheet?: boolean;
+  /** Touch: move buttons under the header, since a tile can't be dragged. */
+  moves?: boolean;
 }) {
   const found = target ? locate(inventory, target.key) : undefined;
   const copies =
     found?.item.itemType === ITEM_TYPE_WEAPON ? weaponCopies(inventory, found.item.name).length : 0;
+  const body = found && (
+    <>
+      <Header item={found.item} onLock={onLock} />
+      {moves && (
+        <MoveButtons inventory={inventory} item={found.item} place={found.place} onDone={onClose} />
+      )}
+      {found.item.itemType === ITEM_TYPE_WEAPON && found.item.instanceId ? (
+        <WeaponRollView
+          key={found.item.instanceId}
+          item={found.item}
+          instanceId={found.item.instanceId}
+          characterId={found.place.kind === "character" ? found.place.characterId : undefined}
+        />
+      ) : found.item.itemType === ITEM_TYPE_ARMOR && found.item.instanceId ? (
+        <ArmorView instanceId={found.item.instanceId} itemHash={found.item.itemHash} />
+      ) : (
+        <ItemDescription itemHash={found.item.itemHash} />
+      )}
+      {(found.item.instanceId || copies > 1) && (
+        <div className={cn(SECTION, "flex-row flex-wrap items-center gap-1")}>
+          {found.item.instanceId && <TagButtons instanceId={found.item.instanceId} />}
+          {copies > 1 && (
+            <button
+              type="button"
+              onClick={() => onCompare(found.item)}
+              className={cn(TAG_BUTTON, "border-foreground/12 bg-foreground/4 shrink-0 gap-1 px-3 text-[0.8rem] font-medium")}
+            >
+              <HugeiconsIcon icon={GitCompareIcon} className="size-3.5" aria-hidden />
+              Compare {copies} copies
+            </button>
+          )}
+        </div>
+      )}
+    </>
+  );
+  if (sheet) {
+    return (
+      <Drawer
+        open={Boolean(found)}
+        onOpenChange={(open) => !open && onClose()}
+        swipeDirection="down"
+        showSwipeHandle
+      >
+        <DrawerContent aria-label={found?.item.name ?? "Item"}>
+          <div className="min-h-0 flex-1 overflow-y-auto pb-[env(safe-area-inset-bottom)]">{body}</div>
+        </DrawerContent>
+      </Drawer>
+    );
+  }
   return (
     <Popover
       open={Boolean(found)}
@@ -98,40 +155,52 @@ export function ItemDetails({
         className="max-h-(--available-height) w-min max-w-[calc(100vw-1rem)] min-w-[300px] gap-0 overflow-y-auto p-0"
         style={PANEL_FRAME}
       >
-        {found && (
-          <>
-            <Header item={found.item} onLock={onLock} />
-            {found.item.itemType === ITEM_TYPE_WEAPON && found.item.instanceId ? (
-              <WeaponRollView
-                key={found.item.instanceId}
-                item={found.item}
-                instanceId={found.item.instanceId}
-                characterId={found.place.kind === "character" ? found.place.characterId : undefined}
-              />
-            ) : found.item.itemType === ITEM_TYPE_ARMOR && found.item.instanceId ? (
-              <ArmorView instanceId={found.item.instanceId} itemHash={found.item.itemHash} />
-            ) : (
-              <ItemDescription itemHash={found.item.itemHash} />
-            )}
-            {(found.item.instanceId || copies > 1) && (
-              <div className={cn(SECTION, "flex-row flex-wrap items-center gap-1")}>
-                {found.item.instanceId && <TagButtons instanceId={found.item.instanceId} />}
-                {copies > 1 && (
-                  <button
-                    type="button"
-                    onClick={() => onCompare(found.item)}
-                    className={cn(TAG_BUTTON, "border-foreground/12 bg-foreground/4 shrink-0 gap-1 px-3 text-[0.8rem] font-medium")}
-                  >
-                    <HugeiconsIcon icon={GitCompareIcon} className="size-3.5" aria-hidden />
-                    Compare {copies} copies
-                  </button>
-                )}
-              </div>
-            )}
-          </>
-        )}
+        {body}
       </PopoverContent>
     </Popover>
+  );
+}
+
+/**
+ * What a drag does, as buttons, for touch: pull from the postmaster, equip on or send to
+ * each character, or send to the vault. A move that can't happen is greyed out with why.
+ * Nothing for items that never move (account-wide stacks).
+ */
+function MoveButtons({
+  inventory,
+  item,
+  place,
+  onDone,
+}: {
+  inventory: ManagerInventory;
+  item: InventoryItem;
+  place: Place;
+  onDone: () => void;
+}) {
+  const actions = useManagerActions();
+  if (!actions) return null;
+  const options = moveOptions(inventory, item, place, actions.problem);
+  if (options.every((o) => o.problem)) return null;
+  return (
+    // Equips on the left and sends on the right, so a character's two share a line.
+    <div className={cn(SECTION, "grid grid-cols-2 gap-1.5")}>
+      {options.map((o) => (
+        <Button
+          key={o.label}
+          variant="outline"
+          size="sm"
+          className={cn("min-w-0", o.to.kind === "character" && o.to.equipped ? "col-start-1" : "col-start-2")}
+          disabled={o.problem !== null}
+          title={o.problem ?? undefined}
+          onClick={() => {
+            actions.move(item, place, o.to);
+            onDone();
+          }}
+        >
+          <span className="truncate">{o.label}</span>
+        </Button>
+      ))}
+    </div>
   );
 }
 

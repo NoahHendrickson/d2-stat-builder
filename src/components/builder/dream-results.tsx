@@ -390,7 +390,8 @@ export function DreamComparison({
   return (
     <div className="flex min-h-0 flex-col gap-4">
       <div className="flex flex-col gap-2">
-        <div className="flex min-h-5 items-center justify-between gap-3">
+        {/* Phones: the status goes above the note, so the note keeps the full width. */}
+        <div className="flex min-h-5 items-center justify-between gap-3 max-md:flex-col-reverse max-md:items-start max-md:gap-1">
           <span className="text-muted-foreground text-sm">{note}</span>
           <span
             className="text-muted-foreground shrink-0 text-xs tabular-nums"
@@ -424,9 +425,11 @@ export function DreamComparison({
         </div>
       )}
 
+      {/* Phones: Current gets the wider column (a Keep is short), and a Replace card drops
+          to its own full-width line under the piece it replaces. */}
       <div
         className={cn(
-          "grid grid-cols-[minmax(0,1fr)_1.25rem_minmax(0,1.4fr)] items-center gap-x-3 gap-y-3 transition-opacity",
+          "grid grid-cols-[minmax(0,1fr)_1.25rem_minmax(0,1.4fr)] items-center gap-x-3 gap-y-3 transition-opacity max-md:grid-cols-[minmax(0,1.5fr)_1rem_minmax(0,1fr)]",
           running && result && "pointer-events-none opacity-50",
         )}
       >
@@ -444,7 +447,10 @@ export function DreamComparison({
                 applied={build.tuning[slot]}
                 icons={statIcons}
               />
-              <span className="text-muted-foreground flex justify-center" aria-hidden>
+              <span
+                className={cn("text-muted-foreground flex justify-center", v.kind === "replace" && "max-md:hidden")}
+                aria-hidden
+              >
                 {v.kind === "replace" && <HugeiconsIcon icon={ArrowRight02Icon} className="text-foreground size-4" />}
               </span>
               {v.kind === "keep" && (
@@ -458,7 +464,7 @@ export function DreamComparison({
                 </div>
               )}
               {v.kind === "replace" && (
-                <div className="border-positive/40 bg-positive/8 flex flex-col gap-2 border p-2">
+                <div className="border-positive/40 bg-positive/8 flex flex-col gap-2 border p-2 max-md:col-span-3">
                   <span className="text-positive text-xs font-medium tracking-wider uppercase normal:normal-case normal:tracking-normal">
                     Replace
                   </span>

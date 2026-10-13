@@ -240,7 +240,8 @@ export const LoadoutRow = memo(function LoadoutRow({
           onClick={() => onToggle(saved.id)}
           aria-expanded={open}
           aria-label={open ? "Hide stat breakdown" : "Show stat breakdown"}
-          className="text-foreground hover:bg-foreground/6 flex h-9 items-center gap-4 rounded-none normal:rounded-[8px] px-2 text-sm leading-5 tabular-nums outline-none transition-colors focus-visible:ring-1 focus-visible:ring-outline-strong"
+          // Phones: spread across the card's full width so all seven numbers fit on one line.
+          className="text-foreground hover:bg-foreground/6 flex h-9 items-center gap-4 rounded-none normal:rounded-[8px] px-2 text-sm leading-5 tabular-nums outline-none transition-colors focus-visible:ring-1 focus-visible:ring-outline-strong max-md:w-full max-md:justify-between max-md:gap-1 max-md:px-1"
         >
           {optimizer ? (
             <>
@@ -248,11 +249,11 @@ export const LoadoutRow = memo(function LoadoutRow({
               {STAT_COLS.map(({ key, i }) => {
                 const value = optimizer.stats[i];
                 return (
-                  <span key={key} className="flex items-center gap-1">
+                  <span key={key} className="flex items-center gap-1 max-md:gap-0.5">
                     <StatGlyph
                       src={statIcons[key]}
                       label={STAT_LABELS[key]}
-                      className="size-4 opacity-75"
+                      className="size-4 opacity-75 max-md:size-3.5"
                     />
                     <span className={cn(value === 0 && "text-muted-foreground")}>
                       {value}

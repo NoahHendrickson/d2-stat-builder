@@ -145,7 +145,9 @@ function ArtificeCell({
  * (viewport 2xl still leaves a narrow builds column beside the sidebar + config).
  */
 const BREAKDOWN_GRID =
-  "grid grid-cols-[minmax(7rem,max-content)_repeat(6,minmax(2.25rem,1fr))_auto] items-center gap-x-2 @[44rem]/build:grid-cols-[minmax(8rem,max-content)_repeat(6,minmax(2.5rem,1fr))_auto] @[44rem]/build:gap-x-4";
+  "grid grid-cols-[minmax(7rem,max-content)_repeat(6,minmax(2.25rem,1fr))_auto] items-center gap-x-2 @[44rem]/build:grid-cols-[minmax(8rem,max-content)_repeat(6,minmax(2.5rem,1fr))_auto] @[44rem]/build:gap-x-4 " +
+  // Phones: those minimums add up past a card's width and clip the last stat column.
+  "max-md:grid-cols-[minmax(5.25rem,max-content)_repeat(6,minmax(1.75rem,1fr))_auto] max-md:gap-x-1";
 
 /** Delta colours: +n the game's stat-gain green, -n red, 0 secondary. */
 const POSITIVE_CLASS = "text-positive";
@@ -414,7 +416,7 @@ const BuildRow = memo(function BuildRow({
         <div className="d2-reveal border-t border-foreground/8">
           {/* Shared column tracks so totals line up with per-piece stats
               (name column is max-content of the longest piece name). */}
-          <div className={cn(BREAKDOWN_GRID, "border-b border-foreground/8 px-4")}>
+          <div className={cn(BREAKDOWN_GRID, "border-b border-foreground/8 px-4 max-md:px-3")}>
             {/* Armor table — Figma 18:6899 */}
             <div className="col-span-full grid grid-cols-subgrid items-center gap-y-4 py-4">
               <div className="d2-label">Armor</div>
@@ -515,7 +517,7 @@ const BuildRow = memo(function BuildRow({
               })}
             </div>
 
-            <div className="col-span-full -mx-4 border-t border-foreground/8" />
+            <div className="col-span-full -mx-4 max-md:-mx-3 border-t border-foreground/8" />
 
             {/* Totals — Figma 18:6970 */}
             <div className="col-span-full grid grid-cols-subgrid items-center gap-y-6 py-4">
@@ -543,7 +545,7 @@ const BuildRow = memo(function BuildRow({
               <TotalsRow label="Total" render={(i) => loadout.stats[i]} />
             </div>
 
-            <div className="col-span-full -mx-4 border-t border-foreground/8" />
+            <div className="col-span-full -mx-4 max-md:-mx-3 border-t border-foreground/8" />
 
             {/* Masterwork — what it costs to make the assumed-full masterwork real */}
             <div className="col-span-full py-4">

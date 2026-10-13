@@ -2,10 +2,12 @@ import { expect, test } from "vitest";
 import { BUCKETS } from "./buckets";
 import type { InventoryItem } from "./build";
 import {
+  CAPTION_HEIGHT_PX,
   HEADING_HEIGHT_PX,
   layoutVault,
   lineOfItem,
   linesBetween,
+  phoneTileMetrics,
   type VaultBucket,
   type VaultTileLine,
 } from "./vault-layout";
@@ -169,4 +171,61 @@ test("a section without a heading starts with its tiles, padded as asked", () =>
   expect(line!.top).toBe(0);
   expect(line!.padTop).toBe(4);
   expect(height).toBe(4 + 76 + 4);
+});
+
+test("phone tiles fill the width in whole columns, at least six, never past 60px", () => {
+  for (const width of [288, 328, 358, 398, 700]) {
+    const m = phoneTileMetrics(width);
+    expect(m.cols).toBeGreaterThanOrEqual(6);
+    expect(m.tile).toBeLessThanOrEqual(60);
+    expect(m.height).toBe(m.tile + 16);
+    // A character slot row (equipped, a double gap, then cols - 1 tiles) fits the width…
+    expect(m.cols * (m.tile + m.gap)).toBeLessThanOrEqual(width);
+    // …with less than a column's worth to spare.
+    expect(width - m.cols * (m.tile + m.gap)).toBeLessThan(m.cols + m.gap);
+  }
+  expect(phoneTileMetrics(358)).toMatchObject({ cols: 6, tile: 53, gap: 6 });
+});
+
+test("phone captions name the bucket and each group above its own lines", () => {
+  const m = phoneTileMetrics(358);
+  const labelled = (key: string, count: number) => ({ ...group(key, count), label: key.toUpperCase() });
+  const { lines, height } = layoutVault(
+    [{ heading: "Weapons", buckets: [bucket([labelled("a", 8), labelled("b", 2)], { captions: true })] }],
+    358,
+    undefined,
+    m,
+  );
+  expect(lines.map((line) => (line.kind === "caption" ? `${line.level}:${line.label}:${line.count}` : line.kind))).toEqual([
+    "heading",
+    "bucket:Kinetic:10",
+    "group:A:8",
+    "tiles",
+    "tiles",
+    "group:B:2",
+    "tiles",
+  ]);
+  const tiles = lines.filter((line): line is VaultTileLine => line.kind === "tiles");
+  // Six to a line, groups never sharing one, no marker column.
+  expect(shape(tiles)).toEqual([[6], [2], [2]]);
+  expect(tiles.every((line) => line.cells.every((cell) => cell.markerWidth === 0))).toBe(true);
+  // A group's first line sits right under its caption; the wrap keeps the tile gap.
+  expect(tiles.map((line) => line.padTop)).toEqual([0, m.gap, 0]);
+  // Lines stack without gaps or overlaps, and the bucket's padding closes it off.
+  for (let i = 1; i < lines.length; i++) expect(lines[i]!.top).toBe(lines[i - 1]!.top + lines[i - 1]!.height);
+  expect(height).toBe(
+    HEADING_HEIGHT_PX + 3 * CAPTION_HEIGHT_PX + 3 * m.height + m.gap + 10,
+  );
+});
+
+test("on phones, a bucket with nothing to name keeps its padding", () => {
+  const m = phoneTileMetrics(358);
+  const { lines } = layoutVault(
+    [{ heading: "Other", buckets: [bucket([group("a", 3)], { label: undefined, captions: true })] }],
+    358,
+    4,
+    m,
+  );
+  expect(lines.map((line) => line.kind)).toEqual(["heading", "tiles"]);
+  expect((lines[1] as VaultTileLine).padTop).toBe(4);
 });

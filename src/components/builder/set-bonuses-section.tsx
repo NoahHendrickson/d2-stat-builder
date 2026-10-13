@@ -161,8 +161,9 @@ export function SetBonusesSection({
                 : "No sets to show."}
         </p>
       ) : (
-        // Figma 17:5731: name · 2pc perk · 4pc perk columns (+ the roll-grid button), 16px row gap
-        <div className="grid grid-cols-[minmax(0,1.4fr)_minmax(0,0.75fr)_minmax(0,1fr)_auto] items-center gap-x-4 gap-y-4">
+        // Figma 17:5731: name · 2pc perk · 4pc perk columns (+ the roll-grid button), 16px row gap.
+        // Phones: the name (and grid button) on one line, each perk on its own under it (see SetRow).
+        <div className="grid grid-cols-[minmax(0,1.4fr)_minmax(0,0.75fr)_minmax(0,1fr)_auto] items-center gap-x-4 gap-y-4 max-md:grid-cols-[minmax(0,1fr)_auto] max-md:gap-y-5">
           {pinnedList.map((s) => row(s, true))}
           {pinnedList.length > 0 && unpinnedList.length > 0 && (
             <div className="border-border col-span-full border-t" aria-hidden />

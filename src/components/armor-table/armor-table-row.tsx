@@ -28,7 +28,8 @@ export const COLUMN_COUNT = 13;
  *  piece name. Stats stay fixed. */
 export const TABLE_COLGROUP = (
   <colgroup>
-    <col style={{ width: "22rem" }} /* name */ />
+    {/* Phones: narrower, and pinned (see NAME_CELL_STICKY), so stats scroll in beside it. */}
+    <col className="w-[22rem] max-md:w-[13rem]" /* name */ />
     <col /* class — flexible */ />
     <col /* archetype — flexible */ />
     <col /* tertiary — flexible */ />
@@ -43,17 +44,25 @@ export const TABLE_COLGROUP = (
 
 /**
  * Duplicate groups cycle these hues (amber first) so neighbouring groups never share
- * a colour. Written out whole for Tailwind: background, hover, and the line that opens
- * the group, then the faint line between its rows.
+ * a colour. Written out whole for Tailwind: background (plus `--row-tint`, the same wash for
+ * the opaque sticky name cell on phones), hover, and the line that opens the group, then the
+ * faint line between its rows.
  */
 const DUPLICATE_GROUP_TINTS = [
-  ["bg-amber-500/14 hover:bg-amber-500/24", "border-amber-500/60", "border-amber-500/15"],
-  ["bg-sky-500/14 hover:bg-sky-500/24", "border-sky-500/60", "border-sky-500/15"],
-  ["bg-emerald-500/14 hover:bg-emerald-500/24", "border-emerald-500/60", "border-emerald-500/15"],
-  ["bg-rose-500/14 hover:bg-rose-500/24", "border-rose-500/60", "border-rose-500/15"],
-  ["bg-violet-500/14 hover:bg-violet-500/24", "border-violet-500/60", "border-violet-500/15"],
-  ["bg-lime-500/14 hover:bg-lime-500/24", "border-lime-500/60", "border-lime-500/15"],
+  ["bg-amber-500/14 hover:bg-amber-500/24 [--row-tint:color-mix(in_oklab,var(--color-amber-500)_14%,transparent)]", "border-amber-500/60", "border-amber-500/15"],
+  ["bg-sky-500/14 hover:bg-sky-500/24 [--row-tint:color-mix(in_oklab,var(--color-sky-500)_14%,transparent)]", "border-sky-500/60", "border-sky-500/15"],
+  ["bg-emerald-500/14 hover:bg-emerald-500/24 [--row-tint:color-mix(in_oklab,var(--color-emerald-500)_14%,transparent)]", "border-emerald-500/60", "border-emerald-500/15"],
+  ["bg-rose-500/14 hover:bg-rose-500/24 [--row-tint:color-mix(in_oklab,var(--color-rose-500)_14%,transparent)]", "border-rose-500/60", "border-rose-500/15"],
+  ["bg-violet-500/14 hover:bg-violet-500/24 [--row-tint:color-mix(in_oklab,var(--color-violet-500)_14%,transparent)]", "border-violet-500/60", "border-violet-500/15"],
+  ["bg-lime-500/14 hover:bg-lime-500/24 [--row-tint:color-mix(in_oklab,var(--color-lime-500)_14%,transparent)]", "border-lime-500/60", "border-lime-500/15"],
 ] as const;
+
+/**
+ * Phones: the name cell stays put while the table scrolls sideways. Sticky cells need a
+ * solid fill, so it paints the opaque glass under the row's duplicate tint, if any.
+ */
+const NAME_CELL_STICKY =
+  "max-md:sticky max-md:left-0 max-md:z-[1] max-md:pr-1 max-md:shadow-[1px_0_0_var(--border)] max-md:[background:linear-gradient(var(--row-tint,transparent),var(--row-tint,transparent)),var(--glass-opaque)]";
 
 export interface Row {
   piece: ArmorPiece;
@@ -105,7 +114,7 @@ export const ArmorRow = memo(function ArmorRow({
         junk && "[&>td:not(:first-child)]:opacity-40",
       )}
     >
-      <td className="overflow-hidden py-2 pr-3 pl-3">
+      <td className={cn("overflow-hidden py-2 pr-3 pl-3", NAME_CELL_STICKY)}>
         <div className="flex items-center gap-2">
           <div className={cn("flex min-w-0 flex-1 items-center gap-2", junk && "opacity-40")}>
             {piece.icon ? (

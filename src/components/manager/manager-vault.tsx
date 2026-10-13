@@ -39,6 +39,7 @@ import {
   lineOfItem,
   linesBetween,
   type VaultBucket,
+  type VaultCaptionLine,
   type VaultSection,
   type VaultTileLine,
 } from "@/lib/inventory/vault-layout";
@@ -47,7 +48,7 @@ import { weaponTypeIcon } from "@/lib/weapons/weapon-type-icon-paths";
 import { useStoreValue } from "@/lib/value-store";
 import { ItemTile } from "./item-tile";
 import { useItemComparator } from "./view-menu";
-import { dragStore } from "./manager-context";
+import { dragStore, usePhoneLayout, usePhoneTiles } from "./manager-context";
 import { DropZone } from "./manager-drop-zone";
 
 /** Above and below a slot's tiles: the slot rows' drop zones are padded this much. */
@@ -73,12 +74,14 @@ function markerWidth(groupBy: GroupKey, { items }: ItemGroup): number {
 /**
  * The vault as sections of sorted, grouped buckets, ready to lay out: the tab's gear
  * (one bucket per character slot, keyed by its hash), then (on All) what has no row of
- * its own and the account-wide inventories.
+ * its own and the account-wide inventories. On phones every bucket and group is named in
+ * text above its tiles, in place of the markers beside them.
  */
 function vaultSections(
   { vault, account }: ManagerInventory,
   compare: (a: InventoryItem, b: InventoryItem) => number,
   { weaponGroup, armorGroup, vaultTab }: ViewSettings,
+  phone: boolean,
 ): { gear: VaultSection[]; extra: VaultSection[] } {
   const bucket = (
     key: string,
@@ -90,9 +93,11 @@ function vaultSections(
     label,
     groupBy,
     groups: groupItems([...(items ?? [])].sort(compare), groupBy),
-    // No text labels: groups sit side by side, except types, which get a line each.
-    stacked: groupBy === "type",
-    markerWidth: (group) => markerWidth(groupBy, group),
+    ...(phone
+      ? // Each group on its own lines under its name.
+        { stacked: true, markerWidth: () => 0, captions: true }
+      : // No text labels: groups sit side by side, except types, which get a line each.
+        { stacked: groupBy === "type", markerWidth: (group: ItemGroup) => markerWidth(groupBy, group) }),
   });
   // Weapons and armor each follow their own grouping; the rest isn't grouped.
   const groupFor = (label: string): GroupKey =>
@@ -125,7 +130,11 @@ function vaultSections(
 function useVaultSections(inventory: ManagerInventory) {
   const view = useViewSettings();
   const compare = useItemComparator();
-  return useMemo(() => vaultSections(inventory, compare, view), [inventory, compare, view]);
+  const phone = usePhoneLayout();
+  return useMemo(
+    () => vaultSections(inventory, compare, view, phone),
+    [inventory, compare, view, phone],
+  );
 }
 
 const NO_SECTIONS: readonly VaultSection[] = [];
@@ -202,6 +211,7 @@ export function VaultPane({ inventory }: { inventory: ManagerInventory }) {
  */
 function VaultTabs({ inventory }: { inventory: ManagerInventory }) {
   const view = useViewSettings();
+  const phone = usePhoneLayout();
   const { vault } = inventory;
   const count = (tab: VaultTab) =>
     VAULT_GROUPS.find((g) => g.label === VAULT_TAB_LABELS[tab])?.rows.reduce(
@@ -209,7 +219,14 @@ function VaultTabs({ inventory }: { inventory: ManagerInventory }) {
       0,
     );
   return (
-    <div className="mb-3 flex items-end gap-6 border-b border-foreground/12">
+    // Phones: the currencies take a line of their own above the tabs; beside them they
+    // squeeze into one box per line.
+    <div
+      className={cn(
+        "mb-3 flex items-end gap-6 border-b border-foreground/12",
+        phone && "flex-col-reverse items-stretch gap-2",
+      )}
+    >
       <Tabs
         value={view.vaultTab}
         onValueChange={(tab) => setViewSettings({ ...view, vaultTab: tab as VaultTab })}
@@ -252,7 +269,11 @@ function VaultLines({ sections, pad }: { sections: readonly VaultSection[]; pad?
   const [span, setSpan] = useState<readonly [number, number]>([0, 0]);
   const [focused, setFocused] = useState<string | null>(null);
   const drag = useStoreValue(dragStore);
-  const layout = useMemo(() => layoutVault(sections, width, pad), [sections, width, pad]);
+  const metrics = usePhoneTiles() ?? undefined;
+  const layout = useMemo(
+    () => layoutVault(sections, width, pad, metrics),
+    [sections, width, pad, metrics],
+  );
 
   // Measured before paint (so the first frame already has its tiles), then on anything
   // that moves the list against the viewport. Capture, because scroll events don't
@@ -309,16 +330,38 @@ function VaultLines({ sections, pad }: { sections: readonly VaultSection[]; pad?
           <h2 key={line.key} className="d2-label absolute inset-x-0 pt-5 pb-1" style={{ top: line.top }}>
             {line.label}
           </h2>
+        ) : line.kind === "caption" ? (
+          <VaultCaption key={line.key} line={line} />
         ) : (
-          <VaultLineRow key={line.key} line={line} />
+          <VaultLineRow key={line.key} line={line} gap={metrics?.gap ?? TILE_GAP_PX} />
         );
       })}
     </div>
   );
 }
 
+/**
+ * Phones: a slot's name ("Kinetic") or one of its groups' ("Hand Cannon"), with how many
+ * items it holds, on the line above its tiles.
+ */
+function VaultCaption({ line }: { line: VaultCaptionLine }) {
+  const Tag = line.level === "bucket" ? "h3" : "p";
+  return (
+    <Tag
+      className={cn(
+        "absolute inset-x-0 flex items-end gap-2 pb-1.5",
+        line.level === "bucket" ? "text-sm font-medium" : "text-muted-foreground text-xs",
+      )}
+      style={{ top: line.top, height: line.height }}
+    >
+      <span className="min-w-0 truncate">{line.label}</span>
+      <span className="text-muted-foreground shrink-0 text-xs tabular-nums">{line.count}</span>
+    </Tag>
+  );
+}
+
 /** One line of vault tiles: a group's (or a few small groups'), each after its marker's column. */
-const VaultLineRow = memo(function VaultLineRow({ line }: { line: VaultTileLine }) {
+const VaultLineRow = memo(function VaultLineRow({ line, gap }: { line: VaultTileLine; gap: number }) {
   return (
     <div
       role="group"
@@ -338,7 +381,7 @@ const VaultLineRow = memo(function VaultLineRow({ line }: { line: VaultTileLine 
               {cell.marker && <GroupMarker groupBy={line.groupBy} item={cell.marker} />}
             </span>
           )}
-          <div className="flex" style={{ gap: TILE_GAP_PX }}>
+          <div className="flex" style={{ gap }}>
             {cell.items.map((item) => (
               <ItemTile key={item.key} item={item} />
             ))}

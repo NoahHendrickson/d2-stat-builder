@@ -76,6 +76,7 @@ import {
 import type { DimLoadoutItem } from "@/lib/dim/loadout-link";
 import type { EditorTotals } from "@/lib/loadouts/editor-stats";
 import { cn } from "@/lib/utils";
+import { useTouchFirst } from "@/lib/use-min-width";
 
 export interface LoadoutDetailsValues {
   name: string;
@@ -243,6 +244,9 @@ function EditorIdentityFields({
 }) {
   const [name, setName] = useState(initialName);
   const [notes, setNotes] = useState(initialNotes);
+  // An on-screen keyboard would cover half the drawer before the loadout is even in view.
+  // The form mounts when the drawer opens, never while hydrating, so this is the real device.
+  const focusName = !useTouchFirst();
   const validRef = useRef(nameIsValid(initialName));
 
   const setNameValue = (next: string) => {
@@ -272,7 +276,7 @@ function EditorIdentityFields({
         placeholder="Loadout name"
         aria-label="Loadout name"
         className="h-9 w-full bg-transparent text-sm sm:w-64 lg:w-full dark:bg-transparent"
-        autoFocus
+        autoFocus={focusName}
         onFocus={(e) => e.target.select()}
       />
       <label htmlFor={notesId} className="sr-only">
@@ -284,7 +288,7 @@ function EditorIdentityFields({
         onChange={(e) => setNotesValue(e.target.value)}
         maxLength={MAX_NOTES_LENGTH}
         placeholder="Notes (optional — #hashtags become filters)"
-        className="h-9 min-w-0 flex-1 bg-transparent text-sm sm:max-w-md sm:min-w-48 lg:max-w-none lg:min-w-0 dark:bg-transparent"
+        className="h-9 min-w-0 flex-1 bg-transparent text-sm max-sm:basis-full sm:max-w-md sm:min-w-48 lg:max-w-none lg:min-w-0 dark:bg-transparent"
       />
     </>
   );
@@ -518,8 +522,9 @@ function EditorForm({
 
       {/* Body: subclass + pieces side by side, each column with its options. The body
           itself doesn't scroll at a single row; the grid takes the leftover height and
-          the subclass column scrolls its own options. */}
-      <div className="flex min-h-0 flex-1 flex-col px-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+          the subclass column scrolls its own options. Phones stack the columns at full
+          height and scroll the body as one. */}
+      <div className="flex min-h-0 flex-1 flex-col px-4 pb-[max(1rem,env(safe-area-inset-bottom))] max-md:overflow-y-auto max-md:overscroll-contain">
         {description && !mods && (
           <p className="text-muted-foreground mb-3 text-xs">{description}</p>
         )}
@@ -542,7 +547,7 @@ function EditorForm({
             Gated so the header can paint before ~550 tooltip roots and images mount. */}
         {showGrids && (
           <div
-            className="grid min-h-0 flex-1 grid-cols-[repeat(auto-fit,minmax(11rem,1fr))] gap-2 lg:grid-cols-[repeat(var(--editor-cols),minmax(0,1fr))]"
+            className="grid min-h-0 flex-1 grid-cols-[repeat(auto-fit,minmax(11rem,1fr))] gap-2 max-md:flex-none max-md:grid-cols-1 lg:grid-cols-[repeat(var(--editor-cols),minmax(0,1fr))]"
             style={{ "--editor-cols": (mods?.pieces.length ?? 0) + (subclass ? 1 : 0) } as CSSProperties}
           >
             {subclass && (

@@ -21,7 +21,42 @@ const BUCKET_PAD_PX = 10;
 /** A section heading: 20px above one 16px label line, 4px below. */
 export const HEADING_HEIGHT_PX = 40;
 
-const TILE_PITCH_PX = TILE_WIDTH_PX + TILE_GAP_PX;
+/** A line naming what follows on phones: a slot ("Kinetic") or a group ("Hand Cannon"). */
+export const CAPTION_HEIGHT_PX = 28;
+
+/** Tile size and spacing to lay out with. Desktop tiles are fixed; phones size them to fit. */
+export interface TileMetrics {
+  tile: number;
+  /** Tile plus its label bar. */
+  height: number;
+  gap: number;
+  /** Tiles across a full line (phones only; desktop lines just wrap). */
+  cols: number;
+}
+
+export const DESKTOP_TILE_METRICS: TileMetrics = {
+  tile: TILE_WIDTH_PX,
+  height: TILE_HEIGHT_PX,
+  gap: TILE_GAP_PX,
+  cols: 0,
+};
+
+const PHONE_TILE_GAP_PX = 6;
+const PHONE_MIN_COLS = 6;
+/** The label bar under the icon, as on desktop (TILE_HEIGHT_PX - TILE_WIDTH_PX). */
+const TILE_FOOTER_PX = TILE_HEIGHT_PX - TILE_WIDTH_PX;
+
+/**
+ * Phones: at least six tiles across, as wide as fills `width` in whole columns but never
+ * wider than a desktop tile. A character slot row is the equipped tile, a double gap, then
+ * `cols - 1` more, so the tile leaves room for one gap per column.
+ */
+export function phoneTileMetrics(width: number): TileMetrics {
+  const gap = PHONE_TILE_GAP_PX;
+  const cols = Math.max(PHONE_MIN_COLS, Math.ceil((width + gap) / (TILE_WIDTH_PX + gap)));
+  const tile = Math.max(1, Math.floor((width - cols * gap) / cols));
+  return { tile, height: tile + TILE_FOOTER_PX, gap, cols };
+}
 
 /** One vault row (a slot's items, sorted and grouped) to lay out. */
 export interface VaultBucket {
@@ -35,6 +70,11 @@ export interface VaultBucket {
   stacked: boolean;
   /** Width of the marker drawn beside a group's tiles, or 0 when it has none. */
   markerWidth(group: ItemGroup): number;
+  /**
+   * Phones: name the bucket and each of its groups on a line of their own above their
+   * tiles. Pair with `stacked` and no markers, so each group starts its own line.
+   */
+  captions?: boolean;
 }
 
 export interface VaultSection {
@@ -75,7 +115,16 @@ export interface VaultTileLine extends LineBox {
   cells: readonly VaultCell[];
 }
 
-export type VaultLine = VaultHeadingLine | VaultTileLine;
+export interface VaultCaptionLine extends LineBox {
+  kind: "caption";
+  /** A bucket's name, or one of its groups'. */
+  level: "bucket" | "group";
+  label: string;
+  /** Items in the group (or bucket). */
+  count: number;
+}
+
+export type VaultLine = VaultHeadingLine | VaultTileLine | VaultCaptionLine;
 
 export interface VaultLayout {
   lines: VaultLine[];
@@ -87,10 +136,13 @@ interface BucketRow {
   cells: VaultCell[];
   /** Starts a group (or a line of small groups): set apart from the line above. */
   opens: boolean;
+  /** Phones: the group this row starts, named on a line above it. */
+  caption?: { label: string; count: number };
 }
 
 /** A bucket's tiles as rows: which groups, and which of their items, share each one. */
-function bucketRows(bucket: VaultBucket, width: number): BucketRow[] {
+function bucketRows(bucket: VaultBucket, width: number, m: TileMetrics): BucketRow[] {
+  const pitch = m.tile + m.gap;
   const rows: BucketRow[] = [];
   // Small groups waiting to share a row, and the width they take so far.
   let shared: VaultCell[] = [];
@@ -105,7 +157,7 @@ function bucketRows(bucket: VaultBucket, width: number): BucketRow[] {
     if (group.items.length === 0) continue;
     const markerWidth = bucket.markerWidth(group);
     const lead = markerWidth > 0 ? markerWidth + MARKER_GAP_PX : 0;
-    const natural = lead + group.items.length * TILE_PITCH_PX - TILE_GAP_PX;
+    const natural = lead + group.items.length * pitch - m.gap;
 
     if (!bucket.stacked && natural <= width) {
       if (shared.length > 0 && used + GROUP_GAP_X_PX + natural > width) flush();
@@ -116,7 +168,7 @@ function bucketRows(bucket: VaultBucket, width: number): BucketRow[] {
 
     // A line (or several) of its own, wrapping at the pane's edge.
     flush();
-    const perRow = Math.max(1, Math.floor((width - lead + TILE_GAP_PX) / TILE_PITCH_PX));
+    const perRow = Math.max(1, Math.floor((width - lead + m.gap) / pitch));
     for (let i = 0; i < group.items.length; i += perRow) {
       rows.push({
         key: `${bucket.key}:${group.key}:${i / perRow}`,
@@ -129,6 +181,9 @@ function bucketRows(bucket: VaultBucket, width: number): BucketRow[] {
           },
         ],
         opens: i === 0,
+        ...(i === 0 && bucket.captions && group.label
+          ? { caption: { label: group.label, count: group.items.length } }
+          : {}),
       });
     }
   }
@@ -145,6 +200,7 @@ export function layoutVault(
   sections: readonly VaultSection[],
   width: number,
   pad = BUCKET_PAD_PX,
+  m: TileMetrics = DESKTOP_TILE_METRICS,
 ): VaultLayout {
   const lines: VaultLine[] = [];
   if (width <= 0) return { lines, height: 0 };
@@ -163,10 +219,24 @@ export function layoutVault(
     }
 
     for (const bucket of section.buckets) {
-      const rows = bucketRows(bucket, width);
+      const rows = bucketRows(bucket, width, m);
+      // Tiles sit right under a caption (its line has room above the text); otherwise
+      // they're padded as usual.
+      let captioned = false;
+      const pushCaption = (key: string, level: VaultCaptionLine["level"], label: string, count: number) => {
+        lines.push({ kind: "caption", key, level, label, count, top, height: CAPTION_HEIGHT_PX });
+        top += CAPTION_HEIGHT_PX;
+        captioned = true;
+      };
+      if (bucket.captions && bucket.label && rows.length > 0) {
+        const count = bucket.groups.reduce((n, g) => n + g.items.length, 0);
+        pushCaption(`${bucket.key}:caption`, "bucket", bucket.label, count);
+      }
       rows.forEach((row, i) => {
-        const padTop = i === 0 ? pad : row.opens ? GROUP_GAP_Y_PX : TILE_GAP_PX;
-        const height = padTop + TILE_HEIGHT_PX + (i === rows.length - 1 ? pad : 0);
+        if (row.caption) pushCaption(`${row.key}:caption`, "group", row.caption.label, row.caption.count);
+        const padTop = captioned ? 0 : i === 0 ? pad : row.opens ? GROUP_GAP_Y_PX : m.gap;
+        captioned = false;
+        const height = padTop + m.height + (i === rows.length - 1 ? pad : 0);
         lines.push({
           kind: "tiles",
           key: row.key,
@@ -183,6 +253,7 @@ export function layoutVault(
   }
   return { lines, height: top };
 }
+
 
 /** The lines overlapping `from`…`to` (list offsets), as a half-open index range. */
 export function linesBetween(lines: readonly VaultLine[], from: number, to: number): [number, number] {

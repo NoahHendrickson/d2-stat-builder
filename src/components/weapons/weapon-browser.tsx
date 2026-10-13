@@ -499,7 +499,7 @@ const WeaponDetails = memo(function WeaponDetails({
           )
         }
         className={cn(
-          "relative flex size-14 shrink-0 items-center justify-center outline-none",
+          "relative flex size-14 shrink-0 items-center justify-center outline-none max-md:size-11",
           masterwork
             ? cn(
                 "transition-[opacity,filter] hover:brightness-125 focus-visible:[&>img]:d2-tile-selected",
@@ -568,7 +568,7 @@ const WeaponDetails = memo(function WeaponDetails({
           {/* Pulled left by a chip's padding and border, so the first icon
               lines up under the name. */}
           <Description
-            className="-ml-[7px] flex items-center gap-1.5 text-muted-foreground"
+            className="-ml-[7px] flex items-center gap-1.5 text-muted-foreground max-md:flex-wrap"
             onPointerLeave={reveal.leave}
           >
             <RevealRowContext value={reveal}>
@@ -636,7 +636,7 @@ const WeaponDetails = memo(function WeaponDetails({
                   header stays two lines in a narrow pane. */}
               {origin.length > 0 && (
                 <span
-                  className="ml-2 min-w-0 truncate"
+                  className="ml-2 min-w-0 truncate max-md:ml-[7px] max-md:basis-full max-md:whitespace-normal"
                   title={origin
                     .map(([name, value]) => `${name}: ${value}`)
                     .join(", ")}
@@ -656,11 +656,11 @@ const WeaponDetails = memo(function WeaponDetails({
       {/* Perks first, the stats they move beside them on the right; the stats
           take what width is left, dropping below once that is under 16rem. */}
       <div className="flex flex-wrap items-start gap-6">
-        <div className="flex max-w-full gap-2.5 overflow-x-auto pb-1">
+        <div className="flex max-w-full gap-2.5 overflow-x-auto pb-1 max-md:gap-1.5">
           {!hasIntrinsic && masterworks.length > 0 && (
             <section
               aria-label="Masterwork"
-              className="flex shrink-0 flex-col gap-2.5"
+              className="flex shrink-0 flex-col gap-2.5 max-md:gap-1.5"
             >
               {masterworks.map((index) => perkTile(MASTERWORK, index))}
             </section>
@@ -670,7 +670,7 @@ const WeaponDetails = memo(function WeaponDetails({
               <section
                 key={i}
                 aria-label={column.kind}
-                className="flex shrink-0 flex-col gap-2.5"
+                className="flex shrink-0 flex-col gap-2.5 max-md:gap-1.5"
               >
                 {column !== fixedFrame &&
                   column.perkIndices.map((index) => perkTile(i, index))}
@@ -681,7 +681,7 @@ const WeaponDetails = memo(function WeaponDetails({
                     role="group"
                     aria-label="Masterwork"
                     className={cn(
-                      "flex flex-col gap-2.5",
+                      "flex flex-col gap-2.5 max-md:gap-1.5",
                       column !== fixedFrame && "mt-2.5",
                     )}
                   >
@@ -692,6 +692,10 @@ const WeaponDetails = memo(function WeaponDetails({
             ),
           )}
         </div>
+        {/* Touch has no hover: phones open a perk's tooltip on a held finger. */}
+        <p className="-mt-3 basis-full text-xs text-muted-foreground md:hidden">
+          Tap a perk to pick it, or press and hold to read it.
+        </p>
         {Object.keys(current).length > 0 && (
           <div className="min-w-64 flex-1 basis-64">
             <WeaponStats base={current} stats={preview} />

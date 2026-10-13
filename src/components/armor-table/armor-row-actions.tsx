@@ -4,7 +4,11 @@ import { TooltipLabel } from "@/components/ui/tooltip";
 import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { Delete02Icon, Loading03Icon } from "@hugeicons/core-free-icons";
+import {
+  Delete02Icon,
+  Loading03Icon,
+  MoreVerticalIcon,
+} from "@hugeicons/core-free-icons";
 import { toast } from "@/lib/toast";
 import { setTag, type ItemTag } from "@/lib/inventory/annotations";
 import type { ArmorPiece } from "@/lib/armory/normalize";
@@ -19,6 +23,13 @@ import {
   vaultedNote,
 } from "@/lib/bungie/equip-client";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 
 type Action = "move" | "equip";
@@ -142,43 +153,90 @@ export function ArmorRowActions({
   };
 
   return (
-    <div className="flex shrink-0 items-center gap-1">
-      <div className={cn("flex items-center gap-1", !busy && REVEAL_ON_ROW_HOVER)}>
-        {(["move", "equip"] as const).map((action) => (
-          <TooltipLabel
-            label={reasons[action] ?? undefined}
-            key={action}
-            disabled={Boolean(reasons[action])}
-          >
+    <>
+      {/* Phones: one menu in place of three always-on buttons, so the name cell can be
+          narrow enough to leave the stats in view. */}
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          aria-label={`${piece.name} actions`}
+          render={
             <Button
-              size="sm"
-              variant="outline"
-              className="h-6 px-2 text-xs"
+              variant="ghost"
+              size="icon-sm"
+              className={cn("shrink-0 md:hidden", junk && "text-destructive")}
+            />
+          }
+        >
+          {busy ? (
+            <HugeiconsIcon icon={Loading03Icon} className="animate-spin" aria-hidden />
+          ) : (
+            <HugeiconsIcon icon={MoreVerticalIcon} strokeWidth={2} aria-hidden />
+          )}
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-60">
+          {(["move", "equip"] as const).map((action) => (
+            <DropdownMenuItem
+              key={action}
               disabled={Boolean(reasons[action]) || busy !== null}
               onClick={() => void run(action)}
+              className="h-auto flex-col items-start gap-0 py-1.5"
             >
-              {busy === action && (
-                <HugeiconsIcon icon={Loading03Icon} className="animate-spin" aria-hidden />
-              )}
               {action === "move" ? "Move" : "Equip"}
+              {target && !reasons[action] && (
+                <span className="text-muted-foreground text-xs">
+                  {action === "move" ? "To" : "On"} your {CLASS_NAMES[piece.classType] ?? "character"}
+                </span>
+              )}
+              {reasons[action] && (
+                <span className="text-muted-foreground text-xs">{reasons[action]}</span>
+              )}
+            </DropdownMenuItem>
+          ))}
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onClick={() => setTag([piece.instanceId], junk ? undefined : "junk")}>
+            <HugeiconsIcon icon={Delete02Icon} aria-hidden />
+            {junk ? "Unmark junk" : "Mark as junk"}
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+      <div className="flex shrink-0 items-center gap-1 max-md:hidden">
+        <div className={cn("flex items-center gap-1", !busy && REVEAL_ON_ROW_HOVER)}>
+          {(["move", "equip"] as const).map((action) => (
+            <TooltipLabel
+              label={reasons[action] ?? undefined}
+              key={action}
+              disabled={Boolean(reasons[action])}
+            >
+              <Button
+                size="sm"
+                variant="outline"
+                className="h-6 px-2 text-xs"
+                disabled={Boolean(reasons[action]) || busy !== null}
+                onClick={() => void run(action)}
+              >
+                {busy === action && (
+                  <HugeiconsIcon icon={Loading03Icon} className="animate-spin" aria-hidden />
+                )}
+                {action === "move" ? "Move" : "Equip"}
+              </Button>
+            </TooltipLabel>
+          ))}
+        </div>
+        <span className={cn("flex", !junk && REVEAL_ON_ROW_HOVER)}>
+          <TooltipLabel label={junk ? "Unmark junk" : "Mark as junk"}>
+            <Button
+              size="sm"
+              variant={junk ? "default" : "outline"}
+              className={cn("size-6 p-0", !junk && "text-muted-foreground")}
+              aria-label="Junk"
+              aria-pressed={junk}
+              onClick={() => setTag([piece.instanceId], junk ? undefined : "junk")}
+            >
+              <HugeiconsIcon icon={Delete02Icon} className="size-3" aria-hidden />
             </Button>
           </TooltipLabel>
-        ))}
+        </span>
       </div>
-      <span className={cn("flex", !junk && REVEAL_ON_ROW_HOVER)}>
-        <TooltipLabel label={junk ? "Unmark junk" : "Mark as junk"}>
-          <Button
-            size="sm"
-            variant={junk ? "default" : "outline"}
-            className={cn("size-6 p-0", !junk && "text-muted-foreground")}
-            aria-label="Junk"
-            aria-pressed={junk}
-            onClick={() => setTag([piece.instanceId], junk ? undefined : "junk")}
-          >
-            <HugeiconsIcon icon={Delete02Icon} className="size-3" aria-hidden />
-          </Button>
-        </TooltipLabel>
-      </span>
-    </div>
+    </>
   );
 }

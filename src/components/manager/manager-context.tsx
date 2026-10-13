@@ -7,6 +7,7 @@ import type { MoveStep } from "@/lib/inventory/smart-moves";
 import type { MoveOutcome } from "@/lib/inventory/move-queue";
 import type { PendingToast } from "@/lib/toast";
 import { createValueStore } from "@/lib/value-store";
+import type { TileMetrics } from "@/lib/inventory/vault-layout";
 
 /** The item being dragged and where it came from; drop zones subscribe to this. */
 export interface DragInfo {
@@ -47,4 +48,23 @@ export const ManagerActionsContext = createContext<ManagerActions | null>(null);
 
 export function useManagerActions(): ManagerActions | null {
   return useContext(ManagerActionsContext);
+}
+
+/**
+ * Whether the page is laid out for a phone (below Tailwind `md`), and there, the tile
+ * size and spacing that fill its width (see phoneTileMetrics). Wider screens keep fixed
+ * 60px tiles.
+ */
+export type ManagerLayout = { phone: false } | { phone: true; tiles: TileMetrics };
+
+export const ManagerLayoutContext = createContext<ManagerLayout>({ phone: false });
+
+export function usePhoneLayout(): boolean {
+  return useContext(ManagerLayoutContext).phone;
+}
+
+/** Phones: the tile size that fills the page's width. Null on wider screens. */
+export function usePhoneTiles(): TileMetrics | null {
+  const layout = useContext(ManagerLayoutContext);
+  return layout.phone ? layout.tiles : null;
 }

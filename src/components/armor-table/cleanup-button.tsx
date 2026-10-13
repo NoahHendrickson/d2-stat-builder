@@ -74,7 +74,7 @@ export function CleanupButton({
         onClick={onToggle}
       >
         <HugeiconsIcon icon={CleanIcon} data-icon="inline-start" aria-hidden />
-        Cleanup
+        <span className="max-md:sr-only">Cleanup</span>
       </Button>
       <DropdownMenu>
         <DropdownMenuTrigger

@@ -20,7 +20,7 @@ export function BuilderPageShell() {
   // Horizontal padding on lg lives inside each column scroller so the gutter
   // to the left of the settings cards still wheel-scrolls that column.
   return (
-    <main className="flex h-full min-h-0 flex-col px-6 py-6 pb-24 lg:overflow-hidden lg:px-0 lg:pb-6">
+    <main className="flex h-full min-h-0 flex-col px-6 py-6 pb-24 max-md:px-4 lg:overflow-hidden lg:px-0 lg:pb-6">
       <BuilderPanel showInlineStatusCards={!desktop} />
     </main>
   );

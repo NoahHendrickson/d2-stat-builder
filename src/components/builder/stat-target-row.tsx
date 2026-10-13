@@ -215,7 +215,8 @@ export const StatTargetRow = memo(function StatTargetRow({
                   : 0,
               );
             }}
-            className="h-5 w-9 border-foreground/12 bg-foreground/8 px-1 text-center text-[11px] leading-5 font-medium tabular-nums normal:h-6 normal:w-10 normal:rounded-[6px] normal:bg-foreground/4 normal:text-xs normal:font-normal md:normal:text-xs [appearance:textfield] md:text-[11px] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+            // Phones type at 16px (see globals.css), so the chip grows to hold it.
+            className="h-5 w-9 max-md:h-7 max-md:w-12 max-md:normal:h-7 max-md:normal:w-12 border-foreground/12 bg-foreground/8 px-1 text-center text-[11px] leading-5 font-medium tabular-nums normal:h-6 normal:w-10 normal:rounded-[6px] normal:bg-foreground/4 normal:text-xs normal:font-normal md:normal:text-xs [appearance:textfield] md:text-[11px] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
           />
           {stepper && (
             <StepButton
