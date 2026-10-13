@@ -3,11 +3,7 @@
 import { Fragment, memo, useMemo, type ReactNode } from "react";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { CheckmarkCircle02Icon } from "@hugeicons/core-free-icons";
-import {
-  BUILD_CARD_LIFT_CLASS,
-  BUILD_LIST_WELL_CLASS,
-  MAX_SHOWN,
-} from "@/components/builder/build-results";
+import { BUILD_LIST_WELL_CLASS, MAX_SHOWN } from "@/components/builder/build-results";
 import {
   CardStats,
   Glyph,
@@ -155,8 +151,9 @@ function TheorySummaryCard({
       ? `the ${closeOnly ? "close " : ""}build below`
       : `the ${summary.builds} ${closeOnly ? "close " : ""}builds below`;
   return (
-    <div className={cn(BUILD_CARD_LIFT_CLASS, "flex flex-col gap-1.5 p-3 normal:bg-popover")}>
-      <h3 className="d2-label">What to farm</h3>
+    // The set-badge blue (build cards' 2pc pills), framed like the alert above it.
+    <div className="flex flex-col gap-1.5 rounded-md border border-[#41a6ff]/60 bg-[#41a6ff]/12 p-3">
+      <h3 className="d2-label text-[#1f7ad1] dark:text-[#7cc2ff]">What to farm</h3>
       <p className="text-muted-foreground text-sm leading-relaxed">
         {closeOnly ? "The closest builds farm for " : "Farm for "}
         {orList(
