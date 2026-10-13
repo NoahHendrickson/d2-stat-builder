@@ -34,12 +34,12 @@ export function TheoryIntroAlert() {
   if (!open) return null;
   return (
     <div
-      className="d2-reveal flex items-start gap-2.5 rounded-md border border-warning/60 bg-warning/15 px-3 py-2.5"
+      className="d2-reveal flex items-start gap-2.5 rounded-md border border-amber-500/60 bg-amber-500/15 px-3 py-2.5"
       role="note"
     >
       <HugeiconsIcon
         icon={InformationCircleIcon}
-        className="text-warning mt-0.5 size-4 shrink-0"
+        className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400"
         aria-hidden
       />
       <div className="text-foreground/90 flex min-w-0 flex-1 flex-col gap-1 text-sm">
