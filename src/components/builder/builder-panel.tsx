@@ -22,7 +22,6 @@ import {
 } from "@/lib/armory/set-filters";
 import {
   availableFragments,
-  SUBCLASSES,
   type Subclass,
 } from "@/lib/armory/fragments";
 import {
@@ -72,6 +71,7 @@ import type {
   BuildsMode,
 } from "@/components/builder/builds-column-content";
 import { SetBonusesSection } from "@/components/builder/set-bonuses-section";
+import { useTabInput } from "@/components/builder/use-tab-input";
 import { dreamInputForBuild } from "@/lib/optimizer/dream-input";
 
 import type { OptimizerLoadout } from "@/lib/optimizer/types";
@@ -156,12 +156,40 @@ export function BuilderPanel({
   const [classType, setClassType] = useState<number | null>(
     initialSaved?.classType ?? null,
   );
-  const [targets, setTargets] = useState<number[]>(
+  /**
+   * Actual builds (owned armor) or theoretical ones (the Tier-5 rolls that would reach
+   * the targets). The theoretical tab hides the settings it ignores, and keeps its own
+   * targets, major mods, exotic, set bonuses and fragments (useTabInput): it opens on
+   * the defaults, and Builds gets its own back on the way out. Class, the set list
+   * filters and the hidden settings are shared.
+   */
+  const [buildsMode, setBuildsMode] = useState<BuildsMode>("actual");
+  const theoretical = buildsMode === "theoretical";
+  const {
+    value: targets,
+    actual: actualTargets,
+    set: setTargets,
+    setIn: setTargetsIn,
+  } = useTabInput<number[]>(
+    buildsMode,
     () => initialSaved?.targets ?? [0, 0, 0, 0, 0, 0],
+    () => [0, 0, 0, 0, 0, 0],
   );
-  const [major, setMajor] = useState(initialSaved?.major ?? 0);
-  const [setReqs, setSetReqs] = useState<Record<number, 2 | 4>>(
+  const {
+    value: major,
+    actual: actualMajor,
+    set: setMajor,
+    setIn: setMajorIn,
+  } = useTabInput(buildsMode, () => initialSaved?.major ?? 0, () => 0);
+  const {
+    value: setReqs,
+    actual: actualSetReqs,
+    set: setSetReqs,
+    setIn: setSetReqsIn,
+  } = useTabInput<Record<number, 2 | 4>>(
+    buildsMode,
     () => initialSaved?.setReqs ?? {},
+    () => ({}),
   );
   // Pins follow the account between computers (synced-settings.ts), not the selections.
   const pinnedSets = usePinnedSets();
@@ -176,34 +204,47 @@ export function BuilderPanel({
    */
   const [dreamOpen, setDreamOpen] = useState(false);
   const [dreamBuild, setDreamBuild] = useState<OptimizerLoadout | null>(null);
-  /**
-   * Actual builds (owned armor) or theoretical ones (the Tier-5 rolls that would reach
-   * the targets). Targets, major mods and fragments are shared; the theoretical tab
-   * hides the settings it ignores.
-   */
-  const [buildsMode, setBuildsMode] = useState<BuildsMode>("actual");
-  const theoretical = buildsMode === "theoretical";
   // Held by name, not index: the exotics list is rebuilt (and re-indexed) whenever a
   // pool toggle changes, and an index would slide onto whichever exotic took its place.
-  const [selectedExoticName, setSelectedExoticName] = useState<string | null>(
-    null,
-  );
+  const {
+    value: selectedExoticName,
+    actual: actualExoticName,
+    set: setSelectedExoticName,
+    setIn: setSelectedExoticNameIn,
+  } = useTabInput<string | null>(buildsMode, () => null, () => null);
   /** Exotic class item Spirit pair; null = Any. Cleared when exotic/class changes. */
-  const [exoticPerks, setExoticPerks] = useState<
-    [number | null, number | null]
-  >(() => initialSaved?.exoticPerks ?? [null, null]);
+  const {
+    value: exoticPerks,
+    actual: actualExoticPerks,
+    set: setExoticPerks,
+    setIn: setExoticPerksIn,
+  } = useTabInput<[number | null, number | null]>(
+    buildsMode,
+    () => initialSaved?.exoticPerks ?? [null, null],
+    () => [null, null],
+  );
   const [useBalancedTuning, setUseBalancedTuning] = useState(
     initialSaved?.balancedTuning ?? true,
   );
-  const [activeSubclass, setActiveSubclass] = useState<Subclass>(
-    initialSaved?.activeSubclass ?? "Prismatic",
+  const {
+    value: activeSubclass,
+    actual: actualActiveSubclass,
+    set: setActiveSubclass,
+    setIn: setActiveSubclassIn,
+  } = useTabInput<Subclass>(
+    buildsMode,
+    () => initialSaved?.activeSubclass ?? "Prismatic",
+    () => "Prismatic",
   );
-  const [fragSel, setFragSel] = useState<Record<Subclass, Set<number>>>(() =>
-    initialSaved
-      ? fragSelFromArrays(initialSaved.fragSel)
-      : (Object.fromEntries(
-          SUBCLASSES.map((s) => [s, new Set<number>()]),
-        ) as Record<Subclass, Set<number>>),
+  const {
+    value: fragSel,
+    actual: actualFragSel,
+    set: setFragSel,
+    setIn: setFragSelIn,
+  } = useTabInput<Record<Subclass, Set<number>>>(
+    buildsMode,
+    () => fragSelFromArrays(initialSaved?.fragSel ?? {}),
+    () => fragSelFromArrays({}),
   );
   // Legacy EXOTICS: the solver spends their artifice +3.
   const [useLegacyExotics, setUseLegacyExotics] = useState(
@@ -283,28 +324,27 @@ export function BuilderPanel({
   );
 
   // Set requirements narrowed to bonuses the player's pieces for this class can make: a
-  // restored (or class-corrected) requirement for a set they no longer own, or one picked
-  // on the Theoretical Builds tab for a set they own too few pieces of, would make every
-  // build infeasible. A 4pc with 2–3 owned pieces becomes the 2pc they can make. This is
-  // what the Builds tab searches with and shows; persistence and "Load in builder" keep
-  // the raw `setReqs` so turning a pool toggle off (or switching tabs) can't
-  // permanently drop a requirement.
+  // restored (or class-corrected) requirement for a set they no longer own, or one they
+  // now own too few pieces of, would make every build infeasible. A 4pc with 2–3 owned
+  // pieces becomes the 2pc they can make. This is what the Builds tab searches with and
+  // shows; persistence and "Load in builder" keep the raw `setReqs` so turning a pool
+  // toggle off can't permanently drop a requirement.
   const ownedSetReqs = useMemo(() => makeableSetReqs(setReqs, setMap), [setReqs, setMap]);
 
-  // What persistence and "Load in builder" store: the raw map, capped at what
+  // What persistence and "Load in builder" store: the Builds tab's raw map, capped at what
   // parseBuilderSnapshot accepts. Requirements for sets that left the pool are
   // invisible in the UI, so without the cap they accumulate silently and every
   // later save is rejected with a bare "Invalid loadout". Owned ones take the
   // slots first; orphans fill what's left.
   const persistedSetReqs = useMemo(() => {
-    const entries = Object.entries(setReqs);
-    if (entries.length <= MAX_SET_BONUSES) return setReqs;
+    const entries = Object.entries(actualSetReqs);
+    if (entries.length <= MAX_SET_BONUSES) return actualSetReqs;
     const owned = entries.filter(([h]) => setMap.has(Number(h)));
     const orphans = entries.filter(([h]) => !setMap.has(Number(h)));
     return Object.fromEntries(
       [...owned, ...orphans].slice(0, MAX_SET_BONUSES),
     ) as Record<number, 2 | 4>;
-  }, [setReqs, setMap]);
+  }, [actualSetReqs, setMap]);
 
   const fragments = useMemo(
     () =>
@@ -379,7 +419,7 @@ export function BuilderPanel({
         else next.add(hash);
         return { ...prev, [activeSubclass]: next };
       }),
-    [activeSubclass],
+    [activeSubclass, setFragSel],
   );
 
   const {
@@ -396,7 +436,7 @@ export function BuilderPanel({
       ...prev,
       [result.subclass]: result.fragmentHashes,
     }));
-  }, [applyCurrentFragments]);
+  }, [applyCurrentFragments, setActiveSubclass, setFragSel]);
 
   const setRequirements = useMemo(
     () =>
@@ -653,47 +693,70 @@ export function BuilderPanel({
     if (pendingExoticName.current === undefined || !exotics.length) return;
     const name = pendingExoticName.current;
     pendingExoticName.current = undefined;
-    setSelectedExoticName(resolveRestoredExotic(name, useDreamersBond));
-  }, [exotics, resolveRestoredExotic, useDreamersBond]);
+    setSelectedExoticNameIn("actual", resolveRestoredExotic(name, useDreamersBond));
+  }, [exotics, resolveRestoredExotic, useDreamersBond, setSelectedExoticNameIn]);
 
   // "Optimize" in the sidebar replaces the stored selections while this panel may already
-  // be mounted: adopt them the way the mount-time restore does. The exotic resolves right
-  // away when the class is unchanged (its list is live); otherwise it waits for the new
-  // class's list exactly like a fresh restore. The router keeps this view mounted but
-  // hidden while the armor table is showing (effects torn down, so the event is missed);
-  // the generation check catches up on such a replacement when the view comes back.
+  // be mounted: adopt them the way the mount-time restore does, into the Builds tab, and
+  // show it. The exotic resolves right away when the class is unchanged (its list is
+  // live); otherwise it waits for the new class's list exactly like a fresh restore, and
+  // the theoretical tab drops what the old class voided (as onClassChange does). The
+  // router keeps this view mounted but hidden while the armor table is showing (effects
+  // torn down, so the event is missed); the generation check catches up on such a
+  // replacement when the view comes back.
   useEffect(() => {
     const adopt = () => {
       adoptedGeneration.current = selectionsGeneration();
       const saved = loadSelections();
       if (!saved) return;
+      setBuildsMode("actual");
       setClassType(saved.classType);
-      setTargets(saved.targets);
-      setMajor(saved.major);
-      setSetReqs(saved.setReqs);
+      setTargetsIn("actual", saved.targets);
+      setMajorIn("actual", saved.major);
+      setSetReqsIn("actual", saved.setReqs);
       setSetFilters(saved.setFilters);
       setUseBalancedTuning(saved.balancedTuning);
       setUseLegacyExotics(saved.legacyExotics);
       setUseLowerTierArmor(saved.lowerTierArmor);
       setPowerRange(saved.powerRange);
-      setActiveSubclass(saved.activeSubclass);
-      setFragSel(fragSelFromArrays(saved.fragSel));
-      setExoticPerks(saved.exoticPerks);
+      setActiveSubclassIn("actual", saved.activeSubclass);
+      setFragSelIn("actual", fragSelFromArrays(saved.fragSel));
+      setExoticPerksIn("actual", saved.exoticPerks);
       if (saved.classType === classType && exotics.length) {
-        setSelectedExoticName(
+        setSelectedExoticNameIn(
+          "actual",
           resolveRestoredExotic(saved.exoticName, forcesDreamersBond(saved.powerRange)),
         );
       } else {
         pendingExoticName.current = saved.exoticName;
+        setSetReqsIn("theoretical", {});
+        setSelectedExoticNameIn("theoretical", null);
+        setExoticPerksIn("theoretical", [null, null]);
       }
     };
     if (adoptedGeneration.current !== selectionsGeneration()) adopt();
     window.addEventListener(SELECTIONS_REPLACED_EVENT, adopt);
     return () => window.removeEventListener(SELECTIONS_REPLACED_EVENT, adopt);
-  }, [classType, exotics, resolveRestoredExotic]);
+  }, [
+    classType,
+    exotics,
+    resolveRestoredExotic,
+    setTargetsIn,
+    setMajorIn,
+    setSetReqsIn,
+    setActiveSubclassIn,
+    setFragSelIn,
+    setExoticPerksIn,
+    setSelectedExoticNameIn,
+  ]);
 
-  // Persist selections (debounced) on any change; the exotic is saved by name. Held off
-  // while a restored exotic is still unresolved (see pendingExoticName).
+  // The Builds tab's exotic as persisted: by name, and only while it's in the live list.
+  const actualExotic = resolveExoticIndex(actualExoticName, exotics);
+  const persistedExoticName = actualExotic === null ? null : exotics[actualExotic].name;
+
+  // Persist the Builds tab's selections (debounced) on any change; the theoretical tab's
+  // live only as long as the panel. Held off while a restored exotic is still unresolved
+  // (see pendingExoticName).
   const pendingSave = useRef<{ timer: number; save: () => void } | null>(null);
   useEffect(() => {
     if (pendingExoticName.current !== undefined) return;
@@ -702,22 +765,19 @@ export function BuilderPanel({
       saveSelections({
         version: SCHEMA_VERSION,
         classType,
-        targets,
-        major,
+        targets: actualTargets,
+        major: actualMajor,
         setReqs: persistedSetReqs,
         setFilters,
-        exoticName:
-          selectedExotic === null
-            ? null
-            : (exotics[selectedExotic]?.name ?? null),
-        exoticPerks,
+        exoticName: persistedExoticName,
+        exoticPerks: actualExoticPerks,
         allowTuning: true,
         balancedTuning: useBalancedTuning,
         legacyExotics: useLegacyExotics,
         lowerTierArmor: useLowerTierArmor,
         powerRange,
-        activeSubclass,
-        fragSel: fragSelToArrays(fragSel),
+        activeSubclass: actualActiveSubclass,
+        fragSel: fragSelToArrays(actualFragSel),
       });
     };
     const timer = window.setTimeout(save, 300);
@@ -725,19 +785,18 @@ export function BuilderPanel({
     return () => window.clearTimeout(timer);
   }, [
     classType,
-    targets,
-    major,
+    actualTargets,
+    actualMajor,
     persistedSetReqs,
     setFilters,
-    selectedExotic,
-    exotics,
-    exoticPerks,
+    persistedExoticName,
+    actualExoticPerks,
     useBalancedTuning,
     useLegacyExotics,
     useLowerTierArmor,
     powerRange,
-    activeSubclass,
-    fragSel,
+    actualActiveSubclass,
+    actualFragSel,
   ]);
   // Hidden (tab switch) or unmounted mid-debounce: write the pending selections now
   // instead of dropping them.
@@ -920,31 +979,36 @@ export function BuilderPanel({
   const setTarget = useCallback(
     (i: number, value: number) =>
       setTargets((prev) => prev.map((v, idx) => (idx === i ? value : v))),
-    [],
+    [setTargets],
   );
   // Section Reset buttons: always clickable. A section already at its default keeps
   // its state object, so the click is a no-op (no re-render, no new search).
   const resetTargets = useCallback(
     () => setTargets((prev) => (prev.some((v) => v > 0) ? [0, 0, 0, 0, 0, 0] : prev)),
-    [],
+    [setTargets],
   );
 
-  const onClassChange = useCallback((next: number) => {
-    setClassType(next);
-    setSetReqs({});
-    setSelectedExoticName(null);
-    setExoticPerks([null, null]);
-  }, []);
+  // Sets and exotics are per class, so a class switch clears them on both tabs.
+  const onClassChange = useCallback(
+    (next: number) => {
+      setClassType(next);
+      setSetReqsIn("both", {});
+      setSelectedExoticNameIn("both", null);
+      setExoticPerksIn("both", [null, null]);
+    },
+    [setSetReqsIn, setSelectedExoticNameIn, setExoticPerksIn],
+  );
 
   const onExoticSelect = useCallback((index: number | null) => {
     setSelectedExoticName(index === null ? null : (exotics[index]?.name ?? null));
     setExoticPerks([null, null]);
-    if (index === null) return;
+    // The theoretical tab ignores Power matters, so its exotic leaves Dreamer's Bond be.
+    if (index === null || theoretical) return;
     const hashes = exotics[index]?.hashes ?? [];
     if (hashes.some(isExoticClassItemHash)) {
       setPowerRange((r) => (r.dreamersBond ? { ...r, dreamersBond: false } : r));
     }
-  }, [exotics]);
+  }, [exotics, theoretical, setSelectedExoticName, setExoticPerks]);
 
   // Forcing Dreamer's Bond — by its checkbox, or by turning Power matters on with it
   // already checked — evicts a selected exotic class item from the pinned slot.
@@ -960,7 +1024,7 @@ export function BuilderPanel({
         setExoticPerks([null, null]);
       }
     },
-    [powerRange, selectedClassItemHash],
+    [powerRange, selectedClassItemHash, setSelectedExoticName, setExoticPerks],
   );
 
   const setSetMinOwned = useCallback(
@@ -997,14 +1061,14 @@ export function BuilderPanel({
         return next;
       });
     },
-    [visibleSets, theoretical],
+    [visibleSets, theoretical, setSetReqs],
   );
 
-  const onMajorChange = useCallback((v: string) => setMajor(Number(v)), []);
+  const onMajorChange = useCallback((v: string) => setMajor(Number(v)), [setMajor]);
 
   const resetSetReqs = useCallback(
     () => setSetReqs((prev) => (Object.keys(prev).length > 0 ? {} : prev)),
-    [],
+    [setSetReqs],
   );
   const resetFragments = useCallback(
     () =>
@@ -1013,7 +1077,7 @@ export function BuilderPanel({
           ? { ...prev, [activeSubclass]: new Set<number>() }
           : prev,
       ),
-    [activeSubclass],
+    [activeSubclass, setFragSel],
   );
   const resetAdvanced = useCallback(() => {
     setUseBalancedTuning(true);
@@ -1159,7 +1223,7 @@ export function BuilderPanel({
                 selected={selectedExotic}
                 onSelect={onExoticSelect}
               />
-              {spiritPerks && !useDreamersBond && (
+              {spiritPerks && (theoretical || !useDreamersBond) && (
                 <ExoticClassPerkPicker
                   left={spiritPerks.left}
                   right={spiritPerks.right}
