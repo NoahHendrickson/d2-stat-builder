@@ -4,6 +4,7 @@ import { memo, useState } from "react";
 
 import {
   BuildsColumnContent,
+  getTheoryStatus,
   type BuildsColumnContentProps,
 } from "@/components/builder/builds-column-content";
 import { BuildsMobileBar } from "@/components/builder/builds-mobile-bar";
@@ -16,7 +17,7 @@ const DESKTOP_BUILDS_MIN_PX = 1024;
 export const BuildsSurface = memo(function BuildsSurface(props: BuildsColumnContentProps) {
   const desktop = useMinWidth(DESKTOP_BUILDS_MIN_PX);
   const [sheetOpen, setSheetOpen] = useState(false);
-  const { ready, showLoading, running, result, displayedProgress } = props;
+  const { ready, showLoading, running, result, displayedProgress, mode, theory } = props;
 
   if (desktop) {
     return (
@@ -36,6 +37,7 @@ export const BuildsSurface = memo(function BuildsSurface(props: BuildsColumnCont
         running={running}
         result={result}
         displayedProgress={displayedProgress}
+        theoryStatus={mode === "theoretical" ? getTheoryStatus(ready, theory) : undefined}
         open={sheetOpen}
         onOpen={() => setSheetOpen(true)}
       />

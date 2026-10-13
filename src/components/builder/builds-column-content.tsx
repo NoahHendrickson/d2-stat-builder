@@ -10,6 +10,9 @@ import {
   type GetBuilderState,
 } from "@/components/builder/build-results";
 import { LoadoutSortControls } from "@/components/builder/loadout-sort-controls";
+import { TheoryIntroAlert } from "@/components/builder/theory-intro-alert";
+import { TheoryResults, type TheoryExoticDisplay } from "@/components/builder/theory-results";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { ArmorPiece } from "@/lib/armory/normalize";
 import type { ArmorSetInfo } from "@/lib/armory/sets";
 import type { ArmoryCharacter } from "@/lib/armory/fetch";
@@ -25,6 +28,12 @@ import type {
   OptimizerOutput,
   RefinementState,
 } from "@/lib/optimizer/types";
+import {
+  DEFAULT_THEORY_SORT,
+  THEORY_SORT_OPTIONS,
+  type TheorySortState,
+} from "@/lib/builder/sort-theory";
+import type { TheoryBuildState } from "@/lib/optimizer/use-theory-build";
 import { useStoreValue, type ValueStore } from "@/lib/value-store";
 
 const LOADING_ROWS = 5;
@@ -82,7 +91,38 @@ export function getBuildsStatusLabel({
   }
 }
 
+/** Builds from owned armor, or the Tier-5 rolls that would reach the targets. */
+export type BuildsMode = "actual" | "theoretical";
+
+/** The theoretical list's state and header label (the mobile bar shows the same). */
+export function getTheoryStatus(
+  ready: boolean,
+  theory: TheoryBuildState,
+): { state: BuildsViewState; label: string } {
+  if (!ready) return { state: "not-ready", label: "" };
+  if (theory.running) return { state: "searching", label: "Searching…" };
+  const n = theory.result?.recipes.length;
+  if (n === undefined) return { state: "idle", label: "" };
+  const close = theory.result!.close.length;
+  const closeLabel = close ? `${close} close` : "";
+  if (n === 0) {
+    return close
+      ? { state: "results", label: `No exact builds, ${closeLabel}` }
+      : { state: "no-matches", label: "No builds reach these" };
+  }
+  const shown = Math.min(MAX_SHOWN, n);
+  const label = `${shown} ${shown === 1 ? "build" : "builds"}`;
+  return { state: "results", label: close ? `${label}, ${closeLabel}` : label };
+}
+
 export interface BuildsColumnContentProps {
+  mode: BuildsMode;
+  onModeChange: (mode: BuildsMode) => void;
+  theory: TheoryBuildState;
+  /** The exotic theoretical builds wear (null = none picked). */
+  theoryExotic: TheoryExoticDisplay | null;
+  /** Every set the class can wear (theoretical builds can require unowned ones). */
+  theorySetMap: Map<number, ArmorSetInfo>;
   ready: boolean;
   /** The gear on screen is last visit's copy; builds wait for the live profile. */
   provisional?: boolean;
@@ -138,20 +178,41 @@ export function BuildsColumnContent({
   onEquipped,
   onDream,
   provisional = false,
+  mode,
+  onModeChange,
+  theory,
+  theoryExotic,
+  theorySetMap,
 }: BuildsColumnContentProps) {
   const [sort, setSort] = useState<LoadoutSortState>(DEFAULT_LOADOUT_SORT);
-  const viewState = getBuildsViewState({ ready, showLoading, result });
-  const statusLabel = getBuildsStatusLabel({ ready, showLoading, result });
-  const showSort = viewState === "results";
+  const [theorySort, setTheorySort] = useState<TheorySortState>(DEFAULT_THEORY_SORT);
+  const theoretical = mode === "theoretical";
+  const theoryStatus = getTheoryStatus(ready, theory);
+  const viewState = theoretical
+    ? theoryStatus.state
+    : getBuildsViewState({ ready, showLoading, result });
+  const statusLabel = theoretical
+    ? theoryStatus.label
+    : getBuildsStatusLabel({ ready, showLoading, result });
+  // A theoretical list stays sortable while a newer one is on its way.
+  const showSort = theoretical
+    ? (theory.result?.recipes.length ?? 0) > 1
+    : viewState === "results";
 
   return (
     <div className="space-y-5">
-      <div className="flex min-h-8 items-center gap-3">
-        <h2 className="pl-1 text-xl leading-none font-normal">Builds</h2>
+      <div className="flex min-h-8 flex-wrap items-center gap-3">
+        <h2 className="sr-only">Builds</h2>
+        <Tabs value={mode} onValueChange={(v) => onModeChange(v as BuildsMode)}>
+          <TabsList aria-label="Which builds to show">
+            <TabsTrigger value="actual">Builds</TabsTrigger>
+            <TabsTrigger value="theoretical">Theoretical Builds</TabsTrigger>
+          </TabsList>
+        </Tabs>
         <div className="ml-auto flex min-w-0 items-center gap-3">
           {/* Initial search only — `running` is false once refinement starts
               (see use-optimizer); refinement Cancel lives in the status alert. */}
-          {running && (
+          {!theoretical && running && (
             <Button
               variant="link"
               onClick={onCancel}
@@ -166,7 +227,16 @@ export function BuildsColumnContent({
           >
             {statusLabel}
           </span>
-          {showSort && <LoadoutSortControls sort={sort} onChange={setSort} />}
+          {showSort &&
+            (theoretical ? (
+              <LoadoutSortControls
+                sort={theorySort}
+                onChange={setTheorySort}
+                options={THEORY_SORT_OPTIONS}
+              />
+            ) : (
+              <LoadoutSortControls sort={sort} onChange={setSort} />
+            ))}
         </div>
       </div>
       {!ready ? (
@@ -175,6 +245,18 @@ export function BuildsColumnContent({
             ? "Refreshing your gear from Bungie — builds will appear in a moment."
             : "Sign in and load your gear to generate builds."}
         </p>
+      ) : theoretical ? (
+        <div className="space-y-3">
+          <TheoryIntroAlert />
+          <TheoryResults
+            state={theory}
+            exotic={theoryExotic}
+            setMap={theorySetMap}
+            pieceMap={pieceMap}
+            statIcons={statIcons}
+            sort={theorySort}
+          />
+        </div>
       ) : (
         <>
           {showLoading &&

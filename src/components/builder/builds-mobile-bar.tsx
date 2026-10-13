@@ -6,6 +6,7 @@ import { ArrowUp01Icon } from "@hugeicons/core-free-icons";
 import {
   getBuildsStatusLabel,
   getBuildsViewState,
+  type BuildsViewState,
 } from "@/components/builder/builds-column-content";
 import type { OptimizerOutput } from "@/lib/optimizer/types";
 import { useStoreValue, type ValueStore } from "@/lib/value-store";
@@ -17,6 +18,8 @@ export interface BuildsMobileBarProps {
   running: boolean;
   result: OptimizerOutput | null;
   displayedProgress: ValueStore<number>;
+  /** Set while the theoretical list is showing: its state and label replace the search's. */
+  theoryStatus?: { state: BuildsViewState; label: string };
   open: boolean;
   onOpen: () => void;
 }
@@ -65,13 +68,17 @@ export function BuildsMobileBar({
   running,
   result,
   displayedProgress: progressStore,
+  theoryStatus,
   open,
   onOpen,
 }: BuildsMobileBarProps) {
   if (!ready) return null;
 
-  const state = getBuildsViewState({ ready, showLoading, result });
-  const statusLabel = getBuildsStatusLabel({ ready, showLoading, result });
+  const state = theoryStatus?.state ?? getBuildsViewState({ ready, showLoading, result });
+  const statusLabel =
+    theoryStatus?.label ?? getBuildsStatusLabel({ ready, showLoading, result });
+  // The theoretical search has no progress to show.
+  const showProgress = state === "searching" && !theoryStatus;
 
   return (
     <div
@@ -94,13 +101,13 @@ export function BuildsMobileBar({
               : "fine-pointer:border-foreground/25",
         )}
       >
-        {state === "searching" && (
+        {showProgress && (
           <ProgressFill
             store={progressStore}
             className="bg-black/30 absolute inset-x-0 top-0 hidden h-[2px] overflow-hidden fine-pointer:block"
           />
         )}
-        {state === "searching" && (
+        {showProgress && (
           <ProgressFill
             store={progressStore}
             className="bg-black/30 h-0.5 w-full overflow-hidden rounded-none normal:rounded-full fine-pointer:hidden"
@@ -109,13 +116,13 @@ export function BuildsMobileBar({
         <span className="flex items-center gap-3">
           <span className="min-w-0 flex-1">
             <span className="fine-pointer:text-base block text-sm font-medium fine-pointer:font-semibold">
-              Builds
+              {theoryStatus ? "Theoretical Builds" : "Builds"}
             </span>
             <span className="text-muted-foreground block truncate text-xs">
               {statusLabel}
             </span>
           </span>
-          {running && state === "searching" && (
+          {!theoryStatus && running && state === "searching" && (
             <span className="text-muted-foreground shrink-0 text-xs">Running</span>
           )}
           <HugeiconsIcon icon={ArrowUp01Icon}
