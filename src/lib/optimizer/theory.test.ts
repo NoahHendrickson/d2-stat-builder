@@ -249,6 +249,30 @@ describe("solveTheory", () => {
     }
   }, 30_000);
 
+  it("tunes the stats owned pieces can carry, so a fully owned build is found", () => {
+    // Five owned Brawler / Weapons-tertiary pieces, tuned to Weapons, from a 4pc set. With
+    // five majors they reach every target if the majors go on Health, Class, Grenade,
+    // Super and Melee and one piece takes +5 Weapons. Greedy mods instead put the last
+    // major on Weapons and need a Health tuning none of them carries.
+    const owned: OwnedRoll[] = [0, 1, 2, 3, 4].map((slot) => ({
+      instanceId: `b${slot}`,
+      slot,
+      archetype: "Brawler",
+      tertiary: 0,
+      tuned: 0,
+      setHash: 7,
+    }));
+    const q = input({
+      owned,
+      sets: [{ setHash: 7, count: 4 }],
+      minimums: [105, 130, 35, 35, 35, 160],
+      mods: { major: 5, minor: 0 },
+    });
+    const result = solve(q);
+    for (const r of result.recipes) expectSound(r, q);
+    expect(result.recipes[0].owned).toBe(5);
+  });
+
   it("ranks on the owned pieces a build really seats, not the scan's bound", () => {
     // Owned Gunners outside the required set: the scan counts them, but a 4pc set with an
     // exotic leaves no legendary free for them, so they can't be seated.

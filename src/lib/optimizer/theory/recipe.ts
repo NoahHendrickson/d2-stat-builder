@@ -53,95 +53,136 @@ export function recipeBuilder({ input, space, c, constant }: RecipeContext) {
     const g = c.map((v, s) => (v <= FREE ? FREE : v - units[s]));
     if (focus >= 0) g[focus] = p.gain;
 
-    // Mods, greedily as tuningsNeeded counts them.
-    const need = g.map((v) => Math.max(0, v));
-    const mods: [number, number][] = Array.from({ length: NUM_STATS }, () => [0, 0]);
-    const neediest = (min: number) => {
-      let best = -1;
-      for (let s = 0; s < NUM_STATS; s++) {
-        if (need[s] >= min && (best < 0 || need[s] > need[best])) best = s;
-      }
-      return best;
-    };
-    let majors = major;
-    let minors = minor;
-    for (const min of [2, 1]) {
-      for (let s = neediest(min); majors > 0 && s >= 0; s = neediest(min)) {
-        mods[s][0]++;
-        need[s] -= 2;
-        majors--;
-      }
-    }
-    for (let s = neediest(1); minors > 0 && s >= 0; s = neediest(1)) {
-      mods[s][1]++;
-      need[s] -= 1;
-      minors--;
-    }
-
-    const value = (s: number) => constant[s] + UNIT * (units[s] + 2 * mods[s][0] + mods[s][1]);
-    // Spare mods (the focus is capped, or "flexible"): raise the lowest stat under the cap.
-    const lowest = () => {
-      let best = -1;
-      for (let s = 0; s < NUM_STATS; s++) {
-        if (value(s) < STAT_CAP && (best < 0 || value(s) < value(best))) best = s;
-      }
-      return best;
-    };
-    for (let s = lowest(); majors > 0 && s >= 0; s = lowest()) {
-      mods[s][0]++;
-      majors--;
-    }
-    for (let s = lowest(); minors > 0 && s >= 0; s = lowest()) {
-      mods[s][1]++;
-      minors--;
-    }
-
     // What each stat must keep: its target, or for the focus stat the value the scan
     // proved it reaches (so the build never gives its own maxed stat away as a donor).
     const floor = (s: number) =>
       s === focus
         ? Math.min(STAT_CAP, constant[s] + UNIT * (units[s] + p.gain))
         : input.minimums[s];
-    // Tunings: each unit still short comes from the stat with the most room — a stat with
-    // nothing to keep first (lowest first, so the 0-clamp hides what it can), else most spare.
-    const gained = new Array(NUM_STATS).fill(0);
-    const room = (s: number) =>
-      floor(s) > 0 ? Math.floor((value(s) + gained[s] - floor(s)) / UNIT) : Infinity;
-    const tunings: TheoryTuning[] = [];
-    for (let s = 0; s < NUM_STATS; s++) {
-      for (let k = 0; k < need[s] && tunings.length < MAX_TUNINGS; k++) {
-        let donor = -1;
-        for (let d = 0; d < NUM_STATS; d++) {
-          if (d === s || room(d) <= 0) continue;
-          if (donor < 0) {
-            donor = d;
-            continue;
-          }
-          const rd = room(d);
-          const rb = room(donor);
-          if (rd === Infinity && rb === Infinity) {
-            if (value(d) + gained[d] < value(donor) + gained[donor]) donor = d;
-          } else if (rd > rb) {
-            donor = d;
-          }
+
+    /**
+     * Mods and tunings for the sum. Mods go greedily as tuningsNeeded counts them, then
+     * each unit still short is tuned in from the stat with the most room. `prefer[s]`
+     * units of stat s's need are kept for tunings instead of mods — the same totals, but
+     * tunings an owned piece's tuned stat can carry. Null when it doesn't work out.
+     */
+    const plan = (prefer: number[]) => {
+      const need = g.map((v) => Math.max(0, v));
+      let reserve = MAX_TUNINGS;
+      const reserved = need.map((n, s) => {
+        const r = Math.min(n, prefer[s], reserve);
+        reserve -= r;
+        return r;
+      });
+      const left = need.map((n, s) => n - reserved[s]);
+      const mods: [number, number][] = Array.from({ length: NUM_STATS }, () => [0, 0]);
+      const neediest = (min: number) => {
+        let best = -1;
+        for (let s = 0; s < NUM_STATS; s++) {
+          if (left[s] >= min && (best < 0 || left[s] > left[best])) best = s;
         }
-        if (donor < 0) {
-          if (allowShort) break;
-          return [];
+        return best;
+      };
+      let majors = major;
+      let minors = minor;
+      for (const min of [2, 1]) {
+        for (let s = neediest(min); majors > 0 && s >= 0; s = neediest(min)) {
+          mods[s][0]++;
+          left[s] -= 2;
+          majors--;
         }
-        tunings.push({ plus: s, minus: donor });
-        gained[s] += UNIT;
-        gained[donor] -= UNIT;
       }
-    }
-    const stats = Array.from({ length: NUM_STATS }, (_, s) => clampStat(value(s) + gained[s]));
-    const short = stats.map((v, s) => Math.max(0, input.minimums[s] - v));
-    if (!allowShort && short.some((v) => v > 0)) return [];
+      for (let s = neediest(1); minors > 0 && s >= 0; s = neediest(1)) {
+        mods[s][1]++;
+        left[s] -= 1;
+        minors--;
+      }
+
+      const value = (s: number) => constant[s] + UNIT * (units[s] + 2 * mods[s][0] + mods[s][1]);
+      // Spare mods (the focus is capped, or "flexible"): raise the lowest stat under the cap.
+      const lowest = () => {
+        let best = -1;
+        for (let s = 0; s < NUM_STATS; s++) {
+          if (value(s) < STAT_CAP && (best < 0 || value(s) < value(best))) best = s;
+        }
+        return best;
+      };
+      for (let s = lowest(); majors > 0 && s >= 0; s = lowest()) {
+        mods[s][0]++;
+        majors--;
+      }
+      for (let s = lowest(); minors > 0 && s >= 0; s = lowest()) {
+        mods[s][1]++;
+        minors--;
+      }
+
+      // Tunings: from a stat with nothing to keep first (lowest first, so the 0-clamp hides
+      // what it can), else the one with the most spare.
+      const gained = new Array(NUM_STATS).fill(0);
+      const room = (s: number) =>
+        floor(s) > 0 ? Math.floor((value(s) + gained[s] - floor(s)) / UNIT) : Infinity;
+      const tunings: TheoryTuning[] = [];
+      for (let s = 0; s < NUM_STATS; s++) {
+        // A major on a reserved stat can overshoot and cover part of the reservation.
+        const toTune = Math.max(0, left[s] + reserved[s]);
+        for (let k = 0; k < toTune && tunings.length < MAX_TUNINGS; k++) {
+          let donor = -1;
+          for (let d = 0; d < NUM_STATS; d++) {
+            if (d === s || room(d) <= 0) continue;
+            if (donor < 0) {
+              donor = d;
+              continue;
+            }
+            const rd = room(d);
+            const rb = room(donor);
+            if (rd === Infinity && rb === Infinity) {
+              if (value(d) + gained[d] < value(donor) + gained[donor]) donor = d;
+            } else if (rd > rb) {
+              donor = d;
+            }
+          }
+          if (donor < 0) {
+            if (allowShort) break;
+            return null;
+          }
+          tunings.push({ plus: s, minus: donor });
+          gained[s] += UNIT;
+          gained[donor] -= UNIT;
+        }
+      }
+      const stats = Array.from({ length: NUM_STATS }, (_, s) => clampStat(value(s) + gained[s]));
+      const short = stats.map((v, s) => Math.max(0, floor(s) - v));
+      if (!allowShort && short.some((v) => v > 0)) return null;
+      return { mods, tunings, stats, short: stats.map((v, s) => Math.max(0, input.minimums[s] - v)) };
+    };
 
     const made = waysToMake(units, space);
-    return placeOwned(made, tunings, input.sets, space, ways).map((pieces) =>
-      recipeOf(pieces, p.focus, stats, mods, allowShort ? short : undefined),
-    );
+    const seat = (pl: NonNullable<ReturnType<typeof plan>>) =>
+      placeOwned(made, pl.tunings, input.sets, space, ways);
+    const ownedIn = (built: TheoryPiece[][]) => built[0]?.filter((piece) => piece.owned).length ?? -1;
+
+    let chosen = plan(new Array(NUM_STATS).fill(0));
+    let built = chosen ? seat(chosen) : [];
+    // The greedy mods fix which stats get tuned, and an owned piece can only carry a tuning
+    // on its own tuned stat. So also try keeping tunings for the tuned stats of the owned
+    // pieces this sum's rolls could seat (one per slot and stat), and take whichever plan
+    // seats more of them.
+    const inWays = new Set(made.flatMap((w) => w.legs));
+    const prefer = new Array(NUM_STATS).fill(0);
+    for (const list of space.ownedBySlot) {
+      for (const t of new Set(list.filter((o) => inWays.has(o.roll)).map((o) => o.tuned))) prefer[t]++;
+    }
+    if (prefer.some((n) => n > 0)) {
+      const alt = plan(prefer);
+      const altBuilt = alt ? seat(alt) : [];
+      if (ownedIn(altBuilt) > ownedIn(built)) {
+        chosen = alt;
+        built = altBuilt;
+      }
+    }
+    if (!chosen) return [];
+    const { mods, stats, short } = chosen;
+    return built.map((pieces) => recipeOf(pieces, p.focus, stats, mods, allowShort ? short : undefined));
   };
 }
 

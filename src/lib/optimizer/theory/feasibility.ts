@@ -12,6 +12,9 @@ export const UNIT = 5;
 export const FREE = -1_000_000;
 /** One directional tuning per piece. */
 export const MAX_TUNINGS = NUM_SLOTS;
+// tuningsNeeded runs ~4M times a query: read the stat count from a local, not through
+// the imported binding (which test runners turn into a property lookup per read).
+const STATS = NUM_STATS;
 
 /**
  * Directional tunings a build needs to reach its targets (≥ 0), or −(units it falls short
@@ -30,7 +33,7 @@ export function tuningsNeeded(g: ArrayLike<number>, major: number, minor: number
   let odd = 0;
   let sum = 0;
   let free = false;
-  for (let s = 0; s < NUM_STATS; s++) {
+  for (let s = 0; s < STATS; s++) {
     const v = g[s];
     if (v <= FREE) {
       free = true;

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { theoryExotic, theoryOwnedRolls } from "./theory-input";
+import { buildTheorySpace } from "./theory/space";
 import type { ArmorPiece } from "../armory/normalize";
 import { ARMOR_SLOTS } from "../armory/stats";
 import type { Manifest } from "../manifest/load";
@@ -62,5 +63,38 @@ describe("theoryExotic", () => {
     });
     expect(exotic?.slot).toBe(4);
     expect(exotic?.rolls?.map((r) => r.tertiary)).toEqual([0, 1, 2, 3]);
+  });
+});
+
+describe("theoryExotic, with an owned copy that disagrees with the Spirit catalog", () => {
+  it("allows the copy's real roll, so the space can seat it", () => {
+    // The right Spirit's catalog tertiary is Grenade (3); the owned Paragon copy with that
+    // Spirit pair actually rolled a Health (1) tertiary.
+    const spiritPerks = {
+      left: [{ hash: 7, name: "L", column: 1 as const, primaryStat: 4, secondaryStat: 5 }],
+      right: [{ hash: 8, name: "R", column: 2 as const, preferredTertiary: 3 }],
+    };
+    const copy = {
+      instanceId: "copy",
+      itemHash: 1,
+      isExotic: true,
+      tunedStat: 0,
+      exoticPerkHashes: [7, 8],
+      baseStats: [0, 20, 0, 0, 30, 25],
+      slot: "classItem",
+    } as unknown as ArmorPiece;
+    const { exotic } = theoryExotic({
+      option: { name: "Solipsism", slot: "classItem" },
+      classItemHash: 1,
+      spiritPerks,
+      exoticPerks: [7, 8],
+      pieces: [copy],
+      archetypes,
+      manifest,
+    });
+    expect(exotic?.rolls).toEqual([{ archetype: "Paragon", tertiary: 1 }]);
+    expect(exotic?.owned).toEqual([{ instanceId: "copy", archetype: "Paragon", tertiary: 1 }]);
+    const space = buildTheorySpace(archetypes, [], exotic);
+    expect([...space.exotic!.owned.values()]).toEqual(["copy"]);
   });
 });

@@ -82,6 +82,8 @@ export interface TheoryExoticChoice {
  *
  * An exotic class item's roll follows its Spirits: the left one sets the archetype, the
  * right one the tertiary (see exotic-class-perks.ts); an "any" column allows them all.
+ * The right Spirits' tertiaries there are mostly guesses, so what an owned copy shows a
+ * Spirit actually rolls wins, and every matching owned copy's roll is allowed.
  */
 export function theoryExotic(choice: TheoryExoticChoice): {
   exotic: TheoryExotic | null;
@@ -93,6 +95,13 @@ export function theoryExotic(choice: TheoryExoticChoice): {
 
   if (classItemHash !== undefined) {
     const [left, right] = choice.exoticPerks;
+    const copies = pieces.filter((p) => p.itemHash === classItemHash && p.tunedStat !== undefined);
+    // Right Spirit → the tertiary owned copies show it gives.
+    const observed = new Map<number, number>();
+    for (const p of copies) {
+      const spirit = p.exoticPerkHashes?.[1];
+      if (spirit !== undefined) observed.set(spirit, rollStatIndices(p.baseStats)[2]);
+    }
     const lefts = (choice.spiritPerks?.left ?? []).filter((s) => left === null || s.hash === left);
     const rights = (choice.spiritPerks?.right ?? []).filter((s) => right === null || s.hash === right);
     const rolls: { archetype: string; tertiary: number }[] = [];
@@ -105,16 +114,25 @@ export function theoryExotic(choice: TheoryExoticChoice): {
         right === null
           ? tertiariesOf(archetype)
           : rights.map((r) =>
-              resolveTertiary(r.preferredTertiary, archetype.primary, archetype.secondary),
+              resolveTertiary(
+                observed.get(r.hash) ?? r.preferredTertiary,
+                archetype.primary,
+                archetype.secondary,
+              ),
             );
       for (const tertiary of new Set(tertiaries)) rolls.push({ archetype: archetype.name, tertiary });
     }
-    const owned = pieces.flatMap((p) => {
-      if (p.itemHash !== classItemHash || p.tunedStat === undefined) return [];
-      const picked = left !== null || right !== null;
-      if (picked && !matchesSpiritSelection(p.exoticPerkHashes, choice.exoticPerks)) return [];
-      return ownedRollOf(p, archetypes);
-    });
+    const picked = left !== null || right !== null;
+    const owned = copies.flatMap((p) =>
+      picked && !matchesSpiritSelection(p.exoticPerkHashes, choice.exoticPerks)
+        ? []
+        : ownedRollOf(p, archetypes),
+    );
+    for (const o of owned) {
+      if (!rolls.some((r) => r.archetype === o.archetype && r.tertiary === o.tertiary)) {
+        rolls.push({ archetype: o.archetype, tertiary: o.tertiary });
+      }
+    }
     return {
       // Spirits that can't be read (no catalog entry, an unknown archetype) leave no rolls:
       // then any roll goes, rather than none.
