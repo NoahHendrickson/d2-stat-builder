@@ -80,9 +80,12 @@ function ClarityLines({ lines }: { lines: ClarityLine[] }) {
 export function PerkTooltip({
   perk,
   insight,
+  craftedOnly = false,
 }: {
   perk: PerkRef;
   insight: ClarityLine[] | undefined;
+  /** This weapon only gets the perk by crafting; it never drops with it. */
+  craftedOnly?: boolean;
 }) {
   const enhanced =
     perk.enhancedDescription && perk.enhancedDescription !== perk.description
@@ -92,9 +95,9 @@ export function PerkTooltip({
     <div className="grid gap-2 whitespace-normal">
       <p className="font-medium text-foreground uppercase normal:normal-case normal:tracking-normal tracking-wide">
         {perk.name}
-        {!perk.currentlyCanRoll && (
+        {(!perk.currentlyCanRoll || craftedOnly) && (
           <span className="ml-2 font-normal normal-case tracking-normal text-muted-foreground">
-            Retired
+            {perk.currentlyCanRoll ? "Crafted only" : "Retired"}
           </span>
         )}
       </p>

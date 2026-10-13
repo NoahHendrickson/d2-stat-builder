@@ -2,7 +2,11 @@ import type { DestinyInventoryItemDefinition } from "bungie-api-ts/destiny2";
 
 import type { DestinyIconDefinitionEntry, ManifestDefs } from "./manifest";
 import { internWeaponCatalog } from "./intern-weapons";
-import { collectSocketPlugCandidates, extractPlugStatMods } from "./socket-plug-candidates";
+import {
+  collectSocketPlugCandidates,
+  extractPlugStatMods,
+  withPatternPlugCandidates,
+} from "./socket-plug-candidates";
 import {
   resolveWeaponSeason,
   resolveWeaponSources,
@@ -79,7 +83,7 @@ function weaponInvestmentStats(
 
 /** One visible perk per name; enhanced-tier hashes are kept as `alternateHashes` for vault resolution. */
 export function buildColumnPerks(
-  candidates: { hash: number; canRoll: boolean }[],
+  candidates: { hash: number; canRoll: boolean; craftedOnly?: true }[],
   items: Record<number, DestinyInventoryItemDefinition>,
 ): { perks: PerkRef[]; identifier: string } {
   const byName = new Map<
@@ -89,6 +93,7 @@ export function buildColumnPerks(
       name: string;
       icon?: string;
       canRoll: boolean;
+      craftedOnly: boolean;
       description?: string;
       enhancedHash?: number;
       enhancedDescription?: string;
@@ -97,7 +102,7 @@ export function buildColumnPerks(
   >();
   let identifier = "";
 
-  for (const { hash, canRoll } of candidates) {
+  for (const { hash, canRoll, craftedOnly = false } of candidates) {
     const pd = items[hash];
     if (!pd || isCosmeticOrEmptyPlug(pd)) continue;
     if (!identifier) identifier = pd.plug?.plugCategoryIdentifier ?? "";
@@ -105,8 +110,9 @@ export function buildColumnPerks(
     if (!name) continue;
 
     if (isEnhancedPlug(pd)) {
-      const row = byName.get(name) ?? { hash: 0, name, canRoll: false };
+      const row = byName.get(name) ?? { hash: 0, name, canRoll: false, craftedOnly: true };
       row.canRoll = row.canRoll || canRoll;
+      row.craftedOnly = row.craftedOnly && craftedOnly;
       row.enhancedHash = hash;
       row.enhancedDescription = plugDescription(pd);
       byName.set(name, row);
@@ -119,6 +125,7 @@ export function buildColumnPerks(
       name,
       icon: pd.displayProperties?.icon || undefined,
       canRoll: row?.canRoll || canRoll,
+      craftedOnly: (row?.craftedOnly ?? true) && craftedOnly,
       description: plugDescription(pd),
       enhancedHash: row?.enhancedHash,
       enhancedDescription: row?.enhancedDescription,
@@ -138,6 +145,7 @@ export function buildColumnPerks(
       enhancedDescription: row.enhancedDescription,
       alternateHashes: row.enhancedHash ? [row.enhancedHash] : undefined,
       statMods: row.statMods,
+      ...(row.craftedOnly ? { craftedOnly: true } : {}),
     });
   }
   return { perks, identifier };
@@ -426,9 +434,8 @@ export function buildWeaponIndex(
       }
     }
 
-    // Crafting can pick perks no random drop rolls (Sticky Grenades on Tarnation).
-    // The pattern's sockets share the weapon's indexes but use their own plug hashes
-    // for perks drops also roll, so only names the drop pool lacks are added.
+    // Pattern sockets sit at the weapon's socket indexes. Its intrinsic socket holds
+    // the crafted enhanced-frame tiers, not frames to pick, so only perk sockets use it.
     const pattern =
       item.inventory?.recipeItemHash != null ? items[item.inventory.recipeItemHash] : undefined;
 
@@ -438,15 +445,11 @@ export function buildWeaponIndex(
       if (!entry) continue;
       const isIntrinsic = intrinsicIdx.has(idx);
 
-      const candidates = collectSocketPlugCandidates(entry, plugSets, items);
-      const craftedEntry = pattern?.sockets?.socketEntries[idx];
-      if (craftedEntry) {
-        const plugName = (hash: number) => items[hash]?.displayProperties?.name;
-        const dropNames = new Set(candidates.map(({ hash }) => plugName(hash)));
-        for (const crafted of collectSocketPlugCandidates(craftedEntry, plugSets, items)) {
-          if (!dropNames.has(plugName(crafted.hash))) candidates.push(crafted);
-        }
-      }
+      const dropCandidates = collectSocketPlugCandidates(entry, plugSets, items);
+      const patternEntry = isIntrinsic ? undefined : pattern?.sockets?.socketEntries[idx];
+      const candidates = patternEntry
+        ? withPatternPlugCandidates(dropCandidates, patternEntry, plugSets, items)
+        : dropCandidates;
       if (!candidates.length) continue;
 
       const { perks, identifier } = buildColumnPerks(candidates, items);

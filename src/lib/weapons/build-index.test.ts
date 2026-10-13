@@ -16,6 +16,7 @@ import {
   collectSocketPlugCandidates,
   pairedPoolPlugs,
   plugSetEntryCanRoll,
+  withPatternPlugCandidates,
 } from "./socket-plug-candidates";
 function traitPlug(
   hash: number,
@@ -300,35 +301,39 @@ describe("collectSocketPlugCandidates", () => {
   });
 });
 
+const magazinePlug = (hash: number, name: string, tierType: 2 | 3, category = "magazines_gl") =>
+  ({
+    hash,
+    displayProperties: { name, icon: "" },
+    inventory: { tierType },
+    plug: { plugCategoryIdentifier: category },
+  }) as DestinyInventoryItemDefinition;
+
+// Heavy GL magazines: Sticky is a base perk with no partner in the first
+// enhanced run; Implosion (and Sticky's enhanced plug) come after it.
+const magazines: Record<number, DestinyInventoryItemDefinition> = {
+  1: magazinePlug(1, "Spike Grenades", 2),
+  2: magazinePlug(2, "Mini Frags", 2),
+  3: magazinePlug(3, "Sticky Grenades", 2),
+  11: magazinePlug(11, "Spike Grenades", 3),
+  12: magazinePlug(12, "Mini Frags", 3),
+  4: magazinePlug(4, "Implosion Rounds", 2),
+  14: magazinePlug(14, "Implosion Rounds", 3),
+  13: magazinePlug(13, "Sticky Grenades", 3),
+};
+const magazinePool = [1, 2, 3, 11, 12, 4, 14, 13];
+
+const plugSet = (hashes: number[], currentlyCanRoll = true) => ({
+  reusablePlugItems: hashes.map((plugItemHash) => ({ plugItemHash, currentlyCanRoll })),
+});
+
 describe("pairedPoolPlugs", () => {
-  const plug = (hash: number, name: string, tierType: 2 | 3, category = "magazines_gl") =>
-    ({
-      hash,
-      displayProperties: { name, icon: "" },
-      inventory: { tierType },
-      plug: { plugCategoryIdentifier: category },
-    }) as DestinyInventoryItemDefinition;
-
-  // Heavy GL magazines: Sticky is a base perk with no partner in the first
-  // enhanced run; Implosion (and Sticky's enhanced plug) come after it.
-  const items: Record<number, DestinyInventoryItemDefinition> = {
-    1: plug(1, "Spike Grenades", 2),
-    2: plug(2, "Mini Frags", 2),
-    3: plug(3, "Sticky Grenades", 2),
-    11: plug(11, "Spike Grenades", 3),
-    12: plug(12, "Mini Frags", 3),
-    4: plug(4, "Implosion Rounds", 2),
-    14: plug(14, "Implosion Rounds", 3),
-    13: plug(13, "Sticky Grenades", 3),
-  };
-  const pool = [1, 2, 3, 11, 12, 4, 14, 13];
-
   it("keeps base perks paired in the first enhanced run and drops later additions", () => {
-    expect(pairedPoolPlugs(pool, items)).toEqual(new Set([1, 2, 11, 12]));
+    expect(pairedPoolPlugs(magazinePool, magazines)).toEqual(new Set([1, 2, 11, 12]));
   });
 
   it("returns undefined for pools without enhanced plugs", () => {
-    expect(pairedPoolPlugs([1, 2, 3], items)).toBeUndefined();
+    expect(pairedPoolPlugs([1, 2, 3], magazines)).toBeUndefined();
   });
 
   it("leaves trait pools alone", () => {
@@ -343,33 +348,73 @@ describe("pairedPoolPlugs", () => {
 
   it("pairs '<name> Enhanced' plugs and skips empty sockets inside a run", () => {
     const tricorn = {
-      1: plug(1, "Harmony", 2, "barrels"),
-      2: plug(2, "Golden Tricorn", 2, "barrels"),
-      11: plug(11, "Harmony", 3, "barrels"),
-      9: plug(9, "Empty Traits Socket", 2, "crafting.recipes.empty_socket"),
-      12: plug(12, "Golden Tricorn Enhanced", 3, "barrels"),
+      1: magazinePlug(1, "Harmony", 2, "barrels"),
+      2: magazinePlug(2, "Golden Tricorn", 2, "barrels"),
+      11: magazinePlug(11, "Harmony", 3, "barrels"),
+      9: magazinePlug(9, "Empty Traits Socket", 2, "crafting.recipes.empty_socket"),
+      12: magazinePlug(12, "Golden Tricorn Enhanced", 3, "barrels"),
     };
     expect(pairedPoolPlugs([1, 2, 11, 9, 12], tricorn)).toEqual(new Set([1, 2, 11, 12]));
   });
 
   it("drops unpaired pool entries, including a curated default", () => {
-    const plugSets = {
-      100: { reusablePlugItems: pool.map((plugItemHash) => ({ plugItemHash, currentlyCanRoll: true })) },
-    };
+    const plugSets = { 100: plugSet(magazinePool) };
     const socket = { randomizedPlugSetHash: 100, singleInitialItemHash: 3 };
-    const { perks } = buildColumnPerks(collectSocketPlugCandidates(socket, plugSets, items), items);
+    const { perks } = buildColumnPerks(
+      collectSocketPlugCandidates(socket, plugSets, magazines),
+      magazines,
+    );
 
     expect(perks.map((p) => [p.name, p.currentlyCanRoll])).toEqual([
       ["Spike Grenades", true],
       ["Mini Frags", true],
     ]);
   });
+});
 
-  it("adds perks a craftable weapon's pattern offers but random drops rule out", () => {
+describe("withPatternPlugCandidates", () => {
+  const drops = [
+    { hash: 1, canRoll: true },
+    { hash: 2, canRoll: false },
+    { hash: 11, canRoll: true },
+  ];
+
+  it("adds the pattern's crafted-only plugs, flagged, after the drop pool", () => {
+    const plugSets = { 200: plugSet([1, 3, 11, 13]) };
+    expect(
+      withPatternPlugCandidates(drops, { reusablePlugSetHash: 200 }, plugSets, magazines),
+    ).toEqual([
+      ...drops,
+      { hash: 3, canRoll: true, craftedOnly: true },
+      { hash: 13, canRoll: true, craftedOnly: true },
+    ]);
+  });
+
+  it("keeps the drop hash for shared perks and takes the pattern's rollability", () => {
+    const items = { ...magazines, 22: magazinePlug(22, "Mini Frags", 2) };
+    const plugSets = { 200: plugSet([22]) };
+    expect(withPatternPlugCandidates(drops, { reusablePlugSetHash: 200 }, plugSets, items)).toEqual([
+      { hash: 1, canRoll: true },
+      { hash: 2, canRoll: true },
+      { hash: 11, canRoll: true },
+    ]);
+  });
+
+  it("adds nothing from a pattern socket holding another column's plugs", () => {
+    const items = { ...magazines, 30: magazinePlug(30, "Quick Launch", 2, "barrels") };
+    const plugSets = { 200: plugSet([30]) };
+    expect(withPatternPlugCandidates(drops, { reusablePlugSetHash: 200 }, plugSets, items)).toEqual(
+      drops,
+    );
+    expect(withPatternPlugCandidates([], { reusablePlugSetHash: 200 }, plugSets, items)).toEqual([]);
+  });
+});
+
+describe("buildWeaponIndex", () => {
+  it("follows recipeItemHash to mark the pattern's crafted-only perks", () => {
     const defs = {
       DestinyInventoryItemDefinition: {
-        ...items,
-        21: plug(21, "Spike Grenades", 2),
+        ...magazines,
         500: {
           hash: 500,
           itemType: 3,
@@ -387,10 +432,7 @@ describe("pairedPoolPlugs", () => {
           sockets: { socketEntries: [{ reusablePlugSetHash: 200 }] },
         },
       },
-      DestinyPlugSetDefinition: {
-        100: { reusablePlugItems: pool.map((plugItemHash) => ({ plugItemHash, currentlyCanRoll: true })) },
-        200: { reusablePlugItems: [21, 3, 11, 13].map((plugItemHash) => ({ plugItemHash, currentlyCanRoll: true })) },
-      },
+      DestinyPlugSetDefinition: { 100: plugSet(magazinePool), 200: plugSet([1, 3, 11, 13]) },
       DestinyStatDefinition: {},
       DestinyStatGroupDefinition: {},
       DestinyDamageTypeDefinition: {},
@@ -400,15 +442,16 @@ describe("pairedPoolPlugs", () => {
     } as unknown as ManifestDefs;
 
     const { index } = buildWeaponIndex(defs, "test");
-    const weapon = index.weapons.find((w) => w.name === "Tarnation")!;
-    const magazine = weapon.columns[0]!.perkIndices.map((i) => index.perks[i]!);
+    const [magazine] = index.weapons.find((w) => w.name === "Tarnation")!.columns;
+    const name = (i: number) => index.perks[i]!.name;
 
-    expect(magazine.map((p) => [p.hash, p.name, p.currentlyCanRoll])).toEqual([
-      [1, "Spike Grenades", true],
-      [2, "Mini Frags", true],
-      [3, "Sticky Grenades", true],
+    expect(magazine!.perkIndices.map(name)).toEqual([
+      "Spike Grenades",
+      "Mini Frags",
+      "Sticky Grenades",
     ]);
-    expect(magazine.find((p) => p.name === "Sticky Grenades")?.alternateHashes).toEqual([13]);
+    expect(magazine!.craftedOnly?.map(name)).toEqual(["Sticky Grenades"]);
+    expect(index.perks.find((p) => p.name === "Sticky Grenades")).not.toHaveProperty("craftedOnly");
   });
 });
 

@@ -122,10 +122,15 @@ export function internWeaponCatalog(
   };
 
   const summaries: WeaponSummary[] = weapons.map((weapon) => {
-    const columns: InternedPerkColumn[] = weapon.columns.map((column) => ({
-      kind: column.kind,
-      perkIndices: column.perks.map((perk) => internPerk(perk)),
-    }));
+    const columns: InternedPerkColumn[] = weapon.columns.map((column) => {
+      const perkIndices = column.perks.map((perk) => internPerk(perk));
+      const craftedOnly = perkIndices.filter((_, i) => column.perks[i]!.craftedOnly);
+      return {
+        kind: column.kind,
+        perkIndices,
+        ...(craftedOnly.length ? { craftedOnly } : {}),
+      };
+    });
     const perkNames = [...new Set(weapon.perks)];
     // Masterworks share the perk table so the grid treats them like any plug.
     // They belong to this weapon, so its own stats name their modifiers.

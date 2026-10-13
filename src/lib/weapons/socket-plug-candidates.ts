@@ -114,6 +114,40 @@ export function collectSocketPlugCandidates(
   return [...byHash.entries()].map(([hash, canRoll]) => ({ hash, canRoll }));
 }
 
+/**
+ * A weapon socket's drop candidates plus what its crafting pattern's socket adds.
+ * Pattern-only plugs (Sticky Grenades on Tarnation) come back `craftedOnly`. A perk in
+ * both pools keeps the drop pool's hash, since `buildColumnPerks` keeps the last hash
+ * per name, and is rollable if either pool can roll it. Pattern plugs outside the drop
+ * pool's plug categories are skipped, so a pattern socket that stops lining up with
+ * the weapon's adds nothing.
+ */
+export function withPatternPlugCandidates(
+  dropCandidates: { hash: number; canRoll: boolean }[],
+  patternEntry: SocketPlugSource,
+  plugSets: Record<number, { reusablePlugItems?: SocketPlugSetEntry[] }>,
+  items: PoolPlugDefs,
+): { hash: number; canRoll: boolean; craftedOnly?: true }[] {
+  const name = (hash: number) => items[hash]?.displayProperties?.name;
+  const category = (hash: number) => items[hash]?.plug?.plugCategoryIdentifier;
+  const dropNames = new Set(dropCandidates.map(({ hash }) => name(hash)));
+  const dropCategories = new Set(dropCandidates.map(({ hash }) => category(hash)));
+
+  const craftableNames = new Set<string | undefined>();
+  const craftedOnly: { hash: number; canRoll: boolean; craftedOnly: true }[] = [];
+  for (const plug of collectSocketPlugCandidates(patternEntry, plugSets, items)) {
+    if (!dropCategories.has(category(plug.hash))) continue;
+    if (!dropNames.has(name(plug.hash))) craftedOnly.push({ ...plug, craftedOnly: true });
+    else if (plug.canRoll) craftableNames.add(name(plug.hash));
+  }
+  return [
+    ...dropCandidates.map((plug) =>
+      craftableNames.has(name(plug.hash)) ? { ...plug, canRoll: true } : plug,
+    ),
+    ...craftedOnly,
+  ];
+}
+
 /** Non-conditional investment stat modifiers from a plug definition. */
 export function extractPlugStatMods(def: DestinyInventoryItemDefinition): StatMod[] | undefined {
   const mods: StatMod[] = [];

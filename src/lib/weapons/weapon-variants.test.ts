@@ -421,6 +421,30 @@ describe("weapon version grouping", () => {
     ]);
   });
 
+  it("keeps a perk crafted-only only when every tier marks it so", () => {
+    const sticky = { ...perk("Sticky Grenades"), craftedOnly: true };
+    const tier = (hash: number, name: string, perks: PerkRef[]) =>
+      weapon(hash, name, {
+        adept: name.endsWith("(Adept)"),
+        source: "Pit of Heresy",
+        columns: [{ kind: "Magazine", perks }],
+      });
+
+    const [normal] = reconcileAdeptTierPools([
+      tier(1, "Koraxis's Distress", [perk("Spike Grenades"), sticky]),
+      tier(2, "Koraxis's Distress (Adept)", [sticky, perk("Alloy Casing")]),
+    ]);
+    const craftedOnly = (merged: WeaponDoc) =>
+      merged.columns[0]!.perks.filter((p) => p.craftedOnly).map((p) => p.name);
+    expect(craftedOnly(normal!)).toEqual(["Sticky Grenades"]);
+
+    const [mixed] = reconcileAdeptTierPools([
+      tier(1, "Koraxis's Distress", [sticky]),
+      tier(2, "Koraxis's Distress (Adept)", [perk("Sticky Grenades")]),
+    ]);
+    expect(craftedOnly(mixed!)).toEqual([]);
+  });
+
   it("merges adept tiers only within the same source", () => {
     const vow = weapon(613334176, "Forbearance", {
       source: "Vow of the Disciple",
