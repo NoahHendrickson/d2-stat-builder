@@ -426,6 +426,12 @@ export function buildWeaponIndex(
       }
     }
 
+    // Crafting can pick perks no random drop rolls (Sticky Grenades on Tarnation).
+    // The pattern's sockets share the weapon's indexes but use their own plug hashes
+    // for perks drops also roll, so only names the drop pool lacks are added.
+    const pattern =
+      item.inventory?.recipeItemHash != null ? items[item.inventory.recipeItemHash] : undefined;
+
     const columns: PerkColumn[] = [];
     for (const idx of [...intrinsicIdx, ...perkIdx]) {
       const entry = item.sockets.socketEntries[idx];
@@ -433,6 +439,14 @@ export function buildWeaponIndex(
       const isIntrinsic = intrinsicIdx.has(idx);
 
       const candidates = collectSocketPlugCandidates(entry, plugSets, items);
+      const craftedEntry = pattern?.sockets?.socketEntries[idx];
+      if (craftedEntry) {
+        const plugName = (hash: number) => items[hash]?.displayProperties?.name;
+        const dropNames = new Set(candidates.map(({ hash }) => plugName(hash)));
+        for (const crafted of collectSocketPlugCandidates(craftedEntry, plugSets, items)) {
+          if (!dropNames.has(plugName(crafted.hash))) candidates.push(crafted);
+        }
+      }
       if (!candidates.length) continue;
 
       const { perks, identifier } = buildColumnPerks(candidates, items);

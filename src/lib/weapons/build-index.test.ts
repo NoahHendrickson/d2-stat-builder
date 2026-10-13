@@ -6,6 +6,7 @@ import {
   buildColumnPerks,
   deriveAttunementSourceOverrides,
   buildDamageTypeCatalog,
+  buildWeaponIndex,
   buildWeaponTypeCatalog,
   plugChampion,
   weaponChampions,
@@ -362,6 +363,52 @@ describe("pairedPoolPlugs", () => {
       ["Spike Grenades", true],
       ["Mini Frags", true],
     ]);
+  });
+
+  it("adds perks a craftable weapon's pattern offers but random drops rule out", () => {
+    const defs = {
+      DestinyInventoryItemDefinition: {
+        ...items,
+        21: plug(21, "Spike Grenades", 2),
+        500: {
+          hash: 500,
+          itemType: 3,
+          displayProperties: { name: "Tarnation", icon: "" },
+          inventory: { recipeItemHash: 501, bucketTypeHash: 953998645 },
+          equippingBlock: { ammoType: 3 },
+          sockets: {
+            socketEntries: [{ randomizedPlugSetHash: 100 }],
+            socketCategories: [{ socketCategoryHash: 4241085061, socketIndexes: [0] }],
+          },
+        },
+        501: {
+          hash: 501,
+          displayProperties: { name: "Tarnation", icon: "" },
+          sockets: { socketEntries: [{ reusablePlugSetHash: 200 }] },
+        },
+      },
+      DestinyPlugSetDefinition: {
+        100: { reusablePlugItems: pool.map((plugItemHash) => ({ plugItemHash, currentlyCanRoll: true })) },
+        200: { reusablePlugItems: [21, 3, 11, 13].map((plugItemHash) => ({ plugItemHash, currentlyCanRoll: true })) },
+      },
+      DestinyStatDefinition: {},
+      DestinyStatGroupDefinition: {},
+      DestinyDamageTypeDefinition: {},
+      DestinySeasonDefinition: {},
+      DestinyCollectibleDefinition: {},
+      DestinyPresentationNodeDefinition: {},
+    } as unknown as ManifestDefs;
+
+    const { index } = buildWeaponIndex(defs, "test");
+    const weapon = index.weapons.find((w) => w.name === "Tarnation")!;
+    const magazine = weapon.columns[0]!.perkIndices.map((i) => index.perks[i]!);
+
+    expect(magazine.map((p) => [p.hash, p.name, p.currentlyCanRoll])).toEqual([
+      [1, "Spike Grenades", true],
+      [2, "Mini Frags", true],
+      [3, "Sticky Grenades", true],
+    ]);
+    expect(magazine.find((p) => p.name === "Sticky Grenades")?.alternateHashes).toEqual([13]);
   });
 });
 
