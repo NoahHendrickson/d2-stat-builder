@@ -35,6 +35,11 @@ export interface TheoryBuilds {
   ceilings: ValueStore<CeilingsView>;
   /** What the cards show for an exotic they'd have you farm (null = none picked). */
   exoticDisplay: TheoryExoticDisplay | null;
+  /**
+   * Nothing to plan for yet: no stat target, exotic or set bonus. The search still runs
+   * (it sets the slider maxima) but there are no builds to show.
+   */
+  empty: boolean;
 }
 
 /**
@@ -155,8 +160,11 @@ export function useTheoryBuilds({
     [exoticChoice, option],
   );
 
+  const empty =
+    !targets.some((t) => t > 0) && !exoticChoice.exotic && setRequirements.length === 0;
+
   return useMemo(
-    () => ({ state, sets, setMap, ceilings, exoticDisplay }),
-    [state, sets, setMap, ceilings, exoticDisplay],
+    () => ({ state, sets, setMap, ceilings, exoticDisplay, empty }),
+    [state, sets, setMap, ceilings, exoticDisplay, empty],
   );
 }
