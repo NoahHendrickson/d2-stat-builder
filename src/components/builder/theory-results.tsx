@@ -269,6 +269,7 @@ const TheoryRow = memo(function TheoryRow({
 
 export function TheoryResults({
   state,
+  empty,
   exotic,
   setMap,
   pieceMap,
@@ -276,6 +277,8 @@ export function TheoryResults({
   sort,
 }: {
   state: TheoryBuildState;
+  /** No target, exotic or set bonus picked yet: prompt for one instead of listing rolls. */
+  empty: boolean;
   exotic: TheoryExoticDisplay | null;
   setMap: Map<number, ArmorSetInfo>;
   pieceMap: Map<string, ArmorPiece>;
@@ -311,6 +314,12 @@ export function TheoryResults({
     </div>
   );
 
+  const prompt = (
+    <p className="text-muted-foreground text-sm">
+      Set a stat target, an exotic or a set bonus to see which Tier 5 rolls to farm.
+    </p>
+  );
+  if (empty) return prompt;
   if (state.failed) {
     return (
       <p className="text-muted-foreground text-sm">
@@ -319,11 +328,7 @@ export function TheoryResults({
     );
   }
   if (!state.result) {
-    return state.running ? null : (
-      <p className="text-muted-foreground text-sm">
-        Set stat targets, major mods and fragments to see which Tier 5 rolls reach them.
-      </p>
-    );
+    return state.running ? null : prompt;
   }
   if (state.result.setsDontFit) {
     return (

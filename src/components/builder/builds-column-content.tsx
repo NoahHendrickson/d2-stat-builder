@@ -35,7 +35,6 @@ import {
   THEORY_SORT_OPTIONS,
   type TheorySortState,
 } from "@/lib/builder/sort-theory";
-import type { TheoryBuildState } from "@/lib/optimizer/use-theory-build";
 import { useStoreValue, type ValueStore } from "@/lib/value-store";
 
 const LOADING_ROWS = 5;
@@ -99,7 +98,7 @@ export interface BuildsHeader {
 }
 
 /** The theoretical list's header: a count of exact and close builds. */
-function theoryHeader(ready: boolean, theory: TheoryBuildState): BuildsHeader {
+function theoryHeader(ready: boolean, { state: theory, empty }: TheoryBuilds): BuildsHeader {
   const header = (state: BuildsViewState, label: string): BuildsHeader => ({
     title: "Theoretical Builds",
     state,
@@ -109,6 +108,7 @@ function theoryHeader(ready: boolean, theory: TheoryBuildState): BuildsHeader {
   });
   const { result } = theory;
   if (!ready) return header("not-ready", "");
+  if (empty) return header("idle", "");
   if (theory.running) return header("searching", "Searching…");
   if (theory.failed) return header("idle", "Search failed");
   if (!result) return header("idle", "");
@@ -137,7 +137,7 @@ export function buildsHeader({
   BuildsColumnContentProps,
   "mode" | "ready" | "showLoading" | "running" | "result" | "theory"
 >): BuildsHeader {
-  if (mode === "theoretical") return theoryHeader(ready, theory.state);
+  if (mode === "theoretical") return theoryHeader(ready, theory);
   const state = getBuildsViewState({ ready, showLoading, result });
   return {
     title: "Builds",
@@ -272,7 +272,7 @@ function TheoryBuildsBody({
   onSortChange,
 }: BodyProps<TheorySortState>) {
   // A theoretical list stays sortable while a newer one is on its way.
-  const sortable = (theory.state.result?.recipes.length ?? 0) > 1;
+  const sortable = !theory.empty && (theory.state.result?.recipes.length ?? 0) > 1;
   return (
     <div className="space-y-5">
       <HeaderRow
@@ -288,6 +288,7 @@ function TheoryBuildsBody({
         <TheoryIntroAlert />
         <TheoryResults
           state={theory.state}
+          empty={theory.empty}
           exotic={theory.exoticDisplay}
           setMap={theory.setMap}
           pieceMap={pieceMap}
