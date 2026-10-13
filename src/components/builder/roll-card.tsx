@@ -18,7 +18,8 @@ const STAT_COLS = STAT_DISPLAY_ORDER.map((key) => ({ key, i: STAT_ORDER.indexOf(
 
 export function Glyph({ stat, icons, className }: { stat: number; icons: StatIconMap; className?: string }) {
   const key = STAT_ORDER[stat];
-  return <StatGlyph src={icons[key]} label={STAT_LABELS[key]} className={className} />;
+  // Tinted: the same colour and strength as the label it sits beside.
+  return <StatGlyph src={icons[key]} label={STAT_LABELS[key]} className={className} tint />;
 }
 
 /** A stat as a glyph and its name. */
@@ -261,7 +262,7 @@ export function CardStats({
       <div className="flex flex-wrap items-center gap-x-8 gap-y-1 text-base font-medium tabular-nums">
         {STAT_COLS.map(({ key, i }) => (
           <span key={key} className={cn("flex items-center gap-1", short?.[i] && "text-warning")}>
-            <StatGlyph src={icons[key]} label={STAT_LABELS[key]} className="size-5" plain />
+            <StatGlyph src={icons[key]} label={STAT_LABELS[key]} className="size-5" plain tint />
             {stats[i]}
             {was && <Delta value={stats[i] - was.stats[i]} />}
           </span>
