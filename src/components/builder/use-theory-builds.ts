@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import type { TheoryExoticDisplay } from "@/components/builder/theory-results";
 import { MAX_MODS } from "@/components/builder/use-builder-search-inputs";
 import type { ArmorArchetype } from "@/lib/armory/archetypes";
 import type { SpiritPerkInfo } from "@/lib/armory/exotic-class-perks";
@@ -17,6 +16,15 @@ import { useTheoryBuild, type TheoryBuildState } from "@/lib/optimizer/use-theor
 import { createValueStore, type ValueStore } from "@/lib/value-store";
 
 const NO_SETS: ArmorSetInfo[] = [];
+
+/** What the cards show for the build's exotic when it isn't owned. */
+export interface TheoryExoticDisplay {
+  name: string;
+  icon?: string;
+  watermark?: string;
+  /** False when no Tier 5 copy is owned to read its stat bonus from. */
+  bonusKnown: boolean;
+}
 
 export interface TheoryBuilds {
   state: TheoryBuildState;

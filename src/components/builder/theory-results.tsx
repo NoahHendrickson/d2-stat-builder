@@ -3,11 +3,13 @@
 import { Fragment, memo, useMemo, type ReactNode } from "react";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { CheckmarkCircle02Icon } from "@hugeicons/core-free-icons";
-import { BUILD_LIST_WELL_CLASS, MAX_SHOWN } from "@/components/builder/build-results";
 import {
-  CardStats,
-  Glyph,
+  BUILD_LIST_WELL_CLASS,
   HeaderRule,
+  StatsHeader,
+} from "@/components/builder/build-results";
+import {
+  Glyph,
   ModList,
   MutedCell,
   RollCard,
@@ -16,6 +18,7 @@ import {
   StatName,
   TuningName,
 } from "@/components/builder/roll-card";
+import type { TheoryExoticDisplay } from "@/components/builder/use-theory-builds";
 import type { ArmorPiece } from "@/lib/armory/normalize";
 import type { ArmorSetInfo } from "@/lib/armory/sets";
 import {
@@ -33,14 +36,7 @@ import type { TheoryBuildState } from "@/lib/optimizer/use-theory-build";
 import { useEntrance } from "@/lib/use-entrance";
 import { cn } from "@/lib/utils";
 
-/** What the cards show for the build's exotic when it isn't owned. */
-export interface TheoryExoticDisplay {
-  name: string;
-  icon?: string;
-  watermark?: string;
-  /** False when no Tier 5 copy is owned to read its stat bonus from. */
-  bonusKnown: boolean;
-}
+const NO_RECIPES: TheoryRecipe[] = [];
 
 /**
  * One piece (one slot): archetype, with the owned item or the exotic, the slot and the
@@ -166,14 +162,14 @@ function TheorySummaryCard({
         pieces
         {summary.tertiaries.length ? (
           <>
-            {" "}with a {orList(summary.tertiaries.map((t) => <InlineStat key={t.stat} stat={t.stat} icons={icons} />))} tertiary
+            {" "}with a {orList(summary.tertiaries.map((stat) => <InlineStat key={stat} stat={stat} icons={icons} />))} tertiary
           </>
         ) : (
           " with any tertiary"
         )}
         {summary.tuned && (
           <>
-            , tuned to {orList(summary.tuned.map((t) => <InlineStat key={t.stat} stat={t.stat} icons={icons} />))}
+            , tuned to {orList(summary.tuned.map((stat) => <InlineStat key={stat} stat={stat} icons={icons} />))}
           </>
         )}
         {sets.length > 0 && (
@@ -225,7 +221,7 @@ const TheoryRow = memo(function TheoryRow({
   const misses = recipe.short ? <ShortList short={recipe.short} icons={statIcons} /> : null;
   return (
     <RollCard
-      stats={<CardStats total={recipe.total} stats={recipe.stats} short={recipe.short} icons={statIcons} />}
+      stats={<StatsHeader total={recipe.total} stats={recipe.stats} icons={statIcons} tint short={recipe.short} />}
       meta={
         plain ? misses : (
           <>
@@ -286,12 +282,9 @@ export function TheoryResults({
   statIcons: StatIconMap;
   sort: TheorySortState;
 }) {
-  const recipes = state.result?.recipes;
-  const sorted = useMemo(
-    () => (recipes ? sortTheoryRecipes(recipes, sort).slice(0, MAX_SHOWN) : []),
-    [recipes, sort],
-  );
-  const close = state.result?.close ?? [];
+  const recipes = state.result?.recipes ?? NO_RECIPES;
+  const close = state.result?.close ?? NO_RECIPES;
+  const sorted = useMemo(() => sortTheoryRecipes(recipes, sort), [recipes, sort]);
   // New results cascade in; a re-sort only reorders (see useEntrance).
   const entering = useEntrance(recipes);
   const row = (recipe: TheoryRecipe) => (
@@ -346,7 +339,7 @@ export function TheoryResults({
       {`You don't own a Tier 5 ${exotic.name}, so its exotic stat bonus isn't counted.`}
     </p>
   );
-  if (sorted.length === 0) {
+  if (recipes.length === 0) {
     return (
       <div className="space-y-3">
         <p className="text-muted-foreground text-sm">
@@ -362,7 +355,7 @@ export function TheoryResults({
   return (
     <div className="space-y-3">
       {bonusNote}
-      <TheorySummaryCard recipes={recipes!} closeOnly={false} setMap={setMap} icons={statIcons} />
+      <TheorySummaryCard recipes={recipes} closeOnly={false} setMap={setMap} icons={statIcons} />
       <div className={cn(BUILD_LIST_WELL_CLASS, entering && "d2-stagger")}>
         {sorted.map(row)}
       </div>

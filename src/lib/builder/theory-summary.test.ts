@@ -25,9 +25,8 @@ describe("summarizeTheory", () => {
     ])!;
     expect(s.archetypes.map((a) => a.name)).toEqual(["Gunner", "Powerhouse"]);
     expect(s.archetypes[0].share).toBeCloseTo(0.6);
-    expect(s.tertiaries.map((t) => t.stat)).toEqual([5]);
+    expect(s.tertiaries).toEqual([5]);
     expect(s.tuned).toBeNull();
-    expect(s.pieces).toBe(10);
     expect(s.builds).toBe(2);
   });
 
@@ -35,16 +34,16 @@ describe("summarizeTheory", () => {
     const tune = { tuning: { plus: 0, minus: 1 } };
     const s = summarizeTheory([
       recipe([
-        piece("Brawler", 0, { owned: { instanceId: "x", slot: 0 } }),
+        piece("Brawler", 0, { owned: { instanceId: "x" } }),
         piece("Brawler", 0, { exotic: true }),
         piece("Gunner", 5, tune),
         piece("Gunner", 5, tune),
         piece("Powerhouse", 5, { setHash: 7 }),
       ]),
     ])!;
-    expect(s.pieces).toBe(3);
     expect(s.archetypes.map((a) => a.name)).toEqual(["Gunner", "Powerhouse"]);
-    expect(s.tuned).toEqual([{ stat: 0, share: 1 }]);
+    expect(s.archetypes[0].share).toBeCloseTo(2 / 3);
+    expect(s.tuned).toEqual([0]);
     expect(s.setHashes).toEqual([7]);
   });
 

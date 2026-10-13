@@ -15,15 +15,39 @@ import type { Manifest } from "../manifest/load";
 import type { OwnedRoll, TheoryExotic } from "./theory";
 
 /**
+ * An Armor 3.0 piece's roll: its archetype (by name, or by its top two base stats when
+ * the name is unknown) and tertiary, the third-highest base stat.
+ */
+function rollOf(
+  p: ArmorPiece,
+  archetypes: ArmorArchetype[],
+): { archetype: ArmorArchetype; tertiary: number } | null {
+  const [primary, secondary, tertiary] = rollStatIndices(p.baseStats);
+  const archetype =
+    archetypes.find((a) => a.name === p.archetype) ??
+    archetypes.find((a) => a.primary === primary && a.secondary === secondary);
+  return archetype ? { archetype, tertiary } : null;
+}
+
+/** A piece as an owned copy of its roll (none when its archetype is unknown). */
+function ownedRollOf(
+  p: ArmorPiece,
+  archetypes: ArmorArchetype[],
+): { instanceId: string; archetype: string; tertiary: number }[] {
+  const roll = rollOf(p, archetypes);
+  return roll ? [{ instanceId: p.instanceId, archetype: roll.archetype.name, tertiary: roll.tertiary }] : [];
+}
+
+/**
  * Owned Tier-5 legendaries as rolls a theoretical build can use in place of a farmed
- * one: only pieces whose stats are exactly the generic roll's (30 / 25 / 20, 5s).
+ * one: only tuned pieces whose stats are exactly the generic roll's (30 / 25 / 20, 5s).
  */
 export function theoryOwnedRolls(pieces: ArmorPiece[], archetypes: ArmorArchetype[]): OwnedRoll[] {
-  const byName = new Map(archetypes.map((a) => [a.name, a]));
   return pieces.flatMap((p) => {
-    const archetype = p.archetype ? byName.get(p.archetype) : undefined;
-    if (p.isExotic || p.tunedStat === undefined || !archetype) return [];
-    const tertiary = rollStatIndices(p.baseStats)[2];
+    if (p.isExotic || p.tunedStat === undefined) return [];
+    const roll = rollOf(p, archetypes);
+    if (!roll) return [];
+    const { archetype, tertiary } = roll;
     const expected = t5RollStats(archetype.primary, archetype.secondary, tertiary);
     if (expected.some((v, s) => v !== p.stats[s])) return [];
     return [
@@ -37,19 +61,6 @@ export function theoryOwnedRolls(pieces: ArmorPiece[], archetypes: ArmorArchetyp
       },
     ];
   });
-}
-
-/** An Armor 3.0 roll read off a piece's base stats: the top three are 30 / 25 / 20. */
-function rollOf(
-  p: ArmorPiece,
-  archetypes: ArmorArchetype[],
-): { archetype: string; tertiary: number } | null {
-  const [primary, secondary, tertiary] = rollStatIndices(p.baseStats);
-  const archetype =
-    archetypes.find((a) => a.name === p.archetype) ??
-    archetypes.find((a) => a.primary === primary && a.secondary === secondary);
-  if (!archetype) return null;
-  return { archetype: archetype.name, tertiary };
 }
 
 export interface TheoryExoticChoice {
@@ -102,8 +113,7 @@ export function theoryExotic(choice: TheoryExoticChoice): {
       if (p.itemHash !== classItemHash || p.tunedStat === undefined) return [];
       const picked = left !== null || right !== null;
       if (picked && !matchesSpiritSelection(p.exoticPerkHashes, choice.exoticPerks)) return [];
-      const roll = rollOf(p, archetypes);
-      return roll ? [{ instanceId: p.instanceId, ...roll }] : [];
+      return ownedRollOf(p, archetypes);
     });
     return {
       // Spirits that can't be read (no catalog entry, an unknown archetype) leave no rolls:
@@ -116,10 +126,7 @@ export function theoryExotic(choice: TheoryExoticChoice): {
   const copies = pieces.filter(
     (p) => p.isExotic && p.name === option.name && p.tunedStat !== undefined,
   );
-  const owned = copies.flatMap((p) => {
-    const roll = rollOf(p, archetypes);
-    return roll ? [{ instanceId: p.instanceId, ...roll }] : [];
-  });
+  const owned = copies.flatMap((p) => ownedRollOf(p, archetypes));
   const def = copies[0] && manifest.def("DestinyInventoryItemDefinition", copies[0].itemHash);
   return {
     exotic: {

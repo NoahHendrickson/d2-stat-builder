@@ -39,7 +39,7 @@ export function SetBonusesSection({
   onTogglePin,
   setFilters,
   onSetMinOwnedChange,
-  planning = false,
+  planning,
   pieces,
   manifest,
   classType,
@@ -58,7 +58,7 @@ export function SetBonusesSection({
    * Planning what to farm (Theoretical Builds): every set is listed and any bonus can be
    * required, however few of its pieces are owned — so there's no owned-count filter.
    */
-  planning?: boolean;
+  planning: boolean;
   /** The optimizer pool (what the roll grid counts). */
   pieces: ArmorPiece[];
   manifest?: Manifest;

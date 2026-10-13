@@ -6,15 +6,14 @@
  * Runtime imports are relative (not `@/`): the optimizer workers and Node tests use it.
  */
 import type { ArmorArchetype } from "./archetypes";
+import { MASTERWORK_OFF_STAT_BONUS } from "./stats";
 
 const NUM_STATS = 6;
 
 /** Tier-5 archetype stat values: primary, secondary, tertiary. */
-export const T5_PRIMARY = 30;
-export const T5_SECONDARY = 25;
-export const T5_TERTIARY = 20;
-/** MW5 lifts each of the three off-archetype stats to 5. */
-export const T5_MASTERWORKED_OFF_STAT = 5;
+const T5_PRIMARY = 30;
+const T5_SECONDARY = 25;
+const T5_TERTIARY = 20;
 
 /** The stats an archetype's tertiary can be: any but its primary and secondary. */
 export function tertiariesOf(a: { primary: number; secondary: number }): number[] {
@@ -25,7 +24,7 @@ export function tertiariesOf(a: { primary: number; secondary: number }): number[
 
 /** A roll's masterworked stats. */
 export function t5RollStats(primary: number, secondary: number, tertiary: number): number[] {
-  const stats = new Array(NUM_STATS).fill(T5_MASTERWORKED_OFF_STAT);
+  const stats = new Array(NUM_STATS).fill(MASTERWORK_OFF_STAT_BONUS);
   stats[primary] = T5_PRIMARY;
   stats[secondary] = T5_SECONDARY;
   stats[tertiary] = T5_TERTIARY;

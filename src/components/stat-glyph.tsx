@@ -55,29 +55,28 @@ export function StatGlyph({
         aria-hidden
       />
     );
-  if (tint) {
-    const glyph = (
-      <span
-        role={decorative ? undefined : "img"}
-        aria-label={decorative ? undefined : label}
-        aria-hidden={decorative || undefined}
-        title={plain && !decorative ? label : undefined}
-        tabIndex={plain ? undefined : 0}
-        className={cn("inline-block size-4 shrink-0 bg-current", className)}
-        style={tintStyle(`${BUNGIE_IMAGE_BASE}${src}`)}
-      />
-    );
-    return plain ? glyph : <TooltipLabel label={label}>{glyph}</TooltipLabel>;
-  }
-  const img = (
+  const url = `${BUNGIE_IMAGE_BASE}${src}`;
+  // A lone glyph names its stat (title, and no tab stop without a tooltip to open).
+  const shared = {
+    "aria-hidden": decorative || undefined,
+    title: plain && !decorative ? label : undefined,
+    tabIndex: plain ? undefined : 0,
+  };
+  const glyph = tint ? (
+    <span
+      {...shared}
+      role={decorative ? undefined : "img"}
+      aria-label={decorative ? undefined : label}
+      className={cn("inline-block size-4 shrink-0 bg-current", className)}
+      style={tintStyle(url)}
+    />
+  ) : (
     // Tiny Bungie glyphs: skip next/image so collapsed rows don't pay optimizer + tooltip cost.
     // eslint-disable-next-line @next/next/no-img-element
     <img
-      src={`${BUNGIE_IMAGE_BASE}${src}`}
+      {...shared}
+      src={url}
       alt={decorative ? "" : label}
-      aria-hidden={decorative || undefined}
-      title={plain && !decorative ? label : undefined}
-      tabIndex={plain ? undefined : 0}
       width={16}
       height={16}
       decoding="async"
@@ -88,6 +87,5 @@ export function StatGlyph({
       )}
     />
   );
-  if (plain) return img;
-  return <TooltipLabel label={label}>{img}</TooltipLabel>;
+  return plain ? glyph : <TooltipLabel label={label}>{glyph}</TooltipLabel>;
 }

@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   dreamCandidates,
-  dreamRolls,
   farmOdds,
   solveDream,
   type DreamInput,
 } from "./dream";
 import type { ArmorArchetype } from "../armory/archetypes";
+import { t5Rolls } from "../armory/t5-rolls";
 import { solve } from "./solve";
 import { realWarlockSlots } from "./real-pool.fixture";
 import type { OptimizerInput, OptimizerPiece } from "./types";
@@ -57,9 +57,9 @@ const dream = (base: OptimizerInput, extra: Partial<DreamInput> = {}): DreamInpu
   ...extra,
 });
 
-describe("dreamRolls", () => {
+describe("t5Rolls", () => {
   it("enumerates every archetype × tertiary with the T5 30/25/20 + MW5 shape", () => {
-    const rolls = dreamRolls(ARCHETYPES);
+    const rolls = t5Rolls(ARCHETYPES);
     expect(rolls).toHaveLength(12 * 4);
     for (const r of rolls) {
       expect([...r.stats].sort((a, b) => b - a)).toEqual([30, 25, 20, 5, 5, 5]);
@@ -110,7 +110,7 @@ describe("solveDream", () => {
     for (const f of farm) {
       // Exactly the tertiaries that leave at most one stat short, by at most 5 (one +5
       // tune covers it): any tuned stat when none is short, otherwise just that one.
-      const expected = dreamRolls(ARCHETYPES)
+      const expected = t5Rolls(ARCHETYPES)
         .filter((r) => r.archetype.name === f.archetype)
         .map((r) => ({ ...r, short: [0, 5].filter((s) => r.stats[s] < 25) }))
         .filter((r) => r.short.length === 0 || (r.short.length === 1 && r.stats[r.short[0]] >= 20))
@@ -253,7 +253,7 @@ describe("dreamCandidates exotic branch", () => {
       expect(d.exotic).toBe(true);
       expect(d.exoticName).toBe("Gauntlets");
       expect(d.tuned).toBeNull();
-      const roll = dreamRolls(ARCHETYPES).find(
+      const roll = t5Rolls(ARCHETYPES).find(
         (r) => r.archetype.name === d.archetype && r.tertiary === d.tertiary,
       )!;
       expect(d.stats).toEqual(roll.stats.map((v, s) => v + (s === 1 ? 10 : 0)));

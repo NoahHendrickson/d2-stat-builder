@@ -153,7 +153,7 @@ function recipeOf(
   short: StatArray | undefined,
 ): TheoryRecipe {
   const owned = pieces.filter((piece) => piece.owned).length;
-  const usedSlots = new Set(pieces.flatMap((piece) => (piece.owned ? [piece.owned.slot] : [])));
+  const usedSlots = new Set(pieces.flatMap((piece) => (piece.owned ? [piece.slot] : [])));
   const total = stats.reduce((a, b) => a + b, 0);
   const key =
     pieces
@@ -294,7 +294,7 @@ function seat(
   const setCounts = sets.map((s) => s.count);
   for (const s of seats) {
     const piece = legs[s.piece];
-    piece.owned = { instanceId: s.instanceId, slot: s.slot };
+    piece.owned = { instanceId: s.instanceId };
     piece.slot = s.slot;
     if (s.tuning >= 0) {
       piece.tuning = tunings[s.tuning];
@@ -313,7 +313,7 @@ function seat(
         // The exotic takes a tuning first: its tuning is flexible, so it narrows no drop.
         tuning: tuningsLeft.shift() ?? null,
         exotic: true,
-        owned: way.exotic.ownedId ? { instanceId: way.exotic.ownedId, slot: exoticSlot } : undefined,
+        owned: way.exotic.ownedId ? { instanceId: way.exotic.ownedId } : undefined,
       }
     : null;
   // The farmed legendaries take the slots nothing owned (or the exotic) fills, in order —

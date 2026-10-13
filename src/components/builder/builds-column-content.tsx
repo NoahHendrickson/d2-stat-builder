@@ -47,7 +47,7 @@ export type BuildsViewState =
   | "results"
   | "no-matches";
 
-export function getBuildsViewState({
+function getBuildsViewState({
   ready,
   showLoading,
   result,
@@ -63,16 +63,7 @@ export function getBuildsViewState({
   return "results";
 }
 
-export function getBuildsStatusLabel({
-  ready,
-  showLoading,
-  result,
-}: {
-  ready: boolean;
-  showLoading: boolean;
-  result: OptimizerOutput | null;
-}): string {
-  const state = getBuildsViewState({ ready, showLoading, result });
+function getBuildsStatusLabel(state: BuildsViewState, result: OptimizerOutput | null): string {
   switch (state) {
     case "not-ready":
       return "";
@@ -116,20 +107,21 @@ function theoryHeader(ready: boolean, theory: TheoryBuildState): BuildsHeader {
     progress: false,
     busy: false,
   });
+  const { result } = theory;
   if (!ready) return header("not-ready", "");
   if (theory.running) return header("searching", "Searching…");
   if (theory.failed) return header("idle", "Search failed");
-  const n = theory.result?.recipes.length;
-  if (n === undefined) return header("idle", "");
-  const close = theory.result!.close.length;
+  if (!result) return header("idle", "");
+  if (result.setsDontFit) return header("no-matches", "Set bonuses don't fit");
+  const n = result.recipes.length;
+  const close = result.close.length;
   const closeLabel = close ? `${close} close` : "";
   if (n === 0) {
     return close
       ? header("results", `No exact builds, ${closeLabel}`)
       : header("no-matches", "No builds reach these");
   }
-  const shown = Math.min(MAX_SHOWN, n);
-  const label = `${shown} ${shown === 1 ? "build" : "builds"}`;
+  const label = `${n} ${n === 1 ? "build" : "builds"}`;
   return header("results", close ? `${label}, ${closeLabel}` : label);
 }
 
@@ -150,7 +142,7 @@ export function buildsHeader({
   return {
     title: "Builds",
     state,
-    label: getBuildsStatusLabel({ ready, showLoading, result }),
+    label: getBuildsStatusLabel(state, result),
     progress: state === "searching",
     // Initial search only — `running` is false once refinement starts (see use-optimizer).
     busy: running,

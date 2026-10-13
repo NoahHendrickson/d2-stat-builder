@@ -1,9 +1,34 @@
 import { describe, expect, it } from "vitest";
-import { theoryExotic } from "./theory-input";
+import { theoryExotic, theoryOwnedRolls } from "./theory-input";
+import type { ArmorPiece } from "../armory/normalize";
+import { ARMOR_SLOTS } from "../armory/stats";
 import type { Manifest } from "../manifest/load";
 
 const manifest = { def: () => undefined } as unknown as Manifest;
 const archetypes = [{ name: "Paragon", primary: 4, secondary: 5 }];
+
+describe("theoryOwnedRolls", () => {
+  it("keeps tuned legendaries with the exact Tier 5 roll, by archetype name or shape", () => {
+    // A Paragon (super / melee) with a weapons tertiary, masterworked.
+    const t5 = {
+      slot: ARMOR_SLOTS[0],
+      baseStats: [20, 0, 0, 0, 30, 25],
+      stats: [20, 5, 5, 5, 30, 25],
+      tunedStat: 0,
+      archetype: "Paragon",
+    };
+    const pieces = [
+      { ...t5, instanceId: "named" },
+      { ...t5, instanceId: "shape", archetype: undefined },
+      { ...t5, instanceId: "unmasterworked", stats: [20, 0, 5, 5, 30, 25] },
+      { ...t5, instanceId: "exotic", isExotic: true },
+      { ...t5, instanceId: "untuned", tunedStat: undefined },
+    ] as unknown as ArmorPiece[];
+    const owned = theoryOwnedRolls(pieces, archetypes);
+    expect(owned.map((o) => o.instanceId)).toEqual(["named", "shape"]);
+    expect(owned[0]).toMatchObject({ slot: 0, archetype: "Paragon", tertiary: 0, tuned: 0 });
+  });
+});
 
 describe("theoryExotic", () => {
   it("lets an exotic class item roll anything when its Spirits can't be read", () => {

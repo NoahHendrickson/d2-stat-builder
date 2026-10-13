@@ -26,7 +26,7 @@
  */
 import {
   clampStat,
-  constants,
+  unitsToGain,
   FREE,
   MAX_TUNINGS,
   NUM_SLOTS,
@@ -39,8 +39,7 @@ import { recipeBuilder, type Candidate } from "./recipe";
 import type { TheorySpace } from "./space";
 import type { TheoryInput, TheoryRecipe, TheoryResult } from "./types";
 
-export { tuningsNeeded, UNIT } from "./feasibility";
-export { buildTheorySpace, rollUnits, theoryRolls, type TheorySpace } from "./space";
+export { buildTheorySpace, type TheorySpace } from "./space";
 export type * from "./types";
 
 /** Builds kept per (focus, owned-count bound) while scanning. */
@@ -81,12 +80,14 @@ export function solveTheory(input: TheoryInput, space: TheorySpace): TheoryResul
   const { major, minor } = input.mods;
   // Fragments and the exotic's bonus are the same for every build.
   const constant = input.fragmentBonus.map((v, s) => v + (input.exotic?.intrinsic[s] ?? 0));
-  const c = constants(input.minimums, constant);
+  const c = unitsToGain(input.minimums, constant);
   const g = new Int32Array(NUM_STATS);
   const ceilings = new Array(NUM_STATS).fill(0);
   const maxGain = 2 * major + minor + MAX_TUNINGS;
   const legendaries = NUM_SLOTS - (input.exotic ? 1 : 0);
   const setsDontFit = input.sets.reduce((n, s) => n + s.count, 0) > legendaries;
+  // No build can exist, so there's nothing to scan.
+  if (setsDontFit) return { recipes: [], ceilings, setsDontFit, close: [] };
   const { units, ownedBound } = space;
 
   // Per focus (6 stats, then "flexible") and owned-count bound, the best few sums.
@@ -117,7 +118,7 @@ export function solveTheory(input: TheoryInput, space: TheorySpace): TheoryResul
       spread += clamp(constant[s] + U * units[base + s]);
     }
     // ≥ 0: tunings to reach every target; < 0: −(units short).
-    const allTunings = setsDontFit ? -Infinity : needed(g, major, minor);
+    const allTunings = needed(g, major, minor);
     const owned = ownedBound[i];
     if (allTunings < 0 && allTunings >= -CLOSE_UNITS) {
       insertBounded(
@@ -195,11 +196,8 @@ export function solveTheory(input: TheoryInput, space: TheorySpace): TheoryResul
   // from most owned down, a build is kept only if it beats every build with more owned:
   // owning more is worth a lower value, not the reverse.
   const alternates: TheoryRecipe[] = [];
+  // By key, so a build another focus already listed isn't listed twice.
   const byKey = new Map<string, TheoryRecipe>();
-  const add = (recipe: TheoryRecipe) => {
-    const prev = byKey.get(recipe.key);
-    if (!prev || recipe.owned > prev.owned) byKey.set(recipe.key, recipe);
-  };
   for (let f = 0; f < FOCI; f++) {
     const built = kept[f]
       .flat()
@@ -224,8 +222,8 @@ export function solveTheory(input: TheoryInput, space: TheorySpace): TheoryResul
         groupBest = -Infinity;
       }
       groupBest = Math.max(groupBest, p.value);
-      if (p.value <= bestAbove) continue;
-      add(recipes[0]);
+      if (p.value <= bestAbove || byKey.has(recipes[0].key)) continue;
+      byKey.set(recipes[0].key, recipes[0]);
       alternates.push(...recipes.slice(1));
       n++;
     }
@@ -233,7 +231,7 @@ export function solveTheory(input: TheoryInput, space: TheorySpace): TheoryResul
   // A short list: the same stats from other archetype mixes, best of each build first.
   for (const recipe of alternates) {
     if (byKey.size >= FEW_BUILDS) break;
-    add(recipe);
+    if (!byKey.has(recipe.key)) byKey.set(recipe.key, recipe);
   }
   const recipes = [...byKey.values()].sort(
     (a, b) => b.owned - a.owned || a.tuned - b.tuned || b.total - a.total,

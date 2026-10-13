@@ -868,8 +868,8 @@ export function BuilderPanel({
   // What the two tabs show differently in the settings, picked once: Theoretical Builds
   // plans what to farm, so it lists every set (owned or not) and its own slider maxima.
   const settingsView = theoretical
-    ? { sets: theory.sets, setMap: theory.setMap, setReqs, ceilings: theory.ceilings, planning: true }
-    : { sets, setMap, setReqs: ownedSetReqs, ceilings: ceilingsView, planning: false };
+    ? { sets: theory.sets, setMap: theory.setMap, setReqs, ceilings: theory.ceilings }
+    : { sets, setMap, setReqs: ownedSetReqs, ceilings: ceilingsView };
 
   // The dream query for one build at the modal's targets (see dreamInputForBuild).
   const makeDreamInput = useCallback(
@@ -972,13 +972,14 @@ export function BuilderPanel({
   );
 
   const visibleSets = settingsView.setMap;
-  // Toggles act on the requirements as shown (on Builds, the ones the owned pieces make).
-  const shownSetReqs = settingsView.setReqs;
   const toggleSet = useCallback(
     (setHash: number, count: 2 | 4) => {
       setSetReqs((prev) => {
+        // Toggles act on the requirements as shown (on Builds, the ones the owned pieces
+        // make — see ownedSetReqs).
+        const shown = theoretical ? prev : makeableSetReqs(prev, visibleSets);
         const next = { ...prev };
-        if (shownSetReqs[setHash] === count) {
+        if (shown[setHash] === count) {
           delete next[setHash];
           return next;
         }
@@ -996,7 +997,7 @@ export function BuilderPanel({
         return next;
       });
     },
-    [visibleSets, shownSetReqs],
+    [visibleSets, theoretical],
   );
 
   const onMajorChange = useCallback((v: string) => setMajor(Number(v)), []);
@@ -1182,7 +1183,7 @@ export function BuilderPanel({
                 onTogglePin={togglePinnedSet}
                 setFilters={setFilters}
                 onSetMinOwnedChange={setSetMinOwned}
-                planning={settingsView.planning}
+                planning={theoretical}
                 pieces={pool}
                 manifest={manifest}
                 classType={classType}
@@ -1207,7 +1208,7 @@ export function BuilderPanel({
               )}
             </Section>
 
-            {!settingsView.planning && (
+            {!theoretical && (
               <>
                 <Section
                   title="Advanced settings"

@@ -55,8 +55,8 @@ export interface TheoryPiece extends TheoryRoll {
   slot: number;
   /** null = any tuned stat will do (the piece needs no tuning). */
   tuning: TheoryTuning | null;
-  /** The owned piece that already has this roll, and its slot (ARMOR_SLOTS index). */
-  owned?: { instanceId: string; slot: number };
+  /** The owned piece that already has this roll (it's in its own slot). */
+  owned?: { instanceId: string };
   /** The build's exotic (its tuning is flexible: any +5). */
   exotic?: true;
   /** The required set this piece counts toward. */

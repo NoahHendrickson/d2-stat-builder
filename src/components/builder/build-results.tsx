@@ -73,11 +73,42 @@ export const BUILD_CARD_LIFT_CLASS =
 /** Stack of build cards — no well; they sit on the main column. */
 export const BUILD_LIST_WELL_CLASS = "flex flex-col gap-3";
 
-/** Display stat columns paired with their STAT_ORDER index (used by the build breakdown). */
-const STAT_COLS = STAT_DISPLAY_ORDER.map((key) => ({
+/** Display stat columns paired with their STAT_ORDER index. */
+export const STAT_COLS = STAT_DISPLAY_ORDER.map((key) => ({
   key,
   i: STAT_ORDER.indexOf(key),
 }));
+
+/** A card header's total and six stats. */
+export function StatsHeader({
+  total,
+  stats,
+  icons,
+  tint = false,
+  short,
+}: {
+  total: number;
+  stats: number[];
+  icons: StatIconMap;
+  /** Glyphs in the text colour (see StatGlyph). */
+  tint?: boolean;
+  /** Points each stat is short of its target (a close build): those show in yellow. */
+  short?: number[];
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
+      <span className="text-base font-medium tabular-nums">{total}</span>
+      <div className="flex flex-wrap items-center gap-x-8 gap-y-1 text-base font-medium tabular-nums">
+        {STAT_COLS.map(({ key, i }) => (
+          <span key={key} className={cn("flex items-center gap-1", short?.[i] && "text-warning")}>
+            <StatGlyph src={icons[key]} label={STAT_LABELS[key]} className="size-5" plain tint={tint} />
+            {stats[i]}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 /**
  * The Tuned-column cell for one piece: the tuned stat's icon for a directional tune
@@ -200,7 +231,7 @@ const isTheoretical = (piece: ArmorPiece) =>
 const NOT_OWNED_TITLE = "You don't own this Spirit pair. The stats are a theoretical roll, so this build can't be equipped.";
 
 /** Vertical rule between collapsed-header clusters (Figma 86:862). */
-function HeaderRule() {
+export function HeaderRule() {
   return <span className="h-[15px] w-px shrink-0 bg-foreground/16" aria-hidden />;
 }
 
@@ -372,24 +403,7 @@ const BuildRow = memo(function BuildRow({
             />
           )}
           <div className="flex min-w-0 flex-col justify-center gap-2">
-            <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-              <span className="text-base font-medium tabular-nums">
-                {loadout.total}
-              </span>
-              <div className="flex flex-wrap items-center gap-x-8 gap-y-1 text-base font-medium tabular-nums">
-                {STAT_COLS.map(({ key, i }) => (
-                  <span key={key} className="flex items-center gap-1">
-                    <StatGlyph
-                      src={statIcons[key]}
-                      label={STAT_LABELS[key]}
-                      className="size-5"
-                      plain
-                    />
-                    {loadout.stats[i]}
-                  </span>
-                ))}
-              </div>
-            </div>
+            <StatsHeader total={loadout.total} stats={loadout.stats} icons={statIcons} />
             <BuildHeaderMeta
               notOwned={pieces.some((p) => p !== undefined && isTheoretical(p))}
               setBadges={setBadges}

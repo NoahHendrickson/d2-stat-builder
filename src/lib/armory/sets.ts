@@ -16,15 +16,21 @@ export interface ArmorSetInfo {
   ownedCount: number;
 }
 
+/** Owned pieces per set hash. */
+function countBySet(pieces: ArmorPiece[]): Map<number, number> {
+  const counts = new Map<number, number>();
+  for (const p of pieces) {
+    if (p.setHash) counts.set(p.setHash, (counts.get(p.setHash) ?? 0) + 1);
+  }
+  return counts;
+}
+
 /** Resolve the distinct armor sets present in `pieces` to names + 2pc/4pc perks. */
 export function availableSets(
   pieces: ArmorPiece[],
   manifest: Manifest,
 ): ArmorSetInfo[] {
-  const counts = new Map<number, number>();
-  for (const p of pieces) {
-    if (p.setHash) counts.set(p.setHash, (counts.get(p.setHash) ?? 0) + 1);
-  }
+  const counts = countBySet(pieces);
 
   const sets: ArmorSetInfo[] = [];
   for (const [setHash, ownedCount] of counts) {
@@ -45,10 +51,7 @@ export function classSets(
   classType: number,
   pieces: ArmorPiece[],
 ): ArmorSetInfo[] {
-  const counts = new Map<number, number>();
-  for (const p of pieces) {
-    if (p.setHash) counts.set(p.setHash, (counts.get(p.setHash) ?? 0) + 1);
-  }
+  const counts = countBySet(pieces);
   const sets: ArmorSetInfo[] = [];
   const table = manifest.all("DestinyEquipableItemSetDefinition");
   for (const key in table) {

@@ -5,24 +5,9 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { Cancel01Icon, InformationCircleIcon } from "@hugeicons/core-free-icons";
 import { Button } from "@/components/ui/button";
 import { TooltipLabel } from "@/components/ui/tooltip";
+import { seenFlag } from "@/lib/seen-flag";
 
-const SEEN_KEY = "stat-builder:theory-intro-seen";
-
-function seen(): boolean {
-  try {
-    return localStorage.getItem(SEEN_KEY) === "1";
-  } catch {
-    return false;
-  }
-}
-
-function markSeen(): void {
-  try {
-    localStorage.setItem(SEEN_KEY, "1");
-  } catch {
-    // Best-effort: in a privacy mode it just shows again next visit.
-  }
-}
+const intro = seenFlag("stat-builder:theory-intro-seen");
 
 /**
  * When to use Theoretical builds (an example in the author's words), above their list
@@ -30,7 +15,7 @@ function markSeen(): void {
  * Only mounted on the client once the gear is in, so reading storage up front is safe.
  */
 export function TheoryIntroAlert() {
-  const [open, setOpen] = useState(() => !seen());
+  const [open, setOpen] = useState(() => !intro.seen());
   if (!open) return null;
   return (
     <div
@@ -61,7 +46,7 @@ export function TheoryIntroAlert() {
           size="icon-xs"
           aria-label="Dismiss"
           onClick={() => {
-            markSeen();
+            intro.markSeen();
             setOpen(false);
           }}
           className="text-muted-foreground hover:text-foreground shrink-0"

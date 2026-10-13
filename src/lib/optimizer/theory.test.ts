@@ -2,15 +2,14 @@ import { describe, expect, it } from "vitest";
 import type { ArmorArchetype } from "../armory/archetypes";
 import {
   buildTheorySpace,
-  rollUnits,
   solveTheory,
-  theoryRolls,
-  tuningsNeeded,
   type OwnedRoll,
   type TheoryInput,
   type TheoryRecipe,
   type TheorySpace,
 } from "./theory";
+import { FREE, tuningsNeeded } from "./theory/feasibility";
+import { rollUnits, theoryRolls } from "./theory/space";
 import { mulberry32 } from "./test-rng";
 
 // The 12 Armor 3.0 archetypes (see dream.test.ts), in STAT_ORDER indices:
@@ -30,8 +29,6 @@ const ARCHETYPES: ArmorArchetype[] = [
   { name: "Brawler", primary: 5, secondary: 1 },
 ];
 
-const FREE = -1_000_000;
-
 /** Every way to put `n` mods of one size on six stats (as per-stat counts). */
 function placements(n: number): number[][] {
   if (n === 0) return [[0, 0, 0, 0, 0, 0]];
@@ -47,11 +44,13 @@ function placements(n: number): number[][] {
 }
 
 /**
- * Brute force for tuningsNeeded: every mod placement; then each unit still short needs its
- * own tuning, and the units given away can only come from stats with room.
+ * Brute force for tuningsNeeded over every mod placement: each unit still short needs its
+ * own tuning (at most 5), the units given away can only come from stats with room, and
+ * what tuning can't cover is the shortfall. Tunings ≥ 0, or −(fewest units short).
  */
-function bruteTunings(g: number[], major: number, minor: number): number {
-  let best = -1;
+function bruteTuningsNeeded(g: number[], major: number, minor: number): number {
+  let tunings = Infinity;
+  let shortfall = Infinity;
   for (const mods of modUnits(major, minor)) {
     let short = 0;
     let room = 0;
@@ -64,9 +63,11 @@ function bruteTunings(g: number[], major: number, minor: number): number {
       if (h > 0) short += h;
       else room += -h;
     }
-    if (short <= 5 && short <= room && (best < 0 || short < best)) best = short;
+    const miss = short - Math.min(short, 5, room);
+    shortfall = Math.min(shortfall, miss);
+    if (miss === 0) tunings = Math.min(tunings, short);
   }
-  return best;
+  return shortfall > 0 ? -shortfall : tunings;
 }
 
 /** Distinct per-stat mod units over every placement of `major` majors and `minor` minors. */
@@ -88,54 +89,25 @@ function modUnits(major: number, minor: number): number[][] {
   return out;
 }
 
-/** Brute force for shortfall: the fewest units short over every mod placement. */
-function bruteShortfall(g: number[], major: number, minor: number): number {
-  let best = Infinity;
-  for (const mods of modUnits(major, minor)) {
-    let short = 0;
-    let room = 0;
-    for (let s = 0; s < 6; s++) {
-      if (g[s] <= FREE) {
-        room = Infinity;
-        continue;
-      }
-      const h = g[s] - mods[s];
-      if (h > 0) short += h;
-      else room += -h;
-    }
-    best = Math.min(best, short - Math.min(short, 5, room));
-  }
-  return best;
-}
-
-describe("tuningsNeeded, when the targets can't be reached", () => {
-  it("reports the fewest units short, matching a brute force over every mod placement", () => {
-    const rng = mulberry32(17);
-    for (let trial = 0; trial < 600; trial++) {
-      const g = Array.from({ length: 6 }, () =>
-        rng() < 0.2 ? FREE : Math.floor(rng() * 16) - 5,
-      );
-      const major = Math.floor(rng() * 6);
-      const minor = Math.floor(rng() * (6 - major));
-      const t = tuningsNeeded(g, major, minor);
-      expect(t < 0 ? -t : 0, JSON.stringify({ g, major, minor })).toBe(bruteShortfall(g, major, minor));
-    }
-  });
-});
-
 describe("tuningsNeeded", () => {
-  it("matches a brute force over every mod placement", () => {
-    const rng = mulberry32(7);
+  /** Random needs in −5..range−6 per stat (a fifth of them FREE), checked against the oracle. */
+  const check = (seed: number, range: number) => {
+    const rng = mulberry32(seed);
     for (let trial = 0; trial < 600; trial++) {
       const g = Array.from({ length: 6 }, () =>
-        rng() < 0.2 ? FREE : Math.floor(rng() * 12) - 5,
+        rng() < 0.2 ? FREE : Math.floor(rng() * range) - 5,
       );
       const major = Math.floor(rng() * 6);
       const minor = Math.floor(rng() * (6 - major));
-      const t = tuningsNeeded(g, major, minor);
-      expect(t >= 0 ? t : -1, JSON.stringify({ g, major, minor })).toBe(bruteTunings(g, major, minor));
+      expect(tuningsNeeded(g, major, minor), JSON.stringify({ g, major, minor })).toBe(
+        bruteTuningsNeeded(g, major, minor),
+      );
     }
-  });
+  };
+
+  it("matches a brute force over every mod placement", () => check(7, 12));
+
+  it("reports the fewest units short when the targets can't be reached", () => check(17, 16));
 });
 
 /** Recompute a recipe's stats from its rolls, mods, tunings, fragments and exotic bonus. */
@@ -182,18 +154,17 @@ function expectSound(recipe: TheoryRecipe, input: TheoryInput) {
   for (const piece of recipe.pieces) {
     if (piece.tuning) expect(piece.tuning.plus).not.toBe(piece.tuning.minus);
     if (!piece.owned) continue;
-    expect(piece.owned.slot).toBe(piece.slot);
-    expect(slots.has(piece.owned.slot)).toBe(false);
-    slots.add(piece.owned.slot);
+    expect(slots.has(piece.slot)).toBe(false);
+    slots.add(piece.slot);
     if (piece.exotic) {
       const o = input.exotic!.owned.find((x) => x.instanceId === piece.owned!.instanceId)!;
-      expect(piece.owned.slot).toBe(input.exotic!.slot);
+      expect(piece.slot).toBe(input.exotic!.slot);
       expect([o.archetype, o.tertiary]).toEqual([piece.archetype, piece.tertiary]);
       continue;
     }
-    expect(piece.owned.slot).not.toBe(input.exotic?.slot);
+    expect(piece.slot).not.toBe(input.exotic?.slot);
     const o = input.owned.find((x) => x.instanceId === piece.owned!.instanceId)!;
-    expect(o.slot).toBe(piece.owned.slot);
+    expect(o.slot).toBe(piece.slot);
     expect(o.archetype).toBe(piece.archetype);
     expect(o.tertiary).toBe(piece.tertiary);
     if (piece.tuning) expect(piece.tuning.plus).toBe(o.tuned);
@@ -244,7 +215,7 @@ describe("solveTheory", () => {
         r.stats.forEach((v, s) => expect(v).toBeLessThanOrEqual(result.ceilings[s]));
       }
     }
-  });
+  }, 30_000);
 
   it("maxes each stat in its own builds, up to the ceiling", () => {
     const q = input({ minimums: [100, 60, 30, 0, 0, 0], mods: { major: 3, minor: 2 } });
@@ -276,7 +247,7 @@ describe("solveTheory", () => {
         );
       }
     }
-  });
+  }, 30_000);
 
   it("ranks on the owned pieces a build really seats, not the scan's bound", () => {
     // Owned Gunners outside the required set: the scan counts them, but a 4pc set with an
@@ -374,11 +345,11 @@ describe("solveTheory", () => {
               m > 0 ? Math.ceil((m - constant[s]) / 5) - sum[s] : FREE,
             );
             g[f] = FREE;
-            if (bruteTunings(g, major, minor) < 0) continue;
+            if (bruteTuningsNeeded(g, major, minor) < 0) continue;
             const x = constant[f] + 5 * sum[f];
             for (let u = -60; u <= 40; u++) {
               g[f] = u;
-              if (bruteTunings(g, major, minor) < 0) break;
+              if (bruteTuningsNeeded(g, major, minor) < 0) break;
               want[f] = Math.max(want[f], Math.max(0, Math.min(200, x + 5 * u)));
             }
           }

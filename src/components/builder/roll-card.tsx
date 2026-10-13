@@ -3,18 +3,11 @@
 import type { ReactNode } from "react";
 import { ArmorThumb } from "@/components/armor-thumb";
 import { StatGlyph } from "@/components/stat-glyph";
-import { BUILD_CARD_LIFT_CLASS } from "@/components/builder/build-results";
+import { BUILD_CARD_LIFT_CLASS, STAT_COLS } from "@/components/builder/build-results";
 import { armorPipTier, type ArmorPiece } from "@/lib/armory/normalize";
 import { isFullyMasterworked } from "@/lib/armory/masterwork";
-import { STAT_DISPLAY_ORDER, STAT_LABELS, STAT_ORDER, type StatIconMap } from "@/lib/armory/stats";
+import { STAT_LABELS, STAT_ORDER, type StatIconMap } from "@/lib/armory/stats";
 import { cn } from "@/lib/utils";
-
-/**
- * A theoretical build's card: its stats, a line about what to farm, one row per slot
- * (archetype, tertiary, tuned stat), and its mods.
- */
-
-const STAT_COLS = STAT_DISPLAY_ORDER.map((key) => ({ key, i: STAT_ORDER.indexOf(key) }));
 
 /**
  * A stat glyph on a card, tinted to match the text beside it. No tooltip root or tab stop
@@ -92,11 +85,6 @@ export function MutedCell({ children, title }: { children: ReactNode; title?: st
   );
 }
 
-/** Vertical rule between header clusters (as on the build cards). */
-export function HeaderRule() {
-  return <span className="h-[15px] w-px shrink-0 bg-foreground/16" aria-hidden />;
-}
-
 /** The stat mods a build sockets per stat, [majors, minors]: "+10 [Weapons] ×2  +5 [Grenade]". */
 export function ModList({ mods, icons }: { mods: [number, number][]; icons: StatIconMap }) {
   const parts: ReactNode[] = [];
@@ -142,7 +130,7 @@ export function RollThumb({
 }: {
   owned?: ArmorPiece;
   exotic?: { icon?: string; watermark?: string; name: string };
-  primary?: number;
+  primary: number;
   icons: StatIconMap;
 }) {
   if (owned?.icon) {
@@ -162,48 +150,32 @@ export function RollThumb({
   }
   return (
     <span className="d2-brackets flex size-8 shrink-0 items-center justify-center bg-black/25">
-      {primary !== undefined && <Glyph stat={primary} icons={icons} className="opacity-60" decorative />}
+      <Glyph stat={primary} icons={icons} className="opacity-60" decorative />
     </span>
   );
 }
 
-/**
- * A row's Armor cell: the thumb, the archetype with its two stats (or a plain name for a
- * piece without one), and a detail line under it.
- */
+/** A row's Armor cell: the thumb, the archetype with its two stats, and a detail line under it. */
 export function RollIdentity({
   thumb,
   archetype,
-  name,
   icons,
   children,
-  rows = 1,
 }: {
   thumb: ReactNode;
-  archetype?: { name: string; primary: number; secondary: number };
-  /** Shown instead of the archetype when there is none (legacy pieces). */
-  name?: string;
+  archetype: { name: string; primary: number; secondary: number };
   icons: StatIconMap;
   /** The detail line: owned item, exotic, slot, set… (none when empty). */
   children?: ReactNode;
-  /** Rows the cell spans (a roll to farm can list several tertiaries). */
-  rows?: number;
 }) {
   return (
-    <div
-      className="flex min-w-0 items-center gap-2"
-      style={rows > 1 ? { gridRow: `span ${rows}` } : undefined}
-    >
+    <div className="flex min-w-0 items-center gap-2">
       {thumb}
       <div className="flex min-w-0 flex-col justify-center">
         <span className="flex min-w-0 items-center gap-1.5 text-sm">
-          <span className="truncate">{archetype?.name ?? name}</span>
-          {archetype && (
-            <>
-              <Glyph stat={archetype.primary} icons={icons} className="size-3.5" />
-              <Glyph stat={archetype.secondary} icons={icons} className="size-3.5" />
-            </>
-          )}
+          <span className="truncate">{archetype.name}</span>
+          <Glyph stat={archetype.primary} icons={icons} className="size-3.5" />
+          <Glyph stat={archetype.secondary} icons={icons} className="size-3.5" />
         </span>
         {children && <span className="flex min-w-0 items-center gap-1.5 text-xs">{children}</span>}
       </div>
@@ -211,7 +183,10 @@ export function RollIdentity({
   );
 }
 
-/** The card: stats header, a meta line, the slot rows, and a footer (mods, notes). */
+/**
+ * A theoretical build's card: its stats, a line about what to farm, one row per slot
+ * (archetype, tertiary, tuned stat), and a footer (mods, notes).
+ */
 export function RollCard({
   stats,
   meta,
@@ -242,36 +217,6 @@ export function RollCard({
         <div className="flex flex-col gap-2 border-t border-foreground/8 px-4 py-3 max-md:px-3">
           {footer}
         </div>
-      </div>
-    </div>
-  );
-}
-
-/** The header's total and six stats. */
-export function CardStats({
-  total,
-  stats,
-  short,
-  icons,
-}: {
-  total: number;
-  stats: number[];
-  /** Points each stat is short of its target (a close build): those show in yellow. */
-  short?: number[];
-  icons: StatIconMap;
-}) {
-  return (
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
-      <span className="text-base font-medium tabular-nums">
-        {total}
-      </span>
-      <div className="flex flex-wrap items-center gap-x-8 gap-y-1 text-base font-medium tabular-nums">
-        {STAT_COLS.map(({ key, i }) => (
-          <span key={key} className={cn("flex items-center gap-1", short?.[i] && "text-warning")}>
-            <StatGlyph src={icons[key]} label={STAT_LABELS[key]} className="size-5" plain tint />
-            {stats[i]}
-          </span>
-        ))}
       </div>
     </div>
   );

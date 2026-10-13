@@ -1,18 +1,15 @@
 "use client";
 
-import { useMemo } from "react";
 import type { TheoryInput, TheoryResult } from "./theory";
 import type { TheoryResponse } from "./theory-worker";
-import { useWorkerSearch, type WorkerSearchOptions } from "./use-worker-search";
+import {
+  useWorkerSearch,
+  type WorkerSearchOptions,
+  type WorkerSearchState,
+} from "./use-worker-search";
 
-export interface TheoryBuildState {
-  /** True from the moment the input changes (debounce included) until its result lands. */
-  running: boolean;
-  /** The latest result; kept on screen (stale) while a newer search runs. */
-  result: TheoryResult | null;
-  /** The latest search crashed in the worker (cleared by the next one). */
-  failed: boolean;
-}
+/** The theoretical search reports nothing but its result (see WorkerSearchState). */
+export type TheoryBuildState = Omit<WorkerSearchState<TheoryResult, null>, "extra">;
 
 /**
  * Run the theoretical search for `input` whenever its identity changes (see
@@ -25,7 +22,7 @@ export function useTheoryBuild(
   input: TheoryInput | null,
   events: Pick<WorkerSearchOptions<TheoryResult, null>, "onStart" | "onResult"> = {},
 ): TheoryBuildState {
-  const { running, result, failed } = useWorkerSearch(input, {
+  return useWorkerSearch(input, {
     createWorker: () =>
       new Worker(new URL("./theory-worker.ts", import.meta.url), { type: "module" }),
     whenBusy: "queue",
@@ -34,5 +31,4 @@ export function useTheoryBuild(
     initialExtra: null,
     ...events,
   });
-  return useMemo(() => ({ running, result, failed }), [running, result, failed]);
 }

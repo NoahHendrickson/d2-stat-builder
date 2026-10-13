@@ -2,13 +2,12 @@
  * Whether a build's armor sum can reach its targets, in closed form. Every Tier-5 stat
  * value is a multiple of 5, so the search works in those units.
  */
+import { NUM_SLOTS, NUM_STATS } from "../floors";
 import type { StatArray } from "../types";
 
-export const NUM_SLOTS = 5;
-export const NUM_STATS = 6;
+export { clamp as clampStat, NUM_SLOTS, NUM_STATS, STAT_CAP } from "../floors";
 /** Every Tier-5 stat value is a multiple of this. */
 export const UNIT = 5;
-export const STAT_CAP = 200;
 /** A stat with no target: it can give away any number of units. */
 export const FREE = -1_000_000;
 /** One directional tuning per piece. */
@@ -54,8 +53,6 @@ export function tuningsNeeded(g: ArrayLike<number>, major: number, minor: number
 }
 
 /** Units a stat must gain to reach its target from the armor (FREE without a target). */
-export function constants(minimums: StatArray, constant: StatArray): number[] {
+export function unitsToGain(minimums: StatArray, constant: StatArray): number[] {
   return minimums.map((m, s) => (m > 0 ? Math.ceil((m - constant[s]) / UNIT) : FREE));
 }
-
-export const clampStat = (v: number) => Math.max(0, Math.min(STAT_CAP, v));

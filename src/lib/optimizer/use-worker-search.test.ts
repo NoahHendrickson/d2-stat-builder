@@ -23,28 +23,41 @@ class FakeWorker {
     const msg = this.sent.shift()!;
     this.onmessage?.({ data: { seq: msg.seq, result: `result:${msg.input}` } } as MessageEvent);
   }
+  /** Report progress on the oldest unanswered request. */
+  report(extra: number) {
+    this.onmessage?.({ data: { seq: this.sent[0].seq, extra } } as MessageEvent);
+  }
   crash() {
     this.onerror?.();
   }
 }
 
-function setup(policy: Pick<WorkerSearchOptions<string, null>, "whenBusy" | "whenOff">) {
+type Options = WorkerSearchOptions<string, number | null>;
+
+function setup(
+  policy: Pick<Options, "whenBusy" | "whenOff">,
+  events: Pick<Options, "onStart" | "onResult"> = {},
+) {
   const workers: FakeWorker[] = [];
-  let state: SearchSnapshot<string, string, null> = {
+  let state: SearchSnapshot<string, string, number | null> = {
     forInput: null,
     result: null,
     failed: false,
     extra: null,
   };
-  const search = createWorkerSearch<string, string, null>(
+  const search = createWorkerSearch<string, string, number | null>(
     {
       ...policy,
+      ...events,
       createWorker: () => {
         const w = new FakeWorker();
         workers.push(w);
         return w as unknown as Worker;
       },
-      read: (m) => ({ result: (m as { result: string }).result }),
+      read: (m) => {
+        const msg = m as { result?: string; extra?: number };
+        return msg.extra !== undefined ? { extra: msg.extra } : { result: msg.result! };
+      },
       initialExtra: null,
     },
     (next) => (state = next(state)),
@@ -116,6 +129,20 @@ describe("createWorkerSearch", () => {
     expect(workers[1].sent.map((m) => m.input)).toEqual(["b"]);
     workers[1].reply();
     expect(state()).toMatchObject({ forInput: "b", result: "result:b" });
+  });
+
+  it("passes the running search's reports through, and fires onStart / onResult", () => {
+    const events: string[] = [];
+    const { search, workers, state } = setup(
+      { whenBusy: "queue", whenOff: "keep" },
+      { onStart: () => events.push("start"), onResult: (r) => events.push(r) },
+    );
+    search.run("a");
+    workers[0].report(2);
+    expect(state().extra).toBe(2);
+    workers[0].reply();
+    expect(state().extra).toBeNull();
+    expect(events).toEqual(["start", "result:a"]);
   });
 
   it("ignores a reply to a search that was turned off", () => {

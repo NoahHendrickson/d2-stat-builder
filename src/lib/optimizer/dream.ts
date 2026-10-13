@@ -166,9 +166,6 @@ export interface DreamSolveOptions {
   onPhase?: (newPieces: number) => void;
 }
 
-/** Every (archetype, tertiary) roll's masterworked stats (the shared Tier-5 table). */
-export const dreamRolls = t5Rolls;
-
 /** The three off-archetype stats of a roll (the Balanced Tuning targets). */
 function offStatsOf(primary: number, secondary: number, tertiary: number): number[] {
   const out: number[] = [];
@@ -204,7 +201,7 @@ export function dreamCandidates(slot: number, input: DreamInput): DreamPiece[] {
   const setOptions: (number | undefined)[] = reqSets.length ? reqSets : [undefined];
   const out: DreamPiece[] = [];
 
-  for (const { archetype, tertiary, stats } of dreamRolls(input.archetypes)) {
+  for (const { archetype, tertiary, stats } of t5Rolls(input.archetypes)) {
     const roll = {
       slot,
       archetype: archetype.name,

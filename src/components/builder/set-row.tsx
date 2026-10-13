@@ -20,13 +20,13 @@ export const SetRow = memo(function SetRow({
   onTogglePin,
   onToggleSet,
   onOpenGrid,
-  planning = false,
+  planning,
 }: {
   set: ArmorSetInfo;
   pinned: boolean;
   req: 2 | 4 | undefined;
   /** Planning what to farm: any bonus can be required, owned pieces or not. */
-  planning?: boolean;
+  planning: boolean;
   onTogglePin: (setHash: number) => void;
   onToggleSet: (setHash: number, count: 2 | 4) => void;
   /** Open the roll-grid modal on this set. */
