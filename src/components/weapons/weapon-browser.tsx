@@ -454,7 +454,12 @@ const WeaponDetails = memo(function WeaponDetails({
     const perk = catalog.perks[index];
     if (!perk) return null;
     const selected = picked[columnKey] === index;
-    const label = perk.currentlyCanRoll ? perk.name : `${perk.name} (retired)`;
+    const craftedOnly = weapon.columns[columnKey]?.craftedOnly?.includes(index) ?? false;
+    const label = !perk.currentlyCanRoll
+      ? `${perk.name} (retired)`
+      : craftedOnly
+        ? `${perk.name} (crafted only)`
+        : perk.name;
     const masterwork = columnKey === MASTERWORK;
     // Drawn like the Items popover's perk grid (PerkColumnView), at the full size of
     // its Figma cell: a round cell with a hairline, filled blue once picked, and
@@ -523,7 +528,11 @@ const WeaponDetails = memo(function WeaponDetails({
           {content}
         </TooltipTrigger>
         <TooltipContent side="right" align="start" className="max-w-sm">
-          <PerkTooltip perk={perk} insight={clarityLines(clarity, perk)} />
+          <PerkTooltip
+            perk={perk}
+            insight={clarityLines(clarity, perk)}
+            craftedOnly={craftedOnly}
+          />
         </TooltipContent>
       </Tooltip>
     );

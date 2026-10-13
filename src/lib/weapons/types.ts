@@ -22,6 +22,11 @@ export interface PerkRef {
   statMods?: StatMod[];
   /** `statMods` keyed by stat name ("Handling": 10); what the browser ships. */
   stats?: Record<string, number>;
+  /**
+   * Only crafting gives this perk on this weapon. Set on a weapon's own columns; the
+   * shared perk table is per plug hash and leaves it off.
+   */
+  craftedOnly?: boolean;
 }
 
 /** One perk column on a weapon (barrel, magazine, a trait slot, origin, …). */
@@ -35,6 +40,8 @@ export interface PerkColumn {
 export interface InternedPerkColumn {
   kind: string;
   perkIndices: number[];
+  /** The `perkIndices` only crafting gives on this weapon. */
+  craftedOnly?: number[];
 }
 
 export interface WeaponStat {

@@ -97,6 +97,7 @@ function mergePerkRefs(existing: PerkRef, incoming: PerkRef): PerkRef {
     description: existing.description ?? incoming.description,
     enhancedDescription: existing.enhancedDescription ?? incoming.enhancedDescription,
     currentlyCanRoll: existing.currentlyCanRoll || incoming.currentlyCanRoll,
+    craftedOnly: existing.craftedOnly && incoming.craftedOnly,
     ...(alternateHashes.length > 0 ? { alternateHashes } : {}),
   };
 }
