@@ -11,7 +11,8 @@ import {
   type PowerRangeSelection,
 } from "@/lib/builder/selection-storage";
 
-const MAX_MODS = 5;
+/** Stat mod slots: majors take some, minors the rest. */
+export const MAX_MODS = 5;
 
 /**
  * The builder's optimizer queries from its selections: the search settings (shared by

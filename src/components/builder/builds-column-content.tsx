@@ -118,6 +118,7 @@ function theoryHeader(ready: boolean, theory: TheoryBuildState): BuildsHeader {
   });
   if (!ready) return header("not-ready", "");
   if (theory.running) return header("searching", "Searching…");
+  if (theory.failed) return header("idle", "Search failed");
   const n = theory.result?.recipes.length;
   if (n === undefined) return header("idle", "");
   const close = theory.result!.close.length;
@@ -196,6 +197,9 @@ export interface BuildsColumnContentProps {
 export function BuildsColumnContent(props: BuildsColumnContentProps) {
   const { mode, onModeChange, ready, provisional = false } = props;
   const header = buildsHeader(props);
+  // Each tab's sort lives here, not in its body, so switching tabs keeps both.
+  const [actualSort, setActualSort] = useState<LoadoutSortState>(DEFAULT_LOADOUT_SORT);
+  const [theorySort, setTheorySort] = useState<TheorySortState>(DEFAULT_THEORY_SORT);
   const tabs = (
     <Tabs value={mode} onValueChange={(v) => onModeChange(v as BuildsMode)}>
       <TabsList aria-label="Which builds to show">
@@ -217,9 +221,9 @@ export function BuildsColumnContent(props: BuildsColumnContentProps) {
     );
   }
   return mode === "theoretical" ? (
-    <TheoryBuildsBody {...props} tabs={tabs} header={header} />
+    <TheoryBuildsBody {...props} tabs={tabs} header={header} sort={theorySort} onSortChange={setTheorySort} />
   ) : (
-    <ActualBuildsBody {...props} tabs={tabs} header={header} />
+    <ActualBuildsBody {...props} tabs={tabs} header={header} sort={actualSort} onSortChange={setActualSort} />
   );
 }
 
@@ -259,10 +263,22 @@ function HeaderRow({
   );
 }
 
-type BodyProps = BuildsColumnContentProps & { tabs: ReactNode; header: BuildsHeader };
+type BodyProps<S> = BuildsColumnContentProps & {
+  tabs: ReactNode;
+  header: BuildsHeader;
+  sort: S;
+  onSortChange: (sort: S) => void;
+};
 
-function TheoryBuildsBody({ tabs, header, theory, pieceMap, statIcons }: BodyProps) {
-  const [sort, setSort] = useState<TheorySortState>(DEFAULT_THEORY_SORT);
+function TheoryBuildsBody({
+  tabs,
+  header,
+  theory,
+  pieceMap,
+  statIcons,
+  sort,
+  onSortChange,
+}: BodyProps<TheorySortState>) {
   // A theoretical list stays sortable while a newer one is on its way.
   const sortable = (theory.state.result?.recipes.length ?? 0) > 1;
   return (
@@ -272,7 +288,7 @@ function TheoryBuildsBody({ tabs, header, theory, pieceMap, statIcons }: BodyPro
         header={header}
         sort={
           sortable && (
-            <LoadoutSortControls sort={sort} onChange={setSort} options={THEORY_SORT_OPTIONS} />
+            <LoadoutSortControls sort={sort} onChange={onSortChange} options={THEORY_SORT_OPTIONS} />
           )
         }
       />
@@ -314,8 +330,9 @@ function ActualBuildsBody({
   insertablePlugs,
   onEquipped,
   onDream,
-}: BodyProps) {
-  const [sort, setSort] = useState<LoadoutSortState>(DEFAULT_LOADOUT_SORT);
+  sort,
+  onSortChange,
+}: BodyProps<LoadoutSortState>) {
   return (
     <div className="space-y-5">
       <HeaderRow
@@ -324,7 +341,7 @@ function ActualBuildsBody({
         onCancel={onCancel}
         sort={
           header.state === "results" && (
-            <LoadoutSortControls sort={sort} onChange={setSort} options={LOADOUT_SORT_OPTIONS} />
+            <LoadoutSortControls sort={sort} onChange={onSortChange} options={LOADOUT_SORT_OPTIONS} />
           )
         }
       />

@@ -14,7 +14,7 @@ import { useArmory } from "@/lib/armory/use-armory";
 import { useManifest } from "@/lib/manifest/use-manifest";
 import { useOptimizer } from "@/lib/optimizer/use-optimizer";
 import { useSmoothedProgress } from "@/lib/use-smoothed-progress";
-import { availableSets } from "@/lib/armory/sets";
+import { availableSets, makeableSetReqs } from "@/lib/armory/sets";
 import {
   DEFAULT_SET_FILTERS,
   type SetFilters,
@@ -285,17 +285,11 @@ export function BuilderPanel({
   // Set requirements narrowed to bonuses the player's pieces for this class can make: a
   // restored (or class-corrected) requirement for a set they no longer own, or one picked
   // on the Theoretical Builds tab for a set they own too few pieces of, would make every
-  // build infeasible. The optimizer and DIM/export read this pruned view; persistence and
-  // "Load in builder" keep the raw `setReqs` so turning a pool toggle off can't
-  // permanently drop a requirement for a set that only exists on the wider pool.
-  const ownedSetReqs = useMemo(() => {
-    const kept = Object.entries(setReqs).filter(
-      ([h, count]) => (setMap.get(Number(h))?.ownedCount ?? 0) >= count,
-    );
-    return kept.length === Object.keys(setReqs).length
-      ? setReqs
-      : (Object.fromEntries(kept) as Record<number, 2 | 4>);
-  }, [setReqs, setMap]);
+  // build infeasible. A 4pc with 2–3 owned pieces becomes the 2pc they can make. This is
+  // what the Builds tab searches with and shows; persistence and "Load in builder" keep
+  // the raw `setReqs` so turning a pool toggle off (or switching tabs) can't
+  // permanently drop a requirement.
+  const ownedSetReqs = useMemo(() => makeableSetReqs(setReqs, setMap), [setReqs, setMap]);
 
   // What persistence and "Load in builder" store: the raw map, capped at what
   // parseBuilderSnapshot accepts. Requirements for sets that left the pool are
@@ -874,8 +868,8 @@ export function BuilderPanel({
   // What the two tabs show differently in the settings, picked once: Theoretical Builds
   // plans what to farm, so it lists every set (owned or not) and its own slider maxima.
   const settingsView = theoretical
-    ? { sets: theory.sets, setMap: theory.setMap, ceilings: theory.ceilings, planning: true }
-    : { sets, setMap, ceilings: ceilingsView, planning: false };
+    ? { sets: theory.sets, setMap: theory.setMap, setReqs, ceilings: theory.ceilings, planning: true }
+    : { sets, setMap, setReqs: ownedSetReqs, ceilings: ceilingsView, planning: false };
 
   // The dream query for one build at the modal's targets (see dreamInputForBuild).
   const makeDreamInput = useCallback(
@@ -978,11 +972,13 @@ export function BuilderPanel({
   );
 
   const visibleSets = settingsView.setMap;
+  // Toggles act on the requirements as shown (on Builds, the ones the owned pieces make).
+  const shownSetReqs = settingsView.setReqs;
   const toggleSet = useCallback(
     (setHash: number, count: 2 | 4) => {
       setSetReqs((prev) => {
         const next = { ...prev };
-        if (next[setHash] === count) {
+        if (shownSetReqs[setHash] === count) {
           delete next[setHash];
           return next;
         }
@@ -1000,7 +996,7 @@ export function BuilderPanel({
         return next;
       });
     },
-    [visibleSets],
+    [visibleSets, shownSetReqs],
   );
 
   const onMajorChange = useCallback((v: string) => setMajor(Number(v)), []);
@@ -1179,7 +1175,7 @@ export function BuilderPanel({
             <Section title="Set bonuses">
               <SetBonusesSection
                 sets={settingsView.sets}
-                setReqs={setReqs}
+                setReqs={settingsView.setReqs}
                 onToggleSet={toggleSet}
                 onReset={resetSetReqs}
                 pinnedSets={pinnedSets}

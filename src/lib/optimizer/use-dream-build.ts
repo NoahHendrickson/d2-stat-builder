@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import type { DreamInput, DreamResult } from "./dream";
 import type { DreamResponse } from "./dream-worker";
 import { useWorkerSearch, type WorkerSearchOptions } from "./use-worker-search";
@@ -38,5 +39,5 @@ const OPTIONS: WorkerSearchOptions<DreamResult, number | null> = {
  */
 export function useDreamBuild(input: DreamInput | null): DreamBuildState {
   const { running, result, failed, extra } = useWorkerSearch(input, OPTIONS);
-  return { running, phase: extra, result, failed };
+  return useMemo(() => ({ running, phase: extra, result, failed }), [running, extra, result, failed]);
 }

@@ -64,14 +64,14 @@ export const SetRow = memo(function SetRow({
       </span>
       <SetPerkCell
         active={req === 2}
-        disabled={!planning && req !== 2 && set.ownedCount < 2}
+        disabled={!planning && set.ownedCount < 2}
         perk={perk2Info}
         onToggle={() => onToggleSet(set.setHash, 2)}
         className="max-md:col-span-2 max-md:col-start-1 max-md:row-start-2 max-md:pl-7"
       />
       <SetPerkCell
         active={req === 4}
-        disabled={!planning && req !== 4 && set.ownedCount < 4}
+        disabled={!planning && set.ownedCount < 4}
         perk={perk4Info}
         onToggle={() => onToggleSet(set.setHash, 4)}
         className="max-md:col-span-2 max-md:col-start-1 max-md:row-start-3 max-md:pl-7"

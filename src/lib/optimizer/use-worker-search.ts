@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AUTO_SEARCH_DEBOUNCE_MS } from "./use-auto-search";
 
 /** A worker search's view: the latest result (kept, stale, while a newer one runs). */
@@ -23,16 +23,136 @@ export interface WorkerSearchOptions<R, X> {
    * waiting input goes out next (for a worker with caches worth keeping).
    */
   whenBusy: "restart" | "queue";
-  /** A null input: "release" terminates the worker; "keep" leaves it idle, caches and all. */
+  /**
+   * A null input: "release" terminates the worker; "keep" leaves an idle worker alive,
+   * caches and all (a busy one is terminated: what it's solving is no longer wanted).
+   */
   whenOff: "release" | "keep";
-  /** A message of the current search → its result, or an `extra` update. */
+  /** A worker message → its search's result, or an `extra` update. */
   read: (message: unknown) => { result: R } | { extra: X };
   /** `extra` before a search reports any. */
   initialExtra: X;
   /** A search goes out to the worker. */
   onStart?: () => void;
-  /** A search's result lands. */
+  /** The current search's result lands. */
   onResult?: (result: R) => void;
+}
+
+/** What the search shows, with the input it's settled for (≠ the current input = running). */
+export interface SearchSnapshot<I, R, X> {
+  forInput: I | null;
+  result: R | null;
+  failed: boolean;
+  extra: X;
+}
+
+/**
+ * The worker side of a search, outside React so it can be tested with a fake worker.
+ * `seq` numbers every request; the worker echoes it, so a reply to a superseded request
+ * is ignored. `busySeq` is the request the worker is solving right now, whether or not
+ * it's still wanted, so a new request never queues blindly behind a stale solve.
+ */
+export function createWorkerSearch<I, R, X>(
+  initial: WorkerSearchOptions<R, X>,
+  update: (next: (prev: SearchSnapshot<I, R, X>) => SearchSnapshot<I, R, X>) => void,
+) {
+  let opts = initial;
+  let worker: Worker | null = null;
+  let seq = 0;
+  let busySeq: number | null = null;
+  let inFlight: I | null = null;
+  let queued: I | null = null;
+  // Off since the last search: the next one starts clean and goes out at once.
+  let released = true;
+
+  const terminate = () => {
+    worker?.terminate();
+    worker = null;
+    busySeq = null;
+  };
+
+  const spawn = (): Worker => {
+    const w = opts.createWorker();
+    w.onmessage = (e: MessageEvent<{ seq: number }>) => {
+      const read = opts.read(e.data);
+      const current = e.data.seq === seq;
+      if ("result" in read && e.data.seq === busySeq) busySeq = null;
+      if (current && "extra" in read) {
+        const extra = read.extra;
+        update((prev) => ({ ...prev, extra }));
+      } else if (current && "result" in read) {
+        const done = inFlight;
+        inFlight = null;
+        opts.onResult?.(read.result);
+        update(() => ({ forInput: done, result: read.result, failed: false, extra: opts.initialExtra }));
+      }
+      if (busySeq === null && queued) {
+        const next = queued;
+        queued = null;
+        post(next);
+      }
+    };
+    // A crash would otherwise leave `running` true forever. A newer input that was
+    // waiting goes out on a fresh worker; otherwise, if the crash was the current
+    // search's, it settles as failed (the last result stays up).
+    const fail = () => {
+      if (worker !== w) return;
+      const crashedCurrent = busySeq === seq;
+      terminate();
+      const next = queued;
+      queued = null;
+      if (next) {
+        post(next);
+      } else if (crashedCurrent) {
+        const done = inFlight;
+        inFlight = null;
+        update((prev) => ({ ...prev, forInput: done, failed: true, extra: opts.initialExtra }));
+      }
+    };
+    w.onerror = fail;
+    w.onmessageerror = fail;
+    return w;
+  };
+
+  const post = (next: I) => {
+    worker ??= spawn();
+    inFlight = next;
+    busySeq = ++seq;
+    opts.onStart?.();
+    worker.postMessage({ seq, input: next });
+  };
+
+  return {
+    setOptions(next: WorkerSearchOptions<R, X>) {
+      opts = next;
+    },
+    /** Off since the last search (its first one goes out without the debounce). */
+    get released() {
+      return released;
+    },
+    /** Search for `input`, or queue it behind the solve that's running. */
+    run(input: I) {
+      if (opts.whenBusy === "restart" && busySeq !== null) terminate();
+      const extra = opts.initialExtra;
+      if (released) {
+        released = false;
+        update(() => ({ forInput: null, result: null, failed: false, extra }));
+      } else {
+        update((prev) => ({ ...prev, failed: false, extra }));
+      }
+      if (busySeq !== null) queued = input;
+      else post(input);
+    },
+    /** Turned off: drop what's waiting; keep the worker only if it's idle and wanted. */
+    off() {
+      if (opts.whenOff === "release" || busySeq !== null) terminate();
+      inFlight = null;
+      queued = null;
+      seq++;
+      released = true;
+    },
+    dispose: terminate,
+  };
 }
 
 /**
@@ -45,101 +165,29 @@ export function useWorkerSearch<I, R, X>(
   input: I | null,
   options: WorkerSearchOptions<R, X>,
 ): WorkerSearchState<R, X> {
-  // Handlers fire from worker events, after render: read the latest options there.
-  const opts = useRef(options);
-  useEffect(() => {
-    opts.current = options;
+  const [state, setState] = useState<SearchSnapshot<I, R, X>>({
+    forInput: null,
+    result: null,
+    failed: false,
+    extra: options.initialExtra,
   });
-  const [state, setState] = useState<{
-    forInput: I | null;
-    result: R | null;
-    failed: boolean;
-    extra: X;
-  }>({ forInput: null, result: null, failed: false, extra: options.initialExtra });
-  const worker = useRef<Worker | null>(null);
-  const seq = useRef(0);
-  // The input the in-flight request was posted for (null = idle), and the next one.
-  const inFlight = useRef<I | null>(null);
-  const queued = useRef<I | null>(null);
-  // Set when the search is turned off, so turning it back on starts clean.
-  const released = useRef(true);
+  const [search] = useState(() => createWorkerSearch<I, R, X>(options, setState));
+  // Handlers fire from worker events, after render: hand them the latest options.
+  useEffect(() => search.setOptions(options));
 
   useEffect(() => {
     if (!input) {
-      if (opts.current.whenOff === "release") {
-        worker.current?.terminate();
-        worker.current = null;
-      }
-      inFlight.current = null;
-      queued.current = null;
-      seq.current++;
-      released.current = true;
+      search.off();
       return;
     }
-    const post = (w: Worker, next: I) => {
-      inFlight.current = next;
-      opts.current.onStart?.();
-      w.postMessage({ seq: ++seq.current, input: next });
-    };
-    const delay = released.current ? 0 : AUTO_SEARCH_DEBOUNCE_MS;
-    const t = window.setTimeout(() => {
-      const { whenBusy, initialExtra } = opts.current;
-      if (whenBusy === "restart" && inFlight.current) {
-        worker.current?.terminate();
-        worker.current = null;
-        inFlight.current = null;
-      }
-      if (!worker.current) {
-        const w = opts.current.createWorker();
-        w.onmessage = (e: MessageEvent<{ seq: number }>) => {
-          if (e.data.seq !== seq.current) return;
-          const read = opts.current.read(e.data);
-          if ("extra" in read) {
-            setState((prev) => ({ ...prev, extra: read.extra }));
-            return;
-          }
-          const done = inFlight.current;
-          inFlight.current = null;
-          opts.current.onResult?.(read.result);
-          setState({ forInput: done, result: read.result, failed: false, extra: opts.current.initialExtra });
-          const next = queued.current;
-          queued.current = null;
-          if (next) post(w, next);
-        };
-        // A crash would otherwise leave `running` true forever. Settle the newest input
-        // (queued or in flight) as failed, keep the last result, and start a fresh worker
-        // next time.
-        const fail = () => {
-          w.terminate();
-          if (worker.current === w) worker.current = null;
-          const settled = queued.current ?? inFlight.current;
-          inFlight.current = null;
-          queued.current = null;
-          setState((prev) => ({ ...prev, forInput: settled, failed: true, extra: opts.current.initialExtra }));
-        };
-        w.onerror = fail;
-        w.onmessageerror = fail;
-        worker.current = w;
-      }
-      if (released.current) {
-        released.current = false;
-        setState({ forInput: null, result: null, failed: false, extra: initialExtra });
-      } else {
-        setState((prev) => ({ ...prev, failed: false, extra: initialExtra }));
-      }
-      if (inFlight.current) queued.current = input;
-      else post(worker.current, input);
-    }, delay);
+    const t = window.setTimeout(
+      () => search.run(input),
+      search.released ? 0 : AUTO_SEARCH_DEBOUNCE_MS,
+    );
     return () => window.clearTimeout(t);
-  }, [input]);
+  }, [input, search]);
 
-  useEffect(
-    () => () => {
-      worker.current?.terminate();
-      worker.current = null;
-    },
-    [],
-  );
+  useEffect(() => () => search.dispose(), [search]);
 
   // Memoized: consumers re-render only when what they show changes.
   const running = Boolean(input) && state.forInput !== input;

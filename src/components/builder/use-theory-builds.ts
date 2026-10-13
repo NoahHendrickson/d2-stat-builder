@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import type { TheoryExoticDisplay } from "@/components/builder/theory-results";
+import { MAX_MODS } from "@/components/builder/use-builder-search-inputs";
 import type { ArmorArchetype } from "@/lib/armory/archetypes";
 import type { SpiritPerkInfo } from "@/lib/armory/exotic-class-perks";
 import type { ArmorPiece } from "@/lib/armory/normalize";
@@ -115,7 +116,7 @@ export function useTheoryBuilds({
             // so owned pieces aren't seated.
             owned: exoticChoice.exotic || setRequirements.length ? owned : [],
             minimums: targets,
-            mods: { major, minor: 5 - major },
+            mods: { major, minor: MAX_MODS - major },
             fragmentBonus,
             exotic: exoticChoice.exotic,
             sets: setRequirements,

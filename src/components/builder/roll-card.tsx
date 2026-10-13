@@ -16,17 +16,40 @@ import { cn } from "@/lib/utils";
 
 const STAT_COLS = STAT_DISPLAY_ORDER.map((key) => ({ key, i: STAT_ORDER.indexOf(key) }));
 
-export function Glyph({ stat, icons, className }: { stat: number; icons: StatIconMap; className?: string }) {
+/**
+ * A stat glyph on a card, tinted to match the text beside it. No tooltip root or tab stop
+ * (a list holds hundreds): a lone glyph names its stat with a native title and alt text,
+ * and one beside its visible label is `decorative`, so it isn't read twice.
+ */
+export function Glyph({
+  stat,
+  icons,
+  className,
+  decorative = false,
+}: {
+  stat: number;
+  icons: StatIconMap;
+  className?: string;
+  decorative?: boolean;
+}) {
   const key = STAT_ORDER[stat];
-  // Tinted: the same colour and strength as the label it sits beside.
-  return <StatGlyph src={icons[key]} label={STAT_LABELS[key]} className={className} tint />;
+  return (
+    <StatGlyph
+      src={icons[key]}
+      label={STAT_LABELS[key]}
+      className={className}
+      tint
+      plain
+      decorative={decorative}
+    />
+  );
 }
 
 /** A stat as a glyph and its name. */
 export function StatName({ stat, icons }: { stat: number; icons: StatIconMap }) {
   return (
     <span className="inline-flex items-center gap-1 text-sm whitespace-nowrap">
-      <Glyph stat={stat} icons={icons} />
+      <Glyph stat={stat} icons={icons} decorative />
       {STAT_LABELS[STAT_ORDER[stat]]}
     </span>
   );
@@ -50,7 +73,7 @@ export function TuningName({
       className="inline-flex items-center gap-1 text-sm whitespace-nowrap tabular-nums"
       title={title ?? `Tuned stat ${plusLabel}: +5 ${plusLabel}, −5 ${STAT_LABELS[STAT_ORDER[minus]]}`}
     >
-      <Glyph stat={plus} icons={icons} />
+      <Glyph stat={plus} icons={icons} decorative />
       {plusLabel}
       <span className="text-muted-foreground inline-flex items-center gap-0.5 text-xs">
         −5
@@ -139,7 +162,7 @@ export function RollThumb({
   }
   return (
     <span className="d2-brackets flex size-8 shrink-0 items-center justify-center bg-black/25">
-      {primary !== undefined && <Glyph stat={primary} icons={icons} className="opacity-60" />}
+      {primary !== undefined && <Glyph stat={primary} icons={icons} className="opacity-60" decorative />}
     </span>
   );
 }

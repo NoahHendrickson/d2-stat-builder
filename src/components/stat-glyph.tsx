@@ -29,8 +29,9 @@ export function StatGlyph({
   label,
   className,
   invert = true,
-  plain = false,
+  plain: plainProp = false,
   tint = false,
+  decorative = false,
 }: {
   src?: string;
   label: string;
@@ -40,7 +41,13 @@ export function StatGlyph({
   plain?: boolean;
   /** Draw in the text colour at full strength, to match the label beside it. */
   tint?: boolean;
+  /**
+   * A visible label sits right beside it: no tooltip, tab stop or accessible name
+   * (screen readers would read the stat twice). Implies `plain`.
+   */
+  decorative?: boolean;
 }) {
+  const plain = plainProp || decorative;
   if (!src)
     return (
       <span
@@ -51,9 +58,10 @@ export function StatGlyph({
   if (tint) {
     const glyph = (
       <span
-        role="img"
-        aria-label={label}
-        title={plain ? label : undefined}
+        role={decorative ? undefined : "img"}
+        aria-label={decorative ? undefined : label}
+        aria-hidden={decorative || undefined}
+        title={plain && !decorative ? label : undefined}
         tabIndex={plain ? undefined : 0}
         className={cn("inline-block size-4 shrink-0 bg-current", className)}
         style={tintStyle(`${BUNGIE_IMAGE_BASE}${src}`)}
@@ -66,8 +74,9 @@ export function StatGlyph({
     // eslint-disable-next-line @next/next/no-img-element
     <img
       src={`${BUNGIE_IMAGE_BASE}${src}`}
-      alt={label}
-      title={plain ? label : undefined}
+      alt={decorative ? "" : label}
+      aria-hidden={decorative || undefined}
+      title={plain && !decorative ? label : undefined}
       tabIndex={plain ? undefined : 0}
       width={16}
       height={16}

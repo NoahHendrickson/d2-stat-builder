@@ -115,7 +115,7 @@ function orList(items: ReactNode[]): ReactNode {
 function InlineStat({ stat, icons }: { stat: number; icons: StatIconMap }) {
   return (
     <span className="text-foreground inline-flex items-baseline gap-1 font-medium whitespace-nowrap">
-      <Glyph stat={stat} icons={icons} className="self-center" />
+      <Glyph stat={stat} icons={icons} className="self-center" decorative />
       {STAT_LABELS[STAT_ORDER[stat]]}
     </span>
   );
@@ -198,7 +198,7 @@ function ShortList({ short, icons }: { short: number[]; icons: StatIconMap }) {
       <span>Short of</span>
       {missed.map((s) => (
         <span key={s} className="inline-flex items-center gap-1 tabular-nums">
-          <Glyph stat={s} icons={icons} />
+          <Glyph stat={s} icons={icons} decorative />
           {STAT_LABELS[STAT_ORDER[s]]} by {short[s]}
         </span>
       ))}
@@ -340,6 +340,12 @@ export function TheoryResults({
       </p>
     );
   }
+  // A missing exotic bonus can be why nothing (or little) makes it: say so either way.
+  const bonusNote = exotic && !exotic.bonusKnown && (
+    <p className="text-muted-foreground text-xs">
+      {`You don't own a Tier 5 ${exotic.name}, so its exotic stat bonus isn't counted.`}
+    </p>
+  );
   if (sorted.length === 0) {
     return (
       <div className="space-y-3">
@@ -347,6 +353,7 @@ export function TheoryResults({
           No five Tier 5 pieces reach these targets, even with perfect rolls. Ease a target
           or add major mods.
         </p>
+        {bonusNote}
         <TheorySummaryCard recipes={close} closeOnly setMap={setMap} icons={statIcons} />
         {closeSection}
       </div>
@@ -354,11 +361,7 @@ export function TheoryResults({
   }
   return (
     <div className="space-y-3">
-      {exotic && !exotic.bonusKnown && (
-        <p className="text-muted-foreground text-xs">
-          {`You don't own a Tier 5 ${exotic.name}, so its exotic stat bonus isn't counted.`}
-        </p>
-      )}
+      {bonusNote}
       <TheorySummaryCard recipes={recipes!} closeOnly={false} setMap={setMap} icons={statIcons} />
       <div className={cn(BUILD_LIST_WELL_CLASS, entering && "d2-stagger")}>
         {sorted.map(row)}

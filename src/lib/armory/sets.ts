@@ -91,6 +91,26 @@ function setInfo(manifest: Manifest, setHash: number, ownedCount: number): Armor
   };
 }
 
+/**
+ * Set requirements narrowed to the bonuses the owned pieces can make: a requirement for a
+ * set with fewer owned pieces than it needs drops to the 2pc when 2+ are owned, or goes.
+ * Returns `reqs` itself when nothing changes.
+ */
+export function makeableSetReqs(
+  reqs: Record<number, 2 | 4>,
+  sets: ReadonlyMap<number, Pick<ArmorSetInfo, "ownedCount">>,
+): Record<number, 2 | 4> {
+  let changed = false;
+  const kept: Record<number, 2 | 4> = {};
+  for (const [h, count] of Object.entries(reqs)) {
+    const owned = sets.get(Number(h))?.ownedCount ?? 0;
+    const made: 2 | 4 | null = owned >= count ? count : owned >= 2 ? 2 : null;
+    if (made !== count) changed = true;
+    if (made) kept[Number(h)] = made;
+  }
+  return changed ? kept : reqs;
+}
+
 /** A set piece's look for one slot: its icon and season watermark. */
 export interface SetSlotIcon {
   icon: string;
