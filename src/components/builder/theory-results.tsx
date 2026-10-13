@@ -1,9 +1,13 @@
 "use client";
 
-import { memo, useMemo } from "react";
+import { Fragment, memo, useMemo, type ReactNode } from "react";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { CheckmarkCircle02Icon } from "@hugeicons/core-free-icons";
-import { BUILD_LIST_WELL_CLASS, MAX_SHOWN } from "@/components/builder/build-results";
+import {
+  BUILD_CARD_LIFT_CLASS,
+  BUILD_LIST_WELL_CLASS,
+  MAX_SHOWN,
+} from "@/components/builder/build-results";
 import {
   CardStats,
   Glyph,
@@ -27,6 +31,7 @@ import {
   type StatIconMap,
 } from "@/lib/armory/stats";
 import { sortTheoryRecipes, type TheorySortState } from "@/lib/builder/sort-theory";
+import { summarizeTheory } from "@/lib/builder/theory-summary";
 import type { TheoryPiece, TheoryRecipe } from "@/lib/optimizer/theory";
 import type { TheoryBuildState } from "@/lib/optimizer/use-theory-build";
 import { useEntrance } from "@/lib/use-entrance";
@@ -97,6 +102,94 @@ function PieceLine({
         <MutedCell title="Any tuned stat works">Any</MutedCell>
       )}
     </>
+  );
+}
+
+/** "A", "A or B", "A, B or C". */
+function orList(items: ReactNode[]): ReactNode {
+  return items.map((item, i) => (
+    <Fragment key={i}>
+      {i > 0 && (i === items.length - 1 ? " or " : ", ")}
+      {item}
+    </Fragment>
+  ));
+}
+
+/** A stat named inline in a sentence: glyph and name. */
+function InlineStat({ stat, icons }: { stat: number; icons: StatIconMap }) {
+  return (
+    <span className="text-foreground inline-flex items-baseline gap-1 font-medium whitespace-nowrap">
+      <Glyph stat={stat} icons={icons} className="self-center" />
+      {STAT_LABELS[STAT_ORDER[stat]]}
+    </span>
+  );
+}
+
+/**
+ * The gist of the list above the cards: the archetypes, tertiary and tuning most of its
+ * pieces to farm have ("Farm for Gunner or Powerhouse pieces with a Melee tertiary").
+ * Drawn from the exact builds, or the close ones when none make it.
+ */
+function TheorySummaryCard({
+  recipes,
+  closeOnly,
+  setMap,
+  icons,
+}: {
+  recipes: TheoryRecipe[];
+  closeOnly: boolean;
+  setMap: Map<number, ArmorSetInfo>;
+  icons: StatIconMap;
+}) {
+  const summary = useMemo(() => summarizeTheory(recipes), [recipes]);
+  if (!summary) return null;
+  const sets = summary.setHashes.flatMap((h) => setMap.get(h)?.name ?? []);
+  // "40% are Gunner, 40% Powerhouse and 20% Specialist".
+  const shares = summary.archetypes.map(
+    (a, i) => `${Math.round(a.share * 100)}%${i === 0 ? " are" : ""} ${a.name}`,
+  );
+  const shareText =
+    shares.length > 1 ? `${shares.slice(0, -1).join(", ")} and ${shares[shares.length - 1]}` : shares[0];
+  const where =
+    summary.builds === 1
+      ? `the ${closeOnly ? "close " : ""}build below`
+      : `the ${summary.builds} ${closeOnly ? "close " : ""}builds below`;
+  return (
+    <div className={cn(BUILD_CARD_LIFT_CLASS, "flex flex-col gap-1.5 p-3 normal:bg-popover")}>
+      <h3 className="d2-label">What to farm</h3>
+      <p className="text-muted-foreground text-sm leading-relaxed">
+        {closeOnly ? "The closest builds farm for " : "Farm for "}
+        {orList(
+          summary.archetypes.map((a) => (
+            <span key={a.name} className="text-foreground font-medium">
+              {a.name}
+            </span>
+          )),
+        )}{" "}
+        pieces
+        {summary.tertiaries.length ? (
+          <>
+            {" "}with a {orList(summary.tertiaries.map((t) => <InlineStat key={t.stat} stat={t.stat} icons={icons} />))} tertiary
+          </>
+        ) : (
+          " with any tertiary"
+        )}
+        {summary.tuned && (
+          <>
+            , tuned to {orList(summary.tuned.map((t) => <InlineStat key={t.stat} stat={t.stat} icons={icons} />))}
+          </>
+        )}
+        {sets.length > 0 && (
+          <>
+            {" "}from <span className="text-foreground font-medium">{sets.join(" and ")}</span>
+          </>
+        )}
+        .
+      </p>
+      <p className="text-muted-foreground text-xs">
+        Of the pieces to farm in {where}, {shareText}.
+      </p>
+    </div>
   );
 }
 
@@ -257,6 +350,7 @@ export function TheoryResults({
           No five Tier 5 pieces reach these targets, even with perfect rolls. Ease a target
           or add major mods.
         </p>
+        <TheorySummaryCard recipes={close} closeOnly setMap={setMap} icons={statIcons} />
         {closeSection}
       </div>
     );
@@ -268,6 +362,7 @@ export function TheoryResults({
           {`You don't own a Tier 5 ${exotic.name}, so its exotic stat bonus isn't counted.`}
         </p>
       )}
+      <TheorySummaryCard recipes={recipes!} closeOnly={false} setMap={setMap} icons={statIcons} />
       <div className={cn(BUILD_LIST_WELL_CLASS, entering && "d2-stagger")}>
         {sorted.map(row)}
       </div>
