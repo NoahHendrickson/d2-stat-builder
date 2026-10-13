@@ -15,6 +15,7 @@ import {
   resolveDestinyAccount,
 } from "@/lib/bungie/destiny-account";
 import { clearSession, getValidAccessToken, readUser, writeUser } from "@/lib/bungie/session";
+import { gzipResponse } from "@/lib/http/gzip-response";
 
 // 100 Profiles (currentSeasonHash) · 102 Vault · 103 ProfileCurrencies · 200 Characters · 201 CharacterInventories
 // 202 CharacterProgressions (seasonal artifact unlocks, for saved loadouts)
@@ -50,9 +51,14 @@ function slimProfile(profile: DestinyProfileResponse): DestinyProfileResponse {
 /**
  * Server-side proxy for the player's Destiny profile. Runs server-to-server so
  * Bungie's Origin-header check never fires and the access token never leaves the
- * server. Returns the raw DestinyProfileResponse for the client to normalize.
+ * server. Returns the raw DestinyProfileResponse for the client to normalize, gzipped
+ * (the uncompressed profile is what filled the Fast Origin Transfer allowance).
  */
-export async function GET() {
+export async function GET(request: Request) {
+  return gzipResponse(request, await loadProfile());
+}
+
+async function loadProfile(): Promise<Response> {
   let user = await readUser();
   const token = await getValidAccessToken();
   if (!user?.destinyMembershipId || user.destinyMembershipType == null || !token) {
