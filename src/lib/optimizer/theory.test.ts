@@ -3,7 +3,6 @@ import type { ArmorArchetype } from "../armory/archetypes";
 import {
   buildTheorySpace,
   rollUnits,
-  shortfall,
   solveTheory,
   theoryRolls,
   tuningsNeeded,
@@ -109,8 +108,8 @@ function bruteShortfall(g: number[], major: number, minor: number): number {
   return best;
 }
 
-describe("shortfall", () => {
-  it("matches a brute force over every mod placement", () => {
+describe("tuningsNeeded, when the targets can't be reached", () => {
+  it("reports the fewest units short, matching a brute force over every mod placement", () => {
     const rng = mulberry32(17);
     for (let trial = 0; trial < 600; trial++) {
       const g = Array.from({ length: 6 }, () =>
@@ -118,9 +117,8 @@ describe("shortfall", () => {
       );
       const major = Math.floor(rng() * 6);
       const minor = Math.floor(rng() * (6 - major));
-      expect(shortfall(g, major, minor), JSON.stringify({ g, major, minor })).toBe(
-        bruteShortfall(g, major, minor),
-      );
+      const t = tuningsNeeded(g, major, minor);
+      expect(t < 0 ? -t : 0, JSON.stringify({ g, major, minor })).toBe(bruteShortfall(g, major, minor));
     }
   });
 });
@@ -134,9 +132,8 @@ describe("tuningsNeeded", () => {
       );
       const major = Math.floor(rng() * 6);
       const minor = Math.floor(rng() * (6 - major));
-      expect(tuningsNeeded(g, major, minor), JSON.stringify({ g, major, minor })).toBe(
-        bruteTunings(g, major, minor),
-      );
+      const t = tuningsNeeded(g, major, minor);
+      expect(t >= 0 ? t : -1, JSON.stringify({ g, major, minor })).toBe(bruteTunings(g, major, minor));
     }
   });
 });
@@ -258,6 +255,56 @@ describe("solveTheory", () => {
       expect(best).toBe(result.ceilings[s]);
     }
     expect(result.recipes.some((r) => r.focus === "flexible")).toBe(true);
+  });
+
+  it("each stat's best card reaches the stat's max, even with every target set", () => {
+    // A stat-focused build mustn't give its own stat away as a tuning donor.
+    const rng = mulberry32(23);
+    for (let trial = 0; trial < 10; trial++) {
+      const major = Math.floor(rng() * 3);
+      const q = input({
+        // High enough that mods alone don't cover them, so tunings (and donors) are needed.
+        minimums: Array.from({ length: 6 }, () => 50 + Math.floor(rng() * 40)),
+        mods: { major, minor: 5 - major },
+      });
+      const result = solve(q);
+      for (let f = 0; f < 6; f++) {
+        const focused = result.recipes.filter((r) => r.focus === f);
+        if (!focused.length) continue;
+        expect(Math.max(...focused.map((r) => r.stats[f])), JSON.stringify({ q: q.minimums, f })).toBe(
+          result.ceilings[f],
+        );
+      }
+    }
+  });
+
+  it("ranks on the owned pieces a build really seats, not the scan's bound", () => {
+    // Owned Gunners outside the required set: the scan counts them, but a 4pc set with an
+    // exotic leaves no legendary free for them, so they can't be seated.
+    const owned: OwnedRoll[] = [0, 1, 3, 4].map((slot) => ({
+      instanceId: `g${slot}`,
+      slot,
+      archetype: "Gunner",
+      tertiary: 1,
+      tuned: 0,
+    }));
+    const exotic = { slot: 2, rolls: null, intrinsic: [0, 0, 0, 0, 0, 0], owned: [] };
+    const q = input({
+      owned,
+      exotic,
+      sets: [{ setHash: 9, count: 4 }],
+      minimums: [120, 60, 0, 0, 0, 0],
+      mods: { major: 3, minor: 2 },
+    });
+    const result = solve(q);
+    for (const r of result.recipes) {
+      expectSound(r, q);
+      expect(r.owned).toBe(0);
+    }
+    for (let f = 0; f < 6; f++) {
+      const focused = result.recipes.filter((r) => r.focus === f);
+      if (focused.length) expect(Math.max(...focused.map((r) => r.stats[f]))).toBe(result.ceilings[f]);
+    }
   });
 
   it("returns nothing for targets no five rolls can reach", () => {

@@ -39,7 +39,7 @@ export function SetBonusesSection({
   onTogglePin,
   setFilters,
   onSetMinOwnedChange,
-  allowUnowned = false,
+  planning = false,
   pieces,
   manifest,
   classType,
@@ -55,10 +55,10 @@ export function SetBonusesSection({
   setFilters: SetFilters;
   onSetMinOwnedChange: (minOwned: SetMinOwned) => void;
   /**
-   * Planning (theoretical builds): every set is listed and can be required, however few
-   * of its pieces are owned — so the owned-count filter is off and hidden.
+   * Planning what to farm (Theoretical Builds): every set is listed and any bonus can be
+   * required, however few of its pieces are owned — so there's no owned-count filter.
    */
-  allowUnowned?: boolean;
+  planning?: boolean;
   /** The optimizer pool (what the roll grid counts). */
   pieces: ArmorPiece[];
   manifest?: Manifest;
@@ -78,7 +78,7 @@ export function SetBonusesSection({
     const shown = sortSets(
       sets.filter((s) => {
         if (q && !s.name.toLowerCase().includes(q)) return false;
-        return allowUnowned || passesSetFilters(s.ownedCount, setFilters);
+        return planning || passesSetFilters(s.ownedCount, setFilters);
       }),
       sort,
     );
@@ -86,8 +86,8 @@ export function SetBonusesSection({
       pinnedList: shown.filter((s) => pinned.has(s.setHash)),
       unpinnedList: shown.filter((s) => !pinned.has(s.setHash)),
     };
-  }, [sets, pinned, query, setFilters, allowUnowned, sort]);
-  const activeFilters = !allowUnowned && hasActiveSetFilters(setFilters);
+  }, [sets, pinned, query, setFilters, planning, sort]);
+  const activeFilters = !planning && hasActiveSetFilters(setFilters);
 
   // The grid's set pickers follow the list's order — pinned first, each group in the
   // chosen sort — but ignore its search and filters, so every set stays reachable.
@@ -119,7 +119,7 @@ export function SetBonusesSection({
       set={s}
       pinned={isPinned}
       req={setReqs[s.setHash]}
-      allowUnowned={allowUnowned}
+      planning={planning}
       onTogglePin={onTogglePin}
       onToggleSet={onToggleSet}
       onOpenGrid={openGrid}
@@ -149,7 +149,8 @@ export function SetBonusesSection({
           sort={sort}
           onSortChange={setSort}
           filters={setFilters}
-          onMinOwnedChange={allowUnowned ? undefined : onSetMinOwnedChange}
+          onMinOwnedChange={onSetMinOwnedChange}
+          planning={planning}
           onReset={onReset}
         />
       </div>

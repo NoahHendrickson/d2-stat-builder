@@ -9,25 +9,21 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  LOADOUT_SORT_OPTIONS,
-  type LoadoutSortKey,
-} from "@/lib/builder/sort-loadouts";
 import { cn } from "@/lib/utils";
 
 /**
  * Figma 17:6201 "Select Trigger": a flat, input-bordered "Sort: <key> <direction>"
  * trigger. Each option in the menu has up/down arrows to set key + direction.
  */
-export function LoadoutSortControls<K extends string = LoadoutSortKey>({
+export function LoadoutSortControls<K extends string>({
   sort,
   onChange,
-  options = LOADOUT_SORT_OPTIONS as readonly { key: K; label: string }[],
+  options,
 }: {
   sort: { key: K; asc: boolean };
   onChange: (next: { key: K; asc: boolean }) => void;
-  /** The sortable keys, in menu order (defaults to the build list's). */
-  options?: readonly { key: K; label: string }[];
+  /** The sortable keys, in menu order. */
+  options: readonly { key: K; label: string }[];
 }) {
   const directionIcon = sort.asc ? ArrowUp02Icon : ArrowDown02Icon;
   const directionLabel = sort.asc ? "Low to high" : "High to low";

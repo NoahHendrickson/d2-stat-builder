@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import {
   BUILD_CARD_LIFT_CLASS,
@@ -11,7 +11,8 @@ import {
 } from "@/components/builder/build-results";
 import { LoadoutSortControls } from "@/components/builder/loadout-sort-controls";
 import { TheoryIntroAlert } from "@/components/builder/theory-intro-alert";
-import { TheoryResults, type TheoryExoticDisplay } from "@/components/builder/theory-results";
+import { TheoryResults } from "@/components/builder/theory-results";
+import type { TheoryBuilds } from "@/components/builder/use-theory-builds";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { ArmorPiece } from "@/lib/armory/normalize";
 import type { ArmorSetInfo } from "@/lib/armory/sets";
@@ -19,6 +20,7 @@ import type { ArmoryCharacter } from "@/lib/armory/fetch";
 import type { StatIconMap } from "@/lib/armory/stats";
 import {
   DEFAULT_LOADOUT_SORT,
+  LOADOUT_SORT_OPTIONS,
   type LoadoutSortState,
 } from "@/lib/builder/sort-loadouts";
 import type { StatModHashes } from "@/lib/dim/mod-hashes";
@@ -94,35 +96,71 @@ export function getBuildsStatusLabel({
 /** Builds from owned armor, or the Tier-5 rolls that would reach the targets. */
 export type BuildsMode = "actual" | "theoretical";
 
-/** The theoretical list's state and header label (the mobile bar shows the same). */
-export function getTheoryStatus(
-  ready: boolean,
-  theory: TheoryBuildState,
-): { state: BuildsViewState; label: string } {
-  if (!ready) return { state: "not-ready", label: "" };
-  if (theory.running) return { state: "searching", label: "Searching…" };
+/** What the builds header (and the mobile bar) shows for the tab that's open. */
+export interface BuildsHeader {
+  title: string;
+  state: BuildsViewState;
+  label: string;
+  /** The search reports progress (actual builds only): show its bar. */
+  progress: boolean;
+  /** The initial search is running (actual builds only): it can be cancelled. */
+  busy: boolean;
+}
+
+/** The theoretical list's header: a count of exact and close builds. */
+function theoryHeader(ready: boolean, theory: TheoryBuildState): BuildsHeader {
+  const header = (state: BuildsViewState, label: string): BuildsHeader => ({
+    title: "Theoretical Builds",
+    state,
+    label,
+    progress: false,
+    busy: false,
+  });
+  if (!ready) return header("not-ready", "");
+  if (theory.running) return header("searching", "Searching…");
   const n = theory.result?.recipes.length;
-  if (n === undefined) return { state: "idle", label: "" };
+  if (n === undefined) return header("idle", "");
   const close = theory.result!.close.length;
   const closeLabel = close ? `${close} close` : "";
   if (n === 0) {
     return close
-      ? { state: "results", label: `No exact builds, ${closeLabel}` }
-      : { state: "no-matches", label: "No builds reach these" };
+      ? header("results", `No exact builds, ${closeLabel}`)
+      : header("no-matches", "No builds reach these");
   }
   const shown = Math.min(MAX_SHOWN, n);
   const label = `${shown} ${shown === 1 ? "build" : "builds"}`;
-  return { state: "results", label: close ? `${label}, ${closeLabel}` : label };
+  return header("results", close ? `${label}, ${closeLabel}` : label);
+}
+
+/** The header for the open tab, shared by the builds column and the mobile bar. */
+export function buildsHeader({
+  mode,
+  ready,
+  showLoading,
+  running,
+  result,
+  theory,
+}: Pick<
+  BuildsColumnContentProps,
+  "mode" | "ready" | "showLoading" | "running" | "result" | "theory"
+>): BuildsHeader {
+  if (mode === "theoretical") return theoryHeader(ready, theory.state);
+  const state = getBuildsViewState({ ready, showLoading, result });
+  return {
+    title: "Builds",
+    state,
+    label: getBuildsStatusLabel({ ready, showLoading, result }),
+    progress: state === "searching",
+    // Initial search only — `running` is false once refinement starts (see use-optimizer).
+    busy: running,
+  };
 }
 
 export interface BuildsColumnContentProps {
   mode: BuildsMode;
   onModeChange: (mode: BuildsMode) => void;
-  theory: TheoryBuildState;
-  /** The exotic theoretical builds wear (null = none picked). */
-  theoryExotic: TheoryExoticDisplay | null;
-  /** Every set the class can wear (theoretical builds can require unowned ones). */
-  theorySetMap: Map<number, ArmorSetInfo>;
+  /** The Theoretical Builds tab's state (see useTheoryBuilds). */
+  theory: TheoryBuilds;
   ready: boolean;
   /** The gear on screen is last visit's copy; builds wait for the live profile. */
   provisional?: boolean;
@@ -154,10 +192,109 @@ export interface BuildsColumnContentProps {
   onDream?: (loadout: OptimizerLoadout) => void;
 }
 
-export function BuildsColumnContent({
-  ready,
+/** The tabs, then the open tab's builds (each with its own header extras and sort). */
+export function BuildsColumnContent(props: BuildsColumnContentProps) {
+  const { mode, onModeChange, ready, provisional = false } = props;
+  const header = buildsHeader(props);
+  const tabs = (
+    <Tabs value={mode} onValueChange={(v) => onModeChange(v as BuildsMode)}>
+      <TabsList aria-label="Which builds to show">
+        <TabsTrigger value="actual">Builds</TabsTrigger>
+        <TabsTrigger value="theoretical">Theoretical Builds</TabsTrigger>
+      </TabsList>
+    </Tabs>
+  );
+  if (!ready) {
+    return (
+      <div className="space-y-5">
+        <HeaderRow tabs={tabs} header={header} />
+        <p className="text-muted-foreground text-sm">
+          {provisional
+            ? "Refreshing your gear from Bungie — builds will appear in a moment."
+            : "Sign in and load your gear to generate builds."}
+        </p>
+      </div>
+    );
+  }
+  return mode === "theoretical" ? (
+    <TheoryBuildsBody {...props} tabs={tabs} header={header} />
+  ) : (
+    <ActualBuildsBody {...props} tabs={tabs} header={header} />
+  );
+}
+
+/** The tabs on the left; Cancel, the status label and any sort control on the right. */
+function HeaderRow({
+  tabs,
+  header,
+  onCancel,
+  sort,
+}: {
+  tabs: ReactNode;
+  header: BuildsHeader;
+  onCancel?: () => void;
+  sort?: ReactNode;
+}) {
+  return (
+    <div className="flex min-h-8 flex-wrap items-center gap-3">
+      <h2 className="sr-only">{header.title}</h2>
+      {tabs}
+      <div className="ml-auto flex min-w-0 items-center gap-3">
+        {/* Refinement Cancel lives in the status alert. */}
+        {header.busy && onCancel && (
+          <Button
+            variant="link"
+            onClick={onCancel}
+            className="text-muted-foreground hover:text-foreground h-auto p-0 text-xs font-normal"
+          >
+            Cancel
+          </Button>
+        )}
+        <span className="text-muted-foreground text-sm tabular-nums" aria-live="polite">
+          {header.label}
+        </span>
+        {sort}
+      </div>
+    </div>
+  );
+}
+
+type BodyProps = BuildsColumnContentProps & { tabs: ReactNode; header: BuildsHeader };
+
+function TheoryBuildsBody({ tabs, header, theory, pieceMap, statIcons }: BodyProps) {
+  const [sort, setSort] = useState<TheorySortState>(DEFAULT_THEORY_SORT);
+  // A theoretical list stays sortable while a newer one is on its way.
+  const sortable = (theory.state.result?.recipes.length ?? 0) > 1;
+  return (
+    <div className="space-y-5">
+      <HeaderRow
+        tabs={tabs}
+        header={header}
+        sort={
+          sortable && (
+            <LoadoutSortControls sort={sort} onChange={setSort} options={THEORY_SORT_OPTIONS} />
+          )
+        }
+      />
+      <div className="space-y-3">
+        <TheoryIntroAlert />
+        <TheoryResults
+          state={theory.state}
+          exotic={theory.exoticDisplay}
+          setMap={theory.setMap}
+          pieceMap={pieceMap}
+          statIcons={statIcons}
+          sort={sort}
+        />
+      </div>
+    </div>
+  );
+}
+
+function ActualBuildsBody({
+  tabs,
+  header,
   showLoading,
-  running,
   result,
   displayedProgress,
   refinement,
@@ -177,124 +314,53 @@ export function BuildsColumnContent({
   insertablePlugs,
   onEquipped,
   onDream,
-  provisional = false,
-  mode,
-  onModeChange,
-  theory,
-  theoryExotic,
-  theorySetMap,
-}: BuildsColumnContentProps) {
+}: BodyProps) {
   const [sort, setSort] = useState<LoadoutSortState>(DEFAULT_LOADOUT_SORT);
-  const [theorySort, setTheorySort] = useState<TheorySortState>(DEFAULT_THEORY_SORT);
-  const theoretical = mode === "theoretical";
-  const theoryStatus = getTheoryStatus(ready, theory);
-  const viewState = theoretical
-    ? theoryStatus.state
-    : getBuildsViewState({ ready, showLoading, result });
-  const statusLabel = theoretical
-    ? theoryStatus.label
-    : getBuildsStatusLabel({ ready, showLoading, result });
-  // A theoretical list stays sortable while a newer one is on its way.
-  const showSort = theoretical
-    ? (theory.result?.recipes.length ?? 0) > 1
-    : viewState === "results";
-
   return (
     <div className="space-y-5">
-      <div className="flex min-h-8 flex-wrap items-center gap-3">
-        <h2 className="sr-only">Builds</h2>
-        <Tabs value={mode} onValueChange={(v) => onModeChange(v as BuildsMode)}>
-          <TabsList aria-label="Which builds to show">
-            <TabsTrigger value="actual">Builds</TabsTrigger>
-            <TabsTrigger value="theoretical">Theoretical Builds</TabsTrigger>
-          </TabsList>
-        </Tabs>
-        <div className="ml-auto flex min-w-0 items-center gap-3">
-          {/* Initial search only — `running` is false once refinement starts
-              (see use-optimizer); refinement Cancel lives in the status alert. */}
-          {!theoretical && running && (
-            <Button
-              variant="link"
-              onClick={onCancel}
-              className="text-muted-foreground hover:text-foreground h-auto p-0 text-xs font-normal"
-            >
-              Cancel
-            </Button>
-          )}
-          <span
-            className="text-muted-foreground text-sm tabular-nums"
-            aria-live="polite"
-          >
-            {statusLabel}
-          </span>
-          {showSort &&
-            (theoretical ? (
-              <LoadoutSortControls
-                sort={theorySort}
-                onChange={setTheorySort}
-                options={THEORY_SORT_OPTIONS}
-              />
-            ) : (
-              <LoadoutSortControls sort={sort} onChange={setSort} />
-            ))}
-        </div>
-      </div>
-      {!ready ? (
+      <HeaderRow
+        tabs={tabs}
+        header={header}
+        onCancel={onCancel}
+        sort={
+          header.state === "results" && (
+            <LoadoutSortControls sort={sort} onChange={setSort} options={LOADOUT_SORT_OPTIONS} />
+          )
+        }
+      />
+      {showLoading &&
+        (result ? (
+          <BuildsProgressBar progress={displayedProgress} />
+        ) : (
+          <BuildsLoading progress={displayedProgress} />
+        ))}
+      {result ? (
+        <BuildResults
+          result={result}
+          refinement={refinement}
+          refinementProgress={refinementProgress}
+          onShowPending={onShowPending}
+          onCancel={onCancel}
+          pieceMap={pieceMap}
+          setMap={setMap}
+          statIcons={statIcons}
+          balancedTuningIcon={balancedTuningIcon}
+          characters={characters}
+          statModHashes={statModHashes}
+          tuningPlugHashes={tuningPlugHashes}
+          artificeModHashes={artificeModHashes}
+          getBuilderState={getBuilderState}
+          manifest={manifest}
+          insertablePlugs={insertablePlugs}
+          onEquipped={onEquipped}
+          onDream={onDream}
+          sort={sort}
+        />
+      ) : !showLoading ? (
         <p className="text-muted-foreground text-sm">
-          {provisional
-            ? "Refreshing your gear from Bungie — builds will appear in a moment."
-            : "Sign in and load your gear to generate builds."}
+          Pick an exotic, set bonuses, and stat targets — builds update as you go.
         </p>
-      ) : theoretical ? (
-        <div className="space-y-3">
-          <TheoryIntroAlert />
-          <TheoryResults
-            state={theory}
-            exotic={theoryExotic}
-            setMap={theorySetMap}
-            pieceMap={pieceMap}
-            statIcons={statIcons}
-            sort={theorySort}
-          />
-        </div>
-      ) : (
-        <>
-          {showLoading &&
-            (result ? (
-              <BuildsProgressBar progress={displayedProgress} />
-            ) : (
-              <BuildsLoading progress={displayedProgress} />
-            ))}
-          {result ? (
-            <BuildResults
-              result={result}
-              refinement={refinement}
-              refinementProgress={refinementProgress}
-              onShowPending={onShowPending}
-              onCancel={onCancel}
-              pieceMap={pieceMap}
-              setMap={setMap}
-              statIcons={statIcons}
-              balancedTuningIcon={balancedTuningIcon}
-              characters={characters}
-              statModHashes={statModHashes}
-              tuningPlugHashes={tuningPlugHashes}
-              artificeModHashes={artificeModHashes}
-              getBuilderState={getBuilderState}
-              manifest={manifest}
-              insertablePlugs={insertablePlugs}
-              onEquipped={onEquipped}
-              onDream={onDream}
-              sort={sort}
-            />
-          ) : !showLoading ? (
-            <p className="text-muted-foreground text-sm">
-              Pick an exotic, set bonuses, and stat targets — builds update as
-              you go.
-            </p>
-          ) : null}
-        </>
-      )}
+      ) : null}
     </div>
   );
 }

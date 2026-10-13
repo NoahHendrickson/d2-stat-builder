@@ -1,5 +1,5 @@
 /**
- * The theoretical search's inventory-side inputs (see theory.ts): the owned pieces it can
+ * The theoretical search's inventory-side inputs (see theory/): the owned pieces it can
  * seat, and the exotic the builder has picked.
  */
 import type { ArmorArchetype } from "../armory/archetypes";
@@ -9,11 +9,10 @@ import {
   type SpiritPerkInfo,
 } from "../armory/exotic-class-perks";
 import { intrinsicStats, type ArmorPiece } from "../armory/normalize";
-import { ARMOR_SLOTS, tertiaryStatIndex, type ArmorSlot } from "../armory/stats";
+import { ARMOR_SLOTS, rollStatIndices, type ArmorSlot } from "../armory/stats";
+import { t5RollStats, tertiariesOf } from "../armory/t5-rolls";
 import type { Manifest } from "../manifest/load";
-import { rollUnits, type OwnedRoll, type TheoryExotic } from "./theory";
-
-const UNIT = 5;
+import type { OwnedRoll, TheoryExotic } from "./theory";
 
 /**
  * Owned Tier-5 legendaries as rolls a theoretical build can use in place of a farmed
@@ -24,9 +23,9 @@ export function theoryOwnedRolls(pieces: ArmorPiece[], archetypes: ArmorArchetyp
   return pieces.flatMap((p) => {
     const archetype = p.archetype ? byName.get(p.archetype) : undefined;
     if (p.isExotic || p.tunedStat === undefined || !archetype) return [];
-    const tertiary = tertiaryStatIndex(p.baseStats);
-    const expected = rollUnits({ ...archetype, archetype: archetype.name, tertiary });
-    if (expected.some((u, s) => u * UNIT !== p.stats[s])) return [];
+    const tertiary = rollStatIndices(p.baseStats)[2];
+    const expected = t5RollStats(archetype.primary, archetype.secondary, tertiary);
+    if (expected.some((v, s) => v !== p.stats[s])) return [];
     return [
       {
         instanceId: p.instanceId,
@@ -45,12 +44,12 @@ function rollOf(
   p: ArmorPiece,
   archetypes: ArmorArchetype[],
 ): { archetype: string; tertiary: number } | null {
-  const order = p.baseStats.map((_, i) => i).sort((a, b) => p.baseStats[b] - p.baseStats[a]);
+  const [primary, secondary, tertiary] = rollStatIndices(p.baseStats);
   const archetype =
     archetypes.find((a) => a.name === p.archetype) ??
-    archetypes.find((a) => a.primary === order[0] && a.secondary === order[1]);
+    archetypes.find((a) => a.primary === primary && a.secondary === secondary);
   if (!archetype) return null;
-  return { archetype: archetype.name, tertiary: tertiaryStatIndex(p.baseStats) };
+  return { archetype: archetype.name, tertiary };
 }
 
 export interface TheoryExoticChoice {
@@ -93,7 +92,7 @@ export function theoryExotic(choice: TheoryExoticChoice): {
       if (!archetype) continue;
       const tertiaries =
         right === null
-          ? [0, 1, 2, 3, 4, 5].filter((s) => s !== archetype.primary && s !== archetype.secondary)
+          ? tertiariesOf(archetype)
           : rights.map((r) =>
               resolveTertiary(r.preferredTertiary, archetype.primary, archetype.secondary),
             );
@@ -107,7 +106,9 @@ export function theoryExotic(choice: TheoryExoticChoice): {
       return roll ? [{ instanceId: p.instanceId, ...roll }] : [];
     });
     return {
-      exotic: { slot, rolls, intrinsic: [0, 0, 0, 0, 0, 0], owned },
+      // Spirits that can't be read (no catalog entry, an unknown archetype) leave no rolls:
+      // then any roll goes, rather than none.
+      exotic: { slot, rolls: rolls.length ? rolls : null, intrinsic: [0, 0, 0, 0, 0, 0], owned },
       bonusKnown: true,
     };
   }

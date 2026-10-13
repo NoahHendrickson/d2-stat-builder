@@ -44,14 +44,16 @@ export const SetListControls = memo(function SetListControls({
   onSortChange,
   filters,
   onMinOwnedChange,
+  planning,
   onReset,
 }: {
   count: number;
   sort: SetSortKey;
   onSortChange: (key: SetSortKey) => void;
   filters: SetFilters;
-  /** Omitted = no owned-count filter (theoretical builds list every set). */
-  onMinOwnedChange?: (minOwned: SetMinOwned) => void;
+  onMinOwnedChange: (minOwned: SetMinOwned) => void;
+  /** Planning what to farm: every set is listed, so the owned-count filter is hidden. */
+  planning: boolean;
   onReset: () => void;
 }) {
   const activeFilters = hasActiveSetFilters(filters);
@@ -93,7 +95,7 @@ export const SetListControls = memo(function SetListControls({
           </DropdownMenuContent>
         </DropdownMenu>
 
-        {onMinOwnedChange && (
+        {!planning && (
           <Popover>
             <TooltipLabel label="Armor set list settings">
               <PopoverTrigger

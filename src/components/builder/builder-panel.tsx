@@ -14,7 +14,7 @@ import { useArmory } from "@/lib/armory/use-armory";
 import { useManifest } from "@/lib/manifest/use-manifest";
 import { useOptimizer } from "@/lib/optimizer/use-optimizer";
 import { useSmoothedProgress } from "@/lib/use-smoothed-progress";
-import { availableSets, classSets } from "@/lib/armory/sets";
+import { availableSets } from "@/lib/armory/sets";
 import {
   DEFAULT_SET_FILTERS,
   type SetFilters,
@@ -76,11 +76,7 @@ import { dreamInputForBuild } from "@/lib/optimizer/dream-input";
 
 import type { OptimizerLoadout } from "@/lib/optimizer/types";
 import type { DreamInput } from "@/lib/optimizer/dream";
-import type { TheoryInput } from "@/lib/optimizer/theory";
-import { theoryExotic, theoryOwnedRolls } from "@/lib/optimizer/theory-input";
-import { useTheoryBuild } from "@/lib/optimizer/use-theory-build";
-import type { CeilingsView } from "@/lib/optimizer/optimizer-store";
-import { createValueStore } from "@/lib/value-store";
+import { useTheoryBuilds } from "@/components/builder/use-theory-builds";
 import {
   DEFAULT_POWER_RANGE,
   forcesDreamersBond,
@@ -286,14 +282,16 @@ export function BuilderPanel({
     [sets],
   );
 
-  // Set requirements narrowed to sets the player owns for this class: a restored (or
-  // class-corrected) requirement for a set they no longer own would make every build
-  // infeasible. The optimizer and DIM/export read this pruned view; persistence and
+  // Set requirements narrowed to bonuses the player's pieces for this class can make: a
+  // restored (or class-corrected) requirement for a set they no longer own, or one picked
+  // on the Theoretical Builds tab for a set they own too few pieces of, would make every
+  // build infeasible. The optimizer and DIM/export read this pruned view; persistence and
   // "Load in builder" keep the raw `setReqs` so turning a pool toggle off can't
   // permanently drop a requirement for a set that only exists on the wider pool.
   const ownedSetReqs = useMemo(() => {
-    if (!setMap.size) return setReqs;
-    const kept = Object.entries(setReqs).filter(([h]) => setMap.has(Number(h)));
+    const kept = Object.entries(setReqs).filter(
+      ([h, count]) => (setMap.get(Number(h))?.ownedCount ?? 0) >= count,
+    );
     return kept.length === Object.keys(setReqs).length
       ? setReqs
       : (Object.fromEntries(kept) as Record<number, 2 | 4>);
@@ -413,24 +411,6 @@ export function BuilderPanel({
         count,
       })),
     [ownedSetReqs],
-  );
-
-  // Theoretical builds plan what to farm, so they list every set the class can wear,
-  // owned or not, and keep the requirements for sets with no owned pieces.
-  const theorySets = useMemo(
-    () => (manifest && classType !== null ? classSets(manifest, classType, pool) : []),
-    [manifest, classType, pool],
-  );
-  const theorySetMap = useMemo(
-    () => new Map(theorySets.map((s) => [s.setHash, s])),
-    [theorySets],
-  );
-  const theorySetRequirements = useMemo(
-    () =>
-      Object.entries(setReqs)
-        .filter(([h]) => theorySetMap.has(Number(h)))
-        .map(([setHash, count]) => ({ setHash: Number(setHash), count })),
-    [setReqs, theorySetMap],
   );
 
   // Dedupe by name — the same exotic can exist in multiple versions (Armor 2.0 vs 3.0)
@@ -872,84 +852,30 @@ export function BuilderPanel({
   // theoretical tab; coming back searches at once.
   useAutoSearch(searchReady && classType !== null && !theoretical, runOptimizer);
 
-  // What theoretical builds can seat: owned Tier-5 legendaries, and the picked exotic.
-  const theoryOwned = useMemo(
-    () => theoryOwnedRolls(classPieces, archetypes),
-    [classPieces, archetypes],
-  );
-  const theoryExoticChoice = useMemo(
-    () =>
-      manifest
-        ? theoryExotic({
-            option: selectedExoticOption ?? null,
-            classItemHash: selectedClassItemHash,
-            spiritPerks,
-            exoticPerks,
-            pieces: classPieces,
-            archetypes,
-            manifest,
-          })
-        : { exotic: null, bonusKnown: true },
-    [
-      manifest,
-      selectedExoticOption,
-      selectedClassItemHash,
+  const theory = useTheoryBuilds({
+    active: theoretical,
+    searchReady,
+    manifest,
+    classType,
+    pool,
+    classPieces,
+    archetypes,
+    setReqs,
+    targets,
+    major,
+    fragmentBonus,
+    exotic: {
+      option: selectedExoticOption ?? null,
+      classItemHash: selectedClassItemHash,
       spiritPerks,
       exoticPerks,
-      classPieces,
-      archetypes,
-    ],
-  );
-
-  const theoryInput = useMemo(
-    (): TheoryInput | null =>
-      theoretical && searchReady && archetypes.length
-        ? {
-            archetypes,
-            // With no exotic or set picked the cards are a plain list of rolls to farm,
-            // so owned pieces aren't seated.
-            owned:
-              theoryExoticChoice.exotic || theorySetRequirements.length ? theoryOwned : [],
-            minimums: targets,
-            mods: { major, minor: 5 - major },
-            fragmentBonus,
-            exotic: theoryExoticChoice.exotic,
-            sets: theorySetRequirements,
-          }
-        : null,
-    [
-      theoretical,
-      searchReady,
-      archetypes,
-      theoryOwned,
-      targets,
-      major,
-      fragmentBonus,
-      theoryExoticChoice,
-      theorySetRequirements,
-    ],
-  );
-  const theory = useTheoryBuild(theoryInput);
-  // What the theoretical cards show for an exotic they'd have you farm.
-  const theoryExoticDisplay = useMemo(
-    () =>
-      theoryExoticChoice.exotic && selectedExoticOption
-        ? {
-            name: selectedExoticOption.name,
-            icon: selectedExoticOption.icon,
-            watermark: selectedExoticOption.watermark,
-            bonusKnown: theoryExoticChoice.bonusKnown,
-          }
-        : null,
-    [theoryExoticChoice, selectedExoticOption],
-  );
-  // The theoretical maxima are exact, so the sliders show them as proven.
-  const [theoryCeilings] = useState(() =>
-    createValueStore<CeilingsView>({ values: null, exact: false }),
-  );
-  useEffect(() => {
-    theoryCeilings.set({ values: theory.result?.ceilings ?? null, exact: true });
-  }, [theoryCeilings, theory.result]);
+    },
+  });
+  // What the two tabs show differently in the settings, picked once: Theoretical Builds
+  // plans what to farm, so it lists every set (owned or not) and its own slider maxima.
+  const settingsView = theoretical
+    ? { sets: theory.sets, setMap: theory.setMap, ceilings: theory.ceilings, planning: true }
+    : { sets, setMap, ceilings: ceilingsView, planning: false };
 
   // The dream query for one build at the modal's targets (see dreamInputForBuild).
   const makeDreamInput = useCallback(
@@ -1051,8 +977,7 @@ export function BuilderPanel({
     [],
   );
 
-  // The set list on screen: every class set on the theoretical tab, owned ones otherwise.
-  const shownSetMap = theoretical ? theorySetMap : setMap;
+  const visibleSets = settingsView.setMap;
   const toggleSet = useCallback(
     (setHash: number, count: 2 | 4) => {
       setSetReqs((prev) => {
@@ -1068,14 +993,14 @@ export function BuilderPanel({
         const keys = Object.keys(next);
         if (keys.length > MAX_SET_BONUSES) {
           const evict =
-            keys.find((h) => Number(h) !== setHash && !shownSetMap.has(Number(h))) ??
+            keys.find((h) => Number(h) !== setHash && !visibleSets.has(Number(h))) ??
             keys.find((h) => Number(h) !== setHash);
           if (evict !== undefined) delete next[Number(evict)];
         }
         return next;
       });
     },
-    [shownSetMap],
+    [visibleSets],
   );
 
   const onMajorChange = useCallback((v: string) => setMajor(Number(v)), []);
@@ -1122,8 +1047,6 @@ export function BuilderPanel({
       mode: buildsMode,
       onModeChange: setBuildsMode,
       theory,
-      theoryExotic: theoryExoticDisplay,
-      theorySetMap,
       ready: searchReady,
       provisional,
       showLoading,
@@ -1151,8 +1074,6 @@ export function BuilderPanel({
     [
       buildsMode,
       theory,
-      theoryExoticDisplay,
-      theorySetMap,
       searchReady,
       provisional,
       showLoading,
@@ -1215,7 +1136,7 @@ export function BuilderPanel({
                       index={i}
                       icon={statIcons[key]}
                       value={targets[i]}
-                      ceilingsView={theoretical ? theoryCeilings : ceilingsView}
+                      ceilingsView={settingsView.ceilings}
                       onChange={setTarget}
                     />
                   );
@@ -1257,7 +1178,7 @@ export function BuilderPanel({
 
             <Section title="Set bonuses">
               <SetBonusesSection
-                sets={theoretical ? theorySets : sets}
+                sets={settingsView.sets}
                 setReqs={setReqs}
                 onToggleSet={toggleSet}
                 onReset={resetSetReqs}
@@ -1265,7 +1186,7 @@ export function BuilderPanel({
                 onTogglePin={togglePinnedSet}
                 setFilters={setFilters}
                 onSetMinOwnedChange={setSetMinOwned}
-                allowUnowned={theoretical}
+                planning={settingsView.planning}
                 pieces={pool}
                 manifest={manifest}
                 classType={classType}
@@ -1290,7 +1211,7 @@ export function BuilderPanel({
               )}
             </Section>
 
-            {!theoretical && (
+            {!settingsView.planning && (
               <>
                 <Section
                   title="Advanced settings"

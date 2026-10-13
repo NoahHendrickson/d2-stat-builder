@@ -13,6 +13,7 @@
  * Pure — no DOM/React deps, so it runs in a Web Worker and in Node tests.
  */
 import { solve } from "./solve";
+import { t5Rolls } from "../armory/t5-rolls";
 // Type-only (erased): keeps the worker bundle free of the armory/manifest modules.
 import type { ArmorArchetype } from "../armory/archetypes";
 import type {
@@ -23,13 +24,6 @@ import type {
 
 const NUM_SLOTS = 5;
 const NUM_STATS = 6;
-
-/** Tier-5 archetype stat values: primary, secondary, tertiary. */
-const T5_PRIMARY = 30;
-const T5_SECONDARY = 25;
-const T5_TERTIARY = 20;
-/** MW5 lifts each of the three off-archetype stats to 5. */
-const T5_MASTERWORKED_OFF_STAT = 5;
 
 /** Whole dream search wall clock; each solve gets what's left (capped per solve). */
 const DREAM_BUDGET_MS = 15000;
@@ -172,23 +166,8 @@ export interface DreamSolveOptions {
   onPhase?: (newPieces: number) => void;
 }
 
-/** Every (archetype, tertiary) roll's masterworked stats. */
-export function dreamRolls(
-  archetypes: ArmorArchetype[],
-): { archetype: ArmorArchetype; tertiary: number; stats: number[] }[] {
-  const out = [];
-  for (const archetype of archetypes) {
-    for (let tertiary = 0; tertiary < NUM_STATS; tertiary++) {
-      if (tertiary === archetype.primary || tertiary === archetype.secondary) continue;
-      const stats = new Array(NUM_STATS).fill(T5_MASTERWORKED_OFF_STAT);
-      stats[archetype.primary] = T5_PRIMARY;
-      stats[archetype.secondary] = T5_SECONDARY;
-      stats[tertiary] = T5_TERTIARY;
-      out.push({ archetype, tertiary, stats });
-    }
-  }
-  return out;
-}
+/** Every (archetype, tertiary) roll's masterworked stats (the shared Tier-5 table). */
+export const dreamRolls = t5Rolls;
 
 /** The three off-archetype stats of a roll (the Balanced Tuning targets). */
 function offStatsOf(primary: number, secondary: number, tertiary: number): number[] {

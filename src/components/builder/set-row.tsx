@@ -20,13 +20,13 @@ export const SetRow = memo(function SetRow({
   onTogglePin,
   onToggleSet,
   onOpenGrid,
-  allowUnowned = false,
+  planning = false,
 }: {
   set: ArmorSetInfo;
   pinned: boolean;
   req: 2 | 4 | undefined;
-  /** Bonuses can be required without owning enough pieces (theoretical builds). */
-  allowUnowned?: boolean;
+  /** Planning what to farm: any bonus can be required, owned pieces or not. */
+  planning?: boolean;
   onTogglePin: (setHash: number) => void;
   onToggleSet: (setHash: number, count: 2 | 4) => void;
   /** Open the roll-grid modal on this set. */
@@ -64,14 +64,14 @@ export const SetRow = memo(function SetRow({
       </span>
       <SetPerkCell
         active={req === 2}
-        disabled={!allowUnowned && set.ownedCount < 2}
+        disabled={!planning && req !== 2 && set.ownedCount < 2}
         perk={perk2Info}
         onToggle={() => onToggleSet(set.setHash, 2)}
         className="max-md:col-span-2 max-md:col-start-1 max-md:row-start-2 max-md:pl-7"
       />
       <SetPerkCell
         active={req === 4}
-        disabled={!allowUnowned && set.ownedCount < 4}
+        disabled={!planning && req !== 4 && set.ownedCount < 4}
         perk={perk4Info}
         onToggle={() => onToggleSet(set.setHash, 4)}
         className="max-md:col-span-2 max-md:col-start-1 max-md:row-start-3 max-md:pl-7"

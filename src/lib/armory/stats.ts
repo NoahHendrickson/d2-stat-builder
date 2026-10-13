@@ -161,12 +161,21 @@ export function offArchetypeIndices(base: StatArray): number[] {
 }
 
 /**
+ * An Armor 3.0 base roll's [primary, secondary, tertiary] stat indices: its three highest
+ * stats (30 / 25 / 20 on Tier 5). Ties resolve in STAT_ORDER order (stable sort). Only
+ * meaningful for pieces with a real archetype shape.
+ */
+export function rollStatIndices(base: StatArray): [number, number, number] {
+  const [primary, secondary, tertiary] = base.map((_, i) => i).sort((a, b) => base[b] - base[a]);
+  return [primary, secondary, tertiary];
+}
+
+/**
  * The tertiary archetype stat index = the 3rd-highest base-roll stat (fixed at 20
- * on Tier 5). Complement of offArchetypeIndices; ties resolve in STAT_ORDER order
- * (stable sort). Only meaningful for Armor 3.0 pieces with a real archetype shape.
+ * on Tier 5). Complement of offArchetypeIndices.
  */
 export function tertiaryStatIndex(base: StatArray): number {
-  return base.map((_, i) => i).sort((a, b) => base[b] - base[a])[2];
+  return rollStatIndices(base)[2];
 }
 
 /** Armor inventory bucket hash -> slot. */
