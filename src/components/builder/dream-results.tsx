@@ -1,21 +1,17 @@
 "use client";
 
-import { Fragment, type ReactNode } from "react";
+import { Fragment, useState } from "react";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { ArrowRight02Icon } from "@hugeicons/core-free-icons";
+import { Button } from "@/components/ui/button";
+import { ArmorThumb } from "@/components/armor-thumb";
+import { StatGlyph } from "@/components/stat-glyph";
+import { armorPipTier, type ArmorPiece } from "@/lib/armory/normalize";
+import { isFullyMasterworked } from "@/lib/armory/masterwork";
 import {
-  CardStats,
-  Glyph,
-  ModList,
-  MutedCell,
-  RollCard,
-  RollIdentity,
-  RollThumb,
-  StatName,
-  TuningName,
-} from "@/components/builder/roll-card";
-import type { ArmorPiece } from "@/lib/armory/normalize";
-import {
-  ARMOR_SLOTS,
   SLOT_LABELS,
+  ARMOR_SLOTS,
+  STAT_DISPLAY_ORDER,
   STAT_LABELS,
   STAT_ORDER,
   tertiaryStatIndex,
@@ -24,8 +20,8 @@ import {
 import {
   farmOdds,
   type DreamOption,
+  type DreamResult,
   type FarmPiece,
-  type FarmRoll,
 } from "@/lib/optimizer/dream";
 import type { DreamBuildState } from "@/lib/optimizer/use-dream-build";
 import type { AppliedTuning, OptimizerLoadout } from "@/lib/optimizer/types";
@@ -66,267 +62,273 @@ function WorkingBar({ running }: { running: boolean }) {
   );
 }
 
-/**
- * A build's stat mods per stat as [majors, minors], from the points each stat got and
- * how many of each size were used: majors go to stats with 10+ points first, which
- * always accounts for every mod (a major is 10 points on one stat).
- */
-function modCounts(loadout: OptimizerLoadout): [number, number][] {
-  let majors = loadout.modsUsed.major;
-  return loadout.modBonus.map((points) => {
-    const major = Math.min(Math.floor(points / 10), majors);
-    majors -= major;
-    return [major, (points - 10 * major) / 5];
-  });
+function Glyph({ stat, icons }: { stat: number; icons: StatIconMap }) {
+  const key = STAT_ORDER[stat];
+  return <StatGlyph src={icons[key]} label={STAT_LABELS[key]} />;
 }
 
-/** An Armor 3.0 piece's archetype with its two stats (the top two of its base roll). */
-function archetypeOf(piece: ArmorPiece): { name: string; primary: number; secondary: number } | undefined {
-  if (!piece.archetype) return undefined;
-  const order = piece.baseStats.map((_, i) => i).sort((a, b) => piece.baseStats[b] - piece.baseStats[a]);
-  return { name: piece.archetype, primary: order[0], secondary: order[1] };
-}
-
-/**
- * The Tuned cell for a tuning the build sockets on a piece it keeps: the tuned stat only,
- * never the −5 (the user found a −5 on a kept piece confusing).
- */
-function SocketedTuning({
-  tune,
-  artifice,
-  icons,
-}: {
-  tune: AppliedTuning | null;
-  artifice: number | null;
-  icons: StatIconMap;
-}) {
-  if (tune?.kind === "directional") return <TuningName plus={tune.plus} icons={icons} />;
-  if (tune?.kind === "balanced") return <span className="text-sm">Balanced</span>;
-  if (artifice !== null) {
-    return (
-      <span className="inline-flex items-center gap-1 text-sm" title={`Artifice +3 ${STAT_LABELS[STAT_ORDER[artifice]]}`}>
-        +3
-        <Glyph stat={artifice} icons={icons} />
-      </span>
-    );
+/** The tertiary / tuned requirements of one farm piece, as compactly as they allow. */
+function FarmRolls({ farm, icons }: { farm: FarmPiece; icons: StatIconMap }) {
+  const { n, of } = farmOdds(farm);
+  if (n === of) {
+    // An exotic's tuning is flexible, so its rolls only ever vary by tertiary.
+    return <span>{farm.exotic ? "Any tertiary" : "Any tertiary, any tuning"}</span>;
   }
-  return <MutedCell>None</MutedCell>;
+  return (
+    <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+      {farm.rolls.map((roll) => (
+        <span key={roll.tertiary} className="inline-flex items-center gap-1">
+          <Glyph stat={roll.tertiary} icons={icons} />
+          {STAT_LABELS[STAT_ORDER[roll.tertiary]]} tertiary
+          {farm.exotic ? null : roll.tuned === null ? (
+            <span className="text-muted-foreground">· any tuning</span>
+          ) : (
+            <span className="text-muted-foreground inline-flex items-center gap-1">
+              · tuned
+              {roll.tuned.map((t) => (
+                <Glyph key={t} stat={t} icons={icons} />
+              ))}
+            </span>
+          )}
+        </span>
+      ))}
+    </span>
+  );
 }
 
-/**
- * The Tuned cell for one roll to farm: which tuned stats a drop can have. When the build
- * sockets a directional tune there, it's shown on the stat it uses, like a theoretical
- * build; other tuned stats that also work follow.
- */
-function FarmTuning({
+function FarmLine({
   farm,
-  roll,
-  tune,
   icons,
+  exoticIcon,
 }: {
   farm: FarmPiece;
-  roll: FarmRoll;
-  tune: AppliedTuning | null;
   icons: StatIconMap;
+  exoticIcon?: string;
 }) {
-  const directional = tune?.kind === "directional" ? tune : null;
-  // An exotic's tuning is flexible: any +5 goes, so only the one socketed matters.
-  if (farm.exotic) {
-    return directional ? (
-      <TuningName
-        plus={directional.plus}
-        minus={directional.minus}
-        icons={icons}
-        title="An exotic's tuning is flexible: socket this +5 / −5"
-      />
-    ) : (
-      <MutedCell title="Any tuned stat works">Any</MutedCell>
-    );
-  }
-  if (roll.tuned === null) {
-    return (
-      <MutedCell title="Any tuned stat works">
-        Any{tune?.kind === "balanced" && ", Balanced"}
-      </MutedCell>
-    );
-  }
-  const shown = directional && roll.tuned.includes(directional.plus) ? directional : null;
-  const others = roll.tuned.filter((t) => t !== shown?.plus);
+  const slot = SLOT_LABELS[ARMOR_SLOTS[farm.slot]];
+  const title = farm.exotic
+    ? `${farm.exoticName ?? "Exotic"} · ${farm.archetype}`
+    : `${farm.archetype} ${slot.toLowerCase()}`;
+  const odds = farmOdds(farm);
+  // A truncated roll list is a lower bound: say so on the piece, not just globally.
+  const atLeast = farm.complete ? "" : "≥ ";
+  const oddsTitle = farm.exotic
+    ? `${atLeast}${odds.n} of the ${odds.of} possible tertiaries work (an exotic's tuning is flexible)`
+    : `${atLeast}${odds.n} of the ${odds.of} possible ${farm.archetype} rolls (tertiary × tuned stat) work`;
   return (
-    <span className="inline-flex items-center gap-2 whitespace-nowrap">
-      {shown && <TuningName plus={shown.plus} minus={shown.minus} icons={icons} />}
-      {others.length > 0 && (
-        <span className="text-muted-foreground inline-flex items-center gap-1 text-sm">
-          {shown ? "or" : null}
-          {others.map((t) =>
-            shown || others.length > 1 ? (
-              <Glyph key={t} stat={t} icons={icons} />
-            ) : (
-              <StatName key={t} stat={t} icons={icons} />
-            ),
-          )}
+    <div className="flex items-start gap-3">
+      {farm.exotic && exoticIcon ? (
+        <ArmorThumb icon={exoticIcon} alt={farm.exoticName} size={48} gearTier={5} />
+      ) : (
+        <span className="d2-brackets text-muted-foreground flex size-12 shrink-0 items-center justify-center bg-black/25 text-[10px] font-medium tracking-wider uppercase normal:normal-case normal:tracking-normal">
+          {slot === "Class Item" ? "Class" : slot}
+        </span>
+      )}
+      <div className="flex min-w-0 flex-1 flex-col gap-1 text-xs">
+        <div className="flex items-baseline justify-between gap-3">
+          <span className="truncate text-sm font-medium">{title}</span>
+          <span
+            className="text-muted-foreground shrink-0 tabular-nums"
+            title={oddsTitle + (farm.complete ? "" : " — listing them ran out of time, so more may")}
+          >
+            {atLeast}
+            {odds.n}/{odds.of} rolls
+          </span>
+        </div>
+        <span className="text-muted-foreground inline-flex items-center gap-1">
+          <Glyph stat={farm.primary} icons={icons} />
+          {STAT_LABELS[STAT_ORDER[farm.primary]]} 30 ·
+          <Glyph stat={farm.secondary} icons={icons} />
+          {STAT_LABELS[STAT_ORDER[farm.secondary]]} 25
+        </span>
+        <FarmRolls farm={farm} icons={icons} />
+      </div>
+    </div>
+  );
+}
+
+function PieceThumb({ piece, size }: { piece?: ArmorPiece; size: 32 | 40 }) {
+  if (!piece?.icon) {
+    return (
+      <span
+        className={cn("d2-brackets shrink-0 bg-black/25", size === 32 ? "size-8" : "size-10")}
+        aria-hidden
+      />
+    );
+  }
+  return (
+    <ArmorThumb
+      icon={piece.icon}
+      watermark={piece.watermark}
+      alt={piece.name}
+      size={size}
+      masterworked={isFullyMasterworked(piece)}
+      gearTier={armorPipTier(piece)}
+    />
+  );
+}
+
+/** A stat total with its change from the build as it is. */
+function StatWithDelta({ value, delta }: { value: number; delta: number }) {
+  return (
+    <span className="tabular-nums">
+      {value}
+      {delta !== 0 && (
+        <span className={cn("ml-0.5 text-xs", delta > 0 ? "text-positive" : "text-destructive")}>
+          {delta > 0 ? `+${delta}` : delta}
         </span>
       )}
     </span>
   );
 }
 
-/** One slot the option replaces: the archetype to farm, then each tertiary that works. */
-function FarmRows({
-  farm,
-  tune,
-  icons,
-  exotic,
-  setName,
-}: {
-  farm: FarmPiece;
-  tune: AppliedTuning | null;
-  icons: StatIconMap;
-  exotic?: { icon?: string; name: string };
-  setName?: string;
-}) {
-  const odds = farmOdds(farm);
-  // A truncated roll list is a lower bound: say so on the piece.
-  const atLeast = farm.complete ? "" : "≥ ";
-  const anyRoll = odds.n === odds.of;
+/** The tuning a build puts on a piece: "tuned +5 Weapons", "Balanced tuning", or none. */
+function TuningText({ tune, icons }: { tune: AppliedTuning | null; icons: StatIconMap }) {
+  if (!tune) return <span>no tuning mod</span>;
+  if (tune.kind === "balanced") return <span>Balanced tuning</span>;
   return (
-    <>
-      <RollIdentity
-        thumb={
-          <RollThumb
-            exotic={farm.exotic && exotic ? exotic : undefined}
-            primary={farm.primary}
-            icons={icons}
-          />
-        }
-        archetype={{ name: farm.archetype, primary: farm.primary, secondary: farm.secondary }}
-        icons={icons}
-        rows={anyRoll ? 1 : farm.rolls.length}
-      >
-        {farm.exotic && <span className="text-exotic truncate">{farm.exoticName ?? exotic?.name}</span>}
-        <span className="text-muted-foreground shrink-0">{SLOT_LABELS[ARMOR_SLOTS[farm.slot]]}</span>
-        {setName && <span className="text-muted-foreground truncate">{setName}</span>}
-        <span
-          className="text-muted-foreground shrink-0 tabular-nums"
-          title={
-            farm.exotic
-              ? `${atLeast}${odds.n} of the ${odds.of} possible tertiaries work (an exotic's tuning is flexible)`
-              : `${atLeast}${odds.n} of the ${odds.of} possible ${farm.archetype} rolls (tertiary × tuned stat) work`
-          }
-        >
-          {atLeast}
-          {odds.n}/{odds.of} rolls
-        </span>
-      </RollIdentity>
-      {anyRoll ? (
-        <>
-          <MutedCell title="Any tertiary works">Any</MutedCell>
-          <FarmTuning farm={farm} roll={{ tertiary: farm.rolls[0].tertiary, tuned: null }} tune={tune} icons={icons} />
-        </>
-      ) : (
-        farm.rolls.map((roll) => (
-          <Fragment key={roll.tertiary}>
-            <StatName stat={roll.tertiary} icons={icons} />
-            <FarmTuning farm={farm} roll={roll} tune={tune} icons={icons} />
-          </Fragment>
-        ))
-      )}
-    </>
+    <span className="inline-flex flex-wrap items-center gap-1">
+      tuned +5
+      <Glyph stat={tune.plus} icons={icons} />
+      {STAT_LABELS[STAT_ORDER[tune.plus]]}
+    </span>
   );
 }
 
-/** One way to reach the targets, as a card: each slot kept or farmed, in slot order. */
-function DreamOptionCard({
-  build,
-  option,
-  pieceMap,
-  icons,
-  exoticIcon,
-  setNames,
-  dimmed,
-}: {
-  build: OptimizerLoadout;
-  option: DreamOption;
-  pieceMap: Map<string, ArmorPiece>;
-  icons: StatIconMap;
-  exoticIcon?: string;
-  setNames: ReadonlyMap<number, string>;
-  dimmed: boolean;
-}) {
-  const { loadout, farm } = option;
-  const farmSlots = farm.map((f) => f.slot).sort((a, b) => a - b);
-  const exoticName = build.pieceIds.map((id) => pieceMap.get(id)).find((p) => p?.isExotic)?.name;
-  // With two or more replacements, only the first lists alternatives (dream.ts FarmPiece).
-  const pinnedNote =
-    farm.length > 1 && farm[0].rolls.length > 1
-      ? `The ${SLOT_LABELS[ARMOR_SLOTS[farm[0].slot]].toLowerCase()} lists every roll that works with the other ${farm.length === 2 ? "replacement" : "replacements"} exactly as shown.`
-      : null;
-
-  const rows: ReactNode[] = [];
-  for (let slot = 0; slot < ARMOR_SLOTS.length; slot++) {
-    const f = farm.find((x) => x.slot === slot);
-    if (f) {
-      rows.push(
-        <FarmRows
-          key={slot}
-          farm={f}
-          tune={loadout.tuning[slot]}
-          icons={icons}
-          exotic={exoticIcon ? { icon: exoticIcon, name: exoticName ?? "Exotic" } : undefined}
-          setName={f.setHash !== undefined ? setNames.get(f.setHash) : undefined}
-        />,
-      );
-      continue;
-    }
-    const piece = pieceMap.get(loadout.pieceIds[slot]);
-    rows.push(
-      <Fragment key={slot}>
-        <RollIdentity
-          thumb={<RollThumb owned={piece} icons={icons} />}
-          archetype={piece ? archetypeOf(piece) : undefined}
-          name={piece?.name ?? "Unknown piece"}
-          icons={icons}
-        >
-          {piece?.archetype && <span className="text-positive truncate">{piece.name}</span>}
-          <span className="text-muted-foreground shrink-0">{SLOT_LABELS[ARMOR_SLOTS[slot]]}</span>
-        </RollIdentity>
-        {piece?.archetype ? (
-          <StatName stat={tertiaryStatIndex(piece.baseStats)} icons={icons} />
-        ) : (
-          <MutedCell>—</MutedCell>
-        )}
-        <SocketedTuning tune={loadout.tuning[slot]} artifice={loadout.artifice[slot]} icons={icons} />
-      </Fragment>,
-    );
-  }
-
+/** One labelled part of a roll line: "Tertiary [icon] Class". */
+function RollPart({ label, stat, icons }: { label: string; stat: number; icons: StatIconMap }) {
   return (
-    <RollCard
-      dimmed={dimmed}
-      stats={<CardStats total={loadout.total} stats={loadout.stats} was={build} icons={icons} />}
-      meta={
-        <span className="text-muted-foreground">
-          {farm.length === 0
-            ? "Nothing to replace"
-            : `Replace ${farm.length}: ${farmSlots.map((s) => SLOT_LABELS[ARMOR_SLOTS[s]]).join(", ")}`}
-        </span>
-      }
-      footer={
-        <>
-          <ModList mods={modCounts(loadout)} icons={icons} />
-          {pinnedNote && <span className="text-muted-foreground text-xs">{pinnedNote}</span>}
-        </>
-      }
-    >
-      {rows}
-    </RollCard>
+    <span className="inline-flex items-center gap-1 whitespace-nowrap">
+      <span className="text-muted-foreground">{label}</span>
+      <Glyph stat={stat} icons={icons} />
+      {STAT_LABELS[STAT_ORDER[stat]]}
+    </span>
   );
 }
 
 /**
- * The dream build's ways to reach the targets, one card each (the easiest drop first):
- * every slot in order, kept as it is or with the roll to farm. A status line with a
- * sweeping bar shows while a search runs; a stale result stays up, dimmed.
+ * A piece's roll on one line: archetype · tertiary · tuned stat. An exotic's tuning is
+ * flexible, so for it the stat the build tunes (+5) is shown; Tier 1–4 pieces have no
+ * tuning socket, so no tuned part. Legacy pieces have no archetype roll: just the slot.
+ */
+function PieceRoll({
+  piece,
+  slot,
+  applied,
+  icons,
+}: {
+  piece: ArmorPiece;
+  slot: number;
+  /** The tuning the build applies to this piece. */
+  applied: AppliedTuning | null;
+  icons: StatIconMap;
+}) {
+  if (piece.archetype === undefined) {
+    return (
+      <span className="text-muted-foreground text-xs">{SLOT_LABELS[ARMOR_SLOTS[slot]]}</span>
+    );
+  }
+  const tertiary = tertiaryStatIndex(piece.baseStats);
+  let tuned: number | "balanced" | null = null;
+  if (piece.tunedStat !== undefined) {
+    if (!piece.isExotic) tuned = piece.tunedStat;
+    else if (applied?.kind === "directional") tuned = applied.plus;
+    else if (applied?.kind === "balanced") tuned = "balanced";
+  }
+  return (
+    <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs">
+      <span>{piece.archetype}</span>
+      <span className="text-muted-foreground" aria-hidden>·</span>
+      <RollPart label="Tertiary" stat={tertiary} icons={icons} />
+      {tuned !== null && (
+        <>
+          <span className="text-muted-foreground" aria-hidden>·</span>
+          {tuned === "balanced" ? (
+            <span className="whitespace-nowrap">
+              <span className="text-muted-foreground">Tuned</span> Balanced
+            </span>
+          ) : (
+            <RollPart label="Tuned" stat={tuned} icons={icons} />
+          )}
+        </>
+      )}
+    </span>
+  );
+}
+
+/** One piece as it is: icon, name, then its roll (archetype · tertiary · tuned). */
+function PieceCell({
+  piece,
+  slot,
+  applied,
+  icons,
+}: {
+  piece?: ArmorPiece;
+  slot: number;
+  applied: AppliedTuning | null;
+  icons: StatIconMap;
+}) {
+  return (
+    <div className="flex min-w-0 items-center gap-3">
+      <PieceThumb piece={piece} size={40} />
+      <div className="flex min-w-0 flex-col gap-1">
+        <span className="truncate text-sm">{piece?.name ?? "Unknown piece"}</span>
+        {piece && <PieceRoll piece={piece} slot={slot} applied={applied} icons={icons} />}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * The stat mods the shown build sockets to reach its targets (they can differ from the
+ * build as it was listed), e.g. "Mods +10 Health · +5 Melee"; "No stat mods" if none.
+ */
+function ModPlan({ loadout, icons }: { loadout: OptimizerLoadout; icons: StatIconMap }) {
+  const parts = STAT_DISPLAY_ORDER.map((key) => STAT_ORDER.indexOf(key)).filter(
+    (s) => loadout.modBonus[s] > 0,
+  );
+  return (
+    <span className="text-muted-foreground flex basis-full flex-wrap items-center gap-x-2 gap-y-1 text-xs font-normal">
+      {parts.length === 0 ? (
+        "No stat mods"
+      ) : (
+        <>
+          Mods
+          {parts.map((s) => (
+            <span key={s} className="text-foreground inline-flex items-center gap-1">
+              +{loadout.modBonus[s]}
+              <Glyph stat={s} icons={icons} />
+              {STAT_LABELS[STAT_ORDER[s]]}
+            </span>
+          ))}
+        </>
+      )}
+    </span>
+  );
+}
+
+/** Short label for an option switcher button: "Helmet → Skirmisher". */
+function optionLabel(option: DreamOption, setNames: ReadonlyMap<number, string>): string {
+  return option.farm
+    .map((f) => {
+      const what = f.exotic ? (f.exoticName ?? "Exotic") : f.archetype;
+      const set = f.setHash !== undefined ? setNames.get(f.setHash) : undefined;
+      return `${SLOT_LABELS[ARMOR_SLOTS[f.slot]]} → ${what}${set ? ` (${set})` : ""}`;
+    })
+    .join(", ");
+}
+
+type RowVerdict =
+  | { kind: "keep" }
+  | { kind: "replace"; farm: FarmPiece; tune: AppliedTuning | null }
+  | { kind: "pending" }
+  | { kind: "none" };
+
+/**
+ * The dream build as a side-by-side: each slot's current piece on the left and, on the
+ * right, "Keep" or the roll to farm in its place — for the option picked above the
+ * table (several ways to get there are usually found; the easiest drop first). A status
+ * line with a sweeping bar shows while a search runs; a stale result stays up, dimmed.
  */
 export function DreamComparison({
   build,
@@ -346,7 +348,24 @@ export function DreamComparison({
   exoticIcon?: string;
 }) {
   const { running, result } = state;
-  const options = result && result.newPieces !== null ? result.options : [];
+  // The picked option belongs to the result it was picked from; a new result starts at
+  // its best option.
+  const [picked, setPicked] = useState<{ result: DreamResult | null; index: number }>({
+    result: null,
+    index: 0,
+  });
+  const options = result?.options ?? [];
+  const index = picked.result === result && picked.index < options.length ? picked.index : 0;
+  const option: DreamOption | undefined = options[index];
+
+  const verdict = (slot: number): RowVerdict => {
+    if (!result) return running ? { kind: "pending" } : { kind: "none" };
+    if (result.newPieces === null) return { kind: "none" };
+    const farm = option?.farm.find((f) => f.slot === slot);
+    return farm
+      ? { kind: "replace", farm, tune: option!.loadout.tuning[slot] }
+      : { kind: "keep" };
+  };
 
   let note: string | null = null;
   if (state.failed && !running) {
@@ -367,6 +386,7 @@ export function DreamComparison({
       (result.capped ? " (The search ran out of time, so there may be more.)" : "");
   }
 
+  const shown = option?.loadout;
   return (
     <div className="flex min-h-0 flex-col gap-4">
       <div className="flex flex-col gap-2">
@@ -383,23 +403,121 @@ export function DreamComparison({
         <WorkingBar running={running} />
       </div>
 
-      {!result && running && (
-        <span className="bg-foreground/10 h-40 w-full animate-pulse motion-reduce:animate-none" aria-hidden />
+      {options.length > 1 && (
+        <div
+          className={cn("flex flex-wrap gap-2 transition-opacity", running && "pointer-events-none opacity-50")}
+          role="group"
+          aria-label="Ways to get there"
+        >
+          {options.map((o, i) => (
+            <Button
+              key={o.loadout.pieceIds.join("|")}
+              variant="outline"
+              size="sm"
+              aria-pressed={i === index}
+              onClick={() => setPicked({ result, index: i })}
+              className="aria-pressed:bg-foreground/10 aria-pressed:[--line-alpha:1.8]"
+            >
+              <span className="text-muted-foreground tabular-nums">{i + 1}</span>
+              {optionLabel(o, setNames)}
+            </Button>
+          ))}
+        </div>
       )}
-      <div className={cn("flex flex-col gap-3", running && "pointer-events-none")}>
-        {options.map((option) => (
-          <DreamOptionCard
-            key={option.loadout.pieceIds.join("|")}
-            build={build}
-            option={option}
-            pieceMap={pieceMap}
-            icons={statIcons}
-            exoticIcon={exoticIcon}
-            setNames={setNames}
-            dimmed={running}
-          />
-        ))}
+
+      {/* Phones: Current gets the wider column (a Keep is short), and a Replace card drops
+          to its own full-width line under the piece it replaces. */}
+      <div
+        className={cn(
+          "grid grid-cols-[minmax(0,1fr)_1.25rem_minmax(0,1.4fr)] items-center gap-x-3 gap-y-3 transition-opacity max-md:grid-cols-[minmax(0,1.5fr)_1rem_minmax(0,1fr)]",
+          running && result && "pointer-events-none opacity-50",
+        )}
+      >
+        <span className="d2-label">Current</span>
+        <span aria-hidden />
+        <span className="d2-label">Should be</span>
+        {build.pieceIds.map((id, slot) => {
+          const piece = pieceMap.get(id);
+          const v = verdict(slot);
+          return (
+            <Fragment key={slot}>
+              <PieceCell
+                piece={piece}
+                slot={slot}
+                applied={build.tuning[slot]}
+                icons={statIcons}
+              />
+              <span
+                className={cn("text-muted-foreground flex justify-center", v.kind === "replace" && "max-md:hidden")}
+                aria-hidden
+              >
+                {v.kind === "replace" && <HugeiconsIcon icon={ArrowRight02Icon} className="text-foreground size-4" />}
+              </span>
+              {v.kind === "keep" && (
+                <div className="flex items-center gap-3">
+                  <span className="opacity-40">
+                    <PieceThumb piece={piece} size={40} />
+                  </span>
+                  <span className="text-muted-foreground text-xs font-medium tracking-wider uppercase normal:normal-case normal:tracking-normal">
+                    Keep
+                  </span>
+                </div>
+              )}
+              {v.kind === "replace" && (
+                <div className="border-positive/40 bg-positive/8 flex flex-col gap-2 border p-2 max-md:col-span-3">
+                  <span className="text-positive text-xs font-medium tracking-wider uppercase normal:normal-case normal:tracking-normal">
+                    Replace
+                  </span>
+                  <FarmLine farm={v.farm} icons={statIcons} exoticIcon={exoticIcon} />
+                  {v.farm.setHash !== undefined && (
+                    <span className="text-xs">
+                      <span className="text-muted-foreground">From </span>
+                      {setNames.get(v.farm.setHash) ?? "the required set"}
+                    </span>
+                  )}
+                  {option && option.farm.length > 1 && (
+                    <span className="text-muted-foreground text-xs">
+                      {v.farm.fixed
+                        ? "Farm exactly this roll: the other replacement's choices assume it."
+                        : "Any of these works with the other replacement exactly as listed."}
+                    </span>
+                  )}
+                  <span className="border-foreground/8 flex flex-wrap items-center gap-1 border-t pt-2 text-xs">
+                    Socket:
+                    <TuningText tune={v.tune} icons={statIcons} />
+                  </span>
+                </div>
+              )}
+              {v.kind === "pending" && (
+                <span className="bg-foreground/10 h-10 w-full animate-pulse motion-reduce:animate-none" aria-hidden />
+              )}
+              {v.kind === "none" && <span className="text-muted-foreground text-xs">—</span>}
+            </Fragment>
+          );
+        })}
       </div>
+
+      {shown && (
+        <div
+          className={cn(
+            "border-foreground/8 flex flex-wrap items-center gap-x-5 gap-y-1 border-t pt-3 text-sm font-medium",
+            running && "opacity-50",
+          )}
+        >
+          <span className="d2-label mr-1">Result</span>
+          <StatWithDelta value={shown.total} delta={shown.total - build.total} />
+          {STAT_DISPLAY_ORDER.map((key) => {
+            const i = STAT_ORDER.indexOf(key);
+            return (
+              <span key={key} className="flex items-center gap-1">
+                <StatGlyph src={statIcons[key]} label={STAT_LABELS[key]} className="size-4" plain />
+                <StatWithDelta value={shown.stats[i]} delta={shown.stats[i] - build.stats[i]} />
+              </span>
+            );
+          })}
+          <ModPlan loadout={shown} icons={statIcons} />
+        </div>
+      )}
     </div>
   );
 }

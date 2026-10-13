@@ -10,8 +10,8 @@ import { STAT_DISPLAY_ORDER, STAT_LABELS, STAT_ORDER, type StatIconMap } from "@
 import { cn } from "@/lib/utils";
 
 /**
- * The card theoretical builds and Dream build options share: the build's stats, a line
- * about what to farm, one row per slot (archetype, tertiary, tuned stat), and its mods.
+ * A theoretical build's card: its stats, a line about what to farm, one row per slot
+ * (archetype, tertiary, tuned stat), and its mods.
  */
 
 const STAT_COLS = STAT_DISPLAY_ORDER.map((key) => ({ key, i: STAT_ORDER.indexOf(key) }));
@@ -32,11 +32,7 @@ export function StatName({ stat, icons }: { stat: number; icons: StatIconMap }) 
   );
 }
 
-/**
- * A directional tuning: the +5 stat by name, the −5 stat as a small glyph after it.
- * Without `minus`, just the tuned stat (Dream build's kept pieces: the user found the
- * −5 there confusing).
- */
+/** A directional tuning: the +5 stat by name, the −5 stat as a small glyph after it. */
 export function TuningName({
   plus,
   minus,
@@ -44,7 +40,7 @@ export function TuningName({
   title,
 }: {
   plus: number;
-  minus?: number;
+  minus: number;
   icons: StatIconMap;
   title?: string;
 }) {
@@ -52,21 +48,14 @@ export function TuningName({
   return (
     <span
       className="inline-flex items-center gap-1 text-sm whitespace-nowrap tabular-nums"
-      title={
-        title ??
-        (minus === undefined
-          ? `Tuned +5 ${plusLabel}`
-          : `Tuned stat ${plusLabel}: +5 ${plusLabel}, −5 ${STAT_LABELS[STAT_ORDER[minus]]}`)
-      }
+      title={title ?? `Tuned stat ${plusLabel}: +5 ${plusLabel}, −5 ${STAT_LABELS[STAT_ORDER[minus]]}`}
     >
       <Glyph stat={plus} icons={icons} />
       {plusLabel}
-      {minus !== undefined && (
-        <span className="text-muted-foreground inline-flex items-center gap-0.5 text-xs">
-          −5
-          <Glyph stat={minus} icons={icons} className="size-3.5" />
-        </span>
-      )}
+      <span className="text-muted-foreground inline-flex items-center gap-0.5 text-xs">
+        −5
+        <Glyph stat={minus} icons={icons} className="size-3.5" />
+      </span>
     </span>
   );
 }
@@ -204,19 +193,16 @@ export function RollCard({
   stats,
   meta,
   footer,
-  dimmed = false,
   children,
 }: {
   stats: ReactNode;
   /** The line under the stats; null = none. */
   meta: ReactNode;
   footer: ReactNode;
-  /** A newer search is running: the card stays up, faded. */
-  dimmed?: boolean;
   children: ReactNode;
 }) {
   return (
-    <div className={cn(BUILD_CARD_LIFT_CLASS, "@container/build transition-opacity", dimmed && "opacity-50")}>
+    <div className={cn(BUILD_CARD_LIFT_CLASS, "@container/build")}>
       <div className="overflow-hidden rounded-none normal:rounded-[19px]">
         <div className="flex flex-col gap-2 p-2 normal:bg-popover normal:p-3">
           {stats}
@@ -238,17 +224,15 @@ export function RollCard({
   );
 }
 
-/** The header's total and six stats; with `was`, each shows its change from that build. */
+/** The header's total and six stats. */
 export function CardStats({
   total,
   stats,
-  was,
   short,
   icons,
 }: {
   total: number;
   stats: number[];
-  was?: { total: number; stats: number[] };
   /** Points each stat is short of its target (a close build): those show in yellow. */
   short?: number[];
   icons: StatIconMap;
@@ -257,26 +241,15 @@ export function CardStats({
     <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
       <span className="text-base font-medium tabular-nums">
         {total}
-        {was && <Delta value={total - was.total} />}
       </span>
       <div className="flex flex-wrap items-center gap-x-8 gap-y-1 text-base font-medium tabular-nums">
         {STAT_COLS.map(({ key, i }) => (
           <span key={key} className={cn("flex items-center gap-1", short?.[i] && "text-warning")}>
             <StatGlyph src={icons[key]} label={STAT_LABELS[key]} className="size-5" plain tint />
             {stats[i]}
-            {was && <Delta value={stats[i] - was.stats[i]} />}
           </span>
         ))}
       </div>
     </div>
-  );
-}
-
-function Delta({ value }: { value: number }) {
-  if (!value) return null;
-  return (
-    <span className={cn("ml-0.5 text-xs", value > 0 ? "text-positive" : "text-destructive")}>
-      {value > 0 ? `+${value}` : value}
-    </span>
   );
 }
