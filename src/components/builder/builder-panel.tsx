@@ -14,7 +14,7 @@ import { useArmory } from "@/lib/armory/use-armory";
 import { useManifest } from "@/lib/manifest/use-manifest";
 import { useOptimizer } from "@/lib/optimizer/use-optimizer";
 import { useSmoothedProgress } from "@/lib/use-smoothed-progress";
-import { availableSets } from "@/lib/armory/sets";
+import { availableSets, makeableSetReqs } from "@/lib/armory/sets";
 import {
   DEFAULT_SET_FILTERS,
   type SetFilters,
@@ -67,12 +67,16 @@ import { SettingRow } from "@/components/builder/setting-row";
 import { PowerRangeControls } from "@/components/builder/power-range-controls";
 import { useBuilderSearchInputs } from "@/components/builder/use-builder-search-inputs";
 import { BuildsSurface } from "@/components/builder/builds-surface";
-import type { BuildsColumnContentProps } from "@/components/builder/builds-column-content";
+import type {
+  BuildsColumnContentProps,
+  BuildsMode,
+} from "@/components/builder/builds-column-content";
 import { SetBonusesSection } from "@/components/builder/set-bonuses-section";
 import { dreamInputForBuild } from "@/lib/optimizer/dream-input";
 
 import type { OptimizerLoadout } from "@/lib/optimizer/types";
 import type { DreamInput } from "@/lib/optimizer/dream";
+import { useTheoryBuilds } from "@/components/builder/use-theory-builds";
 import {
   DEFAULT_POWER_RANGE,
   forcesDreamersBond,
@@ -172,6 +176,13 @@ export function BuilderPanel({
    */
   const [dreamOpen, setDreamOpen] = useState(false);
   const [dreamBuild, setDreamBuild] = useState<OptimizerLoadout | null>(null);
+  /**
+   * Actual builds (owned armor) or theoretical ones (the Tier-5 rolls that would reach
+   * the targets). Targets, major mods and fragments are shared; the theoretical tab
+   * hides the settings it ignores.
+   */
+  const [buildsMode, setBuildsMode] = useState<BuildsMode>("actual");
+  const theoretical = buildsMode === "theoretical";
   // Held by name, not index: the exotics list is rebuilt (and re-indexed) whenever a
   // pool toggle changes, and an index would slide onto whichever exotic took its place.
   const [selectedExoticName, setSelectedExoticName] = useState<string | null>(
@@ -271,18 +282,14 @@ export function BuilderPanel({
     [sets],
   );
 
-  // Set requirements narrowed to sets the player owns for this class: a restored (or
-  // class-corrected) requirement for a set they no longer own would make every build
-  // infeasible. The optimizer and DIM/export read this pruned view; persistence and
-  // "Load in builder" keep the raw `setReqs` so turning a pool toggle off can't
-  // permanently drop a requirement for a set that only exists on the wider pool.
-  const ownedSetReqs = useMemo(() => {
-    if (!setMap.size) return setReqs;
-    const kept = Object.entries(setReqs).filter(([h]) => setMap.has(Number(h)));
-    return kept.length === Object.keys(setReqs).length
-      ? setReqs
-      : (Object.fromEntries(kept) as Record<number, 2 | 4>);
-  }, [setReqs, setMap]);
+  // Set requirements narrowed to bonuses the player's pieces for this class can make: a
+  // restored (or class-corrected) requirement for a set they no longer own, or one picked
+  // on the Theoretical Builds tab for a set they own too few pieces of, would make every
+  // build infeasible. A 4pc with 2–3 owned pieces becomes the 2pc they can make. This is
+  // what the Builds tab searches with and shows; persistence and "Load in builder" keep
+  // the raw `setReqs` so turning a pool toggle off (or switching tabs) can't
+  // permanently drop a requirement.
+  const ownedSetReqs = useMemo(() => makeableSetReqs(setReqs, setMap), [setReqs, setMap]);
 
   // What persistence and "Load in builder" store: the raw map, capped at what
   // parseBuilderSnapshot accepts. Requirements for sets that left the pool are
@@ -835,8 +842,34 @@ export function BuilderPanel({
 
   useOptimizerWarmup();
   // Auto-search (see useAutoSearch): `runOptimizer` is memoized on exactly the build
-  // inputs, so its identity changing is the "something changed" signal.
-  useAutoSearch(searchReady && classType !== null, runOptimizer);
+  // inputs, so its identity changing is the "something changed" signal. Paused on the
+  // theoretical tab; coming back searches at once.
+  useAutoSearch(searchReady && classType !== null && !theoretical, runOptimizer);
+
+  const theory = useTheoryBuilds({
+    active: theoretical,
+    searchReady,
+    manifest,
+    classType,
+    pool,
+    classPieces,
+    archetypes,
+    setReqs,
+    targets,
+    major,
+    fragmentBonus,
+    exotic: {
+      option: selectedExoticOption ?? null,
+      classItemHash: selectedClassItemHash,
+      spiritPerks,
+      exoticPerks,
+    },
+  });
+  // What the two tabs show differently in the settings, picked once: Theoretical Builds
+  // plans what to farm, so it lists every set (owned or not) and its own slider maxima.
+  const settingsView = theoretical
+    ? { sets: theory.sets, setMap: theory.setMap, setReqs, ceilings: theory.ceilings }
+    : { sets, setMap, setReqs: ownedSetReqs, ceilings: ceilingsView };
 
   // The dream query for one build at the modal's targets (see dreamInputForBuild).
   const makeDreamInput = useCallback(
@@ -938,11 +971,15 @@ export function BuilderPanel({
     [],
   );
 
+  const visibleSets = settingsView.setMap;
   const toggleSet = useCallback(
     (setHash: number, count: 2 | 4) => {
       setSetReqs((prev) => {
+        // Toggles act on the requirements as shown (on Builds, the ones the owned pieces
+        // make — see ownedSetReqs).
+        const shown = theoretical ? prev : makeableSetReqs(prev, visibleSets);
         const next = { ...prev };
-        if (next[setHash] === count) {
+        if (shown[setHash] === count) {
           delete next[setHash];
           return next;
         }
@@ -953,14 +990,14 @@ export function BuilderPanel({
         const keys = Object.keys(next);
         if (keys.length > MAX_SET_BONUSES) {
           const evict =
-            keys.find((h) => Number(h) !== setHash && !setMap.has(Number(h))) ??
+            keys.find((h) => Number(h) !== setHash && !visibleSets.has(Number(h))) ??
             keys.find((h) => Number(h) !== setHash);
           if (evict !== undefined) delete next[Number(evict)];
         }
         return next;
       });
     },
-    [setMap],
+    [visibleSets, theoretical],
   );
 
   const onMajorChange = useCallback((v: string) => setMajor(Number(v)), []);
@@ -1004,6 +1041,9 @@ export function BuilderPanel({
 
   const buildsProps: BuildsColumnContentProps = useMemo(
     () => ({
+      mode: buildsMode,
+      onModeChange: setBuildsMode,
+      theory,
       ready: searchReady,
       provisional,
       showLoading,
@@ -1029,6 +1069,8 @@ export function BuilderPanel({
       onDream: openDream,
     }),
     [
+      buildsMode,
+      theory,
       searchReady,
       provisional,
       showLoading,
@@ -1091,7 +1133,7 @@ export function BuilderPanel({
                       index={i}
                       icon={statIcons[key]}
                       value={targets[i]}
-                      ceilingsView={ceilingsView}
+                      ceilingsView={settingsView.ceilings}
                       onChange={setTarget}
                     />
                   );
@@ -1133,14 +1175,15 @@ export function BuilderPanel({
 
             <Section title="Set bonuses">
               <SetBonusesSection
-                sets={sets}
-                setReqs={setReqs}
+                sets={settingsView.sets}
+                setReqs={settingsView.setReqs}
                 onToggleSet={toggleSet}
                 onReset={resetSetReqs}
                 pinnedSets={pinnedSets}
                 onTogglePin={togglePinnedSet}
                 setFilters={setFilters}
                 onSetMinOwnedChange={setSetMinOwned}
+                planning={theoretical}
                 pieces={pool}
                 manifest={manifest}
                 classType={classType}
@@ -1165,46 +1208,50 @@ export function BuilderPanel({
               )}
             </Section>
 
-            <Section
-              title="Advanced settings"
-              trailing={<SectionReset onClick={resetAdvanced} />}
-            >
-              <div className="flex flex-col gap-4">
-                <SettingRow
-                  checkbox
-                  checked={useBalancedTuning}
-                  onCheckedChange={setUseBalancedTuning}
-                  title="Use balanced tuning mods"
-                  description="When off, builds are searched without the Balanced (+1 to off-stats) tune. Directional tuning stays available."
-                />
-                <SettingRow
-                  checkbox
-                  checked={useLegacyExotics}
-                  onCheckedChange={setUseLegacyExotics}
-                  title="Legacy exotics"
-                  description="Include Armor 2.0 exotics"
-                />
-                <SettingRow
-                  checkbox
-                  checked={useLowerTierArmor}
-                  onCheckedChange={setUseLowerTierArmor}
-                  title="Lower tier armor"
-                  description="Include Tier 1–4 Armor 3.0 legendaries. They can't be tuned, but they still count toward set bonuses."
-                />
-              </div>
-            </Section>
-            <Section
-              title="Underlight settings"
-              trailing={<SectionReset onClick={resetPowerRange} />}
-            >
-              <PowerRangeControls
-                value={powerRange}
-                onChange={onPowerRangeChange}
-                slotPieces={powerSlotPieces}
-                weaponPlan={weaponPlan}
-                dreamersItemName={dreamersClassItemName(classType ?? 2)}
-              />
-            </Section>
+            {!theoretical && (
+              <>
+                <Section
+                  title="Advanced settings"
+                  trailing={<SectionReset onClick={resetAdvanced} />}
+                >
+                  <div className="flex flex-col gap-4">
+                    <SettingRow
+                      checkbox
+                      checked={useBalancedTuning}
+                      onCheckedChange={setUseBalancedTuning}
+                      title="Use balanced tuning mods"
+                      description="When off, builds are searched without the Balanced (+1 to off-stats) tune. Directional tuning stays available."
+                    />
+                    <SettingRow
+                      checkbox
+                      checked={useLegacyExotics}
+                      onCheckedChange={setUseLegacyExotics}
+                      title="Legacy exotics"
+                      description="Include Armor 2.0 exotics"
+                    />
+                    <SettingRow
+                      checkbox
+                      checked={useLowerTierArmor}
+                      onCheckedChange={setUseLowerTierArmor}
+                      title="Lower tier armor"
+                      description="Include Tier 1–4 Armor 3.0 legendaries. They can't be tuned, but they still count toward set bonuses."
+                    />
+                  </div>
+                </Section>
+                <Section
+                  title="Underlight settings"
+                  trailing={<SectionReset onClick={resetPowerRange} />}
+                >
+                  <PowerRangeControls
+                    value={powerRange}
+                    onChange={onPowerRangeChange}
+                    slotPieces={powerSlotPieces}
+                    weaponPlan={weaponPlan}
+                    dreamersItemName={dreamersClassItemName(classType ?? 2)}
+                  />
+                </Section>
+              </>
+            )}
           </>
         )}
 

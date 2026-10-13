@@ -44,6 +44,7 @@ export const SetListControls = memo(function SetListControls({
   onSortChange,
   filters,
   onMinOwnedChange,
+  planning,
   onReset,
 }: {
   count: number;
@@ -51,6 +52,8 @@ export const SetListControls = memo(function SetListControls({
   onSortChange: (key: SetSortKey) => void;
   filters: SetFilters;
   onMinOwnedChange: (minOwned: SetMinOwned) => void;
+  /** Planning what to farm: every set is listed, so the owned-count filter is hidden. */
+  planning: boolean;
   onReset: () => void;
 }) {
   const activeFilters = hasActiveSetFilters(filters);
@@ -92,50 +95,52 @@ export const SetListControls = memo(function SetListControls({
           </DropdownMenuContent>
         </DropdownMenu>
 
-        <Popover>
-          <TooltipLabel label="Armor set list settings">
-            <PopoverTrigger
-              aria-label="Armor set list settings"
-              data-active={activeFilters || undefined}
-              render={
-                <Button
-                  variant="ghost"
-                  size="icon-xs"
-                  className={cn(
-                    "text-foreground/90 hover:text-foreground [&_svg:not([class*='size-'])]:size-4",
-                    activeFilters && "text-power hover:text-power",
-                  )}
-                />
-              }
+        {!planning && (
+          <Popover>
+            <TooltipLabel label="Armor set list settings">
+              <PopoverTrigger
+                aria-label="Armor set list settings"
+                data-active={activeFilters || undefined}
+                render={
+                  <Button
+                    variant="ghost"
+                    size="icon-xs"
+                    className={cn(
+                      "text-foreground/90 hover:text-foreground [&_svg:not([class*='size-'])]:size-4",
+                      activeFilters && "text-power hover:text-power",
+                    )}
+                  />
+                }
+              >
+                <HugeiconsIcon icon={FilterIcon} aria-hidden />
+              </PopoverTrigger>
+            </TooltipLabel>
+            {/* Figma 18:6255 — "Select Menu": titled header, then a checkbox list. */}
+            <PopoverContent
+              align="end"
+              className="w-auto max-w-[calc(100vw-1rem)] gap-0 overflow-hidden p-0"
             >
-              <HugeiconsIcon icon={FilterIcon} aria-hidden />
-            </PopoverTrigger>
-          </TooltipLabel>
-          {/* Figma 18:6255 — "Select Menu": titled header, then a checkbox list. */}
-          <PopoverContent
-            align="end"
-            className="w-auto max-w-[calc(100vw-1rem)] gap-0 overflow-hidden p-0"
-          >
-            <PopoverTitle className="text-text-secondary border-b border-foreground/10 px-3 py-2 text-sm font-medium">
-              Filter sets
-            </PopoverTitle>
-            <div className="flex flex-col gap-3 p-3">
-              {/* Both boxes read one threshold, so hiding under 4 also ticks "under 2". */}
-              <SetListSettingRow
-                checked={filters.minOwned >= 2}
-                onCheckedChange={(checked) => onMinOwnedChange(checked ? 2 : 0)}
-              >
-                Hide armor sets I have less than 2 pieces for
-              </SetListSettingRow>
-              <SetListSettingRow
-                checked={filters.minOwned >= 4}
-                onCheckedChange={(checked) => onMinOwnedChange(checked ? 4 : 2)}
-              >
-                Hide armor sets I have less than 4 pieces for
-              </SetListSettingRow>
-            </div>
-          </PopoverContent>
-        </Popover>
+              <PopoverTitle className="text-text-secondary border-b border-foreground/10 px-3 py-2 text-sm font-medium">
+                Filter sets
+              </PopoverTitle>
+              <div className="flex flex-col gap-3 p-3">
+                {/* Both boxes read one threshold, so hiding under 4 also ticks "under 2". */}
+                <SetListSettingRow
+                  checked={filters.minOwned >= 2}
+                  onCheckedChange={(checked) => onMinOwnedChange(checked ? 2 : 0)}
+                >
+                  Hide armor sets I have less than 2 pieces for
+                </SetListSettingRow>
+                <SetListSettingRow
+                  checked={filters.minOwned >= 4}
+                  onCheckedChange={(checked) => onMinOwnedChange(checked ? 4 : 2)}
+                >
+                  Hide armor sets I have less than 4 pieces for
+                </SetListSettingRow>
+              </div>
+            </PopoverContent>
+          </Popover>
+        )}
       </div>
     </div>
   );

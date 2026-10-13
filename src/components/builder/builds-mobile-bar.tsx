@@ -3,19 +3,13 @@
 import { HugeiconsIcon } from "@hugeicons/react";
 import { ArrowUp01Icon } from "@hugeicons/core-free-icons";
 
-import {
-  getBuildsStatusLabel,
-  getBuildsViewState,
-} from "@/components/builder/builds-column-content";
-import type { OptimizerOutput } from "@/lib/optimizer/types";
+import type { BuildsHeader } from "@/components/builder/builds-column-content";
 import { useStoreValue, type ValueStore } from "@/lib/value-store";
 import { cn } from "@/lib/utils";
 
 export interface BuildsMobileBarProps {
-  ready: boolean;
-  showLoading: boolean;
-  running: boolean;
-  result: OptimizerOutput | null;
+  /** The open tab's header, as the builds column shows it (see buildsHeader). */
+  header: BuildsHeader;
   displayedProgress: ValueStore<number>;
   open: boolean;
   onOpen: () => void;
@@ -60,18 +54,13 @@ function publishBottomInset(el: HTMLDivElement) {
 }
 
 export function BuildsMobileBar({
-  ready,
-  showLoading,
-  running,
-  result,
+  header,
   displayedProgress: progressStore,
   open,
   onOpen,
 }: BuildsMobileBarProps) {
-  if (!ready) return null;
-
-  const state = getBuildsViewState({ ready, showLoading, result });
-  const statusLabel = getBuildsStatusLabel({ ready, showLoading, result });
+  const { state, label, title, progress, busy } = header;
+  if (state === "not-ready") return null;
 
   return (
     <div
@@ -94,13 +83,13 @@ export function BuildsMobileBar({
               : "fine-pointer:border-foreground/25",
         )}
       >
-        {state === "searching" && (
+        {progress && (
           <ProgressFill
             store={progressStore}
             className="bg-black/30 absolute inset-x-0 top-0 hidden h-[2px] overflow-hidden fine-pointer:block"
           />
         )}
-        {state === "searching" && (
+        {progress && (
           <ProgressFill
             store={progressStore}
             className="bg-black/30 h-0.5 w-full overflow-hidden rounded-none normal:rounded-full fine-pointer:hidden"
@@ -109,13 +98,13 @@ export function BuildsMobileBar({
         <span className="flex items-center gap-3">
           <span className="min-w-0 flex-1">
             <span className="fine-pointer:text-base block text-sm font-medium fine-pointer:font-semibold">
-              Builds
+              {title}
             </span>
             <span className="text-muted-foreground block truncate text-xs">
-              {statusLabel}
+              {label}
             </span>
           </span>
-          {running && state === "searching" && (
+          {busy && progress && (
             <span className="text-muted-foreground shrink-0 text-xs">Running</span>
           )}
           <HugeiconsIcon icon={ArrowUp01Icon}

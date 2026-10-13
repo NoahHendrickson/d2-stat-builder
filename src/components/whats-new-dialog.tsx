@@ -16,33 +16,18 @@ import { useArmory } from "@/lib/armory/use-armory";
 import { useSession } from "@/lib/auth/use-session";
 import { loadingView } from "@/lib/loading/progress";
 import { useManifest } from "@/lib/manifest/use-manifest";
+import { seenFlag } from "@/lib/seen-flag";
 
 /**
  * Bump for the next release's notes: anyone who dismissed an older one sees the new
  * one once.
  */
 const RELEASE_ID = "2026-10-sidebar";
-const SEEN_KEY = "stat-builder:whats-new-seen";
+const thisRelease = seenFlag("stat-builder:whats-new-seen", RELEASE_ID);
 const WHATS_NEW_HASH = "#whats-new";
 const VIDEO_ID = "3u1CGhr0BAE";
 /** The loading overlay's fade is 200ms; open after it so the dialog isn't drawn under it. */
 const OPEN_DELAY_MS = 300;
-
-function seenThisRelease(): boolean {
-  try {
-    return localStorage.getItem(SEEN_KEY) === RELEASE_ID;
-  } catch {
-    return false;
-  }
-}
-
-function markSeen(): void {
-  try {
-    localStorage.setItem(SEEN_KEY, RELEASE_ID);
-  } catch {
-    // Best-effort: in a privacy mode it just shows again next visit.
-  }
-}
 
 /**
  * The release notes, once per browser per release. Waits for the startup loader to
@@ -68,7 +53,7 @@ export function WhatsNewDialog() {
 
   useEffect(() => {
     // A #whats-new link shows it again, seen or not.
-    if (!ready || (seenThisRelease() && window.location.hash !== WHATS_NEW_HASH)) return;
+    if (!ready || (thisRelease.seen() && window.location.hash !== WHATS_NEW_HASH)) return;
     const timer = setTimeout(() => setOpen(true), OPEN_DELAY_MS);
     return () => clearTimeout(timer);
   }, [ready]);
@@ -79,7 +64,7 @@ export function WhatsNewDialog() {
       onOpenChange={(next) => {
         setOpen(next);
         if (next) return;
-        markSeen();
+        thisRelease.markSeen();
         if (window.location.hash === WHATS_NEW_HASH) {
           history.replaceState(history.state, "", window.location.pathname + window.location.search);
         }

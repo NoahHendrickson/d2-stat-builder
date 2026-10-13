@@ -41,12 +41,6 @@ export const LOADOUT_SORT_OPTIONS: readonly {
   { key: "cost", label: "Upgrade cost" },
 ];
 
-export function loadoutSortLabel(key: LoadoutSortKey): string {
-  if (key === "total") return "Total";
-  if (key === "cost") return "Upgrade cost";
-  return STAT_LABELS[key];
-}
-
 /** A build's masterwork-cost score (see materialScore in masterwork.ts). Null = unknown. */
 export type LoadoutCostFn = (loadout: OptimizerLoadout) => number | null;
 

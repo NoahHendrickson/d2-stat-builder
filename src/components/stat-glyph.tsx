@@ -4,13 +4,34 @@ import { TooltipLabel } from "@/components/ui/tooltip";
 import { BUNGIE_IMAGE_BASE } from "@/lib/bungie/constants";
 import { cn } from "@/lib/utils";
 
+/**
+ * Bungie's stat glyphs are white at ~70% alpha. As a mask filled with the text colour,
+ * stacked three times (each layer covers what's left: 1 − 0.3³ ≈ 97%), the glyph comes
+ * out solid in its label's colour and opacity.
+ */
+function tintStyle(url: string): React.CSSProperties {
+  const image = `url(${url}), url(${url}), url(${url})`;
+  return {
+    maskImage: image,
+    WebkitMaskImage: image,
+    maskSize: "contain",
+    WebkitMaskSize: "contain",
+    maskRepeat: "no-repeat",
+    WebkitMaskRepeat: "no-repeat",
+    maskPosition: "center",
+    WebkitMaskPosition: "center",
+  };
+}
+
 /** A 16px Bungie stat (or plug) icon with a tooltip, or an empty square without `src`. */
 export function StatGlyph({
   src,
   label,
   className,
   invert = true,
-  plain = false,
+  plain: plainProp = false,
+  tint = false,
+  decorative = false,
 }: {
   src?: string;
   label: string;
@@ -18,7 +39,15 @@ export function StatGlyph({
   invert?: boolean;
   /** Skip the tooltip root — used in collapsed row headers. */
   plain?: boolean;
+  /** Draw in the text colour at full strength, to match the label beside it. */
+  tint?: boolean;
+  /**
+   * A visible label sits right beside it: no tooltip, tab stop or accessible name
+   * (screen readers would read the stat twice). Implies `plain`.
+   */
+  decorative?: boolean;
 }) {
+  const plain = plainProp || decorative;
   if (!src)
     return (
       <span
@@ -26,14 +55,28 @@ export function StatGlyph({
         aria-hidden
       />
     );
-  const img = (
+  const url = `${BUNGIE_IMAGE_BASE}${src}`;
+  // A lone glyph names its stat (title, and no tab stop without a tooltip to open).
+  const shared = {
+    "aria-hidden": decorative || undefined,
+    title: plain && !decorative ? label : undefined,
+    tabIndex: plain ? undefined : 0,
+  };
+  const glyph = tint ? (
+    <span
+      {...shared}
+      role={decorative ? undefined : "img"}
+      aria-label={decorative ? undefined : label}
+      className={cn("inline-block size-4 shrink-0 bg-current", className)}
+      style={tintStyle(url)}
+    />
+  ) : (
     // Tiny Bungie glyphs: skip next/image so collapsed rows don't pay optimizer + tooltip cost.
     // eslint-disable-next-line @next/next/no-img-element
     <img
-      src={`${BUNGIE_IMAGE_BASE}${src}`}
-      alt={label}
-      title={plain ? label : undefined}
-      tabIndex={plain ? undefined : 0}
+      {...shared}
+      src={url}
+      alt={decorative ? "" : label}
       width={16}
       height={16}
       decoding="async"
@@ -44,6 +87,5 @@ export function StatGlyph({
       )}
     />
   );
-  if (plain) return img;
-  return <TooltipLabel label={label}>{img}</TooltipLabel>;
+  return plain ? glyph : <TooltipLabel label={label}>{glyph}</TooltipLabel>;
 }

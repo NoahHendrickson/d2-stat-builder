@@ -3,7 +3,6 @@ import type { OptimizerLoadout } from "../optimizer/types";
 import {
   DEFAULT_LOADOUT_SORT,
   LOADOUT_SORT_OPTIONS,
-  loadoutSortLabel,
   sortLoadouts,
   type LoadoutSortState,
 } from "./sort-loadouts";
@@ -69,9 +68,8 @@ test("sort options list Total then display-order stats", () => {
     "weapons",
     "cost",
   ]);
-  expect(loadoutSortLabel("grenade")).toBe("Grenade");
-  expect(loadoutSortLabel("total")).toBe("Total");
-  expect(loadoutSortLabel("cost")).toBe("Upgrade cost");
+  expect(LOADOUT_SORT_OPTIONS.find((o) => o.key === "grenade")?.label).toBe("Grenade");
+  expect(LOADOUT_SORT_OPTIONS.find((o) => o.key === "cost")?.label).toBe("Upgrade cost");
 });
 
 test("sort by cost uses the supplied cost function, cheapest first when ascending", () => {

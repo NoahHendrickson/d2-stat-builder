@@ -16,44 +16,102 @@ export interface ArmorSetInfo {
   ownedCount: number;
 }
 
+/** Owned pieces per set hash. */
+function countBySet(pieces: ArmorPiece[]): Map<number, number> {
+  const counts = new Map<number, number>();
+  for (const p of pieces) {
+    if (p.setHash) counts.set(p.setHash, (counts.get(p.setHash) ?? 0) + 1);
+  }
+  return counts;
+}
+
 /** Resolve the distinct armor sets present in `pieces` to names + 2pc/4pc perks. */
 export function availableSets(
   pieces: ArmorPiece[],
   manifest: Manifest,
 ): ArmorSetInfo[] {
-  const counts = new Map<number, number>();
-  for (const p of pieces) {
-    if (p.setHash) counts.set(p.setHash, (counts.get(p.setHash) ?? 0) + 1);
-  }
+  const counts = countBySet(pieces);
 
   const sets: ArmorSetInfo[] = [];
   for (const [setHash, ownedCount] of counts) {
-    const def = manifest.def("DestinyEquipableItemSetDefinition", setHash);
-    if (!def) continue;
-    const perks: SetPerkInfo[] = (def.setPerks ?? [])
-      .map((sp) => {
-        const perk = manifest.def(
-          "DestinySandboxPerkDefinition",
-          sp.sandboxPerkHash,
-        );
-        return {
-          requiredCount: sp.requiredSetCount,
-          name:
-            perk?.displayProperties?.name ?? `${sp.requiredSetCount}-piece bonus`,
-          description: perk?.displayProperties?.description || undefined,
-        };
-      })
-      .sort((a, b) => a.requiredCount - b.requiredCount);
-
-    sets.push({
-      setHash,
-      name: def.displayProperties?.name ?? "Unknown set",
-      perks,
-      ownedCount,
-    });
+    const info = setInfo(manifest, setHash, ownedCount);
+    if (info) sets.push(info);
   }
 
   return sets.sort((a, b) => b.ownedCount - a.ownedCount);
+}
+
+/**
+ * Every armor set this class can wear, owned or not, with how many of its pieces are in
+ * `pieces` — for planning which set to farm. A set counts when it has set bonuses and
+ * the manifest lists a piece of it for the class.
+ */
+export function classSets(
+  manifest: Manifest,
+  classType: number,
+  pieces: ArmorPiece[],
+): ArmorSetInfo[] {
+  const counts = countBySet(pieces);
+  const sets: ArmorSetInfo[] = [];
+  const table = manifest.all("DestinyEquipableItemSetDefinition");
+  for (const key in table) {
+    const def = table[key];
+    if (!def.setPerks?.length) continue;
+    const wearable = (def.setItems ?? []).some((itemHash) => {
+      const item = manifest.def("DestinyInventoryItemDefinition", itemHash);
+      return (
+        item?.classType === classType &&
+        (item.inventory?.bucketTypeHash as number) in ARMOR_BUCKETS
+      );
+    });
+    if (!wearable) continue;
+    const setHash = Number(key);
+    const info = setInfo(manifest, setHash, counts.get(setHash) ?? 0);
+    if (info) sets.push(info);
+  }
+  return sets.sort((a, b) => b.ownedCount - a.ownedCount || a.name.localeCompare(b.name));
+}
+
+/** A set's name and 2pc / 4pc perks, or null when the manifest doesn't have it. */
+function setInfo(manifest: Manifest, setHash: number, ownedCount: number): ArmorSetInfo | null {
+  const def = manifest.def("DestinyEquipableItemSetDefinition", setHash);
+  if (!def) return null;
+  const perks: SetPerkInfo[] = (def.setPerks ?? [])
+    .map((sp) => {
+      const perk = manifest.def("DestinySandboxPerkDefinition", sp.sandboxPerkHash);
+      return {
+        requiredCount: sp.requiredSetCount,
+        name: perk?.displayProperties?.name ?? `${sp.requiredSetCount}-piece bonus`,
+        description: perk?.displayProperties?.description || undefined,
+      };
+    })
+    .sort((a, b) => a.requiredCount - b.requiredCount);
+  return {
+    setHash,
+    name: def.displayProperties?.name ?? "Unknown set",
+    perks,
+    ownedCount,
+  };
+}
+
+/**
+ * Set requirements narrowed to the bonuses the owned pieces can make: a requirement for a
+ * set with fewer owned pieces than it needs drops to the 2pc when 2+ are owned, or goes.
+ * Returns `reqs` itself when nothing changes.
+ */
+export function makeableSetReqs(
+  reqs: Record<number, 2 | 4>,
+  sets: ReadonlyMap<number, Pick<ArmorSetInfo, "ownedCount">>,
+): Record<number, 2 | 4> {
+  let changed = false;
+  const kept: Record<number, 2 | 4> = {};
+  for (const [h, count] of Object.entries(reqs)) {
+    const owned = sets.get(Number(h))?.ownedCount ?? 0;
+    const made: 2 | 4 | null = owned >= count ? count : owned >= 2 ? 2 : null;
+    if (made !== count) changed = true;
+    if (made) kept[Number(h)] = made;
+  }
+  return changed ? kept : reqs;
 }
 
 /** A set piece's look for one slot: its icon and season watermark. */
