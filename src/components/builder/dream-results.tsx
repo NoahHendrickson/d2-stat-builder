@@ -268,10 +268,8 @@ function PieceCell({
   applied: AppliedTuning | null;
   icons: StatIconMap;
 }) {
-  // A faint box, the Current-column counterpart of a Replace card (the row stretches
-  // both to the same height).
   return (
-    <div className="border-foreground/12 bg-foreground/5 flex min-w-0 items-center gap-3 border p-2">
+    <div className="flex min-w-0 items-center gap-3">
       <PieceThumb piece={piece} size={40} />
       <div className="flex min-w-0 flex-col gap-1">
         <span className="truncate text-sm">{piece?.name ?? "Unknown piece"}</span>
@@ -431,7 +429,7 @@ export function DreamComparison({
           to its own full-width line under the piece it replaces. */}
       <div
         className={cn(
-          "grid grid-cols-[minmax(0,1fr)_1.25rem_minmax(0,1.4fr)] items-stretch gap-x-3 gap-y-3 transition-opacity max-md:grid-cols-[minmax(0,1.5fr)_1rem_minmax(0,1fr)]",
+          "grid grid-cols-[minmax(0,1fr)_1.25rem_minmax(0,1.4fr)] items-center gap-x-3 gap-y-3 transition-opacity max-md:grid-cols-[minmax(0,1.5fr)_1rem_minmax(0,1fr)]",
           running && result && "pointer-events-none opacity-50",
         )}
       >
@@ -450,7 +448,7 @@ export function DreamComparison({
                 icons={statIcons}
               />
               <span
-                className={cn("text-muted-foreground flex items-center justify-center", v.kind === "replace" && "max-md:hidden")}
+                className={cn("text-muted-foreground flex justify-center", v.kind === "replace" && "max-md:hidden")}
                 aria-hidden
               >
                 {v.kind === "replace" && <HugeiconsIcon icon={ArrowRight02Icon} className="text-foreground size-4" />}
@@ -491,9 +489,9 @@ export function DreamComparison({
                 </div>
               )}
               {v.kind === "pending" && (
-                <span className="bg-foreground/10 h-10 w-full self-center animate-pulse motion-reduce:animate-none" aria-hidden />
+                <span className="bg-foreground/10 h-10 w-full animate-pulse motion-reduce:animate-none" aria-hidden />
               )}
-              {v.kind === "none" && <span className="text-muted-foreground self-center text-xs">—</span>}
+              {v.kind === "none" && <span className="text-muted-foreground text-xs">—</span>}
             </Fragment>
           );
         })}
