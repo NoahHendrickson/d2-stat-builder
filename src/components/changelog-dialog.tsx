@@ -6,7 +6,6 @@ import {
   Dialog,
   DialogClose,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -94,16 +93,20 @@ export function ChangelogDialog() {
         className="flex max-h-[min(80dvh,40rem)] flex-col gap-0 p-0 sm:max-w-md"
       >
         <DialogHeader className="px-5 pt-5 pb-4 pr-12">
-          <DialogTitle className="text-lg">What&apos;s new</DialogTitle>
-          <DialogDescription>Every release, newest first.</DialogDescription>
+          <DialogTitle className="text-lg">Changelog</DialogTitle>
         </DialogHeader>
         <div
           ref={list}
           tabIndex={-1}
-          className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-5 pb-5 outline-none"
+          className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-5 pb-5 outline-none"
         >
           {CHANGELOG.map((entry) => (
-            <section key={entry.date} aria-label={formatDate(entry.date)} className="flex flex-col gap-2">
+            // One card per release, framed like the Dream build dialog's cards.
+            <section
+              key={entry.date}
+              aria-label={formatDate(entry.date)}
+              className="d2-card-frame flex shrink-0 flex-col gap-2 p-4 [--card-radius:14px]"
+            >
               <h3 className="text-muted-foreground text-xs font-medium tabular-nums">
                 <time dateTime={entry.date}>{formatDate(entry.date)}</time>
               </h3>
