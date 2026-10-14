@@ -1,0 +1,121 @@
+#!/usr/bin/env node
+// verify-d2: launch D2 Conflux from this checkout, check it's worth driving, drive a
+// journey signed in against a stubbed backend, and tear it all down. See ../SKILL.md.
+//
+//   verify-d2 up [--port 4400] [--dev]          build + start (or `next dev`) on its own port
+//   verify-d2 doctor [--port 4400]              read-only health check; exit 1 on any FAIL
+//   verify-d2 run <journey|all> [--port 4400]   drive journeys/<journey>.mjs; evidence → /tmp/verify-d2/runs/
+//   verify-d2 down [--port 4400]                stop what `up` started, remove scaffolding and stray Chrome
+//   verify-d2 list                              journeys, servers, recent runs
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { CHROME, killStrayBrowsers, strayBrowsers } from "../../../../scripts/browser/browser.mjs";
+import { CHROME_ROOT, fixturePath, runJourney } from "./lib/journey.mjs";
+import { CHECKOUT, DEFAULT_PORT, ROOT, allStates, alive, cwdOf, down, listeners, pgidOf, readState, sourceStamp, up } from "./lib/server.mjs";
+
+const SKILL = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const JOURNEYS = path.join(SKILL, "journeys");
+const argv = process.argv.slice(2);
+const cmd = argv[0];
+const opt = (name, fallback) => { const i = argv.indexOf(`--${name}`); return i > 0 && argv[i + 1] && !argv[i + 1].startsWith("--") ? argv[i + 1] : fallback; };
+const port = Number(opt("port", DEFAULT_PORT));
+
+async function doctor() {
+  let fail = 0;
+  const ok = (m) => console.log(`OK    ${m}`);
+  const bad = (m) => { fail++; console.log(`FAIL  ${m}`); };
+  const warn = (m) => console.log(`WARN  ${m}`);
+  const st = readState(port);
+  if (!st) bad(`no verify server recorded on ${port}; run \`verify-d2 up --port ${port}\``);
+  else {
+    if (alive(st.pid)) ok(`server pid ${st.pid} alive (${st.mode}, ${st.bundler}, started ${st.startedAt})`); else bad(`server pid ${st.pid} is gone; see ${st.log}, then \`verify-d2 down\` and \`up\``);
+    const holders = listeners(port);
+    const ours = holders.filter((p) => pgidOf(p) === st.pgid);
+    if (ours.length && ours.length === holders.length) ok(`port ${port} held by our process group ${st.pgid}`); else bad(`port ${port} listeners ${holders.join(", ") || "none"} are not all in our group ${st.pgid}`);
+    const cwd = ours[0] && cwdOf(ours[0]);
+    if (cwd === CHECKOUT) ok(`serves this checkout (${CHECKOUT})`); else bad(`listener cwd is ${cwd}, not ${CHECKOUT}`);
+    const now = sourceStamp();
+    if (now.hash === st.stamp.hash) ok(`build matches the source (${now.head}${now.dirty ? " + uncommitted" : ""})`);
+    else if (st.mode === "prod") bad(`build is stale: built from ${st.stamp.head}${st.stamp.dirty ? "+dirty" : ""} (${st.stamp.hash}), source is now ${now.head}${now.dirty ? "+dirty" : ""} (${now.hash}); run down + up`);
+    else warn(`source changed since \`next dev\` started (hot reload should cover it; if styles look stale, see SKILL.md Gotchas)`);
+    try {
+      const res = await fetch(`${st.url}/`, { signal: AbortSignal.timeout(30000) });
+      const html = await res.text();
+      if (res.status === 200 && html.includes("<html")) ok(`GET ${st.url}/ → 200`); else bad(`GET ${st.url}/ → ${res.status}`);
+    } catch (e) { bad(`GET ${st.url}/ failed: ${e.message}`); }
+  }
+  if (fs.existsSync(CHROME)) ok(`Chrome at ${CHROME}`); else bad(`no Chrome at ${CHROME}; set CHROME=`);
+  for (const kind of ["full", "small"]) {
+    const f = fixturePath(kind);
+    if (f) ok(`fixture ${kind}: ${f}`); else bad(`fixture ${kind} missing; run \`node scripts/startup-bench/fixture.mjs${kind === "full" ? " full" : ""}\` (needs .env.local)`);
+  }
+  const env = path.join(CHECKOUT, ".env.local");
+  const key = fs.existsSync(env) && /NEXT_PUBLIC_BUNGIE_API_KEY=(\S+)/.exec(fs.readFileSync(env, "utf8"))?.[1]?.replace(/^["']|["']$/g, "");
+  if (!key) bad(`.env.local with NEXT_PUBLIC_BUNGIE_API_KEY not found here (the client needs it to fetch the manifest; \`up\` links the main checkout's)`);
+  else {
+    try {
+      const r = await fetch("https://www.bungie.net/Platform/Destiny2/Manifest/", { headers: { "X-API-Key": key }, signal: AbortSignal.timeout(15000) });
+      const j = await r.json();
+      if (j.ErrorCode === 1) ok(`bungie.net manifest reachable (version ${j.Response.version})`); else bad(`bungie.net manifest: ${j.ErrorStatus} ${j.Message}`);
+    } catch (e) { bad(`bungie.net unreachable: ${e.message}`); }
+  }
+  const strays = strayBrowsers(CHROME_ROOT).filter((c) => c.running);
+  if (strays.length) warn(`${strays.length} Chrome left by runs that died (${strays.map((c) => c.chromePid).join(", ")}); \`verify-d2 down\` stops them`);
+  else ok("no stray verify Chrome");
+  console.log(fail ? `\n${fail} check(s) failed: don't drive this instance until they pass.` : "\nhealthy: safe to drive.");
+  return fail ? 1 : 0;
+}
+
+/** `run <journey|all|path>`: every journey runs in its own browser with its own stub. */
+async function run() {
+  const name = argv[1];
+  if (!name) throw new Error("usage: verify-d2 run <journey|all> [--port N]");
+  const server = readState(port);
+  if (!server || !alive(server.pid)) throw new Error(`no live verify server on ${port}; run \`verify-d2 up\` then \`verify-d2 doctor\``);
+  const files = name === "all"
+    ? fs.readdirSync(JOURNEYS).filter((f) => f.endsWith(".mjs")).map((f) => path.join(JOURNEYS, f))
+    : [fs.existsSync(name) ? path.resolve(name) : path.join(JOURNEYS, `${name.replace(/\.mjs$/, "")}.mjs`)];
+  for (const f of files) if (!fs.existsSync(f)) throw new Error(`no journey ${f}; see \`verify-d2 list\``);
+  const results = [];
+  for (const file of files) results.push(await runJourney({ file, server }));
+  if (results.length > 1) console.log("\n" + results.map((r) => `${r.ok ? "PASS" : "FAIL"}  ${path.basename(r.journey, ".mjs")}`).join("\n"));
+  return results.every((r) => r.ok) ? 0 : 1;
+}
+
+async function downAll() {
+  await down({ port });
+  // Only Chrome whose run has died: live runs on other ports are left alone.
+  for (const s of killStrayBrowsers(CHROME_ROOT)) if (s.running) console.log(`stopped stray Chrome ${s.chromePid}`);
+  return 0;
+}
+
+function list() {
+  console.log("journeys:");
+  for (const f of fs.readdirSync(JOURNEYS).filter((f) => f.endsWith(".mjs"))) console.log(`  ${f.replace(/\.mjs$/, "")}`);
+  console.log("servers:");
+  for (const s of allStates()) console.log(`  ${s.url} pid ${s.pid} ${alive(s.pid) ? "up" : "DEAD"} ${s.mode} ${s.checkout} @ ${s.stamp.head}`);
+  const runs = fs.existsSync(path.join(ROOT, "runs")) ? fs.readdirSync(path.join(ROOT, "runs")).sort().slice(-10) : [];
+  console.log("recent runs:");
+  for (const r of runs) {
+    let s = {};
+    try { s = JSON.parse(fs.readFileSync(path.join(ROOT, "runs", r, "summary.json"), "utf8")); } catch {}
+    console.log(`  ${s.ok === true ? "PASS" : s.ok === false ? "FAIL" : "????"} ${path.join(ROOT, "runs", r)}`);
+  }
+  return 0;
+}
+
+const commands = {
+  up: async () => { await up({ port, mode: argv.includes("--dev") ? "dev" : "prod" }); return 0; },
+  doctor, run, down: downAll, list,
+};
+try {
+  if (!commands[cmd]) {
+    console.log(fs.readFileSync(fileURLToPath(import.meta.url), "utf8").split("\n").slice(1, 10).map((l) => l.replace(/^\/\/ ?/, "")).join("\n"));
+    process.exit(cmd ? 1 : 0);
+  }
+  process.exit(await commands[cmd]());
+} catch (e) {
+  console.error(`verify-d2 ${cmd}: ${e.message}`);
+  process.exit(1);
+}
