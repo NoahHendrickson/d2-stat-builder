@@ -3,6 +3,7 @@ import type {
   DestinyProfileResponse,
 } from "bungie-api-ts/destiny2";
 import { takeEarlyResponse } from "@/lib/early-fetch";
+import { profileEtag } from "./profile-etag";
 import type { Manifest } from "@/lib/manifest/load";
 import {
   equippedSubclassForCharacter,
@@ -84,11 +85,22 @@ export class ArmoryError extends Error {
   }
 }
 
-/** Fetch the player's raw profile from our server proxy (needs no manifest). */
-export async function fetchProfile(): Promise<DestinyProfileResponse> {
+/**
+ * Fetch the player's raw profile from our server proxy (needs no manifest). With the
+ * profile already held, its minted timestamps go along as If-None-Match, and a 304
+ * means Bungie still serves that snapshot: `held` is returned, no body transferred.
+ */
+export async function fetchProfile(
+  held?: DestinyProfileResponse,
+): Promise<DestinyProfileResponse> {
+  const etag = profileEtag(held);
   const res =
     (await takeEarlyResponse("profile")) ??
-    (await fetch("/api/bungie/profile", { cache: "no-store" }));
+    (await fetch("/api/bungie/profile", {
+      cache: "no-store",
+      headers: etag ? { "If-None-Match": etag } : {},
+    }));
+  if (res.status === 304 && held) return held;
   if (!res.ok) {
     const body = (await res.json().catch(() => null)) as { error?: string } | null;
     throw new ArmoryError(

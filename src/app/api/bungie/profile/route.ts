@@ -16,6 +16,7 @@ import {
 } from "@/lib/bungie/destiny-account";
 import { clearSession, getValidAccessToken, readUser, writeUser } from "@/lib/bungie/session";
 import { gzipResponse } from "@/lib/http/gzip-response";
+import { etagMatches, profileEtag } from "@/lib/armory/profile-etag";
 
 // 100 Profiles (currentSeasonHash) · 102 Vault · 103 ProfileCurrencies · 200 Characters · 201 CharacterInventories
 // 202 CharacterProgressions (seasonal artifact unlocks, for saved loadouts)
@@ -52,13 +53,15 @@ function slimProfile(profile: DestinyProfileResponse): DestinyProfileResponse {
  * Server-side proxy for the player's Destiny profile. Runs server-to-server so
  * Bungie's Origin-header check never fires and the access token never leaves the
  * server. Returns the raw DestinyProfileResponse for the client to normalize, gzipped
- * (the uncompressed profile is what filled the Fast Origin Transfer allowance).
+ * (the uncompressed profile is what filled the Fast Origin Transfer allowance), or a
+ * bodiless 304 when the client's If-None-Match names the snapshot Bungie still serves
+ * (see profileEtag).
  */
 export async function GET(request: Request) {
-  return gzipResponse(request, await loadProfile());
+  return gzipResponse(request, await loadProfile(request.headers.get("if-none-match")));
 }
 
-async function loadProfile(): Promise<Response> {
+async function loadProfile(ifNoneMatch: string | null): Promise<Response> {
   let user = await readUser();
   const token = await getValidAccessToken();
   if (!user?.destinyMembershipId || user.destinyMembershipType == null || !token) {
@@ -108,7 +111,13 @@ async function loadProfile(): Promise<Response> {
       );
     }
 
-    return NextResponse.json(slimProfile(res.Response));
+    const etag = profileEtag(res.Response);
+    if (etag && etagMatches(ifNoneMatch, etag)) {
+      return new Response(null, { status: 304, headers: { ETag: etag } });
+    }
+    return NextResponse.json(slimProfile(res.Response), {
+      headers: etag ? { ETag: etag } : {},
+    });
   } catch (err) {
     // The Bungie client throws for platform errors too — `ErrorCode ≠ 1` in the body,
     // often under an HTTP 200 — so the friendly message and the dead-session check

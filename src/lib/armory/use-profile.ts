@@ -34,12 +34,13 @@ export function useProfile({ refreshMs }: { refreshMs?: number } = {}) {
     queryKey: profileKey(membershipId),
     enabled: membershipId !== undefined,
     staleTime: 5 * 60_000,
-    // A cached response older than the profile on screen is dropped (see newerProfile).
-    queryFn: async () =>
-      newerProfile(
-        queryClient.getQueryData<DestinyProfileResponse>(profileKey(membershipId)),
-        await fetchProfile(),
-      ),
+    // The held profile's stamps ride along so an unchanged snapshot comes back as a
+    // bodiless 304; a cached response older than the profile on screen is dropped
+    // (see newerProfile).
+    queryFn: async () => {
+      const held = queryClient.getQueryData<DestinyProfileResponse>(profileKey(membershipId));
+      return newerProfile(held, await fetchProfile(held));
+    },
     refetchInterval: refreshMs ?? false,
     refetchOnWindowFocus: refreshMs ? "always" : true,
     // Every response is a new profile (timestamps move); deep-diffing a multi-MB
