@@ -569,7 +569,11 @@ function buildPiece(
   const power = readPower(item.itemInstanceId, profile);
   const gearTier = readGearTier(item.itemInstanceId, profile);
   const watermark = itemWatermark(def, item.versionNumber);
-  const legacyRaid = legacyRaidOfDef(def, manifest);
+  const setHash = def.equippingBlock?.equipableItemSetHash || undefined;
+  // Only Armor 2.0 pieces count as legacy raid armor, so the strip, the pool, the solver
+  // and the build card all agree on them: a piece with an archetype or a real set
+  // (a reissue) is ordinary armor even if it kept the raid socket.
+  const legacyRaid = legacy && !setHash ? legacyRaidOfDef(def, manifest) : undefined;
 
   return {
     instanceId: item.itemInstanceId,
@@ -585,7 +589,7 @@ function buildPiece(
       ? false
       : isArtificePiece(item.itemInstanceId, profile, manifest),
     isFestivalMask: festivalMask,
-    setHash: def.equippingBlock?.equipableItemSetHash || undefined,
+    setHash,
     archetype,
     baseStats,
     stats,

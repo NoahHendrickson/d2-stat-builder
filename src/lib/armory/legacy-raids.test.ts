@@ -2,12 +2,14 @@ import { describe, expect, test } from "vitest";
 import {
   LEGACY_RAIDS,
   armorGroupOf,
+  legacyRaidForCategory,
   legacyRaidOf,
   legacyRaidSetHash,
   makeableRaidReqs,
   ownedLegacyRaids,
   parseRaidReqs,
   raidSetRequirements,
+  requiredLegacyRaids,
   type LegacyRaidKey,
 } from "./legacy-raids";
 import { inDefaultOptimizerPool } from "./optimizer-pool";
@@ -17,38 +19,81 @@ import { isSyntheticSetHash, syntheticSetIndex } from "../optimizer/synthetic-se
 import type { ArmorPiece } from "./normalize";
 import type { ArmorSlot, StatArray } from "./stats";
 
-// Plug hash → category, the shape of the live manifest: Deep Stone Crypt's "Empty Mod
-// Socket" sits at socket 11 among general / shader / ornament entries.
-const CATEGORIES: Record<number, string> = {
-  1: "enhancements.v2_general",
-  2: "shader",
-  3: "enhancements.raid_descent",
-  4: "enhancements.raid_v600",
-  5: "enhancements.season_outlaw",
+// Plug hashes from the live manifest (2026-10): Deep Stone Crypt's and Vow's "Empty Mod
+// Socket", Last Wish's (Hood of the Great Hunt's socket 11), and Dreambane's Nightmare
+// socket, which is an activity socket and not a raid's.
+const plugs = {
+  general: 1,
+  dsc: 4055462131,
+  vow: 2447143568,
+  lastWish: 1679876242,
+  dreambane: 3,
 };
-const category = (h: number) => CATEGORIES[h];
+const CATEGORIES: Record<number, string> = {
+  [plugs.general]: "enhancements.v2_general",
+  [plugs.dsc]: "enhancements.raid_descent",
+  [plugs.vow]: "enhancements.raid_v600",
+  [plugs.lastWish]: "enhancements.season_outlaw",
+  [plugs.dreambane]: "enhancements.season_maverick",
+};
+const raidByPlug = new Map(
+  Object.entries(CATEGORIES).flatMap(([h, cat]) => {
+    const raid = legacyRaidForCategory(cat);
+    return raid ? [[Number(h), raid] as const] : [];
+  }),
+);
 const entries = (...hashes: number[]) => ({
   sockets: { socketEntries: hashes.map((h) => ({ singleInitialItemHash: h })) },
 });
 
 describe("legacyRaidOf", () => {
   test("reads the raid from the raid mod socket's initial plug", () => {
-    expect(legacyRaidOf(entries(1, 1, 2, 0, 3), category)).toBe("dsc");
-    expect(legacyRaidOf(entries(1, 4), category)).toBe("vow");
+    expect(legacyRaidOf(entries(plugs.general, 0, plugs.dsc), raidByPlug)).toBe("dsc");
+    expect(legacyRaidOf(entries(plugs.general, plugs.vow), raidByPlug)).toBe("vow");
   });
 
-  test("ignores pieces with no raid socket, including seasonal activity sockets", () => {
-    expect(legacyRaidOf(entries(1, 2), category)).toBeUndefined();
-    expect(legacyRaidOf(entries(1, 5), category)).toBeUndefined();
-    expect(legacyRaidOf({}, category)).toBeUndefined();
+  test("Last Wish's raid socket counts, though its category reads like a seasonal one", () => {
+    expect(legacyRaidOf(entries(plugs.general, plugs.lastWish), raidByPlug)).toBe("lw");
+  });
+
+  test("ignores pieces with no raid socket, including activity sockets like Dreambane's", () => {
+    expect(legacyRaidOf(entries(plugs.general), raidByPlug)).toBeUndefined();
+    expect(legacyRaidOf(entries(plugs.general, plugs.dreambane), raidByPlug)).toBeUndefined();
+    expect(legacyRaidOf({}, raidByPlug)).toBeUndefined();
   });
 });
 
-test("raid set hashes are distinct synthetic sets, never a real (unsigned) set hash", () => {
-  const hashes = LEGACY_RAIDS.map((r) => legacyRaidSetHash(r.key));
-  expect(hashes.map(syntheticSetIndex)).toEqual(LEGACY_RAIDS.map((_, i) => i));
-  expect(hashes.every(isSyntheticSetHash)).toBe(true);
-  expect(isSyntheticSetHash(1490136267)).toBe(false);
+describe("raid set hashes", () => {
+  test("are distinct synthetic sets, never a real (unsigned) set hash", () => {
+    const hashes = LEGACY_RAIDS.map((r) => legacyRaidSetHash(r.key));
+    expect(new Set(hashes).size).toBe(LEGACY_RAIDS.length);
+    expect(hashes.every(isSyntheticSetHash)).toBe(true);
+    expect(isSyntheticSetHash(1490136267)).toBe(false);
+  });
+
+  test("come from each raid's fixed id, not its place in the list (build usage stores them)", () => {
+    // Pinned: changing any of these re-keys stored build-usage history.
+    expect(Object.fromEntries(LEGACY_RAIDS.map((r) => [r.key, legacyRaidSetHash(r.key)]))).toEqual({
+      garden: -1,
+      dsc: -2,
+      vog: -3,
+      vow: -4,
+      kf: -5,
+      ron: -6,
+      crota: -7,
+      se: -8,
+      lw: -9,
+    });
+    expect(LEGACY_RAIDS.map((r) => syntheticSetIndex(legacyRaidSetHash(r.key)))).toEqual(
+      LEGACY_RAIDS.map((r) => r.id),
+    );
+  });
+
+  test("requiredLegacyRaids reads the raids back out of a query's set requirements", () => {
+    const reqs = [...raidSetRequirements({ dsc: 2, lw: 1 }), { setHash: 1490136267, count: 2 }];
+    expect(requiredLegacyRaids(reqs)).toEqual(new Set(["dsc", "lw"]));
+    expect(requiredLegacyRaids(undefined)).toEqual(new Set());
+  });
 });
 
 describe("armorGroupOf", () => {
@@ -58,6 +103,7 @@ describe("armorGroupOf", () => {
       setHash: legacyRaidSetHash("dsc"),
       minBadge: 1,
       name: "Deep Stone Crypt raid armor",
+      raid: "dsc",
     });
     expect(armorGroupOf({})).toBeUndefined();
   });
@@ -156,6 +202,15 @@ describe("in the optimizer", () => {
     };
   }
 
+  test("raid pieces join their raid's set only while that raid is required", () => {
+    const piece = armor("d", "helmet", [10, 10, 10, 0, 0, 0], "dsc");
+    expect(armorToOptimizerPiece(piece, new Set()).setHash).toBeUndefined();
+    expect(armorToOptimizerPiece(piece, new Set<LegacyRaidKey>(["vow"])).setHash).toBeUndefined();
+    expect(armorToOptimizerPiece(piece, new Set<LegacyRaidKey>(["dsc"])).setHash).toBe(
+      legacyRaidSetHash("dsc"),
+    );
+  });
+
   test("a raid requirement makes every build wear that many of its pieces", () => {
     const slots: ArmorSlot[] = ["helmet", "arms", "chest", "legs", "classItem"];
     const strong: StatArray = [30, 30, 30, 0, 0, 0];
@@ -164,8 +219,9 @@ describe("in the optimizer", () => {
       armor(`t${i}`, slot, strong),
       ...(i < 3 ? [armor(`dsc${i}`, slot, weak, "dsc")] : []),
     ]);
+    const required = new Set<LegacyRaidKey>(["dsc"]);
     const optimizerSlots = slots.map((slot) =>
-      pieces.filter((p) => p.slot === slot).map(armorToOptimizerPiece),
+      pieces.filter((p) => p.slot === slot).map((p) => armorToOptimizerPiece(p, required)),
     );
     const base = {
       slots: optimizerSlots,

@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useMemo, useState } from "react";
+import { memo, useMemo } from "react";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { ArrowDown01Icon } from "@hugeicons/core-free-icons";
 import { ArmorThumb } from "@/components/armor-thumb";
@@ -24,48 +24,59 @@ type SlotIcons = Partial<Record<ArmorSlot, SetSlotIcon>>;
 /**
  * The Set bonuses card's Legacy raid sets block: one row per legacy raid this class owns
  * armor from, each with the slots the player has a piece in and how many of its pieces
- * every build must wear (Off, 1–5). Folded away until opened, unless a requirement is
- * already on.
+ * every build must wear (Off, 1–5). The fold state is the caller's, so it outlives the
+ * search and the tab switches; the header counts every requirement, shown or not.
  */
 export const LegacyRaidSets = memo(function LegacyRaidSets({
   raids,
+  total,
+  query,
   reqs,
+  slotBudget,
   onCountChange,
+  open,
+  onOpenChange,
   manifest,
   classType,
 }: {
+  /** The raids the set search leaves. */
   raids: LegacyRaidInfo[];
+  /** Every raid this class owns armor from, before the search. */
+  total: number;
+  query: string;
   reqs: RaidReqs;
+  /**
+   * Armor pieces left for raid requirements: five, less the set bonuses' pieces, the
+   * exotic, and a pinned class item. Counts that would pass it are disabled.
+   */
+  slotBudget: number;
   onCountChange: (key: LegacyRaidKey, count: number) => void;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
   /** For the icons of the slots no owned piece covers. */
   manifest?: Manifest;
   classType: number | null;
 }) {
-  const [open, setOpen] = useState(() => Object.keys(reqs).length > 0);
-  // The icons for unowned slots scan every item definition: wait for the first open,
-  // then keep them while the block folds and unfolds.
-  const [opened, setOpened] = useState(open);
+  // A full item-table scan the first time, then cached for the session (sets.ts).
   const icons = useMemo(
-    () =>
-      opened && manifest && classType !== null ? legacyRaidSlotIcons(manifest, classType) : null,
-    [opened, manifest, classType],
+    () => (open && manifest && classType !== null ? legacyRaidSlotIcons(manifest, classType) : null),
+    [open, manifest, classType],
   );
-  const active = raids.filter((r) => reqs[r.key]).length;
+  const counts = Object.values(reqs) as number[];
+  const active = counts.length;
+  const raidPieces = counts.reduce((a, n) => a + n, 0);
   // The divider runs edge to edge: the negative margins cancel the card's padding,
   // which the matching padding gives back to the content.
   return (
     <div className="border-border -mx-3 mt-2 flex flex-col gap-3 border-t px-3 pt-4 normal:-mx-6 normal:px-6 normal:pt-5">
       <button
         type="button"
-        onClick={() => {
-          setOpen((o) => !o);
-          setOpened(true);
-        }}
+        onClick={() => onOpenChange(!open)}
         aria-expanded={open}
         className="hover:text-foreground focus-visible:ring-outline-strong flex cursor-pointer items-center justify-between gap-2 rounded-none pl-1 text-left text-sm outline-none focus-visible:ring-1 normal:rounded-[6px]"
       >
         <span className="tabular-nums">
-          Legacy raid sets ({raids.length})
+          Legacy raid sets ({total})
           {active > 0 && <span className="text-power ml-2">{active} required</span>}
         </span>
         <HugeiconsIcon
@@ -75,54 +86,60 @@ export const LegacyRaidSets = memo(function LegacyRaidSets({
         />
       </button>
       {open && (
-        <LegacyRaidList raids={raids} reqs={reqs} onCountChange={onCountChange} icons={icons} />
+        <>
+          <p className="text-muted-foreground pl-1 text-xs leading-relaxed">
+            Armor 2.0 raid armor has no set bonus. Each piece has a raid mod socket instead,
+            and those mods only work in that raid. Pick how many pieces every build must
+            wear.
+          </p>
+          {raidPieces > slotBudget && (
+            <p className="text-warning pl-1 text-xs leading-relaxed" role="status">
+              These raid pieces, set bonuses and exotic need{" "}
+              {ARMOR_SLOTS.length - slotBudget + raidPieces} armor pieces, but a build wears{" "}
+              {ARMOR_SLOTS.length}, so no build can match. Lower a count.
+            </p>
+          )}
+          {raids.length === 0 ? (
+            <p className="text-muted-foreground pl-1 text-xs">
+              No legacy raids match &quot;{query.trim()}&quot;.
+            </p>
+          ) : (
+            <div className="flex flex-col gap-3">
+              {raids.map((r) => {
+                const count = reqs[r.key] ?? 0;
+                return (
+                  <LegacyRaidRow
+                    key={r.key}
+                    raid={r}
+                    icons={icons?.get(r.key)}
+                    count={count}
+                    // What this raid may ask for: its covered slots, and what the other
+                    // requirements leave of the five.
+                    max={Math.min(r.slotCount, slotBudget - (raidPieces - count))}
+                    onCountChange={onCountChange}
+                  />
+                );
+              })}
+            </div>
+          )}
+        </>
       )}
     </div>
   );
 });
 
-/** The opened block: the explainer and one row per raid. */
-function LegacyRaidList({
-  raids,
-  reqs,
-  onCountChange,
-  icons,
-}: {
-  raids: LegacyRaidInfo[];
-  reqs: RaidReqs;
-  onCountChange: (key: LegacyRaidKey, count: number) => void;
-  icons: Map<LegacyRaidKey, SlotIcons> | null;
-}) {
-  return (
-    <>
-      <p className="text-muted-foreground pl-1 text-xs leading-relaxed">
-        Armor 2.0 raid armor has no set bonus. Each piece has a raid mod socket instead,
-        and those mods only work in that raid. Pick how many pieces every build must wear.
-      </p>
-      <div className="flex flex-col gap-3">
-        {raids.map((r) => (
-          <LegacyRaidRow
-            key={r.key}
-            raid={r}
-            icons={icons?.get(r.key)}
-            count={reqs[r.key] ?? 0}
-            onCountChange={onCountChange}
-          />
-        ))}
-      </div>
-    </>
-  );
-}
-
 function LegacyRaidRow({
   raid,
   icons,
   count,
+  max,
   onCountChange,
 }: {
   raid: LegacyRaidInfo;
   icons: SlotIcons | undefined;
   count: number;
+  /** The highest count this row offers; the current one stays pickable regardless. */
+  max: number;
   onCountChange: (key: LegacyRaidKey, count: number) => void;
 }) {
   // The name over its slots, the count strip beside them. Phones: name and slots share
@@ -141,7 +158,7 @@ function LegacyRaidRow({
             <TabsTrigger
               key={n}
               value={String(n)}
-              disabled={n > raid.slotCount}
+              disabled={n > max && n !== count}
               aria-label={n === 0 ? "Not required" : `At least ${n}`}
             >
               {n === 0 ? "Off" : n}

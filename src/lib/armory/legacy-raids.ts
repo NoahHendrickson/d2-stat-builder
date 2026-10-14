@@ -3,25 +3,34 @@
  * bonus. Each piece instead carries a raid mod socket, and that raid's mods only work
  * inside it. A piece is identified by the socket's plug category, which its "Empty Mod
  * Socket" and every mod that fits share (one category per raid, always socket 11 in the
- * live manifest). No more Armor 2.0 raid armor will ship, so the list is closed.
+ * live manifest). Last Wish's is named like a seasonal one (`season_outlaw`), but its
+ * mods say they only work in Last Wish. No more Armor 2.0 raid armor will ship, so the
+ * list is closed.
  *
  * Runtime imports are relative (not `@/`) so the module also runs under vitest.
  */
 import type { Manifest } from "../manifest/load";
+import { memoByManifest } from "../manifest/memo";
 import { syntheticSetHash } from "../optimizer/synthetic-set";
 import type { SetRequirement } from "../optimizer/types";
 import { ARMOR_SLOTS, type ArmorSlot } from "./stats";
 
-/** Release order, which is also the order the builder lists them in. */
+/**
+ * Release order, which is also the order the builder lists them in. `id` is fixed for
+ * good: the raid's synthetic set hash is built from it (legacyRaidSetHash), and that
+ * hash is part of the stored build-usage keys. Never renumber or reuse one; a raid
+ * added later takes the next unused id.
+ */
 export const LEGACY_RAIDS = [
-  { key: "garden", name: "Garden of Salvation", category: "enhancements.raid_garden" },
-  { key: "dsc", name: "Deep Stone Crypt", category: "enhancements.raid_descent" },
-  { key: "vog", name: "Vault of Glass", category: "enhancements.raid_v520" },
-  { key: "vow", name: "Vow of the Disciple", category: "enhancements.raid_v600" },
-  { key: "kf", name: "King's Fall", category: "enhancements.raid_v620" },
-  { key: "ron", name: "Root of Nightmares", category: "enhancements.raid_v700" },
-  { key: "crota", name: "Crota's End", category: "enhancements.raid_v720" },
-  { key: "se", name: "Salvation's Edge", category: "enhancements.raid_v800" },
+  { key: "lw", id: 8, name: "Last Wish", category: "enhancements.season_outlaw" },
+  { key: "garden", id: 0, name: "Garden of Salvation", category: "enhancements.raid_garden" },
+  { key: "dsc", id: 1, name: "Deep Stone Crypt", category: "enhancements.raid_descent" },
+  { key: "vog", id: 2, name: "Vault of Glass", category: "enhancements.raid_v520" },
+  { key: "vow", id: 3, name: "Vow of the Disciple", category: "enhancements.raid_v600" },
+  { key: "kf", id: 4, name: "King's Fall", category: "enhancements.raid_v620" },
+  { key: "ron", id: 5, name: "Root of Nightmares", category: "enhancements.raid_v700" },
+  { key: "crota", id: 6, name: "Crota's End", category: "enhancements.raid_v720" },
+  { key: "se", id: 7, name: "Salvation's Edge", category: "enhancements.raid_v800" },
 ] as const;
 
 export type LegacyRaidKey = (typeof LEGACY_RAIDS)[number]["key"];
@@ -32,67 +41,101 @@ export type RaidReqs = Partial<Record<LegacyRaidKey, number>>;
 /** The most pieces a requirement can ask for: every armor slot. */
 export const MAX_RAID_PIECES = ARMOR_SLOTS.length;
 
+type LegacyRaid = (typeof LEGACY_RAIDS)[number];
+const BY_KEY = new Map<string, LegacyRaid>(LEGACY_RAIDS.map((r) => [r.key, r]));
 const BY_CATEGORY = new Map<string, LegacyRaidKey>(
   LEGACY_RAIDS.map((r) => [r.category, r.key]),
 );
-const INDEX = new Map<string, number>(LEGACY_RAIDS.map((r, i) => [r.key, i]));
+const BY_SET_HASH = new Map<number, LegacyRaidKey>(
+  LEGACY_RAIDS.map((r) => [syntheticSetHash(r.id), r.key]),
+);
 
 export function isLegacyRaidKey(v: unknown): v is LegacyRaidKey {
-  return typeof v === "string" && INDEX.has(v);
+  return typeof v === "string" && BY_KEY.has(v);
 }
 
 export function legacyRaidName(key: LegacyRaidKey): string {
-  return LEGACY_RAIDS[INDEX.get(key)!].name;
+  return BY_KEY.get(key)!.name;
+}
+
+/** The raid a raid mod socket's plug category belongs to, if any. */
+export function legacyRaidForCategory(category: string): LegacyRaidKey | undefined {
+  return BY_CATEGORY.get(category);
 }
 
 /**
- * The raid whose mod socket an item definition has, if any. `plugCategory` reads a
- * plug's category; legacyRaidOfDef supplies it from the manifest.
+ * The raid whose mod socket an item definition has, if any: the first socket whose
+ * initial plug is in `raidByPlug` (plug hash → raid; see raidPlugs).
  */
 export function legacyRaidOf(
   def: { sockets?: { socketEntries?: { singleInitialItemHash?: number }[] } },
-  plugCategory: (plugHash: number) => string | undefined,
+  raidByPlug: ReadonlyMap<number, LegacyRaidKey>,
 ): LegacyRaidKey | undefined {
   for (const entry of def.sockets?.socketEntries ?? []) {
-    if (!entry.singleInitialItemHash) continue;
-    const cat = plugCategory(entry.singleInitialItemHash);
-    const key = cat ? BY_CATEGORY.get(cat) : undefined;
+    const key = entry.singleInitialItemHash && raidByPlug.get(entry.singleInitialItemHash);
     if (key) return key;
   }
   return undefined;
 }
 
-/** legacyRaidOf, reading plug categories from the manifest. */
+/**
+ * Every plug in a raid mod socket category, mapped to its raid: one pass over the item
+ * table per manifest, so reading a piece's raid is a few map lookups however often the
+ * profile is normalized.
+ */
+const raidPlugs = memoByManifest((manifest) => {
+  const out = new Map<number, LegacyRaidKey>();
+  const table = manifest.all("DestinyInventoryItemDefinition");
+  for (const key in table) {
+    const cat = table[key].plug?.plugCategoryIdentifier;
+    const raid = cat ? BY_CATEGORY.get(cat) : undefined;
+    if (raid) out.set(Number(key), raid);
+  }
+  return out;
+});
+
+/** legacyRaidOf, against the manifest's raid plugs (built on the first socketed def). */
 export function legacyRaidOfDef(
   def: Parameters<typeof legacyRaidOf>[0],
   manifest: Manifest,
 ): LegacyRaidKey | undefined {
-  return legacyRaidOf(
-    def,
-    (plugHash) =>
-      manifest.def("DestinyInventoryItemDefinition", plugHash)?.plug?.plugCategoryIdentifier,
-  );
+  if (!def.sockets?.socketEntries?.length) return undefined;
+  return legacyRaidOf(def, raidPlugs(manifest));
 }
 
 /**
- * The optimizer's set hash for a raid: a synthetic set, since "wear N pieces of this
- * raid" is a set requirement to the solver. It never leaves the optimizer input: stored
- * selections are keyed by raid key, and DIM never sees it.
+ * The optimizer's set hash for a raid: a synthetic set from the raid's fixed `id`, since
+ * "wear N pieces of this raid" is a set requirement to the solver. Stored selections are
+ * keyed by raid key and DIM never sees it, but the build-usage history stores it inside
+ * its query keys, which is why `id` must never change.
  */
 export function legacyRaidSetHash(key: LegacyRaidKey): number {
-  return syntheticSetHash(INDEX.get(key)!);
+  return syntheticSetHash(BY_KEY.get(key)!.id);
+}
+
+/** The legacy raids a query's set requirements require pieces of. */
+export function requiredLegacyRaids(
+  reqs: readonly SetRequirement[] | undefined,
+): Set<LegacyRaidKey> {
+  const out = new Set<LegacyRaidKey>();
+  for (const r of reqs ?? []) {
+    const key = BY_SET_HASH.get(r.setHash);
+    if (key) out.add(key);
+  }
+  return out;
 }
 
 /**
- * The set a piece counts toward, for the solver and the build card's set pills: its
- * manifest armor set, or for legacy raid armor its raid. `name` is the raid's (a
- * manifest set's comes from its ArmorSetInfo). Raid pieces earn a pill from one piece,
- * since each is a mod socket; a set's bonus starts at two.
+ * The set a piece counts toward on the build card's set pills: its manifest armor set,
+ * or for legacy raid armor its raid. `name` is the raid's (a manifest set's comes from
+ * its ArmorSetInfo). Raid pieces earn a pill from one piece, since each is a mod socket;
+ * a set's bonus starts at two.
  */
 export interface ArmorGroup {
   setHash: number;
   minBadge: 1 | 2;
   name?: string;
+  raid?: LegacyRaidKey;
 }
 
 export function armorGroupOf(piece: {
@@ -105,6 +148,7 @@ export function armorGroupOf(piece: {
       setHash: legacyRaidSetHash(piece.legacyRaid),
       minBadge: 1,
       name: `${legacyRaidName(piece.legacyRaid)} raid armor`,
+      raid: piece.legacyRaid,
     };
   }
   return undefined;

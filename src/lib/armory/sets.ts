@@ -1,4 +1,5 @@
 import type { Manifest } from "@/lib/manifest/load";
+import { memoByManifest } from "../manifest/memo";
 import { legacyRaidOfDef, type LegacyRaidKey } from "./legacy-raids";
 import { itemWatermark, type ArmorPiece } from "./normalize";
 import { ARMOR_BUCKETS, TIER_LEGENDARY, type ArmorSlot } from "./stats";
@@ -148,20 +149,36 @@ export function setSlotIcons(
 /**
  * Each legacy raid's own item icon per slot for one class, from the manifest's legendary
  * armor with that raid's mod socket (the first match per slot wins). For drawing the
- * slots a player owns no piece in. One pass over the armor definitions for every raid.
+ * slots a player owns no piece in. One pass over the item table per class, kept for the
+ * session (raidSlotIconCache).
  */
 export function legacyRaidSlotIcons(
   manifest: Manifest,
   classType: number,
-): Map<LegacyRaidKey, Partial<Record<ArmorSlot, SetSlotIcon>>> {
-  const out = new Map<LegacyRaidKey, Partial<Record<ArmorSlot, SetSlotIcon>>>();
+): RaidSlotIcons {
+  const cache = raidSlotIconCache(manifest);
+  let out = cache.get(classType);
+  if (!out) {
+    out = scanRaidSlotIcons(manifest, classType);
+    cache.set(classType, out);
+  }
+  return out;
+}
+
+type RaidSlotIcons = Map<LegacyRaidKey, Partial<Record<ArmorSlot, SetSlotIcon>>>;
+
+const raidSlotIconCache = memoByManifest(() => new Map<number, RaidSlotIcons>());
+
+function scanRaidSlotIcons(manifest: Manifest, classType: number): RaidSlotIcons {
+  const out: RaidSlotIcons = new Map();
   const table = manifest.all("DestinyInventoryItemDefinition");
   for (const key in table) {
     const def = table[key];
     if (def.classType !== classType || def.inventory?.tierType !== TIER_LEGENDARY) continue;
     const slot = ARMOR_BUCKETS[def.inventory.bucketTypeHash as keyof typeof ARMOR_BUCKETS];
     const icon = def.displayProperties?.icon;
-    if (!slot || !icon || def.redacted) continue;
+    // Armor 2.0 only, like the pieces themselves (see buildPiece).
+    if (!slot || !icon || def.redacted || def.equippingBlock?.equipableItemSetHash) continue;
     const raid = legacyRaidOfDef(def, manifest);
     if (!raid) continue;
     const looks = out.get(raid) ?? {};

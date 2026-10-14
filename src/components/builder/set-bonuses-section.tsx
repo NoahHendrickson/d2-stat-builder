@@ -45,6 +45,7 @@ export function SetBonusesSection({
   planning,
   legacyRaids,
   raidReqs,
+  raidSlotBudget,
   onRaidCountChange,
   pieces,
   manifest,
@@ -68,6 +69,8 @@ export function SetBonusesSection({
   /** Legacy raids this class owns armor from. Not listed while planning (no Tier-5 drops). */
   legacyRaids: LegacyRaidInfo[];
   raidReqs: RaidReqs;
+  /** Armor pieces left for raid requirements (see LegacyRaidSets). */
+  raidSlotBudget: number;
   onRaidCountChange: (key: LegacyRaidKey, count: number) => void;
   /** The optimizer pool (what the roll grid counts). */
   pieces: ArmorPiece[];
@@ -100,10 +103,13 @@ export function SetBonusesSection({
   const activeFilters = !planning && hasActiveSetFilters(setFilters);
   // The search narrows the raid rows too; the set list's owned-count filter doesn't.
   const shownRaids = useMemo(() => {
-    if (planning) return [];
     const q = query.trim().toLowerCase();
     return legacyRaids.filter((r) => !q || r.name.toLowerCase().includes(q));
-  }, [legacyRaids, query, planning]);
+  }, [legacyRaids, query]);
+  // The raid fold's state lives here, so neither the search nor a trip to Theoretical
+  // folds it. Until it's toggled, it's open exactly while a requirement is on.
+  const [raidsToggled, setRaidsOpen] = useState<boolean | null>(null);
+  const raidsOpen = raidsToggled ?? Object.keys(raidReqs).length > 0;
 
   // The grid's set pickers follow the list's order — pinned first, each group in the
   // chosen sort — but ignore its search and filters, so every set stays reachable.
@@ -195,11 +201,17 @@ export function SetBonusesSection({
           {unpinnedList.map((s) => row(s, false))}
         </div>
       )}
-      {shownRaids.length > 0 && (
+      {/* Not while planning: legacy raid armor never drops as a Tier-5 roll. */}
+      {!planning && legacyRaids.length > 0 && (
         <LegacyRaidSets
           raids={shownRaids}
+          total={legacyRaids.length}
+          query={query}
           reqs={raidReqs}
+          slotBudget={raidSlotBudget}
           onCountChange={onRaidCountChange}
+          open={raidsOpen}
+          onOpenChange={setRaidsOpen}
           manifest={manifest}
           classType={classType}
         />
