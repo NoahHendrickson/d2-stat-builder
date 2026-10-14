@@ -440,8 +440,8 @@ function VaultTitle({ inventory: { vaultCount, vaultCapacity } }: { inventory: M
           }}
         />
         <div className="absolute inset-y-0 right-0 flex flex-col items-end justify-center gap-1 px-3 pb-1 text-right">
-          <h2 className="d2-heading text-sm leading-none text-white drop-shadow">Vault</h2>
-          <span className="text-xs leading-none text-white/75 tabular-nums drop-shadow">
+          <h2 className="text-lg leading-tight font-medium text-white">Vault</h2>
+          <span className="text-xs leading-none text-white/75 tabular-nums">
             <span className={cn("font-medium", nearFull ? "text-destructive" : "text-white")}>
               {vaultCount.toLocaleString()}
             </span>
