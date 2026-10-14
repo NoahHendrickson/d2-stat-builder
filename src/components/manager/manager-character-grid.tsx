@@ -15,6 +15,7 @@ import { StatGlyph } from "@/components/stat-glyph";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   CLASS_NAMES,
+  RACE_NAMES,
   STAT_DISPLAY_ORDER,
   STAT_LABELS,
   type StatIconMap,
@@ -200,7 +201,8 @@ function CharacterTab({ character, onPick }: { character: ManagerCharacter; onPi
 }
 
 /**
- * The character's emblem nameplate with class and Power, pinned while the grid scrolls.
+ * The character's emblem nameplate, laid out like the game's character select: class and
+ * race beside the emblem's icon, Power at the top right. Pinned while the grid scrolls.
  * Dropping on it sends the item to that character (and pulls postmaster items).
  */
 function CharacterHeader({
@@ -214,6 +216,7 @@ function CharacterHeader({
   const phone = usePhoneLayout();
   const farming = useStoreValue(farmingStore) === character.id;
   const name = CLASS_NAMES[character.classType] ?? "Guardian";
+  const race = character.raceType !== undefined ? RACE_NAMES[character.raceType] : undefined;
   const fallbackColor = character.emblemColor
     ? `rgb(${character.emblemColor.red} ${character.emblemColor.green} ${character.emblemColor.blue})`
     : undefined;
@@ -232,7 +235,7 @@ function CharacterHeader({
               <button
                 type="button"
                 aria-label={`${name} options`}
-                className="relative block h-16 w-full overflow-hidden border border-foreground/15 text-left outline-none focus-visible:d2-tile-selected normal:rounded-[12px]"
+                className="relative block h-14 w-full overflow-hidden text-left outline-none focus-visible:d2-tile-selected normal:rounded-[12px]"
               />
             }
           >
@@ -252,18 +255,25 @@ function CharacterHeader({
                 style={fallbackColor ? { backgroundColor: fallbackColor } : undefined}
               />
             )}
-            <div className="absolute inset-0 bg-gradient-to-r from-black/10 via-black/45 to-black/75" />
-            <div className="absolute inset-y-0 right-0 flex flex-col items-end justify-center gap-1 px-3 text-right">
-              <span className="d2-heading text-sm leading-none text-white drop-shadow">{name}</span>
-              <PowerValue value={character.light} size="sm" className="leading-none drop-shadow" />
-              {character.maxPower !== undefined && (
-                <span
-                  className="text-[11px] leading-none text-white/75 tabular-nums drop-shadow"
-                  title="The highest gear power this character could equip from your whole account"
-                >
-                  Max {character.maxPower}
-                </span>
-              )}
+            {/* A light wash past the icon, so text stays readable on bright emblems. */}
+            <div className="absolute inset-0 bg-gradient-to-r from-transparent from-20% to-black/30" />
+            {/* The emblem art carries its icon in the left square (the plate's height). */}
+            <div className="absolute inset-y-0 right-0 left-14 flex items-start justify-between gap-2 py-1.5 pr-3 pl-1">
+              <div className="flex min-w-0 flex-col gap-0.5">
+                <span className="truncate text-lg leading-tight font-medium text-white">{name}</span>
+                {race && <span className="truncate text-sm leading-tight text-white/60">{race}</span>}
+              </div>
+              <div className="flex shrink-0 flex-col items-end gap-1">
+                <PowerValue value={character.light} size="lg" tone="gold" className="leading-none" />
+                {character.maxPower !== undefined && (
+                  <span
+                    className="text-[11px] leading-none text-white/70 tabular-nums"
+                    title="The highest gear power this character could equip from your whole account"
+                  >
+                    Max {character.maxPower}
+                  </span>
+                )}
+              </div>
             </div>
             {farming && (
               <HugeiconsIcon

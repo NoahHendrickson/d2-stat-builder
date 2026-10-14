@@ -118,7 +118,7 @@ export const SetListControls = memo(function SetListControls({
             {/* Figma 18:6255 — "Select Menu": titled header, then a checkbox list. */}
             <PopoverContent
               align="end"
-              className="w-auto max-w-[calc(100vw-1rem)] gap-0 overflow-hidden p-0"
+              className="d2-frost w-auto max-w-[calc(100vw-1rem)] gap-0 overflow-hidden p-0"
             >
               <PopoverTitle className="text-text-secondary border-b border-foreground/10 px-3 py-2 text-sm font-medium">
                 Filter sets

@@ -216,6 +216,21 @@ export function WeaponSearchBox({
         ?.scrollIntoView({ block: "nearest" });
   }, [active, expanded, id]);
 
+  // Whether a pointer is pressed right now, for the blur handler below.
+  const pointerHeld = useRef(false);
+  useEffect(() => {
+    const down = () => (pointerHeld.current = true);
+    const up = () => (pointerHeld.current = false);
+    document.addEventListener("pointerdown", down, true);
+    document.addEventListener("pointerup", up, true);
+    document.addEventListener("pointercancel", up, true);
+    return () => {
+      document.removeEventListener("pointerdown", down, true);
+      document.removeEventListener("pointerup", up, true);
+      document.removeEventListener("pointercancel", up, true);
+    };
+  }, []);
+
   function leaveDrill() {
     setDrillParam(null);
     setDrillText("");
@@ -288,10 +303,26 @@ export function WeaponSearchBox({
     <div
       className="min-w-0 flex-1"
       onBlur={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget)) {
+        const box = event.currentTarget;
+        if (box.contains(event.relatedTarget)) return;
+        // The list sits in the page flow, so closing it moves the results up. Focus
+        // leaves before the click lands (on the press with a mouse, between the
+        // tap's mousedown and click on touch), so close only after the click:
+        // closing at once would slide another weapon under the pointer.
+        const close = () => {
+          if (box.contains(document.activeElement)) return;
           setOpen(false);
           leaveDrill();
-        }
+        };
+        const afterClick = () => setTimeout(close);
+        if (!pointerHeld.current) return afterClick();
+        const done = new AbortController();
+        const onRelease = () => {
+          done.abort();
+          afterClick();
+        };
+        document.addEventListener("pointerup", onRelease, { signal: done.signal });
+        document.addEventListener("pointercancel", onRelease, { signal: done.signal });
       }}
     >
       <div
