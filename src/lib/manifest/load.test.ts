@@ -25,7 +25,7 @@ vi.mock("bungie-api-ts/destiny2", async (importOriginal) => ({
 
 const { loadManifest } = await import("./load");
 
-const REV = "item-def-projection-v7";
+const REV = "item-def-projection-v8";
 const info = (version: string) => ({
   Response: {
     version,

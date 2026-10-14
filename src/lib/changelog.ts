@@ -7,7 +7,7 @@
  * their own terms, never by comparison to another app or site.
  */
 export interface ChangelogEntry {
-  /** Release day, YYYY-MM-DD. Also what "seen" is tracked by: a newer top date is news. */
+  /** Release day, YYYY-MM-DD. "Seen" tracks it with the line count: a newer top date, or a new line under it, is news. */
   date: string;
   changes: string[];
   /** A video or post that goes with the release. */

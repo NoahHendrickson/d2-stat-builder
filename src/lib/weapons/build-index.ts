@@ -63,7 +63,8 @@ function isEnhancedPlug(def: DestinyInventoryItemDefinition): boolean {
   return def.inventory?.tierType === 3;
 }
 
-function plugDescription(def: DestinyInventoryItemDefinition): string | undefined {
+/** The item's own description; weapon perks don't read their sandbox perks. */
+function itemDescription(def: DestinyInventoryItemDefinition): string | undefined {
   const description = def.displayProperties?.description?.trim();
   return description || undefined;
 }
@@ -114,7 +115,7 @@ export function buildColumnPerks(
       row.canRoll = row.canRoll || canRoll;
       row.craftedOnly = row.craftedOnly && craftedOnly;
       row.enhancedHash = hash;
-      row.enhancedDescription = plugDescription(pd);
+      row.enhancedDescription = itemDescription(pd);
       byName.set(name, row);
       continue;
     }
@@ -126,7 +127,7 @@ export function buildColumnPerks(
       icon: pd.displayProperties?.icon || undefined,
       canRoll: row?.canRoll || canRoll,
       craftedOnly: (row?.craftedOnly ?? true) && craftedOnly,
-      description: plugDescription(pd),
+      description: itemDescription(pd),
       enhancedHash: row?.enhancedHash,
       enhancedDescription: row?.enhancedDescription,
       statMods: extractPlugStatMods(pd) ?? row?.statMods,

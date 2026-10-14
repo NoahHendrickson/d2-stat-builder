@@ -1,10 +1,13 @@
 import { test, expect } from "vitest";
-import { dedupeModOptions, isExcludedModName, statModName, type ModOption } from "./mod-options";
-import { ARTIFICE_MOD_CATEGORY, GENERAL_MOD_CATEGORY, STAT_HASHES } from "@/lib/armory/stats";
+import { dedupeModOptions, getModCatalog, isExcludedModName, type ModOption } from "./mod-options";
+import { GENERAL_MOD_CATEGORY, STAT_HASHES } from "@/lib/armory/stats";
+import type { ArmorPiece, ArmorSocket } from "@/lib/armory/normalize";
+import type { Manifest } from "@/lib/manifest/load";
 
 const opt = (hash: number, name: string, cost: number, artifactOnly = false): ModOption => ({
   hash,
   name,
+  label: name,
   cost,
   stackable: true,
   artifactOnly,
@@ -36,25 +39,40 @@ test("isExcludedModName hides Curse of Riven leftovers", () => {
   expect(isExcludedModName("Arc Siphon")).toBe(false);
 });
 
-test("statModName reads a stat mod as its stat gain", () => {
-  const mod = (cat: string, value: number, statTypeHash = STAT_HASHES.grenade) => ({
-    plug: { plugCategoryIdentifier: cat },
-    investmentStats: [{ statTypeHash: 3578062600, value: 3 }, { statTypeHash, value }],
-  });
-  expect(statModName(mod(GENERAL_MOD_CATEGORY, 10))).toBe("+10 Grenade");
-  expect(statModName(mod(GENERAL_MOD_CATEGORY, 5, STAT_HASHES.weapons))).toBe("+5 Weapons");
-  expect(statModName(mod(ARTIFICE_MOD_CATEGORY, 3, STAT_HASHES.super))).toBe("+3 Super");
-  expect(statModName(mod("enhancements.v2_head", 10))).toBeUndefined();
-  const tuning = (...stats: [number, number][]) => ({
-    plug: { plugCategoryIdentifier: "v460.plugs.armor.tuning.mods" },
-    investmentStats: stats.map(([statTypeHash, value]) => ({ statTypeHash, value })),
-  });
-  expect(statModName(tuning([STAT_HASHES.grenade, -5], [STAT_HASHES.weapons, 5]))).toBe(
-    "+5 Weapons / −5 Grenade",
-  );
-  // Balanced Tuning is all-positive: it keeps its own name.
-  expect(
-    statModName(tuning([STAT_HASHES.grenade, 1], [STAT_HASHES.weapons, 1], [STAT_HASHES.super, 1])),
-  ).toBeUndefined();
-  expect(statModName(undefined)).toBeUndefined();
+
+test("a stat mod's full-cost and artifact copies stay one tile, labelled by its gain", () => {
+  // Live data: the artifact copy invests only energy; its +10 is on the shared sandbox perk.
+  const plug = { plugCategoryIdentifier: GENERAL_MOD_CATEGORY, insertionRules: [] };
+  const items: Record<number, object> = {
+    1435557120: {
+      displayProperties: { name: "Grenade Mod", description: "" },
+      collectibleHash: 1,
+      plug: { ...plug, energyCost: { energyCost: 3 } },
+      perks: [{ perkHash: 4234432032 }],
+      investmentStats: [{ statTypeHash: 3578062600, value: 3 }, { statTypeHash: STAT_HASHES.grenade, value: 10 }],
+    },
+    3896141096: {
+      displayProperties: { name: "Grenade Mod", description: "" },
+      plug: { ...plug, energyCost: { energyCost: 1 } },
+      perks: [{ perkHash: 4234432032 }],
+      investmentStats: [{ statTypeHash: 3578062600, value: 1 }],
+    },
+  };
+  const plugSet = { reusablePlugItems: Object.keys(items).map((h) => ({ plugItemHash: Number(h) })) };
+  const tables: Record<string, Record<number, object>> = {
+    DestinyInventoryItemDefinition: items,
+    DestinyPlugSetDefinition: { 731468111: plugSet },
+  };
+  const manifest = {
+    def: (t: string, h: number | undefined) => (h == null ? undefined : tables[t]?.[h]),
+    all: (t: string) => tables[t] ?? {},
+  } as unknown as Manifest;
+  const socket = { kind: "general", plugSetHash: 731468111 } as ArmorSocket;
+  const piece = {} as ArmorPiece;
+  const catalog = getModCatalog(manifest);
+
+  const shown = catalog.optionsFor(piece, socket, new Set([1435557120]));
+  expect(shown.map((o) => [o.hash, o.label])).toEqual([[1435557120, "+10 Grenade"]]);
+  expect(shown[0].description).toBeUndefined();
+  expect(catalog.option(3896141096)?.label).toBe("+10 Grenade");
 });

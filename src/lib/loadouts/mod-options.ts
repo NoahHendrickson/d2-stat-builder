@@ -2,20 +2,22 @@ import type { Manifest } from "@/lib/manifest/load";
 import type { ArmorPiece, ArmorSocket } from "@/lib/armory/normalize";
 import {
   BALANCED_TUNING_PLUG_HASH,
-  STAT_HASH_TO_INDEX,
-  STAT_LABELS,
   STAT_ORDER,
   plugKindForCategory,
   type ArmorSocketKind,
 } from "@/lib/armory/stats";
-import { plugDescription } from "@/lib/armory/fragments";
+import { describePlug } from "@/lib/armory/plug-text";
 import { getArtificeModHashes, getTuningPlugHashes } from "@/lib/dim/mod-hashes";
 
 /** One pickable mod for a socket. */
 export interface ModOption {
   hash: number;
+  /** The manifest name: what pairs a mod's full-cost and artifact copies (`dedupeModOptions`). */
   name: string;
+  /** What the tile says: "+10 Grenade" for stat and tuning mods, else the name. */
+  label: string;
   icon?: string;
+  /** See `describePlug`: absent on stat and tuning mods. */
   description?: string;
   /** Armor energy cost (0 for tuning / artifice). */
   cost: number;
@@ -53,41 +55,19 @@ export function isPlaceholderPlug(def: {
   );
 }
 
-/**
- * What a stat mod (general +10 / +5, artifice +3) or directional tuning mod does, e.g.
- * "+10 Grenade" or "+5 Weapons / −5 Grenade" — shown in place of its name. Undefined
- * for any other plug (Balanced Tuning included).
- */
-export function statModName(def: {
-  plug?: { plugCategoryIdentifier?: string };
-  investmentStats?: { statTypeHash: number; value: number }[];
-} | undefined): string | undefined {
-  const kind = plugKindForCategory(def?.plug?.plugCategoryIdentifier ?? "");
-  if (kind !== "general" && kind !== "artifice" && kind !== "tuning") return undefined;
-  const inv = (def?.investmentStats ?? [])
-    .filter((s) => STAT_HASH_TO_INDEX[s.statTypeHash] !== undefined && s.value !== 0)
-    .sort((a, b) => b.value - a.value);
-  const shape = inv.map((s) => Math.sign(s.value)).join();
-  if (shape !== (kind === "tuning" ? "1,-1" : "1")) return undefined;
-  return inv
-    .map(
-      (s) =>
-        `${s.value > 0 ? "+" : "−"}${Math.abs(s.value)} ${STAT_LABELS[STAT_ORDER[STAT_HASH_TO_INDEX[s.statTypeHash]]]}`,
-    )
-    .join(" / ");
-}
-
 function optionFor(manifest: Manifest, hash: number): ModOption | undefined {
   const def = manifest.def("DestinyInventoryItemDefinition", hash);
   if (!def || def.redacted || !def.displayProperties?.name || def.plug?.isDummyPlug) return undefined;
   if (isExcludedModName(def.displayProperties.name)) return undefined;
   if (isPlaceholderPlug(def)) return undefined;
   const rules = def.plug?.insertionRules ?? [];
+  const { label, description } = describePlug(manifest, hash);
   return {
     hash,
-    name: statModName(def) ?? def.displayProperties.name,
+    name: def.displayProperties.name,
+    label,
     icon: def.displayProperties.icon,
-    description: plugDescription(def, manifest),
+    description,
     cost: def.plug?.energyCost?.energyCost ?? 0,
     stackable: !rules.some((r) => r.failureMessage?.includes(NO_STACK_RULE)),
     artifactOnly: def.collectibleHash === undefined,
@@ -123,7 +103,7 @@ export function dedupeModOptions(
       )[0],
     );
   }
-  return out.sort((a, b) => a.cost - b.cost || a.name.localeCompare(b.name));
+  return out.sort((a, b) => a.cost - b.cost || a.label.localeCompare(b.label));
 }
 
 /** Plug hashes a plug set lists (everything, including the empty plug). */
@@ -144,6 +124,8 @@ export class ModOptionCatalog {
   private readonly tuning: Map<string, number>;
   private readonly artifice: (number | undefined)[];
   private readonly cache = new Map<string, ModOption[]>();
+  /** `option()` per hash: placement loops call it for every cost lookup. */
+  private readonly byHash = new Map<number, ModOption | undefined>();
 
   constructor(private readonly manifest: Manifest) {
     this.tuning = getTuningPlugHashes(manifest);
@@ -178,7 +160,7 @@ export class ModOptionCatalog {
         out = [...plugSetHashes(this.manifest, socket.plugSetHash)]
           .filter((h) => h !== socket.emptyPlugHash)
           .flatMap((h) => optionFor(this.manifest, h) ?? [])
-          .sort((a, b) => a.cost - b.cost || a.name.localeCompare(b.name));
+          .sort((a, b) => a.cost - b.cost || a.label.localeCompare(b.label));
     }
     this.cache.set(key, out);
     return out;
@@ -196,7 +178,7 @@ export class ModOptionCatalog {
         if (minus === plus) continue;
         const hash = this.tuning.get(`${plus}-${minus}`);
         if (hash === undefined) continue;
-        // Named "+5 X / −5 Y" by `statModName`.
+        // Labelled "+5 X / −5 Y" by `describePlug`.
         const opt = optionFor(this.manifest, hash);
         if (opt) out.push(opt);
       }
@@ -206,7 +188,8 @@ export class ModOptionCatalog {
 
   /** Display info for a plug hash (any kind), or undefined if unknown. */
   option(hash: number): ModOption | undefined {
-    return optionFor(this.manifest, hash);
+    if (!this.byHash.has(hash)) this.byHash.set(hash, optionFor(this.manifest, hash));
+    return this.byHash.get(hash);
   }
 
   /** Socket kind this plug belongs to, or undefined if it isn't an armor mod. */

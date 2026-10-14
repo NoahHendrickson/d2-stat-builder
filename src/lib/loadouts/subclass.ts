@@ -1,6 +1,7 @@
 import type { Manifest } from "../manifest/load";
 import { memoByManifest } from "../manifest/memo";
 import { buildFragmentStats, type Subclass } from "../armory/fragments";
+import { plugDescription } from "../armory/plug-text";
 import type { StatArray } from "../armory/stats";
 import {
   ABILITY_KINDS, ABILITY_PLUG_CATEGORY_SUFFIX, ASPECT_SOCKET_COUNT, FRAGMENT_SOCKET_COUNT,
@@ -104,12 +105,9 @@ function computeSubclassOptions(
     const options = hashes.flatMap((hash): SubclassPlugOption[] => {
       const plug = manifest.def("DestinyInventoryItemDefinition", hash);
       if (!plug || (!includeInitial && hash === socket?.singleInitialItemHash)) return [];
-      const description = plug.perks?.map((p) =>
-        manifest.def("DestinySandboxPerkDefinition", p.perkHash)?.displayProperties?.description,
-      ).filter(Boolean).join("\n") || plug.displayProperties.description;
       return [{
         hash, name: plug.displayProperties.name, icon: plug.displayProperties.icon,
-        description,
+        description: plugDescription(plug, manifest) ?? "",
         fragmentSlots: plug.investmentStats?.find((s) => s.statTypeHash === 2223994109)?.value ?? 0,
         stats: buildFragmentStats(plug.investmentStats, classType).stats,
         plugCategory: plug.plug?.plugCategoryIdentifier,

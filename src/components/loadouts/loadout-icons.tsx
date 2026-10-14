@@ -2,9 +2,10 @@
 
 import Image from "next/image";
 import { TooltipLabel } from "@/components/ui/tooltip";
-import { buildFragmentStats, formatFragmentStats, plugDescription, SUBCLASS_LINE, subclassFromPlug, type Subclass } from "@/lib/armory/fragments";
+import { buildFragmentStats, formatFragmentStats, SUBCLASS_LINE, subclassFromPlug, type Subclass } from "@/lib/armory/fragments";
+import { describePlug } from "@/lib/armory/plug-text";
 import { isStrandSharedAbilityIcon } from "@/lib/dim/subclasses";
-import { statModName } from "@/lib/loadouts/mod-options";
+import { PlugTooltip } from "@/components/loadouts/plug-tooltip";
 import {
   STRAND_ABILITY_PLATE_FILTER,
   StrandAbilityRecolor,
@@ -57,30 +58,18 @@ export function PlugIcon({
   framed?: boolean;
 }) {
   const def = manifest.def("DestinyInventoryItemDefinition", hash);
-  // Stat and tuning mods are named by what they do, which says it all; everything else
-  // gets its description under the name.
-  const statName = statModName(def);
-  const name = statName ?? def?.displayProperties?.name ?? `#${hash}`;
-  const description = statName || !def ? undefined : plugDescription(def, manifest);
+  const { label: name, description } = describePlug(manifest, hash);
   const stats =
     classType === undefined
       ? ""
       : formatFragmentStats(
           buildFragmentStats(def?.investmentStats, classType).stats,
         );
+  // Plain text for alt / aria-label; the tooltip gets the structured version.
   const title = suffix ? `${name} — ${suffix}` : name;
   const label = stats ? `${title}\n${stats}` : title;
-  const tooltip = description ? (
-    <span className="flex max-w-64 flex-col gap-1">
-      <span>
-        <span className="font-medium">{name}</span>
-        {suffix && <span className="text-muted-foreground"> — {suffix}</span>}
-      </span>
-      {stats && <span>{stats}</span>}
-      <span className="text-muted-foreground">{description}</span>
-    </span>
-  ) : (
-    label
+  const tooltip = (
+    <PlugTooltip name={name} suffix={suffix} stats={stats} description={description} />
   );
   const icon = def?.displayProperties?.icon;
   const recolor = isStrandSharedAbilityIcon(def?.plug?.plugCategoryIdentifier);

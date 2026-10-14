@@ -1,5 +1,6 @@
 import type { Manifest } from "@/lib/manifest/load";
 import { memoByManifest } from "@/lib/manifest/memo";
+import { plugDescription } from "./plug-text";
 import { STAT_HASH_TO_INDEX, STAT_LABELS, STAT_ORDER, type StatArray } from "./stats";
 
 export type Subclass = "Arc" | "Solar" | "Void" | "Stasis" | "Strand" | "Prismatic";
@@ -130,37 +131,11 @@ export interface FragmentInfo {
   hash: number;
   name: string;
   icon?: string;
-  /** Player-facing inspect text (sandbox perk, then item description). */
+  /** Player-facing inspect text (see `plugDescription`). */
   description?: string;
   subclass: Subclass;
   /** Summed investment stats on the six armor stats (STAT_ORDER); may be negative. */
   stats: StatArray;
-}
-
-/** A plug's description: its sandbox perks' text, then the item's own description (empty on many mods and artifact perks). */
-export function plugDescription(
-  def: {
-    displayProperties?: { description?: string };
-    flavorText?: string;
-    perks?: { perkHash: number }[];
-  },
-  manifest: Manifest,
-): string | undefined {
-  const fromPerks = (def.perks ?? [])
-    .map(
-      (p) =>
-        manifest.def("DestinySandboxPerkDefinition", p.perkHash)
-          ?.displayProperties?.description,
-    )
-    .filter((d): d is string => Boolean(d?.trim()))
-    .join("\n")
-    .trim();
-  return (
-    fromPerks ||
-    def.displayProperties?.description?.trim() ||
-    def.flavorText?.trim() ||
-    undefined
-  );
 }
 
 /**

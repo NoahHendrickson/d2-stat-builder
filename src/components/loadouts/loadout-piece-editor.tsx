@@ -17,10 +17,8 @@ import {
   pieceEnergyUsed,
 } from "@/lib/loadouts/mod-placement";
 import { TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { PlugTooltip } from "@/components/loadouts/plug-tooltip";
 import { cn } from "@/lib/utils";
-
-/** A mod cell's tooltip: the mod's name, and what it does for armor mods. */
-type ModTip = { name: string; description?: string };
 
 const KIND_LABEL: Record<ArmorSocket["kind"], string> = {
   general: "Stat mod",
@@ -103,7 +101,6 @@ const ModCell = memo(function ModCell({
   count,
   blocked,
   problem,
-  describe,
   onPick,
   tooltipHandle,
 }: {
@@ -112,10 +109,8 @@ const ModCell = memo(function ModCell({
   /** No socket or energy left for this mod (clicking a chosen one still clears it). */
   blocked: boolean;
   problem?: string;
-  /** Show the mod's description too (stat, tuning and artifice names already say what they do). */
-  describe: boolean;
   onPick: (option: ModOption) => void;
-  tooltipHandle: BaseTooltip.Handle<ModTip>;
+  tooltipHandle: BaseTooltip.Handle<ModOption>;
 }) {
   const chosen = count > 0;
   const cost = option.cost > 0 ? `${option.cost} energy` : undefined;
@@ -126,13 +121,13 @@ const ModCell = memo(function ModCell({
     : blocked && !problem
       ? "won't fit"
       : undefined;
-  const label = [option.name, cost, state, problem && `not placed: ${problem}`]
+  const label = [option.label, cost, state, problem && `not placed: ${problem}`]
     .filter(Boolean)
     .join(" · ");
   return (
     <TooltipTrigger
       handle={tooltipHandle}
-      payload={{ name: option.name, description: describe ? option.description : undefined }}
+      payload={option}
       render={
         <button
           type="button"
@@ -233,7 +228,7 @@ function KindGrid({
     (exclusive || !full) && (energyLeft === undefined || o.cost <= energyLeft + credit);
   const heading = sockets.length > 1 ? `${KIND_LABEL[kind]}s` : KIND_LABEL[kind];
 
-  const tooltipHandle = useMemo(() => BaseTooltip.createHandle<ModTip>(), []);
+  const tooltipHandle = useMemo(() => BaseTooltip.createHandle<ModOption>(), []);
 
   const onPick = useCallback(
     (o: ModOption) => {
@@ -288,7 +283,6 @@ function KindGrid({
               count={count}
               blocked={count === 0 && !canAdd}
               problem={problems.get(o.hash) ?? problems.get(o.name)}
-              describe={kind === "other"}
               onPick={onPick}
               tooltipHandle={tooltipHandle}
             />
@@ -298,14 +292,7 @@ function KindGrid({
         {({ payload }) =>
           payload !== undefined ? (
             <TooltipContent>
-              {payload.description ? (
-                <span className="flex max-w-64 flex-col gap-1">
-                  <span className="font-medium">{payload.name}</span>
-                  <span className="text-muted-foreground">{payload.description}</span>
-                </span>
-              ) : (
-                payload.name
-              )}
+              <PlugTooltip name={payload.label} description={payload.description} />
             </TooltipContent>
           ) : null
         }

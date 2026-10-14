@@ -10,6 +10,7 @@ import type {
   DestinyItemQualityBlockDefinition,
   DestinyItemSocketEntryDefinition,
   DestinyItemSocketEntryPlugItemDefinition,
+  DestinyItemTooltipNotification,
   DestinyPlugRuleDefinition,
 } from "bungie-api-ts/destiny2";
 
@@ -57,7 +58,15 @@ export interface ItemDef
     DestinyItemInvestmentStatDefinition,
     "statTypeHash" | "value" | "isConditionallyActive"
   >[];
-  readonly perks: Pick<DestinyItemPerkEntryDefinition, "perkHash">[];
+  /** `perkVisibility` 2 (Hidden) marks internal perks a tooltip skips. */
+  readonly perks: (Pick<DestinyItemPerkEntryDefinition, "perkHash"> &
+    Partial<Pick<DestinyItemPerkEntryDefinition, "perkVisibility">>)[];
+  /**
+   * The game's tooltip notes ("only active in the raid", "matches your Super's element").
+   * Kept on armor mods and artifact perks only: on subclass plugs they're unlock-state
+   * messages, and weapon/cosmetic plugs aren't shown with descriptions.
+   */
+  readonly tooltipNotifications?: Pick<DestinyItemTooltipNotification, "displayString">[];
   readonly plug?: ItemDefPlug;
   readonly sockets?: { readonly socketEntries: ItemDefSocketEntry[] };
   readonly quality?: Pick<
@@ -95,6 +104,8 @@ export interface ItemDefSocketEntry
 
 /** DestinyItemType.Subclass */
 const ITEM_TYPE_SUBCLASS = 16;
+/** Seasonal artifact perks' plug category. */
+const ARTIFACT_PERK_CATEGORY = "artifact_perks";
 
 type Writable<T> = { -readonly [K in keyof T]: T[K] };
 
@@ -118,6 +129,7 @@ const BLOCK_KEYS = [
   "equippingBlock",
   "investmentStats",
   "perks",
+  "tooltipNotifications",
   "plug",
   "sockets",
   "quality",
@@ -164,8 +176,15 @@ export function projectItemDef(def: DestinyInventoryItemDefinition): ItemDef {
     investmentStats: (def.investmentStats ?? []).map((s) =>
       pick(s, ["statTypeHash", "value", "isConditionallyActive"]),
     ),
-    perks: (def.perks ?? []).map((p) => pick(p, ["perkHash"])),
+    perks: (def.perks ?? []).map((p) => pick(p, ["perkHash", "perkVisibility"])),
   };
+  const category = def.plug?.plugCategoryIdentifier ?? "";
+  if (
+    def.tooltipNotifications?.length &&
+    (category.startsWith("enhancements.") || category === ARTIFACT_PERK_CATEGORY)
+  ) {
+    out.tooltipNotifications = def.tooltipNotifications.map((n) => pick(n, ["displayString"]));
+  }
   if (def.inventory) {
     out.inventory = pick(def.inventory, ["bucketTypeHash", "tierType", "recipeItemHash"]);
   }
@@ -223,7 +242,8 @@ export function projectItemDef(def: DestinyInventoryItemDefinition): ItemDef {
  * these items add to the cache.
  */
 export function projectItemDefLean(def: DestinyInventoryItemDefinition): ItemDef {
-  const { sockets: _sockets, ...rest } = projectItemDef(def);
+  const { sockets: _sockets, tooltipNotifications: _notes, ...rest } = projectItemDef(def);
   void _sockets;
+  void _notes;
   return { ...rest, flavorText: "", investmentStats: [], perks: [] };
 }
