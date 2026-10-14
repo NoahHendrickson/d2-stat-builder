@@ -15,7 +15,7 @@ import {
   resolveDestinyAccount,
 } from "@/lib/bungie/destiny-account";
 import { clearSession, getValidAccessToken, readUser, writeUser } from "@/lib/bungie/session";
-import { gzipResponse } from "@/lib/http/gzip-response";
+import { compressResponse } from "@/lib/http/compress-response";
 import {
   HELD_PROFILE_HEADER,
   isNewerMint,
@@ -59,14 +59,14 @@ function slimProfile(profile: DestinyProfileResponse): DestinyProfileResponse {
 /**
  * Server-side proxy for the player's Destiny profile. Runs server-to-server so
  * Bungie's Origin-header check never fires and the access token never leaves the
- * server. Returns the raw DestinyProfileResponse for the client to normalize, gzipped
- * (the uncompressed profile is what filled the Fast Origin Transfer allowance), or a
+ * server. Returns the raw DestinyProfileResponse for the client to normalize, compressed
+ * here (the uncompressed profile is what filled the Fast Origin Transfer allowance), or a
  * bodiless 304 when the client holds a profile and Bungie has nothing newer (see
  * profile-mint.ts).
  */
 export async function GET(request: Request) {
   const held = parseHeldProfile(request.headers.get(HELD_PROFILE_HEADER));
-  return gzipResponse(request, await loadProfile(held));
+  return compressResponse(request, await loadProfile(held));
 }
 
 async function loadProfile(held: Minted | undefined): Promise<Response> {
