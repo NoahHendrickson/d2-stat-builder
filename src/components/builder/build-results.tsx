@@ -30,7 +30,7 @@ import {
 } from "@/lib/armory/masterwork";
 import type { Manifest } from "@/lib/manifest/load";
 import type { ArmorSetInfo } from "@/lib/armory/sets";
-import { legacyRaidName, type LegacyRaidKey } from "@/lib/armory/legacy-raids";
+import { armorGroupOf, type ArmorGroup } from "@/lib/armory/legacy-raids";
 import {
   STAT_DISPLAY_ORDER,
   STAT_LABELS,
@@ -361,24 +361,21 @@ const BuildRow = memo(function BuildRow({
   // assume it's done; this only tells the player what they'd have to spend.
   const masterwork = summarizeMasterwork(pieces);
 
-  const setCounts = new Map<number, number>();
+  // One pill per set the build wears enough of: a manifest set from 2 pieces, a legacy
+  // raid from 1 (see armorGroupOf).
+  const groups = new Map<number, { group: ArmorGroup; count: number }>();
   for (const p of pieces) {
-    if (p?.setHash)
-      setCounts.set(p.setHash, (setCounts.get(p.setHash) ?? 0) + 1);
+    const group = p && armorGroupOf(p);
+    if (!group) continue;
+    const entry = groups.get(group.setHash) ?? { group, count: 0 };
+    entry.count++;
+    groups.set(group.setHash, entry);
   }
   const setBadges: { name: string; count: number }[] = [];
-  for (const [hash, cnt] of setCounts) {
-    if (cnt < 2) continue;
-    const info = setMap.get(hash);
-    if (info) setBadges.push({ name: info.name, count: cnt });
-  }
-  // Legacy raid armor has no set bonus, but every piece is a raid mod socket: one counts.
-  const raidCounts = new Map<LegacyRaidKey, number>();
-  for (const p of pieces) {
-    if (p?.legacyRaid) raidCounts.set(p.legacyRaid, (raidCounts.get(p.legacyRaid) ?? 0) + 1);
-  }
-  for (const [key, cnt] of raidCounts) {
-    setBadges.push({ name: `${legacyRaidName(key)} raid armor`, count: cnt });
+  for (const { group, count } of groups.values()) {
+    if (count < group.minBadge) continue;
+    const name = group.name ?? setMap.get(group.setHash)?.name;
+    if (name) setBadges.push({ name, count });
   }
 
   return (

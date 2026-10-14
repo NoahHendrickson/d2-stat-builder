@@ -11,7 +11,7 @@ import {
   isExoticClassItemHash,
 } from "./exotic-class-perks";
 import { isFestivalMask } from "./festival-masks";
-import { legacyRaidOf, type LegacyRaidKey } from "./legacy-raids";
+import { legacyRaidOfDef, type LegacyRaidKey } from "./legacy-raids";
 import { readMasterwork, type MasterworkInfo } from "./masterwork";
 import {
   ARMOR_ARCHETYPE_PLUG_CATEGORY,
@@ -22,6 +22,7 @@ import {
   STAT_HASHES,
   STAT_HASH_TO_INDEX,
   STAT_ORDER,
+  TIER_EXOTIC,
   TUNING_PLUG_CATEGORY,
   offArchetypeIndices,
   plugKindForCategory,
@@ -138,7 +139,6 @@ export interface ArmorPiece {
 }
 
 const ITEM_TYPE_ARMOR = 2;
-const TIER_TYPE_EXOTIC = 6;
 /** ItemState.Locked */
 const ITEM_STATE_LOCKED = 1;
 /** The postmaster bucket (Lost Items) — items here live in the character inventory list. */
@@ -516,7 +516,7 @@ function buildPiece(
     (festivalMask ? "helmet" : undefined);
   if (!slot) return null;
 
-  const isExotic = def.inventory?.tierType === TIER_TYPE_EXOTIC;
+  const isExotic = def.inventory?.tierType === TIER_EXOTIC;
   const exoticClassItem = isExotic && isExoticClassItemHash(item.itemHash);
   const exoticPerkHashes = exoticClassItem
     ? exoticClassItemPerks(item.itemInstanceId, profile)
@@ -569,11 +569,7 @@ function buildPiece(
   const power = readPower(item.itemInstanceId, profile);
   const gearTier = readGearTier(item.itemInstanceId, profile);
   const watermark = itemWatermark(def, item.versionNumber);
-  const legacyRaid = legacyRaidOf(
-    def,
-    (plugHash) =>
-      manifest.def("DestinyInventoryItemDefinition", plugHash)?.plug?.plugCategoryIdentifier,
-  );
+  const legacyRaid = legacyRaidOfDef(def, manifest);
 
   return {
     instanceId: item.itemInstanceId,

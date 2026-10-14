@@ -1,17 +1,19 @@
 import { describe, expect, test } from "vitest";
 import {
   LEGACY_RAIDS,
-  isLegacyRaidSetHash,
+  armorGroupOf,
   legacyRaidOf,
   legacyRaidSetHash,
   makeableRaidReqs,
   ownedLegacyRaids,
   parseRaidReqs,
   raidSetRequirements,
+  type LegacyRaidKey,
 } from "./legacy-raids";
 import { inDefaultOptimizerPool } from "./optimizer-pool";
 import { armorToOptimizerPiece } from "../optimizer/from-armory";
 import { solve } from "../optimizer/solve";
+import { isSyntheticSetHash, syntheticSetIndex } from "../optimizer/synthetic-set";
 import type { ArmorPiece } from "./normalize";
 import type { ArmorSlot, StatArray } from "./stats";
 
@@ -42,11 +44,23 @@ describe("legacyRaidOf", () => {
   });
 });
 
-test("stand-in set hashes are distinct and never a real (unsigned) set hash", () => {
+test("raid set hashes are distinct synthetic sets, never a real (unsigned) set hash", () => {
   const hashes = LEGACY_RAIDS.map((r) => legacyRaidSetHash(r.key));
-  expect(new Set(hashes).size).toBe(LEGACY_RAIDS.length);
-  expect(hashes.every(isLegacyRaidSetHash)).toBe(true);
-  expect(isLegacyRaidSetHash(1490136267)).toBe(false);
+  expect(hashes.map(syntheticSetIndex)).toEqual(LEGACY_RAIDS.map((_, i) => i));
+  expect(hashes.every(isSyntheticSetHash)).toBe(true);
+  expect(isSyntheticSetHash(1490136267)).toBe(false);
+});
+
+describe("armorGroupOf", () => {
+  test("a manifest set badges from 2 pieces, a legacy raid from 1, by name", () => {
+    expect(armorGroupOf({ setHash: 1490136267 })).toEqual({ setHash: 1490136267, minBadge: 2 });
+    expect(armorGroupOf({ legacyRaid: "dsc" })).toEqual({
+      setHash: legacyRaidSetHash("dsc"),
+      minBadge: 1,
+      name: "Deep Stone Crypt raid armor",
+    });
+    expect(armorGroupOf({})).toBeUndefined();
+  });
 });
 
 describe("ownedLegacyRaids", () => {
@@ -106,13 +120,18 @@ test("parseRaidReqs keeps known raids with a count of 1–5", () => {
 });
 
 describe("in the optimizer", () => {
-  const off = { legacyExotics: false, lowerTierArmor: false, legacyArmor: false };
+  const off = {
+    legacyExotics: false,
+    lowerTierArmor: false,
+    legacyArmor: false,
+    legacyRaids: new Set<LegacyRaidKey>(),
+  };
 
   test("a required raid's legacy legendaries join the pool, other legacy armor doesn't", () => {
-    const dsc = { isFestivalMask: false, isExotic: false, legacyRaid: "dsc" };
-    const vow = { isFestivalMask: false, isExotic: false, legacyRaid: "vow" };
+    const dsc = { isFestivalMask: false, isExotic: false, legacyRaid: "dsc" as const };
+    const vow = { isFestivalMask: false, isExotic: false, legacyRaid: "vow" as const };
     const plain = { isFestivalMask: false, isExotic: false };
-    const opts = { ...off, legacyRaids: new Set(["dsc"]) };
+    const opts = { ...off, legacyRaids: new Set<LegacyRaidKey>(["dsc"]) };
     expect(inDefaultOptimizerPool(dsc, opts)).toBe(true);
     expect(inDefaultOptimizerPool(vow, opts)).toBe(false);
     expect(inDefaultOptimizerPool(plain, opts)).toBe(false);

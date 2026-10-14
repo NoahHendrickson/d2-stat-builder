@@ -7,6 +7,8 @@
  *
  * Runtime imports are relative (not `@/`) so the module also runs under vitest.
  */
+import type { Manifest } from "../manifest/load";
+import { syntheticSetHash } from "../optimizer/synthetic-set";
 import type { SetRequirement } from "../optimizer/types";
 import { ARMOR_SLOTS, type ArmorSlot } from "./stats";
 
@@ -43,7 +45,10 @@ export function legacyRaidName(key: LegacyRaidKey): string {
   return LEGACY_RAIDS[INDEX.get(key)!].name;
 }
 
-/** The raid whose mod socket an item definition has, if any. */
+/**
+ * The raid whose mod socket an item definition has, if any. `plugCategory` reads a
+ * plug's category; legacyRaidOfDef supplies it from the manifest.
+ */
 export function legacyRaidOf(
   def: { sockets?: { socketEntries?: { singleInitialItemHash?: number }[] } },
   plugCategory: (plugHash: number) => string | undefined,
@@ -57,18 +62,52 @@ export function legacyRaidOf(
   return undefined;
 }
 
+/** legacyRaidOf, reading plug categories from the manifest. */
+export function legacyRaidOfDef(
+  def: Parameters<typeof legacyRaidOf>[0],
+  manifest: Manifest,
+): LegacyRaidKey | undefined {
+  return legacyRaidOf(
+    def,
+    (plugHash) =>
+      manifest.def("DestinyInventoryItemDefinition", plugHash)?.plug?.plugCategoryIdentifier,
+  );
+}
+
 /**
- * The optimizer's stand-in set hash for a raid. The solver only knows set requirements,
- * and "wear N pieces of this raid" is one. Negative, so it can't collide with a real
- * DestinyEquipableItemSetDefinition hash. It never leaves the optimizer input: stored
+ * The optimizer's set hash for a raid: a synthetic set, since "wear N pieces of this
+ * raid" is a set requirement to the solver. It never leaves the optimizer input: stored
  * selections are keyed by raid key, and DIM never sees it.
  */
 export function legacyRaidSetHash(key: LegacyRaidKey): number {
-  return -(INDEX.get(key)! + 1);
+  return syntheticSetHash(INDEX.get(key)!);
 }
 
-export function isLegacyRaidSetHash(setHash: number): boolean {
-  return setHash < 0;
+/**
+ * The set a piece counts toward, for the solver and the build card's set pills: its
+ * manifest armor set, or for legacy raid armor its raid. `name` is the raid's (a
+ * manifest set's comes from its ArmorSetInfo). Raid pieces earn a pill from one piece,
+ * since each is a mod socket; a set's bonus starts at two.
+ */
+export interface ArmorGroup {
+  setHash: number;
+  minBadge: 1 | 2;
+  name?: string;
+}
+
+export function armorGroupOf(piece: {
+  setHash?: number;
+  legacyRaid?: LegacyRaidKey;
+}): ArmorGroup | undefined {
+  if (piece.setHash) return { setHash: piece.setHash, minBadge: 2 };
+  if (piece.legacyRaid) {
+    return {
+      setHash: legacyRaidSetHash(piece.legacyRaid),
+      minBadge: 1,
+      name: `${legacyRaidName(piece.legacyRaid)} raid armor`,
+    };
+  }
+  return undefined;
 }
 
 /** One owned piece standing for its slot: what the row's slot strip draws. */

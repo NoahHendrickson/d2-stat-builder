@@ -3,9 +3,15 @@ import {
   buildOptimizerSlots,
   inDefaultOptimizerPool,
 } from "./optimizer-pool";
+import type { LegacyRaidKey } from "./legacy-raids";
 import type { ArmorSlot } from "./stats";
 
-const off = { legacyExotics: false, lowerTierArmor: false, legacyArmor: false };
+const off = {
+  legacyExotics: false,
+  lowerTierArmor: false,
+  legacyArmor: false,
+  legacyRaids: new Set<LegacyRaidKey>(),
+};
 
 test("T5 Festival of the Lost masks stay out of the default optimizer pool", () => {
   const mask = { isFestivalMask: true, tunedStat: 0, isExotic: false };

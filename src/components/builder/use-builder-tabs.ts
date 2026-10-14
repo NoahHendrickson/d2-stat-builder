@@ -7,6 +7,7 @@ import {
   availableSpiritPerks,
   isExoticClassItemHash,
 } from "@/lib/armory/exotic-class-perks";
+import type { RaidReqs } from "@/lib/armory/legacy-raids";
 import type { Manifest } from "@/lib/manifest/load";
 import {
   fragSelFromArrays,
@@ -17,12 +18,18 @@ import {
 /**
  * What Builds and Theoretical Builds each keep for themselves. Class, the set list
  * filters and the Builds-only settings (tuning, pools, Power matters) are shared and
- * live outside this record.
+ * live outside this record. Legacy raid requirements are Builds-only too, but they're
+ * selections bound to the class like set bonuses, so they live here.
  */
 export interface TabSelections {
   targets: number[];
   major: number;
   setReqs: Record<number, 2 | 4>;
+  /**
+   * Legacy raids every build must wear pieces of. Only Builds shows the control (raid
+   * armor can't drop at Tier 5), so Theoretical's stays empty.
+   */
+  raidReqs: RaidReqs;
   /** Held by name: the exotics list is re-indexed whenever a pool toggle changes. */
   exoticName: string | null;
   /** Exotic class item Spirit pair; null = Any. */
@@ -35,6 +42,7 @@ export const DEFAULT_TAB: TabSelections = {
   targets: [0, 0, 0, 0, 0, 0],
   major: 0,
   setReqs: {},
+  raidReqs: {},
   exoticName: null,
   exoticPerks: [null, null],
   activeSubclass: "Prismatic",
@@ -50,6 +58,7 @@ export function tabFromSaved(saved: PersistedSelections): TabSelections {
     targets: saved.targets,
     major: saved.major,
     setReqs: saved.setReqs,
+    raidReqs: saved.raidReqs,
     exoticName: null,
     exoticPerks: saved.exoticPerks,
     activeSubclass: saved.activeSubclass,
@@ -57,16 +66,23 @@ export function tabFromSaved(saved: PersistedSelections): TabSelections {
   };
 }
 
-/** Drops what a class switch voids: sets and exotics are per class. Already clear → same object. */
+/** Drops what a class switch voids: sets, raids and exotics are per class. Already clear → same object. */
 export function clearClassBound(tab: TabSelections): TabSelections {
   const clear =
     Object.keys(tab.setReqs).length === 0 &&
+    Object.keys(tab.raidReqs).length === 0 &&
     tab.exoticName === null &&
     tab.exoticPerks[0] === null &&
     tab.exoticPerks[1] === null;
   return clear
     ? tab
-    : { ...tab, setReqs: DEFAULT_TAB.setReqs, exoticName: null, exoticPerks: DEFAULT_TAB.exoticPerks };
+    : {
+        ...tab,
+        setReqs: DEFAULT_TAB.setReqs,
+        raidReqs: DEFAULT_TAB.raidReqs,
+        exoticName: null,
+        exoticPerks: DEFAULT_TAB.exoticPerks,
+      };
 }
 
 export interface BuilderTabs {

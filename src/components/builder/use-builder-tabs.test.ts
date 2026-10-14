@@ -12,6 +12,7 @@ const picked: TabSelections = {
   ...DEFAULT_TAB,
   targets: [100, 0, 0, 0, 0, 0],
   setReqs: { 1: 2 },
+  raidReqs: { dsc: 2 },
   exoticName: "Foo",
   exoticPerks: [1, 2],
 };
@@ -45,10 +46,19 @@ describe("updateTabs", () => {
 });
 
 describe("clearClassBound", () => {
-  it("drops sets, exotic and Spirit pair, keeping the rest", () => {
+  it("drops sets, legacy raids, exotic and Spirit pair, keeping the rest", () => {
     const cleared = clearClassBound(picked);
-    expect(cleared).toMatchObject({ setReqs: {}, exoticName: null, exoticPerks: [null, null] });
+    expect(cleared).toMatchObject({
+      setReqs: {},
+      raidReqs: {},
+      exoticName: null,
+      exoticPerks: [null, null],
+    });
     expect(cleared.targets).toBe(picked.targets);
+  });
+
+  it("clears a tab whose only class-bound pick is a legacy raid", () => {
+    expect(clearClassBound({ ...DEFAULT_TAB, raidReqs: { vow: 1 } }).raidReqs).toEqual({});
   });
 
   it("is a no-op on a tab with nothing class-bound", () => {

@@ -42,6 +42,14 @@ export const LegacyRaidSets = memo(function LegacyRaidSets({
   classType: number | null;
 }) {
   const [open, setOpen] = useState(() => Object.keys(reqs).length > 0);
+  // The icons for unowned slots scan every item definition: wait for the first open,
+  // then keep them while the block folds and unfolds.
+  const [opened, setOpened] = useState(open);
+  const icons = useMemo(
+    () =>
+      opened && manifest && classType !== null ? legacyRaidSlotIcons(manifest, classType) : null,
+    [opened, manifest, classType],
+  );
   const active = raids.filter((r) => reqs[r.key]).length;
   // The divider runs edge to edge: the negative margins cancel the card's padding,
   // which the matching padding gives back to the content.
@@ -49,7 +57,10 @@ export const LegacyRaidSets = memo(function LegacyRaidSets({
     <div className="border-border -mx-3 mt-2 flex flex-col gap-3 border-t px-3 pt-4 normal:-mx-6 normal:px-6 normal:pt-5">
       <button
         type="button"
-        onClick={() => setOpen((o) => !o)}
+        onClick={() => {
+          setOpen((o) => !o);
+          setOpened(true);
+        }}
         aria-expanded={open}
         className="hover:text-foreground focus-visible:ring-outline-strong flex cursor-pointer items-center justify-between gap-2 rounded-none pl-1 text-left text-sm outline-none focus-visible:ring-1 normal:rounded-[6px]"
       >
@@ -64,36 +75,24 @@ export const LegacyRaidSets = memo(function LegacyRaidSets({
         />
       </button>
       {open && (
-        <LegacyRaidList
-          raids={raids}
-          reqs={reqs}
-          onCountChange={onCountChange}
-          manifest={manifest}
-          classType={classType}
-        />
+        <LegacyRaidList raids={raids} reqs={reqs} onCountChange={onCountChange} icons={icons} />
       )}
     </div>
   );
 });
 
-/** The opened block. Its own component so the manifest scan for icons waits for an open. */
+/** The opened block: the explainer and one row per raid. */
 function LegacyRaidList({
   raids,
   reqs,
   onCountChange,
-  manifest,
-  classType,
+  icons,
 }: {
   raids: LegacyRaidInfo[];
   reqs: RaidReqs;
   onCountChange: (key: LegacyRaidKey, count: number) => void;
-  manifest?: Manifest;
-  classType: number | null;
+  icons: Map<LegacyRaidKey, SlotIcons> | null;
 }) {
-  const icons = useMemo(
-    () => (manifest && classType !== null ? legacyRaidSlotIcons(manifest, classType) : null),
-    [manifest, classType],
-  );
   return (
     <>
       <p className="text-muted-foreground pl-1 text-xs leading-relaxed">

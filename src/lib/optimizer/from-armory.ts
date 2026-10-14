@@ -1,4 +1,4 @@
-import { legacyRaidSetHash } from "../armory/legacy-raids";
+import { armorGroupOf } from "../armory/legacy-raids";
 import type { ArmorPiece } from "../armory/normalize";
 import { offArchetypeIndices } from "../armory/stats";
 import type { OptimizerPiece } from "./types";
@@ -10,8 +10,8 @@ export function armorToOptimizerPiece(p: ArmorPiece): OptimizerPiece {
     stats: p.stats,
     exotic: p.isExotic,
     hash: p.itemHash,
-    // Legacy raid armor has no real set; it counts toward its raid's stand-in one.
-    setHash: p.setHash ?? (p.legacyRaid ? legacyRaidSetHash(p.legacyRaid) : undefined),
+    // Legacy raid armor has no manifest set; it counts toward its raid's synthetic one.
+    setHash: armorGroupOf(p)?.setHash,
     power: p.power,
     // Artifice is legacy-only, tuning Tier-5-only; enforce the exclusivity here
     // (the solver stays general, the results UI shares one column for both).

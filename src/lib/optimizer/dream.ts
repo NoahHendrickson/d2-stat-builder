@@ -13,7 +13,7 @@
  * Pure — no DOM/React deps, so it runs in a Web Worker and in Node tests.
  */
 import { solve } from "./solve";
-import { isLegacyRaidSetHash } from "../armory/legacy-raids";
+import { isSyntheticSetHash } from "./synthetic-set";
 import { t5Rolls } from "../armory/t5-rolls";
 // Type-only (erased): keeps the worker bundle free of the armory/manifest modules.
 import type { ArmorArchetype } from "../armory/archetypes";
@@ -197,10 +197,10 @@ function withoutAnyTuned(pool: DreamPiece[]): DreamPiece[] {
 
 /** Every dream roll that may fill `slot`, as optimizer pieces plus their descriptions. */
 export function dreamCandidates(slot: number, input: DreamInput): DreamPiece[] {
-  // Legacy raid armor can't drop as a Tier-5 roll: only kept pieces meet a raid requirement.
+  // No Tier-5 roll joins a synthetic set: only kept pieces meet one of those.
   const reqSets = (input.base.setRequirements ?? [])
     .map((r) => r.setHash)
-    .filter((h) => !isLegacyRaidSetHash(h));
+    .filter((h) => !isSyntheticSetHash(h));
   // With set requirements, a roll in a required set dominates the same roll in none.
   const setOptions: (number | undefined)[] = reqSets.length ? reqSets : [undefined];
   const out: DreamPiece[] = [];

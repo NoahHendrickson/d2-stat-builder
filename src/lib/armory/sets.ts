@@ -1,7 +1,7 @@
 import type { Manifest } from "@/lib/manifest/load";
-import { legacyRaidOf, type LegacyRaidKey } from "./legacy-raids";
+import { legacyRaidOfDef, type LegacyRaidKey } from "./legacy-raids";
 import { itemWatermark, type ArmorPiece } from "./normalize";
-import { ARMOR_BUCKETS, type ArmorSlot } from "./stats";
+import { ARMOR_BUCKETS, TIER_LEGENDARY, type ArmorSlot } from "./stats";
 
 export interface SetPerkInfo {
   requiredCount: number;
@@ -145,9 +145,6 @@ export function setSlotIcons(
   return out;
 }
 
-/** DestinyItemTierType.Superior: legendary. */
-const TIER_LEGENDARY = 5;
-
 /**
  * Each legacy raid's own item icon per slot for one class, from the manifest's legendary
  * armor with that raid's mod socket (the first match per slot wins). For drawing the
@@ -158,8 +155,6 @@ export function legacyRaidSlotIcons(
   classType: number,
 ): Map<LegacyRaidKey, Partial<Record<ArmorSlot, SetSlotIcon>>> {
   const out = new Map<LegacyRaidKey, Partial<Record<ArmorSlot, SetSlotIcon>>>();
-  const plugCategory = (h: number) =>
-    manifest.def("DestinyInventoryItemDefinition", h)?.plug?.plugCategoryIdentifier;
   const table = manifest.all("DestinyInventoryItemDefinition");
   for (const key in table) {
     const def = table[key];
@@ -167,7 +162,7 @@ export function legacyRaidSlotIcons(
     const slot = ARMOR_BUCKETS[def.inventory.bucketTypeHash as keyof typeof ARMOR_BUCKETS];
     const icon = def.displayProperties?.icon;
     if (!slot || !icon || def.redacted) continue;
-    const raid = legacyRaidOf(def, plugCategory);
+    const raid = legacyRaidOfDef(def, manifest);
     if (!raid) continue;
     const looks = out.get(raid) ?? {};
     looks[slot] ??= { icon, watermark: itemWatermark(def) };

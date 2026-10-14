@@ -65,8 +65,8 @@ export function SetBonusesSection({
    * required, however few of its pieces are owned — so there's no owned-count filter.
    */
   planning: boolean;
-  /** Legacy raids this class owns armor from; omitted where they don't apply (planning). */
-  legacyRaids?: LegacyRaidInfo[];
+  /** Legacy raids this class owns armor from. Not listed while planning (no Tier-5 drops). */
+  legacyRaids: LegacyRaidInfo[];
   raidReqs: RaidReqs;
   onRaidCountChange: (key: LegacyRaidKey, count: number) => void;
   /** The optimizer pool (what the roll grid counts). */
@@ -100,9 +100,10 @@ export function SetBonusesSection({
   const activeFilters = !planning && hasActiveSetFilters(setFilters);
   // The search narrows the raid rows too; the set list's owned-count filter doesn't.
   const shownRaids = useMemo(() => {
+    if (planning) return [];
     const q = query.trim().toLowerCase();
-    return (legacyRaids ?? []).filter((r) => !q || r.name.toLowerCase().includes(q));
-  }, [legacyRaids, query]);
+    return legacyRaids.filter((r) => !q || r.name.toLowerCase().includes(q));
+  }, [legacyRaids, query, planning]);
 
   // The grid's set pickers follow the list's order — pinned first, each group in the
   // chosen sort — but ignore its search and filters, so every set stays reachable.
