@@ -3,7 +3,8 @@
  * do now that they couldn't before, newest first, back to the first release. When a
  * user-facing change ships, add a line to today's entry (or a new entry at the top).
  * Fixes count when a user would notice them; refactors and internals don't. Write for
- * players: what changed and where to find it, not how it works.
+ * players: what changed and where to find it, not how it works. Describe features on
+ * their own terms, never by comparison to another app or site.
  */
 export interface ChangelogEntry {
   /** Release day, YYYY-MM-DD. Also what "seen" is tracked by: a newer top date is news. */
@@ -51,7 +52,7 @@ export const CHANGELOG: readonly ChangelogEntry[] = [
     date: "2026-10-10",
     changes: [
       "A sidebar with every tool, plus your own links.",
-      "Items: move, equip, tag, compare and search your gear, DIM-style.",
+      "Items: move, equip, tag, compare and search all of your gear.",
       "Weapon search across every weapon in the game.",
       "Loadouts get their own page, with weapons, artifacts and in-game slot saving.",
       "Reset buttons on the optimizer's settings sections.",
@@ -150,7 +151,7 @@ export const CHANGELOG: readonly ChangelogEntry[] = [
   {
     date: "2026-07-01",
     changes: [
-      "The first release: an armor stat optimizer with tuning mods, in-game equip and Open in DIM.",
+      "The first release: an armor stat optimizer with tuning mods, and equipping builds in-game.",
     ],
   },
 ];
