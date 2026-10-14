@@ -8,7 +8,7 @@ const STATUS = /(\d[\d,]*) weapons/;
 export default async function ({ page, app, step, shot, expect, log }) {
   // The count lives in a status whose "weapons" word is screen-reader-only: read its accessible
   // name (innerText splits it across lines).
-  const STATUS_EL = { role: "status", name: /weapons|Loading|Updating/i, nth: 0 };
+  const STATUS_EL = { role: "status", name: /weapons|Loading|Updating/i };
   const statusText = () => page.name(STATUS_EL).catch(() => "");
   const count = async () => Number(STATUS.exec(await statusText())?.[1].replace(/,/g, "") ?? NaN);
   const settledCount = async () => {
@@ -73,8 +73,8 @@ export default async function ({ page, app, step, shot, expect, log }) {
     expect(picked, "an unpicked perk tile exists");
     const perk = await page.name(picked);
     await page.click(picked);
-    await page.waitFor(async () => (await page.attr(picked, "aria-pressed")) === "true");
-    expect(true, `"${perk}" is pressed after the click`);
+    const pressed = await page.waitFor(async () => (await page.attr(picked, "aria-pressed")) === "true", { timeout: 5000 }).then(() => true, () => false);
+    expect(pressed, `"${perk}" is pressed after the click`);
     await shot("perk-picked", { within: details });
   });
 }

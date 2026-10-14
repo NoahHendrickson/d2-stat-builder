@@ -32,5 +32,5 @@ Preconditions:
 
 - Theme and site icon are local only (`stat-builder:app-theme`, `stat-builder:site-icon`). They never touch `/api/settings`; use links or pinned sets to prove sync.
 - Toasts are `dialog`s named by their title. A search for "a dialog about clearing" finds the toast.
-- Settings pushes are debounced 500 ms. Wait for the `PUT` in `stub.requests`; don't sleep.
+- Settings pushes are debounced 500 ms. Wait for the `PUT` (`stub.last("PUT", "/api/settings/")`); don't sleep.
 - `/api/settings/<key>` accepts only `links`, `pinnedSets` and `activitySets`, each holding an array. Anything else gets 404 or 400 from the stub, as it would from the real route.

@@ -5,8 +5,8 @@ export const meta = { fixture: "full" };
 const VAULT_TILE = { css: '[aria-label="Vault"] [role=button][draggable]' };
 
 export default async function ({ page, app, stub, step, shot, expect, log }) {
-  const toast = (rx) => page.waitFor(async () => (await app.toasts()).find((t) => rx.test(t)), { timeout: 30000 });
-  const last = (path) => stub.requests.filter((r) => r.method === "POST" && r.path === path).at(-1);
+  // Item names go into toast patterns verbatim.
+  const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
   await step("open the inventory", async () => {
     await app.open("/manager");
@@ -42,8 +42,8 @@ export default async function ({ page, app, stub, step, shot, expect, log }) {
     await page.click(lock);
     await page.waitFor(async () => (await page.attr(lock, "aria-pressed")) !== before);
     const want = before !== "true";
-    await toast(new RegExp(`${want ? "Locked" : "Unlocked"} ${item}`));
-    const req = last("/api/bungie/lock");
+    await app.toast(new RegExp(`${want ? "Locked" : "Unlocked"} ${esc(item)}`));
+    const req = stub.last("POST", "/api/bungie/lock");
     expect(req?.body?.locked === want, `POST /api/bungie/lock sent locked:${want} for ${item}`);
     await shot("locked");
     await page.press("Escape");
@@ -69,8 +69,8 @@ export default async function ({ page, app, stub, step, shot, expect, log }) {
     const label = await page.name({ ...move, nth: 0 });
     log(`  ${item}: ${label}`);
     await page.click({ ...move, nth: 0 });
-    await toast(new RegExp(`^(Moved|Equipped) ${item}`));
-    const req = last("/api/bungie/move");
+    await app.toast(new RegExp(`^(Moved|Equipped) ${esc(item)}`));
+    const req = stub.last("POST", "/api/bungie/move");
     expect(req?.body?.from?.kind === "vault" && req.body.to?.kind === "character", `POST /api/bungie/move vault → character (${JSON.stringify({ from: req?.body?.from, to: req?.body?.to })})`);
     await shot("moved");
     await page.emulatePointer("fine");

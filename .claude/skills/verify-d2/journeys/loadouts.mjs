@@ -22,8 +22,6 @@ export default async function ({ page, app, stub, step, shot, expect, log }) {
     await page.click({ role: "button", name: `Actions for ${loadout}` });
     await page.click({ role: "menuitem", name: item });
   };
-  const lastWrite = (method, path) => stub.requests.filter((r) => r.method === method && r.path.startsWith(path)).at(-1);
-  const toast = (rx) => page.waitFor(async () => (await app.toasts()).find((t) => rx.test(t)), { timeout: 30000 });
 
   await step("open the seeded list", async () => {
     await app.open("/loadouts");
@@ -50,9 +48,9 @@ export default async function ({ page, app, stub, step, shot, expect, log }) {
     await page.waitFor(drawer);
     await page.fill({ role: "textbox", name: "Loadout name" }, "Raid build v2", { within: drawer });
     await page.click({ role: "button", name: "Save changes" }, { within: drawer });
-    await toast(/Loadout updated/);
+    await app.toast(/Loadout updated/);
     await page.waitFor(card("Raid build v2"));
-    const put = lastWrite("PUT", "/api/loadouts/11111111");
+    const put = stub.last("PUT", "/api/loadouts/11111111");
     expect(put?.status === 200 && put.body?.loadout?.name === "Raid build v2", `PUT /api/loadouts/:id carried the new name (${put?.body?.loadout?.name})`);
   });
 
@@ -65,7 +63,7 @@ export default async function ({ page, app, stub, step, shot, expect, log }) {
     }, { timeout: 30000 });
     log(`  apply result: ${done}`);
     expect(/applied/i.test(done) && !/partially|couldn't/i.test(done), "the apply finished cleanly");
-    const apply = lastWrite("POST", "/api/bungie/apply-loadout");
+    const apply = stub.last("POST", "/api/bungie/apply-loadout");
     expect(apply?.status === 200, "POST /api/bungie/apply-loadout answered 200 (ndjson)");
     const ids = (apply.body.items ?? []).map((i) => i.itemInstanceId);
     log(`  equipped ids: ${ids.join(", ")}`);
@@ -82,33 +80,32 @@ export default async function ({ page, app, stub, step, shot, expect, log }) {
     await page.click({ role: "radio", name: /^Slot 1\b/ }, { within: dialog });
     await shot("ingame-dialog", { within: dialog });
     await page.click({ role: "button", name: /^Equip and (save|replace)$/ }, { within: dialog });
-    await toast(/Saved to in-game loadout 1/);
+    await app.toast(/Saved to in-game loadout 1/);
     const applies = stub.requests.filter((r) => r.method === "POST" && r.path === "/api/bungie/apply-loadout");
     expect(applies.length === 2, `it equipped first (apply-loadout requests so far: ${applies.length})`);
-    const snap = lastWrite("POST", "/api/bungie/ingame-loadouts");
+    const snap = stub.last("POST", "/api/bungie/ingame-loadouts");
     expect(snap?.body?.loadoutIndex === 0, `POST /api/bungie/ingame-loadouts targeted index 0 (${JSON.stringify(snap?.body)})`);
   });
 
   await step("lo-delete: Delete asks first, then removes one card", async () => {
     await menu("Dungeon build", "Delete");
-    const dialog = { role: "alertdialog", name: "Delete loadout?" };
-    const confirm = (await page.exists(dialog)) ? dialog : { role: "dialog", name: "Delete loadout?" };
+    const confirm = { role: "dialog", name: "Delete loadout?" };
     await page.waitFor(confirm);
     await page.click({ role: "button", name: "Delete" }, { within: confirm });
-    await toast(/Loadout deleted/);
+    await app.toast(/Loadout deleted/);
     await page.waitFor(card("Dungeon build"), { gone: true });
-    expect(lastWrite("DELETE", "/api/loadouts/22222222")?.status === 200, "DELETE /api/loadouts/:id answered 200");
+    expect(stub.last("DELETE", "/api/loadouts/22222222")?.status === 200, "DELETE /api/loadouts/:id answered 200");
     expect(!stub.store.loadouts.has("22222222-2222-4222-8222-222222222222"), "the stored row is gone");
   });
 
   await step("lo-bulk: Delete all loadouts empties the list", async () => {
     await page.click({ role: "button", name: "More loadout actions" });
     await page.click({ role: "menuitem", name: "Delete all loadouts" });
-    const confirm = (await page.exists({ role: "alertdialog", name: /^Delete all/ })) ? { role: "alertdialog", name: /^Delete all/ } : { role: "dialog", name: /^Delete all/ };
+    const confirm = { role: "dialog", name: /^Delete all/ };
     await page.waitFor(confirm);
     await page.click({ role: "button", name: "Delete all" }, { within: confirm });
     await page.waitForText(/No saved loadouts yet/);
-    const del = lastWrite("DELETE", "/api/loadouts");
+    const del = stub.last("DELETE", "/api/loadouts");
     expect(del?.path === "/api/loadouts" && del.body?.all === true, "bulk DELETE /api/loadouts sent {all:true}");
     expect(stub.store.loadouts.size === 0, "the store is empty");
     await shot("empty");

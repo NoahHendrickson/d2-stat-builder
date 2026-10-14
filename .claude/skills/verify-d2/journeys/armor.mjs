@@ -1,5 +1,6 @@
 // Armor table (/armor): name search, Searches column (build usage), Junk toggle, Duplicates.
-// Usage history is seeded: every piece eligible for 30 searches, every other one used in 12.
+// Usage history is seeded as 30 recorded searches that every piece could join; every other
+// piece was used by 12 of them.
 // See features/armor.md.
 export const meta = {
   fixture: "full",
@@ -13,9 +14,11 @@ export const meta = {
     for (const comp of Object.values(profile.itemComponents)) if (comp.data?.[src.itemInstanceId]) comp.data[id] = structuredClone(comp.data[src.itemInstanceId]);
     return profile;
   },
-  seed: (profile) => ({
-    usage: Object.fromEntries(Object.keys(profile.itemComponents.stats.data).map((id, i) => [id, { eligible: 30, used: i % 2 ? 12 : 0 }])),
-  }),
+  seed: (profile) => {
+    const ids = Object.keys(profile.itemComponents.stats.data);
+    const queries = Array.from({ length: 30 }, (_, q) => [q.toString(16).padStart(64, "0"), ids.map((id, i) => [id, i % 2 && q < 12 ? 1 : 0])]);
+    return { usage: Object.fromEntries(queries) };
+  },
 };
 
 // Table rows get no accessible name in Chrome; body rows by CSS.

@@ -4,7 +4,6 @@ export const meta = { fixture: "small" };
 
 export default async function ({ page, app, stub, step, shot, expect, log }) {
   const theme = () => page.evalJs("document.documentElement.dataset.appTheme ?? null");
-  const toast = (rx) => page.waitFor(async () => (await app.toasts()).find((t) => rx.test(t)), { timeout: 30000 });
 
   await step("open settings", async () => {
     await app.open("/settings");
@@ -35,8 +34,8 @@ export default async function ({ page, app, stub, step, shot, expect, log }) {
   await step("set-usage: Clear history deletes the account's usage", async () => {
     // No confirmation step: one click clears it.
     await page.click({ role: "button", name: "Clear history" });
-    await toast(/Armor usage history cleared/);
-    expect(stub.requests.some((r) => r.method === "DELETE" && r.path === "/api/build-usage"), "DELETE /api/build-usage was sent");
+    await app.toast(/Armor usage history cleared/);
+    expect(stub.last("DELETE", "/api/build-usage")?.status === 204, "DELETE /api/build-usage was sent");
   });
 
   await step("set-sync: a sidebar link is pushed to /api/settings/links", async () => {

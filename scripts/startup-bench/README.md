@@ -1,7 +1,8 @@
 # Startup and navigation benches
 
-Headless Google Chrome over CDP, with `/api/auth/session`, `/api/bungie/*`, and
-`/api/loadouts` stubbed so no Bungie sign-in is needed (`cdp.mjs`). The t3 preview webview
+Headless Google Chrome over CDP, with every `/api/*` request answered by an in-memory stub
+so no Bungie sign-in is needed (`cdp.mjs`, on the shared driver and stub in `scripts/browser/`,
+which the verify-d2 skill uses too). The t3 preview webview
 throttles timers, so measure here. For numbers worth keeping, run against a production
 build (`npm run build && npx next start -p 4400`): the dev server compiles on demand and
 doesn't prefetch.

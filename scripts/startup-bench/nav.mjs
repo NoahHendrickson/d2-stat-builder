@@ -9,6 +9,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { ROUTES as VIEWS } from "../browser/routes.mjs";
 import { launch, sleep } from "./cdp.mjs";
 
 const args = process.argv.slice(2);
@@ -22,16 +23,10 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const profile = fs.readFileSync(path.join(here, fixture), "utf8");
 const [width, height] = mobile ? [390, 844] : [1600, 1000];
 
-// What "this view is showing its content" means, per route.
-const MARKERS = {
-  "/": '[aria-label="Health target"]',
-  "/armor": "table tbody tr td",
-  "/weapons": '[aria-label="Weapons"] [role=listitem]',
-  "/loadouts": '[aria-label^="Search loadouts"]',
-  "/manager": 'section[aria-label^="Characters"] [role=button][draggable]',
-  "/settings": "#settings-appearance",
-};
-const ROUTES = ["/", "/armor", "/weapons", "/loadouts", "/manager"];
+// What "this view is showing its content" means, per route (shared with the verify-d2 skill).
+const MARKERS = Object.fromEntries(VIEWS.map((v) => [v.path, v.marker]));
+// The sidebar views, cycled through; /settings is only visited once.
+const ROUTES = VIEWS.filter((v) => v.nav).map((v) => v.path);
 
 const b = await launch({ dir: "/tmp/d2-startup-bench/chrome-nav", profile, width, height });
 const { product } = await b.s("Browser.getVersion");

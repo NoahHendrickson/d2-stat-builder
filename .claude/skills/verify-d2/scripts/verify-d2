@@ -2,49 +2,24 @@
 // verify-d2: launch D2 Conflux from this checkout, check it's worth driving, drive a
 // journey signed in against a stubbed backend, and tear it all down. See ../SKILL.md.
 //
-//   verify-d2 up [--port 4400] [--dev]       build + start (or `next dev`) on its own port
-//   verify-d2 doctor [--port 4400]           read-only health check; exit 1 on any FAIL
-//   verify-d2 run <journey|all> [--port 4400]  drive journeys/<journey>.mjs; evidence → /tmp/verify-d2/runs/
-//   verify-d2 down [--port 4400]             stop what `up` started, remove scaffolding and stray Chrome
-//   verify-d2 list                           journeys, servers, recent runs
-import { execFileSync } from "node:child_process";
+//   verify-d2 up [--port 4400] [--dev]          build + start (or `next dev`) on its own port
+//   verify-d2 doctor [--port 4400]              read-only health check; exit 1 on any FAIL
+//   verify-d2 run <journey|all> [--port 4400]   drive journeys/<journey>.mjs; evidence → /tmp/verify-d2/runs/
+//   verify-d2 down [--port 4400]                stop what `up` started, remove scaffolding and stray Chrome
+//   verify-d2 list                              journeys, servers, recent runs
 import fs from "node:fs";
 import path from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
-import { chromePath, launchBrowser, sleep } from "./lib/browser.mjs";
+import { fileURLToPath } from "node:url";
+import { CHROME, killStrayBrowsers, strayBrowsers } from "../../../../scripts/browser/browser.mjs";
+import { CHROME_ROOT, fixturePath, runJourney } from "./lib/journey.mjs";
 import { CHECKOUT, DEFAULT_PORT, ROOT, allStates, alive, cwdOf, down, listeners, pgidOf, readState, sourceStamp, up } from "./lib/server.mjs";
-import { createStub } from "./lib/stub.mjs";
 
 const SKILL = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const JOURNEYS = path.join(SKILL, "journeys");
 const argv = process.argv.slice(2);
 const cmd = argv[0];
 const opt = (name, fallback) => { const i = argv.indexOf(`--${name}`); return i > 0 && argv[i + 1] && !argv[i + 1].startsWith("--") ? argv[i + 1] : fallback; };
-const has = (name) => argv.includes(`--${name}`);
 const port = Number(opt("port", DEFAULT_PORT));
-
-function fixturePath(kind) {
-  const name = kind === "small" ? ".profile.json" : ".profile-full.json";
-  const here = path.join(CHECKOUT, "scripts/startup-bench", name);
-  if (fs.existsSync(here)) return here;
-  // A worktree can borrow the main checkout's (they're gitignored, built from the live manifest).
-  const main = execFileSync("git", ["-C", CHECKOUT, "worktree", "list", "--porcelain"], { encoding: "utf8" }).split("\n")[0].slice(9);
-  const there = path.join(main, "scripts/startup-bench", name);
-  return fs.existsSync(there) ? there : null;
-}
-
-/** Stray headless Chrome from runs that died before closing it (identified by our profile path). */
-function strayChromes() {
-  const dir = path.join(ROOT, "chrome");
-  let out = [];
-  for (const run of fs.existsSync(dir) ? fs.readdirSync(dir) : []) {
-    const pidFile = path.join(dir, run, "verify-d2.pid");
-    const pid = Number(fs.existsSync(pidFile) ? fs.readFileSync(pidFile, "utf8") : 0);
-    let args = "";
-    try { args = execFileSync("ps", ["-o", "args=", "-p", String(pid)], { encoding: "utf8" }); } catch {}
-    out.push({ run, pid, dir: path.join(dir, run), running: Boolean(pid) && alive(pid) && args.includes(path.join(dir, run)) });
-  }
-  return out;
-}
 
 async function doctor() {
   let fail = 0;
@@ -70,7 +45,7 @@ async function doctor() {
       if (res.status === 200 && html.includes("<html")) ok(`GET ${st.url}/ → 200`); else bad(`GET ${st.url}/ → ${res.status}`);
     } catch (e) { bad(`GET ${st.url}/ failed: ${e.message}`); }
   }
-  if (fs.existsSync(chromePath())) ok(`Chrome at ${chromePath()}`); else bad(`no Chrome at ${chromePath()}; set CHROME=`);
+  if (fs.existsSync(CHROME)) ok(`Chrome at ${CHROME}`); else bad(`no Chrome at ${CHROME}; set CHROME=`);
   for (const kind of ["full", "small"]) {
     const f = fixturePath(kind);
     if (f) ok(`fixture ${kind}: ${f}`); else bad(`fixture ${kind} missing; run \`node scripts/startup-bench/fixture.mjs${kind === "full" ? " full" : ""}\` (needs .env.local)`);
@@ -85,149 +60,39 @@ async function doctor() {
       if (j.ErrorCode === 1) ok(`bungie.net manifest reachable (version ${j.Response.version})`); else bad(`bungie.net manifest: ${j.ErrorStatus} ${j.Message}`);
     } catch (e) { bad(`bungie.net unreachable: ${e.message}`); }
   }
-  const strays = strayChromes().filter((c) => c.running);
-  if (strays.length) warn(`${strays.length} Chrome from earlier runs still running (${strays.map((c) => c.pid).join(", ")}); \`verify-d2 down\` stops them`);
+  const strays = strayBrowsers(CHROME_ROOT).filter((c) => c.running);
+  if (strays.length) warn(`${strays.length} Chrome left by runs that died (${strays.map((c) => c.chromePid).join(", ")}); \`verify-d2 down\` stops them`);
   else ok("no stray verify Chrome");
   console.log(fail ? `\n${fail} check(s) failed: don't drive this instance until they pass.` : "\nhealthy: safe to drive.");
-  process.exit(fail ? 1 : 0);
+  return fail ? 1 : 0;
 }
 
-/** Every journey, one at a time, each in its own process and browser. */
-async function runAll() {
-  const { spawnSync } = await import("node:child_process");
-  const names = fs.readdirSync(path.join(SKILL, "journeys")).filter((f) => f.endsWith(".mjs")).map((f) => f.replace(/\.mjs$/, ""));
-  const results = names.map((name) => [name, spawnSync(process.execPath, [fileURLToPath(import.meta.url), "run", name, "--port", String(port)], { stdio: "inherit" }).status]);
-  console.log("\n" + results.map(([n, code]) => `${code === 0 ? "PASS" : "FAIL"}  ${n}`).join("\n"));
-  process.exit(results.every(([, code]) => code === 0) ? 0 : 1);
-}
-
+/** `run <journey|all|path>`: every journey runs in its own browser with its own stub. */
 async function run() {
   const name = argv[1];
   if (!name) throw new Error("usage: verify-d2 run <journey|all> [--port N]");
-  if (name === "all") return runAll();
-  const file = fs.existsSync(name) ? path.resolve(name) : path.join(SKILL, "journeys", `${name.replace(/\.mjs$/, "")}.mjs`);
-  if (!fs.existsSync(file)) throw new Error(`no journey ${file}; see \`verify-d2 list\``);
-  const st = readState(port);
-  if (!st || !alive(st.pid)) throw new Error(`no live verify server on ${port}; run \`verify-d2 up\` then \`verify-d2 doctor\``);
-  const mod = await import(pathToFileURL(file).href);
-  const meta = { fixture: "full", width: 1600, height: 1000, signedIn: true, ...(mod.meta ?? {}) };
-  const fixture = fixturePath(meta.fixture);
-  if (!fixture) throw new Error(`fixture ${meta.fixture} missing; see \`verify-d2 doctor\``);
-
-  const id = `${new Date().toISOString().replace(/[-:]/g, "").replace("T", "-").slice(0, 15)}-${path.basename(file, ".mjs")}`;
-  const out = path.join(ROOT, "runs", id);
-  fs.mkdirSync(out, { recursive: true });
-  const logFile = path.join(out, "steps.log");
-  const log = (line) => { const l = `${new Date().toISOString().slice(11, 23)} ${line}`; console.log(l); fs.appendFileSync(logFile, l + "\n"); };
-  // `meta.profile(profile)` can reshape the fixture for one journey's preconditions (e.g. a
-  // duplicate piece) without touching the shared file.
-  let profileJson = fs.readFileSync(fixture, "utf8");
-  if (typeof meta.profile === "function") profileJson = JSON.stringify(meta.profile(JSON.parse(profileJson)) ?? JSON.parse(profileJson));
-  // `meta.seed(profile)` can build seed data from the fixture (e.g. loadouts of real armor ids).
-  const stub = createStub({ profile: profileJson, signedIn: meta.signedIn, seed: typeof meta.seed === "function" ? meta.seed(JSON.parse(profileJson)) : meta.seed });
-
-  // The What's new dialog opens on every fresh profile; mark the current release seen
-  // (read from source so it tracks new releases) unless the journey wants to see it.
-  const release = /RELEASE_ID = "([^"]+)"/.exec(fs.readFileSync(path.join(CHECKOUT, "src/components/whats-new-dialog.tsx"), "utf8"))?.[1];
-  const initScripts = [];
-  if (!meta.whatsNew && release) initScripts.push(`try { localStorage.setItem("stat-builder:whats-new-seen", ${JSON.stringify(release)}); } catch {}`);
-  for (const [k, v] of Object.entries(meta.localStorage ?? {})) initScripts.push(`try { if (localStorage.getItem(${JSON.stringify(k)}) === null) localStorage.setItem(${JSON.stringify(k)}, ${JSON.stringify(typeof v === "string" ? v : JSON.stringify(v))}); } catch {}`);
-
-  const profileDir = path.join(ROOT, "chrome", id);
-  let browser;
-  const origin = new URL(st.url).origin;
-  browser = await launchBrowser({
-    profileDir, width: meta.width, height: meta.height, initScripts,
-    interceptPatterns: [`${origin}/api/*`],
-    onRequest: async ({ requestId, request }) => {
-      const res = stub.handle(request.method, request.url, request.postData);
-      if (res === "passthrough") return browser.page.continueRequest(requestId);
-      await browser.page.fulfill(requestId, res.status, res.body, res.headers ?? { "content-type": "application/json" });
-    },
-  });
-  fs.writeFileSync(path.join(profileDir, "verify-d2.pid"), String(browser.pid));
-  const { page } = browser;
-  if (meta.pointer === "coarse") await page.emulatePointer("coarse");
-
-  let shotN = 0;
-  const evidence = [];
-  const shot = async (label, opts = {}) => {
-    const base = path.join(out, `${String(++shotN).padStart(2, "0")}-${label.replace(/[^a-z0-9-]+/gi, "-")}`);
-    await page.screenshot(`${base}.png`, opts);
-    fs.writeFileSync(`${base}.aria.txt`, await page.aria(opts));
-    evidence.push(`${base}.png`, `${base}.aria.txt`);
-    log(`  📸 ${path.basename(base)}.png + .aria.txt`);
-  };
-  // Route markers: the view's own content is on screen (proven by the nav bench).
-  const MARKERS = {
-    "/": '[aria-label="Health target"]', "/armor": "table tbody tr td", "/weapons": '[aria-label="Weapons"] [role=listitem]',
-    "/loadouts": '[aria-label^="Search loadouts"]', "/manager": 'section[aria-label^="Characters"] [role=button][draggable]', "/settings": "#settings-appearance",
-  };
-  const app = {
-    url: st.url,
-    /** Load a route and wait until it's usable: loader gone, the view's marker on screen. */
-    async open(route, opts = {}) {
-      await page.goto(st.url + route);
-      const marker = opts.ready ?? MARKERS[route.split(/[?#]/)[0]];
-      await page.waitFor({ css: '[aria-label="Loading progress"]' }, { gone: true, timeout: opts.timeout ?? 120000 });
-      if (marker) await page.waitFor(marker, { timeout: opts.timeout ?? 120000 });
-      if (meta.signedIn && /sign in with bungie/i.test(await page.text())) throw new Error("the app shows the sign-in card: the session stub isn't being honoured");
-    },
-    /** Click a sidebar link the way a user navigates (desktop sidebar). */
-    async nav(name, route) {
-      await page.click({ role: "link", name }, { within: { role: "navigation", name: "Main" } });
-      if (MARKERS[route]) await page.waitFor(MARKERS[route], { timeout: 60000 });
-    },
-    /** Latest toast titles, newest last. */
-    async toasts() {
-      return page.evalJs(`[...document.querySelectorAll('[data-slot="toast-title"]')].map((e) => e.innerText.trim())`);
-    },
-  };
-  const expect = (cond, msg) => { if (!cond) throw new Error(`expectation failed: ${msg}`); log(`  ✔ ${msg}`); };
-  const step = async (label, fn) => {
-    const t0 = Date.now();
-    log(`▶ ${label}`);
-    await fn();
-    log(`✓ ${label} (${Date.now() - t0} ms)`);
-  };
-
-  log(`journey ${path.relative(CHECKOUT, file)} against ${st.url} (${st.mode} @ ${st.stamp.head}${st.stamp.dirty ? "+dirty" : ""}), fixture ${meta.fixture}, ${meta.width}x${meta.height}`);
-  let error = null;
-  const t0 = Date.now();
-  try {
-    await mod.default({ page, app, stub, step, shot, expect, log, sleep });
-  } catch (e) {
-    error = e;
-    log(`✗ ${e.message}`);
-    try { await shot("failure"); } catch (e2) { log(`  (failure capture failed: ${e2.message})`); }
-  } finally {
-    fs.writeFileSync(path.join(out, "api.json"), JSON.stringify(stub.requests, null, 1));
-    fs.writeFileSync(path.join(out, "console.txt"), page.consoleLines.join("\n"));
-    await browser.close();
-  }
-  const summary = {
-    journey: path.relative(CHECKOUT, file), ok: !error, error: error?.message ?? null, ms: Date.now() - t0,
-    server: { url: st.url, mode: st.mode, source: st.stamp }, fixture: meta.fixture,
-    writes: stub.writes().map((w) => `${w.method} ${w.path} → ${w.status}`), unstubbed: [...new Set(stub.unstubbed)],
-    consoleErrors: page.consoleLines.filter((l) => !l.startsWith("warning")).length, evidence,
-  };
-  fs.writeFileSync(path.join(out, "summary.json"), JSON.stringify(summary, null, 2));
-  if (summary.unstubbed.length) log(`⚠ unstubbed API calls (answered 501): ${summary.unstubbed.join(", ")}`);
-  log(`${error ? "FAILED" : "PASSED"} in ${Math.round(summary.ms / 1000)} s; evidence in ${out}`);
-  process.exit(error ? 1 : 0);
+  const server = readState(port);
+  if (!server || !alive(server.pid)) throw new Error(`no live verify server on ${port}; run \`verify-d2 up\` then \`verify-d2 doctor\``);
+  const files = name === "all"
+    ? fs.readdirSync(JOURNEYS).filter((f) => f.endsWith(".mjs")).map((f) => path.join(JOURNEYS, f))
+    : [fs.existsSync(name) ? path.resolve(name) : path.join(JOURNEYS, `${name.replace(/\.mjs$/, "")}.mjs`)];
+  for (const f of files) if (!fs.existsSync(f)) throw new Error(`no journey ${f}; see \`verify-d2 list\``);
+  const results = [];
+  for (const file of files) results.push(await runJourney({ file, server }));
+  if (results.length > 1) console.log("\n" + results.map((r) => `${r.ok ? "PASS" : "FAIL"}  ${path.basename(r.journey, ".mjs")}`).join("\n"));
+  return results.every((r) => r.ok) ? 0 : 1;
 }
 
 async function downAll() {
   await down({ port });
-  for (const c of strayChromes()) {
-    if (c.running) { try { process.kill(c.pid, "SIGKILL"); } catch {} console.log(`stopped stray Chrome ${c.pid}`); }
-    fs.rmSync(c.dir, { recursive: true, force: true });
-  }
+  // Only Chrome whose run has died: live runs on other ports are left alone.
+  for (const s of killStrayBrowsers(CHROME_ROOT)) if (s.running) console.log(`stopped stray Chrome ${s.chromePid}`);
+  return 0;
 }
 
 function list() {
   console.log("journeys:");
-  for (const f of fs.readdirSync(path.join(SKILL, "journeys")).filter((f) => f.endsWith(".mjs"))) console.log(`  ${f.replace(/\.mjs$/, "")}`);
+  for (const f of fs.readdirSync(JOURNEYS).filter((f) => f.endsWith(".mjs"))) console.log(`  ${f.replace(/\.mjs$/, "")}`);
   console.log("servers:");
   for (const s of allStates()) console.log(`  ${s.url} pid ${s.pid} ${alive(s.pid) ? "up" : "DEAD"} ${s.mode} ${s.checkout} @ ${s.stamp.head}`);
   const runs = fs.existsSync(path.join(ROOT, "runs")) ? fs.readdirSync(path.join(ROOT, "runs")).sort().slice(-10) : [];
@@ -237,15 +102,19 @@ function list() {
     try { s = JSON.parse(fs.readFileSync(path.join(ROOT, "runs", r, "summary.json"), "utf8")); } catch {}
     console.log(`  ${s.ok === true ? "PASS" : s.ok === false ? "FAIL" : "????"} ${path.join(ROOT, "runs", r)}`);
   }
+  return 0;
 }
 
+const commands = {
+  up: async () => { await up({ port, mode: argv.includes("--dev") ? "dev" : "prod" }); return 0; },
+  doctor, run, down: downAll, list,
+};
 try {
-  if (cmd === "up") await up({ port, mode: has("dev") ? "dev" : "prod" });
-  else if (cmd === "doctor") await doctor();
-  else if (cmd === "run") await run();
-  else if (cmd === "down") await downAll();
-  else if (cmd === "list") list();
-  else { console.log(fs.readFileSync(fileURLToPath(import.meta.url), "utf8").split("\n").slice(1, 9).map((l) => l.replace(/^\/\/ ?/, "")).join("\n")); process.exit(cmd ? 1 : 0); }
+  if (!commands[cmd]) {
+    console.log(fs.readFileSync(fileURLToPath(import.meta.url), "utf8").split("\n").slice(1, 10).map((l) => l.replace(/^\/\/ ?/, "")).join("\n"));
+    process.exit(cmd ? 1 : 0);
+  }
+  process.exit(await commands[cmd]());
 } catch (e) {
   console.error(`verify-d2 ${cmd}: ${e.message}`);
   process.exit(1);

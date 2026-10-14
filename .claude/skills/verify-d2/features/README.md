@@ -6,7 +6,7 @@ This directory is the maintained source for verifying what a signed-in user can 
 
 - `verify-d2 up` is serving this checkout at `http://localhost:4400` (or the `--port` you chose), and `verify-d2 doctor` passed.
 - The session is stubbed as `Verify Guardian` (membershipId `verify-user`). The profile is the `full` fixture (Hunter, Titan and Warlock, all Power 450, about 720 items) unless the journey asks for `small` (one Hunter, 63 armor pieces).
-- Every `/api/*` request is answered by `scripts/lib/stub.mjs`. Nothing reaches Bungie writes, Neon, or Discord.
+- Every `/api/*` request is answered by `scripts/browser/stub.mjs`. Nothing reaches Bungie writes, Neon, or Discord.
 - Each run starts from a fresh Chrome profile at 1600×1000 with the What's new dialog marked as seen.
 
 ## Driving conventions

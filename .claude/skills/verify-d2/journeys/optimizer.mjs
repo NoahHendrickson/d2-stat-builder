@@ -24,7 +24,7 @@ export default async function ({ page, app, stub, step, shot, expect, log }) {
   await step("opt-target: a Health target filters the builds", async () => {
     await page.fill({ role: "spinbutton", name: "Health target value" }, "100");
     await page.press("Enter");
-    await page.waitFor(async () => (await page.attr({ role: "spinbutton", name: "Health target value" }, "value")) === "100");
+    await page.waitFor(async () => (await page.value({ role: "spinbutton", name: "Health target value" })) === "100");
     // The search reruns 250 ms after an edit: wait for the end state, not for a quiet moment.
     const healthOnCards = async () => {
       const cards = await page.findAll(CARD);
@@ -44,9 +44,9 @@ export default async function ({ page, app, stub, step, shot, expect, log }) {
 
   await step("opt-open: a build card expands to its pieces", async () => {
     await page.click({ ...CARD, nth: 0 });
-    await page.waitFor(async () => (await page.attr({ ...CARD, nth: 0 }, "aria-expanded")) === "true");
+    // The breakdown rendering is the signal; the header's state is the check.
     await page.waitForText(/masterwork/i);
-    expect(true, "first card is expanded (aria-expanded=true) and shows Masterwork");
+    expect((await page.attr({ ...CARD, nth: 0 }, "aria-expanded")) === "true", "first card is expanded (aria-expanded=true) and shows Masterwork");
   });
 
   await step("opt-dream: Dream build answers for the first build", async () => {
@@ -63,9 +63,9 @@ export default async function ({ page, app, stub, step, shot, expect, log }) {
     const first = await answer();
     log(`  dream status at the build's own stats: ${first}`);
     expect(first === "No farming needed", "the build as it stands needs no farming");
-    const start = Number(await page.attr(health, "value", { within: dialog }));
+    const start = Number(await page.value(health, { within: dialog }));
     for (let i = 0; i < 10; i++) await page.click({ role: "button", name: "Raise Health by 1" }, { within: dialog, settle: 40 });
-    await page.waitFor(async () => Number(await page.attr(health, "value", { within: dialog })) === start + 10);
+    await page.waitFor(async () => Number(await page.value(health, { within: dialog })) === start + 10);
     const after = await answer();
     log(`  dream status after Health ${start} → ${start + 10}: ${after}`);
     expect(after !== "Search failed", `Dream build answers a raised target (${after})`);
@@ -83,15 +83,13 @@ export default async function ({ page, app, stub, step, shot, expect, log }) {
     await shot("save-drawer", { within: drawer });
     await page.click({ role: "button", name: "Save" }, { within: drawer });
     await page.waitFor(drawer, { gone: true });
-    const toast = await page.waitFor(async () => (await app.toasts()).find((t) => /Loadout saved/.test(t)));
-    expect(toast, `toast "${toast}"`);
-    const post = stub.requests.find((r) => r.method === "POST" && r.path === "/api/loadouts");
+    log(`  toast: ${await app.toast(/Loadout saved/)}`);
+    const post = stub.last("POST", "/api/loadouts");
     expect(post?.status === 201, "POST /api/loadouts answered 201");
     expect(post.body?.loadout?.name === "verify-d2 build", `request carries the name (${post.body?.loadout?.name})`);
     expect(post.body.loadout.equipped?.length >= 5, `request carries the armor (${post.body.loadout.equipped?.length} items)`);
-    await app.nav("Loadouts", "/loadouts");
-    await page.waitFor({ role: "article", name: "verify-d2 build" });
-    expect(true, 'Loadouts lists an article named "verify-d2 build"');
+    await app.nav("/loadouts");
+    expect(await page.exists({ role: "article", name: "verify-d2 build" }), 'Loadouts lists an article named "verify-d2 build"');
     await shot("loadouts-after-save");
   });
 }

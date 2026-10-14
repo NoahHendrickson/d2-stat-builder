@@ -5,47 +5,61 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { ROUTES } from "../../../../../scripts/browser/routes.mjs";
 
 export const ROOT = "/tmp/verify-d2";
 export const DEFAULT_PORT = 4400;
 // .claude/skills/verify-d2/scripts/lib → the checkout this skill lives in.
 export const CHECKOUT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../../..");
+// What a build is made from: a change here after `up` makes a prod build stale.
+const SOURCE_PATHS = ["src", "public", "next.config.ts", "package.json", "postcss.config.mjs"];
 
 const statePath = (port) => path.join(ROOT, "servers", `${port}.json`);
 export const readState = (port) => { try { return JSON.parse(fs.readFileSync(statePath(port), "utf8")); } catch { return null; } };
 const writeState = (st) => { fs.mkdirSync(path.join(ROOT, "servers"), { recursive: true }); fs.writeFileSync(statePath(st.port), JSON.stringify(st, null, 2)); };
 export const allStates = () => { try { return fs.readdirSync(path.join(ROOT, "servers")).filter((f) => f.endsWith(".json")).map((f) => JSON.parse(fs.readFileSync(path.join(ROOT, "servers", f), "utf8"))); } catch { return []; } };
 
-const sh = (cmd, args, opts = {}) => { try { return execFileSync(cmd, args, { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], ...opts }).trim(); } catch { return ""; } };
+const raw = (cmd, args) => { try { return execFileSync(cmd, args, { encoding: "utf8", stdio: ["ignore", "pipe", "ignore"], maxBuffer: 64 * 1024 * 1024 }); } catch { return ""; } };
+const sh = (cmd, args) => raw(cmd, args).trim();
 export const alive = (pid) => { try { process.kill(pid, 0); return true; } catch { return false; } };
 export const listeners = (port) => sh("lsof", ["-nP", "-t", `-iTCP:${port}`, "-sTCP:LISTEN"]).split("\n").filter(Boolean).map(Number);
 export const pgidOf = (pid) => Number(sh("ps", ["-o", "pgid=", "-p", String(pid)])) || null;
 export const cwdOf = (pid) => sh("lsof", ["-a", "-p", String(pid), "-d", "cwd", "-Fn"]).split("\n").find((l) => l.startsWith("n"))?.slice(1) ?? null;
 
-/** HEAD plus a hash of uncommitted changes under src/ and config: what a build was made from. */
+/**
+ * HEAD plus a hash of every changed or untracked file's current contents under the source
+ * paths: what a build was made from. Hashing files (not `git diff` output) keeps large
+ * regenerated files and new untracked files in the stamp.
+ */
 export function sourceStamp() {
   const head = sh("git", ["-C", CHECKOUT, "rev-parse", "--short", "HEAD"]);
-  const dirty = sh("git", ["-C", CHECKOUT, "status", "--porcelain", "--", "src", "public", "next.config.ts", "package.json", "postcss.config.mjs"]);
-  const diff = dirty ? sh("git", ["-C", CHECKOUT, "diff", "HEAD", "--", "src", "public", "next.config.ts", "package.json", "postcss.config.mjs"]) + dirty : "";
-  return { head, dirty: Boolean(dirty), hash: crypto.createHash("sha1").update(head + diff).digest("hex").slice(0, 10) };
+  // Untrimmed: porcelain lines start with a two-letter status that can begin with a space.
+  const status = raw("git", ["-C", CHECKOUT, "status", "--porcelain=v1", "-z", "--untracked-files=all", "--", ...SOURCE_PATHS]);
+  const files = status.split("\0").filter(Boolean).map((l) => l.slice(3)).sort();
+  const hash = crypto.createHash("sha1").update(head);
+  for (const f of files) {
+    hash.update(`\0${f}\0`);
+    try { hash.update(fs.readFileSync(path.join(CHECKOUT, f))); } catch { hash.update("<deleted>"); }
+  }
+  return { head, dirty: files.length > 0, hash: hash.digest("hex").slice(0, 10) };
 }
 
-/** The main checkout of this repository (first entry of `git worktree list`). */
-function mainCheckout() {
+/** The main checkout of this repository (first entry of `git worktree list`), or null. */
+export function mainCheckout() {
   const first = sh("git", ["-C", CHECKOUT, "worktree", "list", "--porcelain"]).split("\n")[0];
-  return first?.startsWith("worktree ") ? first.slice(9) : null;
+  return first?.startsWith("worktree ") ? first.slice("worktree ".length) : null;
 }
 
 /**
  * Worktrees have no node_modules or .env.local. Borrow the main checkout's as symlinks
- * (verification scaffolding, removed by `down`). Returns the links created.
+ * (verification scaffolding, removed by the last `down` in this checkout). Returns the links created.
  */
 function scaffold(log) {
   const created = [];
   const main = mainCheckout();
   for (const name of ["node_modules", ".env.local"]) {
     const here = path.join(CHECKOUT, name);
-    if (fs.existsSync(here) || fs.lstatSync(here, { throwIfNoEntry: false })) continue;
+    if (fs.lstatSync(here, { throwIfNoEntry: false })) continue;
     const there = main && path.join(main, name);
     if (!there || there === here || !fs.existsSync(there)) throw new Error(`${name} is missing here and in the main checkout (${main}); run npm install / create .env.local first`);
     fs.symlinkSync(there, here);
@@ -61,18 +75,17 @@ function otherDevServer() {
   return pids.find((pid) => cwdOf(pid) === CHECKOUT) ?? null;
 }
 
-async function waitReady(port, scheme, logFile, pid, timeoutMs) {
+async function waitReady(port, logFile, pid, timeoutMs) {
   const t0 = Date.now();
   // Ready means the pages render, not only that the port answers: in dev each route
   // compiles on its first request, so warm all of them before handing over.
-  const routes = ["/", "/armor", "/weapons", "/loadouts", "/manager", "/settings"];
-  let pending = [...routes];
+  let pending = ROUTES.map((r) => r.path);
   while (Date.now() - t0 < timeoutMs) {
     if (!alive(pid)) throw new Error(`server exited during startup; see ${logFile}`);
     const next = [];
     for (const r of pending) {
       try {
-        const res = await fetch(`${scheme}://localhost:${port}${r}`, { redirect: "manual", signal: AbortSignal.timeout(120000) });
+        const res = await fetch(`http://localhost:${port}${r}`, { redirect: "manual", signal: AbortSignal.timeout(120000) });
         const body = await res.text();
         if (res.status !== 200 || !body.includes("<html")) next.push(r);
       } catch { next.push(r); }
@@ -95,6 +108,10 @@ export async function up({ port = DEFAULT_PORT, mode = "prod", log = console.log
   if (existing && alive(existing.pid)) throw new Error(`a verify server is already up on ${port} (pid ${existing.pid}, ${existing.mode}, ${existing.checkout}); run \`verify-d2 down --port ${port}\` first`);
   const holders = listeners(port);
   if (holders.length) throw new Error(`port ${port} is taken by pid ${holders.join(", ")} (not started by verify-d2); pick another with --port`);
+  // A second prod build here would rewrite .next under the running one. Runs are isolated
+  // per browser and stub, so share it instead.
+  const twin = allStates().find((o) => o.checkout === CHECKOUT && o.mode === mode && alive(o.pid));
+  if (twin) throw new Error(`a ${mode} verify server for this checkout is already up on ${twin.port}; run journeys against it with --port ${twin.port} (runs don't share state)`);
   if (mode === "dev") {
     const other = otherDevServer();
     if (other) throw new Error(`pid ${other} already runs \`next dev\` in ${CHECKOUT}; two dev servers would share .next/dev. Use prod mode (the default) instead`);
@@ -130,7 +147,7 @@ export async function up({ port = DEFAULT_PORT, mode = "prod", log = console.log
   const state = { port, pid: child.pid, pgid: child.pid, mode, bundler: webpack ? "webpack" : "turbopack", checkout: CHECKOUT, url: `http://localhost:${port}`, stamp, scaffolding: created, log: logFile, startedAt: new Date().toISOString() };
   writeState(state);
   try {
-    const ms = await waitReady(port, "http", logFile, child.pid, mode === "dev" ? 600000 : 120000);
+    const ms = await waitReady(port, logFile, child.pid, mode === "dev" ? 600000 : 120000);
     log(`ready at ${state.url} after ${Math.round(ms / 1000)} s (pid ${child.pid}, ${mode}, ${state.bundler})`);
   } catch (e) {
     await down({ port, log });
@@ -148,11 +165,16 @@ export async function down({ port = DEFAULT_PORT, log = console.log }) {
     if (alive(st.pid)) try { process.kill(-st.pgid, "SIGKILL"); } catch {}
     log(`stopped pid ${st.pid} (group ${st.pgid}) on ${port}`);
   }
-  // Scaffolding links go once no other recorded server still needs them.
-  const others = allStates().filter((o) => o.port !== port && alive(o.pid));
-  for (const p of st.scaffolding ?? []) {
-    if (others.some((o) => o.scaffolding?.includes(p))) continue;
-    if (fs.lstatSync(p, { throwIfNoEntry: false })?.isSymbolicLink()) { fs.rmSync(p); log(`scaffold: removed ${p}`); }
+  // Scaffolding is per checkout: while another server here is still up it needs the links,
+  // so hand them to it; the last `down` in the checkout removes them.
+  const heir = allStates().find((o) => o.port !== port && o.checkout === st.checkout && alive(o.pid));
+  if (heir && st.scaffolding?.length) {
+    writeState({ ...heir, scaffolding: [...new Set([...(heir.scaffolding ?? []), ...st.scaffolding])] });
+    log(`scaffold: kept for the server on ${heir.port}`);
+  } else {
+    for (const p of st.scaffolding ?? []) {
+      if (fs.lstatSync(p, { throwIfNoEntry: false })?.isSymbolicLink()) { fs.rmSync(p); log(`scaffold: removed ${p}`); }
+    }
   }
   fs.rmSync(statePath(port), { force: true });
 }
