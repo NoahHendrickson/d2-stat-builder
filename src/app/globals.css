@@ -588,9 +588,20 @@ input[type="number"] {
   }
 }
 
+/* d2-glass's inputs: its fill and its backdrop filter. Not inherited, so they
+   restyle only the element that sets them, never a d2-glass surface nested in it. */
+@property --glass-tint {
+  syntax: "*";
+  inherits: false;
+}
+@property --glass-filter {
+  syntax: "*";
+  inherits: false;
+}
+
 /* Frosted variant of d2-glass: a thin tint over a heavier blur, so the page
    behind shows through as soft colour instead of the menu reading as a solid
-   fill. Sets d2-glass's inputs, so the two go together on one element. */
+   fill. Goes beside d2-glass on the same element. */
 @utility d2-frost {
   --glass-tint: var(--frost);
   --glass-filter: blur(36px) saturate(1.1);

@@ -80,8 +80,8 @@ export interface InventoryItem {
 export interface ManagerCharacter {
   id: string;
   classType: number;
-  /** DestinyRace (0 Human, 1 Awoken, 2 Exo); missing from older fixtures. */
-  raceType?: number;
+  /** DestinyRace: 0 Human, 1 Awoken, 2 Exo. */
+  raceType: number;
   light: number;
   emblemBackgroundPath: string;
   /** Square emblem icon (relative Bungie image path), for compact character buttons. */
@@ -437,7 +437,7 @@ export function buildInventory(
       return {
         id: c.characterId,
         classType: c.classType,
-        ...(c.raceType !== undefined ? { raceType: c.raceType } : {}),
+        raceType: c.raceType,
         light: c.light,
         emblemBackgroundPath: c.emblemBackgroundPath,
         emblemPath: c.emblemPath,

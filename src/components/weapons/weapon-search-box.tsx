@@ -15,6 +15,7 @@ import {
   type FilterValue,
 } from "@/lib/weapons/filter-suggestions";
 import { matchRank } from "@/lib/weapons/rank";
+import { useCloseAfterClick } from "@/lib/use-close-after-click";
 import type { AmmoTypeRef, DamageTypeRef } from "@/lib/weapons/types";
 import { cn } from "@/lib/utils";
 
@@ -216,20 +217,11 @@ export function WeaponSearchBox({
         ?.scrollIntoView({ block: "nearest" });
   }, [active, expanded, id]);
 
-  // Whether a pointer is pressed right now, for the blur handler below.
-  const pointerHeld = useRef(false);
-  useEffect(() => {
-    const down = () => (pointerHeld.current = true);
-    const up = () => (pointerHeld.current = false);
-    document.addEventListener("pointerdown", down, true);
-    document.addEventListener("pointerup", up, true);
-    document.addEventListener("pointercancel", up, true);
-    return () => {
-      document.removeEventListener("pointerdown", down, true);
-      document.removeEventListener("pointerup", up, true);
-      document.removeEventListener("pointercancel", up, true);
-    };
-  }, []);
+  // The options push the results down, so they close only once a click outside has landed.
+  const onBlur = useCloseAfterClick(() => {
+    setOpen(false);
+    leaveDrill();
+  });
 
   function leaveDrill() {
     setDrillParam(null);
@@ -302,28 +294,7 @@ export function WeaponSearchBox({
   return (
     <div
       className="min-w-0 flex-1"
-      onBlur={(event) => {
-        const box = event.currentTarget;
-        if (box.contains(event.relatedTarget)) return;
-        // The list sits in the page flow, so closing it moves the results up. Focus
-        // leaves before the click lands (on the press with a mouse, between the
-        // tap's mousedown and click on touch), so close only after the click:
-        // closing at once would slide another weapon under the pointer.
-        const close = () => {
-          if (box.contains(document.activeElement)) return;
-          setOpen(false);
-          leaveDrill();
-        };
-        const afterClick = () => setTimeout(close);
-        if (!pointerHeld.current) return afterClick();
-        const done = new AbortController();
-        const onRelease = () => {
-          done.abort();
-          afterClick();
-        };
-        document.addEventListener("pointerup", onRelease, { signal: done.signal });
-        document.addEventListener("pointercancel", onRelease, { signal: done.signal });
-      }}
+      onBlur={onBlur}
     >
       <div
         className="flex min-h-12 cursor-text flex-wrap items-center gap-1.5 border-y border-foreground/12 bg-foreground/8 px-4 py-2 transition-colors md:px-6 normal:px-3 hover:border-foreground/20 focus-within:border-foreground/30 normal:mx-6 normal:rounded-[10px] normal:border normal:bg-foreground/4"

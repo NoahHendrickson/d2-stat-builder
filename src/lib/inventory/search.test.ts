@@ -28,6 +28,7 @@ const inv: ManagerInventory = {
     {
       id: "c",
       classType: 1,
+      raceType: 0,
       light: 0,
       emblemBackgroundPath: "",
       emblemPath: "",

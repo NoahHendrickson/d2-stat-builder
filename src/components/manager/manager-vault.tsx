@@ -48,7 +48,7 @@ import { weaponTypeIcon } from "@/lib/weapons/weapon-type-icon-paths";
 import { useStoreValue } from "@/lib/value-store";
 import { ItemTile } from "./item-tile";
 import { useItemComparator } from "./view-menu";
-import { dragStore, usePhoneLayout, usePhoneTiles } from "./manager-context";
+import { dragStore, usePhoneLayout, usePhoneTiles, usePinnedPlateClass } from "./manager-context";
 import { DropZone } from "./manager-drop-zone";
 
 /** Above and below a slot's tiles: the slot rows' drop zones are padded this much. */
@@ -169,9 +169,18 @@ export function AlignedVault({
       className="grid min-w-0 grid-rows-subgrid pl-3"
       style={{ gridColumn: "-2", gridRow: `1 / span ${rowSpan}` }}
     >
-      <VaultHeader inventory={inventory} className="justify-between" />
-      {/* Down to the postmasters' row: nothing of the vault's own. */}
-      <div style={{ gridRow: `span ${headerRows}` }} />
+      {headerRows === 1 ? (
+        // Beside the nameplates, the header runs on into the postmasters' row (the vault
+        // has none), so its tabs don't stretch the nameplate row and leave a band under them.
+        <VaultHeader inventory={inventory} className="row-span-2 self-start" />
+      ) : (
+        <>
+          {/* Compact, it shares the character tabs' row, its own tabs level with theirs. */}
+          <VaultHeader inventory={inventory} className="justify-between" />
+          {/* Down to the postmasters' row: nothing of the vault's own. */}
+          <div style={{ gridRow: `span ${headerRows}` }} />
+        </>
+      )}
       {SLOT_ROWS.map(({ row, groupStart }) => (
         <div key={row.hash} className={cn("min-w-0 pb-2", groupStart && "pt-5")}>
           <VaultLines sections={bySlot.get(String(row.hash)) ?? NO_SECTIONS} pad={SLOT_PAD_PX} />
@@ -202,22 +211,15 @@ export function VaultPane({ inventory }: { inventory: ManagerInventory }) {
 }
 
 /**
- * The vault's nameplate with the currencies beside it, then its tabs. Pinned under the
- * search bar like the characters' nameplates, filled once something scrolls under it; on
- * phones the tab strip above is what's pinned, as there.
+ * The vault's nameplate with the currencies beside it, then its tabs, pinned like the
+ * characters' nameplates.
  */
 function VaultHeader({ inventory, className }: { inventory: ManagerInventory; className?: string }) {
-  const phone = usePhoneLayout();
+  const pinnedPlate = usePinnedPlateClass();
   return (
-    <div
-      className={cn(
-        "flex flex-col pb-3",
-        !phone && "sticky top-8 z-10 -mt-3 pt-3 group-data-scrolled/manager:bg-glass-opaque",
-        className,
-      )}
-    >
-      {/* Phones: the currencies go under the nameplate instead of beside it. */}
-      <div className={cn("flex items-center gap-3 pb-3", phone && "flex-col items-start")}>
+    <div className={cn("flex flex-col", pinnedPlate, className)}>
+      {/* The currencies drop under the nameplate when the column is too narrow for both. */}
+      <div className="flex flex-wrap items-center gap-3 pb-3">
         <VaultTitle inventory={inventory} />
         <VaultCurrencies inventory={inventory} />
       </div>
@@ -421,11 +423,13 @@ const VAULT_SIGIL_CROP = {
  * vault sigil, "Vault", how full it is, and a fill bar along the bottom that turns red near full.
  */
 function VaultTitle({ inventory: { vaultCount, vaultCapacity } }: { inventory: ManagerInventory }) {
-  const full = vaultCapacity !== undefined && vaultCount >= vaultCapacity;
   const fill = vaultCapacity ? Math.min(vaultCount / vaultCapacity, 1) : 0;
+  // Red from here on: the count and the bar together.
+  const nearFull = fill >= 0.95;
   return (
     <div className="w-70 max-w-full shrink-0">
-      <div className="relative h-14 w-full overflow-hidden bg-[#4a4d53] normal:rounded-[12px]">
+      {/* Always dark, like an emblem, so it takes the dark palette (its red) in either mode. */}
+      <div className="dark relative h-14 w-full overflow-hidden bg-[#4a4d53] normal:rounded-[12px]">
         <div
           aria-hidden
           className="absolute top-1/2 left-2.5 aspect-[236/154] w-15 -translate-y-1/2 bg-no-repeat"
@@ -438,8 +442,7 @@ function VaultTitle({ inventory: { vaultCount, vaultCapacity } }: { inventory: M
         <div className="absolute inset-y-0 right-0 flex flex-col items-end justify-center gap-1 px-3 pb-1 text-right">
           <h2 className="d2-heading text-sm leading-none text-white drop-shadow">Vault</h2>
           <span className="text-xs leading-none text-white/75 tabular-nums drop-shadow">
-            {/* The emblem is always dark: the dark theme's red reads on it. */}
-            <span className={cn("font-medium", full ? "text-[#ff8f84]" : "text-white")}>
+            <span className={cn("font-medium", nearFull ? "text-destructive" : "text-white")}>
               {vaultCount.toLocaleString()}
             </span>
             {vaultCapacity ? ` / ${vaultCapacity.toLocaleString()}` : ""}
@@ -448,7 +451,7 @@ function VaultTitle({ inventory: { vaultCount, vaultCapacity } }: { inventory: M
         {vaultCapacity !== undefined && (
           <div className="absolute inset-x-0 bottom-0 h-[3px] bg-black/30">
             <div
-              className={cn("h-full", fill >= 0.95 ? "bg-[#ff8f84]" : "bg-white/70")}
+              className={cn("h-full", nearFull ? "bg-destructive" : "bg-white/70")}
               style={{ width: `${fill * 100}%` }}
             />
           </div>
