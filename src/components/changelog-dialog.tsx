@@ -1,6 +1,6 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
+import { useEffect, useRef, useSyncExternalStore } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -35,12 +35,17 @@ function subscribe(listener: () => void) {
 const latest = seenFlag("stat-builder:changelog-seen", CHANGELOG[0]?.date ?? "");
 let unseen: boolean | null = null;
 
+/** Links from before the Changelog (the old release popup's #whats-new) open it too. */
+const HASHES = ["#changelog", "#whats-new"];
+
 function setOpen(open: boolean) {
   if (open === isOpen) return;
   isOpen = open;
   if (open) {
     latest.markSeen();
     unseen = false;
+  } else if (HASHES.includes(window.location.hash)) {
+    history.replaceState(history.state, "", window.location.pathname + window.location.search);
   }
   emit();
 }
@@ -70,17 +75,33 @@ function formatDate(date: string): string {
   return dateFormat.format(new Date(`${date}T00:00:00Z`));
 }
 
-/** The Changelog: every entry in lib/changelog.ts, newest first. */
+/**
+ * The Changelog: every entry in lib/changelog.ts, newest first, scrolling back to the
+ * first release. The only place the app announces what's new; it never opens by itself.
+ */
 export function ChangelogDialog() {
   const open = useSyncExternalStore(subscribe, () => isOpen, () => false);
+  // Focus starts on the list, not its first link (an older release's), so it opens at
+  // the top and the arrow keys scroll it.
+  const list = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (HASHES.includes(window.location.hash)) openChangelog();
+  }, []);
   return (
     <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent className="flex max-h-[min(80dvh,40rem)] flex-col gap-0 p-0 sm:max-w-md">
+      <DialogContent
+        initialFocus={list}
+        className="flex max-h-[min(80dvh,40rem)] flex-col gap-0 p-0 sm:max-w-md"
+      >
         <DialogHeader className="px-5 pt-5 pb-4 pr-12">
           <DialogTitle className="text-lg">What&apos;s new</DialogTitle>
-          <DialogDescription>New features and fixes, newest first.</DialogDescription>
+          <DialogDescription>Every release, newest first.</DialogDescription>
         </DialogHeader>
-        <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-5 pb-5">
+        <div
+          ref={list}
+          tabIndex={-1}
+          className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto px-5 pb-5 outline-none"
+        >
           {CHANGELOG.map((entry) => (
             <section key={entry.date} aria-label={formatDate(entry.date)} className="flex flex-col gap-2">
               <h3 className="text-muted-foreground text-xs font-medium tabular-nums">
@@ -91,6 +112,17 @@ export function ChangelogDialog() {
                   <li key={change}>{change}</li>
                 ))}
               </ul>
+              {entry.link && (
+                <a
+                  href={entry.link.href}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-power w-fit text-sm underline-offset-4 hover:underline"
+                >
+                  {entry.link.label}
+                  <span className="sr-only"> (opens in a new tab)</span>
+                </a>
+              )}
             </section>
           ))}
         </div>
