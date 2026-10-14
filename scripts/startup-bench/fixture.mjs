@@ -57,7 +57,7 @@ for (const d of armor(6, 14239492).slice(0, 3)) add(d);
 
 const profile = {
   profile: { data: { currentSeasonHash: 0 } },
-  characters: { data: { c1: { characterId: "c1", classType: 1, light: 450, emblemBackgroundPath: "/common/destiny2_content/icons/x.jpg", dateLastPlayed: "2026-09-22T00:00:00Z" } } },
+  characters: { data: { c1: { characterId: "c1", classType: 1, raceType: 0, light: 450, emblemBackgroundPath: "/common/destiny2_content/icons/x.jpg", dateLastPlayed: "2026-09-22T00:00:00Z" } } },
   characterEquipment: { data: { c1: { items: items.slice(0, 5) } } },
   characterInventories: { data: { c1: { items: items.slice(5, 20) } } },
   profileInventory: { data: { items: items.slice(20) } },
@@ -135,7 +135,7 @@ function writeFull() {
 
   const profile = {
     profile: { data: { currentSeasonHash: 0 } },
-    characters: { data: Object.fromEntries(chars.map(([id, classType, played]) => [id, { characterId: id, classType, light: 450, emblemBackgroundPath: "/common/destiny2_content/icons/x.jpg", dateLastPlayed: played }])) },
+    characters: { data: Object.fromEntries(chars.map(([id, classType, played]) => [id, { characterId: id, classType, raceType: 0, light: 450, emblemBackgroundPath: "/common/destiny2_content/icons/x.jpg", dateLastPlayed: played }])) },
     characterEquipment: { data: equipment },
     characterInventories: { data: inventories },
     profileInventory: { data: { items: [...vault, ...stacks(1469714392, 40), ...stacks(3313201758, 30)] } },

@@ -126,7 +126,7 @@ export function ApplyProgressSection() {
       className={cn(
         // A fixed 6-across grid keeps it square-ish. On Slate the menu fill reads too
         // blue for a card this big: same lift, less hue.
-        "d2-glass [.dark[data-app-theme=slate]_&]:[--glass-raised:rgb(68_76_92/92%)] flex w-60 flex-col gap-3 p-3 text-popover-foreground",
+        "d2-glass [.dark[data-app-theme=slate]_&]:[--glass-tint:rgb(68_76_92/92%)] flex w-60 flex-col gap-3 p-3 text-popover-foreground",
         // Pinned to the main column's bottom-left (its contain-layout is the containing
         // block): top-left sat on the Items search and every page's filter row. Sits
         // above whatever publishes --app-bottom-inset (the phone Builds bar).

@@ -72,6 +72,9 @@
   /* Menus, popovers and tooltips: a step off --glass so they don't melt into
      the panes behind them, which also sit on --glass. */
   --glass-raised: rgb(248 247 245 / 90%);
+  /* Frosted menus (d2-frost): the same tint, thin enough that what's behind
+     shows through the blur as colour and shape. */
+  --frost: rgb(248 247 245 / 50%);
   /* The sidebar and main panes that cover the backdrop. Glass by default; the
      slate backdrop clears them (below). */
   --shell-sidebar: var(--glass);
@@ -271,6 +274,7 @@
   /* Neutral slate, not blue, and translucent enough that the scene tint
      under the menu carries through the blur. */
   --glass-raised: rgb(88 94 100 / 70%);
+  --frost: rgb(88 94 100 / 38%);
   --text-primary: #fcfcf5;
   --text-secondary: rgb(255 255 255 / 0.7);
   --text-muted: rgb(255 255 255 / 0.7);
@@ -309,6 +313,9 @@
      neutral grey reads green against it. 92% so a dark dialog under a menu
      doesn't grey it out. */
   --glass-raised: rgb(76 92 120 / 92%);
+  /* Frosted menus: near-neutral, only a hint of the backdrop's blue, so the
+     menu doesn't read bluer than the page it covers. */
+  --frost: rgb(82 88 100 / 40%);
   /* Dialogs, toasts and tooltips take the gradient's blue (#374358) as well, so
      they don't read grey over the page; menus stay the lighter step above. */
   --panel-strong: rgb(55 67 88 / 82%);
@@ -328,6 +335,7 @@
   --glass: var(--popover);
   --glass-opaque: var(--background);
   --glass-raised: var(--popover);
+  --frost: var(--popover);
   --panel: var(--card);
   --panel-strong: var(--popover);
 }
@@ -560,8 +568,8 @@ input[type="number"] {
    The line sits a step brighter than the default field/button stops so the
    floating frame reads against the scene. */
 @utility d2-glass {
-  background-color: var(--glass-raised);
-  backdrop-filter: blur(20px);
+  background-color: var(--glass-tint, var(--glass-raised));
+  backdrop-filter: var(--glass-filter, blur(20px));
   --line-side: color-mix(in srgb, var(--foreground) calc(var(--line-alpha, 1) * 12%), transparent);
   --line-mid: color-mix(in srgb, var(--foreground) calc(var(--line-alpha, 1) * 40%), transparent);
   border: 1px solid transparent;
@@ -578,6 +586,25 @@ input[type="number"] {
     border-color: var(--input);
     border-radius: 10px;
   }
+}
+
+/* d2-glass's inputs: its fill and its backdrop filter. Not inherited, so they
+   restyle only the element that sets them, never a d2-glass surface nested in it. */
+@property --glass-tint {
+  syntax: "*";
+  inherits: false;
+}
+@property --glass-filter {
+  syntax: "*";
+  inherits: false;
+}
+
+/* Frosted variant of d2-glass: a thin tint over a heavier blur, so the page
+   behind shows through as soft colour instead of the menu reading as a solid
+   fill. Goes beside d2-glass on the same element. */
+@utility d2-frost {
+  --glass-tint: var(--frost);
+  --glass-filter: blur(36px) saturate(1.1);
 }
 
 /* Darker frosted slate: dialogs and toasts sit on this. Stronger than the

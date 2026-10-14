@@ -15,6 +15,7 @@ import {
   type FilterValue,
 } from "@/lib/weapons/filter-suggestions";
 import { matchRank } from "@/lib/weapons/rank";
+import { useCloseAfterClick } from "@/lib/use-close-after-click";
 import type { AmmoTypeRef, DamageTypeRef } from "@/lib/weapons/types";
 import { cn } from "@/lib/utils";
 
@@ -216,6 +217,12 @@ export function WeaponSearchBox({
         ?.scrollIntoView({ block: "nearest" });
   }, [active, expanded, id]);
 
+  // The options push the results down, so they close only once a click outside has landed.
+  const onBlur = useCloseAfterClick(() => {
+    setOpen(false);
+    leaveDrill();
+  });
+
   function leaveDrill() {
     setDrillParam(null);
     setDrillText("");
@@ -287,12 +294,7 @@ export function WeaponSearchBox({
   return (
     <div
       className="min-w-0 flex-1"
-      onBlur={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget)) {
-          setOpen(false);
-          leaveDrill();
-        }
-      }}
+      onBlur={onBlur}
     >
       <div
         className="flex min-h-12 cursor-text flex-wrap items-center gap-1.5 border-y border-foreground/12 bg-foreground/8 px-4 py-2 transition-colors md:px-6 normal:px-3 hover:border-foreground/20 focus-within:border-foreground/30 normal:mx-6 normal:rounded-[10px] normal:border normal:bg-foreground/4"

@@ -320,7 +320,7 @@ export function ManagerSearch({ inventory }: { inventory: ManagerInventory }) {
             id={listId}
             role="listbox"
             aria-label="Search suggestions"
-            className="d2-glass normal:rounded-[10px] absolute top-full left-0 z-50 mt-1 flex w-[min(26rem,calc(100vw-2rem))] cursor-default flex-col p-1 text-sm"
+            className="d2-glass d2-frost normal:rounded-[10px] absolute top-full left-0 z-50 mt-1 flex w-[min(26rem,calc(100vw-2rem))] cursor-default flex-col p-1 text-sm"
             // Keep focus (and the caret) in the input while clicking rows.
             onMouseDown={(e) => e.preventDefault()}
           >

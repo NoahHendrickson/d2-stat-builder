@@ -68,3 +68,15 @@ export function usePhoneTiles(): TileMetrics | null {
   const layout = useContext(ManagerLayoutContext);
   return layout.phone ? layout.tiles : null;
 }
+
+/**
+ * The classes for a column's nameplate block (a character's, the vault's): pinned under the
+ * search bar, filled once something scrolls under it. pt-3 is that filled gap; -mt-3 keeps it
+ * out of the layout. Phones pin the tab strip instead: a nameplate there would take a fifth of
+ * the screen.
+ */
+export function usePinnedPlateClass(): string {
+  return usePhoneLayout()
+    ? "pb-3"
+    : "sticky top-8 z-10 -mt-3 py-3 group-data-scrolled/manager:bg-glass-opaque";
+}

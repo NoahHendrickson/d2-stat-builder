@@ -27,6 +27,7 @@ const item = (key: string, extra: Partial<InventoryItem> = {}): InventoryItem =>
 const hunter = (inventory: ManagerCharacter["inventory"]): ManagerCharacter => ({
   id: "H",
   classType: 1,
+  raceType: 0,
   light: 0,
   emblemBackgroundPath: "",
   emblemPath: "",

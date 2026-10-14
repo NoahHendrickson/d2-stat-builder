@@ -48,7 +48,7 @@ import { weaponTypeIcon } from "@/lib/weapons/weapon-type-icon-paths";
 import { useStoreValue } from "@/lib/value-store";
 import { ItemTile } from "./item-tile";
 import { useItemComparator } from "./view-menu";
-import { dragStore, usePhoneLayout, usePhoneTiles } from "./manager-context";
+import { dragStore, usePhoneLayout, usePhoneTiles, usePinnedPlateClass } from "./manager-context";
 import { DropZone } from "./manager-drop-zone";
 
 /** Above and below a slot's tiles: the slot rows' drop zones are padded this much. */
@@ -169,12 +169,18 @@ export function AlignedVault({
       className="grid min-w-0 grid-rows-subgrid pl-3"
       style={{ gridColumn: "-2", gridRow: `1 / span ${rowSpan}` }}
     >
-      <div className="flex flex-col justify-between">
-        <VaultTitle inventory={inventory} />
-        <VaultTabs inventory={inventory} />
-      </div>
-      {/* Down to the postmasters' row: nothing of the vault's own. */}
-      <div style={{ gridRow: `span ${headerRows}` }} />
+      {headerRows === 1 ? (
+        // Beside the nameplates, the header runs on into the postmasters' row (the vault
+        // has none), so its tabs don't stretch the nameplate row and leave a band under them.
+        <VaultHeader inventory={inventory} className="row-span-2 self-start" />
+      ) : (
+        <>
+          {/* Compact, it shares the character tabs' row, its own tabs level with theirs. */}
+          <VaultHeader inventory={inventory} className="justify-between" />
+          {/* Down to the postmasters' row: nothing of the vault's own. */}
+          <div style={{ gridRow: `span ${headerRows}` }} />
+        </>
+      )}
       {SLOT_ROWS.map(({ row, groupStart }) => (
         <div key={row.hash} className={cn("min-w-0 pb-2", groupStart && "pt-5")}>
           <VaultLines sections={bySlot.get(String(row.hash)) ?? NO_SECTIONS} pad={SLOT_PAD_PX} />
@@ -195,8 +201,7 @@ export function VaultPane({ inventory }: { inventory: ManagerInventory }) {
   return (
     <DropZone to={{ kind: "vault" }} className="flex min-w-0 flex-col">
       <section aria-label="Vault" className="flex flex-col">
-        <VaultTitle inventory={inventory} />
-        <VaultTabs inventory={inventory} />
+        <VaultHeader inventory={inventory} />
         <div className="flex flex-col pb-4">
           <VaultLines sections={sections} />
         </div>
@@ -206,12 +211,29 @@ export function VaultPane({ inventory }: { inventory: ManagerInventory }) {
 }
 
 /**
+ * The vault's nameplate with the currencies beside it, then its tabs, pinned like the
+ * characters' nameplates.
+ */
+function VaultHeader({ inventory, className }: { inventory: ManagerInventory; className?: string }) {
+  const pinnedPlate = usePinnedPlateClass();
+  return (
+    <div className={cn("flex flex-col", pinnedPlate, className)}>
+      {/* The currencies drop under the nameplate when the column is too narrow for both. */}
+      <div className="flex flex-wrap items-center gap-3 pb-3">
+        <VaultTitle inventory={inventory} />
+        <VaultCurrencies inventory={inventory} />
+      </div>
+      <VaultTabs inventory={inventory} />
+    </div>
+  );
+}
+
+/**
  * Which of the vault's sections to show: everything, or just weapons or armor (each with
- * how many the vault holds). The currencies share the tabs' line, wrapping beside them.
+ * how many the vault holds).
  */
 function VaultTabs({ inventory }: { inventory: ManagerInventory }) {
   const view = useViewSettings();
-  const phone = usePhoneLayout();
   const { vault } = inventory;
   const count = (tab: VaultTab) =>
     VAULT_GROUPS.find((g) => g.label === VAULT_TAB_LABELS[tab])?.rows.reduce(
@@ -219,14 +241,7 @@ function VaultTabs({ inventory }: { inventory: ManagerInventory }) {
       0,
     );
   return (
-    // Phones: the currencies take a line of their own above the tabs; beside them they
-    // squeeze into one box per line.
-    <div
-      className={cn(
-        "mb-3 flex items-end gap-6 border-b border-foreground/12",
-        phone && "flex-col-reverse items-stretch gap-2",
-      )}
-    >
+    <div className="border-b border-foreground/12">
       <Tabs
         value={view.vaultTab}
         onValueChange={(tab) => setViewSettings({ ...view, vaultTab: tab as VaultTab })}
@@ -246,7 +261,6 @@ function VaultTabs({ inventory }: { inventory: ManagerInventory }) {
           })}
         </TabsList>
       </Tabs>
-      <VaultCurrencies inventory={inventory} />
     </div>
   );
 }
@@ -392,16 +406,57 @@ const VaultLineRow = memo(function VaultLineRow({ line, gap }: { line: VaultTile
   );
 });
 
-/** "Vault" and how full it is, above the vault's tabs. */
+/**
+ * The game's vault sigil. The plain one (the Vault vendor's smallTransparentIcon) is only
+ * 48px and blurs when scaled up, so this is the vendor's 360px largeTransparentIcon, which
+ * draws the sigil inside a shield outline: the crop shows just the sigil (236×154 at x 66,
+ * y 18), as background percentages so it holds at any width.
+ */
+const VAULT_SIGIL = `${BUNGIE_IMAGE_BASE}/common/destiny2_content/icons/9e92b994196275ad1a2f89946b2e65a4.png`;
+const VAULT_SIGIL_CROP = {
+  size: `${(360 / 236) * 100}% auto`,
+  position: `${(66 / (360 - 236)) * 100}% ${(18 / (360 - 154)) * 100}%`,
+};
+
+/**
+ * The vault's nameplate above its tabs: a grey emblem the width of a character's, with the
+ * vault sigil, "Vault", how full it is, and a fill bar along the bottom that turns red near full.
+ */
 function VaultTitle({ inventory: { vaultCount, vaultCapacity } }: { inventory: ManagerInventory }) {
-  const full = vaultCapacity !== undefined && vaultCount >= vaultCapacity;
+  const fill = vaultCapacity ? Math.min(vaultCount / vaultCapacity, 1) : 0;
+  // Red from here on: the count and the bar together.
+  const nearFull = fill >= 0.95;
   return (
-    <div className="flex items-baseline justify-between gap-3 pb-2">
-      <h2 className="d2-heading text-sm">Vault</h2>
-      <span className={cn("text-xs tabular-nums", full ? "text-destructive" : "text-muted-foreground")}>
-        {vaultCount.toLocaleString()}
-        {vaultCapacity ? ` / ${vaultCapacity.toLocaleString()}` : ""}
-      </span>
+    <div className="w-70 max-w-full shrink-0">
+      {/* Always dark, like an emblem, so it takes the dark palette (its red) in either mode. */}
+      <div className="dark relative h-14 w-full overflow-hidden bg-[#4a4d53] normal:rounded-[12px]">
+        <div
+          aria-hidden
+          className="absolute top-1/2 left-2.5 aspect-[236/154] w-15 -translate-y-1/2 bg-no-repeat"
+          style={{
+            backgroundImage: `url(${VAULT_SIGIL})`,
+            backgroundSize: VAULT_SIGIL_CROP.size,
+            backgroundPosition: VAULT_SIGIL_CROP.position,
+          }}
+        />
+        <div className="absolute inset-y-0 right-0 flex flex-col items-end justify-center gap-1 px-3 pb-1 text-right">
+          <h2 className="text-lg leading-tight font-medium text-white">Vault</h2>
+          <span className="text-xs leading-none text-white/75 tabular-nums">
+            <span className={cn("font-medium", nearFull ? "text-destructive" : "text-white")}>
+              {vaultCount.toLocaleString()}
+            </span>
+            {vaultCapacity ? ` / ${vaultCapacity.toLocaleString()}` : ""}
+          </span>
+        </div>
+        {vaultCapacity !== undefined && (
+          <div className="absolute inset-x-0 bottom-0 h-[3px] bg-black/30">
+            <div
+              className={cn("h-full", nearFull ? "bg-destructive" : "bg-white/70")}
+              style={{ width: `${fill * 100}%` }}
+            />
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -416,11 +471,15 @@ const CURRENCY_TINTS: Record<number, string> = {
   [ASCENDANT_ALLOY_HASH]: "#e0552b",
 };
 
-/** The account's currencies and upgrade materials, a tinted box each. */
+/** The account's currencies and upgrade materials, a tinted box each, in two rows. */
 function VaultCurrencies({ inventory: { currencies } }: { inventory: ManagerInventory }) {
   if (currencies.length === 0) return null;
   return (
-    <div className="flex min-w-0 flex-wrap gap-1.5 py-1" aria-label="Currencies">
+    <div
+      className="grid min-w-0 gap-1.5"
+      style={{ gridTemplateColumns: `repeat(${Math.ceil(currencies.length / 2)}, max-content)` }}
+      aria-label="Currencies"
+    >
       {currencies.map((c) => {
         const tint = CURRENCY_TINTS[c.itemHash] ?? "var(--foreground)";
         return (

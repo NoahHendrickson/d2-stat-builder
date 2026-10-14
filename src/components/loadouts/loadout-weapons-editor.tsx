@@ -198,7 +198,7 @@ function SlotPicker({
             )}
           </span>
         </PopoverTrigger>
-        <PopoverContent align="start" className="w-(--anchor-width) min-w-80 gap-2 p-2">
+        <PopoverContent align="start" className="d2-frost w-(--anchor-width) min-w-80 gap-2 p-2">
           <div className="relative">
             <Input
               type="search"

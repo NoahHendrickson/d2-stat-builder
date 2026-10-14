@@ -215,6 +215,12 @@ export const SLOT_LABELS: Record<ArmorSlot, string> = {
   classItem: "Class Item",
 };
 
+export const RACE_NAMES: Record<number, string> = {
+  0: "Human",
+  1: "Awoken",
+  2: "Exo",
+};
+
 export const CLASS_NAMES: Record<number, string> = {
   0: "Titan",
   1: "Hunter",

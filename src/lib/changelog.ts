@@ -20,6 +20,9 @@ export const CHANGELOG: readonly ChangelogEntry[] = [
     changes: [
       "Legacy raid sets: build with your Armor 2.0 raid armor, Last Wish through Salvation's Edge. Find it under Set bonuses in the Stat optimizer.",
       "This changelog, the one place to see what's new.",
+      "Items: character nameplates look like the game's character select, with class, race and Power. The vault gets a nameplate of its own showing how full it is, with your currencies beside it, and stays pinned as you scroll.",
+      "Dropdown menus are frosted glass: the page shows through, softly blurred.",
+      "Weapon search: clicking a weapon while filter suggestions are open now opens that weapon.",
     ],
   },
   {
