@@ -1,11 +1,15 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { DestinyProfileResponse } from "bungie-api-ts/destiny2";
 import { ArmoryError, fetchProfile } from "./fetch";
+import { HELD_PROFILE_HEADER, PROFILE_SHAPE_VERSION } from "./profile-mint";
 
 const held = {
   responseMintedTimestamp: "2026-10-02T15:00:10Z",
   secondaryComponentsMintedTimestamp: "2026-10-02T15:00:12Z",
 } as DestinyProfileResponse;
+
+const sentHeaders = (fetchMock: ReturnType<typeof vi.fn>) =>
+  (fetchMock.mock.calls[0] as unknown as [string, RequestInit])[1].headers as Record<string, string>;
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -16,19 +20,22 @@ describe("fetchProfile", () => {
     const fetchMock = vi.fn(async () => new Response(null, { status: 304 }));
     vi.stubGlobal("fetch", fetchMock);
     expect(await fetchProfile(held)).toBe(held);
-    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
-    expect((init.headers as Record<string, string>)["If-None-Match"]).toBe(
-      '"2026-10-02T15:00:10Z|2026-10-02T15:00:12Z"',
+    expect(sentHeaders(fetchMock)[HELD_PROFILE_HEADER]).toBe(
+      `${PROFILE_SHAPE_VERSION} 2026-10-02T15:00:10Z 2026-10-02T15:00:12Z`,
     );
   });
 
-  it("sends no validator and parses the body when nothing is held", async () => {
+  it("sends no stamps and parses the body when nothing is held", async () => {
     const fresh = { ...held, responseMintedTimestamp: "2026-10-02T15:01:00Z" };
     const fetchMock = vi.fn(async () => Response.json(fresh));
     vi.stubGlobal("fetch", fetchMock);
     expect(await fetchProfile()).toEqual(fresh);
-    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
-    expect(init.headers).toEqual({});
+    expect(sentHeaders(fetchMock)).toEqual({});
+  });
+
+  it("refuses a 304 it did not ask for", async () => {
+    vi.stubGlobal("fetch", async () => new Response(null, { status: 304 }));
+    await expect(fetchProfile()).rejects.toMatchObject({ status: 304 });
   });
 
   it("still surfaces errors with their status", async () => {

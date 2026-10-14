@@ -16,7 +16,12 @@ import {
 } from "@/lib/bungie/destiny-account";
 import { clearSession, getValidAccessToken, readUser, writeUser } from "@/lib/bungie/session";
 import { gzipResponse } from "@/lib/http/gzip-response";
-import { etagMatches, profileEtag } from "@/lib/armory/profile-etag";
+import {
+  HELD_PROFILE_HEADER,
+  isNewerMint,
+  parseHeldProfile,
+  type Minted,
+} from "@/lib/armory/profile-mint";
 
 // 100 Profiles (currentSeasonHash) · 102 Vault · 103 ProfileCurrencies · 200 Characters · 201 CharacterInventories
 // 202 CharacterProgressions (seasonal artifact unlocks, for saved loadouts)
@@ -25,6 +30,8 @@ import { etagMatches, profileEtag } from "@/lib/armory/profile-etag";
 // 310 is needed for tuning: it exposes each Tier-5 piece's available tuning plugs
 // (which reveal its rolled "tuned stat"). It 500'd client-side on the full vault;
 // re-added here to test whether the server-to-server call handles the larger payload.
+// Changing this list or slimProfile changes what a client holds for the same Bungie
+// snapshot: bump PROFILE_SHAPE_VERSION (profile-mint.ts) so held copies stop getting 304s.
 const COMPONENTS = [100, 102, 103, 200, 201, 202, 205, 300, 304, 305, 310] as DestinyComponentType[];
 
 /**
@@ -54,14 +61,15 @@ function slimProfile(profile: DestinyProfileResponse): DestinyProfileResponse {
  * Bungie's Origin-header check never fires and the access token never leaves the
  * server. Returns the raw DestinyProfileResponse for the client to normalize, gzipped
  * (the uncompressed profile is what filled the Fast Origin Transfer allowance), or a
- * bodiless 304 when the client's If-None-Match names the snapshot Bungie still serves
- * (see profileEtag).
+ * bodiless 304 when the client holds a profile and Bungie has nothing newer (see
+ * profile-mint.ts).
  */
 export async function GET(request: Request) {
-  return gzipResponse(request, await loadProfile(request.headers.get("if-none-match")));
+  const held = parseHeldProfile(request.headers.get(HELD_PROFILE_HEADER));
+  return gzipResponse(request, await loadProfile(held));
 }
 
-async function loadProfile(ifNoneMatch: string | null): Promise<Response> {
+async function loadProfile(held: Minted | undefined): Promise<Response> {
   let user = await readUser();
   const token = await getValidAccessToken();
   if (!user?.destinyMembershipId || user.destinyMembershipType == null || !token) {
@@ -111,13 +119,11 @@ async function loadProfile(ifNoneMatch: string | null): Promise<Response> {
       );
     }
 
-    const etag = profileEtag(res.Response);
-    if (etag && etagMatches(ifNoneMatch, etag)) {
-      return new Response(null, { status: 304, headers: { ETag: etag } });
+    // Same snapshot as the client's, or an older one from Bungie's cache: nothing to send.
+    if (held && !isNewerMint(held, res.Response)) {
+      return new Response(null, { status: 304 });
     }
-    return NextResponse.json(slimProfile(res.Response), {
-      headers: etag ? { ETag: etag } : {},
-    });
+    return NextResponse.json(slimProfile(res.Response));
   } catch (err) {
     // The Bungie client throws for platform errors too — `ErrorCode ≠ 1` in the body,
     // often under an HTTP 200 — so the friendly message and the dead-session check

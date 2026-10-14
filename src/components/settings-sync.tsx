@@ -13,10 +13,8 @@ import {
 
 /**
  * Keeps the account-synced settings (links, pinned sets) in step with the signed-in
- * account: pulls on load, and again on a return to the window once the copy is five
- * minutes old, so switching back from another computer picks up what changed there.
- * (It used to refetch on every return after 30 s — a fifth of all function calls, for
- * data that changes a few times a week.) Renders nothing.
+ * account: pulls on load and whenever the window regains focus, so switching back
+ * from another computer picks up what changed there. Renders nothing.
  */
 export function SettingsSync() {
   const session = useSession();
@@ -27,7 +25,7 @@ export function SettingsSync() {
   const query = useQuery<StoredSettings>({
     queryKey: ["settings", membershipId],
     enabled: membershipId !== null,
-    staleTime: 5 * 60_000,
+    staleTime: 30_000,
     refetchOnWindowFocus: true,
     // 503 (storage not configured) and 401 won't change by retrying.
     retry: false,

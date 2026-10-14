@@ -3,7 +3,7 @@ import type {
   DestinyProfileResponse,
 } from "bungie-api-ts/destiny2";
 import { takeEarlyResponse } from "@/lib/early-fetch";
-import { profileEtag } from "./profile-etag";
+import { HELD_PROFILE_HEADER, encodeHeldProfile, isNewerMint } from "./profile-mint";
 import type { Manifest } from "@/lib/manifest/load";
 import {
   equippedSubclassForCharacter,
@@ -86,21 +86,24 @@ export class ArmoryError extends Error {
 }
 
 /**
- * Fetch the player's raw profile from our server proxy (needs no manifest). With the
- * profile already held, its minted timestamps go along as If-None-Match, and a 304
- * means Bungie still serves that snapshot: `held` is returned, no body transferred.
+ * Fetch the player's raw profile from our server proxy (needs no manifest). With a
+ * profile already held, its minted stamps go along in a header, and a 304 means Bungie
+ * has nothing newer (see isNewerMint): `held` is returned, no body transferred.
  */
 export async function fetchProfile(
   held?: DestinyProfileResponse,
 ): Promise<DestinyProfileResponse> {
-  const etag = profileEtag(held);
+  const stamps = encodeHeldProfile(held);
   const res =
     (await takeEarlyResponse("profile")) ??
     (await fetch("/api/bungie/profile", {
       cache: "no-store",
-      headers: etag ? { "If-None-Match": etag } : {},
+      headers: stamps ? { [HELD_PROFILE_HEADER]: stamps } : {},
     }));
-  if (res.status === 304 && held) return held;
+  if (res.status === 304) {
+    if (held && stamps) return held;
+    throw new ArmoryError(res.status, "Profile proxy answered 304 to a request without stamps");
+  }
   if (!res.ok) {
     const body = (await res.json().catch(() => null)) as { error?: string } | null;
     throw new ArmoryError(
@@ -113,21 +116,15 @@ export async function fetchProfile(
 
 /**
  * The profile to keep after a fetch: `next`, unless Bungie minted it no later than the
- * one already held. Bungie serves profiles from a cache, so a refetch can come back
- * older than what's on screen (and roll it back); one minted at the same moment is the
- * same snapshot, and keeping the old object spares everything derived from it.
+ * one already held (the proxy answers such a fetch with a 304, but a response that
+ * raced an older poll can still arrive in full). Keeping the old object spares
+ * everything derived from it.
  */
 export function newerProfile(
   prev: DestinyProfileResponse | undefined,
   next: DestinyProfileResponse,
 ): DestinyProfileResponse {
-  if (!prev) return next;
-  // A missing or unreadable timestamp is NaN, which never compares as older.
-  const notNewer = (key: "responseMintedTimestamp" | "secondaryComponentsMintedTimestamp") =>
-    Date.parse(next[key]) <= Date.parse(prev[key]);
-  return notNewer("responseMintedTimestamp") && notNewer("secondaryComponentsMintedTimestamp")
-    ? prev
-    : next;
+  return !prev || isNewerMint(prev, next) ? next : prev;
 }
 
 const derived = new WeakMap<DestinyProfileResponse, WeakMap<Manifest, Armory>>();
