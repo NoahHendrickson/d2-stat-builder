@@ -14,6 +14,7 @@ import { Cancel01Icon, Menu01Icon } from "@hugeicons/core-free-icons";
 import { AppSidebar, NAV_ITEMS, pageTitle } from "@/components/app-sidebar";
 import { SignInCard, useAuthResultToast } from "@/components/auth/sign-in-card";
 import { BugReportDialog } from "@/components/bug-report/bug-report-dialog";
+import { ChangelogDialog } from "@/components/changelog-dialog";
 import { ArmoryDiagnosticsGate } from "@/components/armory/armory-diagnostics-gate";
 import { ApplyProgressSection } from "@/components/loadouts/apply-progress-card";
 import { loadLoadoutsList } from "@/components/loadouts/loadouts-list-chunk";
@@ -217,6 +218,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <SettingsSync />
       <BuildUsageRecorder />
       {authed && <BugReportDialog />}
+      {authed && <ChangelogDialog />}
 
       {!desktop && authed && (
         <Drawer
