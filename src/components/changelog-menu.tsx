@@ -1,21 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useSyncExternalStore } from "react";
-import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { useEffect, useRef, useSyncExternalStore, type ReactElement } from "react";
+import { Popover, PopoverContent, PopoverTitle, PopoverTrigger } from "@/components/ui/popover";
 import { CHANGELOG } from "@/lib/changelog";
 import { seenFlag } from "@/lib/seen-flag";
 
-// Whether the dialog is open lives here, not in the button: the sidebar that holds the
-// button comes and goes (the mobile menu drawer, the desktop breakpoint), and the one
-// dialog AppShell mounts has to outlive it. Same pattern as the bug report dialog.
 let isOpen = false;
 const listeners = new Set<() => void>();
 
@@ -49,9 +38,6 @@ function setOpen(open: boolean) {
   emit();
 }
 
-/** Open the Changelog. */
-export const openChangelog = () => setOpen(true);
-
 /** Whether there's an entry this browser hasn't opened the Changelog since. */
 export function useChangelogUnseen(): boolean {
   return useSyncExternalStore(
@@ -75,30 +61,39 @@ function formatDate(date: string): string {
 }
 
 /**
- * The Changelog: every entry in lib/changelog.ts, newest first, scrolling back to the
- * first release. The only place the app announces what's new; it never opens by itself.
+ * The Changelog: a menu off the sidebar's Changelog row, listing every entry in
+ * lib/changelog.ts as a card, newest first, scrolling back to the first release. The
+ * only place the app announces what's new; it never opens by itself. Its open state
+ * lives in this module, so it survives the sidebar re-rendering (collapse, breakpoints).
  */
-export function ChangelogDialog() {
+export function ChangelogMenu({ trigger }: { trigger: ReactElement }) {
   const open = useSyncExternalStore(subscribe, () => isOpen, () => false);
   // Focus starts on the list, not its first link (an older release's), so it opens at
   // the top and the arrow keys scroll it.
   const list = useRef<HTMLDivElement>(null);
+  // An old #whats-new / #changelog link opens it. Unmounting closes it: the phone drawer
+  // that holds the row can close under an open menu, which mustn't reopen with it.
   useEffect(() => {
-    if (HASHES.includes(window.location.hash)) openChangelog();
+    if (HASHES.includes(window.location.hash)) setOpen(true);
+    return () => setOpen(false);
   }, []);
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogContent
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger render={trigger} />
+      <PopoverContent
+        side="right"
+        align="end"
+        sideOffset={8}
         initialFocus={list}
-        className="flex max-h-[min(80dvh,40rem)] flex-col gap-0 p-0 sm:max-w-md"
+        className="max-h-[min(var(--available-height),40rem)] w-96 max-w-[calc(100vw-1rem)] gap-0 p-0"
       >
-        <DialogHeader className="px-5 pt-5 pb-4 pr-12">
-          <DialogTitle className="text-lg">Changelog</DialogTitle>
-        </DialogHeader>
+        <PopoverTitle className="border-foreground/10 border-b px-4 py-3 text-base">
+          Changelog
+        </PopoverTitle>
         <div
           ref={list}
           tabIndex={-1}
-          className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-5 pb-5 outline-none"
+          className="d2-scroll flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto p-3 outline-none"
         >
           {CHANGELOG.map((entry) => (
             // One card per release, framed like the Dream build dialog's cards.
@@ -129,10 +124,7 @@ export function ChangelogDialog() {
             </section>
           ))}
         </div>
-        <DialogFooter className="mx-0 mb-0">
-          <DialogClose render={<Button />}>Close</DialogClose>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+      </PopoverContent>
+    </Popover>
   );
 }
