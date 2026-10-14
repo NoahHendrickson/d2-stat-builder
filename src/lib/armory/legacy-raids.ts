@@ -227,6 +227,41 @@ export function makeableRaidReqs(
   return changed ? kept : reqs;
 }
 
+/** Why a set of raid counts can't be worn in one build (see raidCountConflict). */
+export type RaidCountConflict =
+  /** More pieces than a build wears: the raids' plus `reserved` others. */
+  | { kind: "total"; pieces: number }
+  /** These raids' pieces cover too few distinct slots between them for their counts. */
+  | { kind: "slots"; raids: LegacyRaidKey[] };
+
+/**
+ * Whether one build can wear every raid count in `reqs` alongside `reserved` other
+ * pieces (set bonuses, the exotic, a pinned class item), each in a slot of its own. Hall's
+ * theorem over the five slots: it fits unless the whole lot needs more than five pieces,
+ * or some group of raids needs more pieces than the slots their armor covers between
+ * them. The reserved pieces can go in any slot, so they only add to the total. Null when
+ * it fits; otherwise the smallest group that doesn't. At most five raids are ever
+ * required, so the 2^k groups are a handful.
+ */
+export function raidCountConflict(
+  reqs: RaidReqs,
+  raids: readonly LegacyRaidInfo[],
+  reserved: number,
+): RaidCountConflict | null {
+  const required = raids.filter((r) => (reqs[r.key] ?? 0) > 0);
+  const pieces = required.reduce((a, r) => a + reqs[r.key]!, 0);
+  if (pieces + reserved > ARMOR_SLOTS.length) return { kind: "total", pieces: pieces + reserved };
+  let worst: LegacyRaidKey[] | null = null;
+  for (let mask = 1; mask < 1 << required.length; mask++) {
+    const group = required.filter((_, i) => mask & (1 << i));
+    if (worst && group.length >= worst.length) continue;
+    const slots = new Set(group.flatMap((r) => Object.keys(r.slots)));
+    const need = group.reduce((a, r) => a + reqs[r.key]!, 0);
+    if (need > slots.size) worst = group.map((r) => r.key);
+  }
+  return worst ? { kind: "slots", raids: worst } : null;
+}
+
 /** Raid requirements as the solver's set requirements (see legacyRaidSetHash). */
 export function raidSetRequirements(reqs: RaidReqs): SetRequirement[] {
   return (Object.entries(reqs) as [LegacyRaidKey, number][]).map(([key, count]) => ({

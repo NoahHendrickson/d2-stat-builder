@@ -8,6 +8,7 @@ The home route lets a user pick a class, set a target for each of the six armor 
 - `opt-open` expands a build card to its pieces, stat breakdown, and masterwork notes.
 - `opt-dream` makes Dream build answer, at the build's own stats and at raised targets.
 - `opt-save` turns "Save as loadout" into a stored loadout that the Loadouts page lists.
+- `opt-raid` lists the legacy (Armor 2.0) raids the class owns armor from under Set bonuses, and requiring N pieces of one puts that many in every build (`journeys/optimizer-raids.mjs`).
 
 ## How to get to it (user POV)
 
@@ -27,6 +28,7 @@ Preconditions:
 - **Open (`opt-open`).** Click card `nth: 0`. Its `aria-expanded` becomes `true`, and the card shows an ARMOR table and a MASTERWORK list.
 - **Dream (`opt-dream`).** Click `button "Dream build"` `nth: 0`. In `dialog "Dream build"`, wait until `progressbar "Dream build search"` has `aria-busy="false"`. The status reads `No farming needed`. Click `button "Raise Health by 1"` ten times, wait for `spinbutton "Health target value"` to reach start+10 and for the search to go idle again. The status reads `N new pieces` or `Out of reach`, never `Search failed`. Close it with `button "Close dialog"`.
 - **Save (`opt-save`).** Hover card `nth: 0`, then click `button "Save as loadout"` `nth: 0`. In `dialog "Save loadout"`, fill `textbox "Loadout name"` with `verify-d2 build` and click `button "Save"`. The drawer closes, and the toast `Loadout saved` appears. `api.json` has `POST /api/loadouts` → 201 with `loadout.name` and at least 5 `equipped` items. Then `app.nav("/loadouts")` shows `article "verify-d2 build"`.
+- **Raids (`opt-raid`, its own journey).** The fixture has no Armor 2.0 raid armor, so `optimizer-raids.mjs` adds Hunter pieces with `meta.profile`: Deep Stone Crypt in all five slots, Vow of the Disciple and Last Wish in arms + legs. Click `button "Legacy raid sets (3)"` (name starts `Legacy raid sets`; a requirement adds `N required`). Each raid has `list "<raid> pieces owned"` with `listitem "<Slot>: <piece name>"` or `"<Slot>: not owned"`, and `tablist "<raid> pieces every build must wear"` with tabs `Not required`, `At least 1` … `At least 5`. A count that can't be worn beside the other picks has `data-disabled`. Requiring `At least 3` of Deep Stone Crypt puts a `3pc` pill titled `Deep Stone Crypt raid armor` on every card. Vow 2 disables every Last Wish count (they share arms + legs). The Save as loadout request carries `builder.raidReqs`. Theoretical Builds hides the block.
 - **Proof.** `01-results`, `02-health-100`, `03-dream` (the dialog), `04-save-drawer`, `05-loadouts-after-save`.
 
 ## Gotchas
@@ -38,3 +40,5 @@ Preconditions:
 - Which card comes first can change while background refinement runs. Assert properties every card shares, not a particular card.
 - Fixture armor has no mod sockets, so the save drawer shows each stat mod as "not slotted". The saved loadout's stats then leave out the +mods; that's a fixture limit, not a bug.
 - `localStorage["stat-builder:selections"]` restores targets and the exotic on reload. Fresh profiles start at all-zero targets.
+- Card names come from the stat icons' alt text, so a card's `textContent` has no "Health". To read its pills from the DOM, find the cards as `button[aria-expanded]` containing `[alt=Health]`.
+- After a raid pick, "Search progress" may not have appeared yet (the search is debounced). Poll for every card's pill instead of waiting on the progress bar alone.

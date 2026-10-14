@@ -45,7 +45,7 @@ export function SetBonusesSection({
   planning,
   legacyRaids,
   raidReqs,
-  raidSlotBudget,
+  raidReservedSlots,
   onRaidCountChange,
   pieces,
   manifest,
@@ -69,8 +69,8 @@ export function SetBonusesSection({
   /** Legacy raids this class owns armor from. Not listed while planning (no Tier-5 drops). */
   legacyRaids: LegacyRaidInfo[];
   raidReqs: RaidReqs;
-  /** Armor pieces left for raid requirements (see LegacyRaidSets). */
-  raidSlotBudget: number;
+  /** Armor pieces promised to set bonuses, the exotic or a pinned class item. */
+  raidReservedSlots: number;
   onRaidCountChange: (key: LegacyRaidKey, count: number) => void;
   /** The optimizer pool (what the roll grid counts). */
   pieces: ArmorPiece[];
@@ -205,10 +205,10 @@ export function SetBonusesSection({
       {!planning && legacyRaids.length > 0 && (
         <LegacyRaidSets
           raids={shownRaids}
-          total={legacyRaids.length}
+          allRaids={legacyRaids}
           query={query}
           reqs={raidReqs}
-          slotBudget={raidSlotBudget}
+          reserved={raidReservedSlots}
           onCountChange={onRaidCountChange}
           open={raidsOpen}
           onOpenChange={setRaidsOpen}

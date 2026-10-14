@@ -8,6 +8,7 @@ import {
   makeableRaidReqs,
   ownedLegacyRaids,
   parseRaidReqs,
+  raidCountConflict,
   raidSetRequirements,
   requiredLegacyRaids,
   type LegacyRaidKey,
@@ -238,5 +239,37 @@ describe("in the optimizer", () => {
     for (const l of out.loadouts) {
       expect(l.pieceIds.filter((id) => id.startsWith("dsc")).length).toBeGreaterThanOrEqual(2);
     }
+  });
+});
+
+describe("raidCountConflict", () => {
+  // DSC: helmet + chest. Vow: helmet + chest. KF: legs.
+  const raids = ownedLegacyRaids([
+    { legacyRaid: "dsc", slot: "helmet", name: "Legacy's Oath Mask" },
+    { legacyRaid: "dsc", slot: "chest", name: "Legacy's Oath Vest" },
+    { legacyRaid: "vow", slot: "helmet", name: "Resonant Fury Mask" },
+    { legacyRaid: "vow", slot: "chest", name: "Resonant Fury Vest" },
+    { legacyRaid: "kf", slot: "legs", name: "War Numen's Boots" },
+  ]);
+
+  test("fits when the raids have slots of their own", () => {
+    expect(raidCountConflict({ dsc: 2, kf: 1 }, raids, 2)).toBeNull();
+    expect(raidCountConflict({ dsc: 1, vow: 1, kf: 1 }, raids, 0)).toBeNull();
+  });
+
+  test("names the raids whose pieces share too few slots", () => {
+    // 2 + 2 pieces over the same helmet and chest: four is under five, but can't fit.
+    expect(raidCountConflict({ dsc: 2, vow: 2 }, raids, 0)).toEqual({
+      kind: "slots",
+      raids: ["dsc", "vow"],
+    });
+    expect(raidCountConflict({ dsc: 2, vow: 1, kf: 1 }, raids, 0)).toEqual({
+      kind: "slots",
+      raids: ["dsc", "vow"],
+    });
+  });
+
+  test("counts the reserved pieces against the five", () => {
+    expect(raidCountConflict({ dsc: 2, kf: 1 }, raids, 3)).toEqual({ kind: "total", pieces: 6 });
   });
 });

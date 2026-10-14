@@ -8,6 +8,8 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { TooltipLabel } from "@/components/ui/tooltip";
 import {
   MAX_RAID_PIECES,
+  legacyRaidName,
+  raidCountConflict,
   type LegacyRaidInfo,
   type LegacyRaidKey,
   type RaidReqs,
@@ -29,10 +31,10 @@ type SlotIcons = Partial<Record<ArmorSlot, SetSlotIcon>>;
  */
 export const LegacyRaidSets = memo(function LegacyRaidSets({
   raids,
-  total,
+  allRaids,
   query,
   reqs,
-  slotBudget,
+  reserved,
   onCountChange,
   open,
   onOpenChange,
@@ -41,15 +43,15 @@ export const LegacyRaidSets = memo(function LegacyRaidSets({
 }: {
   /** The raids the set search leaves. */
   raids: LegacyRaidInfo[];
-  /** Every raid this class owns armor from, before the search. */
-  total: number;
+  /** Every raid this class owns armor from, before the search: what has to fit. */
+  allRaids: LegacyRaidInfo[];
   query: string;
   reqs: RaidReqs;
   /**
-   * Armor pieces left for raid requirements: five, less the set bonuses' pieces, the
-   * exotic, and a pinned class item. Counts that would pass it are disabled.
+   * Armor pieces promised elsewhere: set bonus pieces, the exotic, a pinned class item.
+   * A count that couldn't fit beside them and the other raids is disabled.
    */
-  slotBudget: number;
+  reserved: number;
   onCountChange: (key: LegacyRaidKey, count: number) => void;
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -62,9 +64,8 @@ export const LegacyRaidSets = memo(function LegacyRaidSets({
     () => (open && manifest && classType !== null ? legacyRaidSlotIcons(manifest, classType) : null),
     [open, manifest, classType],
   );
-  const counts = Object.values(reqs) as number[];
-  const active = counts.length;
-  const raidPieces = counts.reduce((a, n) => a + n, 0);
+  const active = Object.keys(reqs).length;
+  const conflict = raidCountConflict(reqs, allRaids, reserved);
   // The divider runs edge to edge: the negative margins cancel the card's padding,
   // which the matching padding gives back to the content.
   return (
@@ -76,7 +77,7 @@ export const LegacyRaidSets = memo(function LegacyRaidSets({
         className="hover:text-foreground focus-visible:ring-outline-strong flex cursor-pointer items-center justify-between gap-2 rounded-none pl-1 text-left text-sm outline-none focus-visible:ring-1 normal:rounded-[6px]"
       >
         <span className="tabular-nums">
-          Legacy raid sets ({total})
+          Legacy raid sets ({allRaids.length})
           {active > 0 && <span className="text-power ml-2">{active} required</span>}
         </span>
         <HugeiconsIcon
@@ -92,11 +93,12 @@ export const LegacyRaidSets = memo(function LegacyRaidSets({
             and those mods only work in that raid. Pick how many pieces every build must
             wear.
           </p>
-          {raidPieces > slotBudget && (
+          {conflict && (
             <p className="text-warning pl-1 text-xs leading-relaxed" role="status">
-              These raid pieces, set bonuses and exotic need{" "}
-              {ARMOR_SLOTS.length - slotBudget + raidPieces} armor pieces, but a build wears{" "}
-              {ARMOR_SLOTS.length}, so no build can match. Lower a count.
+              {conflict.kind === "total"
+                ? `These raid pieces, set bonuses and exotic need ${conflict.pieces} armor pieces, but a build wears ${ARMOR_SLOTS.length}, so no build can match.`
+                : `Your ${listRaids(conflict.raids)} pieces only cover ${coveredSlots(conflict.raids, allRaids)} armor slots${conflict.raids.length > 1 ? " between them" : ""}, too few for these counts, so no build can match.`}{" "}
+              Lower a count.
             </p>
           )}
           {raids.length === 0 ? (
@@ -113,9 +115,9 @@ export const LegacyRaidSets = memo(function LegacyRaidSets({
                     raid={r}
                     icons={icons?.get(r.key)}
                     count={count}
-                    // What this raid may ask for: its covered slots, and what the other
-                    // requirements leave of the five.
-                    max={Math.min(r.slotCount, slotBudget - (raidPieces - count))}
+                    // A count is offered only if one build could still wear it beside
+                    // every other requirement, in slots of their own.
+                    fits={(n) => !raidCountConflict({ ...reqs, [r.key]: n }, allRaids, reserved)}
                     onCountChange={onCountChange}
                   />
                 );
@@ -132,14 +134,14 @@ function LegacyRaidRow({
   raid,
   icons,
   count,
-  max,
+  fits,
   onCountChange,
 }: {
   raid: LegacyRaidInfo;
   icons: SlotIcons | undefined;
   count: number;
-  /** The highest count this row offers; the current one stays pickable regardless. */
-  max: number;
+  /** Whether this raid at count `n` still fits; the current count stays pickable regardless. */
+  fits: (n: number) => boolean;
   onCountChange: (key: LegacyRaidKey, count: number) => void;
 }) {
   // The name over its slots, the count strip beside them. Phones: name and slots share
@@ -158,7 +160,7 @@ function LegacyRaidRow({
             <TabsTrigger
               key={n}
               value={String(n)}
-              disabled={n > max && n !== count}
+              disabled={n !== count && n > 0 && !fits(n)}
               aria-label={n === 0 ? "Not required" : `At least ${n}`}
             >
               {n === 0 ? "Off" : n}
@@ -196,4 +198,19 @@ function RaidSlots({ raid, icons }: { raid: LegacyRaidInfo; icons: SlotIcons | u
       })}
     </ul>
   );
+}
+
+/** "Deep Stone Crypt", "Deep Stone Crypt and Vow of the Disciple", "A, B and C". */
+function listRaids(keys: LegacyRaidKey[]): string {
+  const names = keys.map(legacyRaidName);
+  return names.length < 2
+    ? names.join("")
+    : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+}
+
+/** How many distinct armor slots these raids' owned pieces cover. */
+function coveredSlots(keys: LegacyRaidKey[], raids: LegacyRaidInfo[]): number {
+  const slots = new Set<string>();
+  for (const r of raids) if (keys.includes(r.key)) for (const s of Object.keys(r.slots)) slots.add(s);
+  return slots.size;
 }

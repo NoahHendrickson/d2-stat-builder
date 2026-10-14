@@ -1026,12 +1026,11 @@ export function BuilderPanel({
     [updateTab],
   );
 
-  // Armor pieces the Builds search leaves for raid requirements: five, less the set
-  // bonuses' pieces, the exotic, and Dreamer's Bond when it holds the class item.
-  const raidSlotBudget =
-    ARMOR_SLOTS.length -
-    Object.values(ownedSetReqs).reduce((a, n) => a + n, 0) -
-    (actualExotic !== null ? 1 : 0) -
+  // Armor pieces a Builds search has promised to something other than a legacy raid:
+  // the set bonuses' pieces, the exotic, and Dreamer's Bond when it holds the class item.
+  const raidReservedSlots =
+    Object.values(ownedSetReqs).reduce((a, n) => a + n, 0) +
+    (actualExotic !== null ? 1 : 0) +
     (useDreamersBond ? 1 : 0);
 
   // How many of a raid's pieces every build must wear; 0 drops the requirement.
@@ -1236,7 +1235,7 @@ export function BuilderPanel({
                 planning={theoretical}
                 legacyRaids={legacyRaids}
                 raidReqs={ownedRaidReqs}
-                raidSlotBudget={raidSlotBudget}
+                raidReservedSlots={raidReservedSlots}
                 onRaidCountChange={setRaidCount}
                 pieces={pool}
                 manifest={manifest}
