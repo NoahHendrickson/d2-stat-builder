@@ -7,6 +7,7 @@ import type { DimLoadout, DimLoadoutItem } from "../dim/loadout-link";
 import type { AppliedTuning, OptimizerLoadout } from "../optimizer/types";
 import { parsePowerRange, type PersistedSelections } from "../builder/selection-storage";
 import { SUBCLASSES, type Subclass } from "../armory/fragments";
+import { parseRaidReqs } from "../armory/legacy-raids";
 
 export const LOADOUT_SCHEMA_VERSION = 1;
 
@@ -296,6 +297,8 @@ export function parseBuilderSnapshot(v: unknown): BuilderSnapshot | null {
     targets,
     major: v.major,
     setReqs: setReqs as Record<number, 2 | 4>,
+    // Added after the first snapshots shipped: none when absent.
+    raidReqs: parseRaidReqs(v.raidReqs),
     exoticName: v.exoticName,
     exoticPerks: [ep[0], ep[1]] as [number | null, number | null],
     allowTuning: v.allowTuning,

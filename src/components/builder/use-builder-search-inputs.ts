@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 import type { ArmorPiece } from "@/lib/armory/normalize";
 import type { DreamSettings } from "@/lib/optimizer/dream-input";
+import { requiredLegacyRaids } from "@/lib/armory/legacy-raids";
 import { armorToOptimizerPiece } from "@/lib/optimizer/from-armory";
 import type { ExoticConstraint, OptimizerInput } from "@/lib/optimizer/types";
 import { useWeaponPlan } from "@/lib/optimizer/use-weapon-plan";
@@ -64,10 +65,10 @@ export function useBuilderSearchInputs({
     [baseSearchSettings, powerRange],
   );
 
-  const optimizerSlots = useMemo(
-    () => slotPieces.map((pieces) => pieces.map(armorToOptimizerPiece)),
-    [slotPieces],
-  );
+  const optimizerSlots = useMemo(() => {
+    const raids = requiredLegacyRaids(setRequirements);
+    return slotPieces.map((pieces) => pieces.map((p) => armorToOptimizerPiece(p, raids)));
+  }, [slotPieces, setRequirements]);
   const exoticConstraint = useMemo(
     (): ExoticConstraint =>
       selectedExotic === null

@@ -13,6 +13,7 @@ import {
   GarageIcon,
   Layers01Icon,
   LayoutTable01Icon,
+  Megaphone01Icon,
   MoreHorizontalIcon,
   PanelLeftIcon,
   PencilEdit02Icon,
@@ -29,6 +30,7 @@ import {
 import { TooltipLabel } from "@/components/ui/tooltip";
 import { SidebarStatus } from "@/components/armory/armory-status";
 import { openBugReport } from "@/components/bug-report/bug-report-dialog";
+import { ChangelogMenu, useChangelogUnseen } from "@/components/changelog-menu";
 import { LinkDialog } from "@/components/links/link-dialog";
 import { LinkFavicon } from "@/components/links/link-favicon";
 import { addLink, removeLink, updateLink, useLinks } from "@/lib/links/use-links";
@@ -184,6 +186,7 @@ export const AppSidebar = memo(function AppSidebar({
           collapsed ? "items-center px-2.5" : "px-2",
         )}
       >
+        <ChangelogButton collapsed={collapsed} />
         {DISCORD_INVITE_URL && <DiscordLink collapsed={collapsed} />}
         <BugReportButton collapsed={collapsed} onNavigate={onNavigate} />
       </div>
@@ -244,6 +247,39 @@ function NavItem({
   ) : (
     link
   );
+}
+
+/**
+ * Opens the Changelog menu beside the row. A dot marks an entry this browser hasn't
+ * opened it since. On phones the menu opens over the sidebar drawer, which stays open.
+ */
+function ChangelogButton({ collapsed }: { collapsed: boolean }) {
+  const unseen = useChangelogUnseen();
+  const label = unseen ? "Changelog (new)" : "Changelog";
+  const trigger = (
+    <button
+      type="button"
+      aria-label={collapsed || unseen ? label : undefined}
+      className={cn(
+        rowClass,
+        "text-muted-foreground hover:bg-foreground/5 hover:text-foreground data-[popup-open]:text-foreground",
+        collapsed ? "w-9 justify-center" : "px-2.5",
+      )}
+    >
+      <span className="relative shrink-0">
+        <HugeiconsIcon icon={Megaphone01Icon} strokeWidth={1.5} className="size-5" aria-hidden />
+        {unseen && (
+          <span
+            className="bg-power absolute -top-0.5 -right-0.5 size-2 rounded-full"
+            aria-hidden
+          />
+        )}
+      </span>
+      {!collapsed && <span className="min-w-0 flex-1 truncate text-left">Changelog</span>}
+    </button>
+  );
+  const menu = <ChangelogMenu trigger={trigger} />;
+  return collapsed ? <TooltipLabel label={label}>{menu}</TooltipLabel> : menu;
 }
 
 /** Join the community server: the invite opens the Discord app where there is one. */

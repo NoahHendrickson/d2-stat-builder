@@ -178,6 +178,10 @@ export function tertiaryStatIndex(base: StatArray): number {
   return rollStatIndices(base)[2];
 }
 
+/** DestinyItemTierType values the armory reads: legendary (Superior) and exotic. */
+export const TIER_LEGENDARY = 5;
+export const TIER_EXOTIC = 6;
+
 /** Armor inventory bucket hash -> slot. */
 export const ARMOR_BUCKETS = {
   3448274439: "helmet",

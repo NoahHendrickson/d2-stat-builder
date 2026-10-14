@@ -16,6 +16,12 @@ import { useOptimizer } from "@/lib/optimizer/use-optimizer";
 import { useSmoothedProgress } from "@/lib/use-smoothed-progress";
 import { availableSets, makeableSetReqs } from "@/lib/armory/sets";
 import {
+  makeableRaidReqs,
+  ownedLegacyRaids,
+  raidSetRequirements,
+  type LegacyRaidKey,
+} from "@/lib/armory/legacy-raids";
+import {
   DEFAULT_SET_FILTERS,
   type SetFilters,
   type SetMinOwned,
@@ -37,6 +43,7 @@ import { ownedFestivalMasks } from "@/lib/armory/festival-masks";
 import {
   buildOptimizerSlots,
   inDefaultOptimizerPool,
+  type PoolOptions,
 } from "@/lib/armory/optimizer-pool";
 import {
   ARMOR_SLOTS,
@@ -236,21 +243,41 @@ export function BuilderPanel({
     [armory, classType],
   );
 
+  // The legacy raids this class owns armor from, and the raid requirements narrowed to
+  // what that armor can make (like ownedSetReqs below; the raw map is what's stored).
+  const legacyRaids = useMemo(() => ownedLegacyRaids(classPieces), [classPieces]);
+  const ownedRaidReqs = useMemo(
+    () => makeableRaidReqs(tabs.actual.raidReqs, legacyRaids),
+    [tabs.actual.raidReqs, legacyRaids],
+  );
+  // Keyed on which raids are required, not how many pieces: a count change leaves the
+  // pool (and everything built from it) alone.
+  const requiredRaidList = Object.keys(ownedRaidReqs).sort().join(",");
+  const requiredRaids = useMemo(
+    () =>
+      new Set(requiredRaidList ? (requiredRaidList.split(",") as LegacyRaidKey[]) : []),
+    [requiredRaidList],
+  );
+
   // Candidate pool for the optimizer: Tier-5 pieces (exactly those with a tuning
   // socket) plus — when enabled — legacy/non-tunable exotics, whose artifice +3 the
   // solver spends, Tier 1–4 Armor 3.0 legendaries, and (only while "Power matters" is
-  // on) legacy Armor 2.0 legendaries. FotL masks are never in this pool; they join the
-  // helmet slot as optional power-0 candidates while "Power matters" is on.
+  // on) legacy Armor 2.0 legendaries, plus the armor of any required legacy raid. FotL
+  // masks are never in this pool; they join the helmet slot as optional power-0
+  // candidates while "Power matters" is on. The power preview below reuses the same
+  // options with its own legacy-armor checkbox.
+  const poolOptions = useMemo(
+    (): PoolOptions => ({
+      legacyExotics: useLegacyExotics,
+      lowerTierArmor: useLowerTierArmor,
+      legacyArmor: useLegacyArmor,
+      legacyRaids: requiredRaids,
+    }),
+    [useLegacyExotics, useLowerTierArmor, useLegacyArmor, requiredRaids],
+  );
   const pool = useMemo(
-    () =>
-      classPieces.filter((p) =>
-        inDefaultOptimizerPool(p, {
-          legacyExotics: useLegacyExotics,
-          lowerTierArmor: useLowerTierArmor,
-          legacyArmor: useLegacyArmor,
-        }),
-      ),
-    [classPieces, useLegacyExotics, useLowerTierArmor, useLegacyArmor],
+    () => classPieces.filter((p) => inDefaultOptimizerPool(p, poolOptions)),
+    [classPieces, poolOptions],
   );
 
   const sets = useMemo(
@@ -379,12 +406,14 @@ export function BuilderPanel({
   }, [applyCurrentFragments, buildsMode, updateTab]);
 
   const setRequirements = useMemo(
-    () =>
-      Object.entries(ownedSetReqs).map(([setHash, count]) => ({
+    () => [
+      ...Object.entries(ownedSetReqs).map(([setHash, count]) => ({
         setHash: Number(setHash),
         count,
       })),
-    [ownedSetReqs],
+      ...raidSetRequirements(ownedRaidReqs),
+    ],
+    [ownedSetReqs, ownedRaidReqs],
   );
 
   // Dedupe by name — the same exotic can exist in multiple versions (Armor 2.0 vs 3.0)
@@ -556,13 +585,8 @@ export function BuilderPanel({
   // is applied too, so a theoretical exotic class item seeds the first-enable range.
   const powerSlotPieces = useMemo(() => {
     if (powerRange.enabled) return slotPieces;
-    const previewPool = classPieces.filter((p) =>
-      inDefaultOptimizerPool(p, {
-        legacyExotics: useLegacyExotics,
-        lowerTierArmor: useLowerTierArmor,
-        legacyArmor: powerRange.legacyArmor,
-      }),
-    );
+    const previewOptions = { ...poolOptions, legacyArmor: powerRange.legacyArmor };
+    const previewPool = classPieces.filter((p) => inDefaultOptimizerPool(p, previewOptions));
     let previewClassItems;
     if (powerRange.dreamersBond) {
       previewClassItems = dreamersPiece ? [dreamersPiece] : [];
@@ -594,8 +618,7 @@ export function BuilderPanel({
   }, [
     slotPieces,
     classPieces,
-    useLegacyExotics,
-    useLowerTierArmor,
+    poolOptions,
     powerRange.enabled,
     powerRange.dreamersBond,
     powerRange.legacyArmor,
@@ -686,6 +709,7 @@ export function BuilderPanel({
         targets: tabs.actual.targets,
         major: tabs.actual.major,
         setReqs: persistedSetReqs,
+        raidReqs: tabs.actual.raidReqs,
         setFilters,
         exoticName: persistedExoticName,
         exoticPerks: actualExoticPerks,
@@ -710,6 +734,7 @@ export function BuilderPanel({
     tabs.actual.targets,
     tabs.actual.major,
     persistedSetReqs,
+    tabs.actual.raidReqs,
     setFilters,
     persistedExoticName,
     exotics,
@@ -740,6 +765,7 @@ export function BuilderPanel({
       targets: tabs.actual.targets,
       major: tabs.actual.major,
       setReqs: persistedSetReqs,
+      raidReqs: tabs.actual.raidReqs,
       exoticName: persistedExoticName,
       exoticPerks: actualExoticPerks,
       allowTuning: true,
@@ -754,6 +780,7 @@ export function BuilderPanel({
       tabs.actual.targets,
       tabs.actual.major,
       persistedSetReqs,
+      tabs.actual.raidReqs,
       persistedExoticName,
       actualExoticPerks,
       useBalancedTuning,
@@ -999,13 +1026,34 @@ export function BuilderPanel({
     [updateTab],
   );
 
-  const resetSetReqs = useCallback(
-    () =>
-      updateTab("setReqs", (prev) =>
-        Object.keys(prev).length > 0 ? DEFAULT_TAB.setReqs : prev,
-      ),
+  // Armor pieces a Builds search has promised to something other than a legacy raid:
+  // the set bonuses' pieces, the exotic, and Dreamer's Bond when it holds the class item.
+  const raidReservedSlots =
+    Object.values(ownedSetReqs).reduce((a, n) => a + n, 0) +
+    (actualExotic !== null ? 1 : 0) +
+    (useDreamersBond ? 1 : 0);
+
+  // How many of a raid's pieces every build must wear; 0 drops the requirement.
+  const setRaidCount = useCallback(
+    (key: LegacyRaidKey, count: number) =>
+      updateTab("raidReqs", (prev) => {
+        if ((prev[key] ?? 0) === count) return prev;
+        const next = { ...prev };
+        if (count > 0) next[key] = count;
+        else delete next[key];
+        return next;
+      }),
     [updateTab],
   );
+
+  const resetSetReqs = useCallback(() => {
+    updateTab("setReqs", (prev) =>
+      Object.keys(prev).length > 0 ? DEFAULT_TAB.setReqs : prev,
+    );
+    updateTab("raidReqs", (prev) =>
+      Object.keys(prev).length > 0 ? DEFAULT_TAB.raidReqs : prev,
+    );
+  }, [updateTab]);
   const resetFragments = useCallback(
     () =>
       updateTab("fragSel", (prev) =>
@@ -1185,6 +1233,10 @@ export function BuilderPanel({
                 setFilters={setFilters}
                 onSetMinOwnedChange={setSetMinOwned}
                 planning={theoretical}
+                legacyRaids={legacyRaids}
+                raidReqs={ownedRaidReqs}
+                raidReservedSlots={raidReservedSlots}
+                onRaidCountChange={setRaidCount}
                 pieces={pool}
                 manifest={manifest}
                 classType={classType}

@@ -24,7 +24,10 @@ export interface OptimizerPiece {
   exotic: boolean;
   /** Item hash (used to force a specific exotic). */
   hash?: number;
-  /** Armor set this piece belongs to (for set-bonus requirements), if any. */
+  /**
+   * Armor set this piece belongs to (for set-bonus requirements), if any. Negative = a
+   * synthetic set (see synthetic-set.ts).
+   */
   setHash?: number;
   /** Tier-5 tuning, if this piece can be tuned. The optimizer auto-picks the tune. */
   tuning?: PieceTuning;
@@ -60,6 +63,7 @@ export interface PowerRange {
 
 /** Require at least `count` equipped pieces from a given armor set (2 = 2pc bonus, 4 = 4pc). */
 export interface SetRequirement {
+  /** A manifest armor set, or a negative synthetic one no farmed roll can join (synthetic-set.ts). */
   setHash: number;
   count: number;
 }

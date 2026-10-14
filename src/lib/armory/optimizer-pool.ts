@@ -6,6 +6,7 @@
  * Runtime imports are relative (not `@/`) — the vitest runner has no `@/` alias.
  */
 import { helmetCandidates } from "./festival-masks";
+import type { LegacyRaidKey } from "./legacy-raids";
 import { ARMOR_SLOTS, type ArmorSlot } from "./stats";
 
 /** Which non-Tier-5 pieces join the optimizer pool alongside the T5 ones. */
@@ -23,6 +24,12 @@ export interface PoolOptions {
    * (see includesLegacyArmor) — off while the toggle is, like the FotL masks.
    */
   legacyArmor: boolean;
+  /**
+   * Legacy raids the builder requires pieces of (Set bonuses → Legacy raid sets). Their
+   * Armor 2.0 legendaries join the pool whatever `legacyArmor` says: a requirement on
+   * them is a request to use them.
+   */
+  legacyRaids: ReadonlySet<LegacyRaidKey>;
 }
 
 /**
@@ -36,13 +43,18 @@ export function inDefaultOptimizerPool(
     tunedStat?: number;
     archetype?: string;
     isExotic: boolean;
+    legacyRaid?: LegacyRaidKey;
   },
   opts: PoolOptions,
 ): boolean {
   if (piece.isFestivalMask) return false;
   if (piece.tunedStat !== undefined) return true;
   if (piece.isExotic) return opts.legacyExotics;
-  return piece.archetype !== undefined ? opts.lowerTierArmor : opts.legacyArmor;
+  if (piece.archetype !== undefined) return opts.lowerTierArmor;
+  return (
+    opts.legacyArmor ||
+    (piece.legacyRaid !== undefined && opts.legacyRaids.has(piece.legacyRaid))
+  );
 }
 
 /**

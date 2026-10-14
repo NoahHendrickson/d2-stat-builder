@@ -10,6 +10,7 @@ const existing: PersistedSelections = {
   targets: [9, 9, 9, 9, 9, 9],
   major: 5,
   setReqs: { 1: 2 },
+  raidReqs: {},
   setFilters: { minOwned: 0 },
   exoticName: "Old",
   exoticPerks: [1, 2],
@@ -58,6 +59,7 @@ test("with a builder snapshot: restores it, keeps pins/filters, merges fragSel",
         targets: [0, 100, 0, 0, 0, 0],
         major: 2,
         setReqs: { 42: 4 },
+        raidReqs: { vow: 3 },
         exoticName: "Cenotaph Mask",
         exoticPerks: [null, null],
         allowTuning: true,
@@ -81,6 +83,7 @@ test("with a builder snapshot: restores it, keeps pins/filters, merges fragSel",
   expect(out.classType).toBe(2);
   expect(out.major).toBe(2);
   expect(out.exoticName).toBe("Cenotaph Mask");
+  expect(out.raidReqs).toEqual({ vow: 3 });
   expect(out.setFilters).toEqual(existing.setFilters);
   expect(out.activeSubclass).toBe("Prismatic");
   expect(out.fragSel.Prismatic).toEqual([8, 9]);
@@ -133,6 +136,7 @@ test("opts.major overrides a stale builder snapshot (Optimize from edited mods)"
         targets: [0, 100, 0, 0, 0, 0],
         major: 0,
         setReqs: {},
+        raidReqs: {},
         exoticName: null,
         exoticPerks: [null, null],
         allowTuning: true,

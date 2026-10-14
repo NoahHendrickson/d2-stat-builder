@@ -38,10 +38,9 @@ export async function runJourney({ file, server }) {
   fs.mkdirSync(out, { recursive: true });
   const log = (line) => { const l = `${new Date().toISOString().slice(11, 23)} ${line}`; console.log(l); fs.appendFileSync(path.join(out, "steps.log"), l + "\n"); };
 
-  // The What's new dialog opens on every fresh profile: mark the current release seen (read
-  // from source, so it follows new releases).
-  const release = /RELEASE_ID = "([^"]+)"/.exec(fs.readFileSync(path.join(CHECKOUT, "src/components/whats-new-dialog.tsx"), "utf8"))?.[1];
-  const initScripts = release ? [`try { localStorage.setItem("stat-builder:whats-new-seen", ${JSON.stringify(release)}); } catch {}`] : [];
+  // Nothing opens by itself on a fresh profile (release notes live in the sidebar's
+  // Changelog), so a journey starts with no setup scripts.
+  const initScripts = [];
 
   log(`journey ${path.relative(CHECKOUT, file)} against ${server.url} (${server.mode} @ ${server.stamp.head}${server.stamp.dirty ? "+dirty" : ""}), fixture ${meta.fixture}, ${meta.width}x${meta.height}`);
   const t0 = Date.now();

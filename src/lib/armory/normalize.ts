@@ -11,6 +11,7 @@ import {
   isExoticClassItemHash,
 } from "./exotic-class-perks";
 import { isFestivalMask } from "./festival-masks";
+import { legacyRaidOfDef, type LegacyRaidKey } from "./legacy-raids";
 import { readMasterwork, type MasterworkInfo } from "./masterwork";
 import {
   ARMOR_ARCHETYPE_PLUG_CATEGORY,
@@ -21,6 +22,7 @@ import {
   STAT_HASHES,
   STAT_HASH_TO_INDEX,
   STAT_ORDER,
+  TIER_EXOTIC,
   TUNING_PLUG_CATEGORY,
   offArchetypeIndices,
   plugKindForCategory,
@@ -80,6 +82,11 @@ export interface ArmorPiece {
    */
   isFestivalMask: boolean;
   setHash?: number;
+  /**
+   * Legacy (Armor 2.0) raid armor: the raid whose mod socket the piece has. Those pieces
+   * have no set bonus; the builder can require them by raid instead (legacy-raids.ts).
+   */
+  legacyRaid?: LegacyRaidKey;
   /** Archetype plug name (e.g. "Gunner") — Armor 3.0 only; undefined on legacy pieces. */
   archetype?: string;
   /** True base roll: intrinsic stat plugs only — no mods, masterwork, or tuning. */
@@ -132,7 +139,6 @@ export interface ArmorPiece {
 }
 
 const ITEM_TYPE_ARMOR = 2;
-const TIER_TYPE_EXOTIC = 6;
 /** ItemState.Locked */
 const ITEM_STATE_LOCKED = 1;
 /** The postmaster bucket (Lost Items) — items here live in the character inventory list. */
@@ -510,7 +516,7 @@ function buildPiece(
     (festivalMask ? "helmet" : undefined);
   if (!slot) return null;
 
-  const isExotic = def.inventory?.tierType === TIER_TYPE_EXOTIC;
+  const isExotic = def.inventory?.tierType === TIER_EXOTIC;
   const exoticClassItem = isExotic && isExoticClassItemHash(item.itemHash);
   const exoticPerkHashes = exoticClassItem
     ? exoticClassItemPerks(item.itemInstanceId, profile)
@@ -563,6 +569,11 @@ function buildPiece(
   const power = readPower(item.itemInstanceId, profile);
   const gearTier = readGearTier(item.itemInstanceId, profile);
   const watermark = itemWatermark(def, item.versionNumber);
+  const setHash = def.equippingBlock?.equipableItemSetHash || undefined;
+  // Only Armor 2.0 pieces count as legacy raid armor, so the strip, the pool, the solver
+  // and the build card all agree on them: a piece with an archetype or a real set
+  // (a reissue) is ordinary armor even if it kept the raid socket.
+  const legacyRaid = legacy && !setHash ? legacyRaidOfDef(def, manifest) : undefined;
 
   return {
     instanceId: item.itemInstanceId,
@@ -578,7 +589,7 @@ function buildPiece(
       ? false
       : isArtificePiece(item.itemInstanceId, profile, manifest),
     isFestivalMask: festivalMask,
-    setHash: def.equippingBlock?.equipableItemSetHash || undefined,
+    setHash,
     archetype,
     baseStats,
     stats,
@@ -589,6 +600,7 @@ function buildPiece(
     ...((item.state ?? 0) & ITEM_STATE_LOCKED ? { locked: true } : {}),
     ...(item.bucketHash === POSTMASTER_BUCKET ? { postmaster: true } : {}),
     ...(watermark ? { watermark } : {}),
+    ...(legacyRaid ? { legacyRaid } : {}),
     ...(armorSockets ? { armorSockets } : {}),
     ...(energy ? { energy } : {}),
     ...(masterwork ? { masterwork } : {}),

@@ -6,6 +6,7 @@
 // Runtime imports are relative (not `@/`) — the vitest runner has no `@/` alias, matching
 // the convention in normalize.ts / solve.ts.
 import { SUBCLASSES, type Subclass } from "../armory/fragments";
+import { parseRaidReqs, type RaidReqs } from "../armory/legacy-raids";
 import {
   DEFAULT_SET_FILTERS,
   isSetMinOwned,
@@ -125,6 +126,8 @@ export interface PersistedSelections {
   targets: number[];
   major: number;
   setReqs: Record<number, 2 | 4>;
+  /** Legacy raids every build must wear pieces of, and how many (legacy-raids.ts). */
+  raidReqs: RaidReqs;
   /** Armor-set list display settings (ownership / piece-count toggles). */
   setFilters: SetFilters;
   exoticName: string | null;
@@ -279,6 +282,8 @@ function parse(raw: string | null): PersistedSelections | null {
     targets: o.targets as number[],
     major: o.major as number,
     setReqs: o.setReqs as Record<number, 2 | 4>,
+    // Optional (added after v1 shipped) — older stored blobs won't have it. Default none.
+    raidReqs: parseRaidReqs(o.raidReqs),
     setFilters,
     exoticName: o.exoticName as string | null,
     exoticPerks,

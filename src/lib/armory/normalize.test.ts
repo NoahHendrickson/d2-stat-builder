@@ -834,3 +834,50 @@ test("armorPipTier prefers live gearTier and falls back to tunedStat as T5", () 
   expect(armorPipTier({})).toBeUndefined();
   expect(armorPipTier(undefined)).toBeUndefined();
 });
+
+test("only Armor 2.0 pieces with a raid mod socket count as legacy raid armor", () => {
+  const RAID_PLUG = 4055462131; // Deep Stone Crypt's "Empty Mod Socket"
+  const ARCHETYPE_PLUG = 5;
+  const raidArmor = (extra: object) => ({
+    itemType: 2,
+    classType: 1,
+    displayProperties: { name: "Legacy's Oath Mask" },
+    inventory: { bucketTypeHash: 3448274439, tierType: 5 },
+    sockets: { socketEntries: [{ singleInitialItemHash: RAID_PLUG }] },
+    ...extra,
+  });
+  const defs: Record<number, object> = {
+    1: raidArmor({}),
+    2: raidArmor({ equippingBlock: { equipableItemSetHash: 77 } }), // reissued with a set
+    3: raidArmor({}), // rolled with an archetype below: Armor 3.0
+    [RAID_PLUG]: { plug: { plugCategoryIdentifier: "enhancements.raid_descent" } },
+    [ARCHETYPE_PLUG]: {
+      displayProperties: { name: "Gunner" },
+      plug: { plugCategoryIdentifier: "armor_archetypes" },
+    },
+  };
+  const manifest = {
+    def: (_table: string, hash: number | null | undefined) =>
+      hash == null ? undefined : defs[hash],
+    all: () => defs,
+  } as unknown as Manifest;
+  const profile = {
+    itemComponents: {
+      sockets: { data: { c: { sockets: [{ plugHash: ARCHETYPE_PLUG }] } } },
+    },
+    profileInventory: {
+      data: {
+        items: [
+          { itemInstanceId: "a", itemHash: 1 },
+          { itemInstanceId: "b", itemHash: 2 },
+          { itemInstanceId: "c", itemHash: 3 },
+        ],
+      },
+    },
+  } as unknown as DestinyProfileResponse;
+  const [legacy, withSet, withArchetype] = normalizeArmory(profile, manifest);
+  expect(legacy.legacyRaid).toBe("dsc");
+  expect(withSet.legacyRaid).toBeUndefined();
+  expect(withArchetype.archetype).toBe("Gunner");
+  expect(withArchetype.legacyRaid).toBeUndefined();
+});

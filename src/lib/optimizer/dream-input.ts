@@ -7,6 +7,7 @@ import { intrinsicStats, type ArmorPiece } from "../armory/normalize";
 import { ARMOR_SLOTS } from "../armory/stats";
 import type { Manifest } from "../manifest/load";
 import type { DreamExotic, DreamInput } from "./dream";
+import { requiredLegacyRaids } from "../armory/legacy-raids";
 import { armorToOptimizerPiece } from "./from-armory";
 import type { OptimizerInput } from "./types";
 
@@ -62,10 +63,11 @@ export function dreamInputForBuild({
               : [0, 0, 0, 0, 0, 0],
         }
       : { kind: "none" };
+  const raids = requiredLegacyRaids(settings.setRequirements);
   return {
     base: {
       ...settings,
-      slots: owned.map((p) => [armorToOptimizerPiece(p)]),
+      slots: owned.map((p) => [armorToOptimizerPiece(p, raids)]),
       minimums: targets,
       exotic: exoticPiece
         ? { mode: "specific", hashes: [exoticPiece.itemHash] }

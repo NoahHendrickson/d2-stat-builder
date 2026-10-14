@@ -7,6 +7,7 @@ import type { DestinyItemComponent, DestinyProfileResponse } from "bungie-api-ts
 import type { Manifest } from "../manifest/load";
 import { weaponRoll } from "../inventory/weapon-details";
 import { itemWatermark, type ArmorLocation } from "./normalize";
+import { TIER_EXOTIC } from "./stats";
 
 export const WEAPON_SLOTS = ["kinetic", "energy", "power"] as const;
 export type WeaponSlot = (typeof WEAPON_SLOTS)[number];
@@ -62,7 +63,6 @@ export interface LoadoutWeapon {
 
 const POSTMASTER_BUCKET = 215593132;
 const ITEM_STATE_LOCKED = 1;
-const TIER_EXOTIC = 6;
 
 /** The slot a weapon definition equips in; undefined for anything that isn't a weapon. */
 export function weaponSlotOfHash(

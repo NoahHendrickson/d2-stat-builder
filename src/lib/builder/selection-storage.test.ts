@@ -64,6 +64,7 @@ function sampleSelections(): PersistedSelections {
     targets: [100, 0, 50, 0, 0, 30],
     major: 3,
     setReqs: { 987654: 4, 123456: 2 },
+    raidReqs: { dsc: 2 },
     setFilters: { minOwned: 0 },
     exoticName: "Gyrfalcon's Hauberk",
     exoticPerks: [null, null],
