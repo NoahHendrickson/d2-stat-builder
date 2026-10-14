@@ -30,6 +30,7 @@ import {
 } from "@/lib/armory/masterwork";
 import type { Manifest } from "@/lib/manifest/load";
 import type { ArmorSetInfo } from "@/lib/armory/sets";
+import { legacyRaidName, type LegacyRaidKey } from "@/lib/armory/legacy-raids";
 import {
   STAT_DISPLAY_ORDER,
   STAT_LABELS,
@@ -370,6 +371,14 @@ const BuildRow = memo(function BuildRow({
     if (cnt < 2) continue;
     const info = setMap.get(hash);
     if (info) setBadges.push({ name: info.name, count: cnt });
+  }
+  // Legacy raid armor has no set bonus, but every piece is a raid mod socket: one counts.
+  const raidCounts = new Map<LegacyRaidKey, number>();
+  for (const p of pieces) {
+    if (p?.legacyRaid) raidCounts.set(p.legacyRaid, (raidCounts.get(p.legacyRaid) ?? 0) + 1);
+  }
+  for (const [key, cnt] of raidCounts) {
+    setBadges.push({ name: `${legacyRaidName(key)} raid armor`, count: cnt });
   }
 
   return (

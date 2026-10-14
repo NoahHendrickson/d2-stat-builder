@@ -23,6 +23,12 @@ export interface PoolOptions {
    * (see includesLegacyArmor) — off while the toggle is, like the FotL masks.
    */
   legacyArmor: boolean;
+  /**
+   * Legacy raids the builder requires pieces of (Set bonuses → Legacy raid sets). Their
+   * Armor 2.0 legendaries join the pool whatever `legacyArmor` says: a requirement on
+   * them is a request to use them.
+   */
+  legacyRaids?: ReadonlySet<string>;
 }
 
 /**
@@ -36,13 +42,18 @@ export function inDefaultOptimizerPool(
     tunedStat?: number;
     archetype?: string;
     isExotic: boolean;
+    legacyRaid?: string;
   },
   opts: PoolOptions,
 ): boolean {
   if (piece.isFestivalMask) return false;
   if (piece.tunedStat !== undefined) return true;
   if (piece.isExotic) return opts.legacyExotics;
-  return piece.archetype !== undefined ? opts.lowerTierArmor : opts.legacyArmor;
+  if (piece.archetype !== undefined) return opts.lowerTierArmor;
+  return (
+    opts.legacyArmor ||
+    (piece.legacyRaid !== undefined && opts.legacyRaids?.has(piece.legacyRaid) === true)
+  );
 }
 
 /**

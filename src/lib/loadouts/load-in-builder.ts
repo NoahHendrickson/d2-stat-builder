@@ -44,6 +44,7 @@ export function selectionsForLoadout(
     targets: [0, 0, 0, 0, 0, 0],
     major,
     setReqs: {},
+    raidReqs: {},
     setFilters: existing?.setFilters ?? DEFAULT_SET_FILTERS,
     exoticName: null,
     exoticPerks: [null, null],

@@ -6,6 +6,7 @@ import {
   type DreamInput,
 } from "./dream";
 import type { ArmorArchetype } from "../armory/archetypes";
+import { legacyRaidSetHash } from "../armory/legacy-raids";
 import { t5Rolls } from "../armory/t5-rolls";
 import { solve } from "./solve";
 import { realWarlockSlots } from "./real-pool.fixture";
@@ -79,6 +80,19 @@ describe("t5Rolls", () => {
     // Per roll and set: one untuned (any tuned stat) variant plus one per tuned stat.
     expect(pieces).toHaveLength(48 * 7 * 2);
     expect(new Set(pieces.map((p) => p.setHash))).toEqual(new Set([11, 22]));
+  });
+
+  it("never offers a roll toward a legacy raid requirement (raid armor can't drop at Tier 5)", () => {
+    const base = input([[], [], [], [], []], [0, 0, 0, 0, 0, 0]);
+    base.setRequirements = [
+      { setHash: 11, count: 2 },
+      { setHash: legacyRaidSetHash("dsc"), count: 2 },
+    ];
+    expect(new Set(dreamCandidates(0, dream(base)).map((p) => p.setHash))).toEqual(new Set([11]));
+    base.setRequirements = [{ setHash: legacyRaidSetHash("dsc"), count: 2 }];
+    expect(new Set(dreamCandidates(0, dream(base)).map((p) => p.setHash))).toEqual(
+      new Set([undefined]),
+    );
   });
 });
 

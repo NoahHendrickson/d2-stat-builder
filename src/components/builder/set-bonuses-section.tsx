@@ -7,7 +7,9 @@ import { Search01Icon } from "@hugeicons/core-free-icons";
 import { Input, SearchClearButton } from "@/components/ui/input";
 import { SetRow } from "@/components/builder/set-row";
 import { SetListControls } from "@/components/builder/set-list-controls";
+import { LegacyRaidSets } from "@/components/builder/legacy-raid-sets";
 import { getArchetypes } from "@/lib/armory/archetypes";
+import type { LegacyRaidInfo, LegacyRaidKey, RaidReqs } from "@/lib/armory/legacy-raids";
 import type { ArmorPiece } from "@/lib/armory/normalize";
 import {
   hasActiveSetFilters,
@@ -27,8 +29,9 @@ const SetGridDialog = dynamic(
 );
 
 /**
- * The Set bonuses list: search, sort/filter, the pinned and unpinned rows, and the one
- * roll-grid modal every row's grid button opens (on that row's set).
+ * The Set bonuses list: search, sort/filter, the pinned and unpinned rows, the one
+ * roll-grid modal every row's grid button opens (on that row's set), and under them the
+ * legacy raid sets (Builds only).
  */
 export function SetBonusesSection({
   sets,
@@ -40,6 +43,9 @@ export function SetBonusesSection({
   setFilters,
   onSetMinOwnedChange,
   planning,
+  legacyRaids,
+  raidReqs,
+  onRaidCountChange,
   pieces,
   manifest,
   classType,
@@ -59,6 +65,10 @@ export function SetBonusesSection({
    * required, however few of its pieces are owned — so there's no owned-count filter.
    */
   planning: boolean;
+  /** Legacy raids this class owns armor from; omitted where they don't apply (planning). */
+  legacyRaids?: LegacyRaidInfo[];
+  raidReqs: RaidReqs;
+  onRaidCountChange: (key: LegacyRaidKey, count: number) => void;
   /** The optimizer pool (what the roll grid counts). */
   pieces: ArmorPiece[];
   manifest?: Manifest;
@@ -88,6 +98,11 @@ export function SetBonusesSection({
     };
   }, [sets, pinned, query, setFilters, planning, sort]);
   const activeFilters = !planning && hasActiveSetFilters(setFilters);
+  // The search narrows the raid rows too; the set list's owned-count filter doesn't.
+  const shownRaids = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return (legacyRaids ?? []).filter((r) => !q || r.name.toLowerCase().includes(q));
+  }, [legacyRaids, query]);
 
   // The grid's set pickers follow the list's order — pinned first, each group in the
   // chosen sort — but ignore its search and filters, so every set stays reachable.
@@ -178,6 +193,15 @@ export function SetBonusesSection({
           )}
           {unpinnedList.map((s) => row(s, false))}
         </div>
+      )}
+      {shownRaids.length > 0 && (
+        <LegacyRaidSets
+          raids={shownRaids}
+          reqs={raidReqs}
+          onCountChange={onRaidCountChange}
+          manifest={manifest}
+          classType={classType}
+        />
       )}
       {grid && (
         <SetGridDialog

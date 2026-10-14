@@ -11,6 +11,7 @@ import {
   isExoticClassItemHash,
 } from "./exotic-class-perks";
 import { isFestivalMask } from "./festival-masks";
+import { legacyRaidOf, type LegacyRaidKey } from "./legacy-raids";
 import { readMasterwork, type MasterworkInfo } from "./masterwork";
 import {
   ARMOR_ARCHETYPE_PLUG_CATEGORY,
@@ -80,6 +81,11 @@ export interface ArmorPiece {
    */
   isFestivalMask: boolean;
   setHash?: number;
+  /**
+   * Legacy (Armor 2.0) raid armor: the raid whose mod socket the piece has. Those pieces
+   * have no set bonus; the builder can require them by raid instead (legacy-raids.ts).
+   */
+  legacyRaid?: LegacyRaidKey;
   /** Archetype plug name (e.g. "Gunner") — Armor 3.0 only; undefined on legacy pieces. */
   archetype?: string;
   /** True base roll: intrinsic stat plugs only — no mods, masterwork, or tuning. */
@@ -563,6 +569,11 @@ function buildPiece(
   const power = readPower(item.itemInstanceId, profile);
   const gearTier = readGearTier(item.itemInstanceId, profile);
   const watermark = itemWatermark(def, item.versionNumber);
+  const legacyRaid = legacyRaidOf(
+    def,
+    (plugHash) =>
+      manifest.def("DestinyInventoryItemDefinition", plugHash)?.plug?.plugCategoryIdentifier,
+  );
 
   return {
     instanceId: item.itemInstanceId,
@@ -589,6 +600,7 @@ function buildPiece(
     ...((item.state ?? 0) & ITEM_STATE_LOCKED ? { locked: true } : {}),
     ...(item.bucketHash === POSTMASTER_BUCKET ? { postmaster: true } : {}),
     ...(watermark ? { watermark } : {}),
+    ...(legacyRaid ? { legacyRaid } : {}),
     ...(armorSockets ? { armorSockets } : {}),
     ...(energy ? { energy } : {}),
     ...(masterwork ? { masterwork } : {}),
