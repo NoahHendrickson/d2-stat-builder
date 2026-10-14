@@ -137,8 +137,8 @@ export interface FragmentInfo {
   stats: StatArray;
 }
 
-/** Same source the loadout subclass editor uses: perk text, then the item's own description. */
-export function fragmentDescription(
+/** A plug's description: its sandbox perks' text, then the item's own description (empty on many mods and artifact perks). */
+export function plugDescription(
   def: {
     displayProperties?: { description?: string };
     flavorText?: string;
@@ -214,7 +214,7 @@ function scanFragments(
       hash: Number(key),
       name: def.displayProperties?.name ?? "Unknown",
       icon: def.displayProperties?.icon,
-      description: fragmentDescription(def, manifest),
+      description: plugDescription(def, manifest),
       subclass,
       stats,
     });

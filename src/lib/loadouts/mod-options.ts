@@ -2,11 +2,13 @@ import type { Manifest } from "@/lib/manifest/load";
 import type { ArmorPiece, ArmorSocket } from "@/lib/armory/normalize";
 import {
   BALANCED_TUNING_PLUG_HASH,
+  STAT_HASH_TO_INDEX,
   STAT_LABELS,
   STAT_ORDER,
   plugKindForCategory,
   type ArmorSocketKind,
 } from "@/lib/armory/stats";
+import { plugDescription } from "@/lib/armory/fragments";
 import { getArtificeModHashes, getTuningPlugHashes } from "@/lib/dim/mod-hashes";
 
 /** One pickable mod for a socket. */
@@ -51,6 +53,30 @@ export function isPlaceholderPlug(def: {
   );
 }
 
+/**
+ * What a stat mod (general +10 / +5, artifice +3) or directional tuning mod does, e.g.
+ * "+10 Grenade" or "+5 Weapons / −5 Grenade" — shown in place of its name. Undefined
+ * for any other plug (Balanced Tuning included).
+ */
+export function statModName(def: {
+  plug?: { plugCategoryIdentifier?: string };
+  investmentStats?: { statTypeHash: number; value: number }[];
+} | undefined): string | undefined {
+  const kind = plugKindForCategory(def?.plug?.plugCategoryIdentifier ?? "");
+  if (kind !== "general" && kind !== "artifice" && kind !== "tuning") return undefined;
+  const inv = (def?.investmentStats ?? [])
+    .filter((s) => STAT_HASH_TO_INDEX[s.statTypeHash] !== undefined && s.value !== 0)
+    .sort((a, b) => b.value - a.value);
+  const shape = inv.map((s) => Math.sign(s.value)).join();
+  if (shape !== (kind === "tuning" ? "1,-1" : "1")) return undefined;
+  return inv
+    .map(
+      (s) =>
+        `${s.value > 0 ? "+" : "−"}${Math.abs(s.value)} ${STAT_LABELS[STAT_ORDER[STAT_HASH_TO_INDEX[s.statTypeHash]]]}`,
+    )
+    .join(" / ");
+}
+
 function optionFor(manifest: Manifest, hash: number): ModOption | undefined {
   const def = manifest.def("DestinyInventoryItemDefinition", hash);
   if (!def || def.redacted || !def.displayProperties?.name || def.plug?.isDummyPlug) return undefined;
@@ -59,9 +85,9 @@ function optionFor(manifest: Manifest, hash: number): ModOption | undefined {
   const rules = def.plug?.insertionRules ?? [];
   return {
     hash,
-    name: def.displayProperties.name,
+    name: statModName(def) ?? def.displayProperties.name,
     icon: def.displayProperties.icon,
-    description: def.displayProperties.description || undefined,
+    description: plugDescription(def, manifest),
     cost: def.plug?.energyCost?.energyCost ?? 0,
     stackable: !rules.some((r) => r.failureMessage?.includes(NO_STACK_RULE)),
     artifactOnly: def.collectibleHash === undefined,
@@ -170,13 +196,9 @@ export class ModOptionCatalog {
         if (minus === plus) continue;
         const hash = this.tuning.get(`${plus}-${minus}`);
         if (hash === undefined) continue;
+        // Named "+5 X / −5 Y" by `statModName`.
         const opt = optionFor(this.manifest, hash);
-        if (opt) {
-          out.push({
-            ...opt,
-            name: `+5 ${STAT_LABELS[STAT_ORDER[plus]]} / −5 ${STAT_LABELS[STAT_ORDER[minus]]}`,
-          });
-        }
+        if (opt) out.push(opt);
       }
     }
     return out;

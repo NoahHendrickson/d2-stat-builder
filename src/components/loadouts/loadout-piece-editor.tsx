@@ -19,6 +19,9 @@ import {
 import { TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
+/** A mod cell's tooltip: the mod's name, and what it does for armor mods. */
+type ModTip = { name: string; description?: string };
+
 const KIND_LABEL: Record<ArmorSocket["kind"], string> = {
   general: "Stat mod",
   other: "Armor mod",
@@ -100,6 +103,7 @@ const ModCell = memo(function ModCell({
   count,
   blocked,
   problem,
+  describe,
   onPick,
   tooltipHandle,
 }: {
@@ -108,8 +112,10 @@ const ModCell = memo(function ModCell({
   /** No socket or energy left for this mod (clicking a chosen one still clears it). */
   blocked: boolean;
   problem?: string;
+  /** Show the mod's description too (stat, tuning and artifice names already say what they do). */
+  describe: boolean;
   onPick: (option: ModOption) => void;
-  tooltipHandle: BaseTooltip.Handle<string>;
+  tooltipHandle: BaseTooltip.Handle<ModTip>;
 }) {
   const chosen = count > 0;
   const cost = option.cost > 0 ? `${option.cost} energy` : undefined;
@@ -126,7 +132,7 @@ const ModCell = memo(function ModCell({
   return (
     <TooltipTrigger
       handle={tooltipHandle}
-      payload={option.name}
+      payload={{ name: option.name, description: describe ? option.description : undefined }}
       render={
         <button
           type="button"
@@ -227,7 +233,7 @@ function KindGrid({
     (exclusive || !full) && (energyLeft === undefined || o.cost <= energyLeft + credit);
   const heading = sockets.length > 1 ? `${KIND_LABEL[kind]}s` : KIND_LABEL[kind];
 
-  const tooltipHandle = useMemo(() => BaseTooltip.createHandle<string>(), []);
+  const tooltipHandle = useMemo(() => BaseTooltip.createHandle<ModTip>(), []);
 
   const onPick = useCallback(
     (o: ModOption) => {
@@ -282,6 +288,7 @@ function KindGrid({
               count={count}
               blocked={count === 0 && !canAdd}
               problem={problems.get(o.hash) ?? problems.get(o.name)}
+              describe={kind === "other"}
               onPick={onPick}
               tooltipHandle={tooltipHandle}
             />
@@ -289,7 +296,18 @@ function KindGrid({
         })}
       <BaseTooltip.Root handle={tooltipHandle} disableHoverablePopup>
         {({ payload }) =>
-          payload !== undefined ? <TooltipContent>{payload}</TooltipContent> : null
+          payload !== undefined ? (
+            <TooltipContent>
+              {payload.description ? (
+                <span className="flex max-w-64 flex-col gap-1">
+                  <span className="font-medium">{payload.name}</span>
+                  <span className="text-muted-foreground">{payload.description}</span>
+                </span>
+              ) : (
+                payload.name
+              )}
+            </TooltipContent>
+          ) : null
         }
       </BaseTooltip.Root>
     </section>
