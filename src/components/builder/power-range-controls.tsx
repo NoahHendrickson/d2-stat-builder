@@ -51,6 +51,8 @@ export const PowerRangeControls = memo(function PowerRangeControls({
   onChange,
   slotPieces,
   weaponPlan,
+  legacyArmor,
+  onLegacyArmorChange,
   dreamersItemName,
 }: {
   value: PowerRangeSelection;
@@ -63,10 +65,16 @@ export const PowerRangeControls = memo(function PowerRangeControls({
   slotPieces: readonly (readonly { power?: number; isExotic: boolean }[])[];
   /** The weapon-mix scan for the current range and stats (see useWeaponPlan). */
   weaponPlan: WeaponPlanState;
+  /**
+   * The legacy-armor pool setting. It belongs to Advanced settings and acts whether
+   * Power matters is on or not; this is a second checkbox for it, where it helps most.
+   */
+  legacyArmor: boolean;
+  onLegacyArmorChange: (checked: boolean) => void;
   /** Class-specific collections item: Dreamer's Bond / Cloak / Mark. */
   dreamersItemName: string;
 }) {
-  const { enabled, bounds, weapons, dreamersBond, legacyArmor } = value;
+  const { enabled, bounds, weapons, dreamersBond } = value;
   const rootRef = useRef<HTMLDivElement>(null);
   // Follow the open animation only for a click, not a restored already-on state.
   const revealOnExpand = useRef(false);
@@ -231,11 +239,9 @@ export const PowerRangeControls = memo(function PowerRangeControls({
             <SettingRow
               checkbox
               checked={legacyArmor}
-              onCheckedChange={(checked) =>
-                emit({ ...value, legacyArmor: checked })
-              }
-              title="Use legacy armor"
-              description="If you're having trouble landing in range, include Armor 2.0 legendaries. They can't be tuned and join no set, but their lower power can help."
+              onCheckedChange={onLegacyArmorChange}
+              title="Legacy armor"
+              description="If you're having trouble landing in range, include Armor 2.0 legendaries. They can't be tuned and join no set, but their lower power can help. Searches can take several seconds longer. Also in Advanced settings."
             />
 
             <SettingRow
