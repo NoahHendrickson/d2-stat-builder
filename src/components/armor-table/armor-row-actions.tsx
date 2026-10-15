@@ -1,7 +1,7 @@
 "use client";
 
 import { TooltipLabel } from "@/components/ui/tooltip";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
@@ -31,8 +31,40 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
+import { FavoriteHeart } from "@/components/favorite-heart";
 
 type Action = "move" | "equip";
+
+/**
+ * The tag toggles, in the phone menu and the row's buttons alike. An active toggle stays
+ * visible when the row isn't hovered; Junk's fills in, Favorite's heart does.
+ */
+const ROW_TAGS: readonly {
+  tag: ItemTag;
+  name: string;
+  /** What clicking does while the piece has / hasn't the tag. */
+  on: string;
+  off: string;
+  activeVariant: "default" | "outline";
+  glyph: (active: boolean, className: string) => ReactNode;
+}[] = [
+  {
+    tag: "favorite",
+    name: "Favorite",
+    on: "Remove from favorites",
+    off: "Favorite",
+    activeVariant: "outline",
+    glyph: (active, className) => <FavoriteHeart filled={active} className={className} />,
+  },
+  {
+    tag: "junk",
+    name: "Junk",
+    on: "Unmark junk",
+    off: "Mark as junk",
+    activeVariant: "default",
+    glyph: (_, className) => <HugeiconsIcon icon={Delete02Icon} className={className} aria-hidden />,
+  },
+];
 
 /**
  * Takes no room until its row is hovered or holds keyboard focus (sr-only keeps it tabbable;
@@ -72,9 +104,9 @@ function equipDisabledReason(
 /**
  * Move / Equip a single piece onto its class's most recently played character,
  * via the same /api/bungie/equip proxy the builder's "Equip items" uses
- * (mode: "move" skips the equip step), and a Junk toggle on the Manager's tag store.
- * Sits at the right of the row's name cell (`group/row`); the junk mark stays visible
- * on junk pieces.
+ * (mode: "move" skips the equip step), and Favorite / Junk toggles on the Manager's tag
+ * store. Sits at the right of the row's name cell (`group/row`); the heart stays visible
+ * on favorites and the bin on junk pieces.
  */
 export function ArmorRowActions({
   piece,
@@ -88,7 +120,7 @@ export function ArmorRowActions({
   onDone: () => void;
   /** The table shows last visit's gear; nothing may be moved until the live profile lands. */
   provisional?: boolean;
-  /** Its Manager tag; Junk replaces any other tag, and clicking it again clears it. */
+  /** Its Manager tag; Favorite or Junk replaces any other tag, and clicking it again clears it. */
   tag?: ItemTag;
 }) {
   const queryClient = useQueryClient();
@@ -99,6 +131,7 @@ export function ArmorRowActions({
 
   const target = lastPlayedCharacter(characters, piece.classType);
   const junk = tag === "junk";
+  const toggleTag = (t: ItemTag) => setTag([piece.instanceId], tag === t ? undefined : t);
   const refreshing = provisional ? "Refreshing your gear from Bungie…" : null;
   const reasons: Record<Action, string | null> = {
     move: refreshing ?? moveDisabledReason(piece, target),
@@ -193,10 +226,12 @@ export function ArmorRowActions({
             </DropdownMenuItem>
           ))}
           <DropdownMenuSeparator />
-          <DropdownMenuItem onClick={() => setTag([piece.instanceId], junk ? undefined : "junk")}>
-            <HugeiconsIcon icon={Delete02Icon} aria-hidden />
-            {junk ? "Unmark junk" : "Mark as junk"}
-          </DropdownMenuItem>
+          {ROW_TAGS.map((t) => (
+            <DropdownMenuItem key={t.tag} onClick={() => toggleTag(t.tag)}>
+              {t.glyph(tag === t.tag, "size-4")}
+              {tag === t.tag ? t.on : t.off}
+            </DropdownMenuItem>
+          ))}
         </DropdownMenuContent>
       </DropdownMenu>
       <div className="flex shrink-0 items-center gap-1 max-md:hidden">
@@ -222,20 +257,25 @@ export function ArmorRowActions({
             </TooltipLabel>
           ))}
         </div>
-        <span className={cn("flex", !junk && REVEAL_ON_ROW_HOVER)}>
-          <TooltipLabel label={junk ? "Unmark junk" : "Mark as junk"}>
-            <Button
-              size="sm"
-              variant={junk ? "default" : "outline"}
-              className={cn("size-6 p-0", !junk && "text-muted-foreground")}
-              aria-label="Junk"
-              aria-pressed={junk}
-              onClick={() => setTag([piece.instanceId], junk ? undefined : "junk")}
-            >
-              <HugeiconsIcon icon={Delete02Icon} className="size-3" aria-hidden />
-            </Button>
-          </TooltipLabel>
-        </span>
+        {ROW_TAGS.map((t) => {
+          const active = tag === t.tag;
+          return (
+            <span key={t.tag} className={cn("flex", !active && REVEAL_ON_ROW_HOVER)}>
+              <TooltipLabel label={active ? t.on : t.off}>
+                <Button
+                  size="sm"
+                  variant={active ? t.activeVariant : "outline"}
+                  className={cn("size-6 p-0", !active && "text-muted-foreground")}
+                  aria-label={t.name}
+                  aria-pressed={active}
+                  onClick={() => toggleTag(t.tag)}
+                >
+                  {t.glyph(active, "size-3")}
+                </Button>
+              </TooltipLabel>
+            </span>
+          );
+        })}
       </div>
     </>
   );

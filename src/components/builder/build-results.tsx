@@ -46,6 +46,13 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { StatGlyph } from "@/components/stat-glyph";
 import { PowerValue } from "@/components/power-value";
+import { FavoriteHeart } from "@/components/favorite-heart";
+import {
+  FavoriteBuildButton,
+  FavoritesBadge,
+  useBuildFavorites,
+  type BuildFavorites,
+} from "@/components/builder/build-favorites";
 import {
   BuildActions,
   type BuildActionProps,
@@ -238,19 +245,21 @@ export function HeaderRule() {
 
 /**
  * Second line of a collapsed build card: a "Not owned" flag for a theoretical
- * class item, 2pc set pills, gold light level, and remaining masterwork materials
- * (rarest first).
+ * class item, 2pc set pills, gold light level with a heart for favorite pieces, and
+ * remaining masterwork materials (rarest first).
  */
 function BuildHeaderMeta({
   notOwned,
   setBadges,
   power,
+  favorites,
   masterwork,
   manifest,
 }: {
   notOwned: boolean;
   setBadges: { name: string; count: number }[];
   power: number | null;
+  favorites: BuildFavorites;
   masterwork: LoadoutMasterworkSummary;
   manifest?: Manifest;
 }) {
@@ -279,16 +288,20 @@ function BuildHeaderMeta({
       </span>,
     );
   }
-  if (power !== null) {
+  if (power !== null || favorites.count > 0) {
     clusters.push(
-      <PowerValue
-        key="power"
-        value={power}
-        size="xs"
-        tone="gold"
-        className="gap-0.5 text-xs items-center"
-        title="Gear power — the game's average over these pieces (and your weapons, if entered)"
-      />,
+      <span key="power" className="inline-flex items-center gap-2">
+        {power !== null && (
+          <PowerValue
+            value={power}
+            size="xs"
+            tone="gold"
+            className="gap-0.5 text-xs items-center"
+            title="Gear power — the game's average over these pieces (and your weapons, if entered)"
+          />
+        )}
+        <FavoritesBadge favorites={favorites} />
+      </span>,
     );
   }
   if (
@@ -356,6 +369,7 @@ const BuildRow = memo(function BuildRow({
 } & BuildActionProps) {
   const [open, setOpen] = useState(false);
   const pieces = loadout.pieceIds.map((id) => pieceMap.get(id));
+  const favorites = useBuildFavorites(loadout.pieceIds, pieces);
   const exotic = pieces.find((p) => p?.isExotic);
   // What finishing the pieces' masterworks would cost — the stats above already
   // assume it's done; this only tells the player what they'd have to spend.
@@ -414,6 +428,7 @@ const BuildRow = memo(function BuildRow({
               notOwned={pieces.some((p) => p !== undefined && isTheoretical(p))}
               setBadges={setBadges}
               power={loadout.power}
+              favorites={favorites}
               masterwork={masterwork}
               manifest={manifest}
             />
@@ -480,6 +495,7 @@ const BuildRow = memo(function BuildRow({
                         <span className="truncate text-sm">{piece.name}</span>
                         {(isTheoretical(piece) ||
                           piece.power !== undefined ||
+                          favorites.has(pi) ||
                           (piece.masterwork &&
                             piece.masterwork.level < piece.masterwork.max)) && (
                           <div className="flex items-center gap-2">
@@ -496,6 +512,11 @@ const BuildRow = memo(function BuildRow({
                                 className="shrink-0 items-center gap-0.5 text-xs"
                                 title="Power"
                               />
+                            )}
+                            {favorites.has(pi) && (
+                              <span title="Favorite" className="flex">
+                                <FavoriteHeart />
+                              </span>
                             )}
                             {piece.masterwork &&
                               piece.masterwork.level < piece.masterwork.max && (
@@ -535,6 +556,9 @@ const BuildRow = memo(function BuildRow({
                   </Fragment>
                 );
               })}
+              <div className="col-span-full">
+                <FavoriteBuildButton favorites={favorites} />
+              </div>
             </div>
 
             <div className="col-span-full -mx-4 max-md:-mx-3 border-t border-foreground/8" />

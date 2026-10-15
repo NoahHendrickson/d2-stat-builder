@@ -5,7 +5,11 @@
 // Runtime imports are relative (not `@/`) so the module also runs under vitest.
 import type { DimLoadout, DimLoadoutItem } from "../dim/loadout-link";
 import type { AppliedTuning, OptimizerLoadout } from "../optimizer/types";
-import { parsePowerRange, type PersistedSelections } from "../builder/selection-storage";
+import {
+  parseLegacyArmor,
+  parsePowerRange,
+  type PersistedSelections,
+} from "../builder/selection-storage";
 import { SUBCLASSES, type Subclass } from "../armory/fragments";
 import { parseRaidReqs } from "../armory/legacy-raids";
 
@@ -306,6 +310,7 @@ export function parseBuilderSnapshot(v: unknown): BuilderSnapshot | null {
     legacyExotics: v.legacyExotics,
     // Added after the first snapshots shipped: default off when absent.
     lowerTierArmor: v.lowerTierArmor === true,
+    legacyArmor: parseLegacyArmor(v),
     powerRange: parsePowerRange(v.powerRange),
     activeSubclass: v.activeSubclass as Subclass,
     fragmentHashes,

@@ -12,11 +12,8 @@ import {
 } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { useArmory } from "@/lib/armory/use-armory";
-import { sessionMembershipId } from "@/lib/armory/use-profile";
-import { useSession } from "@/lib/auth/use-session";
 import {
   annotationsStore,
-  loadAnnotations,
   setTag,
   type Annotations,
   type ItemTag,
@@ -269,9 +266,6 @@ const HeaderRow = memo(function HeaderRow({
 
 export function ArmorTable() {
   const armory = useArmory();
-  // Junk tags live in the Manager's tag store; point it at this account here too.
-  const membershipId = sessionMembershipId(useSession().data);
-  useEffect(() => loadAnnotations(membershipId), [membershipId]);
   const manifestStatus = useManifest();
   const manifest =
     manifestStatus.state === "ready" ? manifestStatus.manifest : undefined;
