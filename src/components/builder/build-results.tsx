@@ -46,6 +46,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { StatGlyph } from "@/components/stat-glyph";
 import { PowerValue } from "@/components/power-value";
+import { FavoriteHeart } from "@/components/favorite-heart";
+import { useTagMask } from "@/lib/inventory/annotations";
 import {
   BuildActions,
   type BuildActionProps,
@@ -238,19 +240,24 @@ export function HeaderRule() {
 
 /**
  * Second line of a collapsed build card: a "Not owned" flag for a theoretical
- * class item, 2pc set pills, gold light level, and remaining masterwork materials
- * (rarest first).
+ * class item, 2pc set pills, gold light level with a heart when pieces are favorites,
+ * and remaining masterwork materials (rarest first).
  */
 function BuildHeaderMeta({
   notOwned,
   setBadges,
   power,
+  favorites,
+  pieceCount,
   masterwork,
   manifest,
 }: {
   notOwned: boolean;
   setBadges: { name: string; count: number }[];
   power: number | null;
+  /** How many of the build's pieces are tagged Favorite. */
+  favorites: number;
+  pieceCount: number;
   masterwork: LoadoutMasterworkSummary;
   manifest?: Manifest;
 }) {
@@ -279,16 +286,32 @@ function BuildHeaderMeta({
       </span>,
     );
   }
-  if (power !== null) {
+  if (power !== null || favorites > 0) {
     clusters.push(
-      <PowerValue
-        key="power"
-        value={power}
-        size="xs"
-        tone="gold"
-        className="gap-0.5 text-xs items-center"
-        title="Gear power — the game's average over these pieces (and your weapons, if entered)"
-      />,
+      <span key="power" className="inline-flex items-center gap-2">
+        {power !== null && (
+          <PowerValue
+            value={power}
+            size="xs"
+            tone="gold"
+            className="gap-0.5 text-xs items-center"
+            title="Gear power — the game's average over these pieces (and your weapons, if entered)"
+          />
+        )}
+        {favorites > 0 && (
+          <span
+            className="inline-flex items-center gap-0.5 text-xs font-medium tabular-nums"
+            title={
+              favorites === pieceCount
+                ? "Every piece is a favorite"
+                : `${favorites} of ${pieceCount} pieces are favorites`
+            }
+          >
+            <FavoriteHeart />
+            {favorites < pieceCount && favorites}
+          </span>
+        )}
+      </span>,
     );
   }
   if (
@@ -356,6 +379,10 @@ const BuildRow = memo(function BuildRow({
 } & BuildActionProps) {
   const [open, setOpen] = useState(false);
   const pieces = loadout.pieceIds.map((id) => pieceMap.get(id));
+  const favoriteMask = useTagMask(loadout.pieceIds, "favorite");
+  const isFavorite = (pi: number) => (favoriteMask & (1 << pi)) !== 0;
+  let favorites = 0;
+  for (let pi = 0; pi < loadout.pieceIds.length; pi++) if (isFavorite(pi)) favorites++;
   const exotic = pieces.find((p) => p?.isExotic);
   // What finishing the pieces' masterworks would cost — the stats above already
   // assume it's done; this only tells the player what they'd have to spend.
@@ -414,6 +441,8 @@ const BuildRow = memo(function BuildRow({
               notOwned={pieces.some((p) => p !== undefined && isTheoretical(p))}
               setBadges={setBadges}
               power={loadout.power}
+              favorites={favorites}
+              pieceCount={loadout.pieceIds.length}
               masterwork={masterwork}
               manifest={manifest}
             />
@@ -480,6 +509,7 @@ const BuildRow = memo(function BuildRow({
                         <span className="truncate text-sm">{piece.name}</span>
                         {(isTheoretical(piece) ||
                           piece.power !== undefined ||
+                          isFavorite(pi) ||
                           (piece.masterwork &&
                             piece.masterwork.level < piece.masterwork.max)) && (
                           <div className="flex items-center gap-2">
@@ -496,6 +526,11 @@ const BuildRow = memo(function BuildRow({
                                 className="shrink-0 items-center gap-0.5 text-xs"
                                 title="Power"
                               />
+                            )}
+                            {isFavorite(pi) && (
+                              <span title="Favorite" className="flex">
+                                <FavoriteHeart />
+                              </span>
                             )}
                             {piece.masterwork &&
                               piece.masterwork.level < piece.masterwork.max && (
@@ -649,6 +684,7 @@ const BuildRow = memo(function BuildRow({
           onEquipped={onEquipped}
           pieceMap={pieceMap}
           onDream={onDream}
+          favoriteMask={favoriteMask}
         />
       </div>
       </div>

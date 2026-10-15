@@ -117,3 +117,19 @@ export function useAnnotation(instanceId: string | undefined): Annotation | unde
   const get = () => (instanceId ? annotationsStore.get()[instanceId] : undefined);
   return useSyncExternalStore(annotationsStore.subscribe, get, () => undefined);
 }
+
+/**
+ * Which of `instanceIds` carry `tag`, as a bitmask (bit i = instanceIds[i]): one
+ * subscription for a whole build, re-rendering only when one of its pieces changes.
+ */
+export function useTagMask(instanceIds: readonly string[], tag: ItemTag): number {
+  const get = () => {
+    const annotations = annotationsStore.get();
+    let mask = 0;
+    instanceIds.forEach((id, i) => {
+      if (annotations[id]?.tag === tag) mask |= 1 << i;
+    });
+    return mask;
+  };
+  return useSyncExternalStore(annotationsStore.subscribe, get, () => 0);
+}

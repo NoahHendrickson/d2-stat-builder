@@ -31,6 +31,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
+import { FavoriteHeart } from "@/components/favorite-heart";
 
 type Action = "move" | "equip";
 
@@ -72,9 +73,9 @@ function equipDisabledReason(
 /**
  * Move / Equip a single piece onto its class's most recently played character,
  * via the same /api/bungie/equip proxy the builder's "Equip items" uses
- * (mode: "move" skips the equip step), and a Junk toggle on the Manager's tag store.
- * Sits at the right of the row's name cell (`group/row`); the junk mark stays visible
- * on junk pieces.
+ * (mode: "move" skips the equip step), and Favorite / Junk toggles on the Manager's tag
+ * store. Sits at the right of the row's name cell (`group/row`); the heart stays visible
+ * on favorites and the bin on junk pieces.
  */
 export function ArmorRowActions({
   piece,
@@ -88,7 +89,7 @@ export function ArmorRowActions({
   onDone: () => void;
   /** The table shows last visit's gear; nothing may be moved until the live profile lands. */
   provisional?: boolean;
-  /** Its Manager tag; Junk replaces any other tag, and clicking it again clears it. */
+  /** Its Manager tag; Favorite or Junk replaces any other tag, and clicking it again clears it. */
   tag?: ItemTag;
 }) {
   const queryClient = useQueryClient();
@@ -99,6 +100,7 @@ export function ArmorRowActions({
 
   const target = lastPlayedCharacter(characters, piece.classType);
   const junk = tag === "junk";
+  const favorite = tag === "favorite";
   const refreshing = provisional ? "Refreshing your gear from Bungie…" : null;
   const reasons: Record<Action, string | null> = {
     move: refreshing ?? moveDisabledReason(piece, target),
@@ -193,6 +195,12 @@ export function ArmorRowActions({
             </DropdownMenuItem>
           ))}
           <DropdownMenuSeparator />
+          <DropdownMenuItem
+            onClick={() => setTag([piece.instanceId], favorite ? undefined : "favorite")}
+          >
+            <FavoriteHeart filled={favorite} className="size-4" />
+            {favorite ? "Remove from favorites" : "Favorite"}
+          </DropdownMenuItem>
           <DropdownMenuItem onClick={() => setTag([piece.instanceId], junk ? undefined : "junk")}>
             <HugeiconsIcon icon={Delete02Icon} aria-hidden />
             {junk ? "Unmark junk" : "Mark as junk"}
@@ -222,6 +230,20 @@ export function ArmorRowActions({
             </TooltipLabel>
           ))}
         </div>
+        <span className={cn("flex", !favorite && REVEAL_ON_ROW_HOVER)}>
+          <TooltipLabel label={favorite ? "Remove from favorites" : "Favorite"}>
+            <Button
+              size="sm"
+              variant="outline"
+              className={cn("size-6 p-0", !favorite && "text-muted-foreground")}
+              aria-label="Favorite"
+              aria-pressed={favorite}
+              onClick={() => setTag([piece.instanceId], favorite ? undefined : "favorite")}
+            >
+              <FavoriteHeart filled={favorite} />
+            </Button>
+          </TooltipLabel>
+        </span>
         <span className={cn("flex", !junk && REVEAL_ON_ROW_HOVER)}>
           <TooltipLabel label={junk ? "Unmark junk" : "Mark as junk"}>
             <Button
