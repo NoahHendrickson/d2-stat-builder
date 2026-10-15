@@ -235,7 +235,7 @@ export const PowerRangeControls = memo(function PowerRangeControls({
                 emit({ ...value, legacyArmor: checked })
               }
               title="Use legacy armor"
-              description="If you're having trouble landing in range, include Armor 2.0 legendaries. They can't be tuned and join no set, but their lower power can help."
+              description="If you're having trouble landing in range, include Armor 2.0 legendaries. They can't be tuned and join no set, but their lower power can help. Searches can take several seconds longer."
             />
 
             <SettingRow

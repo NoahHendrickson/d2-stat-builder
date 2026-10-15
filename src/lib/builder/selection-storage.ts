@@ -28,9 +28,9 @@ export interface PowerBounds {
  * floor of the mean power over the five armor pieces and the weapons entered below —
  * inside `bounds`. `bounds` is null until the user (or the controls' first-enable seed)
  * sets it, and is kept while the toggle is off so switching it back on restores it.
- * Enabled with null bounds constrains nothing. `dreamersBond`, `legacyArmor` and the
- * weapon powers are likewise kept while off; they only act while `enabled` (see
- * forcesDreamersBond / includesLegacyArmor).
+ * Enabled with null bounds constrains nothing. `dreamersBond` and the weapon powers are
+ * likewise kept while off; they only act while `enabled` (see forcesDreamersBond).
+ * `legacyArmor` lives here too but acts on its own (see includesLegacyArmor).
  */
 export interface PowerRangeSelection {
   enabled: boolean;
@@ -48,8 +48,9 @@ export interface PowerRangeSelection {
   dreamersBond: boolean;
   /**
    * Let legacy (Armor 2.0) legendaries — no archetype, no tuning socket — into the
-   * optimizer pool. Like the FotL masks, a power-range option: their power is what
-   * makes them worth wearing, since they can't be tuned and join no set.
+   * optimizer pool. Shown both under Advanced settings and under Power matters (their
+   * power is the usual reason to wear them, since they can't be tuned and join no set);
+   * both checkboxes edit this one flag, and it applies whether Power matters is on or not.
    */
   legacyArmor: boolean;
 }
@@ -67,12 +68,9 @@ export function forcesDreamersBond(range: PowerRangeSelection): boolean {
   return range.enabled && range.dreamersBond;
 }
 
-/**
- * Whether legacy (Armor 2.0) legendaries join the pool: only while Power matters is
- * actually constraining (enabled with bounds), the same contract FotL masks use.
- */
+/** Whether legacy (Armor 2.0) legendaries join the pool: whenever checked, Power matters or not. */
 export function includesLegacyArmor(range: PowerRangeSelection): boolean {
-  return range.enabled && range.bounds !== null && range.legacyArmor;
+  return range.legacyArmor;
 }
 
 /** The weapon powers that were actually entered, in slot order — what the solver averages in. */

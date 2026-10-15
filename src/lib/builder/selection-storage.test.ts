@@ -207,16 +207,17 @@ test("parsePowerRange reads legacyArmor, defaulting anything but true to off", (
   expect(parsePowerRange({ enabled: true }).legacyArmor).toBe(false);
 });
 
-test("includesLegacyArmor only while Power matters is constraining (enabled with bounds)", () => {
+test("includesLegacyArmor follows the checkbox whether Power matters is on or not", () => {
   const checked = {
     ...DEFAULT_POWER_RANGE,
     legacyArmor: true,
     bounds: { min: 200, max: 300 },
   };
   expect(includesLegacyArmor({ ...checked, enabled: true })).toBe(true);
-  expect(includesLegacyArmor({ ...checked, enabled: false })).toBe(false);
-  expect(includesLegacyArmor({ ...checked, enabled: true, bounds: null })).toBe(false);
+  expect(includesLegacyArmor({ ...checked, enabled: false })).toBe(true);
+  expect(includesLegacyArmor({ ...checked, enabled: true, bounds: null })).toBe(true);
   expect(includesLegacyArmor({ ...DEFAULT_POWER_RANGE, enabled: true })).toBe(false);
+  expect(includesLegacyArmor(DEFAULT_POWER_RANGE)).toBe(false);
 });
 
 test("toOptimizerPowerRange is undefined unless enabled with bounds set", () => {

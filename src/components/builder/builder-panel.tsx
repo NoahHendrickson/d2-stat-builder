@@ -204,10 +204,18 @@ export function BuilderPanel({
   const [powerRange, setPowerRange] = useState<PowerRangeSelection>(
     () => initialSaved?.powerRange ?? DEFAULT_POWER_RANGE,
   );
-  // Dreamer's Bond and legacy armor are "Power matters" options: checked but with the
-  // toggle off, they're inert.
+  // Dreamer's Bond is a "Power matters" option: checked but with the toggle off, it's
+  // inert. Legacy armor is stored with the range (its checkbox shows there too) but
+  // acts on its own — the Advanced settings checkbox edits the same flag.
   const useDreamersBond = forcesDreamersBond(powerRange);
   const useLegacyArmor = includesLegacyArmor(powerRange);
+  const setUseLegacyArmor = useCallback(
+    (checked: boolean) =>
+      setPowerRange((prev) =>
+        prev.legacyArmor === checked ? prev : { ...prev, legacyArmor: checked },
+      ),
+    [],
+  );
   // Power matters is a Builds setting: Theoretical ignores it, so its exotic is never
   // displaced by a pinned Dreamer's Bond.
   const classItemPinned = !theoretical && useDreamersBond;
@@ -261,11 +269,9 @@ export function BuilderPanel({
 
   // Candidate pool for the optimizer: Tier-5 pieces (exactly those with a tuning
   // socket) plus — when enabled — legacy/non-tunable exotics, whose artifice +3 the
-  // solver spends, Tier 1–4 Armor 3.0 legendaries, and (only while "Power matters" is
-  // on) legacy Armor 2.0 legendaries, plus the armor of any required legacy raid. FotL
-  // masks are never in this pool; they join the helmet slot as optional power-0
-  // candidates while "Power matters" is on. The power preview below reuses the same
-  // options with its own legacy-armor checkbox.
+  // solver spends, Tier 1–4 Armor 3.0 legendaries, and legacy Armor 2.0 legendaries,
+  // plus the armor of any required legacy raid. FotL masks are never in this pool; they
+  // join the helmet slot as optional power-0 candidates while "Power matters" is on.
   const poolOptions = useMemo(
     (): PoolOptions => ({
       legacyExotics: useLegacyExotics,
@@ -580,13 +586,12 @@ export function BuilderPanel({
   );
 
   // The pool as it stands once Power matters is ON — identical while it is; with the
-  // toggle off, the same builder runs again with Dreamer's pinned (if checked) and
-  // legacy legendaries admitted (if checked), including class items. Spirit selection
-  // is applied too, so a theoretical exotic class item seeds the first-enable range.
+  // toggle off, the same builder runs again with Dreamer's pinned (if checked) and the
+  // class items opened up. Spirit selection is applied too, so a theoretical exotic
+  // class item seeds the first-enable range.
   const powerSlotPieces = useMemo(() => {
     if (powerRange.enabled) return slotPieces;
-    const previewOptions = { ...poolOptions, legacyArmor: powerRange.legacyArmor };
-    const previewPool = classPieces.filter((p) => inDefaultOptimizerPool(p, previewOptions));
+    const previewPool = classPieces.filter((p) => inDefaultOptimizerPool(p, poolOptions));
     let previewClassItems;
     if (powerRange.dreamersBond) {
       previewClassItems = dreamersPiece ? [dreamersPiece] : [];
@@ -621,7 +626,6 @@ export function BuilderPanel({
     poolOptions,
     powerRange.enabled,
     powerRange.dreamersBond,
-    powerRange.legacyArmor,
     dreamersPiece,
     festivalMaskHelmets,
     manifest,
@@ -1067,7 +1071,8 @@ export function BuilderPanel({
     setUseBalancedTuning(true);
     setUseLegacyExotics(true);
     setUseLowerTierArmor(false);
-  }, []);
+    setUseLegacyArmor(false);
+  }, [setUseLegacyArmor]);
   const resetPowerRange = useCallback(
     () =>
       setPowerRange((prev) =>
@@ -1281,6 +1286,13 @@ export function BuilderPanel({
                       onCheckedChange={setUseLegacyExotics}
                       title="Legacy exotics"
                       description="Include Armor 2.0 exotics"
+                    />
+                    <SettingRow
+                      checkbox
+                      checked={useLegacyArmor}
+                      onCheckedChange={setUseLegacyArmor}
+                      title="Legacy armor"
+                      description="Include Armor 2.0 legendaries. They can't be tuned and join no set, and searches can take several seconds longer. Also under Power matters, where their lower power helps."
                     />
                     <SettingRow
                       checkbox
