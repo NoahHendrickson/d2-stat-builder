@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
  * scrolls the card list to that loadout; the one at the top of the list is filled.
  *
  * Memoized: the list re-renders on every scroll frame, this only when the shown
- * loadouts or the current one change.
+ * loadouts or the current one change. Mounted only on wide screens.
  */
 export const LoadoutIndex = memo(function LoadoutIndex({
   loadouts,
@@ -24,21 +24,21 @@ export const LoadoutIndex = memo(function LoadoutIndex({
   className?: string;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
+  const activeRef = useRef<HTMLButtonElement>(null);
 
-  // Keep the current name in view as the cards scroll past. Only this column moves
-  // (scrollIntoView would also scroll the page).
+  // Keep the current name in view as the cards scroll past, and after a filter or sort
+  // reorders the names. Only this column moves (scrollIntoView would also scroll the page).
   useEffect(() => {
     const scroller = scrollRef.current;
-    if (!scroller || !activeId) return;
-    const el = scroller.querySelector<HTMLElement>(`[data-loadout-id="${CSS.escape(activeId)}"]`);
-    if (!el) return;
+    const el = activeRef.current;
+    if (!scroller || !el) return;
     const top = el.offsetTop;
     const bottom = top + el.offsetHeight;
     if (top < scroller.scrollTop) scroller.scrollTop = top;
     else if (bottom > scroller.scrollTop + scroller.clientHeight) {
       scroller.scrollTop = bottom - scroller.clientHeight;
     }
-  }, [activeId]);
+  }, [activeId, loadouts]);
 
   return (
     <nav aria-label="Loadouts by name" className={cn("min-h-0 flex-col", className)}>
@@ -50,10 +50,9 @@ export const LoadoutIndex = memo(function LoadoutIndex({
               <li key={saved.id}>
                 <button
                   type="button"
-                  data-loadout-id={saved.id}
+                  ref={active ? activeRef : undefined}
                   aria-current={active ? "true" : undefined}
                   onClick={() => onJump(index)}
-                  title={saved.loadout.name}
                   className={cn(
                     "normal:rounded-[8px] focus-visible:ring-outline-strong flex h-8 w-full items-center px-2.5 text-left text-sm outline-none transition-colors focus-visible:ring-1",
                     active
