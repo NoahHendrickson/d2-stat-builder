@@ -14,8 +14,6 @@ import { useQueryClient } from "@tanstack/react-query";
 import { TooltipLabel } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/lib/toast";
-import { setTag } from "@/lib/inventory/annotations";
-import { FavoriteHeart } from "@/components/favorite-heart";
 import { cn } from "@/lib/utils";
 import type { ArmorPiece } from "@/lib/armory/normalize";
 import type { ArmoryCharacter } from "@/lib/armory/fetch";
@@ -79,10 +77,10 @@ const SaveLoadoutDrawer = dynamic(
 );
 
 /**
- * Footer of a build card, collapsed or expanded: favorite its pieces, copy the piece
- * IDs as a DIM search, hand the build to DIM's loadout editor, or pull the pieces to a
- * character and equip them. All but favoriting need every piece still present in the
- * armory (a refetch can drop instances from stale results).
+ * Footer of a build card, collapsed or expanded: copy the piece IDs as a DIM
+ * search, hand the build to DIM's loadout editor, or pull the pieces to a
+ * character and equip them. All need every piece still present in the armory
+ * (a refetch can drop instances from stale results).
  */
 export function BuildActions({
   loadout,
@@ -99,14 +97,11 @@ export function BuildActions({
   onEquipped,
   pieceMap,
   onDream,
-  favoriteMask,
 }: {
   loadout: OptimizerLoadout;
   pieces: (ArmorPiece | undefined)[];
   exoticName?: string;
   setBadges: { name: string; count: number }[];
-  /** Which pieces are tagged Favorite (bit i = loadout.pieceIds[i]; see useTagMask). */
-  favoriteMask: number;
 } & BuildActionProps) {
   const queryClient = useQueryClient();
   const [equipping, setEquipping] = useState(false);
@@ -145,25 +140,6 @@ export function BuildActions({
   const hasModHashes = Boolean(
     statModHashes && tuningPlugHashes && artificeModHashes,
   );
-
-  // Real instances only: a theoretical class item or Dreamer's Bond has nothing to tag.
-  const favoritable = loadout.pieceIds.flatMap((id, i) =>
-    pieces[i] && !isSyntheticClassItemId(id) ? [{ id, favorite: (favoriteMask & (1 << i)) !== 0 }] : [],
-  );
-  const allFavorite = favoritable.length > 0 && favoritable.every((p) => p.favorite);
-
-  /** Favorite every piece (replacing any other tag), or with all already favorites, clear them. */
-  const toggleFavorites = () => {
-    if (favoritable.length === 0) return;
-    const ids = favoritable.map((p) => p.id);
-    setTag(ids, allFavorite ? undefined : "favorite");
-    const pieceWord = ids.length === 1 ? "piece" : "pieces";
-    toast.success(
-      allFavorite
-        ? `Removed ${ids.length} ${pieceWord} from favorites`
-        : `Favorited ${ids.length} ${pieceWord}`,
-    );
-  };
 
   const defaultName = (subclass: DimSubclassInput | undefined) =>
     defaultLoadoutName({
@@ -322,18 +298,6 @@ export function BuildActions({
         </RevealAction>
       )}
       <RevealAction>
-        <Button
-          variant="outline"
-          onClick={toggleFavorites}
-          disabled={favoritable.length === 0}
-          aria-pressed={allFavorite}
-          className="gap-0 px-2"
-        >
-          <FavoriteHeart filled={allFavorite} className="size-4" />
-          <RevealLabel>{allFavorite ? "Unfavorite these pieces" : "Favorite these pieces"}</RevealLabel>
-        </Button>
-      </RevealAction>
-      <RevealAction>
         <TooltipLabel
           label={
             missingTitle ??
@@ -441,7 +405,7 @@ function RevealLabel({ children, touch = false }: { children: ReactNode; touch?:
         "grid grid-cols-[0fr] transition-[grid-template-columns] duration-200 ease-out group-has-focus-visible/reveal:grid-cols-[1fr] group-hover/reveal:grid-cols-[1fr] motion-reduce:transition-none",
         touch
           ? "pointer-coarse:grid-cols-[1fr]"
-          : "pointer-coarse:@min-[56rem]/build:grid-cols-[1fr]",
+          : "pointer-coarse:@min-[44rem]/build:grid-cols-[1fr]",
       )}
     >
       <span className="overflow-hidden">

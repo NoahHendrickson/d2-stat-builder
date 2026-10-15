@@ -1,5 +1,5 @@
 import { HugeiconsIcon } from "@hugeicons/react";
-import { FavouriteIcon } from "@hugeicons/core-free-icons";
+import { TAG_ICONS } from "@/components/manager/tag-icons";
 import { cn } from "@/lib/utils";
 
 /**
@@ -16,7 +16,7 @@ export function FavoriteHeart({
 }) {
   return (
     <HugeiconsIcon
-      icon={FavouriteIcon}
+      icon={TAG_ICONS.favorite}
       strokeWidth={2}
       className={cn("size-3 shrink-0", filled && "text-pink-400 fill-pink-400/35", className)}
       aria-hidden

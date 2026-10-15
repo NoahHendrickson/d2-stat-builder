@@ -11,8 +11,6 @@ import {
 import dynamic from "next/dynamic";
 import { useSession } from "@/lib/auth/use-session";
 import { useArmory } from "@/lib/armory/use-armory";
-import { sessionMembershipId } from "@/lib/armory/use-profile";
-import { loadAnnotations } from "@/lib/inventory/annotations";
 import { useManifest } from "@/lib/manifest/use-manifest";
 import { useOptimizer } from "@/lib/optimizer/use-optimizer";
 import { useSmoothedProgress } from "@/lib/use-smoothed-progress";
@@ -130,9 +128,6 @@ export function BuilderPanel({
   showInlineStatusCards?: boolean;
 }) {
   const session = useSession();
-  // Build cards show (and set) Favorite tags from the Manager's tag store.
-  const membershipId = sessionMembershipId(session.data);
-  useEffect(() => loadAnnotations(membershipId), [membershipId]);
   const armoryQuery = useArmory();
   const manifestStatus = useManifest();
   const {
