@@ -48,7 +48,6 @@ import { StatGlyph } from "@/components/stat-glyph";
 import { PowerValue } from "@/components/power-value";
 import { FavoriteHeart } from "@/components/favorite-heart";
 import {
-  FavoriteBuildButton,
   FavoritesBadge,
   useBuildFavorites,
   type BuildFavorites,
@@ -556,9 +555,6 @@ const BuildRow = memo(function BuildRow({
                   </Fragment>
                 );
               })}
-              <div className="col-span-full">
-                <FavoriteBuildButton favorites={favorites} />
-              </div>
             </div>
 
             <div className="col-span-full -mx-4 max-md:-mx-3 border-t border-foreground/8" />
@@ -673,6 +669,7 @@ const BuildRow = memo(function BuildRow({
           onEquipped={onEquipped}
           pieceMap={pieceMap}
           onDream={onDream}
+          favorites={favorites}
         />
       </div>
       </div>

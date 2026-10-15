@@ -1,8 +1,6 @@
 "use client";
 
 import { FavoriteHeart } from "@/components/favorite-heart";
-import { Button } from "@/components/ui/button";
-import { TooltipLabel } from "@/components/ui/tooltip";
 import { isSyntheticClassItemId } from "@/lib/armory/exotic-class-perks";
 import type { ArmorPiece } from "@/lib/armory/normalize";
 import {
@@ -99,28 +97,5 @@ export function FavoritesBadge({ favorites }: { favorites: BuildFavorites }) {
       <FavoriteHeart />
       {!favorites.all && favorites.count}
     </span>
-  );
-}
-
-/** The expanded build's "Favorite these pieces" toggle, under its pieces. */
-export function FavoriteBuildButton({ favorites }: { favorites: BuildFavorites }) {
-  const disabled = favorites.total === 0;
-  return (
-    <TooltipLabel
-      label={disabled ? "Refresh your gear — a piece in this build is missing" : undefined}
-      disabled={disabled}
-    >
-      <Button
-        variant="outline"
-        size="sm"
-        onClick={favorites.toggle}
-        disabled={disabled}
-        aria-pressed={favorites.all}
-        className="w-fit"
-      >
-        <FavoriteHeart filled={favorites.all} className="size-3.5" />
-        {favorites.all ? "Unfavorite these pieces" : "Favorite these pieces"}
-      </Button>
-    </TooltipLabel>
   );
 }
