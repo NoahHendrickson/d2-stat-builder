@@ -24,7 +24,7 @@ const armor = {
     { statTypeHash: 1, value: 10, isConditionallyActive: false, extra: 1 },
     { statTypeHash: 2, value: 5, isConditionallyActive: true },
   ],
-  perks: [{ perkHash: 7, requirementDisplayString: "r" }],
+  perks: [{ perkHash: 7, requirementDisplayString: "r", perkVisibility: 2 }],
   quality: { currentVersion: 1, displayVersionWatermarkIcons: ["/a", "/b"], versions: [] },
   sockets: {
     detail: "big",
@@ -61,7 +61,7 @@ describe("projectItemDef", () => {
         { statTypeHash: 1, value: 10, isConditionallyActive: false },
         { statTypeHash: 2, value: 5, isConditionallyActive: true },
       ],
-      perks: [{ perkHash: 7 }],
+      perks: [{ perkHash: 7, perkVisibility: 2 }],
       quality: { currentVersion: 1, displayVersionWatermarkIcons: ["/a", "/b"] },
       sockets: {
         socketEntries: [
@@ -75,8 +75,21 @@ describe("projectItemDef", () => {
   it("keeps every key of ItemDef when the source has them all", () => {
     // A def with every block present: the projection's key set must be exactly the
     // type's key set, so a field added to ItemDef but not to projectItemDef is caught.
-    const full = { ...armor, collectibleHash: 42, breakerTypeHash: 485622768, plug: { plugCategoryIdentifier: "x", insertionMaterialRequirementHash: 0, isDummyPlug: false, insertionRules: [] } } as unknown as DestinyInventoryItemDefinition;
+    const full = { ...armor, collectibleHash: 42, breakerTypeHash: 485622768, tooltipNotifications: [{ displayString: "n", displayStyle: "s" }], plug: { plugCategoryIdentifier: "enhancements.v2_head", insertionMaterialRequirementHash: 0, isDummyPlug: false, insertionRules: [] } } as unknown as DestinyInventoryItemDefinition;
     expect(Object.keys(projectItemDef(full)).sort()).toEqual([...ITEM_DEF_KEYS].sort());
+  });
+
+  it("keeps tooltip notes on armor mods and artifact perks only", () => {
+    const withNotes = (plugCategoryIdentifier: string) =>
+      projectItemDef({
+        ...armor,
+        tooltipNotifications: [{ displayString: "Only active in the raid.", displayStyle: "ui_display_style_info" }],
+        plug: { plugCategoryIdentifier, insertionRules: [] },
+      } as unknown as DestinyInventoryItemDefinition).tooltipNotifications;
+    expect(withNotes("enhancements.raid_descent")).toEqual([{ displayString: "Only active in the raid." }]);
+    expect(withNotes("artifact_perks")).toEqual([{ displayString: "Only active in the raid." }]);
+    // Subclass notes are unlock-state messages ("Ability not yet unlocked").
+    expect(withNotes("hunter.arc.movement")).toBeUndefined();
   });
 
   it("keeps a weapon's crafting recipe hash", () => {

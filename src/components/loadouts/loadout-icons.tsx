@@ -3,7 +3,9 @@
 import Image from "next/image";
 import { TooltipLabel } from "@/components/ui/tooltip";
 import { buildFragmentStats, formatFragmentStats, SUBCLASS_LINE, subclassFromPlug, type Subclass } from "@/lib/armory/fragments";
+import { describePlug } from "@/lib/armory/plug-text";
 import { isStrandSharedAbilityIcon } from "@/lib/dim/subclasses";
+import { PlugTooltip } from "@/components/loadouts/plug-tooltip";
 import {
   STRAND_ABILITY_PLATE_FILTER,
   StrandAbilityRecolor,
@@ -56,15 +58,19 @@ export function PlugIcon({
   framed?: boolean;
 }) {
   const def = manifest.def("DestinyInventoryItemDefinition", hash);
-  const name = def?.displayProperties?.name ?? `#${hash}`;
+  const { label: name, description } = describePlug(manifest, hash);
   const stats =
     classType === undefined
       ? ""
       : formatFragmentStats(
           buildFragmentStats(def?.investmentStats, classType).stats,
         );
+  // Plain text for alt / aria-label; the tooltip gets the structured version.
   const title = suffix ? `${name} — ${suffix}` : name;
   const label = stats ? `${title}\n${stats}` : title;
+  const tooltip = (
+    <PlugTooltip name={name} suffix={suffix} stats={stats} description={description} />
+  );
   const icon = def?.displayProperties?.icon;
   const recolor = isStrandSharedAbilityIcon(def?.plug?.plugCategoryIdentifier);
   const plate = PLATELESS_MOD.test(def?.plug?.plugCategoryIdentifier ?? "");
@@ -81,7 +87,7 @@ export function PlugIcon({
             ? "size-10"
             : "size-6");
   return icon ? (
-    <TooltipLabel label={label}>
+    <TooltipLabel label={tooltip}>
       <span
         className={cn(
           sizeClass,
@@ -110,7 +116,7 @@ export function PlugIcon({
       </span>
     </TooltipLabel>
   ) : (
-    <TooltipLabel label={label}>
+    <TooltipLabel label={tooltip}>
       <span
         className={cn(
           "bg-muted relative shrink-0 rounded-none",

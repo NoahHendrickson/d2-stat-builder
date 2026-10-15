@@ -137,7 +137,7 @@ function StatModChip({
   blocked?: string;
   onSlot: () => void;
 }) {
-  const name = option?.name ?? "Stat mod";
+  const name = option?.label ?? "Stat mod";
   const label = slotted
     ? `${name} · slotted`
     : blocked

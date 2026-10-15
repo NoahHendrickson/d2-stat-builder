@@ -19,8 +19,14 @@ function subscribe(listener: () => void) {
   };
 }
 
-/** The newest entry, once opened: the button's dot goes until a newer one ships. */
-const latest = seenFlag("stat-builder:changelog-seen", CHANGELOG[0]?.date ?? "");
+/**
+ * The newest entry, once opened: the button's dot goes until a newer one ships, or a
+ * line is added to it (several releases can land on one day).
+ */
+const latest = seenFlag(
+  "stat-builder:changelog-seen",
+  CHANGELOG[0] ? `${CHANGELOG[0].date}+${CHANGELOG[0].changes.length}` : "",
+);
 let unseen: boolean | null = null;
 
 /** Links from before the Changelog (the old release popup's #whats-new) open it too. */

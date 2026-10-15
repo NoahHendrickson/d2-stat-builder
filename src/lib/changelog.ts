@@ -7,7 +7,7 @@
  * their own terms, never by comparison to another app or site.
  */
 export interface ChangelogEntry {
-  /** Release day, YYYY-MM-DD. Also what "seen" is tracked by: a newer top date is news. */
+  /** Release day, YYYY-MM-DD. "Seen" tracks it with the line count: a newer top date, or a new line under it, is news. */
   date: string;
   changes: string[];
   /** A video or post that goes with the release. */
@@ -23,6 +23,7 @@ export const CHANGELOG: readonly ChangelogEntry[] = [
       "Items: character nameplates look like the game's character select, with class, race and Power. The vault gets a nameplate of its own showing how full it is, with your currencies beside it, and stays pinned as you scroll.",
       "Dropdown menus are frosted glass: the page shows through, softly blurred.",
       "Weapon search: clicking a weapon while filter suggestions are open now opens that weapon.",
+      "Loadout tooltips say what things do: stat mods read +10 Grenade, and armor mods, aspects, fragments and artifact perks show their descriptions, on the Loadouts page and in Edit.",
     ],
   },
   {

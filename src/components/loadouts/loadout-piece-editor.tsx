@@ -17,6 +17,7 @@ import {
   pieceEnergyUsed,
 } from "@/lib/loadouts/mod-placement";
 import { TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { PlugTooltip } from "@/components/loadouts/plug-tooltip";
 import { cn } from "@/lib/utils";
 
 const KIND_LABEL: Record<ArmorSocket["kind"], string> = {
@@ -109,7 +110,7 @@ const ModCell = memo(function ModCell({
   blocked: boolean;
   problem?: string;
   onPick: (option: ModOption) => void;
-  tooltipHandle: BaseTooltip.Handle<string>;
+  tooltipHandle: BaseTooltip.Handle<ModOption>;
 }) {
   const chosen = count > 0;
   const cost = option.cost > 0 ? `${option.cost} energy` : undefined;
@@ -120,13 +121,13 @@ const ModCell = memo(function ModCell({
     : blocked && !problem
       ? "won't fit"
       : undefined;
-  const label = [option.name, cost, state, problem && `not placed: ${problem}`]
+  const label = [option.label, cost, state, problem && `not placed: ${problem}`]
     .filter(Boolean)
     .join(" · ");
   return (
     <TooltipTrigger
       handle={tooltipHandle}
-      payload={option.name}
+      payload={option}
       render={
         <button
           type="button"
@@ -227,7 +228,7 @@ function KindGrid({
     (exclusive || !full) && (energyLeft === undefined || o.cost <= energyLeft + credit);
   const heading = sockets.length > 1 ? `${KIND_LABEL[kind]}s` : KIND_LABEL[kind];
 
-  const tooltipHandle = useMemo(() => BaseTooltip.createHandle<string>(), []);
+  const tooltipHandle = useMemo(() => BaseTooltip.createHandle<ModOption>(), []);
 
   const onPick = useCallback(
     (o: ModOption) => {
@@ -289,7 +290,11 @@ function KindGrid({
         })}
       <BaseTooltip.Root handle={tooltipHandle} disableHoverablePopup>
         {({ payload }) =>
-          payload !== undefined ? <TooltipContent>{payload}</TooltipContent> : null
+          payload !== undefined ? (
+            <TooltipContent>
+              <PlugTooltip name={payload.label} description={payload.description} />
+            </TooltipContent>
+          ) : null
         }
       </BaseTooltip.Root>
     </section>

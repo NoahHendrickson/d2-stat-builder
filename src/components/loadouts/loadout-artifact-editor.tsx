@@ -14,6 +14,8 @@ import { BUNGIE_IMAGE_BASE } from "@/lib/bungie/constants";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { TooltipLabel } from "@/components/ui/tooltip";
+import { describePlug } from "@/lib/armory/plug-text";
+import { PlugTooltip } from "@/components/loadouts/plug-tooltip";
 import { ArmorThumb } from "@/components/armor-thumb";
 import {
   EmptySlotIcon,
@@ -287,15 +289,12 @@ export function LoadoutArtifactEditor({
                         key={hash}
                         label={why ? `${perkName} — ${why}` : perkName}
                         tooltip={
-                          <span className="flex max-w-64 flex-col gap-1">
-                            <span className="font-medium">{perkName}</span>
-                            {d?.displayProperties?.description && (
-                              <span className="text-muted-foreground">
-                                {d.displayProperties.description}
-                              </span>
-                            )}
+                          <PlugTooltip
+                            name={perkName}
+                            description={describePlug(manifest, hash).description}
+                          >
                             {why && <span className="text-warning">{why}</span>}
-                          </span>
+                          </PlugTooltip>
                         }
                         chosen={chosen}
                         blocked={why !== undefined}
