@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 import { useManagerActions, usePhoneTiles } from "./manager-context";
 import { useSearchState } from "./search-store";
 import { TAG_ICONS } from "./tag-icons";
+import { FavoriteHeart } from "@/components/favorite-heart";
 
 const FOOTER_PX = ITEM_TILE_FOOTER_PX;
 /** The icon sits inside a 1px frame, so it is 2px narrower than the tile. */
@@ -126,7 +127,12 @@ export const ItemTile = memo(function ItemTile({
               item.masterworked ? "bg-item-frame-masterwork" : "bg-item-frame",
             )}
           >
-            <HugeiconsIcon icon={TAG_ICONS[tag]} className="size-3" strokeWidth={2} />
+            {tag === "favorite" ? (
+              // Deeper pink than elsewhere: the tab is the light frame colour.
+              <FavoriteHeart className="text-pink-600 fill-pink-600/35" />
+            ) : (
+              <HugeiconsIcon icon={TAG_ICONS[tag]} className="size-3" strokeWidth={2} />
+            )}
           </span>
         )}
         {/* Deepsight: the game's orange-red border. */}

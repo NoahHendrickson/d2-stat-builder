@@ -14,6 +14,7 @@ import { ArmorRowActions } from "@/components/armor-table/armor-row-actions";
 import { ArmorThumb } from "@/components/armor-thumb";
 import { isFullyMasterworked } from "@/lib/armory/masterwork";
 import { useAnnotation } from "@/lib/inventory/annotations";
+import { FavoriteHeart } from "@/components/favorite-heart";
 import {
   usageTitle,
   type PieceUsageCounts,
@@ -129,6 +130,12 @@ export const ArmorRow = memo(function ArmorRow({
               <span className="d2-brackets bg-black/25 size-8 shrink-0" aria-hidden />
             )}
             <span className="truncate text-sm">{piece.name}</span>
+            {/* Phones fold the row actions (and their heart) into a menu. */}
+            {tag === "favorite" && (
+              <span title="Favorite" className="flex md:hidden">
+                <FavoriteHeart />
+              </span>
+            )}
             {piece.isArtifice && (
               <Badge variant="outline">
                 Artifice

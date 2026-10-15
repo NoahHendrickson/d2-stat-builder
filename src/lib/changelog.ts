@@ -18,6 +18,7 @@ export const CHANGELOG: readonly ChangelogEntry[] = [
   {
     date: "2026-10-15",
     changes: [
+      "Favorite armor: use the heart on an Armor table row (in the row's menu on phones), or open a build in the Stat optimizer and choose Favorite these pieces. Builds show a heart beside their Power, and each favorite piece has one when you open the build. Favorites show on the Items page too.",
       "Loadouts: every loadout's name in a list beside the cards. Click a name to jump to that loadout.",
     ],
   },
