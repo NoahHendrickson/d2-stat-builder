@@ -14,6 +14,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { TooltipLabel } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/lib/toast";
+import { FavoriteHeart } from "@/components/favorite-heart";
+import type { BuildFavorites } from "@/components/builder/build-favorites";
 import { cn } from "@/lib/utils";
 import type { ArmorPiece } from "@/lib/armory/normalize";
 import type { ArmoryCharacter } from "@/lib/armory/fetch";
@@ -77,10 +79,10 @@ const SaveLoadoutDrawer = dynamic(
 );
 
 /**
- * Footer of a build card, collapsed or expanded: copy the piece IDs as a DIM
- * search, hand the build to DIM's loadout editor, or pull the pieces to a
- * character and equip them. All need every piece still present in the armory
- * (a refetch can drop instances from stale results).
+ * Footer of a build card, collapsed or expanded: favorite its pieces, copy the piece
+ * IDs as a DIM search, hand the build to DIM's loadout editor, or pull the pieces to a
+ * character and equip them. All need every piece still present in the armory (a
+ * refetch can drop instances from stale results); favoriting tags the ones that are.
  */
 export function BuildActions({
   loadout,
@@ -97,11 +99,13 @@ export function BuildActions({
   onEquipped,
   pieceMap,
   onDream,
+  favorites,
 }: {
   loadout: OptimizerLoadout;
   pieces: (ArmorPiece | undefined)[];
   exoticName?: string;
   setBadges: { name: string; count: number }[];
+  favorites: BuildFavorites;
 } & BuildActionProps) {
   const queryClient = useQueryClient();
   const [equipping, setEquipping] = useState(false);
@@ -287,16 +291,40 @@ export function BuildActions({
 
   return (
     // Figma 18:6865 footer: icon actions that open to their label, then the emphatic
-    // "Save as loadout", all on one line.
-    <div className="flex items-center justify-end gap-2 p-2 normal:p-3">
+    // "Save as loadout", all on one line. Narrow touch cards (phones) tighten the gaps,
+    // and anything still too wide wraps rather than painting buttons over each other.
+    <div className="flex flex-wrap items-center justify-end gap-2 p-2 normal:p-3 pointer-coarse:@max-[26rem]/build:gap-1">
       {onDream && (
         <RevealAction className="mr-auto">
           <Button variant="outline" onClick={() => onDream(loadout)} className="gap-0 px-2">
             <HugeiconsIcon icon={SparklesIcon} aria-hidden />
-            <RevealLabel touch>Dream build</RevealLabel>
+            <RevealLabel touch="always">
+              Dream<span className="pointer-coarse:@max-[26rem]/build:hidden"> build</span>
+            </RevealLabel>
           </Button>
         </RevealAction>
       )}
+      <RevealAction>
+        <TooltipLabel
+          label={favorites.total === 0 ? "Refresh your gear — a piece in this build is missing" : undefined}
+          disabled={favorites.total === 0}
+        >
+          <Button
+            variant="outline"
+            onClick={favorites.toggle}
+            disabled={favorites.total === 0}
+            aria-pressed={favorites.all}
+            className="gap-0 px-2"
+          >
+            <FavoriteHeart filled={favorites.all} className="size-4" />
+            {/* Icon only on touch: the heart's fill shows its state, and the footer has
+                no room for a fifth open label. */}
+            <RevealLabel touch="never">
+              {favorites.all ? "Unfavorite these pieces" : "Favorite these pieces"}
+            </RevealLabel>
+          </Button>
+        </TooltipLabel>
+      </RevealAction>
       <RevealAction>
         <TooltipLabel
           label={
@@ -396,16 +424,22 @@ function RevealAction({ children, className }: { children: ReactElement; classNa
 /**
  * The label of a RevealAction button: zero-width until hovered or focused. Touch screens
  * can't hover, so there the labels stay open once the build card is wide enough for all
- * of them, and a `touch` label (Dream build, which has no other way in) always does.
+ * of them (46rem: measured with every `"wide"` label open), an `"always"` label (Dream
+ * build, which has no other way in) always does, and a `"never"` one stays shut.
  */
-function RevealLabel({ children, touch = false }: { children: ReactNode; touch?: boolean }) {
+function RevealLabel({
+  children,
+  touch = "wide",
+}: {
+  children: ReactNode;
+  touch?: "always" | "wide" | "never";
+}) {
   return (
     <span
       className={cn(
         "grid grid-cols-[0fr] transition-[grid-template-columns] duration-200 ease-out group-has-focus-visible/reveal:grid-cols-[1fr] group-hover/reveal:grid-cols-[1fr] motion-reduce:transition-none",
-        touch
-          ? "pointer-coarse:grid-cols-[1fr]"
-          : "pointer-coarse:@min-[44rem]/build:grid-cols-[1fr]",
+        touch === "always" && "pointer-coarse:grid-cols-[1fr]",
+        touch === "wide" && "pointer-coarse:@min-[46rem]/build:grid-cols-[1fr]",
       )}
     >
       <span className="overflow-hidden">
