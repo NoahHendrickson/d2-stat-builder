@@ -9,7 +9,8 @@ import { annotationsStore } from "@/lib/inventory/annotations";
 import { recentlyMoved, requestMoves } from "@/lib/inventory/move-queue";
 import { planSmartMove, type MoveStep, type SmartPlan } from "@/lib/inventory/smart-moves";
 import { toast, type PendingToast } from "@/lib/toast";
-import { loadViewSettings } from "@/lib/inventory/view-settings";
+import { cn } from "@/lib/utils";
+import { loadViewSettings, useViewSettings } from "@/lib/inventory/view-settings";
 import {
   MOVABLE_BUCKETS,
   locate,
@@ -28,32 +29,24 @@ import {
   type ManagerLayout,
 } from "./manager-context";
 import { phoneTileMetrics } from "@/lib/inventory/vault-layout";
+import { itemsPagePlan, type ItemsPagePlan } from "@/lib/inventory/items-page-plan";
 import { usePhoneWidth, useTouchFirst } from "@/lib/use-min-width";
 import { characterDropStore } from "./manager-drop-zone";
+import { CharacterRows } from "./character-rows";
 import { InventoryGrid } from "./manager-character-grid";
 import { VaultPane } from "./manager-vault";
-
-/**
- * Below this width, three character columns (about 930px) would leave the vault only a
- * handful of tiles across: show one character at a time, with tabs to switch.
- */
-const ALL_CHARACTERS_MIN_PX = 1580;
-
-/**
- * From this width the vault sits beside the characters, each of its slots on the same row
- * as that slot on the characters. Narrower, it goes below them in one list.
- */
-const ALIGNED_MIN_PX = 760;
 
 /** Phone tiles before the page is first measured (it is before the first paint). */
 const UNMEASURED_PHONE_PX = 360;
 
 /**
- * The inventory manager: one column per character on the left (postmaster, then
- * weapons, armor, and general gear, each row showing the equipped item beside the
- * rest of that slot), and the vault on the right, every vault slot level with that slot
- * on the characters. The page scrolls as one. Drag a tile onto a slot, a character's
- * nameplate, or the vault to move it; click it for its details and moves.
+ * The inventory manager: a row per character, laid out like the game's character screen
+ * (see CharacterRows), and the vault beside them in a pane of its own that stays put as
+ * the page scrolls, or below them when there's no room. Narrow screens show one character
+ * at a time. The legacy layout (picked in the search bar's settings) has the characters
+ * side by side in columns instead, the vault beside them level with their slots (see
+ * itemsPagePlan). Drag a tile onto a slot, a character, or the vault to move it; click it
+ * for its details and moves.
  */
 export function ManagerView({
   inventory,
@@ -70,17 +63,16 @@ export function ManagerView({
 
   const [menu, setMenu] = useState<ItemDetailsTarget | null>(null);
   const layoutRef = useRef<HTMLDivElement>(null);
-  const [compact, setCompact] = useState(false);
-  const [aligned, setAligned] = useState(true);
   const [layoutWidth, setLayoutWidth] = useState(0);
+  // The saved layout, read before the first layout decision (the measure below) so a
+  // legacy user never mounts the default layout first.
+  useLayoutEffect(loadViewSettings, []);
   useLayoutEffect(() => {
     const el = layoutRef.current;
     if (!el) return;
     const measure = () => {
       // Hidden along with its view (the router keeps recent views mounted): keep what it had.
       if (el.clientWidth === 0) return;
-      setCompact(el.clientWidth < ALL_CHARACTERS_MIN_PX);
-      setAligned(el.clientWidth >= ALIGNED_MIN_PX);
       setLayoutWidth(el.clientWidth);
     };
     // Now, before paint, so a phone's first frame already has its tile size.
@@ -101,10 +93,10 @@ export function ManagerView({
   );
   // Touch can't drag a tile, so its details offer the moves as buttons.
   const touch = useTouchFirst();
+  const plan = itemsPagePlan({ phone, layout: useViewSettings().layout, width: layoutWidth });
   const [vaultOpen, setVaultOpen] = useState(false);
   /** The weapon (by name) whose copies are open in Compare. */
   const [comparing, setComparing] = useState<string | null>(null);
-  useEffect(loadViewSettings, []);
 
   const actions = useMemo<ManagerActions>(() => {
     /** Queue a plan, naming where it goes in its toast. */
@@ -174,27 +166,30 @@ export function ManagerView({
       <div className="flex flex-col gap-4">
         {/* Pinned over the page as it scrolls (the page's top padding counts toward a sticky
             offset, hence -top-6); filled once there's something under it. */}
-        <div className="sticky -top-6 z-30 -mx-4 -mt-6 transition-colors group-data-scrolled/manager:bg-glass-opaque lg:-mx-6">
-          <ManagerSearch inventory={inventory} />
+        <div className="sticky -top-6 z-30 -mx-4 -mt-6 transition-colors group-data-scrolled/manager:d2-sticky-fill lg:-mx-6">
+          <ManagerSearch
+            inventory={inventory}
+            // Phones lay out the same either way, so the layout setting stays off them. Its
+            // intro only opens over the character rows it introduces.
+            layoutMenu={plan && plan.kind !== "phone" ? { intro: plan.kind === "rows" } : undefined}
+          />
         </div>
         <FarmingBanner inventory={inventory} />
         <ManagerLayoutContext value={layout}>
-          <div ref={layoutRef} className="flex flex-col gap-6">
-            <InventoryGrid
-              inventory={inventory}
-              compact={compact}
-              aligned={aligned}
-              vault={
-                phone
-                  ? {
-                      open: vaultOpen,
-                      onOpenChange: setVaultOpen,
-                      pane: <VaultPane inventory={inventory} />,
-                    }
-                  : undefined
-              }
-            />
-            {!aligned && !phone && <VaultPane inventory={inventory} />}
+          <div
+            ref={layoutRef}
+            className={cn(
+              "flex gap-6",
+              plan?.kind === "rows" && plan.vault === "beside" ? "items-start" : "flex-col",
+            )}
+          >
+            {plan && (
+              <PlannedLayout
+                plan={plan}
+                inventory={inventory}
+                vaultTab={{ open: vaultOpen, onOpenChange: setVaultOpen }}
+              />
+            )}
           </div>
         </ManagerLayoutContext>
       </div>
@@ -209,6 +204,64 @@ export function ManagerView({
       />
       <CompareDrawer inventory={inventory} name={comparing} onClose={() => setComparing(null)} />
     </ManagerActionsContext.Provider>
+  );
+}
+
+/** The characters and the vault, as `plan` lays them out. */
+function PlannedLayout({
+  plan,
+  inventory,
+  vaultTab,
+}: {
+  plan: ItemsPagePlan;
+  inventory: ManagerInventory;
+  /** Phones: whether the Vault tab is picked. */
+  vaultTab: { open: boolean; onOpenChange: (open: boolean) => void };
+}) {
+  switch (plan.kind) {
+    case "rows":
+      return (
+        <>
+          <CharacterRows inventory={inventory} />
+          {plan.vault === "beside" ? (
+            <VaultAside inventory={inventory} />
+          ) : (
+            <VaultPane inventory={inventory} placement="below-rows" />
+          )}
+        </>
+      );
+    case "columns":
+      return (
+        <>
+          <InventoryGrid inventory={inventory} compact={plan.compact} aligned={plan.vault === "aligned"} />
+          {plan.vault === "below" && <VaultPane inventory={inventory} placement="below-columns" />}
+        </>
+      );
+    case "phone":
+      return (
+        <InventoryGrid
+          inventory={inventory}
+          compact
+          aligned={false}
+          vault={{ ...vaultTab, pane: <VaultPane inventory={inventory} placement="tab" /> }}
+        />
+      );
+  }
+}
+
+/**
+ * The vault beside the characters: pinned under the search bar and scrolled on its own, so
+ * any vault item can be dragged to any character in view. Its header pins to the pane's
+ * top, filled once tiles scroll under it.
+ */
+function VaultAside({ inventory }: { inventory: ManagerInventory }) {
+  return (
+    <aside
+      className="group/vault d2-scroll sticky top-8 max-h-[calc(100dvh-5rem)] min-w-0 flex-1 overflow-y-auto overscroll-contain"
+      onScroll={(e) => e.currentTarget.toggleAttribute("data-scrolled", e.currentTarget.scrollTop > 0)}
+    >
+      <VaultPane inventory={inventory} placement="beside-rows" />
+    </aside>
   );
 }
 

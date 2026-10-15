@@ -1,0 +1,49 @@
+import type { DestinyProfileResponse } from "bungie-api-ts/destiny2";
+import type { Subclass } from "@/lib/armory/fragments";
+import { subclassItemsForCharacter } from "@/lib/armory/equipped-subclass";
+import { ABILITY_KINDS, type AbilityKind } from "@/lib/dim/subclasses";
+import { abilitySockets } from "@/lib/loadouts/subclass";
+import type { Manifest } from "@/lib/manifest/load";
+
+/** What a character's equipped subclass is set up with, as plug hashes in socket order. */
+export interface SubclassSetup {
+  subclass: Subclass;
+  /** The plug in each ability socket the subclass has (Super, class ability, jump, melee, grenade). */
+  abilities: { kind: AbilityKind; hash: number }[];
+  aspects: number[];
+  fragments: number[];
+}
+
+/**
+ * The equipped subclass's live plugs (component 305), or undefined with none equipped.
+ * Sockets still holding their empty plug ("Empty Fragment Socket") are left out.
+ */
+export function equippedSubclassSetup(
+  profile: DestinyProfileResponse,
+  characterId: string,
+  manifest: Manifest,
+): SubclassSetup | undefined {
+  const equipped = subclassItemsForCharacter(profile, characterId, (itemHash) => [
+    ...abilitySockets(manifest, itemHash).keys(),
+  ]).find((s) => s.equipped);
+  if (!equipped) return undefined;
+  const kinds = abilitySockets(manifest, equipped.itemHash);
+
+  const entries =
+    manifest.def("DestinyInventoryItemDefinition", equipped.itemHash)?.sockets?.socketEntries ?? [];
+  const filled = (sockets: Record<number, number>) =>
+    Object.entries(sockets).flatMap(([index, hash]) =>
+      entries[Number(index)]?.singleInitialItemHash === hash ? [] : [hash],
+    );
+  return {
+    subclass: equipped.subclass,
+    abilities: Object.entries(equipped.abilitySockets)
+      .flatMap(([index, hash]) => {
+        const kind = kinds.get(Number(index));
+        return kind ? [{ kind, hash }] : [];
+      })
+      .sort((a, b) => ABILITY_KINDS.indexOf(a.kind) - ABILITY_KINDS.indexOf(b.kind)),
+    aspects: filled(equipped.aspectSockets),
+    fragments: filled(equipped.fragmentSockets),
+  };
+}

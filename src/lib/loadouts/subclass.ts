@@ -67,6 +67,27 @@ export function abilitySocketIndex(manifest: SuperSocketLookup, itemHash: number
   return undefined;
 }
 
+const abilitySocketCache = memoByManifest(() => new Map<number, ReadonlyMap<number, AbilityKind>>());
+
+/**
+ * A subclass item's ability sockets: each socket's index and the ability it holds, in
+ * ABILITY_KINDS order. Cached per manifest, since every profile refetch asks again.
+ */
+export function abilitySockets(manifest: Manifest, itemHash: number): ReadonlyMap<number, AbilityKind> {
+  const cache = abilitySocketCache(manifest);
+  let sockets = cache.get(itemHash);
+  if (!sockets) {
+    const found = new Map<number, AbilityKind>();
+    for (const kind of ABILITY_KINDS) {
+      const index = abilitySocketIndex(manifest, itemHash, kind);
+      if (index !== undefined) found.set(index, kind);
+    }
+    sockets = found;
+    cache.set(itemHash, sockets);
+  }
+  return sockets;
+}
+
 /** Index of the Super socket on this subclass item, or undefined if the def has none. */
 export function superSocketIndex(manifest: SuperSocketLookup, itemHash: number): number | undefined {
   const entries = manifest.def("DestinyInventoryItemDefinition", itemHash)?.sockets?.socketEntries ?? [];

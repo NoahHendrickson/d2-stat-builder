@@ -11,8 +11,7 @@ import {
   type EquippedSubclass,
   type SubclassItem,
 } from "./equipped-subclass";
-import { abilitySocketIndex } from "@/lib/loadouts/subclass";
-import { ABILITY_KINDS } from "@/lib/dim/subclasses";
+import { abilitySockets } from "@/lib/loadouts/subclass";
 import { normalizeArmory, type ArmorPiece } from "./normalize";
 import { normalizeWeapons, type LoadoutWeapon } from "./weapons";
 import { artifactUnlocksForCharacter } from "./artifact";
@@ -179,12 +178,9 @@ export function buildArmory(
       ...(equippedSubclass ? { equippedSubclass } : {}),
       ...(artifactUnlocks ? { artifactUnlocks } : {}),
       artifacts: artifactsForCharacter(profile, c.characterId, manifest),
-      subclassItems: subclassItemsForCharacter(profile, c.characterId, (hash) =>
-        ABILITY_KINDS.flatMap((kind) => {
-          const index = abilitySocketIndex(manifest, hash, kind);
-          return index === undefined ? [] : [index];
-        }),
-      ),
+      subclassItems: subclassItemsForCharacter(profile, c.characterId, (hash) => [
+        ...abilitySockets(manifest, hash).keys(),
+      ]),
     };
   });
 

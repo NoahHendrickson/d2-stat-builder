@@ -1,7 +1,13 @@
 import { expect, test } from "vitest";
 import { BUCKETS } from "./buckets";
 import type { InventoryItem } from "./build";
-import { DEFAULT_VIEW, groupItems, itemComparator, parseViewSettings } from "./view-settings";
+import {
+  DEFAULT_VIEW,
+  groupItems,
+  itemComparator,
+  parseViewSettings,
+  resetSortAndGrouping,
+} from "./view-settings";
 
 const item = (name: string, extra: Partial<InventoryItem> = {}): InventoryItem => ({
   key: name,
@@ -31,15 +37,39 @@ test("parseViewSettings drops unknown keys and falls back to defaults", () => {
         weaponGroup: "ammo",
         armorGroup: "rarity",
         vaultTab: "armor",
+        layout: "legacy",
       }),
     ),
-  ).toEqual({ sort: ["power", "tag"], weaponGroup: "ammo", armorGroup: "rarity", vaultTab: "armor" });
+  ).toEqual({
+    sort: ["power", "tag"],
+    weaponGroup: "ammo",
+    armorGroup: "rarity",
+    vaultTab: "armor",
+    layout: "legacy",
+  });
   // The old single setting carries over to armor; weapons take their default.
   expect(parseViewSettings(JSON.stringify({ vaultGroup: "tier" }))).toEqual({ ...DEFAULT_VIEW, armorGroup: "tier" });
   expect(
-    parseViewSettings(JSON.stringify({ weaponGroup: "nope", vaultGroup: "nope", vaultTab: "nope" })),
+    parseViewSettings(JSON.stringify({ weaponGroup: "nope", vaultGroup: "nope", vaultTab: "nope", layout: "nope" })),
   ).toEqual(DEFAULT_VIEW);
   expect(parseViewSettings("{")).toEqual(DEFAULT_VIEW);
+});
+
+test("resetSortAndGrouping resets only the sort and grouping", () => {
+  const view = {
+    sort: ["tag" as const],
+    weaponGroup: "ammo" as const,
+    armorGroup: "rarity" as const,
+    vaultTab: "armor" as const,
+    layout: "legacy" as const,
+  };
+  expect(resetSortAndGrouping(view)).toEqual({
+    sort: DEFAULT_VIEW.sort,
+    weaponGroup: DEFAULT_VIEW.weaponGroup,
+    armorGroup: DEFAULT_VIEW.armorGroup,
+    vaultTab: "armor",
+    layout: "legacy",
+  });
 });
 
 test("itemComparator follows the chain, then the name", () => {

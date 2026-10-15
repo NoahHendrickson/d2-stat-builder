@@ -11,6 +11,8 @@ export const BUCKETS = {
   ghost: 4023194814,
   vehicle: 2025709351,
   ships: 284967655,
+  /** The equipped subclass (shown on the character, never moved). */
+  subclass: 3284755031,
   consumables: 1469714392,
   modifications: 3313201758,
   /** Lost Items: character-scoped, but its items can be anything. */
@@ -29,35 +31,46 @@ export interface BucketGroup {
   rows: BucketRow[];
 }
 
-/** The character grid, top to bottom: weapons, then armor, then the rest of the gear. */
-export const CHARACTER_GROUPS: BucketGroup[] = [
-  {
-    label: "Weapons",
-    rows: [
-      { hash: BUCKETS.kinetic, label: "Kinetic" },
-      { hash: BUCKETS.energy, label: "Energy" },
-      { hash: BUCKETS.power, label: "Power" },
-    ],
-  },
-  {
-    label: "Armor",
-    rows: [
-      { hash: BUCKETS.helmet, label: "Helmet" },
-      { hash: BUCKETS.arms, label: "Arms" },
-      { hash: BUCKETS.chest, label: "Chest" },
-      { hash: BUCKETS.legs, label: "Legs" },
-      { hash: BUCKETS.classItem, label: "Class item" },
-    ],
-  },
-  {
-    label: "General",
-    rows: [
-      { hash: BUCKETS.ghost, label: "Ghost" },
-      { hash: BUCKETS.vehicle, label: "Sparrow" },
-      { hash: BUCKETS.ships, label: "Ship" },
-    ],
-  },
+/** A character's weapon slots, top to bottom, as the game lists them under the subclass. */
+export const WEAPON_ROWS: BucketRow[] = [
+  { hash: BUCKETS.kinetic, label: "Kinetic" },
+  { hash: BUCKETS.energy, label: "Energy" },
+  { hash: BUCKETS.power, label: "Power" },
 ];
+
+/** A character's armor slots, top to bottom. */
+export const ARMOR_ROWS: BucketRow[] = [
+  { hash: BUCKETS.helmet, label: "Helmet" },
+  { hash: BUCKETS.arms, label: "Arms" },
+  { hash: BUCKETS.chest, label: "Chest" },
+  { hash: BUCKETS.legs, label: "Legs" },
+  { hash: BUCKETS.classItem, label: "Class item" },
+];
+
+/** A character's general gear slots: Ghost, Sparrow, Ship. */
+export const GENERAL_ROWS: BucketRow[] = [
+  { hash: BUCKETS.ghost, label: "Ghost" },
+  { hash: BUCKETS.vehicle, label: "Sparrow" },
+  { hash: BUCKETS.ships, label: "Ship" },
+];
+
+/** Every movable character bucket: weapons, armor, then the rest of the gear. */
+export const CHARACTER_GROUPS: BucketGroup[] = [
+  { label: "Weapons", rows: WEAPON_ROWS },
+  { label: "Armor", rows: ARMOR_ROWS },
+  { label: "General", rows: GENERAL_ROWS },
+];
+
+/** A slot row in a character column, and whether it starts a group (a wider gap above it). */
+export interface SlotRow {
+  row: BucketRow;
+  groupStart: boolean;
+}
+
+/** Every slot of a character, top to bottom, as the one-column layouts draw them. */
+export const SLOT_ROWS: SlotRow[] = CHARACTER_GROUPS.flatMap((group) =>
+  group.rows.map((row, i) => ({ row, groupStart: i === 0 })),
+);
 
 /** Vault sections follow the character rows; anything else lands in "Other". */
 export const VAULT_GROUPS: BucketGroup[] = CHARACTER_GROUPS;

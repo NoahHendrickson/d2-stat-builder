@@ -18,6 +18,8 @@ export const CHANGELOG: readonly ChangelogEntry[] = [
   {
     date: "2026-10-15",
     changes: [
+      "Items has a new layout: each character gets a row laid out like the in-game character screen, with stats, the champions your weapons stun and set bonuses on the nameplate, and the vault scrolls on its own beside them. Prefer the old layout? Switch back with the gear in the search bar.",
+      "Items: the Titan and Hunter class icons were the wrong way round. Fixed.",
       "Favorite armor: use the heart on an Armor table row (in the row's menu on phones), or open a build in the Stat optimizer and choose Favorite these pieces. Builds show a heart beside their Power, and each favorite piece has one when you open the build. Favorites show on the Items page too.",
       "Loadouts: every loadout's name in a list beside the cards. Click a name to jump to that loadout.",
       "Stat optimizer: Legacy armor now sits under Advanced settings beside Legacy exotics, and works without Power matters on. The checkbox under Power matters is the same setting.",

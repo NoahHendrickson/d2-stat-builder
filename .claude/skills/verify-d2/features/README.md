@@ -38,7 +38,7 @@ Each feature file starts with an H1 title and one paragraph describing the behav
 
 - [Stat optimizer](./optimizer.md): targets, results, opening a build, Dream build, Save as loadout. Journey: `optimizer`.
 - [Saved loadouts](./loadouts.md): search, edit, equip (apply stream), save in-game, delete, delete all. Journey: `loadouts`.
-- [Items (manager)](./manager.md): keyword search, item popover and lock, character tabs, moves. Journey: `manager`.
+- [Items (manager)](./manager.md): layout setting (rows or legacy), keyword search, item popover and lock, character rows, moves. Journey: `manager`.
 - [Weapon search](./weapons.md): name search, filter chips, details pane, perk picks. Journey: `weapons`.
 - [Armor table](./armor.md): name search, Searches (usage) column, Junk, Duplicates. Journey: `armor`.
 - [Settings and sync](./settings.md): theme, site icon, clearing usage history, synced sidebar links. Journey: `settings`.

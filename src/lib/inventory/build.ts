@@ -20,6 +20,7 @@ import {
 } from "@/lib/armory/stats";
 import { ACCOUNT_ROWS, BUCKETS, VAULT_ROW_HASHES } from "./buckets";
 import { maxPower } from "./max-power";
+import { equippedSubclassSetup, type SubclassSetup } from "./subclass";
 import { weaponTypeOf } from "./weapon-types";
 import { addInvestment, tieredMasterworkBonus } from "./weapon-details";
 
@@ -92,6 +93,8 @@ export interface ManagerCharacter {
   stats: Partial<Record<StatKey, number>>;
   /** Highest gear power it could equip from the whole account (see max-power.ts). */
   maxPower?: number;
+  /** The equipped subclass's Super, abilities, aspects, and fragments. */
+  subclass?: SubclassSetup;
   /** Equipped item per bucket hash. */
   equipped: Record<number, InventoryItem>;
   /** Unequipped items per bucket hash (postmaster excluded). */
@@ -433,6 +436,7 @@ export function buildInventory(
         else push(inventory, item.bucketHash, built);
       });
       sortAll(inventory);
+      const subclass = equippedSubclassSetup(profile, c.characterId, manifest);
 
       return {
         id: c.characterId,
@@ -444,6 +448,7 @@ export function buildInventory(
         ...(c.emblemColor ? { emblemColor: c.emblemColor } : {}),
         dateLastPlayed: c.dateLastPlayed,
         stats: characterStats(c.stats),
+        ...(subclass ? { subclass } : {}),
         equipped,
         inventory,
         postmaster,

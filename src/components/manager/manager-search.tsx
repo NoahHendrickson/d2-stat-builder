@@ -48,6 +48,7 @@ import { SearchResultsDrawer } from "./search-results-drawer";
 import { searchMatches } from "./search-store";
 import { TAG_ICONS } from "./tag-icons";
 import { ViewMenu } from "./view-menu";
+import { ItemsSettings } from "./items-settings";
 
 /**
  * Text that combines terms with grouping or `or`: a picked filter stays inline there,
@@ -80,7 +81,14 @@ function once<T>(f: () => T): () => T {
  * picked filter becomes a chip before the text, and the chips and text search together.
  * The match count opens every match in a drawer.
  */
-export function ManagerSearch({ inventory }: { inventory: ManagerInventory }) {
+export function ManagerSearch({
+  inventory,
+  layoutMenu,
+}: {
+  inventory: ManagerInventory;
+  /** The layout setting's menu, when the page offers it; `intro`: it may open by itself. */
+  layoutMenu?: { intro: boolean };
+}) {
   /** What's typed in the field (the chips aren't part of it). */
   const [query, setQuery] = useState("");
   /** Filters picked from the suggestions, each a whole term (`is:handcannon`). */
@@ -382,6 +390,7 @@ export function ManagerSearch({ inventory }: { inventory: ManagerInventory }) {
       {matches && matches.size > 0 && <BulkActions inventory={inventory} matches={matches} />}
       <SearchHelp />
       <ViewMenu />
+      {layoutMenu && <ItemsSettings intro={layoutMenu.intro} />}
       <SearchResultsDrawer
         inventory={inventory}
         query={deferred}
