@@ -98,6 +98,7 @@ import { type ModsSection } from "@/lib/loadouts/mod-placement";
 import { commitLoadout, modsSectionForPieces } from "@/lib/loadouts/commit";
 import { resolveLoadout } from "@/lib/loadouts/resolve";
 import { LoadoutRow } from "@/components/loadouts/loadout-row";
+import { LoadoutIndex } from "@/components/loadouts/loadout-index";
 import {
   LoadoutEditorDrawer,
   type LoadoutDetailsValues,
@@ -129,6 +130,8 @@ const SUBCLASS_OPTIONS = SUBCLASSES.map((sc) => ({ value: sc, label: sc }));
 const ESTIMATED_ROW_HEIGHT_PX = 300;
 /** Vertical gap between cards. */
 const ROW_GAP_PX = 12;
+/** How much of a card must still show at the top of the list for it to be the current one. */
+const CURRENT_ROW_MIN_VISIBLE_PX = 64;
 
 /**
  * The loadouts page body (Figma 69:865): search, then the count with sort / filter
@@ -293,6 +296,32 @@ export function LoadoutsList({
     gap: ROW_GAP_PX,
     getItemKey: (index) => shown[index].id,
   });
+
+  // The name column's current loadout: the one just jumped to (the last cards can't
+  // reach the top), until the player scrolls the list themselves; else the top card.
+  const [jumpedId, setJumpedId] = useState<string | null>(null);
+  const scrollOffset = virtualizer.scrollOffset ?? 0;
+  const topId = virtualizer
+    .getVirtualItems()
+    .find((item) => item.end - scrollOffset > CURRENT_ROW_MIN_VISIBLE_PX)?.key as
+    | string
+    | undefined;
+  const currentId =
+    jumpedId !== null && shown.some((l) => l.id === jumpedId) ? jumpedId : topId;
+  const { scrollToIndex } = virtualizer;
+  const jumpTo = useCallback(
+    (index: number) => {
+      setJumpedId(shown[index].id);
+      scrollToIndex(index, {
+        align: "start",
+        behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
+          ? "auto"
+          : "smooth",
+      });
+    },
+    [shown, scrollToIndex],
+  );
+  const releaseJump = () => setJumpedId(null);
 
   /** Reports a failed save on the action's spinner toast. */
   const mutationError = (pending: Notifier) => (err: { notConfigured: boolean; message: string }) =>
@@ -802,52 +831,64 @@ export function LoadoutsList({
       ) : shown.length === 0 ? (
         <p className="text-muted-foreground text-sm">No loadouts match.</p>
       ) : (
-        <div
-          ref={setScrollEl}
-          className="d2-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain"
-        >
+        <div className="flex min-h-0 flex-1 gap-4">
+          <LoadoutIndex
+            loadouts={shown}
+            activeId={currentId}
+            onJump={jumpTo}
+            className="hidden w-56 shrink-0 lg:flex"
+          />
           <div
-            className="relative w-full"
-            style={{ height: virtualizer.getTotalSize() }}
+            ref={setScrollEl}
+            onWheel={releaseJump}
+            onTouchMove={releaseJump}
+            onKeyDown={releaseJump}
+            onPointerDown={releaseJump}
+            className="d2-scroll min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain"
           >
-            {virtualizer.getVirtualItems().map((item) => {
-              const saved = shown[item.index];
-              return (
-                <div
-                  key={item.key}
-                  ref={virtualizer.measureElement}
-                  data-index={item.index}
-                  className="absolute top-0 left-0 w-full"
-                  style={{ transform: `translateY(${item.start}px)` }}
-                >
-                  <LoadoutRow
-                    saved={saved}
-                    open={expanded.has(saved.id)}
-                    onToggle={toggleExpanded}
-                    pieceMap={pieceMap}
-                    weaponMap={weaponMap}
-                    weapons={armory.weapons}
-                    provisional={provisional}
-                    setRunning={setRun !== null}
-                    manifest={manifest}
-                    characters={armory.characters}
-                    statIcons={statIcons}
-                    balancedTuningIcon={balancedTuningIcon}
-                    now={now}
-                    onEdit={openEdit}
-                    onDuplicate={duplicateLoadout}
-                    onDelete={openDelete}
-                    onShare={shareLoadout}
-                    onOptimize={optimizeLoadout}
-                    onArmoryChanged={onArmoryChanged}
-                    allTags={hashtags}
-                    onSetTag={setLoadoutTag}
-                    selected={selecting ? picked.has(saved.id) : undefined}
-                    onSelect={togglePicked}
-                  />
-                </div>
-              );
-            })}
+            <div
+              className="relative w-full"
+              style={{ height: virtualizer.getTotalSize() }}
+            >
+              {virtualizer.getVirtualItems().map((item) => {
+                const saved = shown[item.index];
+                return (
+                  <div
+                    key={item.key}
+                    ref={virtualizer.measureElement}
+                    data-index={item.index}
+                    className="absolute top-0 left-0 w-full"
+                    style={{ transform: `translateY(${item.start}px)` }}
+                  >
+                    <LoadoutRow
+                      saved={saved}
+                      open={expanded.has(saved.id)}
+                      onToggle={toggleExpanded}
+                      pieceMap={pieceMap}
+                      weaponMap={weaponMap}
+                      weapons={armory.weapons}
+                      provisional={provisional}
+                      setRunning={setRun !== null}
+                      manifest={manifest}
+                      characters={armory.characters}
+                      statIcons={statIcons}
+                      balancedTuningIcon={balancedTuningIcon}
+                      now={now}
+                      onEdit={openEdit}
+                      onDuplicate={duplicateLoadout}
+                      onDelete={openDelete}
+                      onShare={shareLoadout}
+                      onOptimize={optimizeLoadout}
+                      onArmoryChanged={onArmoryChanged}
+                      allTags={hashtags}
+                      onSetTag={setLoadoutTag}
+                      selected={selecting ? picked.has(saved.id) : undefined}
+                      onSelect={togglePicked}
+                    />
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </div>
       )}

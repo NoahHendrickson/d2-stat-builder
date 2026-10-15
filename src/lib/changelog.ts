@@ -18,6 +18,7 @@ export const CHANGELOG: readonly ChangelogEntry[] = [
   {
     date: "2026-10-14",
     changes: [
+      "Loadouts: every loadout's name in a list beside the cards. Click a name to jump to that loadout.",
       "Legacy raid sets: build with your Armor 2.0 raid armor, Last Wish through Salvation's Edge. Find it under Set bonuses in the Stat optimizer.",
       "This changelog, the one place to see what's new.",
       "Items: character nameplates look like the game's character select, with class, race and Power. The vault gets a nameplate of its own showing how full it is, with your currencies beside it, and stays pinned as you scroll.",
