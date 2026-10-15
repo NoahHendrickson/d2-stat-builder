@@ -41,7 +41,7 @@ export const LoadoutIndex = memo(function LoadoutIndex({
   }, [activeId, loadouts]);
 
   return (
-    <nav aria-label="Loadouts by name" className={cn("min-h-0 flex-col", className)}>
+    <nav aria-label="Loadouts by name" className={cn("flex min-h-0 flex-col", className)}>
       <div ref={scrollRef} className="d2-scroll relative min-h-0 flex-1 overflow-y-auto overscroll-contain">
         <ul className="flex flex-col">
           {loadouts.map((saved, index) => {
