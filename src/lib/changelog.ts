@@ -16,6 +16,12 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    date: "2026-10-15",
+    changes: [
+      "Loadouts: every loadout's name in a list beside the cards. Click a name to jump to that loadout.",
+    ],
+  },
+  {
     date: "2026-10-14",
     changes: [
       "Legacy raid sets: build with your Armor 2.0 raid armor, Last Wish through Salvation's Edge. Find it under Set bonuses in the Stat optimizer.",

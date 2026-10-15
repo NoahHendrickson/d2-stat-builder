@@ -98,6 +98,9 @@ import { type ModsSection } from "@/lib/loadouts/mod-placement";
 import { commitLoadout, modsSectionForPieces } from "@/lib/loadouts/commit";
 import { resolveLoadout } from "@/lib/loadouts/resolve";
 import { LoadoutRow } from "@/components/loadouts/loadout-row";
+import { LoadoutIndex } from "@/components/loadouts/loadout-index";
+import { useCurrentRow } from "@/components/loadouts/use-current-row";
+import { useMinWidth } from "@/lib/use-min-width";
 import {
   LoadoutEditorDrawer,
   type LoadoutDetailsValues,
@@ -293,6 +296,10 @@ export function LoadoutsList({
     gap: ROW_GAP_PX,
     getItemKey: (index) => shown[index].id,
   });
+
+  // The name column (wide screens only) beside the cards.
+  const showIndex = useMinWidth(1024);
+  const { currentId, jumpTo } = useCurrentRow(virtualizer, shown, showIndex);
 
   /** Reports a failed save on the action's spinner toast. */
   const mutationError = (pending: Notifier) => (err: { notConfigured: boolean; message: string }) =>
@@ -802,52 +809,62 @@ export function LoadoutsList({
       ) : shown.length === 0 ? (
         <p className="text-muted-foreground text-sm">No loadouts match.</p>
       ) : (
-        <div
-          ref={setScrollEl}
-          className="d2-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain"
-        >
+        <div className="flex min-h-0 flex-1 gap-4">
+          {showIndex && (
+            <LoadoutIndex
+              loadouts={shown}
+              activeId={currentId}
+              onJump={jumpTo}
+              className="w-56 shrink-0"
+            />
+          )}
           <div
-            className="relative w-full"
-            style={{ height: virtualizer.getTotalSize() }}
+            ref={setScrollEl}
+            className="d2-scroll min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain"
           >
-            {virtualizer.getVirtualItems().map((item) => {
-              const saved = shown[item.index];
-              return (
-                <div
-                  key={item.key}
-                  ref={virtualizer.measureElement}
-                  data-index={item.index}
-                  className="absolute top-0 left-0 w-full"
-                  style={{ transform: `translateY(${item.start}px)` }}
-                >
-                  <LoadoutRow
-                    saved={saved}
-                    open={expanded.has(saved.id)}
-                    onToggle={toggleExpanded}
-                    pieceMap={pieceMap}
-                    weaponMap={weaponMap}
-                    weapons={armory.weapons}
-                    provisional={provisional}
-                    setRunning={setRun !== null}
-                    manifest={manifest}
-                    characters={armory.characters}
-                    statIcons={statIcons}
-                    balancedTuningIcon={balancedTuningIcon}
-                    now={now}
-                    onEdit={openEdit}
-                    onDuplicate={duplicateLoadout}
-                    onDelete={openDelete}
-                    onShare={shareLoadout}
-                    onOptimize={optimizeLoadout}
-                    onArmoryChanged={onArmoryChanged}
-                    allTags={hashtags}
-                    onSetTag={setLoadoutTag}
-                    selected={selecting ? picked.has(saved.id) : undefined}
-                    onSelect={togglePicked}
-                  />
-                </div>
-              );
-            })}
+            <div
+              className="relative w-full"
+              style={{ height: virtualizer.getTotalSize() }}
+            >
+              {virtualizer.getVirtualItems().map((item) => {
+                const saved = shown[item.index];
+                return (
+                  <div
+                    key={item.key}
+                    ref={virtualizer.measureElement}
+                    data-index={item.index}
+                    className="absolute top-0 left-0 w-full"
+                    style={{ transform: `translateY(${item.start}px)` }}
+                  >
+                    <LoadoutRow
+                      saved={saved}
+                      open={expanded.has(saved.id)}
+                      onToggle={toggleExpanded}
+                      pieceMap={pieceMap}
+                      weaponMap={weaponMap}
+                      weapons={armory.weapons}
+                      provisional={provisional}
+                      setRunning={setRun !== null}
+                      manifest={manifest}
+                      characters={armory.characters}
+                      statIcons={statIcons}
+                      balancedTuningIcon={balancedTuningIcon}
+                      now={now}
+                      onEdit={openEdit}
+                      onDuplicate={duplicateLoadout}
+                      onDelete={openDelete}
+                      onShare={shareLoadout}
+                      onOptimize={optimizeLoadout}
+                      onArmoryChanged={onArmoryChanged}
+                      allTags={hashtags}
+                      onSetTag={setLoadoutTag}
+                      selected={selecting ? picked.has(saved.id) : undefined}
+                      onSelect={togglePicked}
+                    />
+                  </div>
+                );
+              })}
+            </div>
           </div>
         </div>
       )}
