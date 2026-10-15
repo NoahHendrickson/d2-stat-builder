@@ -31,13 +31,20 @@ test("parseViewSettings drops unknown keys and falls back to defaults", () => {
         weaponGroup: "ammo",
         armorGroup: "rarity",
         vaultTab: "armor",
+        layout: "legacy",
       }),
     ),
-  ).toEqual({ sort: ["power", "tag"], weaponGroup: "ammo", armorGroup: "rarity", vaultTab: "armor" });
+  ).toEqual({
+    sort: ["power", "tag"],
+    weaponGroup: "ammo",
+    armorGroup: "rarity",
+    vaultTab: "armor",
+    layout: "legacy",
+  });
   // The old single setting carries over to armor; weapons take their default.
   expect(parseViewSettings(JSON.stringify({ vaultGroup: "tier" }))).toEqual({ ...DEFAULT_VIEW, armorGroup: "tier" });
   expect(
-    parseViewSettings(JSON.stringify({ weaponGroup: "nope", vaultGroup: "nope", vaultTab: "nope" })),
+    parseViewSettings(JSON.stringify({ weaponGroup: "nope", vaultGroup: "nope", vaultTab: "nope", layout: "nope" })),
   ).toEqual(DEFAULT_VIEW);
   expect(parseViewSettings("{")).toEqual(DEFAULT_VIEW);
 });

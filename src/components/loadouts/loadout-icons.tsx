@@ -145,7 +145,7 @@ export function ManifestIcon({
   showTooltip?: boolean;
   icon?: string;
   label: string;
-  size: 12 | 16 | 22 | 24 | 32 | 40 | 48;
+  size: 12 | 16 | 22 | 24 | 32 | 40 | 48 | 64;
   className?: string;
   /** Super art: a full-bleed diamond, outlined with a sharp 1px stroke. */
   diamond?: boolean;
@@ -165,7 +165,9 @@ export function ManifestIcon({
               ? "size-10"
               : size === 48
                 ? "size-12"
-                : "size-4";
+                : size === 64
+                  ? "size-16"
+                  : "size-4";
   const image = (
     <Image
       src={`${BUNGIE_IMAGE_BASE}${icon}`}

@@ -74,7 +74,15 @@ export function loadoutSetBonuses(
   saved: SavedLoadout,
   manifest: Manifest,
 ): SetBonus[] {
-  return Object.entries(saved.loadout.parameters.setBonuses ?? {}).flatMap(
+  return setBonusesFor(saved.loadout.parameters.setBonuses ?? {}, manifest);
+}
+
+/** The perks each set's piece count unlocks (set hash → pieces), 2pc before 4pc. */
+export function setBonusesFor(
+  counts: Readonly<Record<number, number>>,
+  manifest: Manifest,
+): SetBonus[] {
+  return Object.entries(counts).flatMap(
     ([hash, count]) => {
       const setDef = manifest.def(
         "DestinyEquipableItemSetDefinition",
@@ -105,10 +113,19 @@ export function loadoutSetBonuses(
  * Each set-bonus perk as a round blue cell, like a picked perk in the weapon search;
  * the piece count, set and perk name are in its tooltip.
  */
-export function SetBonusChip({ bonuses }: { bonuses: SetBonus[] }) {
+export function SetBonusChip({
+  bonuses,
+  small = false,
+  className,
+}: {
+  bonuses: SetBonus[];
+  /** 28px cells with 16px icons, for tight strips. */
+  small?: boolean;
+  className?: string;
+}) {
   if (bonuses.length === 0) return null;
   return (
-    <div className="flex shrink-0 items-center gap-1.5">
+    <div className={cn("flex shrink-0 items-center gap-1.5", className)}>
       {bonuses.map((b) => (
         <Tooltip key={`${b.hash}-${b.count}`}>
           <TooltipTrigger
@@ -117,14 +134,17 @@ export function SetBonusChip({ bonuses }: { bonuses: SetBonus[] }) {
               <span
                 tabIndex={0}
                 aria-label={b.perkName ? `${b.label}: ${b.perkName}` : b.label}
-                className="flex size-10 shrink-0 items-center justify-center rounded-full border border-foreground/12 bg-[#305f8e] outline-none focus-visible:d2-tile-selected"
+                className={cn(
+                  "flex shrink-0 items-center justify-center rounded-full border border-foreground/12 bg-[#305f8e] outline-none focus-visible:d2-tile-selected",
+                  small ? "size-7" : "size-10",
+                )}
               />
             }
           >
             <ManifestIcon
               icon={b.icon}
               label={b.label}
-              size={24}
+              size={small ? 16 : 24}
               showTooltip={false}
             />
           </TooltipTrigger>

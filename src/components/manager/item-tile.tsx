@@ -172,15 +172,23 @@ export const ItemTile = memo(function ItemTile({
   );
 });
 
-/** An empty cell, drawn as the game's bracket corners, the same size as a tile. */
+/** An empty cell, drawn as the game's bracket corners over a faint fill, the same size as a tile. */
 export function EmptyTile({ size = 60 }: { size?: ArmorThumbSize }) {
   const phone = usePhoneTiles();
   const width = (size === 60 ? phone?.tile : undefined) ?? size;
   return (
     <span
       aria-hidden
-      className="d2-brackets block shrink-0 self-start opacity-50"
-      style={{ width, height: width + FOOTER_PX }}
+      className="d2-brackets block shrink-0 self-start"
+      // Fainter brackets than elsewhere: the fill already marks the cell.
+      style={
+        {
+          width,
+          height: width + FOOTER_PX,
+          "--bracket": "color-mix(in srgb, var(--foreground) 20%, transparent)",
+          "--bracket-fill": "color-mix(in srgb, var(--foreground) 4%, transparent)",
+        } as CSSProperties
+      }
     />
   );
 }

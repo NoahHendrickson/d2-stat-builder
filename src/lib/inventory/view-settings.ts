@@ -53,6 +53,13 @@ export type VaultTab = (typeof VAULT_TABS)[number];
 
 export const VAULT_TAB_LABELS: Record<VaultTab, string> = { all: "All", weapons: "Weapons", armor: "Armor" };
 
+/**
+ * How the Items page lays out the characters: a row each, like the game's character screen,
+ * or the legacy columns side by side with the vault aligned to their slots.
+ */
+export const ITEMS_LAYOUTS = ["rows", "legacy"] as const;
+export type ItemsLayout = (typeof ITEMS_LAYOUTS)[number];
+
 export interface ViewSettings {
   /** Sort keys in priority order; name always breaks the last tie. */
   sort: SortKey[];
@@ -61,6 +68,7 @@ export interface ViewSettings {
   /** How each vault armor row splits into groups. */
   armorGroup: GroupKey;
   vaultTab: VaultTab;
+  layout: ItemsLayout;
 }
 
 export const DEFAULT_VIEW: ViewSettings = {
@@ -68,6 +76,7 @@ export const DEFAULT_VIEW: ViewSettings = {
   weaponGroup: "type",
   armorGroup: "class",
   vaultTab: "all",
+  layout: "rows",
 };
 
 const STORAGE_KEY = "stat-builder:manager-view:v1";
@@ -100,6 +109,9 @@ export function parseViewSettings(raw: string | null): ViewSettings {
       vaultTab: (VAULT_TABS as readonly unknown[]).includes(v.vaultTab)
         ? (v.vaultTab as VaultTab)
         : DEFAULT_VIEW.vaultTab,
+      layout: (ITEMS_LAYOUTS as readonly unknown[]).includes(v.layout)
+        ? (v.layout as ItemsLayout)
+        : DEFAULT_VIEW.layout,
     };
   } catch {
     return DEFAULT_VIEW;

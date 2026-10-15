@@ -510,6 +510,8 @@ input[type="number"] {
     linear-gradient(var(--bracket), var(--bracket)) bottom left / 1px var(--bracket-len) no-repeat,
     linear-gradient(var(--bracket), var(--bracket)) bottom right / var(--bracket-len) 1px no-repeat,
     linear-gradient(var(--bracket), var(--bracket)) bottom right / 1px var(--bracket-len) no-repeat;
+  /* After the shorthand, which resets it; a bg-* class can't set it. */
+  background-color: var(--bracket-fill, transparent);
 }
 
 /* Item tile: a hairline frame, like an inventory cell (Figma: white/12 line). */
@@ -640,6 +642,18 @@ input[type="number"] {
    backdrop blur would be recomputed every scroll frame. */
 @utility d2-sidebar-opaque {
   background-color: var(--glass-opaque);
+}
+
+/* A sticky header's fill: opaque, so what scrolls under it stays hidden. Dark Slate shows
+   the backdrop's gradient straight through the page, which no flat colour matches at
+   both ends, so there the fill paints that gradient pinned to the viewport, as the
+   backdrop is: it matches the page wherever the header sits. */
+@utility d2-sticky-fill {
+  background-color: var(--glass-opaque);
+  .dark[data-app-theme="slate"] & {
+    background-image: var(--slate-gradient);
+    background-attachment: fixed;
+  }
 }
 
 /* Figma 69:883 icon well: a faint white/16 frame all round with brighter

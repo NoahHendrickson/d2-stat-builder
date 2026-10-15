@@ -1,4 +1,4 @@
-// Items (/manager): search, item popover + lock, character tabs, and a move from the vault.
+// Items (/manager): search, item popover + lock, character rows, and a move from the vault.
 // See features/manager.md.
 export const meta = { fixture: "full" };
 
@@ -11,10 +11,35 @@ export default async function ({ page, app, stub, step, shot, expect, log }) {
   await step("open the inventory", async () => {
     await app.open("/manager");
     expect(await page.exists({ role: "region", name: /^Characters/ }), "characters and vault region is shown");
-    const tabs = await page.findAll({ role: "tab" }, { within: { role: "tablist", name: "Characters" } });
-    expect(tabs.length === 3, `one tab per fixture character (${tabs.length})`);
+    const plates = await page.findAll({ role: "button", name: /^(Hunter|Titan|Warlock) options$/ });
+    expect(plates.length === 3, `one row per fixture character (${plates.length})`);
     expect((await page.count(VAULT_TILE)) > 0, "vault tiles are mounted");
     await shot("inventory");
+  });
+
+  await step("mgr-layout: the first visit points at the layout setting, which switches to legacy", async () => {
+    // The intro opens the settings menu by itself on a first visit (fresh storage).
+    const rows = { role: "menuitemradio", name: /^Character rows/ };
+    const legacy = { role: "menuitemradio", name: /^Legacy columns/ };
+    await page.waitFor(legacy);
+    expect((await page.attr(rows, "aria-checked")) === "true", "new visitors start on character rows");
+    await shot("layout-intro");
+    // Picking a layout closes the menu (and counts the intro as seen).
+    await page.click(legacy);
+    await page.waitFor(legacy, { gone: true });
+    await page.waitFor({ role: "region", name: "Characters and vault" });
+    // About 1310 px here: under legacy's 1580 px for every column, so one character at a
+    // time under tabs, the vault aligned beside it.
+    expect(await page.exists({ role: "tablist", name: "Characters" }), "legacy shows character tabs");
+    await shot("layout-legacy");
+    // Seen once, it stays closed; the gear brings the setting back.
+    await app.open("/manager");
+    await page.waitFor({ role: "region", name: "Characters and vault" });
+    expect(!(await page.exists(legacy)), "the intro doesn't open again");
+    await page.click({ role: "button", name: "Items settings" });
+    await page.click(rows);
+    await page.waitFor(rows, { gone: true });
+    await page.waitFor({ role: "region", name: "Characters" });
   });
 
   await step("mgr-search: a keyword search narrows the items", async () => {
@@ -47,14 +72,6 @@ export default async function ({ page, app, stub, step, shot, expect, log }) {
     expect(req?.body?.locked === want, `POST /api/bungie/lock sent locked:${want} for ${item}`);
     await shot("locked");
     await page.press("Escape");
-  });
-
-  await step("mgr-tabs: character tabs switch the column", async () => {
-    await page.click({ role: "tab", name: "Titan" });
-    await page.waitFor({ role: "button", name: "Titan options" });
-    expect((await page.attr({ role: "tab", name: "Titan" }, "aria-selected")) === "true", "Titan tab selected");
-    await page.click({ role: "tab", name: "Hunter" });
-    await page.waitFor({ role: "button", name: "Hunter options" });
   });
 
   await step("mgr-move: a touch user pulls a vault item to a character", async () => {

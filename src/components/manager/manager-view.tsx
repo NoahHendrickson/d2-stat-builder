@@ -9,7 +9,8 @@ import { annotationsStore } from "@/lib/inventory/annotations";
 import { recentlyMoved, requestMoves } from "@/lib/inventory/move-queue";
 import { planSmartMove, type MoveStep, type SmartPlan } from "@/lib/inventory/smart-moves";
 import { toast, type PendingToast } from "@/lib/toast";
-import { loadViewSettings } from "@/lib/inventory/view-settings";
+import { cn } from "@/lib/utils";
+import { loadViewSettings, useViewSettings } from "@/lib/inventory/view-settings";
 import {
   MOVABLE_BUCKETS,
   locate,
@@ -27,33 +28,50 @@ import {
   type ManagerActions,
   type ManagerLayout,
 } from "./manager-context";
-import { phoneTileMetrics } from "@/lib/inventory/vault-layout";
+import { TILE_GAP_PX, TILE_WIDTH_PX, phoneTileMetrics } from "@/lib/inventory/vault-layout";
 import { usePhoneWidth, useTouchFirst } from "@/lib/use-min-width";
 import { characterDropStore } from "./manager-drop-zone";
+import { CHARACTER_ROW_PX, CharacterRows } from "./character-rows";
 import { InventoryGrid } from "./manager-character-grid";
 import { VaultPane } from "./manager-vault";
 
-/**
- * Below this width, three character columns (about 930px) would leave the vault only a
- * handful of tiles across: show one character at a time, with tabs to switch.
- */
-const ALL_CHARACTERS_MIN_PX = 1580;
+/** Between the characters and the vault beside them (gap-6). */
+const LAYOUT_GAP_PX = 24;
+/** The vault goes beside the characters only with room for five tiles across. */
+const VAULT_BESIDE_MIN_PX = 5 * TILE_WIDTH_PX + 4 * TILE_GAP_PX;
 
 /**
- * From this width the vault sits beside the characters, each of its slots on the same row
- * as that slot on the characters. Narrower, it goes below them in one list.
+ * How the characters' rows fit `width`: with the vault beside them when there's room for
+ * it, else below. Null when a row doesn't fit at all: then it's one character at a time.
  */
-const ALIGNED_MIN_PX = 760;
+function rowsLayout(width: number): { vaultBeside: boolean } | null {
+  if (CHARACTER_ROW_PX + LAYOUT_GAP_PX + VAULT_BESIDE_MIN_PX <= width) return { vaultBeside: true };
+  return CHARACTER_ROW_PX <= width ? { vaultBeside: false } : null;
+}
+
+/**
+ * The legacy layout: below this width, three character columns (about 930px) would leave
+ * the vault only a handful of tiles across, so it shows one character at a time.
+ */
+const LEGACY_ALL_CHARACTERS_MIN_PX = 1580;
+
+/**
+ * The legacy layout: from this width the vault sits beside the characters, each of its
+ * slots on the same row as that slot on the characters. Narrower, it goes below them.
+ */
+const LEGACY_ALIGNED_MIN_PX = 760;
 
 /** Phone tiles before the page is first measured (it is before the first paint). */
 const UNMEASURED_PHONE_PX = 360;
 
 /**
- * The inventory manager: one column per character on the left (postmaster, then
- * weapons, armor, and general gear, each row showing the equipped item beside the
- * rest of that slot), and the vault on the right, every vault slot level with that slot
- * on the characters. The page scrolls as one. Drag a tile onto a slot, a character's
- * nameplate, or the vault to move it; click it for its details and moves.
+ * The inventory manager: a row per character, laid out like the game's character screen
+ * (see CharacterRows), and the vault beside them in a pane of its own that stays put as
+ * the page scrolls, or below them when there's no room. Narrow screens show one character
+ * at a time. The legacy layout (picked in the search bar's settings) has the characters
+ * side by side in columns instead, the vault beside them level with their slots. Drag a
+ * tile onto a slot, a character, or the vault to move it; click it for its details and
+ * moves.
  */
 export function ManagerView({
   inventory,
@@ -70,8 +88,6 @@ export function ManagerView({
 
   const [menu, setMenu] = useState<ItemDetailsTarget | null>(null);
   const layoutRef = useRef<HTMLDivElement>(null);
-  const [compact, setCompact] = useState(false);
-  const [aligned, setAligned] = useState(true);
   const [layoutWidth, setLayoutWidth] = useState(0);
   useLayoutEffect(() => {
     const el = layoutRef.current;
@@ -79,8 +95,6 @@ export function ManagerView({
     const measure = () => {
       // Hidden along with its view (the router keeps recent views mounted): keep what it had.
       if (el.clientWidth === 0) return;
-      setCompact(el.clientWidth < ALL_CHARACTERS_MIN_PX);
-      setAligned(el.clientWidth >= ALIGNED_MIN_PX);
       setLayoutWidth(el.clientWidth);
     };
     // Now, before paint, so a phone's first frame already has its tile size.
@@ -101,6 +115,11 @@ export function ManagerView({
   );
   // Touch can't drag a tile, so its details offer the moves as buttons.
   const touch = useTouchFirst();
+  const legacy = useViewSettings().layout === "legacy";
+  const rows = phone || legacy || layoutWidth === 0 ? null : rowsLayout(layoutWidth);
+  // Phones lay out the same either way: one character at a time, the vault a tab.
+  const legacyColumns = legacy && !phone;
+  const legacyAligned = legacyColumns && layoutWidth >= LEGACY_ALIGNED_MIN_PX;
   const [vaultOpen, setVaultOpen] = useState(false);
   /** The weapon (by name) whose copies are open in Compare. */
   const [comparing, setComparing] = useState<string | null>(null);
@@ -174,27 +193,48 @@ export function ManagerView({
       <div className="flex flex-col gap-4">
         {/* Pinned over the page as it scrolls (the page's top padding counts toward a sticky
             offset, hence -top-6); filled once there's something under it. */}
-        <div className="sticky -top-6 z-30 -mx-4 -mt-6 transition-colors group-data-scrolled/manager:bg-glass-opaque lg:-mx-6">
+        <div className="sticky -top-6 z-30 -mx-4 -mt-6 transition-colors group-data-scrolled/manager:d2-sticky-fill lg:-mx-6">
           <ManagerSearch inventory={inventory} />
         </div>
         <FarmingBanner inventory={inventory} />
         <ManagerLayoutContext value={layout}>
-          <div ref={layoutRef} className="flex flex-col gap-6">
-            <InventoryGrid
-              inventory={inventory}
-              compact={compact}
-              aligned={aligned}
-              vault={
-                phone
-                  ? {
-                      open: vaultOpen,
-                      onOpenChange: setVaultOpen,
-                      pane: <VaultPane inventory={inventory} />,
-                    }
-                  : undefined
-              }
-            />
-            {!aligned && !phone && <VaultPane inventory={inventory} />}
+          <div
+            ref={layoutRef}
+            className={cn("flex gap-6", rows?.vaultBeside ? "items-start" : "flex-col")}
+          >
+            {rows ? (
+              <CharacterRows inventory={inventory} />
+            ) : (
+              <InventoryGrid
+                inventory={inventory}
+                compact={!legacyColumns || layoutWidth < LEGACY_ALL_CHARACTERS_MIN_PX}
+                aligned={legacyAligned}
+                legacy={legacyColumns}
+                vault={
+                  phone
+                    ? {
+                        open: vaultOpen,
+                        onOpenChange: setVaultOpen,
+                        pane: <VaultPane inventory={inventory} />,
+                      }
+                    : undefined
+                }
+              />
+            )}
+            {rows?.vaultBeside ? (
+              <VaultAside inventory={inventory} />
+            ) : (
+              !phone &&
+              !legacyAligned && (
+                <VaultPane
+                  inventory={inventory}
+                  tall={rows !== null}
+                  // Across the page's whole width, gutters too, like the search bar it
+                  // pins under: a fill only as wide as the vault left tiles showing either side.
+                  headerClassName="sticky top-8 z-10 -mx-4 -mt-3 px-4 py-3 group-data-scrolled/manager:d2-sticky-fill lg:-mx-6 lg:px-6"
+                />
+              )
+            )}
           </div>
         </ManagerLayoutContext>
       </div>
@@ -209,6 +249,26 @@ export function ManagerView({
       />
       <CompareDrawer inventory={inventory} name={comparing} onClose={() => setComparing(null)} />
     </ManagerActionsContext.Provider>
+  );
+}
+
+/**
+ * The vault beside the characters: pinned under the search bar and scrolled on its own, so
+ * any vault item can be dragged to any character in view. Its header pins to the pane's
+ * top, filled once tiles scroll under it.
+ */
+function VaultAside({ inventory }: { inventory: ManagerInventory }) {
+  return (
+    <aside
+      className="group/vault d2-scroll sticky top-8 max-h-[calc(100dvh-5rem)] min-w-0 flex-1 overflow-y-auto overscroll-contain"
+      onScroll={(e) => e.currentTarget.toggleAttribute("data-scrolled", e.currentTarget.scrollTop > 0)}
+    >
+      <VaultPane
+        inventory={inventory}
+        tall
+        headerClassName="sticky top-0 z-10 pb-3 group-data-scrolled/vault:d2-sticky-fill"
+      />
+    </aside>
   );
 }
 

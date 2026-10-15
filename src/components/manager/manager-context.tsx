@@ -78,5 +78,5 @@ export function usePhoneTiles(): TileMetrics | null {
 export function usePinnedPlateClass(): string {
   return usePhoneLayout()
     ? "pb-3"
-    : "sticky top-8 z-10 -mt-3 py-3 group-data-scrolled/manager:bg-glass-opaque";
+    : "sticky top-8 z-10 -mt-3 py-3 group-data-scrolled/manager:d2-sticky-fill";
 }
