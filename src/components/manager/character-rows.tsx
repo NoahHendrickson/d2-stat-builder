@@ -12,8 +12,15 @@ import {
   STAT_LABELS,
   type StatIconMap,
 } from "@/lib/armory/stats";
-import { ARMOR_ROWS, BUCKETS, WEAPON_ROWS, type BucketRow } from "@/lib/inventory/buckets";
+import {
+  ARMOR_ROWS,
+  BUCKETS,
+  GENERAL_ROWS,
+  WEAPON_ROWS,
+  type BucketRow,
+} from "@/lib/inventory/buckets";
 import { BUNGIE_IMAGE_BASE } from "@/lib/bungie/constants";
+import { equippedSetCounts } from "@/lib/inventory/armor-details";
 import {
   BREAKER_NAMES,
   type InventoryItem,
@@ -22,56 +29,33 @@ import {
 } from "@/lib/inventory/build";
 import { CHARACTER_SLOTS } from "@/lib/inventory/moves";
 import { TILE_GAP_PX, TILE_HEIGHT_PX, TILE_WIDTH_PX } from "@/lib/inventory/vault-layout";
-import { statIconsFromManifest } from "@/lib/manifest/stat-icons";
-import { useManifest } from "@/lib/manifest/use-manifest";
+import {
+  ROW_COLUMN_GAP_PX,
+  ROW_INFO_PX,
+  ROW_INVENTORY_COLUMNS,
+  ROW_MIDDLE_PX,
+  ZONE_PAD_PX,
+  zoneWidth,
+} from "@/lib/inventory/items-page-plan";
 import { ABILITY_LABELS } from "@/lib/dim/subclasses";
 import type { Manifest } from "@/lib/manifest/load";
 import { ManifestIcon, PlugIcon } from "@/components/loadouts/loadout-icons";
 import { ClassGlyph } from "@/components/class-glyph";
 import { EmptyTile, ItemTile } from "./item-tile";
-import {
-  CharacterHeader,
-  POSTMASTER_FALLBACK_CAPACITY,
-  PostmasterCell,
-} from "./manager-character-grid";
+import { CharacterStrip, PostmasterCell, useCharacterSetup } from "./character-plate";
 import { DropZone } from "./manager-drop-zone";
-import { useItemComparator } from "./view-menu";
 
-/** The nameplate column: four postmaster tiles across. */
-const INFO_PX = 4 * TILE_WIDTH_PX + 3 * TILE_GAP_PX;
-/** Between the postmaster column and the gear. */
-const COLUMN_GAP_PX = 16;
-/** Between the weapons and the armor, where the game draws the Guardian. */
-const MIDDLE_PX = 24;
-/** A drop zone's padding round its tiles (p-1). */
-const ZONE_PAD_PX = 4;
-
-/** A slot's unequipped items sit in a 3×3 grid, as in the game. */
-const INVENTORY_COLUMNS = 3;
-
-const zoneWidth = (tiles: number) =>
-  tiles * TILE_WIDTH_PX + (tiles - 1) * TILE_GAP_PX + 2 * ZONE_PAD_PX;
-
-/** How wide a character row is. */
-export const CHARACTER_ROW_PX =
-  INFO_PX +
-  COLUMN_GAP_PX +
-  2 * (zoneWidth(INVENTORY_COLUMNS) + zoneWidth(1)) +
-  MIDDLE_PX +
-  4 * TILE_GAP_PX;
+const [GHOST_ROW, SPARROW_ROW, SHIP_ROW] = GENERAL_ROWS as [BucketRow, BucketRow, BucketRow];
 
 /**
  * Wider screens: one row per character, laid out like the game's character screen. The
  * nameplate strip across the top; under it the postmaster, over a big faint class sigil,
- * and the gear on five rows: the subclass and weapons on the left, the armor on the right,
- * each slot's unequipped items in a 3×3 grid on the side away from the middle.
+ * and the gear: the subclass, weapons and Ghost down the left, the armor down the right,
+ * then the Sparrow and Ship, one each side. Each slot's unequipped items sit in a 3×3 grid
+ * on the side away from the middle.
  */
 export function CharacterRows({ inventory }: { inventory: ManagerInventory }) {
-  const manifestStatus = useManifest();
-  const manifest = manifestStatus.state === "ready" ? manifestStatus.manifest : undefined;
-  const statIcons = useMemo(() => statIconsFromManifest(manifest), [manifest]);
-  const compare = useItemComparator();
-  const postmasterCapacity = inventory.postmasterCapacity ?? POSTMASTER_FALLBACK_CAPACITY;
+  const { manifest, statIcons, compare, postmasterCapacity } = useCharacterSetup(inventory);
 
   return (
     <section aria-label="Characters" className="flex shrink-0 flex-col gap-10">
@@ -89,6 +73,16 @@ export function CharacterRows({ inventory }: { inventory: ManagerInventory }) {
   );
 }
 
+/** Each slot's grid line and side: the game's, with the Sparrow and Ship on a line of their own. */
+const SLOT_PLACES: { row: BucketRow; line: number; side: "left" | "right" }[] = [
+  // The subclass takes the left of line 1.
+  ...WEAPON_ROWS.map((row, i) => ({ row, line: i + 2, side: "left" as const })),
+  { row: GHOST_ROW, line: WEAPON_ROWS.length + 2, side: "left" },
+  ...ARMOR_ROWS.map((row, i) => ({ row, line: i + 1, side: "right" as const })),
+  { row: SPARROW_ROW, line: ARMOR_ROWS.length + 1, side: "left" },
+  { row: SHIP_ROW, line: ARMOR_ROWS.length + 1, side: "right" },
+];
+
 function CharacterRow({
   character,
   statIcons,
@@ -102,11 +96,11 @@ function CharacterRow({
   compare: (a: InventoryItem, b: InventoryItem) => number;
   postmasterCapacity: number;
 }) {
-  const inventory = zoneWidth(INVENTORY_COLUMNS);
+  const inventory = zoneWidth(ROW_INVENTORY_COLUMNS);
   const equipped = zoneWidth(1);
   // Inventory, equipped, the middle gap, equipped, inventory.
   const gear: CSSProperties = {
-    gridTemplateColumns: `${inventory}px ${equipped}px ${MIDDLE_PX}px ${equipped}px ${inventory}px`,
+    gridTemplateColumns: `${inventory}px ${equipped}px ${ROW_MIDDLE_PX}px ${equipped}px ${inventory}px`,
     columnGap: TILE_GAP_PX,
     rowGap: TILE_GAP_PX,
   };
@@ -119,19 +113,16 @@ function CharacterRow({
       label={CLASS_NAMES[character.classType] ?? "Guardian"}
       className="isolate"
     >
-      {/* The nameplate as a header across the row, carrying the stats, champions, and set
+      {/* The strip as a header across the row, carrying the stats, champions, and set
           bonuses; under it the postmaster and the gear, their tops level. */}
       <div className="flex flex-col gap-4">
-        <CharacterHeader
+        <CharacterStrip
           character={character}
-          statIcons={statIcons}
-          stats={false}
-          wide
-          extras={<StripReadout character={character} statIcons={statIcons} manifest={manifest} />}
+          readout={<StripReadout character={character} statIcons={statIcons} manifest={manifest} />}
         />
-        <div className="flex items-start" style={{ columnGap: COLUMN_GAP_PX }}>
+        <div className="flex items-start" style={{ columnGap: ROW_COLUMN_GAP_PX }}>
           {/* pt-1: level with the tiles, which sit inside their drop zones' padding. */}
-          <div className="relative shrink-0 self-stretch pt-1" style={{ width: INFO_PX }}>
+          <div className="relative shrink-0 self-stretch pt-1" style={{ width: ROW_INFO_PX }}>
             {/* The class's sigil, big and faint behind the column, in place of a banner. */}
             <ClassGlyph
               aria-hidden
@@ -141,25 +132,14 @@ function CharacterRow({
             <PostmasterCell items={character.postmaster} capacity={postmasterCapacity} />
           </div>
           <div className="grid self-start" style={gear}>
-            {/* The subclass heads the weapons, level with the helmet. */}
             <SubclassSlot character={character} manifest={manifest} />
-            {WEAPON_ROWS.map((row, i) => (
+            {SLOT_PLACES.map(({ row, line, side }) => (
               <Slot
                 key={row.hash}
                 character={character}
                 row={row}
-                line={i + 2}
-                side="left"
-                compare={compare}
-              />
-            ))}
-            {ARMOR_ROWS.map((row, i) => (
-              <Slot
-                key={row.hash}
-                character={character}
-                row={row}
-                line={i + 1}
-                side="right"
+                line={line}
+                side={side}
                 compare={compare}
               />
             ))}
@@ -185,18 +165,10 @@ function StripReadout({
   manifest: Manifest | undefined;
 }) {
   const { equipped } = character;
-  const bonuses = useMemo(() => {
-    if (!manifest) return [];
-    const counts: Record<number, number> = {};
-    for (const row of ARMOR_ROWS) {
-      const item = equipped[row.hash];
-      if (!item) continue;
-      const set = manifest.def("DestinyInventoryItemDefinition", item.itemHash)?.equippingBlock
-        ?.equipableItemSetHash;
-      if (set) counts[set] = (counts[set] ?? 0) + 1;
-    }
-    return setBonusesFor(counts, manifest);
-  }, [equipped, manifest]);
+  const bonuses = useMemo(
+    () => (manifest ? setBonusesFor(equippedSetCounts(equipped, manifest), manifest) : []),
+    [equipped, manifest],
+  );
 
   return (
     <div role="group" aria-label="Stats and set bonuses" className="flex items-center gap-5">
@@ -221,12 +193,13 @@ function StripReadout({
 const CHAMPION_TILE = "#2f8b8f";
 
 /** Champion types by BreakerType, in the game's order: Barrier, Overload, Unstoppable. */
-const CHAMPION_TYPES = [1, 2, 3] as const;
+const CHAMPION_TYPES = Object.keys(BREAKER_NAMES).map(Number);
 
 /**
  * A tile per champion type, in the game's order: teal with the icon when an equipped
- * weapon stuns it (each weapon stuns one, by its frame), clear and faded when none does.
- * The tooltip names the weapons.
+ * weapon stuns it on its own (by its frame or an intrinsic), clear and faded when none
+ * does. The seasonal artifact's champion perks aren't counted. The tooltip names the
+ * weapons.
  */
 function ChampionStuns({
   equipped,
@@ -251,11 +224,11 @@ function ChampionStuns({
   }
 
   return (
-    <ul aria-label="Champions stunned" className="flex gap-1">
+    <ul aria-label="Champions your weapons stun" className="flex gap-1">
       {CHAMPION_TYPES.map((type) => {
         const stunning = weapons.get(type);
         const icon = icons.get(type);
-        const label = `${BREAKER_NAMES[type]}: ${stunning ? stunning.join(", ") : "nothing equipped stuns it"}`;
+        const label = `${BREAKER_NAMES[type]}: ${stunning ? stunning.join(", ") : "no equipped weapon stuns it on its own"}`;
         return (
           <li key={type}>
             <TooltipLabel label={label}>
@@ -336,8 +309,8 @@ function SubclassSlot({
             </div>
           )}
           {setup.fragments.length > 0 && (
-            // Up to six: 30px each still fits the grid's width.
-            <div className="flex gap-1">
+            // Up to six: 30px each, 2px apart, fits the 3×3 grid's width (204px).
+            <div className="flex gap-0.5">
               {setup.fragments.map((hash, i) => (
                 <PlugIcon
                   key={`${hash}-${i}`}
@@ -386,7 +359,7 @@ function Slot({
 }: {
   character: ManagerCharacter;
   row: BucketRow;
-  /** The grid line it sits on (1–5). */
+  /** The grid line it sits on (1–6). */
   line: number;
   side: "left" | "right";
   compare: (a: InventoryItem, b: InventoryItem) => number;
@@ -416,7 +389,7 @@ function Slot({
         style={{
           gridRow: line,
           gridColumn: left ? 1 : 5,
-          gridTemplateColumns: `repeat(${INVENTORY_COLUMNS}, ${TILE_WIDTH_PX}px)`,
+          gridTemplateColumns: `repeat(${ROW_INVENTORY_COLUMNS}, ${TILE_WIDTH_PX}px)`,
           direction: left ? "rtl" : undefined,
         }}
       >

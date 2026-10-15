@@ -32,6 +32,11 @@ export default async function ({ page, app, stub, step, shot, expect, log }) {
     // time under tabs, the vault aligned beside it.
     expect(await page.exists({ role: "tablist", name: "Characters" }), "legacy shows character tabs");
     await shot("layout-legacy");
+    // Resetting sort and grouping leaves the layout alone.
+    await page.click({ role: "button", name: "Sort and group" });
+    await page.click({ role: "button", name: "Reset to defaults" });
+    await page.press("Escape");
+    expect(await page.exists({ role: "region", name: "Characters and vault" }), "Reset to defaults keeps legacy columns");
     // Seen once, it stays closed; the gear brings the setting back.
     await app.open("/manager");
     await page.waitFor({ role: "region", name: "Characters and vault" });

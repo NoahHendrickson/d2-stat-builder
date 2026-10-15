@@ -18,7 +18,8 @@ export const CHANGELOG: readonly ChangelogEntry[] = [
   {
     date: "2026-10-15",
     changes: [
-      "Items has a new layout: each character gets a row laid out like the in-game character screen, with stats, champion mods and set bonuses on the nameplate, and the vault scrolls on its own beside them. Prefer the old layout? Switch back with the gear in the search bar.",
+      "Items has a new layout: each character gets a row laid out like the in-game character screen, with stats, the champions your weapons stun and set bonuses on the nameplate, and the vault scrolls on its own beside them. Prefer the old layout? Switch back with the gear in the search bar.",
+      "Items: the Titan and Hunter class icons were the wrong way round. Fixed.",
       "Loadouts: every loadout's name in a list beside the cards. Click a name to jump to that loadout.",
     ],
   },

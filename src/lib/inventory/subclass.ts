@@ -2,12 +2,11 @@ import type { DestinyProfileResponse } from "bungie-api-ts/destiny2";
 import type { Subclass } from "@/lib/armory/fragments";
 import { subclassItemsForCharacter } from "@/lib/armory/equipped-subclass";
 import { ABILITY_KINDS, type AbilityKind } from "@/lib/dim/subclasses";
-import { abilitySocketIndex } from "@/lib/loadouts/subclass";
+import { abilitySockets } from "@/lib/loadouts/subclass";
 import type { Manifest } from "@/lib/manifest/load";
 
 /** What a character's equipped subclass is set up with, as plug hashes in socket order. */
 export interface SubclassSetup {
-  itemHash: number;
   subclass: Subclass;
   /** The plug in each ability socket the subclass has (Super, class ability, jump, melee, grenade). */
   abilities: { kind: AbilityKind; hash: number }[];
@@ -24,25 +23,11 @@ export function equippedSubclassSetup(
   characterId: string,
   manifest: Manifest,
 ): SubclassSetup | undefined {
-  /** Each subclass's ability socket indexes, and the ability each holds. */
-  const kindsOf = new Map<number, Map<number, AbilityKind>>();
-  const abilityKinds = (itemHash: number) => {
-    let kinds = kindsOf.get(itemHash);
-    if (!kinds) {
-      kinds = new Map();
-      for (const kind of ABILITY_KINDS) {
-        const index = abilitySocketIndex(manifest, itemHash, kind);
-        if (index !== undefined) kinds.set(index, kind);
-      }
-      kindsOf.set(itemHash, kinds);
-    }
-    return kinds;
-  };
   const equipped = subclassItemsForCharacter(profile, characterId, (itemHash) => [
-    ...abilityKinds(itemHash).keys(),
+    ...abilitySockets(manifest, itemHash).keys(),
   ]).find((s) => s.equipped);
   if (!equipped) return undefined;
-  const kinds = abilityKinds(equipped.itemHash);
+  const kinds = abilitySockets(manifest, equipped.itemHash);
 
   const entries =
     manifest.def("DestinyInventoryItemDefinition", equipped.itemHash)?.sockets?.socketEntries ?? [];
@@ -51,7 +36,6 @@ export function equippedSubclassSetup(
       entries[Number(index)]?.singleInitialItemHash === hash ? [] : [hash],
     );
   return {
-    itemHash: equipped.itemHash,
     subclass: equipped.subclass,
     abilities: Object.entries(equipped.abilitySockets)
       .flatMap(([index, hash]) => {

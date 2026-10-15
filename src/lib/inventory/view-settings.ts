@@ -79,6 +79,16 @@ export const DEFAULT_VIEW: ViewSettings = {
   layout: "rows",
 };
 
+/**
+ * `view` with its sort and grouping back to the defaults. Page preferences (the vault tab,
+ * the layout) are left alone: listing what resets means a preference added later can't
+ * get reset along with them by accident.
+ */
+export function resetSortAndGrouping(view: ViewSettings): ViewSettings {
+  const { sort, weaponGroup, armorGroup } = DEFAULT_VIEW;
+  return { ...view, sort, weaponGroup, armorGroup };
+}
+
 const STORAGE_KEY = "stat-builder:manager-view:v1";
 const TAG_ORDER: Record<ItemTag | "none", number> = {
   favorite: 0,

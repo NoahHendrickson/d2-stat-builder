@@ -15,12 +15,12 @@ import { TooltipLabel } from "@/components/ui/tooltip";
 import { annotationsStore, type Annotations } from "@/lib/inventory/annotations";
 import type { InventoryItem } from "@/lib/inventory/build";
 import {
-  DEFAULT_VIEW,
   GROUP_KEYS,
   GROUP_LABELS,
   SORT_KEYS,
   SORT_LABELS,
   itemComparator,
+  resetSortAndGrouping,
   setViewSettings,
   useViewSettings,
   type GroupKey,
@@ -165,8 +165,7 @@ export function ViewMenu() {
           variant="ghost"
           size="sm"
           className="self-start"
-          // The vault tab isn't part of the sort and grouping this resets.
-          onClick={() => setViewSettings({ ...DEFAULT_VIEW, vaultTab: view.vaultTab })}
+          onClick={() => setViewSettings(resetSortAndGrouping(view))}
         >
           Reset to defaults
         </Button>

@@ -11,7 +11,7 @@ import {
   GLIMMER_HASH,
 } from "@/lib/armory/masterwork";
 import { BUNGIE_IMAGE_BASE } from "@/lib/bungie/constants";
-import { ACCOUNT_ROWS, CHARACTER_GROUPS, VAULT_GROUPS } from "@/lib/inventory/buckets";
+import { ACCOUNT_ROWS, SLOT_ROWS, VAULT_GROUPS } from "@/lib/inventory/buckets";
 import {
   ASCENDANT_ALLOY_HASH,
   BRIGHT_DUST_HASH,
@@ -48,19 +48,42 @@ import { weaponTypeIcon } from "@/lib/weapons/weapon-type-icon-paths";
 import { useStoreValue } from "@/lib/value-store";
 import { ItemTile } from "./item-tile";
 import { useItemComparator } from "./view-menu";
-import { dragStore, usePhoneLayout, usePhoneTiles, usePinnedPlateClass } from "./manager-context";
+import { PINNED_PLATE, dragStore, usePhoneLayout, usePhoneTiles } from "./manager-context";
+import { PLATE_HEIGHT, STRIP_HEIGHT } from "./character-plate";
 import { DropZone } from "./manager-drop-zone";
 
 /** Above and below a slot's tiles: the slot rows' drop zones are padded this much. */
 const SLOT_PAD_PX = 4;
 
 /**
- * Every slot row of a character in the legacy layout, top to bottom, and whether it starts
- * a group.
+ * Where the vault's header sits, which sets how it pins and how tall its nameplate is:
+ * behind the phone's Vault `tab`; `below` the character columns or rows, pinned across the
+ * page's width; `beside` the character rows, pinned to the top of its own pane. Beside or
+ * below the rows, the nameplate is as tall as the character strips.
  */
-export const SLOT_ROWS = CHARACTER_GROUPS.flatMap((group) =>
-  group.rows.map((row, i) => ({ row, groupStart: i === 0 })),
-);
+export type VaultPlacement = "tab" | "below-columns" | "below-rows" | "beside-rows";
+
+/** Below the characters: across the page's whole width, gutters too, like the search bar. */
+const PINNED_BELOW =
+  "sticky top-8 z-10 -mx-4 -mt-3 px-4 py-3 group-data-scrolled/manager:d2-sticky-fill lg:-mx-6 lg:px-6";
+
+const HEADER_PLACEMENTS: Record<
+  VaultPlacement | "aligned" | "aligned-compact",
+  { className: string; plate: string }
+> = {
+  tab: { className: "pb-3", plate: PLATE_HEIGHT },
+  "below-columns": { className: PINNED_BELOW, plate: PLATE_HEIGHT },
+  "below-rows": { className: PINNED_BELOW, plate: STRIP_HEIGHT },
+  "beside-rows": {
+    className: "sticky top-0 z-10 pb-3 group-data-scrolled/vault:d2-sticky-fill",
+    plate: STRIP_HEIGHT,
+  },
+  // Beside the nameplates, the header runs on into the postmasters' row (the vault has
+  // none), so its tabs don't stretch the nameplate row and leave a band under them.
+  aligned: { className: cn(PINNED_PLATE, "row-span-2 self-start"), plate: PLATE_HEIGHT },
+  // Compact, it shares the character tabs' row, its own tabs level with theirs.
+  "aligned-compact": { className: cn(PINNED_PLATE, "justify-between"), plate: PLATE_HEIGHT },
+};
 
 /** Height the class sigil draws at beside a group of armor. */
 const CLASS_MARKER_PX = 32;
@@ -159,7 +182,6 @@ export function AlignedVault({
   rowSpan: number;
 }) {
   const { gear, extra } = useVaultSections(inventory);
-  const pinnedPlate = usePinnedPlateClass();
   // Each slot's bucket on its own, without a heading: the row it's on names it.
   const bySlot = useMemo(
     () => new Map(gear.flatMap((section) => section.buckets).map((b) => [b.key, [{ buckets: [b] }]])),
@@ -174,21 +196,10 @@ export function AlignedVault({
       style={{ gridColumn: "-2", gridRow: `1 / span ${rowSpan}` }}
     >
       {headerRows === 1 ? (
-        // Beside the nameplates, the header runs on into the postmasters' row (the vault
-        // has none), so its tabs don't stretch the nameplate row and leave a band under them.
-        <VaultHeader
-          inventory={inventory}
-          className={cn(pinnedPlate, "row-span-2 self-start")}
-          tall={false}
-        />
+        <VaultHeader inventory={inventory} placement="aligned" />
       ) : (
         <>
-          {/* Compact, it shares the character tabs' row, its own tabs level with theirs. */}
-          <VaultHeader
-            inventory={inventory}
-            className={cn(pinnedPlate, "justify-between")}
-            tall={false}
-          />
+          <VaultHeader inventory={inventory} placement="aligned-compact" />
           {/* Down to the postmasters' row: nothing of the vault's own. */}
           <div style={{ gridRow: `span ${headerRows}` }} />
         </>
@@ -206,18 +217,15 @@ export function AlignedVault({
 }
 
 /**
- * The vault as one list under section headings; one drop target. Its header pins under
- * the search bar unless `headerClassName` places it otherwise. `tall`: a nameplate as tall as
- * the character rows' strips, for beside them.
+ * The vault as one list under section headings; one drop target. `placement` says where
+ * it sits, which sets how its header pins.
  */
 export function VaultPane({
   inventory,
-  headerClassName,
-  tall = false,
+  placement,
 }: {
   inventory: ManagerInventory;
-  headerClassName?: string;
-  tall?: boolean;
+  placement: VaultPlacement;
 }) {
   const { gear, extra } = useVaultSections(inventory);
   const sections = useMemo(() => [...gear, ...extra], [gear, extra]);
@@ -225,7 +233,7 @@ export function VaultPane({
   return (
     <DropZone to={{ kind: "vault" }} className="flex min-w-0 flex-col">
       <section aria-label="Vault" className="flex flex-col">
-        <VaultHeader inventory={inventory} className={headerClassName} tall={tall} />
+        <VaultHeader inventory={inventory} placement={placement} />
         <div className="flex flex-col pb-4">
           <VaultLines sections={sections} />
         </div>
@@ -234,25 +242,20 @@ export function VaultPane({
   );
 }
 
-/**
- * The vault's nameplate with the currencies beside it, then its tabs, pinned under the
- * search bar unless `className` places it.
- */
+/** The vault's nameplate with the currencies beside it, then its tabs, pinned per `placement`. */
 function VaultHeader({
   inventory,
-  className,
-  tall,
+  placement,
 }: {
   inventory: ManagerInventory;
-  className?: string;
-  tall: boolean;
+  placement: keyof typeof HEADER_PLACEMENTS;
 }) {
-  const pinnedPlate = usePinnedPlateClass();
+  const { className, plate } = HEADER_PLACEMENTS[placement];
   return (
-    <div className={cn("flex flex-col", className ?? pinnedPlate)}>
+    <div className={cn("flex flex-col", className)}>
       {/* The currencies drop under the nameplate when the column is too narrow for both. */}
       <div className="flex flex-wrap items-center gap-3 pb-3">
-        <VaultTitle inventory={inventory} tall={tall} />
+        <VaultTitle inventory={inventory} height={plate} />
         <VaultCurrencies inventory={inventory} />
       </div>
       <VaultTabs inventory={inventory} />
@@ -456,10 +459,11 @@ const VAULT_SIGIL_CROP = {
  */
 function VaultTitle({
   inventory: { vaultCount, vaultCapacity },
-  tall,
+  height,
 }: {
   inventory: ManagerInventory;
-  tall: boolean;
+  /** As tall as the character nameplates beside it (PLATE_HEIGHT or STRIP_HEIGHT). */
+  height: string;
 }) {
   const fill = vaultCapacity ? Math.min(vaultCount / vaultCapacity, 1) : 0;
   // Red from here on: the count and the bar together.
@@ -470,7 +474,7 @@ function VaultTitle({
       <div
         className={cn(
           "dark relative w-full overflow-hidden bg-[#4a4d53] normal:rounded-[12px]",
-          tall ? "h-16" : "h-14",
+          height,
         )}
       >
         <div

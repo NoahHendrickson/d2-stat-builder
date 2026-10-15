@@ -47,22 +47,30 @@ export const ARMOR_ROWS: BucketRow[] = [
   { hash: BUCKETS.classItem, label: "Class item" },
 ];
 
-/**
- * Every movable character bucket: weapons, armor, then the rest of the gear. The Items
- * page draws only weapons and armor on a character; the vault has a section for each.
- */
+/** A character's general gear slots: Ghost, Sparrow, Ship. */
+export const GENERAL_ROWS: BucketRow[] = [
+  { hash: BUCKETS.ghost, label: "Ghost" },
+  { hash: BUCKETS.vehicle, label: "Sparrow" },
+  { hash: BUCKETS.ships, label: "Ship" },
+];
+
+/** Every movable character bucket: weapons, armor, then the rest of the gear. */
 export const CHARACTER_GROUPS: BucketGroup[] = [
   { label: "Weapons", rows: WEAPON_ROWS },
   { label: "Armor", rows: ARMOR_ROWS },
-  {
-    label: "General",
-    rows: [
-      { hash: BUCKETS.ghost, label: "Ghost" },
-      { hash: BUCKETS.vehicle, label: "Sparrow" },
-      { hash: BUCKETS.ships, label: "Ship" },
-    ],
-  },
+  { label: "General", rows: GENERAL_ROWS },
 ];
+
+/** A slot row in a character column, and whether it starts a group (a wider gap above it). */
+export interface SlotRow {
+  row: BucketRow;
+  groupStart: boolean;
+}
+
+/** Every slot of a character, top to bottom, as the one-column layouts draw them. */
+export const SLOT_ROWS: SlotRow[] = CHARACTER_GROUPS.flatMap((group) =>
+  group.rows.map((row, i) => ({ row, groupStart: i === 0 })),
+);
 
 /** Vault sections follow the character rows; anything else lands in "Other". */
 export const VAULT_GROUPS: BucketGroup[] = CHARACTER_GROUPS;

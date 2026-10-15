@@ -13,7 +13,28 @@ import {
   TUNING_PLUG_CATEGORY,
   type StatKey,
 } from "@/lib/armory/stats";
+import { ARMOR_ROWS } from "./buckets";
+import type { InventoryItem } from "./build";
 import type { DetailPlug } from "./weapon-details";
+
+/** The armor set an item belongs to (its set bonuses), if any. */
+export function armorSetHash(manifest: Manifest, itemHash: number): number | undefined {
+  return manifest.def("DestinyInventoryItemDefinition", itemHash)?.equippingBlock?.equipableItemSetHash;
+}
+
+/** How many pieces of each armor set a character has equipped, by set hash. */
+export function equippedSetCounts(
+  equipped: Readonly<Record<number, InventoryItem>>,
+  manifest: Manifest,
+): Record<number, number> {
+  const counts: Record<number, number> = {};
+  for (const row of ARMOR_ROWS) {
+    const item = equipped[row.hash];
+    const set = item && armorSetHash(manifest, item.itemHash);
+    if (set) counts[set] = (counts[set] ?? 0) + 1;
+  }
+  return counts;
+}
 
 export interface SetPerk {
   /** Pieces of the set that must be equipped. */
@@ -103,7 +124,7 @@ export function armorDetails(
   const tunable = tunableStat(profile, manifest, instanceId);
   if (tunable) details.tunable = tunable;
 
-  const setHash = manifest.def("DestinyInventoryItemDefinition", itemHash)?.equippingBlock?.equipableItemSetHash;
+  const setHash = armorSetHash(manifest, itemHash);
   const set = setHash ? manifest.def("DestinyEquipableItemSetDefinition", setHash) : undefined;
   if (set?.displayProperties?.name) {
     details.set = {

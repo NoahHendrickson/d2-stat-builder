@@ -39,24 +39,26 @@ const LAYOUTS: Record<ItemsLayout, { label: string; detail: string; icon: typeof
 };
 
 /**
- * The Items page's settings menu, by the sort menu: which layout it uses. The first visit
- * opens it by itself with a word on the new layout, so anyone who'd rather have the old
- * one finds the switch; closing it (any way) counts as seen. Only mounted on the client
- * once the inventory is in, so reading storage up front is safe.
+ * The Items page's settings menu, by the sort menu: which layout it uses. The first time
+ * the character rows show (`intro`), it opens by itself with a word on them, so anyone
+ * who'd rather have the old layout finds the switch; closing it (any way) counts as seen.
+ * Only mounted on the client once the inventory is in, so reading storage up front is safe.
  */
-export function ItemsSettings() {
+export function ItemsSettings({ intro: introAllowed }: { intro: boolean }) {
   const view = useViewSettings();
-  const [introOpen, setIntroOpen] = useState(() => !intro.seen());
-  const [open, setOpen] = useState(introOpen);
+  const [introSeen, setIntroSeen] = useState(() => intro.seen());
+  const [open, setOpen] = useState(false);
+  // Shown while the page draws the rows it describes; a narrower window holds it back.
+  const introOpen = introAllowed && !introSeen;
 
   return (
     <DropdownMenu
-      open={open}
+      open={open || introOpen}
       onOpenChange={(next) => {
         setOpen(next);
         if (next || !introOpen) return;
         intro.markSeen();
-        setIntroOpen(false);
+        setIntroSeen(true);
       }}
       // Opened by itself, it doesn't lock the page.
       modal={!introOpen}

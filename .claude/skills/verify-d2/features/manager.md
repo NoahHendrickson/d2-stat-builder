@@ -23,7 +23,7 @@ Preconditions:
 - `full` fixture, 1600×1000. With the sidebar open the layout is about 1310 px: character rows (each slot's unequipped items in a 3×3 grid) with the vault beside them (`rowsLayout` in manager-view.tsx).
 
 - **Open.** Run `app.open("/manager")`. `region /^Characters/` is shown, with one `button "<Class> options"` nameplate per character (3), and vault tiles (`{ css: '[aria-label="Vault"] [role=button][draggable]' }`) are mounted.
-- **Layout (`mgr-layout`).** On a fresh profile the settings menu is already open: `menuitemradio /^Character rows/` is `aria-checked="true"`. Click `menuitemradio /^Legacy columns/`: the menu closes and `region "Characters and vault"` appears; at about 1310 px legacy shows one character at a time, so `tablist "Characters"` is there (all three columns need 1580 px). Reopen `/manager`: the intro stays closed (seen flag `stat-builder:items-layout-intro-seen`). Click `button "Items settings"`, then `menuitemradio /^Character rows/`; the menu closes and `region "Characters"` is back.
+- **Layout (`mgr-layout`).** On a fresh profile the settings menu is already open: `menuitemradio /^Character rows/` is `aria-checked="true"`. Click `menuitemradio /^Legacy columns/`: the menu closes and `region "Characters and vault"` appears; at about 1310 px legacy shows one character at a time, so `tablist "Characters"` is there (all three columns need 1580 px). Click `button "Sort and group"`, then `button "Reset to defaults"`: the page stays on legacy (Reset only touches sort and grouping). Reopen `/manager`: the intro stays closed (seen flag `stat-builder:items-layout-intro-seen`). Click `button "Items settings"`, then `menuitemradio /^Character rows/`; the menu closes and `region "Characters"` is back.
 - **Search (`mgr-search`).** Fill `combobox "Search items"` with `is:handcannon`. A `button /^\d+ items?$/` appears (50 on the full fixture), with fewer than the 456 weapons. Click `button "Clear search"` and the count button goes away.
 - **Lock (`mgr-lock`).** Click vault tile `nth: 0` (named like `Monte Carlo, Auto Rifle, Power 442`). Click `button /^(Lock|Unlock)$/`. Its `aria-pressed` flips, the toast `Locked <item>` appears, and `POST /api/bungie/lock` carries `locked: true`.
 - **Move (`mgr-move`).** Run `page.emulatePointer("coarse")`, which must return `true`. Click vault tile `nth: 1`, then the first `button /^(Pull|Send|Equip on)\b.*\b(Hunter|Titan|Warlock)$/` (for example `Equip on Hunter`). The toast `Equipped <item>` or `Moved <item>` appears, and `POST /api/bungie/move` has `from.kind: "vault"` and `to.kind: "character"`.
@@ -31,6 +31,8 @@ Preconditions:
 
 ## Gotchas
 
+- The intro only opens over character rows: below about 1,180 px with the sidebar open (rows need 880 px of content) the page falls back to columns and holds it back.
+- Character rows draw Ghost under the weapons on the left, and Sparrow and Ship on a sixth line, one each side (`[aria-label="Ghost"]` etc. are the unequipped drop zones).
 - A fresh profile opens the layout intro menu over the top right of the page (not modal, so the page still scrolls); it closes on the first click outside it or a pick (and counts as seen). The `mgr-layout` step deals with it first.
 
 - The move buttons render only for touch (`(pointer: coarse)`) or phone widths. CDP media-feature overrides don't flip `(pointer: coarse)`; Chrome touch emulation does (that's what `emulatePointer` uses).

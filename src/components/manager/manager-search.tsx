@@ -42,7 +42,6 @@ import { useManifest } from "@/lib/manifest/use-manifest";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 import { useStoreValue } from "@/lib/value-store";
-import { usePhoneWidth } from "@/lib/use-min-width";
 import { useManagerActions } from "./manager-context";
 import { moveAll } from "./move-all";
 import { SearchResultsDrawer } from "./search-results-drawer";
@@ -82,9 +81,14 @@ function once<T>(f: () => T): () => T {
  * picked filter becomes a chip before the text, and the chips and text search together.
  * The match count opens every match in a drawer.
  */
-export function ManagerSearch({ inventory }: { inventory: ManagerInventory }) {
-  // Phones lay the page out the same either way, so the layout setting stays off them.
-  const phone = usePhoneWidth();
+export function ManagerSearch({
+  inventory,
+  layoutMenu,
+}: {
+  inventory: ManagerInventory;
+  /** The layout setting's menu, when the page offers it; `intro`: it may open by itself. */
+  layoutMenu?: { intro: boolean };
+}) {
   /** What's typed in the field (the chips aren't part of it). */
   const [query, setQuery] = useState("");
   /** Filters picked from the suggestions, each a whole term (`is:handcannon`). */
@@ -386,7 +390,7 @@ export function ManagerSearch({ inventory }: { inventory: ManagerInventory }) {
       {matches && matches.size > 0 && <BulkActions inventory={inventory} matches={matches} />}
       <SearchHelp />
       <ViewMenu />
-      {!phone && <ItemsSettings />}
+      {layoutMenu && <ItemsSettings intro={layoutMenu.intro} />}
       <SearchResultsDrawer
         inventory={inventory}
         query={deferred}
