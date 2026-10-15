@@ -20,8 +20,7 @@ export interface PoolOptions {
   lowerTierArmor: boolean;
   /**
    * Legacy (Armor 2.0) legendaries: no archetype, no tuning socket. Stats assume the
-   * flat +2 legacy masterwork; artifice ones keep their +3. Shared between Advanced
-   * settings and Power matters (see includesLegacyArmor).
+   * flat +2 legacy masterwork; artifice ones keep their +3.
    */
   legacyArmor: boolean;
   /**

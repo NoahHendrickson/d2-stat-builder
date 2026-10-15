@@ -90,7 +90,6 @@ import { useTheoryBuilds } from "@/components/builder/use-theory-builds";
 import {
   DEFAULT_POWER_RANGE,
   forcesDreamersBond,
-  includesLegacyArmor,
   loadSelections,
   saveSelections,
   fragSelToArrays,
@@ -201,21 +200,16 @@ export function BuilderPanel({
   const [useLowerTierArmor, setUseLowerTierArmor] = useState(
     initialSaved?.lowerTierArmor ?? false,
   );
+  // Armor 2.0 legendaries: also offered under Power matters, where their power helps.
+  const [useLegacyArmor, setUseLegacyArmor] = useState(
+    initialSaved?.legacyArmor ?? false,
+  );
   const [powerRange, setPowerRange] = useState<PowerRangeSelection>(
     () => initialSaved?.powerRange ?? DEFAULT_POWER_RANGE,
   );
   // Dreamer's Bond is a "Power matters" option: checked but with the toggle off, it's
-  // inert. Legacy armor is stored with the range (its checkbox shows there too) but
-  // acts on its own — the Advanced settings checkbox edits the same flag.
+  // inert.
   const useDreamersBond = forcesDreamersBond(powerRange);
-  const useLegacyArmor = includesLegacyArmor(powerRange);
-  const setUseLegacyArmor = useCallback(
-    (checked: boolean) =>
-      setPowerRange((prev) =>
-        prev.legacyArmor === checked ? prev : { ...prev, legacyArmor: checked },
-      ),
-    [],
-  );
   // Power matters is a Builds setting: Theoretical ignores it, so its exotic is never
   // displaced by a pinned Dreamer's Bond.
   const classItemPinned = !theoretical && useDreamersBond;
@@ -591,12 +585,11 @@ export function BuilderPanel({
   // class item seeds the first-enable range.
   const powerSlotPieces = useMemo(() => {
     if (powerRange.enabled) return slotPieces;
-    const previewPool = classPieces.filter((p) => inDefaultOptimizerPool(p, poolOptions));
     let previewClassItems;
     if (powerRange.dreamersBond) {
       previewClassItems = dreamersPiece ? [dreamersPiece] : [];
     } else {
-      previewClassItems = previewPool.filter((p) => p.slot === "classItem");
+      previewClassItems = pool.filter((p) => p.slot === "classItem");
       if (
         manifest &&
         classType !== null &&
@@ -615,15 +608,14 @@ export function BuilderPanel({
         );
       }
     }
-    return buildOptimizerSlots(previewPool, {
+    return buildOptimizerSlots(pool, {
       classItemPieces: previewClassItems,
       masks: festivalMaskHelmets,
       powerConstrained: true,
     });
   }, [
     slotPieces,
-    classPieces,
-    poolOptions,
+    pool,
     powerRange.enabled,
     powerRange.dreamersBond,
     dreamersPiece,
@@ -689,6 +681,7 @@ export function BuilderPanel({
       setUseBalancedTuning(saved.balancedTuning);
       setUseLegacyExotics(saved.legacyExotics);
       setUseLowerTierArmor(saved.lowerTierArmor);
+      setUseLegacyArmor(saved.legacyArmor);
       setPowerRange(saved.powerRange);
     };
     if (adoptedGeneration.current !== selectionsGeneration()) adopt();
@@ -721,6 +714,7 @@ export function BuilderPanel({
         balancedTuning: useBalancedTuning,
         legacyExotics: useLegacyExotics,
         lowerTierArmor: useLowerTierArmor,
+        legacyArmor: useLegacyArmor,
         powerRange,
         activeSubclass: actualSubclass,
         fragSel: fragSelToArrays(actualFragSel),
@@ -746,6 +740,7 @@ export function BuilderPanel({
     useBalancedTuning,
     useLegacyExotics,
     useLowerTierArmor,
+    useLegacyArmor,
     powerRange,
     actualSubclass,
     actualFragSel,
@@ -776,6 +771,7 @@ export function BuilderPanel({
       balancedTuning: useBalancedTuning,
       legacyExotics: useLegacyExotics,
       lowerTierArmor: useLowerTierArmor,
+      legacyArmor: useLegacyArmor,
       powerRange,
       activeSubclass: actualSubclass,
       fragmentHashes: [...actualFragSel[actualSubclass]],
@@ -790,6 +786,7 @@ export function BuilderPanel({
       useBalancedTuning,
       useLegacyExotics,
       useLowerTierArmor,
+      useLegacyArmor,
       powerRange,
       actualSubclass,
       actualFragSel,
@@ -1072,15 +1069,14 @@ export function BuilderPanel({
     setUseLegacyExotics(true);
     setUseLowerTierArmor(false);
     setUseLegacyArmor(false);
-  }, [setUseLegacyArmor]);
+  }, []);
   const resetPowerRange = useCallback(
     () =>
       setPowerRange((prev) =>
         prev.enabled ||
         prev.bounds !== null ||
         prev.weapons.some((w) => w !== null) ||
-        prev.dreamersBond ||
-        prev.legacyArmor
+        prev.dreamersBond
           ? DEFAULT_POWER_RANGE
           : prev,
       ),
@@ -1292,7 +1288,7 @@ export function BuilderPanel({
                       checked={useLegacyArmor}
                       onCheckedChange={setUseLegacyArmor}
                       title="Legacy armor"
-                      description="Include Armor 2.0 legendaries. They can't be tuned and join no set, and searches can take several seconds longer. Also under Power matters, where their lower power helps."
+                      description="Include Armor 2.0 legendaries. Searches can take several seconds longer. Also in Underlight settings."
                     />
                     <SettingRow
                       checkbox
@@ -1312,6 +1308,8 @@ export function BuilderPanel({
                     onChange={onPowerRangeChange}
                     slotPieces={powerSlotPieces}
                     weaponPlan={weaponPlan}
+                    legacyArmor={useLegacyArmor}
+                    onLegacyArmorChange={setUseLegacyArmor}
                     dreamersItemName={dreamersClassItemName(classType ?? 2)}
                   />
                 </Section>
