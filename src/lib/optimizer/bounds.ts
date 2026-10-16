@@ -170,7 +170,7 @@ export function computeSuffixBounds(
    * fragments (tightenedTuneCredit). The ceiling probes must not pass it — they raise
    * minimums past the query's, and the credit is derived from the query's.
    */
-  topN?: { frag: number[]; mins: number[] },
+  topN?: { frag: number[]; mins: number[]; maxModPoints: number },
 ): SuffixBounds {
 
   const suffixStat: number[][] = Array.from({ length: NUM_SLOTS + 1 }, () =>
@@ -183,7 +183,7 @@ export function computeSuffixBounds(
   // latter is per PIECE: pairing one piece's lowest roll with another piece's −5 (a
   // Tier-5 piece's −5 under a legacy piece's 4) is a phantom that no completion can
   // realize, and it made every lower-bound term pay for legacy pieces that were never
-  // chosen (see makeZeroClampSlack).
+  // chosen (see zeroClampSlack).
   const suffixMinStat: number[][] = Array.from({ length: NUM_SLOTS + 1 }, () =>
     new Array(NUM_STATS).fill(0),
   );
@@ -202,9 +202,8 @@ export function computeSuffixBounds(
   const exoticSuffix = new Array(NUM_SLOTS + 1).fill(0);
   // artSuffix[k] = number of slots in k..4 offering ≥1 artifice piece — an upper bound
   // on the free +3 mods any completion from slot k can still add. Every stat and total
-  // bound here charges artifice per PIECE instead (see SuffixBounds), so this only tells
-  // the joint-min check whether the pool has artifice at all and bounds the chosen-side
-  // artifice in the zero-clamp slack.
+  // bound here charges artifice per PIECE instead (see SuffixBounds), so this only
+  // bounds the remaining slots' artifice in the zero-clamp slack.
   const artSuffix = new Array(NUM_SLOTS + 1).fill(0);
   const subsetSuffix: number[][] = Array.from({ length: NUM_SLOTS + 1 }, () =>
     new Array(NUM_MASKS).fill(0),
@@ -282,7 +281,15 @@ export function computeSuffixBounds(
   // The tuning credit needs the pool-wide per-stat ranges above (slot 0 = whole pool),
   // so suffixTotal is a second, cheap pass.
   const tuneCredit = topN
-    ? tightenedTuneCredit(slots, topN.frag, topN.mins, suffixStat[0], suffixLowStat[0], slotLowStat)
+    ? tightenedTuneCredit(
+        slots,
+        topN.frag,
+        topN.mins,
+        topN.maxModPoints,
+        suffixStat[0],
+        suffixLowStat[0],
+        slotLowStat,
+      )
     : slots.map((slot) => slot.map((p) => p.tuneTotalUpside));
   for (let k = NUM_SLOTS - 1; k >= 0; k--) {
     let slotBestTotal = 0;
@@ -323,30 +330,29 @@ export function computeSuffixBounds(
  * subtree — including the all-Tier-5 ones that never go near zero — pay the same slack.
  * Once a Tier-5 piece is chosen its real roll replaces its slot's minimum and the slack
  * collapses, which is what prunes the legacy-piece subtrees at depth 1.
+ *
+ * Pure in its arguments: `sum` / `sumTuneDown` are the prefix, `lowStat` the remaining
+ * slots' row of suffixLowStat, `maxArtifice` the artifice pieces the leaf can hold.
  */
-export function makeZeroClampSlack(
+function zeroClampSlack(
   frag: number[],
   mins: number[],
   sum: number[],
   sumTuneDown: number[],
-  suffixLowStat: number[][],
+  lowStat: number[],
   maxModPoints: number,
-  artSuffix: number[],
-  chosenArt: { n: number },
-): (k: number) => number {
-  return (k) => {
-    const maxArtifice = chosenArt.n + artSuffix[k];
-    let slack = 0;
-    for (let s = 0; s < NUM_STATS; s++) {
-      let lowest = sum[s] + frag[s] + sumTuneDown[s] + suffixLowStat[k][s];
-      if (mins[s] > 0) {
-        const fromMin = mins[s] - maxModPoints - maxArtifice * ARTIFICE_MOD_BONUS;
-        if (fromMin > lowest) lowest = fromMin;
-      }
-      if (lowest < 0) slack -= lowest;
+  maxArtifice: number,
+): number {
+  let slack = 0;
+  for (let s = 0; s < NUM_STATS; s++) {
+    let lowest = sum[s] + frag[s] + sumTuneDown[s] + lowStat[s];
+    if (mins[s] > 0) {
+      const fromMin = mins[s] - maxModPoints - maxArtifice * ARTIFICE_MOD_BONUS;
+      if (fromMin > lowest) lowest = fromMin;
     }
-    return slack;
-  };
+    if (lowest < 0) slack -= lowest;
+  }
+  return slack;
 }
 
 /** Clamped-total cost of one −5 on a stat whose value, before that −5, is `v`. */
@@ -361,9 +367,10 @@ const minusFiveLoss = (v: number): number => clamp(v) - clamp(v - 5);
  * CAN be is a pool property: with `v` the minus stat's value before that −5, the −5
  * costs `clamp(v) − clamp(v − 5)` of clamped total, and over every completion `v` lies in
  *   [frag + the piece's own roll + Σ other slots' lowest (roll + own −5),
- *    frag + Σ best (roll + tuning upside)]
+ *    frag + Σ best (roll + tuning upside + artifice) + every mod point]
  * (`suffixLowStat` minus the piece's slot, plus its own stat, and `suffixStat` at slot
- * 0 — the piece's own −5 is the one being priced). The loss is a trapezoid in `v` — 0 below 0,
+ * 0 — the piece's own −5 is the one being priced). Mods only add, so they widen the
+ * upper end alone: a stat near the cap that mods push past 205 absorbs the −5 there. The loss is a trapezoid in `v` — 0 below 0,
  * rising to 5, flat through the cap, falling back to 0 past 205 — so its minimum over an
  * interval is at an endpoint. On Tier-5 pools every stat sits well inside [5, 200] under
  * every completion, so the −5 always costs the full 5 and a directional's net upside is
@@ -383,6 +390,7 @@ function tightenedTuneCredit(
   slots: InternalPiece[][],
   frag: number[],
   mins: number[],
+  maxModPoints: number,
   /** Pool-wide per-stat ranges: computeSuffixBounds' slot-0 rows, and per-slot lows. */
   poolMaxStat: number[],
   poolLowStat: number[],
@@ -390,7 +398,7 @@ function tightenedTuneCredit(
 ): number[][] {
   const capLoss = new Array(NUM_STATS).fill(0);
   for (let s = 0; s < NUM_STATS; s++) {
-    capLoss[s] = minusFiveLoss(frag[s] + poolMaxStat[s]);
+    capLoss[s] = minusFiveLoss(frag[s] + poolMaxStat[s] + maxModPoints);
   }
   const short = (s: number): boolean => mins[s] > 0;
   return slots.map((slot, j) =>
@@ -422,22 +430,17 @@ function tightenedTuneCredit(
  * the chosen pieces plus the remaining slots' lowest rolls already cover a negative
  * fragment the stat can't fall below 0, so `max(0, v_s) = v_s` and the negative fragment
  * counts in full — a mixed fragment set that nets to zero then adds nothing to the bound
- * instead of its positive half. Per node, for the same reason as makeZeroClampSlack.
+ * instead of its positive half. Per node, for the same reason as zeroClampSlack, and pure
+ * in the same way (`minStat` is the remaining slots' row of suffixMinStat).
  */
-export function makeFragmentCredit(
-  frag: number[],
-  sum: number[],
-  suffixMinStat: number[][],
-): (k: number) => number {
-  return (k) => {
-    let credit = 0;
-    for (let s = 0; s < NUM_STATS; s++) {
-      // A positive fragment always counts; a negative one counts (reducing the bound)
-      // only when the prefix + the lowest remaining rolls keep the stat at or above 0.
-      if (frag[s] > 0 || frag[s] + sum[s] + suffixMinStat[k][s] >= 0) credit += frag[s];
-    }
-    return credit;
-  };
+function fragmentCredit(frag: number[], sum: number[], minStat: number[]): number {
+  let credit = 0;
+  for (let s = 0; s < NUM_STATS; s++) {
+    // A positive fragment always counts; a negative one counts (reducing the bound)
+    // only when the prefix + the lowest remaining rolls keep the stat at or above 0.
+    if (frag[s] > 0 || frag[s] + sum[s] + minStat[s] >= 0) credit += frag[s];
+  }
+  return credit;
 }
 
 /**
@@ -525,43 +528,14 @@ export function makeJointMinCheck(
   frag: number[],
   suffixStat: number[][],
   subsetSuffix: number[][],
-  artSuffix: number[],
   maxModPoints: number,
   chosenArt: { n: number },
 ): (k: number) => boolean {
-  // Pool has no artifice pieces at all (artSuffix[0] counts every slot): specialize to
-  // the flat-budget bound so the per-node cost of these hot walks is exactly what it
-  // was before artifice existed.
-  if (artSuffix[0] === 0) {
-    return (k) => {
-      let needed = 0;
-      let mask = 0;
-      let maskShort = 0;
-      for (let s = 0; s < NUM_STATS; s++) {
-        // Shortfall before suffix help (minShortfall owns the zero-minimum/clamp
-        // rule); suffixStat ≥ 0, so short = 0 implies d ≤ 0.
-        const short = minShortfall(mins[s], sum[s] + frag[s] + sumTuneUp[s]);
-        if (short === 0) continue;
-        mask |= 1 << s;
-        maskShort += short;
-        const d = short - suffixStat[k][s];
-        if (d > 0) {
-          needed += deficitPoints(d, false);
-          if (needed > maxModPoints) return false;
-        }
-      }
-      if ((mask & (mask - 1)) !== 0) {
-        // ≥2 short stats (a singleton mask duplicates the per-stat check exactly).
-        const D = maskShort - subsetSuffix[k][mask];
-        if (D > 0 && deficitPoints(D, false) > maxModPoints) return false;
-      }
-      return true;
-    };
-  }
   return (k) => {
     // Only the chosen artifice +3s are still free to land anywhere; the remaining
-    // slots' are folded into the suffix bounds above. With none chosen, every point
-    // left to find comes from 5-grain stat mods, so the deficit rounds up.
+    // slots' are folded into the suffix bounds above. With none chosen (always, on a
+    // pool without artifice), every point left to find comes from 5-grain stat mods,
+    // so the deficit rounds up.
     const artUp = chosenArt.n;
     const budget = maxModPoints + artUp * ARTIFICE_MOD_BONUS;
     let needed = 0;
@@ -627,9 +601,9 @@ export function buildSlots(input: OptimizerInput): InternalPiece[][] {
  * contribute (makeModUpside) + a fragment term:
  *  1. `positive`: tuning credited by its positive parts per piece (a −5 might be absorbed
  *     by a clamp; `suffix.tuneCredit` tightens this pool-wide), fragments by their
- *     unabsorbable part (makeFragmentCredit);
+ *     unabsorbable part (fragmentCredit);
  *  2. `net`: tuning credited NET per piece (+5/−5 cancel), fragments signed, and every
- *     clamp-at-zero absorption paid once from the prefix (makeZeroClampSlack) — tighter
+ *     clamp-at-zero absorption paid once from the prefix (zeroClampSlack) — tighter
  *     when negative fragments or many directionals make bound 1 credit −5s as free.
  * The walk reports each chosen piece through push/pop; `sum`, `sumTuneDown` and
  * `chosenArt` are the walk's own accumulators (shared with the joint-min check).
@@ -644,7 +618,10 @@ export interface AdmissionBound {
    * and only loops over the mod term when it could still matter.
    */
   cannotBeat(k: number, worst: number): boolean;
-  /** The two bounds on their own — each must be admissible by itself (tests). */
+  /**
+   * The two bounds on their own, per-node terms only, through the same expression
+   * cannotBeat prunes with — each must be admissible by itself (tests).
+   */
   positive(k: number): number;
   net(k: number): number;
 }
@@ -661,19 +638,8 @@ export function makeAdmissionBound(
 ): AdmissionBound {
   const { suffixTotal, suffixNetTotal, suffixMinStat, suffixLowStat, artSuffix, tuneCredit } =
     suffix;
-  const fragUpside = makeFragmentCredit(frag, sum, suffixMinStat);
   let fragSum = 0;
   for (let s = 0; s < NUM_STATS; s++) fragSum += frag[s];
-  const zeroSlack = makeZeroClampSlack(
-    frag,
-    mins,
-    sum,
-    sumTuneDown,
-    suffixLowStat,
-    maxModPoints,
-    artSuffix,
-    chosenArt,
-  );
   const modUpside = makeModUpside(
     mins,
     sum,
@@ -682,24 +648,48 @@ export function makeAdmissionBound(
     suffixLowStat,
     maxModPoints,
   );
+  // The per-node fragment and slack terms, from the walk's live prefix.
+  const fragAt = (k: number): number => fragmentCredit(frag, sum, suffixMinStat[k]);
+  const slackAt = (k: number): number =>
+    zeroClampSlack(
+      frag,
+      mins,
+      sum,
+      sumTuneDown,
+      suffixLowStat[k],
+      maxModPoints,
+      chosenArt.n + artSuffix[k],
+    );
+  // The same terms on the EMPTY prefix are pool-wide constants (a chosen piece
+  // contributes at least its slot's floor, so the per-node values only ever come in at
+  // or under these). Computed from explicit zero sums, never the live accumulators, so
+  // they stay the empty-prefix values whenever this factory is built. cannotBeat tries
+  // the constants first and refines a side only when that fails to prune AND that side
+  // can still drop — on a Tier-5 pool with non-negative fragments the slack is already 0
+  // and every fragment already counts, so the hot walk never pays for the 6-stat loops.
+  const empty = new Array(NUM_STATS).fill(0);
+  const fragConst = fragmentCredit(frag, empty, suffixMinStat[0]);
+  const slackConst = zeroClampSlack(
+    frag,
+    mins,
+    empty,
+    empty,
+    suffixLowStat[0],
+    maxModPoints,
+    artSuffix[0],
+  );
+  const refineFrag = fragConst > fragSum;
+  const refineSlack = slackConst > 0;
   let runningTotal = 0;
   let runningNet = 0;
-  // The remaining slots' artifice +3s are inside suffixTotal / suffixNetTotal; only the
-  // chosen pieces' are added here.
-  const artUpside = (): number => chosenArt.n * ARTIFICE_MOD_BONUS;
-  const shared = (k: number): number => modUpside(k) + artUpside();
-  const positive = (k: number): number => runningTotal + suffixTotal[k] + fragUpside(k);
-  const net = (k: number): number => runningNet + suffixNetTotal[k] + fragSum + zeroSlack(k);
-  // The per-node fragment and slack terms evaluated on the empty prefix are the
-  // pool-wide constants (a chosen piece contributes at least its slot's floor, so the
-  // per-node values only ever come in at or under these). cannotBeat tries the
-  // constants first and refines only when that fails to prune AND refinement can
-  // still lower something — on a Tier-5 pool with non-negative fragments the slack is
-  // already 0 and every fragment already counts, so the hot walk never pays for the
-  // two 6-stat loops.
-  const fragConst = fragUpside(0);
-  const slackConst = zeroSlack(0);
-  const refines = slackConst > 0 || fragConst > fragSum;
+  // The one bound expression, minus the mod term: min(positive, net) + the chosen
+  // pieces' artifice +3s (the remaining slots' are inside suffixTotal / suffixNetTotal).
+  // An Infinity term drops its side, which is how positive() / net() read one alone.
+  const bound = (k: number, fragTerm: number, slack: number): number => {
+    const a = runningTotal + suffixTotal[k] + fragTerm;
+    const b = runningNet + suffixNetTotal[k] + fragSum + slack;
+    return (a < b ? a : b) + chosenArt.n * ARTIFICE_MOD_BONUS;
+  };
   return {
     push(k, i) {
       const p = slots[k][i];
@@ -712,23 +702,18 @@ export function makeAdmissionBound(
       runningNet -= p.total + p.tuneNetUpside;
     },
     cannotBeat(k, worst) {
-      // Cheapest first; each bound is admissible alone, so either one at or under
-      // `worst` prunes. The mod term loops only over targeted stats and is last.
-      const art = artUpside();
-      const a = runningTotal + suffixTotal[k] + fragConst + art;
-      const b = runningNet + suffixNetTotal[k] + fragSum + slackConst + art;
-      let base = a < b ? a : b;
-      if (base > worst && refines) {
-        const ra = positive(k) + art;
-        const rb = net(k) + art;
-        base = ra < rb ? ra : rb;
+      // Each bound is admissible alone, so either one at or under `worst` prunes. The
+      // mod term loops over the targeted stats and is last.
+      let base = bound(k, fragConst, slackConst);
+      if (base > worst && (refineFrag || refineSlack)) {
+        base = bound(k, refineFrag ? fragAt(k) : fragConst, refineSlack ? slackAt(k) : slackConst);
       }
       // modUpside(k) ≥ 0: if the rest already beats worst, the answer is known.
       if (base > worst) return false;
       return base + modUpside(k) <= worst;
     },
-    positive: (k) => positive(k) + shared(k),
-    net: (k) => net(k) + shared(k),
+    positive: (k) => bound(k, fragAt(k), Infinity) + modUpside(k),
+    net: (k) => bound(k, Infinity, slackAt(k)) + modUpside(k),
   };
 }
 
