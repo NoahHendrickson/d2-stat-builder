@@ -309,7 +309,8 @@ export function runCeilings(
   let pending: number[] = [];
   const stats: CeilingStats = { probes: 0, feasible: 0, disproven: 0, timedOut: 0, nodes: 0 };
   for (let t = 0; t < NUM_STATS; t++) {
-    const init = clamp(frag[t] + suffixStat[0][t] + maxModPoints + artSuffix[0] * 3);
+    // suffixStat already charges each artifice piece's +3 (see computeSuffixBounds).
+    const init = clamp(frag[t] + suffixStat[0][t] + maxModPoints);
     // With a proven upperSeed, narrow the proven high side to it — but never below the
     // seed's own achievable ceiling (defends against a too-low seed clamping a real
     // ceiling shut; the min(init, …) keeps a bogus-high seed from loosening the bound).
@@ -372,6 +373,51 @@ export function runCeilings(
     }
     if (performance.now() >= globalDeadline) break; // budget spent — keep proven values
     pending = next;
+  }
+  // Leftover pass. A timed-out probe shrinks the WORKING window, so a stat can run out
+  // of window — and drop out of `pending` — while the budget is still largely unspent
+  // (the two-set fixture used 785 of 1200 ms and reported Health 55 against a proven
+  // 86). While time remains, re-probe every stat whose achievable floor is still under
+  // its PROVEN upper, halving the proven gap and sharing what is left of the budget
+  // among the stats still open; each pass gives a probe more time than the last as
+  // other stats settle. A pass in which every probe timed out would only repeat, so
+  // it ends the loop. Same accounting as above: a witness raises the floor (and is
+  // harvested), a completed infeasible probe lowers the proven upper, a timeout
+  // changes nothing.
+  let retry: number[] = [];
+  for (let t = 0; t < NUM_STATS; t++) if (ceiling[t] < uppers[t]) retry.push(t);
+  while (retry.length && performance.now() < globalDeadline) {
+    const next: number[] = [];
+    let progressed = false;
+    for (let i = 0; i < retry.length; i++) {
+      const t = retry[i];
+      if (ceiling[t] >= uppers[t]) continue;
+      const now = performance.now();
+      if (now >= globalDeadline) break;
+      const share = (globalDeadline - now) / (retry.length - i);
+      const mid = ceiling[t] + Math.ceil((uppers[t] - ceiling[t]) / 2);
+      probeMins[t] = mid;
+      const w = feasible(Math.min(globalDeadline, now + share));
+      probeMins[t] = min[t];
+      onProbe?.();
+      stats.probes++;
+      if (w) {
+        stats.feasible++;
+        progressed = true;
+        ceiling[t] = mid;
+        if (mid >= min[t]) raiseAchievableFloors(ceiling, witnessRaw, w.modsUsed, mods);
+        onProgress?.(ceiling.slice(0, NUM_STATS));
+      } else if (aborted) {
+        stats.timedOut++;
+      } else {
+        stats.disproven++;
+        progressed = true;
+        uppers[t] = Math.min(uppers[t], mid - 1);
+      }
+      if (ceiling[t] < uppers[t]) next.push(t);
+    }
+    if (!progressed) break;
+    retry = next;
   }
   // Exactness is the equality of the proven pair: a stat is exact iff its achievable
   // ceiling has met its proven upper. Any gap (a timed-out or budget-starved window that

@@ -413,7 +413,7 @@
     ],
     "exact": true,
     "counters": {
-      "tried": 386463,
+      "tried": 308,
       "valid": 281,
       "validExact": false,
       "capped": false
@@ -441,8 +441,92 @@
     ],
     "exact": true,
     "counters": {
-      "tried": 237964,
-      "valid": 124693,
+      "tried": 12240,
+      "valid": 4718,
+      "validExact": false,
+      "capped": false
+    }
+  },
+  "legacy pool, loose": {
+    "hash": "fab48d32df120bba",
+    "n": 200,
+    "best": 465,
+    "ceilings": [
+      200,
+      164,
+      183,
+      199,
+      185,
+      166
+    ],
+    "uppers": [
+      200,
+      164,
+      183,
+      199,
+      185,
+      166
+    ],
+    "exact": true,
+    "counters": {
+      "tried": 866,
+      "valid": 437,
+      "validExact": false,
+      "capped": false
+    }
+  },
+  "legacy pool, 150/150": {
+    "hash": "6cdb452a00968032",
+    "n": 200,
+    "best": 505,
+    "ceilings": [
+      190,
+      87,
+      140,
+      190,
+      140,
+      115
+    ],
+    "uppers": [
+      190,
+      87,
+      140,
+      190,
+      140,
+      115
+    ],
+    "exact": true,
+    "counters": {
+      "tried": 4850,
+      "valid": 1034,
+      "validExact": false,
+      "capped": false
+    }
+  },
+  "legacy pool, 120/100/100": {
+    "hash": "9425b5e246ad9434",
+    "n": 200,
+    "best": 505,
+    "ceilings": [
+      200,
+      106,
+      187,
+      195,
+      140,
+      120
+    ],
+    "uppers": [
+      200,
+      106,
+      187,
+      195,
+      140,
+      120
+    ],
+    "exact": true,
+    "counters": {
+      "tried": 40658,
+      "valid": 3812,
       "validExact": false,
       "capped": false
     }

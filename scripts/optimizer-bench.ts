@@ -64,6 +64,39 @@ function artificePool(slots: Pool): Pool {
     ),
   );
 }
+/**
+ * Legacy (Armor 2.0) legendaries beside the Tier-5 pool, as "Legacy armor" admits them:
+ * old two-group rolls (each group of three sums to 30–34, every stat ≥ 2) plus the flat
+ * +2 masterwork, no tuning, roughly one in seven artifice. Deterministic (seeded).
+ * These pieces never make a result, so the walk must prune them — the 2026-10-16
+ * review found every lower-bound term paying for their low rolls instead.
+ */
+function legacyPool(slots: Pool, perSlot: number): Pool {
+  let seed = 0x1e9ac7;
+  const rng = (): number => {
+    seed = (seed + 0x6d2b79f5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+  const randInt = (lo: number, hi: number): number => lo + Math.floor(rng() * (hi - lo + 1));
+  const group = (): number[] => {
+    const total = randInt(30, 34);
+    const a = randInt(2, total - 4);
+    const b = randInt(2, total - a - 2);
+    return [a, b, total - a - b];
+  };
+  return slots.map((slot, k) => [
+    ...slot,
+    ...Array.from({ length: perSlot }, (_, i): OptimizerPiece => ({
+      id: `legacy${k}-${i}`,
+      stats: [...group(), ...group()].map((v) => v + 2),
+      exotic: false,
+      artifice: i % 7 === 3,
+      power: 400,
+    })),
+  ]);
+}
 function poweredPool(slots: Pool): Pool {
   return slots.map((slot) => slot.map((p, i) => ({ ...p, power: 400 + (i % 11) })));
 }
@@ -140,6 +173,14 @@ export function queries(pool: Pool): Record<string, () => OptimizerInput> {
     "no exotic, 150/150": () => base(pool, { exotic: { mode: "none" }, ...M150 }),
     "artifice pool, loose": () => base(pool, { slots: artificePool(pool) }),
     "artifice pool, 150/150": () => base(pool, { slots: artificePool(pool), ...M150 }),
+    "legacy pool, loose": () => base(pool, { slots: legacyPool(pool, 50) }),
+    "legacy pool, 150/150": () => base(pool, { slots: legacyPool(pool, 50), ...M150 }),
+    "legacy pool, 120/100/100": () =>
+      base(pool, {
+        slots: legacyPool(pool, 50),
+        minimums: [120, 0, 100, 100, 0, 0],
+        mods: { major: 3, minor: 2 },
+      }),
     "power range 402-408, loose": () =>
       base(pool, { slots: poweredPool(pool), powerRange: { min: 402, max: 408 } }),
     "power range, 150/150": () =>

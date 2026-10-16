@@ -1232,3 +1232,94 @@ describe("required-exotic child skip", () => {
     expect(out.ceilingsExact).toBe(true);
   });
 });
+
+describe("no phantom pieces in the admission bound (2026-10-16 review)", () => {
+  // Tier-5-shaped legendaries: 90-point rolls, so every all-T5 build ties at 450 and a
+  // full heap of ties can only be pruned by a bound that is EXACT on those subtrees.
+  const t5 = (id: string, i: number): OptimizerPiece => ({
+    id,
+    stats: [30, 25, 20, 5, 5, 5].map((v, s) => (s === i % 6 ? v : v)),
+    exotic: false,
+  });
+  const t5Slots = (perSlot: number): OptimizerPiece[][] =>
+    Array.from({ length: 5 }, (_, k) =>
+      Array.from({ length: perSlot }, (_, i) => {
+        const p = t5(`s${k}p${i}`, i);
+        // Rotate the roll so same-slot pieces aren't dedupe twins.
+        p.stats = [...p.stats.slice(i % 6), ...p.stats.slice(0, i % 6)];
+        return p;
+      }),
+    );
+
+  test("an artifice piece in every slot doesn't keep the all-Tier-5 subtrees alive", () => {
+    // One weak artifice piece per slot (57 + 3 ≪ 90). Its +3 belongs to IT: credited
+    // to the slot instead, every all-T5 prefix looked able to reach 450 + 15 and the
+    // walk descended into all 10^5 leaves to prune each one.
+    const slots = t5Slots(10).map((slot, k) => [
+      ...slot,
+      { id: `art${k}`, stats: [22, 17, 12, 2, 2, 2], exotic: false, artifice: true },
+    ]);
+    const out = solve(input(slots, { maxResults: 20 }), { ceilingBudgetMs: 0 });
+    expect(out.loadouts.length).toBe(20);
+    expect(out.loadouts.every((l) => l.total === 450)).toBe(true);
+    expect(out.loadouts.some((l) => l.pieceIds.some((id) => id.startsWith("art")))).toBe(false);
+    // 20 leaves fill the heap; everything after is pruned at or above depth 4.
+    expect(out.combosTried).toBeLessThan(200);
+  });
+
+  test("low-rolled legacy pieces don't loosen the bound on the Tier-5 subtrees", () => {
+    // Old-roll legendaries (≈ 74 points, a 4 in some stat, no tuning) beside tunable
+    // T5 pieces, with two targeted stats and a mod budget. A pool-wide "lowest roll"
+    // paired one piece's 4 with another piece's −5, which priced every T5 directional
+    // as clamp-absorbed (credit 5, not Balanced's 3) and let the walk tune millions of
+    // legacy leaves that could never enter the heap.
+    const t5Only = t5Slots(12).map((slot) =>
+      slot.map((p, i) => ({
+        ...p,
+        tuning: { tuned: i % 2 === 0 ? 0 : 3, offStats: [3, 4, 5] },
+      })),
+    );
+    const withLegacy = t5Only.map((slot, k) => [
+      ...slot,
+      ...Array.from({ length: 12 }, (_, i) => ({
+        id: `legacy${k}-${i}`,
+        stats: [4 + i, 20 - i, 10, 16, 4 + (i % 3), 20 - (i % 5)],
+        exotic: false,
+      })),
+    ]);
+    const settings: Partial<OptimizerInput> = {
+      minimums: [100, 0, 0, 100, 0, 0],
+      mods: { major: 3, minor: 2 },
+      allowTuning: true,
+      maxResults: 50,
+    };
+    const alone = solve(input(t5Only, settings), { ceilingBudgetMs: 0 });
+    const out = solve(input(withLegacy, settings), { ceilingBudgetMs: 0 });
+    expect(alone.loadouts.length).toBe(50);
+    expect(out.capped).toBe(false);
+    expect(out.loadouts.map((l) => l.total)).toEqual(alone.loadouts.map((l) => l.total));
+    expect(out.loadouts.some((l) => l.pieceIds.some((id) => id.startsWith("legacy")))).toBe(false);
+    // The legacy pieces must be cut by the bound near the root, not tuned leaf by leaf:
+    // doubling every slot with them keeps the walk within a small factor of the
+    // Tier-5-only walk instead of multiplying it by the legacy count (the pool-wide
+    // bound tuned ~15x as many leaves here and millions on a real pool).
+    expect(out.combosTried).toBeLessThan(alone.combosTried * 8);
+    expect(out.combosValid).toBeLessThan(alone.combosValid * 2);
+  });
+});
+
+describe("ceiling leftover pass", () => {
+  test("a stat whose working window timed out shut is re-probed while budget remains", () => {
+    // Fixture whose Health probe is the expensive one: with a budget that lets the
+    // round-robin shares time out but leaves plenty over, the leftover pass must close
+    // the proven gap instead of returning with the budget unspent.
+    const q = realWarlockTwoSetInput();
+    const top = solve(q, { ceilingBudgetMs: 0 });
+    const t0 = performance.now();
+    const r = solveCeilings(q, top.ceilings, 6000, { upperSeed: top.ceilingUppers });
+    const used = performance.now() - t0;
+    expect(r.exact).toBe(true);
+    expect(r.ceilings).toEqual(r.uppers);
+    expect(used).toBeLessThan(6000);
+  });
+});
