@@ -85,10 +85,9 @@ export default async function ({ page, app, step, shot, expect, log }) {
     const details = { role: "complementary", name: "Weapon details" };
     const mods = { role: "region", name: "Mods" };
     await page.waitFor(mods, { within: details });
-    // Range's value, read off the stat list: the last item on the name's line
-    // (a preview's signed change sits between them).
+    // Range's value, read off the stat list: the dd right after its dt.
     const range = () => page.evalJs(
-      `Number([...document.querySelectorAll('[aria-label="Weapon details"] dt')].find((dt) => dt.textContent === "Range")?.parentElement?.lastElementChild?.textContent)`,
+      `Number([...document.querySelectorAll('[aria-label="Weapon details"] dt')].find((dt) => dt.textContent === "Range")?.nextElementSibling?.textContent)`,
     );
     const before = await range();
     const ballistics = { role: "button", name: "Ballistics" };

@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
   buildWeaponDpsIndex,
+  compatibleSetups,
   matchSetupPerks,
   parseCsv,
   setupPerkKeys,
+  setupRolls,
   weaponDpsKey,
+  weaponPerkNames,
 } from "./weapon-dps";
 
 // The Sustained tab's shape: the header's own cells break across lines, and a
@@ -128,5 +131,62 @@ describe("matchSetupPerks", () => {
 
   it("leaves columns the setup names nothing in", () => {
     expect(matchSetupPerks(new Set(["b"]), [["a"], ["b", "c"]])).toEqual([undefined, 0]);
+  });
+});
+
+describe("setupRolls", () => {
+  // Perks: 0 Cluster Bomb, 1 Envious Arsenal, 2 Elemental Honing, 3 Timelost Magazine, 4 Ballistics.
+  const perks = ["Cluster Bomb", "Envious Arsenal", "Elemental Honing", "Timelost Magazine", "Ballistics"].map(
+    (name) => ({ name }),
+  );
+  const slots = [
+    { key: 3, perkIndices: [0, 1] },
+    { key: 4, perkIndices: [0, 2] },
+    { key: 5, perkIndices: [3] },
+    { key: 9, perkIndices: [4] },
+  ];
+  const setup = (text: string) => ({ setup: text, dps: 1 });
+
+  it("keys each named perk by its slot, one name per slot", () => {
+    expect(
+      setupRolls([setup("Cluster Bomb + Elemental Honing x5 + Timelost Magazine, Pack Hunter")], slots, perks),
+    ).toEqual([{ 3: 0, 4: 2, 5: 3 }]);
+  });
+
+  it("finds mods and masterworks by their slot too", () => {
+    expect(setupRolls([setup("Envious Arsenal, Ballistics")], slots, perks)).toEqual([{ 3: 1, 9: 4 }]);
+  });
+
+  it("is null for a setup that names nothing this weapon rolls", () => {
+    expect(setupRolls([setup("Pack Hunter, Argent Ordnance")], slots, perks)).toEqual([null]);
+  });
+});
+
+describe("compatibleSetups", () => {
+  const setup = (text: string) => ({ setup: text, dps: 1 });
+  const base = new Set(["chaos reshaped", "mega kill clip", "backup mag"]);
+  const adept = new Set(["backup mag", "rewind rounds"]);
+  const versions = new Set([...base, ...adept]);
+  const setups = [
+    setup("no Backup Mag, projectile, Chaos Reshaped x2 + Mega Kill Clip"),
+    setup("Rewind Rounds, Pack Hunter, simulated"),
+  ];
+
+  it("leaves out a setup naming a perk only another version rolls", () => {
+    expect(compatibleSetups(setups, adept, versions)).toEqual([setups[1]]);
+    expect(compatibleSetups(setups, base, versions)).toEqual([setups[0]]);
+  });
+
+  it("ignores names no version rolls, like buffs and notes", () => {
+    expect(compatibleSetups([setup("Pack Hunter, simulated")], adept, versions)).toHaveLength(1);
+  });
+});
+
+describe("weaponPerkNames", () => {
+  it("covers columns, masterworks and mods", () => {
+    const perks = ["Rampage", "Range Masterwork", "Ballistics"].map((name) => ({ name }));
+    expect(weaponPerkNames({ columns: [{ perkIndices: [0] }], masterworks: [1], mods: [2] }, perks)).toEqual(
+      new Set(["rampage", "range masterwork", "ballistics"]),
+    );
   });
 });

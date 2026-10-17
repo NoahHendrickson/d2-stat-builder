@@ -80,32 +80,36 @@ export function WeaponStats({
         const low = clamp(Math.min(value, from));
         const high = clamp(Math.max(value, from));
         return (
-          <div key={name} className="grid gap-1">
-            <div className="flex items-baseline gap-2">
-              <dt className="min-w-0 flex-1 truncate text-muted-foreground">
-                {name}
-              </dt>
+          // One group per stat, only dt and dd inside, read name, value, change:
+          // the change sits left of the value on screen but after it in order,
+          // so a screen reader hears "Range 53, minus 3".
+          <div
+            key={name}
+            className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-baseline gap-x-2 gap-y-1"
+          >
+            <dt className="col-start-1 row-start-1 flex min-w-0 items-center justify-between gap-2 text-muted-foreground">
+              <span className="truncate">{name}</span>
               {name === RECOIL && <RecoilArc value={value} />}
-              {delta !== 0 && (
-                <dd
-                  className={cn(
-                    "text-xs tabular-nums",
-                    delta > 0 ? "text-positive" : "text-destructive",
-                  )}
-                >
-                  {delta > 0 ? `+${delta}` : `−${-delta}`}
-                </dd>
+            </dt>
+            <dd
+              className={cn(
+                "col-start-3 row-start-1 tabular-nums",
+                delta > 0 && "text-positive",
+                delta < 0 && "text-destructive",
               )}
+            >
+              {value}
+            </dd>
+            {delta !== 0 && (
               <dd
                 className={cn(
-                  "tabular-nums",
-                  delta > 0 && "text-positive",
-                  delta < 0 && "text-destructive",
+                  "col-start-2 row-start-1 text-xs tabular-nums",
+                  delta > 0 ? "text-positive" : "text-destructive",
                 )}
               >
-                {value}
+                {delta > 0 ? `+${delta}` : `−${-delta}`}
               </dd>
-            </div>
+            )}
             {bar && (
               // The stat in a green that dims left to right, lit across its
               // upper-right half by a sheen cut corner to corner, inside a pale
@@ -117,7 +121,7 @@ export function WeaponStats({
               // it drops the lines.
               <dd
                 aria-hidden
-                className="relative h-2 normal:overflow-hidden normal:rounded-full"
+                className="relative col-span-3 row-start-2 h-2 normal:overflow-hidden normal:rounded-full"
               >
                 <div
                   className={cn(

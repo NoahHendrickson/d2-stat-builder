@@ -188,8 +188,11 @@ export function internWeaponCatalog(
     };
   });
 
-  // Mods go in last, after every weapon's perks, so adding them leaves the
-  // indices those already had alone.
+  // Mods go in last, after every weapon's perks. Nothing reads perk indices
+  // across snapshots (popularity and DPS go by hash and name), so this is only
+  // so that regenerating public/data/weapons.json with mods added kept the
+  // existing perks at their indices, and the snapshot's diff stayed additive
+  // and reviewable.
   weapons.forEach((weapon, i) => {
     if (!weapon.modOptions?.length) return;
     summaries[i]!.mods = weapon.modOptions.map((mod) => internPerk(mod));

@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
+import type { Roll } from "@/lib/weapons/pick-slots";
 import type {
   PopularityView,
   WeaponPopularityView,
@@ -46,11 +47,11 @@ export function PopularityBar({
   onTryTop,
 }: {
   view: WeaponPopularityView;
-  onTryTop: (roll: Record<number, number>) => void;
+  onTryTop: (roll: Roll) => void;
 }) {
   const sampled = view.generatedAt ? shortDate.format(new Date(view.generatedAt)) : undefined;
   return (
-    <div className="mt-2 grid gap-2">
+    <div className="mt-1 grid gap-2">
       <div className="flex flex-wrap items-center gap-1.5">
         <div className="flex gap-1" role="radiogroup" aria-label="Count copies from">
           {MODES.map((m) => (

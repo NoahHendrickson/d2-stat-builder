@@ -4,6 +4,8 @@
  * public/data/weapon-dps.json; the weapon page reads that snapshot.
  */
 
+import type { PickSlot, Roll } from "./pick-slots";
+
 export const DPS_SHEET_ID = "1_5wtBjRYHHxuF4oJKDb_iOGZs-wTkzB6RYbnyNLbuz4";
 /** The "Sustained" tab: simulated DPS of single damage sources. */
 export const DPS_SHEET_GID = "1455724279";
@@ -20,7 +22,7 @@ export interface DpsSetup {
   reservesDamage?: number;
   /** Seconds to fire off full reserves, reloads included (the sheet's TtE). */
   timeToEmpty?: number;
-  /** The weapon never reloads (the sheet's INF). */
+  /** Unlimited ammo (the sheet's INF), so there are no full reserves to total. */
   infinite?: true;
 }
 
@@ -205,4 +207,71 @@ export function matchSetupPerks(
   }
   columns.forEach((_, column) => place(column, new Set()));
   return picks;
+}
+
+/** The slot fields the matchers read (see `PickSlot`). */
+type SetupSlot = Pick<PickSlot, "key" | "perkIndices">;
+
+/** Each slot's perks as `perkNameKey`s, in slot order. */
+function slotNames(slots: readonly SetupSlot[], perks: readonly { name: string }[]) {
+  return slots.map((slot) => slot.perkIndices.map((i) => perkNameKey(perks[i]?.name ?? "")));
+}
+
+/**
+ * Each setup's roll on this weapon: the perk it names in each slot (see
+ * `matchSetupPerks`), keyed by slot, or null for a setup that names none here
+ * (buffs only).
+ */
+export function setupRolls(
+  setups: readonly DpsSetup[],
+  slots: readonly SetupSlot[],
+  perks: readonly { name: string }[],
+): (Roll | null)[] {
+  const names = slotNames(slots, perks);
+  return setups.map(({ setup }) => {
+    const roll: Roll = {};
+    matchSetupPerks(new Set(setupPerkKeys(setup)), names).forEach((at, i) => {
+      if (at !== undefined) roll[slots[i]!.key] = slots[i]!.perkIndices[at]!;
+    });
+    return Object.keys(roll).length > 0 ? roll : null;
+  });
+}
+
+/**
+ * Every perk name a weapon can roll (its columns, masterworks and mods), as
+ * `perkNameKey`s.
+ */
+export function weaponPerkNames(
+  weapon: {
+    columns: readonly { perkIndices: readonly number[] }[];
+    masterworks?: readonly number[];
+    mods?: readonly number[];
+  },
+  perks: readonly { name: string }[],
+): Set<string> {
+  const names = new Set<string>();
+  for (const indices of [...weapon.columns.map((c) => c.perkIndices), weapon.masterworks ?? [], weapon.mods ?? []])
+    for (const i of indices) {
+      const name = perks[i]?.name;
+      if (name) names.add(perkNameKey(name));
+    }
+  return names;
+}
+
+/**
+ * The setups this copy of a weapon can run. The sheet names a weapon without
+ * its version, so one name covers the base, adept and Timelost copies, whose
+ * perk pools differ. A setup that names a perk another version can roll
+ * (`versionPerks`, every version's `weaponPerkNames` together) but this one
+ * (`ownPerks`) can't was run on that other version, so it's left out. Names no
+ * version has (buffs, catalysts, notes) don't count either way.
+ */
+export function compatibleSetups(
+  setups: readonly DpsSetup[],
+  ownPerks: ReadonlySet<string>,
+  versionPerks: ReadonlySet<string>,
+): DpsSetup[] {
+  return setups.filter(({ setup }) =>
+    setupPerkKeys(setup).every((name) => ownPerks.has(name) || !versionPerks.has(name)),
+  );
 }
