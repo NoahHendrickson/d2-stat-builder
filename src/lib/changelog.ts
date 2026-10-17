@@ -18,7 +18,7 @@ export const CHANGELOG: readonly ChangelogEntry[] = [
   {
     date: "2026-10-16",
     changes: [
-      "Stat optimizer: searches with Legacy armor, legacy raid sets or artifice pieces in the pool finish at once instead of hitting the time limit and refining in the background. The stat maxima on the sliders also settle in one pass more often.",
+      "Stat optimizer: searches with Legacy armor, legacy raid sets or artifice pieces are faster and less likely to hit the time limit. Stat maxima on the sliders also settle sooner.",
     ],
   },
   {
