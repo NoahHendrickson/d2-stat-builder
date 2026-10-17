@@ -9,6 +9,8 @@
  * it from there.
  */
 
+import type { CompactWeaponIndex } from "./transport";
+
 /** Where the published snapshot lives (GitHub Pages, so serving it costs Vercel nothing). */
 export const PERK_POPULARITY_URL =
   "https://noahhendrickson.github.io/d2-conflux-data/perk-popularity.json";
@@ -39,15 +41,14 @@ export interface PerkPopularityIndex {
   weapons: Record<string, WeaponPopularity>;
 }
 
-/** The catalog fields the tally needs, as in public/data/weapons.json. */
-export interface PopularityCatalog {
-  perks: { hash: number; alternateHashes?: number[] }[];
-  weapons: {
-    hash: number;
-    rarity: string;
-    columns: { perkIndices: number[] }[];
-  }[];
-}
+/** The catalog fields the tally needs: public/data/weapons.json, narrowed. */
+export type PopularityCatalog = {
+  perks: Pick<CompactWeaponIndex["perks"][number], "hash" | "alternateHashes">[];
+  weapons: (Pick<CatalogWeapon, "hash" | "rarity"> & {
+    columns: Pick<CatalogWeapon["columns"][number], "perkIndices">[];
+  })[];
+};
+type CatalogWeapon = CompactWeaponIndex["weapons"][number];
 
 /**
  * What the tally keeps of the catalog: for each random-rolled legendary, every
@@ -77,27 +78,55 @@ export function popularityLookup(catalog: PopularityCatalog): PopularityLookup {
 }
 
 /**
- * The base perk in each column of one equipped copy, from its sockets' plug
- * hashes in socket order (undefined for an empty socket). Columns follow socket
- * order, so each column takes the first socket after the previous column's that
- * holds one of its perks; that keeps a perk two columns share (Opening Shot in
- * both trait columns) in the right one. A column with no match is undefined.
+ * Which socket each column lives in on this weapon, learned from copies of it
+ * (each copy's plug hashes by socket index; undefined for an empty socket).
+ * Every copy of a weapon shares one socket layout, and most perks belong to one
+ * column only, so a column is placed at the socket where its own perks turn up
+ * most. Perks two columns share (Opening Shot in both trait columns) can't say
+ * which column they're in, so they don't vote. A column no copy places is
+ * undefined, and two columns never share a socket.
  */
-export function equippedPerks(
+export function columnSockets(
   columns: Map<number, number>[],
+  copies: readonly (readonly (number | undefined)[])[],
+): (number | undefined)[] {
+  const owners = new Map<number, number>();
+  columns.forEach((column, i) => {
+    for (const plug of column.keys()) owners.set(plug, owners.has(plug) ? -1 : i);
+  });
+  // votes[column][socket] = copies with one of only this column's perks there.
+  const votes = columns.map(() => new Map<number, number>());
+  for (const plugs of copies) {
+    plugs.forEach((plug, socket) => {
+      const owner = plug === undefined ? undefined : owners.get(plug);
+      if (owner === undefined || owner < 0) return;
+      votes[owner]!.set(socket, (votes[owner]!.get(socket) ?? 0) + 1);
+    });
+  }
+  const taken = new Set<number>();
+  return votes.map((byIndex) => {
+    let best: number | undefined;
+    for (const [socket, count] of byIndex)
+      if (!taken.has(socket) && (best === undefined || count > byIndex.get(best)!)) best = socket;
+    if (best !== undefined) taken.add(best);
+    return best;
+  });
+}
+
+/**
+ * The base perk in each column of one copy, read from the column's own socket
+ * (see `columnSockets`). A column whose socket holds something the catalog
+ * doesn't list for it is undefined, rather than borrowing a neighbour's perk.
+ */
+export function perksAtSockets(
+  columns: Map<number, number>[],
+  sockets: readonly (number | undefined)[],
   plugs: readonly (number | undefined)[],
 ): (number | undefined)[] {
-  let next = 0;
-  return columns.map((column) => {
-    if (column.size === 0) return undefined;
-    for (let socket = next; socket < plugs.length; socket++) {
-      const base = plugs[socket] === undefined ? undefined : column.get(plugs[socket]!);
-      if (base !== undefined) {
-        next = socket + 1;
-        return base;
-      }
-    }
-    return undefined;
+  return columns.map((column, i) => {
+    const socket = sockets[i];
+    const plug = socket === undefined ? undefined : plugs[socket];
+    return plug === undefined ? undefined : column.get(plug);
   });
 }
 

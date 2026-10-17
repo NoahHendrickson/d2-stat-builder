@@ -1,9 +1,11 @@
 import { loadEnvConfig } from "@next/env";
 import { readFile, rename, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
+import { THROTTLE_CODES } from "../src/lib/bungie/throttle";
 import {
   addCopy,
-  equippedPerks,
+  columnSockets,
+  perksAtSockets,
   popularityLookup,
   type PerkPopularityIndex,
   type PopularityCatalog,
@@ -18,9 +20,13 @@ import {
  * It walks back from the newest post-game report, a few report ids apart so the
  * sample spreads over time, and for each player it hasn't seen reads the
  * weapons the character in that report has equipped, with their perks.
- * Equipped items are public on every profile, so no one signs in. Nothing about
- * a player is kept except the tally. All requests share one rate limit and back
- * off when Bungie asks.
+ * Equipped items are public on every profile, so no one signs in. A weapon only
+ * counts if the report lists it among the weapons used in that match, so the
+ * PvE/PvP split is about where it was used, not where the player went next.
+ * Each weapon's columns are read from their own sockets, learned from all its
+ * copies at the end (see columnSockets). Nothing about a player is kept except
+ * the tally. All requests share one rate limit; only throttles, server errors
+ * and network failures are retried.
  *
  *   tsx scripts/crawl-perk-popularity.ts --players=500 --out=public/dev-data/perk-popularity.json
  *
@@ -80,14 +86,6 @@ interface BungieResponse<T> {
   Response?: T;
 }
 
-/** Codes that mean "not there" or "can't see it", not "try again". */
-const SKIP_CODES = new Set([
-  1653, // DestinyPGCRNotFound
-  1601, // DestinyAccountNotFound
-  1618, // DestinyUnexpectedError
-  1665, // DestinyPrivacyRestriction
-  217, // UserCannotResolveCentralAccount
-]);
 
 function bungieClient(apiKey: string, rate: number) {
   const spacing = 1000 / rate;
@@ -114,13 +112,16 @@ function bungieClient(apiKey: string, rate: number) {
         // Network blip: back off and retry.
       }
       if (body?.ErrorCode === 1) return body.Response;
-      if (body && SKIP_CODES.has(body.ErrorCode)) return undefined;
       if (body?.ErrorCode === 5) throw new Error("Bungie's API is down for maintenance.");
       if (body?.ErrorCode === 2101 || body?.ErrorCode === 2102)
         throw new Error(`The API key was rejected (${body.ErrorStatus}).`);
-      // Throttled, a 5xx, or something unexpected: wait as long as Bungie asks, at least a backoff.
+      const throttled = status === 429 || (body !== undefined && THROTTLE_CODES.has(body.ErrorCode));
+      // Any other answer (not found, private, bad parameters, …) won't change on retry.
+      if (body && !throttled && status < 500) return undefined;
+      // Throttled, a 5xx, or no answer at all: wait as long as Bungie asks, at least a backoff,
+      // and hold every worker back for a throttle.
       const wait = Math.max((body?.ThrottleSeconds ?? 0) * 1000, 1000 * 2 ** attempt);
-      if (status === 429 || body?.ThrottleSeconds) nextSlot = Date.now() + wait;
+      if (throttled) nextSlot = Date.now() + wait;
       await sleep(wait);
     }
     return undefined;
@@ -131,6 +132,8 @@ function bungieClient(apiKey: string, rate: number) {
 interface PgcrEntry {
   characterId: string;
   player?: { destinyUserInfo?: { membershipType: number; membershipId: string } };
+  /** The weapons this player used in the match (got kills with). */
+  extended?: { weapons?: { referenceId: number }[] };
 }
 interface Pgcr {
   period: string;
@@ -180,7 +183,8 @@ async function main() {
   const newest = await newestPgcr(client.get);
   console.log(`Walking back from report ${newest}.`);
 
-  const tally: Record<string, WeaponPopularity> = {};
+  // Each weapon's copies (mode and plugs by socket), tallied once every copy is in.
+  const copiesByWeapon = new Map<number, { mode: PopularityMode; plugs: (number | undefined)[] }[]>();
   const seen = new Set<string>();
   let nextId = newest;
   let reports = 0;
@@ -191,7 +195,8 @@ async function main() {
 
   async function samplePlayer(entry: PgcrEntry, mode: PopularityMode) {
     const user = entry.player?.destinyUserInfo;
-    if (!user?.membershipId || seen.has(user.membershipId) || done()) return;
+    const used = new Set(entry.extended?.weapons?.map((w) => w.referenceId));
+    if (!user?.membershipId || used.size === 0 || seen.has(user.membershipId) || done()) return;
     seen.add(user.membershipId);
     const profile = await client.get<Profile>(
       `https://www.bungie.net/Platform/Destiny2/${user.membershipType}/Profile/${user.membershipId}/?components=205,305`,
@@ -200,10 +205,12 @@ async function main() {
     const sockets = profile?.itemComponents?.sockets?.data ?? {};
     for (const item of items) {
       if (!WEAPON_BUCKETS.has(item.bucketHash) || !item.itemInstanceId) continue;
-      const columns = lookup.get(item.itemHash);
+      if (!used.has(item.itemHash) || !lookup.has(item.itemHash)) continue;
       const plugs = sockets[item.itemInstanceId]?.sockets.map((s) => s.plugHash);
-      if (!columns || !plugs) continue;
-      addCopy(tally, item.itemHash, equippedPerks(columns, plugs), mode);
+      if (!plugs) continue;
+      const list = copiesByWeapon.get(item.itemHash) ?? [];
+      list.push({ mode, plugs });
+      copiesByWeapon.set(item.itemHash, list);
       copies++;
     }
   }
@@ -232,6 +239,12 @@ async function main() {
   clearInterval(progress);
 
   if (copies === 0) throw new Error("No weapons were tallied; nothing written.");
+  const tally: Record<string, WeaponPopularity> = {};
+  for (const [hash, list] of copiesByWeapon) {
+    const columns = lookup.get(hash)!;
+    const placed = columnSockets(columns, list.map((c) => c.plugs));
+    for (const { mode, plugs } of list) addCopy(tally, hash, perksAtSockets(columns, placed, plugs), mode);
+  }
   const snapshot: PerkPopularityIndex = {
     schema: 1,
     generatedAt: new Date().toISOString(),

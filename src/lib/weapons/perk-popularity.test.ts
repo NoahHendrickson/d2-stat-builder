@@ -3,7 +3,8 @@ import {
   addCopy,
   columnShares,
   copiesSeen,
-  equippedPerks,
+  columnSockets,
+  perksAtSockets,
   popularityLookup,
   type PopularityCatalog,
   type WeaponPopularity,
@@ -49,21 +50,32 @@ describe("popularityLookup", () => {
   });
 });
 
-describe("equippedPerks", () => {
+describe("columnSockets and perksAtSockets", () => {
   const columns = popularityLookup(CATALOG).get(1)!;
+  // Socket layout of weapon 1: 0 frame, 1 barrel, 2 trait one, 3 trait two, 4 a shader.
+  const copies = [
+    [10, 12, 400, 15, 999],
+    [10, 11, 14, 15, 998],
+    [10, 11, 13, 15, 999],
+  ];
+  const sockets = columnSockets(columns, copies);
 
-  it("reads each column from the sockets in order", () => {
-    // Sockets: frame, barrel 12, enhanced Rampage, Kill Clip, then a shader.
-    expect(equippedPerks(columns, [10, 12, 400, 15, 999])).toEqual([undefined, 12, 14, 15]);
+  it("places each column at the socket its own perks turn up in", () => {
+    expect(sockets).toEqual([undefined, 1, 2, 3]);
   });
 
-  it("puts a perk both trait columns share in the column its socket belongs to", () => {
-    expect(equippedPerks(columns, [10, 11, 14, 13])).toEqual([undefined, 11, 14, 13]);
-    expect(equippedPerks(columns, [10, 11, 13, 15])).toEqual([undefined, 11, 13, 15]);
+  it("reads a perk two columns share from the socket it sits in", () => {
+    expect(perksAtSockets(columns, sockets, [10, 11, 13, 15, 999])).toEqual([undefined, 11, 13, 15]);
+    expect(perksAtSockets(columns, sockets, [10, 11, 14, 13, 999])).toEqual([undefined, 11, 14, 13]);
   });
 
-  it("leaves a column it can't find empty and carries on", () => {
-    expect(equippedPerks(columns, [10, undefined, 13, 15])).toEqual([undefined, undefined, 13, 15]);
+  it("leaves a column with an unlisted plug empty instead of taking its neighbour's perk", () => {
+    // Trait one holds a plug the catalog doesn't list; trait two holds the shared Opening Shot.
+    expect(perksAtSockets(columns, sockets, [10, 11, 777, 13, 999])).toEqual([undefined, 11, undefined, 13]);
+  });
+
+  it("doesn't let shared perks place a column, nor two columns share a socket", () => {
+    expect(columnSockets(columns, [[10, 11, 13, 13]])).toEqual([undefined, 1, undefined, undefined]);
   });
 });
 
