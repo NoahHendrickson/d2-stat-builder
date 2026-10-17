@@ -150,7 +150,7 @@ export function solve(
   const mods: ModBudget = input.mods ?? { major: 0, minor: 0 };
   const maxModPoints = mods.major * 10 + mods.minor * 5;
   // Build-wide fragment constant, folded into every loadout's effective stats. May be
-  // negative; its share of the top-N bound is fragUpside (see fragmentCredit).
+  // negative; its share of the top-N bound is fragmentCredit (bounds.ts).
   const frag = input.fragmentBonus ?? new Array(NUM_STATS).fill(0);
   const reqs: SetRequirement[] = input.setRequirements ?? [];
   const exoticMode = input.exotic?.mode ?? "any";
@@ -177,8 +177,9 @@ export function solve(
   const suffix = computeSuffixBounds(slots, reqs, needExotic, (p) => p.exotic, {
     frag,
     mins: min,
+    maxModPoints,
   });
-  const { suffixStat, setSuffix, exoticSuffix, artSuffix, subsetSuffix } = suffix;
+  const { suffixStat, setSuffix, exoticSuffix, subsetSuffix } = suffix;
 
   const heap = new TopNHeap(maxResults);
   // Pre-seed from a prior pass over the SAME input (see SolveOptions.heapSeed): the
@@ -254,7 +255,6 @@ export function solve(
     frag,
     suffixStat,
     subsetSuffix,
-    artSuffix,
     maxModPoints,
     chosenArt,
   );

@@ -13,6 +13,7 @@ import { describe, expect, test } from "vitest";
 import { mulberry32, randInt } from "./test-rng";
 import { computeSuffixBounds, makeAdmissionBound, makeJointMinCheck } from "./bounds";
 import { solveCeilings } from "./ceilings";
+import { solve } from "./solve";
 import {
   NUM_SLOTS,
   NUM_STATS,
@@ -87,7 +88,7 @@ function randomCase(rng: () => number): RandomCase {
  * signature, so a signature change updates only this helper.
  */
 function buildBound(c: RandomCase, sum: number[], sumTuneUp: number[], chosenArt: { n: number }) {
-  const { suffixStat, subsetSuffix, artSuffix } = computeSuffixBounds(
+  const { suffixStat, subsetSuffix } = computeSuffixBounds(
     c.slots,
     [],
     false,
@@ -101,7 +102,6 @@ function buildBound(c: RandomCase, sum: number[], sumTuneUp: number[], chosenArt
     c.frag,
     suffixStat,
     subsetSuffix,
-    artSuffix,
     maxModPoints,
     chosenArt,
   );
@@ -233,12 +233,13 @@ describe("subset-mask suffix bound effectiveness", () => {
 
 describe("top-N admission bound admissibility (never prunes a better completion)", () => {
   /**
-   * The bound solve() prunes a prefix with, rebuilt from the same primitives: chosen
-   * pieces' stats + credited tuning upside, the best the remaining slots can add
-   * (suffixTotal), the mod-slack term (makeModUpside), the reachable artifice +3s and
-   * the fragments' positive part. Brute-forcing every completion through the REAL leaf
-   * search must never find a total above it — at every depth, including the leaf itself
-   * (where the same bound gates the tuner).
+   * The bound solve() prunes a prefix with, from the same factory: chosen pieces' stats
+   * + credited tuning upside + their artifice +3s, the best the remaining slots can add
+   * (suffixTotal, each piece's own +3 included), the mod-slack term (makeModUpside) and
+   * the fragment term. Brute-forcing every completion through the REAL leaf search must
+   * never find a total above either side, nor see cannotBeat prune a prefix whose best
+   * completion beats the threshold — at every depth, including the leaf itself (where
+   * the same bound gates the tuner).
    */
   test("~200 seeded-random pools: bound(k) ≥ the best total of every completion", () => {
     const rng = mulberry32(0xb0d1e5);
@@ -254,11 +255,12 @@ describe("top-N admission bound admissibility (never prunes a better completion)
       const tuner = createTuningSearcher(c.frag, c.mods);
       // Exactly as solve() builds it: top-N suffix bounds (tightened tuning credit for
       // these minimums + fragments) and the one admission-bound factory.
+      const maxModPoints = c.mods.major * 10 + c.mods.minor * 5;
       const suffix = computeSuffixBounds(c.slots, [], false, () => false, {
         frag: c.frag,
         mins: c.mins,
+        maxModPoints,
       });
-      const maxModPoints = c.mods.major * 10 + c.mods.minor * 5;
       if (suffix.suffixStat[0].some((v, s) => v + c.frag[s] >= STAT_CAP)) capReachable++;
       const sum = new Array(NUM_STATS).fill(0);
       const sumTuneDown = new Array(NUM_STATS).fill(0);
@@ -327,6 +329,10 @@ describe("top-N admission bound admissibility (never prunes a better completion)
               .join(",")} mins=${c.mins} frag=${c.frag} mods=${JSON.stringify(c.mods)}`;
             expect(positive, `positive-parts bound: ${ctx}`).toBeGreaterThanOrEqual(best);
             expect(net, `net-tuning bound: ${ctx}`).toBeGreaterThanOrEqual(best);
+            // The walk prunes through cannotBeat (pool-wide constants first, then the
+            // per-node terms), not through positive/net: it must never cut a prefix
+            // that a real completion lifts above the threshold.
+            expect(admission.cannotBeat(k, best - 1), `cannotBeat: ${ctx}`).toBe(false);
             if (Math.min(positive, net) === best) tightPrefixes++;
           }
           for (let j = k - 1; j >= 0; j--) removePiece(j);
@@ -342,5 +348,91 @@ describe("top-N admission bound admissibility (never prunes a better completion)
     // dominance rule).
     expect(capReachable).toBeGreaterThan(50);
     expect(withExotic).toBeGreaterThan(100);
+  });
+});
+
+describe("no phantom pieces in the admission bound (2026-10-16 review)", () => {
+  // Tier-5-shaped legendaries: 90-point rolls, so every all-T5 build ties at 450 and a
+  // full heap of ties can only be pruned by a bound that is EXACT on those subtrees.
+  const t5 = (id: string): OptimizerPiece => ({
+    id,
+    stats: [30, 25, 20, 5, 5, 5],
+    exotic: false,
+  });
+  /** No mods, no tuning, no set/exotic constraints, all minimums 0. */
+  const input = (
+    slots: OptimizerPiece[][],
+    overrides: Partial<OptimizerInput> = {},
+  ): OptimizerInput => ({
+    slots,
+    minimums: [0, 0, 0, 0, 0, 0],
+    mods: { major: 0, minor: 0 },
+    allowTuning: false,
+    ...overrides,
+  });
+  const t5Slots = (perSlot: number): OptimizerPiece[][] =>
+    Array.from({ length: 5 }, (_, k) =>
+      Array.from({ length: perSlot }, (_, i) => {
+        const p = t5(`s${k}p${i}`);
+        // Rotate the roll so same-slot pieces aren't dedupe twins.
+        p.stats = [...p.stats.slice(i % 6), ...p.stats.slice(0, i % 6)];
+        return p;
+      }),
+    );
+
+  test("an artifice piece in every slot doesn't keep the all-Tier-5 subtrees alive", () => {
+    // One weak artifice piece per slot (57 + 3 ≪ 90). Its +3 belongs to IT: credited
+    // to the slot instead, every all-T5 prefix looked able to reach 450 + 15 and the
+    // walk descended into all 10^5 leaves to prune each one.
+    const slots = t5Slots(10).map((slot, k) => [
+      ...slot,
+      { id: `art${k}`, stats: [22, 17, 12, 2, 2, 2], exotic: false, artifice: true },
+    ]);
+    const out = solve(input(slots, { maxResults: 20 }), { ceilingBudgetMs: 0 });
+    expect(out.loadouts.length).toBe(20);
+    expect(out.loadouts.every((l) => l.total === 450)).toBe(true);
+    expect(out.loadouts.some((l) => l.pieceIds.some((id) => id.startsWith("art")))).toBe(false);
+    // 20 leaves fill the heap; everything after is pruned at or above depth 4.
+    expect(out.combosTried).toBeLessThan(200);
+  });
+
+  test("low-rolled legacy pieces don't loosen the bound on the Tier-5 subtrees", () => {
+    // Old-roll legendaries (≈ 74 points, a 4 in some stat, no tuning) beside tunable
+    // T5 pieces, with two targeted stats and a mod budget. A pool-wide "lowest roll"
+    // paired one piece's 4 with another piece's −5, which priced every T5 directional
+    // as clamp-absorbed (credit 5, not Balanced's 3) and let the walk tune millions of
+    // legacy leaves that could never enter the heap.
+    const t5Only = t5Slots(12).map((slot) =>
+      slot.map((p, i) => ({
+        ...p,
+        tuning: { tuned: i % 2 === 0 ? 0 : 3, offStats: [3, 4, 5] },
+      })),
+    );
+    const withLegacy = t5Only.map((slot, k) => [
+      ...slot,
+      ...Array.from({ length: 12 }, (_, i) => ({
+        id: `legacy${k}-${i}`,
+        stats: [4 + i, 20 - i, 10, 16, 4 + (i % 3), 20 - (i % 5)],
+        exotic: false,
+      })),
+    ]);
+    const settings: Partial<OptimizerInput> = {
+      minimums: [100, 0, 0, 100, 0, 0],
+      mods: { major: 3, minor: 2 },
+      allowTuning: true,
+      maxResults: 50,
+    };
+    const alone = solve(input(t5Only, settings), { ceilingBudgetMs: 0 });
+    const out = solve(input(withLegacy, settings), { ceilingBudgetMs: 0 });
+    expect(alone.loadouts.length).toBe(50);
+    expect(out.capped).toBe(false);
+    expect(out.loadouts.map((l) => l.total)).toEqual(alone.loadouts.map((l) => l.total));
+    expect(out.loadouts.some((l) => l.pieceIds.some((id) => id.startsWith("legacy")))).toBe(false);
+    // The legacy pieces must be cut by the bound near the root, not tuned leaf by leaf:
+    // doubling every slot with them keeps the walk within a small factor of the
+    // Tier-5-only walk instead of multiplying it by the legacy count (the pool-wide
+    // bound tuned ~15x as many leaves here and millions on a real pool).
+    expect(out.combosTried).toBeLessThan(alone.combosTried * 8);
+    expect(out.combosValid).toBeLessThan(alone.combosValid * 2);
   });
 });

@@ -1288,7 +1288,7 @@ export function BuilderPanel({
                       checked={useLegacyArmor}
                       onCheckedChange={setUseLegacyArmor}
                       title="Legacy armor"
-                      description="Include Armor 2.0 legendaries. Searches can take several seconds longer. Also in Underlight settings."
+                      description="Include Armor 2.0 legendaries. Also in Underlight settings."
                     />
                     <SettingRow
                       checkbox

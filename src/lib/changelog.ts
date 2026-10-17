@@ -16,6 +16,12 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    date: "2026-10-16",
+    changes: [
+      "Stat optimizer: searches with Legacy armor, legacy raid sets or artifice pieces are faster and less likely to hit the time limit. Stat maxima on the sliders also settle sooner.",
+    ],
+  },
+  {
     date: "2026-10-15",
     changes: [
       "Items has a new layout: each character gets a row laid out like the in-game character screen, with stats, the champions your weapons stun and set bonuses on the nameplate, and the vault scrolls on its own beside them. Prefer the old layout? Switch back with the gear in the search bar.",

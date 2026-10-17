@@ -79,6 +79,7 @@ export function solveCeilings(
     upperSeed: opts.upperSeed,
     onCeilings: opts.onCeilings,
     onProbe: opts.onProbe,
+    reopen: true,
   });
 }
 
@@ -132,6 +133,12 @@ export function runCeilings(
      * probes never read; every field used here matches an option-less call.
      */
     suffix?: SuffixBounds;
+    /**
+     * Keep sweeping while budget remains (see the sweep comment below). Off for the
+     * inline pass: solve() holds its build list until this returns, and the background
+     * phase reopens the windows anyway, seeded with the inline pass's proven uppers.
+     */
+    reopen?: boolean;
   } = {},
 ): { ceilings: number[]; uppers: number[]; exact: boolean; stats: CeilingStats } {
   const onProgress = opts.onCeilings;
@@ -147,7 +154,7 @@ export function runCeilings(
 
   // buildSlots pre-filtered constraint-ineligible exotics (see solve()) — reachability
   // is just p.exotic.
-  const { suffixStat, setSuffix, exoticSuffix, artSuffix, subsetSuffix } =
+  const { suffixStat, setSuffix, exoticSuffix, subsetSuffix } =
     opts.suffix ?? computeSuffixBounds(slots, reqs, needExotic, (p) => p.exotic);
 
   const ceiling = seed.slice(0, NUM_STATS);
@@ -182,7 +189,6 @@ export function runCeilings(
     frag,
     suffixStat,
     subsetSuffix,
-    artSuffix,
     maxModPoints,
     chosenArt,
   );
@@ -306,10 +312,10 @@ export function runCeilings(
   // by timeouts). They start equal; a timeout pulls `optimistic` below `uppers`.
   const uppers = new Array(NUM_STATS).fill(0);
   const optimistic = new Array(NUM_STATS).fill(0);
-  let pending: number[] = [];
   const stats: CeilingStats = { probes: 0, feasible: 0, disproven: 0, timedOut: 0, nodes: 0 };
   for (let t = 0; t < NUM_STATS; t++) {
-    const init = clamp(frag[t] + suffixStat[0][t] + maxModPoints + artSuffix[0] * 3);
+    // suffixStat already charges each artifice piece's +3 (see computeSuffixBounds).
+    const init = clamp(frag[t] + suffixStat[0][t] + maxModPoints);
     // With a proven upperSeed, narrow the proven high side to it — but never below the
     // seed's own achievable ceiling (defends against a too-low seed clamping a real
     // ceiling shut; the min(init, …) keeps a bogus-high seed from loosening the bound).
@@ -318,60 +324,85 @@ export function runCeilings(
         ? Math.max(ceiling[t], Math.min(init, upperSeed[t]))
         : init;
     optimistic[t] = uppers[t];
-    if (optimistic[t] > ceiling[t]) pending.push(t);
   }
-  while (pending.length) {
-    const next: number[] = [];
-    for (let i = 0; i < pending.length; i++) {
-      const t = pending[i];
-      // A witness harvest earlier this pass may have already lifted this stat's floor to
-      // its optimistic bound — it's settled, so don't probe it (and don't re-queue it or
-      // count it as a probe; a skip is not a probe). The share denominator over-counts a
-      // skipped stat by one, which only makes later shares slightly smaller (safe); the
-      // loop still terminates because `next` never re-adds a settled stat.
-      if (ceiling[t] >= optimistic[t]) continue;
-      const now = performance.now();
-      if (now >= globalDeadline) break;
-      const share = (globalDeadline - now) / (pending.length - i + next.length);
-      const mid = ceiling[t] + Math.ceil((optimistic[t] - ceiling[t]) / 2);
-      probeMins[t] = mid;
-      const w = feasible(Math.min(globalDeadline, now + share));
-      probeMins[t] = min[t];
-      onProbe?.();
-      stats.probes++;
-      if (w) {
-        stats.feasible++;
-        ceiling[t] = mid;
-        // Witness harvest: the probe replaced min[t] with `mid`, so the witness meets
-        // probeMins = (min with position t set to mid). That is a superset of the query's
-        // real minimums ONLY when mid >= min[t] — then the witness is a legal build for
-        // THIS query and its final stats (plus spare mods dumped into any one stat) are a
-        // valid achievable floor for EVERY stat's ceiling, letting a later stat settle
-        // without a probe of its own (see the settled-skip guard above). When mid < min[t]
-        // (a probe BELOW the user's own minimum, e.g. a stat whose min is unsatisfiable so
-        // its ceiling is searched from 0) the witness may violate min[t], so it is NOT a
-        // legal build and we must not harvest it into the other stats. `exact` is untouched
-        // either way: harvest only lifts the proven low side, never `optimistic`.
-        if (mid >= min[t]) {
-          raiseAchievableFloors(ceiling, witnessRaw, w.modsUsed, mods);
-        }
-        onProgress?.(ceiling.slice(0, NUM_STATS)); // stream each improvement for animation
-      } else {
-        if (aborted) {
-          stats.timedOut++;
-          // Unproven shrink: narrow only the working window, never the proven upper.
-          optimistic[t] = mid - 1;
+  // Sweeps. One sweep is the round-robin search above, run until every working window
+  // has closed. A timeout closes a window without proof, so a stat can drop out while
+  // the budget is still largely unspent (the two-set fixture used 785 of 1200 ms and
+  // reported Health 55 against a proven 86). With `reopen`, while time remains and the
+  // last sweep proved something (a witness or a disproof — so the gaps or the number of
+  // open stats changed), each stat still under its proven upper gets its window reset
+  // to that upper and the next sweep shares what is left among the stats still open.
+  // A sweep that only timed out would repeat itself, so it ends the search.
+  for (;;) {
+    let pending: number[] = [];
+    for (let t = 0; t < NUM_STATS; t++) if (ceiling[t] < optimistic[t]) pending.push(t);
+    let proved = false;
+    while (pending.length) {
+      const next: number[] = [];
+      for (let i = 0; i < pending.length; i++) {
+        const t = pending[i];
+        // A witness harvest earlier this pass may have already lifted this stat's floor
+        // to its optimistic bound — it's settled, so don't probe it (and don't re-queue
+        // it or count it as a probe; a skip is not a probe). The share denominator
+        // over-counts a skipped stat by one, which only makes later shares slightly
+        // smaller (safe); the loop still terminates because `next` never re-adds a
+        // settled stat.
+        if (ceiling[t] >= optimistic[t]) continue;
+        const now = performance.now();
+        if (now >= globalDeadline) break;
+        const share = (globalDeadline - now) / (pending.length - i + next.length);
+        const mid = ceiling[t] + Math.ceil((optimistic[t] - ceiling[t]) / 2);
+        probeMins[t] = mid;
+        const w = feasible(Math.min(globalDeadline, now + share));
+        probeMins[t] = min[t];
+        onProbe?.();
+        stats.probes++;
+        if (w) {
+          stats.feasible++;
+          proved = true;
+          ceiling[t] = mid;
+          // Witness harvest: the probe replaced min[t] with `mid`, so the witness meets
+          // probeMins = (min with position t set to mid). That is a superset of the
+          // query's real minimums ONLY when mid >= min[t] — then the witness is a legal
+          // build for THIS query and its final stats (plus spare mods dumped into any one
+          // stat) are a valid achievable floor for EVERY stat's ceiling, letting a later
+          // stat settle without a probe of its own (see the settled-skip guard above).
+          // When mid < min[t] (a probe BELOW the user's own minimum, e.g. a stat whose
+          // min is unsatisfiable so its ceiling is searched from 0) the witness may
+          // violate min[t], so it is NOT a legal build and we must not harvest it into
+          // the other stats. `exact` is untouched either way: harvest only lifts the
+          // proven low side, never `optimistic`.
+          if (mid >= min[t]) {
+            raiseAchievableFloors(ceiling, witnessRaw, w.modsUsed, mods);
+          }
+          onProgress?.(ceiling.slice(0, NUM_STATS)); // stream each improvement for animation
         } else {
-          stats.disproven++;
-          // Proven infeasible: `mid−1` is a certified upper — shrink BOTH sides.
-          uppers[t] = Math.min(uppers[t], mid - 1);
-          optimistic[t] = mid - 1;
+          if (aborted) {
+            stats.timedOut++;
+            // Unproven shrink: narrow only the working window, never the proven upper.
+            optimistic[t] = mid - 1;
+          } else {
+            stats.disproven++;
+            proved = true;
+            // Proven infeasible: `mid−1` is a certified upper — shrink BOTH sides.
+            uppers[t] = Math.min(uppers[t], mid - 1);
+            optimistic[t] = mid - 1;
+          }
         }
+        if (ceiling[t] < optimistic[t]) next.push(t);
       }
-      if (ceiling[t] < optimistic[t]) next.push(t);
+      if (performance.now() >= globalDeadline) break; // budget spent — keep proven values
+      pending = next;
     }
-    if (performance.now() >= globalDeadline) break; // budget spent — keep proven values
-    pending = next;
+    if (!opts.reopen || !proved || performance.now() >= globalDeadline) break;
+    let reopened = false;
+    for (let t = 0; t < NUM_STATS; t++) {
+      if (ceiling[t] < uppers[t]) {
+        optimistic[t] = uppers[t];
+        reopened = true;
+      }
+    }
+    if (!reopened) break;
   }
   // Exactness is the equality of the proven pair: a stat is exact iff its achievable
   // ceiling has met its proven upper. Any gap (a timed-out or budget-starved window that
