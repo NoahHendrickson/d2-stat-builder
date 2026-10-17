@@ -6,9 +6,7 @@ import { createValueStore, useStoreValue } from "@/lib/value-store";
 import {
   PERK_POPULARITY_URL,
   columnShares,
-  copiesSeen,
   type PerkPopularityIndex,
-  type PopularityMode,
 } from "./perk-popularity";
 import type { WeaponCatalog } from "./catalog";
 import type { Roll } from "./pick-slots";
@@ -31,33 +29,26 @@ export function usePerkPopularityIndex() {
     retry: false,
     parse: (json) => {
       const data = json as PerkPopularityIndex;
-      if (data?.schema !== 1 || typeof data.weapons !== "object")
+      if (data?.schema !== 2 || typeof data.weapons !== "object")
         throw new Error("The perk popularity snapshot is incomplete.");
       return data;
     },
   });
 }
 
-export type PopularityView = PopularityMode | "all";
-
 /**
- * Whether popularity is showing, and for which mode: one choice for the whole
- * page, so it stays as the user moves from weapon to weapon (and between the
- * pane and the dialog). Not saved across visits.
+ * Whether popularity is showing: one choice for the whole page, so it stays as
+ * the user moves from weapon to weapon (and between the pane and the dialog).
+ * Not saved across visits.
  */
-const popularityStore = createValueStore<{ shown: boolean; mode: PopularityView }>({
-  shown: false,
-  mode: "pve",
-});
+const popularityShown = createValueStore(false);
 
 export interface WeaponPopularityView {
   /** The snapshot has this weapon. */
   available: boolean;
   shown: boolean;
-  mode: PopularityView;
   setShown: (shown: boolean) => void;
-  setMode: (mode: PopularityView) => void;
-  /** Copies seen in the current mode. */
+  /** Copies seen used in PvE. */
   copies: number;
   /** When the snapshot was taken. */
   generatedAt?: string;
@@ -74,18 +65,18 @@ export function useWeaponPopularity(
   weapon: WeaponSummary,
   catalog: WeaponCatalog,
 ): WeaponPopularityView {
-  const { shown, mode } = useStoreValue(popularityStore);
+  const shown = useStoreValue(popularityShown);
   const index = usePerkPopularityIndex().data;
   const data = index?.weapons[weapon.hash];
 
   // Per column: catalog perk index → share, and the top share. Only changes with
-  // the snapshot, the weapon or the mode, not with every hover.
+  // the snapshot or the weapon, not with every hover.
   const columns = useMemo(
     () =>
       weapon.columns.map((column, i) => {
         const shares = new Map<number, number>();
         if (!data) return { shares, top: 0 };
-        const byHash = new Map(columnShares(data, i, mode).map((s) => [s.hash, s.share]));
+        const byHash = new Map(columnShares(data, i).map((s) => [s.hash, s.share]));
         if (byHash.size === 0) return { shares, top: 0 };
         for (const perkIndex of column.perkIndices) {
           const hash = catalog.perks[perkIndex]?.hash;
@@ -93,16 +84,14 @@ export function useWeaponPopularity(
         }
         return { shares, top: Math.max(0, ...shares.values()) };
       }),
-    [data, mode, weapon, catalog],
+    [data, weapon, catalog],
   );
 
   return {
-    available: !!data && copiesSeen(data, "all") > 0,
+    available: !!data && data.copies > 0,
     shown,
-    mode,
-    setShown: (next) => popularityStore.set({ ...popularityStore.get(), shown: next }),
-    setMode: (next) => popularityStore.set({ ...popularityStore.get(), mode: next }),
-    copies: data ? copiesSeen(data, mode) : 0,
+    setShown: (next) => popularityShown.set(next),
+    copies: data?.copies ?? 0,
     generatedAt: index?.generatedAt,
     share: (column, perkIndex) => columns[column]?.shares.get(perkIndex),
     isTop: (column, perkIndex) => {

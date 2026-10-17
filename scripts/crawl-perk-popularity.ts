@@ -9,7 +9,6 @@ import {
   popularityLookup,
   type PerkPopularityIndex,
   type PopularityCatalog,
-  type PopularityMode,
   type WeaponPopularity,
 } from "../src/lib/weapons/perk-popularity";
 
@@ -18,11 +17,12 @@ import {
  * API, and writes a perk-popularity snapshot (see src/lib/weapons/perk-popularity.ts).
  *
  * It walks back from the newest post-game report, a few report ids apart so the
- * sample spreads over time, and for each player it hasn't seen reads the
- * weapons the character in that report has equipped, with their perks.
- * Equipped items are public on every profile, so no one signs in. A weapon only
- * counts if the report lists it among the weapons used in that match, so the
- * PvE/PvP split is about where it was used, not where the player went next.
+ * sample spreads over time, skipping PvP matches (popularity is PvE only), and
+ * for each player it hasn't seen reads the weapons the character in that report
+ * has equipped, with their perks. Equipped items are public on every profile, so
+ * no one signs in. A weapon only counts if the report lists it among the weapons
+ * used in that match, so a PvE count is a weapon used in PvE, not whatever the
+ * player went on to equip.
  * Each weapon's columns are read from their own sockets, learned from all its
  * copies at the end (see columnSockets). Nothing about a player is kept except
  * the tally. All requests share one rate limit; only throttles, server errors
@@ -39,7 +39,7 @@ import {
  */
 
 const WEAPON_BUCKETS = new Set([1498876634, 2465295065, 953998645]);
-/** DestinyActivityModeType.AllPvP. */
+/** DestinyActivityModeType.AllPvP: these reports are skipped, popularity is PvE only. */
 const ALL_PVP = 5;
 
 interface Options {
@@ -183,8 +183,8 @@ async function main() {
   const newest = await newestPgcr(client.get);
   console.log(`Walking back from report ${newest}.`);
 
-  // Each weapon's copies (mode and plugs by socket), tallied once every copy is in.
-  const copiesByWeapon = new Map<number, { mode: PopularityMode; plugs: (number | undefined)[] }[]>();
+  // Each weapon's copies (plugs by socket), tallied once every copy is in.
+  const copiesByWeapon = new Map<number, (number | undefined)[][]>();
   const seen = new Set<string>();
   let nextId = newest;
   let reports = 0;
@@ -193,7 +193,7 @@ async function main() {
   let to = "";
   const done = () => seen.size >= options.players || Date.now() > deadline;
 
-  async function samplePlayer(entry: PgcrEntry, mode: PopularityMode) {
+  async function samplePlayer(entry: PgcrEntry) {
     const user = entry.player?.destinyUserInfo;
     const used = new Set(entry.extended?.weapons?.map((w) => w.referenceId));
     if (!user?.membershipId || used.size === 0 || seen.has(user.membershipId) || done()) return;
@@ -209,7 +209,7 @@ async function main() {
       const plugs = sockets[item.itemInstanceId]?.sockets.map((s) => s.plugHash);
       if (!plugs) continue;
       const list = copiesByWeapon.get(item.itemHash) ?? [];
-      list.push({ mode, plugs });
+      list.push(plugs);
       copiesByWeapon.set(item.itemHash, list);
       copies++;
     }
@@ -221,12 +221,13 @@ async function main() {
       nextId -= options.step;
       const report = await client.get<Pgcr>(pgcrUrl(id));
       if (!report) continue;
+      // PvE only: a PvP match is passed over entirely (not counted, its players not sampled).
+      const modes = report.activityDetails.modes ?? [report.activityDetails.mode];
+      if (modes.includes(ALL_PVP)) continue;
       reports++;
       if (!to || report.period > to) to = report.period;
       if (!from || report.period < from) from = report.period;
-      const modes = report.activityDetails.modes ?? [report.activityDetails.mode];
-      const mode: PopularityMode = modes.includes(ALL_PVP) ? "pvp" : "pve";
-      for (const entry of report.entries) await samplePlayer(entry, mode);
+      for (const entry of report.entries) await samplePlayer(entry);
     }
   }
 
@@ -242,11 +243,11 @@ async function main() {
   const tally: Record<string, WeaponPopularity> = {};
   for (const [hash, list] of copiesByWeapon) {
     const columns = lookup.get(hash)!;
-    const placed = columnSockets(columns, list.map((c) => c.plugs));
-    for (const { mode, plugs } of list) addCopy(tally, hash, perksAtSockets(columns, placed, plugs), mode);
+    const placed = columnSockets(columns, list);
+    for (const plugs of list) addCopy(tally, hash, perksAtSockets(columns, placed, plugs));
   }
   const snapshot: PerkPopularityIndex = {
-    schema: 1,
+    schema: 2,
     generatedAt: new Date().toISOString(),
     from,
     to,

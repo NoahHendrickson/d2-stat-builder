@@ -1,12 +1,12 @@
 /**
- * Perk popularity: which perks players actually run on each legendary weapon.
+ * Perk popularity: which perks players actually run in PvE on each legendary
+ * weapon.
  *
  * `scripts/crawl-perk-popularity.ts` samples recently active players through
- * Bungie's public API (recent post-game reports give the players; their
- * profiles give the rolls on the weapons they had equipped) and tallies each
- * weapon's perks per column, split by whether the report was PvE or PvP. The
- * snapshot is published off Vercel, on GitHub Pages, and the weapon page reads
- * it from there.
+ * Bungie's public API (recent PvE post-game reports give the players; their
+ * profiles give the rolls on the weapons they used) and tallies each weapon's
+ * perks per column. PvP matches are skipped. The snapshot is published off
+ * Vercel, on GitHub Pages, and the weapon page reads it from there.
  */
 
 import type { CompactWeaponIndex } from "./transport";
@@ -15,22 +15,19 @@ import type { CompactWeaponIndex } from "./transport";
 export const PERK_POPULARITY_URL =
   "https://noahhendrickson.github.io/d2-conflux-data/perk-popularity.json";
 
-/** Counts as [PvE, PvP]. */
-export type ModeCounts = [pve: number, pvp: number];
-export type PopularityMode = "pve" | "pvp";
-
 export interface WeaponPopularity {
-  /** Equipped copies seen. */
-  copies: ModeCounts;
+  /** Copies seen used in PvE. */
+  copies: number;
   /**
    * Per catalog column (same index as `weapon.columns`): base perk hash → copies
    * running it. Columns with a single perk are left empty.
    */
-  columns: Record<string, ModeCounts>[];
+  columns: Record<string, number>[];
 }
 
 export interface PerkPopularityIndex {
-  schema: 1;
+  /** 2: PvE only, plain counts (1 held [PvE, PvP] pairs). */
+  schema: 2;
   generatedAt: string;
   /** The span of the post-game reports sampled. */
   from: string;
@@ -130,23 +127,18 @@ export function perksAtSockets(
   });
 }
 
-/** Adds one equipped copy to the tally. */
+/** Adds one copy to the tally. */
 export function addCopy(
   tally: Record<string, WeaponPopularity>,
   weaponHash: number,
   perks: (number | undefined)[],
-  mode: PopularityMode,
 ) {
-  const slot = mode === "pve" ? 0 : 1;
-  const weapon = (tally[weaponHash] ??= {
-    copies: [0, 0],
-    columns: perks.map(() => ({})),
-  });
-  weapon.copies[slot]++;
+  const weapon = (tally[weaponHash] ??= { copies: 0, columns: perks.map(() => ({})) });
+  weapon.copies++;
   perks.forEach((perk, column) => {
     if (perk === undefined) return;
-    const counts = (weapon.columns[column]![perk] ??= [0, 0]);
-    counts[slot]++;
+    const counts = weapon.columns[column]!;
+    counts[perk] = (counts[perk] ?? 0) + 1;
   });
 }
 
@@ -160,27 +152,17 @@ export interface PerkShare {
 }
 
 /**
- * A column's perks by popularity in one mode (or both together), most run
- * first. Shares are of the copies whose perk in this column was identified.
+ * A column's perks by popularity, most run first. Shares are of the copies
+ * whose perk in this column was identified.
  */
-export function columnShares(
-  weapon: WeaponPopularity,
-  column: number,
-  mode: PopularityMode | "all",
-): PerkShare[] {
-  const counts = Object.entries(weapon.columns[column] ?? {}).map(([hash, [pve, pvp]]) => ({
+export function columnShares(weapon: WeaponPopularity, column: number): PerkShare[] {
+  const counts = Object.entries(weapon.columns[column] ?? {}).map(([hash, count]) => ({
     hash: Number(hash),
-    count: mode === "pve" ? pve : mode === "pvp" ? pvp : pve + pvp,
+    count,
   }));
   const total = counts.reduce((sum, c) => sum + c.count, 0);
   return counts
     .filter((c) => c.count > 0)
     .map((c) => ({ ...c, share: c.count / total }))
     .sort((a, b) => b.count - a.count);
-}
-
-/** Copies seen in a mode (or both together). */
-export function copiesSeen(weapon: WeaponPopularity, mode: PopularityMode | "all") {
-  const [pve, pvp] = weapon.copies;
-  return mode === "pve" ? pve : mode === "pvp" ? pvp : pve + pvp;
 }
