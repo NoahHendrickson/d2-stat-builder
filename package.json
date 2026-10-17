@@ -13,6 +13,7 @@
     "bench:snapshot": "tsx scripts/optimizer-bench.ts snapshot",
     "bake:backdrop": "node scripts/bake-backdrop.mjs",
     "generate:weapons": "tsx scripts/generate-weapons.ts",
+    "generate:dps": "tsx scripts/generate-weapon-dps.ts",
     "bench:weapons": "tsx scripts/weapon-search-bench.ts"
   },
   "dependencies": {

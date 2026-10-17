@@ -16,6 +16,14 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    date: "2026-10-17",
+    changes: [
+      "Weapon search: a weapon's details now sit in two cards. Stats are on the left, with the frame at the top and Recoil Direction drawn as the in-game arc; perks, masterworks and mods are on the right.",
+      "Weapon search: the weapon mods each weapon can slot sit under its masterworks. Hover one to preview its stats, or click it to keep it on while you try perks. Adept mods show on adept weapons.",
+      "Weapon search: Advanced stats under a weapon's stats show its boss DPS, total damage from full reserves and the time to fire them for the setups Aegis's boss DPS sheet has tested, for about 160 weapons. Each setup shows the perks it ran; \"See perks\" picks them in the perk grid, and after that, clicking another setup switches the picks to its perks.",
+    ],
+  },
+  {
     date: "2026-10-16",
     changes: [
       "Stat optimizer: searches with Legacy armor, legacy raid sets or artifice pieces are faster and less likely to hit the time limit. Stat maxima on the sliders also settle sooner.",

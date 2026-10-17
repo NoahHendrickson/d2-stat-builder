@@ -55,3 +55,6 @@ next-env.d.ts
 .claude/worktrees/
 scripts/startup-bench/.profile.json
 scripts/startup-bench/.profile-full.json
+
+# Local crawler output the dev server reads (prod reads the published copy).
+/public/dev-data/
