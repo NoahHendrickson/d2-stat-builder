@@ -188,6 +188,13 @@ export function internWeaponCatalog(
     };
   });
 
+  // Mods go in last, after every weapon's perks, so adding them leaves the
+  // indices those already had alone.
+  weapons.forEach((weapon, i) => {
+    if (!weapon.modOptions?.length) return;
+    summaries[i]!.mods = weapon.modOptions.map((mod) => internPerk(mod));
+  });
+
   const details: Record<string, WeaponDetailFields> = {};
   for (const weapon of weapons) {
     details[String(weapon.hash)] = {

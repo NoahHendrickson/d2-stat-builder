@@ -12,12 +12,14 @@ import {
   useEffect,
   useMemo,
   useRef,
+  useId,
   useState,
 } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { ArrowUpDownIcon } from "@hugeicons/core-free-icons";
+import { ArrowDown01Icon, ArrowUpDownIcon } from "@hugeicons/core-free-icons";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -44,6 +46,21 @@ import { WeaponSearchBox } from "@/components/weapons/weapon-search-box";
 import { clarityLines } from "@/lib/weapons/clarity";
 import { weaponDisplayStats } from "@/lib/weapons/display-stats";
 import { useClarity } from "@/lib/weapons/use-clarity";
+import { useWeaponDps } from "@/lib/weapons/use-weapon-dps";
+import { useWeaponPopularity } from "@/lib/weapons/use-perk-popularity";
+import {
+  PopularityBar,
+  PopularityShare,
+  PopularityToggle,
+} from "@/components/weapons/perk-popularity-controls";
+import {
+  DPS_SHEET_URL,
+  matchSetupPerks,
+  perkNameKey,
+  setupPerkKeys,
+  weaponDpsKey,
+  type DpsSetup,
+} from "@/lib/weapons/weapon-dps";
 import { useWeaponCatalog } from "@/lib/weapons/use-weapon-catalog";
 import {
   activeFilterChips,
@@ -395,8 +412,343 @@ function frameIcon(weapon: WeaponSummary, perks: readonly PerkRef[]): string | u
 /** A perk's place in the grid: which column, and its catalog index. */
 type PerkPick = { column: number; perk: number };
 
-/** Masterworks pick like their own column; no real column index is negative. */
+/** Masterworks and mods pick like their own columns; no real column index is negative. */
 const MASTERWORK = -1;
+const MOD = -2;
+
+/** A card holding one or more titled sections of the details. */
+function DetailCard({
+  className,
+  children,
+}: {
+  className?: string;
+  children: ReactNode;
+}) {
+  return (
+    // A visible hairline round the card and a fainter shadow than Card's own.
+    <Card
+      size="sm"
+      className={cn(
+        "gap-4 border-foreground/12 shadow-[0_0_4px_rgb(0_0_0/0.2)]",
+        className,
+      )}
+    >
+      {children}
+    </Card>
+  );
+}
+
+/**
+ * One part of the details (stats, mods, perks, masterworks) under its title.
+ * A section after the first opens with a divider of its own, edge to edge.
+ */
+function DetailSection({
+  title,
+  description,
+  action,
+  collapsible = false,
+  children,
+}: {
+  title: string;
+  /** A line under the title, above its rule; shown only while the section is open. */
+  description?: ReactNode;
+  /** A control at the right end of the title (sections that don't collapse). */
+  action?: ReactNode;
+  /** Its title toggles it, and it starts closed. */
+  collapsible?: boolean;
+  children: ReactNode;
+}) {
+  const [open, setOpen] = useState(!collapsible);
+  const contentId = useId();
+  return (
+    <section
+      aria-label={title}
+      className={cn(
+        "flex flex-col gap-(--card-spacing) not-first:border-t not-first:border-foreground/12 not-first:pt-2",
+        // Closed, the card's own padding is the space under the title; pull it
+        // in so the title sits as centred as an open one between its rules.
+        !open && "-mb-1",
+      )}
+    >
+      <CardHeader>
+        {/* The rule under the title is a plain divider in the border's colour,
+            running out through the padding to the card's edges. A closed
+            section has nothing under its title, so it goes without. */}
+        <CardTitle
+          className={cn(
+            "after:-inset-x-(--card-spacing) after:bg-none after:bg-foreground/12",
+            !open && "pb-0 after:hidden",
+          )}
+        >
+          {collapsible ? (
+            <button
+              type="button"
+              aria-expanded={open}
+              aria-controls={contentId}
+              onClick={() => setOpen((o) => !o)}
+              className="group/toggle flex w-full items-center justify-between gap-2 text-left outline-none focus-visible:d2-tile-selected"
+            >
+              {title}
+              <HugeiconsIcon
+                icon={ArrowDown01Icon}
+                strokeWidth={2}
+                aria-hidden
+                className={cn(
+                  "size-4 text-muted-foreground transition-transform group-hover/toggle:text-foreground motion-reduce:transition-none",
+                  open && "rotate-180",
+                )}
+              />
+            </button>
+          ) : action ? (
+            <div className="flex items-center justify-between gap-2">
+              {title}
+              {action}
+            </div>
+          ) : (
+            title
+          )}
+          {open && description && (
+            <div className="mt-1 text-xs leading-snug font-normal text-muted-foreground">
+              {description}
+            </div>
+          )}
+        </CardTitle>
+      </CardHeader>
+      {open && <CardContent id={contentId}>{children}</CardContent>}
+    </section>
+  );
+}
+
+/**
+ * The frame (intrinsic) as the Items popover shows it under its header: a
+ * tinted strip with the icon and name, its description on hover. Sits flush
+ * under a card's title rule and runs out to the card's edges.
+ */
+function FrameRow({
+  perk,
+  insight,
+}: {
+  perk: PerkRef;
+  insight: ReturnType<typeof clarityLines>;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        delay={0}
+        render={
+          <div className="-mx-(--card-spacing) -mt-(--card-spacing) mb-3 flex items-center gap-2 bg-foreground/4 px-(--card-spacing) py-2 text-xs" />
+        }
+      >
+        {perk.icon && (
+          <Image
+            src={`https://www.bungie.net${perk.icon}`}
+            alt=""
+            width={24}
+            height={24}
+            className="size-6 shrink-0"
+            unoptimized
+          />
+        )}
+        {perk.name}
+      </TooltipTrigger>
+      <TooltipContent side="right" align="start" className="max-w-sm">
+        <PerkTooltip perk={perk} insight={insight} />
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+/** Setups shown before "Show more"; most weapons have one, a few up to seven. */
+const DPS_SHOWN = 3;
+const wholeNumber = new Intl.NumberFormat("en-US");
+
+/** A perk pick per column (column index, or MASTERWORK / MOD → perk index). */
+type Roll = Record<number, number>;
+
+/**
+ * The DPS sheet's tested setups for a weapon, highest DPS first. Each is its
+ * numbers side by side, a label over each, then the perks it ran from the
+ * weapon's grid as icons, then what the setup ran in the sheet's words.
+ * "See perks" at the bottom picks the chosen setup's perks; when more than one
+ * setup names perks, the setups are a choice between them (the first, at
+ * the start), and once "See perks" is pressed, choosing one picks its perks
+ * straight away.
+ */
+function DpsSetups({
+  setups,
+  rolls,
+  perks,
+  onSeePerks,
+}: {
+  setups: DpsSetup[];
+  /** Per setup, the grid perks it names, or null for none. */
+  rolls: (Roll | null)[];
+  perks: readonly PerkRef[];
+  onSeePerks: (roll: Roll) => void;
+}) {
+  const [showAll, setShowAll] = useState(false);
+  const [chosen, setChosen] = useState(() => rolls.findIndex(Boolean));
+  // Once "See perks" is pressed, choosing another setup picks its perks too.
+  const [live, setLive] = useState(false);
+  function choose(i: number) {
+    setChosen(i);
+    const roll = rolls[i];
+    if (live && roll && i !== chosen) onSeePerks(roll);
+  }
+  const shown = showAll ? setups : setups.slice(0, DPS_SHOWN);
+  const choosable = rolls.filter(Boolean).length > 1;
+  const choices = shown.flatMap((_, i) => (rolls[i] ? [i] : []));
+  const rowRefs = useRef<(HTMLDivElement | null)[]>([]);
+  function step(from: number, by: number) {
+    const at = choices.indexOf(from);
+    const next = choices[(at + by + choices.length) % choices.length];
+    if (next === undefined) return;
+    choose(next);
+    rowRefs.current[next]?.focus();
+  }
+  const roll = rolls[chosen];
+  return (
+    <div className="grid gap-5 text-[13px]">
+      <div
+        role={choosable ? "radiogroup" : undefined}
+        aria-label={choosable ? "DPS setups" : undefined}
+        className={cn("grid", choosable ? "gap-1" : "gap-5")}
+      >
+        {shown.map((setup, i) => {
+          const named = Object.values(rolls[i] ?? {}).flatMap((index) => perks[index] ?? []);
+          const option = choosable && rolls[i] != null;
+          return (
+            <div
+              key={i}
+              ref={(row) => {
+                rowRefs.current[i] = row;
+              }}
+              role={option ? "radio" : undefined}
+              aria-checked={option ? chosen === i : undefined}
+              aria-label={option ? `${wholeNumber.format(setup.dps)} boss DPS: ${setup.setup}` : undefined}
+              tabIndex={option ? (chosen === i ? 0 : -1) : undefined}
+              onClick={option ? () => choose(i) : undefined}
+              onKeyDown={
+                option
+                  ? (event) => {
+                      if (event.key === "ArrowDown" || event.key === "ArrowRight") step(i, 1);
+                      else if (event.key === "ArrowUp" || event.key === "ArrowLeft") step(i, -1);
+                      else if (event.key === " " || event.key === "Enter") choose(i);
+                      else return;
+                      event.preventDefault();
+                    }
+                  : undefined
+              }
+              className={cn(
+                "grid gap-2",
+                // Out into the card's padding by its own, so the text stays
+                // in line with the title; the chosen setup a faint frame and
+                // fill (the frame always there, clear, so choosing doesn't
+                // shift it).
+                choosable &&
+                  "-mx-2 border border-transparent p-2 outline-none focus-visible:d2-tile-selected normal:rounded-md",
+                option && "cursor-pointer hover:bg-foreground/3",
+                option &&
+                  chosen === i &&
+                  "border-foreground/16 bg-foreground/5 hover:bg-foreground/5",
+              )}
+            >
+              <dl className="grid grid-cols-3 gap-x-3">
+                <DpsFigure
+                  name="Boss DPS"
+                  hint="Sustained damage per second against a boss, reloads included"
+                  value={wholeNumber.format(setup.dps)}
+                />
+                {setup.reservesDamage !== undefined && (
+                  <DpsFigure
+                    name="Full reserves"
+                    hint="Total damage from firing full reserves"
+                    value={wholeNumber.format(setup.reservesDamage)}
+                  />
+                )}
+                {setup.timeToEmpty !== undefined && (
+                  <DpsFigure
+                    name="Time to empty"
+                    hint="Seconds to fire full reserves, reloads included"
+                    value={`${setup.timeToEmpty.toFixed(1)} s`}
+                  />
+                )}
+              </dl>
+              {named.length > 0 && (
+                // The grid's own round cells, small.
+                <ul aria-label="Perks it ran" className="flex flex-wrap gap-1.5">
+                  {named.map((perk) => (
+                    <li
+                      key={perk.hash}
+                      title={perk.name}
+                      className="flex size-7 items-center justify-center rounded-full border border-foreground/12 bg-foreground/4"
+                    >
+                      {perk.icon && (
+                        <Image
+                          src={`https://www.bungie.net${perk.icon}`}
+                          alt={perk.name}
+                          width={20}
+                          height={20}
+                          unoptimized
+                        />
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {setup.setup && (
+                <p className="text-xs text-muted-foreground">{setup.setup}</p>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      {setups.length > DPS_SHOWN && (
+        <Button
+          size="sm"
+          variant="ghost"
+          className="justify-self-start"
+          onClick={() => setShowAll((all) => !all)}
+        >
+          {showAll ? "Show fewer" : `Show ${setups.length - DPS_SHOWN} more`}
+        </Button>
+      )}
+      {roll && (
+        // The primary buttons' size, across the card.
+        <Button
+          variant="outline"
+          className="w-full"
+          onClick={() => {
+            setLive(true);
+            onSeePerks(roll);
+          }}
+        >
+          See perks
+        </Button>
+      )}
+    </div>
+  );
+}
+
+/** One DPS number, larger, under its label; the label's title spells it out. */
+function DpsFigure({
+  name,
+  hint,
+  value,
+}: {
+  name: string;
+  hint: string;
+  value: string;
+}) {
+  return (
+    <div className="grid min-w-0 content-start gap-0.5">
+      <dt className="truncate text-xs text-muted-foreground" title={hint}>
+        {name}
+      </dt>
+      <dd className="text-lg leading-6 font-medium tabular-nums">{value}</dd>
+    </div>
+  );
+}
 
 /**
  * Memoized: the list beside it re-renders this page as it scrolls (the virtualizer
@@ -413,6 +765,11 @@ const WeaponDetails = memo(function WeaponDetails({
   inDialog?: boolean;
 }) {
   const clarity = useClarity();
+  // Boss DPS, for the weapons the DPS sheet has tested.
+  const dps = useWeaponDps().data;
+  const dpsSetups = dps?.weapons[weaponDpsKey(weapon.name)] ?? [];
+  // How often players run each perk, from the popularity crawl.
+  const popularity = useWeaponPopularity(weapon, catalog);
   // One picked perk per column (column index → perk index); a hovered perk
   // previews in place of its column's pick. Keyed by weapon, so both reset.
   const [picked, setPicked] = useState<Record<number, number>>({});
@@ -435,20 +792,60 @@ const WeaponDetails = memo(function WeaponDetails({
     );
   }
   const masterworks = weapon.masterworks ?? [];
-  const hasIntrinsic = weapon.columns.some((c) => c.kind === "Intrinsic");
+  const mods = weapon.mods ?? [];
   // A frame (or exotic intrinsic) with no alternatives can't be picked, so it
-  // stays in the header alone, its tooltip with it, and the masterworks move
-  // up into its column.
+  // stays in the header alone, its tooltip with it, and leaves the grid.
   const fixedFrame = weapon.columns.find(
     (c) => c.kind === "Intrinsic" && c.perkIndices.length === 1,
   );
+  const perkColumns = weapon.columns.flatMap((column, i) =>
+    column === fixedFrame ? [] : [{ column, i }],
+  );
   const framePerk = fixedFrame && catalog.perks[fixedFrame.perkIndices[0]];
+  // Each DPS setup's roll: the perk it names in each column, each name in one
+  // column only (see matchSetupPerks). Null for a setup that names none here
+  // (buffs only).
+  const pickable: [number, number[]][] = [
+    ...perkColumns.map(({ column, i }): [number, number[]] => [i, column.perkIndices]),
+    [MASTERWORK, masterworks],
+    [MOD, mods],
+  ];
+  const pickableNames = pickable.map(([, indices]) =>
+    indices.map((i) => perkNameKey(catalog.perks[i]?.name ?? "")),
+  );
+  const dpsRolls = dpsSetups.map(({ setup }) => {
+    const picks = matchSetupPerks(new Set(setupPerkKeys(setup)), pickableNames);
+    const roll: Roll = {};
+    picks.forEach((at, column) => {
+      if (at !== undefined) roll[pickable[column]![0]] = pickable[column]![1][at]!;
+    });
+    return Object.keys(roll).length > 0 ? roll : null;
+  });
+  // A setup's roll replaces whatever is picked in the columns any setup uses,
+  // so going from one setup to another leaves none of the first behind; the
+  // user's picks elsewhere stay.
+  function pickDpsRoll(roll: Roll) {
+    const used = new Set(dpsRolls.flatMap((r) => Object.keys(r ?? {})));
+    setPicked((picks) => ({
+      ...Object.fromEntries(Object.entries(picks).filter(([key]) => !used.has(key))),
+      ...roll,
+    }));
+  }
   const frame = framePerk?.icon ?? frameIcon(weapon, catalog.perks);
   const frameName = framePerk?.name ?? weapon.frame ?? "Frame";
+  // The frame the stats are for: the one picked in the grid, else the fixed
+  // one, else the weapon's own (its first if the catalog has none named).
+  const intrinsicColumn = weapon.columns.findIndex((c) => c.kind === "Intrinsic");
+  const intrinsics = weapon.columns[intrinsicColumn]?.perkIndices ?? [];
+  const statsFrame =
+    catalog.perks[picked[intrinsicColumn] ?? -1] ??
+    framePerk ??
+    intrinsics.map((i) => catalog.perks[i]).find((p) => p?.name === weapon.frame) ??
+    catalog.perks[intrinsics[0] ?? -1];
 
   /**
    * One perk's tile. `columnKey` is the column it picks in (MASTERWORK for
-   * masterworks).
+   * masterworks, MOD for mods).
    */
   function perkTile(columnKey: number, index: number) {
     const perk = catalog.perks[index];
@@ -460,13 +857,13 @@ const WeaponDetails = memo(function WeaponDetails({
       : craftedOnly
         ? `${perk.name} (crafted only)`
         : perk.name;
-    const masterwork = columnKey === MASTERWORK;
+    const bare = columnKey === MASTERWORK || columnKey === MOD;
     // Drawn like the Items popover's perk grid (PerkColumnView), at the full size of
     // its Figma cell: a round cell with a hairline, filled blue once picked, and
     // the enhanced arrow in the top-left for perks with an enhanced tier. The
-    // name lives in the tooltip. Masterwork art is its own framed square, so it
-    // goes without a cell; once one is picked, the others dim.
-    const iconSize = masterwork ? 44 : 34;
+    // name lives in the tooltip. Masterwork and mod art is its own framed
+    // square, so it goes without a cell; once one is picked, the others dim.
+    const iconSize = bare ? 44 : 34;
     const content = (
       <>
         {perk.icon && (
@@ -505,10 +902,10 @@ const WeaponDetails = memo(function WeaponDetails({
         }
         className={cn(
           "relative flex size-14 shrink-0 items-center justify-center outline-none max-md:size-11",
-          masterwork
+          bare
             ? cn(
                 "transition-[opacity,filter] hover:brightness-125 focus-visible:[&>img]:d2-tile-selected",
-                picked[MASTERWORK] !== undefined &&
+                picked[columnKey] !== undefined &&
                   !selected &&
                   "opacity-40 hover:opacity-100",
               )
@@ -523,18 +920,27 @@ const WeaponDetails = memo(function WeaponDetails({
       />
     );
     return (
-      <Tooltip key={index}>
-        <TooltipTrigger delay={0} render={trigger}>
-          {content}
-        </TooltipTrigger>
-        <TooltipContent side="right" align="start" className="max-w-sm">
-          <PerkTooltip
-            perk={perk}
-            insight={clarityLines(clarity, perk)}
-            craftedOnly={craftedOnly}
-          />
-        </TooltipContent>
-      </Tooltip>
+      // A perk column's tile carries its popularity under it while that shows.
+      <PopularityShare
+        key={index}
+        view={popularity}
+        column={columnKey}
+        perkIndex={index}
+        selected={selected}
+      >
+        <Tooltip>
+          <TooltipTrigger delay={0} render={trigger}>
+            {content}
+          </TooltipTrigger>
+          <TooltipContent side="right" align="start" className="max-w-sm">
+            <PerkTooltip
+              perk={perk}
+              insight={clarityLines(clarity, perk)}
+              craftedOnly={craftedOnly}
+            />
+          </TooltipContent>
+        </Tooltip>
+      </PopularityShare>
     );
   }
 
@@ -559,7 +965,7 @@ const WeaponDetails = memo(function WeaponDetails({
           size={inDialog ? 56 : 72}
           className="outline-1 -outline-offset-1 outline-foreground/24"
         />
-        <div className="grid min-w-0 gap-2">
+        <div className="grid min-w-0 grid-cols-1 gap-2">
           <Title
             className={cn(
               "font-medium",
@@ -662,53 +1068,117 @@ const WeaponDetails = memo(function WeaponDetails({
         </div>
       </div>
       <div aria-hidden className="d2-rule" />
-      {/* Perks first, the stats they move beside them on the right; the stats
-          take what width is left, dropping below once that is under 16rem. */}
-      <div className="flex flex-wrap items-start gap-6">
-        <div className="flex max-w-full gap-2.5 overflow-x-auto pb-1 max-md:gap-1.5">
-          {!hasIntrinsic && masterworks.length > 0 && (
-            <section
-              aria-label="Masterwork"
-              className="flex shrink-0 flex-col gap-2.5 max-md:gap-1.5"
-            >
-              {masterworks.map((index) => perkTile(MASTERWORK, index))}
-            </section>
-          )}
-          {weapon.columns.map((column, i) =>
-            column === fixedFrame && masterworks.length === 0 ? null : (
-              <section
-                key={i}
-                aria-label={column.kind}
-                className="flex shrink-0 flex-col gap-2.5 max-md:gap-1.5"
+      {/* Two cards. From md up the stats card sits on the left, with the
+          advanced stats under the stats, and the perks card on the right, with
+          the masterworks and mods under the perks; the stats card takes what
+          width is left, going above once that is under 16rem. Phones keep the
+          perks first. */}
+      <div className="flex flex-wrap items-start gap-4">
+        {(perkColumns.length > 0 || masterworks.length > 0 || mods.length > 0) && (
+          <DetailCard className="min-w-0 max-w-full">
+            {perkColumns.length > 0 && (
+              <DetailSection
+                title="Perks"
+                action={
+                  popularity.available && <PopularityToggle view={popularity} />
+                }
+                description={
+                  popularity.available &&
+                  popularity.shown && (
+                    <PopularityBar
+                      view={popularity}
+                      onTryTop={(roll) => setPicked((picks) => ({ ...picks, ...roll }))}
+                    />
+                  )
+                }
               >
-                {column !== fixedFrame &&
-                  column.perkIndices.map((index) => perkTile(i, index))}
-                {column.kind === "Intrinsic" && masterworks.length > 0 && (
-                  // Masterworks sit under a pickable frame, a step apart from
-                  // it, or top the column when the frame is fixed.
-                  <div
-                    role="group"
-                    aria-label="Masterwork"
-                    className={cn(
-                      "flex flex-col gap-2.5 max-md:gap-1.5",
-                      column !== fixedFrame && "mt-2.5",
-                    )}
-                  >
-                    {masterworks.map((index) => perkTile(MASTERWORK, index))}
-                  </div>
-                )}
-              </section>
-            ),
-          )}
-        </div>
+                <div className="flex max-w-full gap-2.5 overflow-x-auto pb-1 max-md:gap-1.5">
+                  {perkColumns.map(({ column, i }) => (
+                    <section
+                      key={i}
+                      aria-label={column.kind}
+                      className="flex shrink-0 flex-col gap-2.5 max-md:gap-1.5"
+                    >
+                      {column.perkIndices.map((index) => perkTile(i, index))}
+                    </section>
+                  ))}
+                </div>
+              </DetailSection>
+            )}
+            {masterworks.length > 0 && (
+              <DetailSection title="Masterworks">
+                {/* Wraps to the perks' width (w-0 min-w-full) rather than
+                    widening the card. */}
+                <div
+                  className={cn(
+                    "flex flex-wrap gap-2.5 max-md:gap-1.5",
+                    perkColumns.length > 0 && "w-0 min-w-full",
+                  )}
+                >
+                  {masterworks.map((index) => perkTile(MASTERWORK, index))}
+                </div>
+              </DetailSection>
+            )}
+            {mods.length > 0 && (
+              // The mod socket's choices that move a stat.
+              <DetailSection title="Mods">
+                <div
+                  className={cn(
+                    "flex flex-wrap gap-2.5 max-md:gap-1.5",
+                    perkColumns.length > 0 && "w-0 min-w-full",
+                  )}
+                >
+                  {mods.map((index) => perkTile(MOD, index))}
+                </div>
+              </DetailSection>
+            )}
+          </DetailCard>
+        )}
         {/* Touch has no hover: phones open a perk's tooltip on a held finger. */}
-        <p className="-mt-3 basis-full text-xs text-muted-foreground md:hidden">
+        <p className="-mt-2 basis-full text-xs text-muted-foreground md:hidden">
           Tap a perk to pick it, or press and hold to read it.
         </p>
-        {Object.keys(current).length > 0 && (
-          <div className="min-w-64 flex-1 basis-64">
-            <WeaponStats base={current} stats={preview} />
-          </div>
+        {(Object.keys(current).length > 0 || dpsSetups.length > 0) && (
+          <DetailCard className="min-w-64 flex-1 basis-64 md:order-first md:max-w-sm">
+            {Object.keys(current).length > 0 && (
+              <DetailSection title="Stats">
+                {statsFrame && (
+                  <FrameRow
+                    perk={statsFrame}
+                    insight={clarityLines(clarity, statsFrame)}
+                  />
+                )}
+                <WeaponStats base={current} stats={preview} />
+              </DetailSection>
+            )}
+            {dpsSetups.length > 0 && (
+              <DetailSection
+                title="Advanced stats"
+                collapsible
+                description={
+                  <>
+                    Simulated boss damage from{" "}
+                    <a
+                      href={DPS_SHEET_URL}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="underline underline-offset-2 hover:text-foreground"
+                    >
+                      Aegis&apos;s boss DPS sheet
+                    </a>
+                    . Open it for the full assumptions behind each setup.
+                  </>
+                }
+              >
+                <DpsSetups
+                  setups={dpsSetups}
+                  rolls={dpsRolls}
+                  perks={catalog.perks}
+                  onSeePerks={pickDpsRoll}
+                />
+              </DetailSection>
+            )}
+          </DetailCard>
         )}
       </div>
     </>
@@ -784,7 +1254,7 @@ export function WeaponBrowser() {
 
   return (
     <main className="flex h-full min-h-[480px] w-full gap-6 p-4 md:p-6">
-      <div className="flex min-w-0 flex-1 flex-col gap-4 lg:w-[26rem] lg:flex-none xl:w-1/2 2xl:w-[44rem]">
+      <div className="flex min-w-0 flex-1 flex-col gap-4 lg:w-[26rem] lg:flex-none xl:w-1/2 2xl:w-[32rem]">
         <h1 className="flex shrink-0 items-center gap-2 text-lg font-medium">
           <Image src="/weapon-search-icon.png" alt="" width={28} height={28} className="size-7" />
           Weapon search
@@ -1005,7 +1475,7 @@ export function WeaponBrowser() {
             so don't build a second copy of them (perks, stats, Clarity) behind it. */}
         {!split ? null : shown && data ? (
           // Keyed here, not on WeaponDetails, so the fade replays per weapon.
-          <div key={shown.hash} className="d2-fade grid gap-4 text-sm">
+          <div key={shown.hash} className="d2-fade grid grid-cols-1 gap-4 text-sm">
             <WeaponDetails weapon={shown} catalog={data} />
           </div>
         ) : (

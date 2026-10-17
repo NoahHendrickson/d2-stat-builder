@@ -92,6 +92,8 @@ export interface WeaponSummary {
   statGroupHash?: number;
   /** Full-tier masterwork choices as indices into `WeaponIndex.perks`. */
   masterworks?: number[];
+  /** Weapon mods that move a shown stat, as indices into `WeaponIndex.perks`. */
+  mods?: number[];
   columns: InternedPerkColumn[];
   /** Every perk name across all columns (deduped) — powers reverse perk search. */
   perks: string[];
@@ -153,13 +155,16 @@ export interface WeaponDetailFields {
 }
 
 /** Full weapon with resolved columns — merged from summary + detail at runtime. */
-export interface WeaponDoc extends Omit<WeaponSummary, "columns" | "perksLower" | "masterworks"> {
+export interface WeaponDoc
+  extends Omit<WeaponSummary, "columns" | "perksLower" | "masterworks" | "mods"> {
   screenshot?: string;
   flavor?: string;
   stats: WeaponStat[];
   investmentStats?: WeaponStat[];
   statGroupHash?: number;
   masterworkOptions?: MasterworkOption[];
+  /** Slottable weapon mods that move a shown stat; see `buildWeaponModOptions`. */
+  modOptions?: PerkRef[];
   columns: PerkColumn[];
 }
 
