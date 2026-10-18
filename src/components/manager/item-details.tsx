@@ -364,7 +364,7 @@ export function WeaponRollPanel({
   onApply?: (plugs: PerkChange[]) => Promise<boolean>;
 }) {
   const catalog = useWeaponCatalog().data;
-  const clarity = useClarity();
+  const clarity = useClarity().data;
   const [hovered, setHovered] = useState<{ socketIndex: number; hash: number } | null>(null);
   /** Picked perk per socket index (only where it differs from what's in the socket). */
   const [picked, setPicked] = useState<Record<number, number>>({});

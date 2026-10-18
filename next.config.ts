@@ -21,9 +21,10 @@ const csp = [
   // Icons render via next/image (same-origin proxy) but allow bungie.net directly too.
   "img-src 'self' https://www.bungie.net data: blob:",
   "font-src 'self'",
-  // Client fetches the manifest straight from bungie.net and weapon perk insights
-  // from Clarity's GitHub Pages feed; dev needs the HMR websocket.
-  `connect-src 'self' https://www.bungie.net https://database-clarity.github.io${isDev ? " ws: wss: https://mcp.figma.com" : ""}`,
+  // Client fetches the manifest straight from bungie.net, weapon perk insights
+  // from Clarity's GitHub Pages feed, and perk popularity from our own GitHub
+  // Pages data repo (kept off Vercel); dev needs the HMR websocket.
+  `connect-src 'self' https://www.bungie.net https://database-clarity.github.io https://noahhendrickson.github.io${isDev ? " ws: wss: https://mcp.figma.com" : ""}`,
   "worker-src 'self' blob:",
   "object-src 'none'",
   "base-uri 'self'",
