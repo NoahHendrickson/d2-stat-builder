@@ -1,9 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
-  addCopy,
   columnShares,
   comboShares,
-  mergePopularity,
   traitColumns,
   columnSockets,
   perksAtSockets,
@@ -81,17 +79,9 @@ describe("columnSockets and perksAtSockets", () => {
   });
 });
 
-describe("tally and shares", () => {
-  const tally: Record<string, WeaponPopularity> = {};
-  addCopy(tally, 1, [undefined, 11, 14, 15]);
-  addCopy(tally, 1, [undefined, 11, 13, 15]);
-  addCopy(tally, 1, [undefined, 12, 14, undefined]);
-  const weapon = tally[1]!;
-
-  it("counts copies, and each identified perk per column", () => {
-    expect(weapon.copies).toBe(3);
-    expect(weapon.columns).toEqual([{}, { 11: 2, 12: 1 }, { 14: 2, 13: 1 }, { 15: 2 }]);
-  });
+describe("shares", () => {
+  // Three copies: barrels 11, 11, 12; the third copy's last column wasn't identified.
+  const weapon: WeaponPopularity = { copies: 3, columns: [{}, { 11: 2, 12: 1 }, { 14: 2, 13: 1 }, { 15: 2 }] };
 
   it("ranks a column's perks by copies, as shares of the copies identified there", () => {
     expect(columnShares(weapon, 1)).toEqual([
@@ -113,88 +103,11 @@ describe("combos", () => {
     expect(traitColumns([{ kind: "Trait" }, { kind: "Barrel" }])).toBeUndefined();
   });
 
-  const tally: Record<string, WeaponPopularity> = {};
-  addCopy(tally, 1, [undefined, 11, 14, 15], [2, 3]);
-  addCopy(tally, 1, [undefined, 11, 14, 15], [2, 3]);
-  addCopy(tally, 1, [undefined, 12, 13, 15], [2, 3]);
-  // A copy whose left perk wasn't identified has no combo, but still counts.
-  addCopy(tally, 1, [undefined, 12, undefined, 13], [2, 3]);
-
-  it("counts a combo only when both trait perks were identified", () => {
-    expect(tally[1]!.copies).toBe(4);
-    expect(tally[1]!.combos).toEqual({ "14,15": 2, "13,15": 1 });
-  });
-
   it("ranks combos by copies, as shares of the copies with both perks", () => {
-    expect(comboShares(tally[1]!)).toEqual([
+    expect(comboShares({ copies: 4, columns: [], combos: { "13,15": 1, "14,15": 2 } })).toEqual([
       { left: 14, right: 15, count: 2, share: 2 / 3 },
       { left: 13, right: 15, count: 1, share: 1 / 3 },
     ]);
   });
 });
 
-describe("mergePopularity", () => {
-  const day = (players: number, from: string, to: string, weapons: Record<string, WeaponPopularity>) => ({
-    schema: 2 as const,
-    generatedAt: to,
-    from,
-    to,
-    players,
-    weapons,
-  });
-
-  it("adds up crawls: copies, perks and combos per weapon, players, the whole span, and each file", () => {
-    const merged = mergePopularity(
-      [
-        {
-          file: "2026-10-17.json",
-          crawl: day(10, "2026-10-16T00:00:00Z", "2026-10-17T00:00:00Z", {
-            1: { copies: 3, columns: [{}, { 11: 3 }] },
-          }),
-        },
-        {
-          file: "2026-10-18T03.json",
-          crawl: {
-            ...day(20, "2026-10-17T00:00:00Z", "2026-10-18T00:00:00Z", {
-              1: { copies: 2, columns: [{}, { 11: 1, 12: 1 }], combos: { "14,15": 2 } },
-              2: { copies: 1, columns: [{ 11: 1 }] },
-            }),
-            sample: { kind: "recent", minutes: 15 },
-          },
-        },
-      ],
-      "2026-10-18T06:00:00Z",
-    );
-    expect(merged).toEqual({
-      schema: 2,
-      generatedAt: "2026-10-18T06:00:00Z",
-      from: "2026-10-16T00:00:00Z",
-      to: "2026-10-18T00:00:00Z",
-      players: 30,
-      weapons: {
-        1: { copies: 5, columns: [{}, { 11: 4, 12: 1 }], combos: { "14,15": 2 } },
-        2: { copies: 1, columns: [{ 11: 1 }] },
-      },
-      // The first crawl is from before `sample` was recorded, so it has none.
-      crawls: [
-        {
-          file: "2026-10-17.json",
-          generatedAt: "2026-10-17T00:00:00Z",
-          from: "2026-10-16T00:00:00Z",
-          to: "2026-10-17T00:00:00Z",
-          players: 10,
-          copies: 3,
-        },
-        {
-          file: "2026-10-18T03.json",
-          generatedAt: "2026-10-18T00:00:00Z",
-          from: "2026-10-17T00:00:00Z",
-          to: "2026-10-18T00:00:00Z",
-          players: 20,
-          copies: 3,
-          sample: { kind: "recent", minutes: 15 },
-        },
-      ],
-    });
-  });
-});

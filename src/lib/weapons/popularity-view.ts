@@ -26,7 +26,7 @@ export interface ComboPopularity {
 export interface WeaponPopularityView {
   /** The snapshot has this weapon. */
   available: boolean;
-  /** Copies seen used in PvE. */
+  /** Distinct copies counted (see WeaponPopularity.copies). */
   copies: number;
   /** When the snapshot was built. */
   generatedAt?: string;
@@ -46,10 +46,10 @@ export interface WeaponPopularityView {
  * (the first of any tie, in grid order), except the two trait columns, which
  * take the most run combo (ties also in grid order), so the traits picked were
  * seen together. Only a combo seen at least MIN_COMBO_COUNT times replaces the
- * columns' own winners: on a thin sample one or two sightings shouldn't
+ * columns' own winners: on a thin sample one or two copies shouldn't
  * override a column's clear lead.
  */
-/** The fewest sightings of a combo for it to set the roll's traits. */
+/** The fewest copies with a combo for it to set the roll's traits. */
 export const MIN_COMBO_COUNT = 3;
 
 export function mostPopularRoll(
