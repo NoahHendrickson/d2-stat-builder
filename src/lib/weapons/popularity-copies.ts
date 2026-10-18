@@ -96,7 +96,7 @@ export const storeMinute = (ms: number) => Math.floor(ms / 60_000);
 /** The day a store minute falls on. */
 const dayOfMinute = (minute: number) => Math.floor(minute / 1_440);
 
-type AnyArray = BigUint64Array | Uint32Array | Uint16Array | Uint8Array;
+export type AnyArray = BigUint64Array | Uint32Array | Uint16Array | Uint8Array;
 /** The bytes behind a typed array, as they are in memory. */
 export const bytesOf = (array: AnyArray) => new Uint8Array(array.buffer, array.byteOffset, array.byteLength);
 
@@ -231,8 +231,9 @@ export function ownerIndex(owners: Owners) {
  * Whichever read of a player is later (to the minute) wins, whatever order the
  * two come in; reads in the same minute keep the store's record and drop
  * nothing:
- * - a copy in both keeps the record seen on the later day (`newer`'s on the
- *   same day), with any column it couldn't identify filled from the other;
+ * - a copy in both keeps the record seen on the later day, or on the same
+ *   day the one whose owner's read is the later, with any column it couldn't
+ *   identify filled from the other;
  * - when the later read saw the player's whole inventory, a copy of theirs
  *   only the earlier read lists is gone (dismantled), on either side;
  * - when they last played is the latest either side knows, so a sighting in a
@@ -246,22 +247,27 @@ export function mergeCopies(older: CopyStore, newer: CopyStore, columnsOf: Catal
   const adding = fresh.length > 0 ? newer : emptyStore();
 
   // Owners: older's keep their indices; newer's are updated in place or appended.
+  // With no one to add (the merge that only holds the store to the catalog), older's as they are.
   const olderCount = older.owners.ids.length;
-  const owners = allocOwners(olderCount + adding.owners.ids.length);
-  for (const field of OWNER_FIELDS) bytesOf(owners[field]).set(bytesOf(older.owners[field]));
-  const index = ownerIndex(older.owners);
+  const adds = adding.owners.ids.length > 0;
+  const owners = adds ? allocOwners(olderCount + adding.owners.ids.length) : older.owners;
+  if (adds) for (const field of OWNER_FIELDS) bytesOf(owners[field]).set(bytesOf(older.owners[field]));
+  const index = adds ? ownerIndex(older.owners) : new Map<bigint, number>();
   let ownerCount = olderCount;
   const ownerMap = new Uint32Array(adding.owners.ids.length);
   /** Players whose newer read is the later, whole one: older copies it didn't list are gone. */
   const goneFromOlder = new Set<number>();
   /** Players whose older read is the later, whole one: newer copies it didn't list are gone. */
   const goneFromNewer = new Set<number>();
+  /** Players whose newer read is the later one (or who are new): a copy both list, seen the same day, is newer's. */
+  const newerLater = new Set<number>();
   for (let i = 0; i < adding.owners.ids.length; i++) {
     const known = index.get(adding.owners.ids[i]!);
     const k = known ?? ownerCount++;
     ownerMap[i] = k;
     if (known === undefined) {
       copyOwner(adding.owners, i, owners, k);
+      newerLater.add(k);
       continue;
     }
     owners.played[k] = Math.max(owners.played[k]!, adding.owners.played[i]!);
@@ -272,6 +278,7 @@ export function mergeCopies(older: CopyStore, newer: CopyStore, columnsOf: Catal
       owners.types[k] = adding.owners.types[i]!;
       owners.read[k] = read;
       owners.whole[k] = adding.owners.whole[i]!;
+      newerLater.add(k);
       if (adding.owners.whole[i]) goneFromOlder.add(k);
     } else if (read < owners.read[k]! && owners.whole[k]) goneFromNewer.add(k);
   }
@@ -285,15 +292,17 @@ export function mergeCopies(older: CopyStore, newer: CopyStore, columnsOf: Catal
     const b = fits(adding.weapons.get(hash));
     // Newer's copies in the merged owner numbering, so the join sees one numbering.
     const rebased = { ...b, owners: b.owners.map((owner) => ownerMap[owner]!) };
-    const merged = mergeWeapon(fits(older.weapons.get(hash)), rebased, goneFromOlder, goneFromNewer);
+    const merged = mergeWeapon(fits(older.weapons.get(hash)), rebased, goneFromOlder, goneFromNewer, newerLater);
     if (merged.ids.length > 0) weapons.set(hash, merged);
   }
-  return { owners: trimmedOwners(owners, ownerCount), weapons, runs: [...older.runs, ...fresh] };
+  return { owners: adds ? trimmedOwners(owners, ownerCount) : owners, weapons, runs: [...older.runs, ...fresh] };
 }
 
 /**
  * A merge join of `a` and `b`'s sorted ids into room for both, trimmed after.
- * A copy on one side only is kept unless its owner is in that side's gone set.
+ * A copy on one side only is kept unless its owner is in that side's gone set;
+ * a copy on both is the later sighting, `b`'s on the same day when its owner
+ * is in `bLater`.
  * A side with nothing to add or drop comes back as it is: most weapons, most
  * merges, since a crawl touches a fraction of the store.
  */
@@ -302,6 +311,7 @@ function mergeWeapon(
   b: WeaponCopies,
   goneFromA: ReadonlySet<number>,
   goneFromB: ReadonlySet<number>,
+  bLater: ReadonlySet<number>,
 ): WeaponCopies {
   const untouched = (side: WeaponCopies, gone: ReadonlySet<number>) =>
     gone.size === 0 || !side.owners.some((owner) => gone.has(owner));
@@ -325,8 +335,10 @@ function mergeWeapon(
       j++;
     } else {
       // The same copy: the later sighting, its gaps filled from the other.
-      const [later, at, remap, other, otherAt, otherRemap] =
-        a.seen[i]! > b.seen[j]! ? [a, i, remapA, b, j, remapB] : [b, j, remapB, a, i, remapA];
+      const bIsLater = a.seen[i]! === b.seen[j]! ? bLater.has(b.owners[j]!) : b.seen[j]! > a.seen[i]!;
+      const [later, at, remap, other, otherAt, otherRemap] = bIsLater
+        ? [b, j, remapB, a, i, remapA]
+        : [a, i, remapA, b, j, remapB];
       copyRow(later, at, out, k, remap);
       for (let column = 0; column < columns; column++) {
         const pick = other.picks[otherAt * columns + column]!;

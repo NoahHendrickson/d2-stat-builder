@@ -101,6 +101,19 @@ describe("storeFromCrawl", () => {
 });
 
 describe("mergeCopies", () => {
+  it("keeps the later read's copy on the same day, whichever order the two come in", () => {
+    // Read at 09:00 with barrel 11, then at 18:00 (rerolled to 12) on the same day.
+    const morning = crawl(10, "morning", [player(7, 10)], [[1, 1, 7, [undefined, 11, 13, 14]]], 9);
+    const evening = crawl(10, "evening", [player(7, 10)], [[1, 1, 7, [undefined, 12, 13, 14]]], 18);
+    for (const store of [merge(morning, evening), merge(evening, morning)])
+      expect(contents(store)[1]).toEqual([[1, 10, 7, [undefined, 12, 13, 14]]]);
+  });
+
+  it("leaves the players as they are when nothing comes in", () => {
+    const store = merge(crawl(10, "a", [player(7, 10)], [[1, 1, 7, [undefined, 11, 13, 14]]]));
+    expect(mergeCopies(store, emptyStore(), columnsOf).owners).toBe(store.owners);
+  });
+
   it("counts a copy in both once, keeping the later sighting, and a player in both once", () => {
     const older = crawl(10, "a", [player(7, 10)], [
       [1, 1, 7, [undefined, 11, 13, 13]],

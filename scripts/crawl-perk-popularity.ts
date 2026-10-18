@@ -494,7 +494,13 @@ async function main() {
       `https://www.bungie.net/Platform/Destiny2/${type}/Profile/${id}/?components=${PROFILE_COMPONENTS}`,
     );
     reading--;
-    if (!profile) return;
+    if (!profile) {
+      // A player in the store who won't read (account gone, moved platform): count
+      // it as a read, of nothing, so they wait a week like the rest instead of
+      // heading the queue every crawl until they're pruned. When they played stays.
+      if (known) owners.push({ id: BigInt(id), type, played: undefined, whole: false });
+      return;
+    }
     players++;
     if (known) rechecked++;
     const vault = profile.profileInventory?.data?.items;

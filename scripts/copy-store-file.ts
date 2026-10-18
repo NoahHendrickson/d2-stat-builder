@@ -8,6 +8,7 @@ import {
   bytesOf,
   COPY_FIELDS,
   OWNER_FIELDS,
+  type AnyArray,
   type CopyStore,
   type Owners,
   type WeaponCopies,
@@ -32,8 +33,6 @@ export const MAGIC = 0x43503244;
 export const VERSION = 3;
 /** "D2PE": the encrypted file's first four bytes. */
 const SEALED = Buffer.from("D2PE");
-
-type AnyArray = Parameters<typeof bytesOf>[0];
 
 function littleEndianOnly() {
   if (endianness() !== "LE") throw new Error("The copy store file is little-endian; this machine isn't.");
