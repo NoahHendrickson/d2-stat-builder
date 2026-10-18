@@ -18,7 +18,8 @@ const COMBOS_SHOWN = 5;
 /** Below this many copies the shares swing on a handful of players. */
 const SMALL_SAMPLE = 30;
 
-const shortDate = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" });
+// With the hour: the snapshot is rebuilt several times a day.
+const sampledAt = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", hour: "numeric" });
 
 /** A share as a whole percent; nobody at all is "0%", a few people "<1%". */
 const percent = (share: number) =>
@@ -150,10 +151,10 @@ export function WeaponPopularityCard({
 
 /**
  * The info icon at the right of the Popularity heading: how the numbers are
- * worked out, and how many copies of this weapon they come from.
+ * worked out, and how many sightings of this weapon they come from.
  */
 function HowPopularityWorks({ view }: { view: WeaponPopularityView }) {
-  const sampled = view.generatedAt ? shortDate.format(new Date(view.generatedAt)) : undefined;
+  const sampled = view.generatedAt ? sampledAt.format(new Date(view.generatedAt)) : undefined;
   return (
     <Tooltip>
       <TooltipTrigger
@@ -171,15 +172,16 @@ function HowPopularityWorks({ view }: { view: WeaponPopularityView }) {
       <TooltipContent side="bottom" align="end" className="grid max-w-72 gap-1.5 text-xs">
         <p>
           We sample players from PvE matches as they end and read the perks on the legendary
-          weapons they actually used in that match. The last 7 days are added up.
+          weapons they actually used in that match, over about the last week. Someone who plays a
+          lot can be seen more than once.
         </p>
         <p>
-          Each percentage is the share of those copies running that perk, or that left and right
+          Each percentage is the share of those sightings running that perk, or that left and right
           perk together.
         </p>
         <p className="text-muted-foreground">
-          {view.copies.toLocaleString("en-US")} {view.copies === 1 ? "copy" : "copies"} of this
-          weapon{sampled ? `, as of ${sampled}` : ""}.
+          Seen {view.copies === 1 ? "once" : `${view.copies.toLocaleString("en-US")} times`}
+          {sampled ? `, as of ${sampled}` : ""}.
           {view.copies < SMALL_SAMPLE && " A small sample, so treat these as rough."}
         </p>
       </TooltipContent>

@@ -28,6 +28,8 @@ export function usePerkPopularityIndex() {
         : [PERK_POPULARITY_URL],
     what: "Perk popularity",
     retry: false,
+    // The data repo rebuilds it several times a day.
+    staleTime: 60 * 60_000,
     parse: (json) => {
       const data = json as PerkPopularityIndex;
       if (data?.schema !== 2 || typeof data.weapons !== "object")
