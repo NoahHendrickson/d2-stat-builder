@@ -24,7 +24,6 @@ describe("mostPopularRoll", () => {
   });
 
   it("keeps the columns' winners when the top combo is too thin to go on", () => {
-    // As many as one player can add (the crawler's cap) isn't enough.
     expect(mostPopularRoll(columns, [combo(4, 6, MIN_COMBO_COUNT - 1)])).toEqual({ 0: 2, 1: 3, 2: 5 });
   });
 

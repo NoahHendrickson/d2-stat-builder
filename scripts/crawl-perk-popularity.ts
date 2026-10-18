@@ -61,16 +61,6 @@ const ALL_PVP = 5;
  * the player made them public), 205 every character's equipment, 305 sockets.
  */
 const PROFILE_COMPONENTS = "102,201,205,305";
-/**
- * The most copies of one weapon a player adds, equipped ones first, then
- * inventory, then vault. A public vault can hold a dozen copies of one weapon
- * (leftovers from farming it); a cap keeps one hoard from setting a thin
- * weapon's numbers alone, while dropping only the hoard's tail: about 7% of
- * vault copies in a sample of 25 public vaults, where 30% were second or later
- * copies. MIN_COMBO_COUNT (popularity-view.ts) sits just above it, so a combo
- * needs more than one player to set a roll.
- */
-export const COPIES_PER_PLAYER = 3;
 
 interface Options {
   players: number;
@@ -468,14 +458,13 @@ async function main() {
     const equipped = Object.values(profile.characterEquipment?.data ?? {}).flatMap((c) => c.items);
     const sockets = profile.itemComponents?.sockets?.data ?? {};
     // Only the tally's weapons (random-rolled legendaries) are in the lookup, so
-    // it picks them out of every bucket, the vault's included.
-    const added = new Map<number, number>();
+    // it picks them out of every bucket, the vault's included. Every copy counts,
+    // several of one weapon included: a player keeping more than one roll of it
+    // is keeping each for a reason.
     for (const item of [...equipped, ...inventories, ...vault]) {
       if (!item.itemInstanceId || !lookup.has(item.itemHash)) continue;
       const plugs = sockets[item.itemInstanceId]?.sockets.map((s) => s.plugHash);
-      const already = added.get(item.itemHash) ?? 0;
-      if (!plugs || already >= COPIES_PER_PLAYER) continue;
-      added.set(item.itemHash, already + 1);
+      if (!plugs) continue;
       const list = copiesByWeapon.get(item.itemHash) ?? [];
       list.push({ id: BigInt(item.itemInstanceId), plugs });
       copiesByWeapon.set(item.itemHash, list);
