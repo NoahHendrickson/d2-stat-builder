@@ -34,6 +34,8 @@ import { decodeRuns, encodeCopies, storeKey } from "./copy-store-file";
 
 /** How far behind the database's clock the read stops: far longer than a save takes. */
 const SETTLE_MS = 5 * 60_000;
+/** Rows a query returns at most: about 20 KB of weapons each, well inside a response. */
+const PAGE = 200;
 
 interface Row {
   id: string;
@@ -41,6 +43,8 @@ interface Row {
   /** ms, or null when the profile didn't say. */
   played: number | null;
   saved: number;
+  /** saved_at to the microsecond, where the next page starts. */
+  savedExact: string;
   weapons: string;
 }
 
@@ -79,51 +83,72 @@ async function main() {
 
   const sql = neon(url);
   const [{ until }] = (await sql`
-    SELECT (extract(epoch FROM date_trunc('milliseconds', now())) * 1000)::float8 - ${SETTLE_MS} AS until`) as {
-    until: number;
-  }[];
-  const rows = (await sql`
-    SELECT membership_id::text AS id,
-      membership_type::int AS type,
-      (extract(epoch FROM last_played) * 1000)::float8 AS played,
-      (extract(epoch FROM date_trunc('milliseconds', saved_at)) * 1000)::float8 AS saved,
-      encode(weapons, 'base64') AS weapons
-    FROM popularity_contributions
-    WHERE date_trunc('milliseconds', saved_at) > ${since}::timestamptz
-      AND date_trunc('milliseconds', saved_at) <= ${new Date(until).toISOString()}::timestamptz
-    ORDER BY saved_at`) as Row[];
-  if (rows.length === 0) {
-    console.log(`No signed-in players saved from ${since} to ${new Date(until).toISOString()}; nothing written.`);
-    return;
-  }
+    SELECT to_char(date_trunc('milliseconds', now() - make_interval(secs => ${SETTLE_MS / 1000})) AT TIME ZONE 'UTC',
+      'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') AS until`) as { until: string }[];
 
   const catalog = JSON.parse(
     await readFile(resolve(args.catalog || "public/data/weapons.json"), "utf8"),
   ) as PopularityCatalog;
   const lookup = popularityLookup(catalog);
   const collected = readCollector(lookup);
+  let players = 0;
   let copies = 0;
   let vaults = 0;
-  for (const row of rows) {
-    const { sawAll, copies: weapons } = decodeContribution(gunzipSync(Buffer.from(row.weapons, "base64")));
-    const { found, whole } = collected.add(
-      // keep: even with none of the tally's weapons, a whole read says they have none now.
-      { id: BigInt(row.id), type: row.type, played: row.played === null ? undefined : storeDay(row.played), readAt: row.saved },
-      weapons,
-      sawAll,
-      true,
-    );
-    copies += found;
-    if (whole) vaults++;
+  let skipped = 0;
+  let first: number | undefined;
+  // A page at a time, in save order; plain comparisons on saved_at, so its index serves them.
+  let after: Pick<Row, "savedExact" | "id"> | undefined;
+  for (;;) {
+    const rows = (await sql`
+      SELECT membership_id::text AS id,
+        membership_type::int AS type,
+        (extract(epoch FROM last_played) * 1000)::float8 AS played,
+        (extract(epoch FROM date_trunc('milliseconds', saved_at)) * 1000)::float8 AS saved,
+        saved_at::text AS "savedExact",
+        encode(weapons, 'base64') AS weapons
+      FROM popularity_contributions
+      WHERE saved_at > ${since}::timestamptz AND saved_at <= ${until}::timestamptz
+        AND (${after === undefined} OR (saved_at, membership_id) > (${after?.savedExact ?? null}::timestamptz, ${after?.id ?? null}::bigint))
+      ORDER BY saved_at, membership_id
+      LIMIT ${PAGE}`) as Row[];
+    for (const row of rows) {
+      first ??= row.saved;
+      // One row that won't read (damaged, or a newer format another deploy wrote) is
+      // passed over, so it can't hold up everyone else's.
+      let weapons: ReturnType<typeof decodeContribution>;
+      try {
+        weapons = decodeContribution(gunzipSync(Buffer.from(row.weapons, "base64")));
+      } catch (error) {
+        skipped++;
+        console.warn(`Skipping a save from ${new Date(row.saved).toISOString()}: ${error instanceof Error ? error.message : error}`);
+        continue;
+      }
+      const { found, whole } = collected.add(
+        // keep: even with none of the tally's weapons, a whole read says they have none now.
+        { id: BigInt(row.id), type: row.type, played: row.played === null ? undefined : storeDay(row.played), readAt: row.saved },
+        weapons.copies,
+        weapons.sawAll,
+        true,
+      );
+      players++;
+      copies += found;
+      if (whole) vaults++;
+    }
+    if (rows.length < PAGE) break;
+    after = rows.at(-1)!;
+  }
+  if (players === 0) {
+    console.log(`No signed-in players saved from ${since} to ${until}${skipped ? ` (${skipped} skipped)` : ""}; nothing written.`);
+    return;
   }
 
   const generatedAt = new Date().toISOString();
   const crawl = collected.store(Date.parse(generatedAt), {
     generatedAt,
     // When the first of them was saved, and where this read stopped: the next run starts after `to`.
-    from: new Date(rows[0]!.saved).toISOString(),
-    to: new Date(until).toISOString(),
-    players: rows.length,
+    from: new Date(first!).toISOString(),
+    to: until,
+    players,
     // Whether they were in the store already isn't known here.
     rechecked: 0,
     copies,
@@ -135,7 +160,7 @@ async function main() {
   await writeFile(`${target}.tmp`, encodeCopies(crawl, key));
   await rename(`${target}.tmp`, target);
   console.log(
-    `Wrote ${copies} copies of ${collected.weapons()} weapons from ${rows.length} signed-in players (${vaults} read whole) saved since ${since} to ${target}.`,
+    `Wrote ${copies} copies of ${collected.weapons()} weapons from ${players} signed-in players (${vaults} read whole${skipped ? `, ${skipped} skipped` : ""}) saved since ${since} to ${target}.`,
   );
 }
 
