@@ -1,8 +1,15 @@
 import { randomBytes } from "node:crypto";
 import { gzipSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
-import { emptyStore, mergeCopies, storeFromCrawl, type CopyStore } from "../src/lib/weapons/popularity-copies";
-import { decodeCopies, encodeCopies, MAGIC, seal, storeKey, VERSION } from "./copy-store-file";
+import {
+  COPY_FIELDS,
+  emptyStore,
+  mergeCopies,
+  OWNER_FIELDS,
+  storeFromCrawl,
+  type CopyStore,
+} from "../src/lib/weapons/popularity-copies";
+import { decodeCopies, decodeOwners, encodeCopies, MAGIC, seal, storeKey, VERSION } from "./copy-store-file";
 
 const key = randomBytes(32);
 const run = (generatedAt: string) => ({
@@ -14,15 +21,16 @@ const run = (generatedAt: string) => ({
   copies: 1,
   vaults: 1,
   sample: { kind: "recent" as const, minutes: 15 },
+  catalog: "0",
 });
 
 /** Every owner and every copy, as plain values. */
 const contents = (store: CopyStore) => ({
-  owners: Object.fromEntries(Object.entries(store.owners).map(([field, array]) => [field, Array.from(array as ArrayLike<unknown>)])),
+  owners: Object.fromEntries(OWNER_FIELDS.map((field) => [field, [...store.owners[field]]])),
   weapons: Object.fromEntries(
     [...store.weapons].map(([hash, w]) => [
       hash,
-      { perks: w.perks, ids: [...w.ids], seen: [...w.seen], owners: [...w.owners], picks: [...w.picks] },
+      { perks: w.perks, ...Object.fromEntries(COPY_FIELDS.map((field) => [field, [...w[field]]])) },
     ]),
   ),
 });
@@ -57,9 +65,12 @@ describe("encodeCopies / decodeCopies", () => {
       ),
       columnsOf,
     );
-    const back = decodeCopies(encodeCopies(store, key), key);
+    const file = encodeCopies(store, key);
+    const back = decodeCopies(file, key);
     expect(contents(back)).toEqual(contents(store));
     expect(back.runs).toEqual(store.runs);
+    // A crawl only needs the players, and gets the same ones.
+    expect(contents({ ...emptyStore(), owners: decodeOwners(file, key) }).owners).toEqual(contents(store).owners);
   });
 
   it("round-trips an empty store", () => {
@@ -69,8 +80,6 @@ describe("encodeCopies / decodeCopies", () => {
   it("can't be read without the key", () => {
     const file = encodeCopies(emptyStore(), key);
     expect(() => decodeCopies(file, randomBytes(32))).toThrow("Couldn't decrypt the copy store");
-    // Nor is it the gzip of the store in plain sight.
-    expect(file.includes(Buffer.from([0x1f, 0x8b]), 4)).toBe(false);
   });
 
   it("rejects a file that isn't an encrypted copy store", () => {

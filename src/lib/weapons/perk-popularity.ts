@@ -73,9 +73,16 @@ export interface CrawlSource {
   rechecked: number;
   /** Copies it read, before any were found to be already in the store. */
   copies: number;
-  /** Players among them whose vault or character inventories were public. */
+  /**
+   * Players among them read whole: vault and character inventories public, and
+   * every weapon's sockets with them, so the read listed every copy they have.
+   * Before owners were kept (vault or inventories public, and only players
+   * with a tracked weapon) the count isn't comparable.
+   */
   vaults: number;
   sample: CrawlSample;
+  /** lookupFingerprint of the weapons the crawl could list; the merge trusts its whole reads only on the same catalog. */
+  catalog: string;
 }
 
 /** The catalog fields the tally needs: public/data/weapons.json, narrowed. */

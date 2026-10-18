@@ -1,10 +1,11 @@
 import { readFile, rename, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { parseArgs } from "node:util";
-import type { PopularityCatalog } from "../src/lib/weapons/perk-popularity";
+import { popularityLookup, type PopularityCatalog } from "../src/lib/weapons/perk-popularity";
 import {
   copyCount,
   emptyStore,
+  lookupFingerprint,
   mergeCopies,
   pruneCopies,
   snapshotFromCopies,
@@ -26,7 +27,9 @@ import { decodeCopies, encodeCopies, storeKey } from "./copy-store-file";
  *   tsx scripts/merge-perk-popularity.ts --store=store.bin --add=crawl.bin --days=14 --out=perk-popularity.json
  *
  * --catalog (weapons.json path, default public/data/weapons.json) holds every
- * copy to the weapon's current columns (see mergeCopies).
+ * copy to the weapon's current columns (see mergeCopies). A crawl that ran on
+ * a different catalog couldn't list every weapon this one keeps, so its whole
+ * reads don't count as whole: nothing of theirs is taken as dismantled.
  */
 
 async function main() {
@@ -57,7 +60,17 @@ async function main() {
     return emptyStore();
   });
   const before = copyCount(store);
-  const crawls = await Promise.all((args.add ?? []).map(async (file) => decodeCopies(await readFile(resolve(file)), key)));
+  const fingerprint = lookupFingerprint(popularityLookup(catalog).keys());
+  const crawls = await Promise.all(
+    (args.add ?? []).map(async (file) => {
+      const crawl = decodeCopies(await readFile(resolve(file)), key);
+      if (crawl.runs.some((run) => run.catalog !== fingerprint)) {
+        console.warn(`${file} was crawled on a different catalog; its whole reads won't drop anything.`);
+        crawl.owners.whole.fill(0);
+      }
+      return crawl;
+    }),
+  );
   // The empty first merge holds the store to today's catalog even with nothing to add.
   for (const crawl of [emptyStore(), ...crawls]) store = mergeCopies(store, crawl, columnsOf);
   store = pruneCopies(store, storeDay() - (days - 1));

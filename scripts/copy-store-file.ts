@@ -2,7 +2,16 @@ import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import { endianness } from "node:os";
 import { gunzipSync, gzipSync } from "node:zlib";
 import type { CrawlSource } from "../src/lib/weapons/perk-popularity";
-import { allocOwners, allocWeapon, type CopyStore, type WeaponCopies } from "../src/lib/weapons/popularity-copies";
+import {
+  allocOwners,
+  allocWeapon,
+  bytesOf,
+  COPY_FIELDS,
+  OWNER_FIELDS,
+  type CopyStore,
+  type Owners,
+  type WeaponCopies,
+} from "../src/lib/weapons/popularity-copies";
 
 /**
  * The copy store's file (src/lib/weapons/popularity-copies.ts). The store lists
@@ -11,11 +20,10 @@ import { allocOwners, allocWeapon, type CopyStore, type WeaponCopies } from "../
  * sit in a public release: "D2PE", a 12-byte IV, the 16-byte auth tag, then
  * the encrypted gzip of the store.
  * The store itself is little-endian throughout: "D2PC", version, a JSON header
- * (the runs), the owners (count, then ids, types, last-played days, last-read
- * days, whole flags), then each weapon: hash, column count, perk table, copy
- * count, then its ids, last-seen days, owners and picks. Typed arrays are
- * copied in bulk, so this only runs on a little-endian machine (every one the
- * crawl runs on).
+ * (the runs), the owner count and each of OWNER_FIELDS in turn, then each
+ * weapon: hash, column count, perk table, copy count, then each of
+ * COPY_FIELDS in turn. Typed arrays are copied in bulk, so this only runs on a
+ * little-endian machine (every one the crawl runs on).
  */
 
 /** "D2PC": the store's first four bytes, once decrypted and unzipped. */
@@ -25,9 +33,7 @@ export const VERSION = 2;
 /** "D2PE": the encrypted file's first four bytes. */
 const SEALED = Buffer.from("D2PE");
 
-/** The bytes behind a typed array, as they are in memory. */
-const bytesOf = (array: BigUint64Array | Uint32Array | Uint16Array | Uint8Array) =>
-  new Uint8Array(array.buffer, array.byteOffset, array.byteLength);
+type AnyArray = Parameters<typeof bytesOf>[0];
 
 function littleEndianOnly() {
   if (endianness() !== "LE") throw new Error("The copy store file is little-endian; this machine isn't.");
@@ -63,21 +69,23 @@ function unseal(file: Buffer, key: Buffer) {
 export function encodeCopies(store: CopyStore, key: Buffer): Buffer {
   littleEndianOnly();
   const header = Buffer.from(JSON.stringify({ runs: store.runs }));
-  const { owners } = store;
-  const ownerArrays = [owners.ids, owners.types, owners.played, owners.read, owners.whole];
-  let size = 4 + 1 + 4 + header.length + 4 + ownerArrays.reduce((sum, array) => sum + array.byteLength, 0) + 4;
+  const ownerArrays = OWNER_FIELDS.map((field) => store.owners[field]);
+  const copyArrays = (weapon: WeaponCopies) => COPY_FIELDS.map((field) => weapon[field]);
+  const bytes = (arrays: AnyArray[]) => arrays.reduce((sum, array) => sum + array.byteLength, 0);
+  let size = 4 + 1 + 4 + header.length + 4 + bytes(ownerArrays) + 4;
   for (const weapon of store.weapons.values())
-    size += 4 + 1 + 1 + weapon.perks.length * 4 + 4 + weapon.ids.length * (8 + 2 + 4 + weapon.columns);
+    size += 4 + 1 + 1 + weapon.perks.length * 4 + 4 + bytes(copyArrays(weapon));
   const out = Buffer.alloc(size);
   let at = out.writeUInt32LE(MAGIC, 0);
   at = out.writeUInt8(VERSION, at);
   at = out.writeUInt32LE(header.length, at);
   at += header.copy(out, at);
-  at = out.writeUInt32LE(owners.ids.length, at);
-  for (const array of ownerArrays) {
+  const put = (array: AnyArray) => {
     out.set(bytesOf(array), at);
     at += array.byteLength;
-  }
+  };
+  at = out.writeUInt32LE(store.owners.ids.length, at);
+  ownerArrays.forEach(put);
   at = out.writeUInt32LE(store.weapons.size, at);
   for (const [hash, weapon] of store.weapons) {
     at = out.writeUInt32LE(hash, at);
@@ -85,15 +93,19 @@ export function encodeCopies(store: CopyStore, key: Buffer): Buffer {
     at = out.writeUInt8(weapon.perks.length, at);
     for (const perk of weapon.perks) at = out.writeUInt32LE(perk, at);
     at = out.writeUInt32LE(weapon.ids.length, at);
-    for (const array of [weapon.ids, weapon.seen, weapon.owners, weapon.picks]) {
-      out.set(bytesOf(array), at);
-      at += array.byteLength;
-    }
+    copyArrays(weapon).forEach(put);
   }
   return seal(gzipSync(out), key);
 }
 
-export function decodeCopies(file: Buffer, key: Buffer): CopyStore {
+/** Fills `array` (its own, aligned memory) from `data` at `at`; returns where it ended. */
+function fill(array: AnyArray, data: Buffer, at: number) {
+  bytesOf(array).set(data.subarray(at, at + array.byteLength));
+  return at + array.byteLength;
+}
+
+/** Reads the file through the owners; `weapons` then reads on from there, if it's wanted. */
+function readStore<T>(file: Buffer, key: Buffer, weapons: (data: Buffer, at: number) => T) {
   littleEndianOnly();
   const data = gunzipSync(unseal(file, key));
   if (data.length < 5 || data.readUInt32LE(0) !== MAGIC) throw new Error("Not a copy store.");
@@ -104,14 +116,14 @@ export function decodeCopies(file: Buffer, key: Buffer): CopyStore {
   at += 4;
   const header = JSON.parse(data.toString("utf8", at, at + headerLength)) as { runs: CrawlSource[] };
   at += headerLength;
-  /** Fills `array` (its own, aligned memory) from the file. */
-  const fill = (array: BigUint64Array | Uint32Array | Uint16Array | Uint8Array) => {
-    bytesOf(array).set(data.subarray(at, at + array.byteLength));
-    at += array.byteLength;
-  };
   const owners = allocOwners(data.readUInt32LE(at));
   at += 4;
-  for (const array of [owners.ids, owners.types, owners.played, owners.read, owners.whole]) fill(array);
+  for (const field of OWNER_FIELDS) at = fill(owners[field], data, at);
+  return { runs: header.runs, owners, weapons: weapons(data, at) };
+}
+
+function readWeapons(data: Buffer, start: number) {
+  let at = start;
   const weapons = new Map<number, WeaponCopies>();
   const count = data.readUInt32LE(at);
   at += 4;
@@ -124,8 +136,13 @@ export function decodeCopies(file: Buffer, key: Buffer): CopyStore {
     at += perkCount * 4;
     const weapon = allocWeapon(columns, perks, data.readUInt32LE(at));
     at += 4;
-    for (const array of [weapon.ids, weapon.seen, weapon.owners, weapon.picks]) fill(array);
+    for (const field of COPY_FIELDS) at = fill(weapon[field], data, at);
     weapons.set(hash, weapon);
   }
-  return { owners, weapons, runs: header.runs };
+  return weapons;
 }
+
+export const decodeCopies = (file: Buffer, key: Buffer): CopyStore => readStore(file, key, readWeapons);
+
+/** Just the store's players: all a crawl needs from it, without building every weapon's copies. */
+export const decodeOwners = (file: Buffer, key: Buffer): Owners => readStore(file, key, () => undefined).owners;

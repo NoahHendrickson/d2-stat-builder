@@ -2,10 +2,11 @@ import { describe, expect, it } from "vitest";
 import type { CrawlSource } from "./perk-popularity";
 import {
   copyCount,
-  dueOwners,
   emptyStore,
+  lookupFingerprint,
   mergeCopies,
   pruneCopies,
+  recheckPlan,
   snapshotFromCopies,
   storeDay,
   storeFromCrawl,
@@ -33,8 +34,9 @@ const run = (generatedAt: string, players = 1): CrawlSource => ({
   copies: 1,
   vaults: 0,
   sample: { kind: "recent", minutes: 15 },
+  catalog: "0",
 });
-const player = (id: number, played: number, whole = false): SeenOwner => ({ id: BigInt(id), type: 3, played, whole });
+const player = (id: number, played: number | undefined, whole = false): SeenOwner => ({ id: BigInt(id), type: 3, played, whole });
 /** A copy of `weapon` as [weapon, instance id, owner's membership id, perks]. */
 type Copy = [weapon: number, id: number, owner: number, perks: (number | undefined)[]];
 
@@ -167,6 +169,26 @@ describe("mergeCopies", () => {
     expect(copyCount(merge(older, newer))).toBe(2);
   });
 
+  it("doesn't let an older crawl added late bring back copies a later whole read found gone, on any weapon", () => {
+    const earlier = crawl(100, "a", [player(7, 100)], [
+      [1, 1, 7, [undefined, 11, 13, 15]],
+      [1, 2, 7, [undefined, 12, 13, 15]],
+      [2, 5, 7, [11]],
+    ]);
+    const laterWhole = crawl(114, "b", [player(7, 114, true)], [[1, 1, 7, [undefined, 11, 13, 15]]]);
+    const inOrder = merge(earlier, laterWhole);
+    const reversed = merge(laterWhole, earlier);
+    expect(contents(inOrder)).toEqual({ 1: [[1, 114, 7, [undefined, 11, 13, 15]]] });
+    expect(contents(reversed)).toEqual(contents(inOrder));
+    expect(players(reversed)).toEqual(players(inOrder));
+  });
+
+  it("keeps when a player last played when a later read couldn't tell", () => {
+    const older = crawl(10, "a", [player(7, 9)], [[2, 1, 7, [11]]]);
+    const newer = crawl(12, "b", [player(7, undefined)], [[2, 1, 7, [11]]]);
+    expect(players(merge(older, newer))).toEqual([[7, 9, 12]]);
+  });
+
   it("drops copies whose column count no longer matches the catalog, and weapons it doesn't have", () => {
     const stale = crawl(10, "a", [player(7, 10)], [
       [1, 1, 7, [11, 13]],
@@ -214,19 +236,51 @@ describe("pruneCopies", () => {
     const store = merge(crawl(day, "a", [player(7, day, true)], []));
     expect(players(pruneCopies(store, day - 13))).toEqual([]);
   });
+
+  it("leaves the copies as they are when no player goes", () => {
+    const store = merge(crawl(day, "a", [player(7, day)], [[2, 1, 7, [11]]]));
+    expect(pruneCopies(store, day - 13).weapons.get(2)).toBe(store.weapons.get(2));
+  });
 });
 
-describe("dueOwners", () => {
-  it("lists the players last read on or before the day given, the longest unread first", () => {
-    const store = merge(
-      crawl(20, "a", [player(1, 20)], [[2, 1, 1, [11]]]),
-      crawl(10, "b", [player(2, 10)], [[2, 2, 2, [11]]]),
-      crawl(30, "c", [player(3, 30)], [[2, 3, 3, [11]]]),
-    );
-    expect(dueOwners(store, 20)).toEqual([
-      { type: 3, id: BigInt(2) },
-      { type: 3, id: BigInt(1) },
-    ]);
+describe("recheckPlan", () => {
+  // Players 1 and 2 were read 10 and 20 days before day 30, player 3 that day.
+  const store = merge(
+    crawl(20, "a", [player(1, 20)], [[2, 1, 1, [11]]]),
+    crawl(10, "b", [player(2, 10)], [[2, 2, 2, [11]]]),
+    crawl(30, "c", [player(3, 30)], [[2, 3, 3, [11]]]),
+  );
+  const plan = () => recheckPlan(store.owners, 30, 7);
+
+  it("reads again the players not read for the days given, the longest unread first", () => {
+    const p = plan();
+    expect([p.next(1, 0), p.next(3, 1), p.next(5, 2)]).toEqual([{ type: 3, id: "2" }, { type: 3, id: "1" }, undefined]);
+    expect(p.remaining()).toBe(0);
+  });
+
+  it("keeps re-reads to half the reads started, failed ones included", () => {
+    const p = plan();
+    // No reads yet: a re-read now would be all of them.
+    expect(p.next(0, 0)).toBeUndefined();
+    // One new read started: the re-read makes it half.
+    expect(p.next(1, 0)).toEqual({ type: 3, id: "2" });
+    // That re-read counts once started, whether or not it answers.
+    expect(p.next(2, 1)).toBeUndefined();
+    expect(p.next(3, 1)).toEqual({ type: 3, id: "1" });
+  });
+
+  it("knows who's in the store, and who was read too recently to read now", () => {
+    const p = plan();
+    expect([p.known("1"), p.known("3"), p.known("9")]).toEqual([true, true, false]);
+    expect([p.recentlyRead("1"), p.recentlyRead("3"), p.recentlyRead("9")]).toEqual([false, true, false]);
+    expect(p.players).toBe(3);
+  });
+});
+
+describe("lookupFingerprint", () => {
+  it("is the same for the same weapons in any order, and differs when one is missing", () => {
+    expect(lookupFingerprint([3, 1, 2])).toBe(lookupFingerprint([1, 2, 3]));
+    expect(lookupFingerprint([1, 2])).not.toBe(lookupFingerprint([1, 2, 3]));
   });
 });
 
