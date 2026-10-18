@@ -21,6 +21,8 @@ export const CHANGELOG: readonly ChangelogEntry[] = [
       "Weapon search: a weapon's details now sit in two cards. Stats are on the left, with the frame at the top and Recoil Direction drawn as the in-game arc; perks, masterworks and mods are on the right.",
       "Weapon search: the weapon mods each weapon can slot sit under its masterworks. Hover one to preview its stats, or click it to keep it on while you try perks. Adept mods show on adept weapons.",
       "Weapon search: Advanced stats under a weapon's stats show its boss DPS, total damage from full reserves and the time to fire them for the setups Aegis's boss DPS sheet has tested, for about 160 weapons. Each setup shows the perks it ran; \"See perks\" picks them in the perk grid, and after that, clicking another setup switches the picks to its perks.",
+      "Weapon search: a Popularity card beside the perks shows how often players run each left and right perk combo, and each perk, on that weapon in PvE, from a daily sample of the past week's matches. Click a combo or a perk to try it in the perk grid, or use Try most popular roll; the info icon explains how it's worked out.",
+      "Weapon search: Masterworks and Mods start with an empty socket. Pick it to see the stats without one, or hover it to preview that.",
     ],
   },
   {

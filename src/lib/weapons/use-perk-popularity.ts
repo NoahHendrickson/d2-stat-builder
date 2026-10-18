@@ -60,7 +60,10 @@ export interface WeaponPopularityView {
   copies: number;
   /** When the snapshot was built. */
   generatedAt?: string;
-  /** Each perk column with data, its perks most run first (perks no one ran left out). */
+  /**
+   * Each perk column with data, every one of its perks in the grid's order (so
+   * the card lines up with it), with its share; perks no one ran are 0.
+   */
   columns: { column: number; perks: PerkPopularity[] }[];
   /** The most run left + right combos, most run first. */
   combos: ComboPopularity[];
@@ -92,12 +95,14 @@ export function useWeaponPopularity(
     // A perk hash → its index in one of this weapon's columns.
     const indexIn = (column: number, hash: number) =>
       weapon.columns[column]?.perkIndices.find((i) => catalog.perks[i]?.hash === hash);
-    const columns = weapon.columns.flatMap((_, column) => {
-      const perks = columnShares(data, column).flatMap(({ hash, share }) => {
-        const perkIndex = indexIn(column, hash);
-        return perkIndex === undefined ? [] : [{ perkIndex, share }];
-      });
-      return perks.length > 0 ? [{ column, perks }] : [];
+    const columns = weapon.columns.flatMap(({ perkIndices }, column) => {
+      const byHash = new Map(columnShares(data, column).map(({ hash, share }) => [hash, share]));
+      if (byHash.size === 0) return [];
+      const perks = perkIndices.map((perkIndex) => ({
+        perkIndex,
+        share: byHash.get(catalog.perks[perkIndex]?.hash ?? -1) ?? 0,
+      }));
+      return [{ column, perks }];
     });
     const traits = traitColumns(weapon.columns);
     const combos = traits
@@ -110,7 +115,9 @@ export function useWeaponPopularity(
         })
       : [];
     const topRoll: Roll = {};
-    for (const { column, perks } of columns) topRoll[column] = perks[0]!.perkIndex;
+    // The most run perk in each column (the first of any tie, in grid order).
+    for (const { column, perks } of columns)
+      topRoll[column] = perks.reduce((best, p) => (p.share > best.share ? p : best)).perkIndex;
     return {
       available: true,
       copies: data.copies,

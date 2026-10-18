@@ -46,7 +46,8 @@ export function DetailCard({
  * border's colour, under the title and any description, running out through
  * the padding to the card's edges; a closed section has nothing under its
  * header, so it goes without, and pulls the card's padding in so its title
- * sits as centred as an open one's.
+ * sits as centred as an open one's. A section with no body (a card's heading)
+ * goes without its rule too: the next section opens with its own.
  */
 function SectionFrame({
   title,
@@ -63,8 +64,9 @@ function SectionFrame({
   action?: ReactNode;
   description?: ReactNode;
   contentId?: string;
-  children: ReactNode;
+  children?: ReactNode;
 }) {
+  const body = open && children != null;
   return (
     <section
       aria-label={title}
@@ -76,7 +78,7 @@ function SectionFrame({
       <CardHeader
         className={cn(
           "relative",
-          open && "pb-2 after:absolute after:inset-x-0 after:bottom-0 after:h-px after:bg-foreground/12",
+          body && "pb-2 after:absolute after:inset-x-0 after:bottom-0 after:h-px after:bg-foreground/12",
         )}
       >
         {/* The rule is the header's, below the description, not the title's. */}
@@ -88,7 +90,7 @@ function SectionFrame({
           </CardDescription>
         )}
       </CardHeader>
-      {open && <CardContent id={contentId}>{children}</CardContent>}
+      {body && <CardContent id={contentId}>{children}</CardContent>}
     </section>
   );
 }
@@ -96,7 +98,7 @@ function SectionFrame({
 /**
  * One part of a weapon's details (stats, perks, masterworks, mods) under its
  * title, with an optional control at the title's right end and a description
- * under it.
+ * under it. Without children it's just a heading, as at the top of a card.
  */
 export function DetailSection({
   title,
@@ -107,7 +109,7 @@ export function DetailSection({
   title: string;
   action?: ReactNode;
   description?: ReactNode;
-  children: ReactNode;
+  children?: ReactNode;
 }) {
   return (
     <SectionFrame title={title} open heading={title} action={action} description={description}>
