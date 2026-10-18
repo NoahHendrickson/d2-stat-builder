@@ -4,8 +4,8 @@
  * `scripts/crawl-perk-popularity.ts` finds active players through Bungie's
  * public API (recent PvE post-game reports give the players) and reads the
  * perks on every copy of a legendary they have equipped, or in a vault they've
- * made public. Each copy counts once, kept in a copy store until it goes
- * unseen for two weeks (popularity-copies.ts); the merge tallies the store
+ * made public. Each copy counts once, kept in a copy store for as long as its
+ * owner keeps playing (popularity-copies.ts); the merge tallies the store
  * into the snapshot published off Vercel, on GitHub Pages, which the weapon
  * page reads: each weapon's perks per column, and the left + right trait pair
  * as a combo.
@@ -18,7 +18,7 @@ export const PERK_POPULARITY_URL =
   "https://noahhendrickson.github.io/d2-conflux-data/perk-popularity.json";
 
 export interface WeaponPopularity {
-  /** Distinct copies seen in the last two weeks, equipped or in a public vault. */
+  /** Distinct copies, equipped or in a public vault, of players who've played in the last two weeks. */
   copies: number;
   /**
    * Per catalog column (same index as `weapon.columns`): base perk hash → copies
@@ -44,11 +44,7 @@ export interface PerkPopularityIndex {
   /** The span of the post-game reports the players were found through, by when they ended. */
   from: string;
   to: string;
-  /**
-   * Profiles read, added up across the crawls in the snapshot, so a player
-   * found in several crawls counts once per crawl. Player-crawls, not players
-   * (their copies, though, count once).
-   */
+  /** The players whose copies are counted (in snapshots before the copy store, profile reads added up across crawls). */
   players: number;
   /** By weapon item hash. */
   weapons: Record<string, WeaponPopularity>;
@@ -56,7 +52,7 @@ export interface PerkPopularityIndex {
 
 /** The published snapshot: the copy store tallied. */
 export interface MergedPopularity extends PerkPopularityIndex {
-  /** The crawls whose copies are in it, oldest first: where every count came from. */
+  /** The crawls of the last two weeks, oldest first. A player's copies can be older: they last as long as the player plays. */
   crawls: CrawlSource[];
 }
 
@@ -72,7 +68,9 @@ export interface CrawlSource {
   generatedAt: string;
   from: string;
   to: string;
+  /** Profiles it read, `rechecked` of them players already in the store. */
   players: number;
+  rechecked: number;
   /** Copies it read, before any were found to be already in the store. */
   copies: number;
   /** Players among them whose vault or character inventories were public. */

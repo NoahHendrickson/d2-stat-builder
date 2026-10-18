@@ -10,18 +10,20 @@ import {
   snapshotFromCopies,
   storeDay,
 } from "../src/lib/weapons/popularity-copies";
-import { decodeCopies, encodeCopies } from "./copy-store-file";
+import { decodeCopies, encodeCopies, storeKey } from "./copy-store-file";
 
 /**
  * Folds crawls into the copy store and tallies it into the published snapshot
  * (see src/lib/weapons/popularity-copies.ts). Each --add is a crawl's file;
- * a copy seen again keeps its latest sighting, and a crawl already in the
- * store is skipped. Copies last seen more than --days ago (today included)
- * drop out. The store is rewritten in place; a missing one starts empty.
+ * a copy seen again keeps its latest sighting, a player read again keeps their
+ * latest read, and a crawl already in the store is skipped. A player who last
+ * played more than --days ago (today included) drops out with their copies.
+ * The store is rewritten in place; a missing one starts empty. Both files are
+ * encrypted with POPULARITY_STORE_KEY (see scripts/copy-store-file.ts).
  * Nothing is written when the store would be left empty, so a run of failed
  * crawls can't publish a blank snapshot.
  *
- *   tsx scripts/merge-perk-popularity.ts --store=copies.bin.gz --add=crawl.bin.gz --days=14 --out=perk-popularity.json
+ *   tsx scripts/merge-perk-popularity.ts --store=store.bin --add=crawl.bin --days=14 --out=perk-popularity.json
  *
  * --catalog (weapons.json path, default public/data/weapons.json) holds every
  * copy to the weapon's current columns (see mergeCopies).
@@ -47,29 +49,29 @@ async function main() {
   const columns = new Map(catalog.weapons.map((w) => [w.hash, w.columns]));
   const columnsOf = (hash: number) => columns.get(hash);
 
+  const key = storeKey();
   const storePath = resolve(args.store);
-  let store = await readFile(storePath).then(decodeCopies, (error: NodeJS.ErrnoException) => {
+  let store = await readFile(storePath).then((file) => decodeCopies(file, key), (error: NodeJS.ErrnoException) => {
     if (error.code !== "ENOENT") throw error;
     console.log(`No copy store at ${storePath} yet; starting one.`);
     return emptyStore();
   });
   const before = copyCount(store);
-  const crawls = await Promise.all((args.add ?? []).map((file) => readFile(resolve(file)).then(decodeCopies)));
+  const crawls = await Promise.all((args.add ?? []).map(async (file) => decodeCopies(await readFile(resolve(file)), key)));
   // The empty first merge holds the store to today's catalog even with nothing to add.
   for (const crawl of [emptyStore(), ...crawls]) store = mergeCopies(store, crawl, columnsOf);
   store = pruneCopies(store, storeDay() - (days - 1));
   const copies = copyCount(store);
-  if (store.runs.length === 0 || copies === 0)
-    throw new Error(`No crawl in the last ${days} days left any copies; nothing written.`);
+  if (copies === 0) throw new Error(`No player who's played in the last ${days} days has any copies; nothing written.`);
 
   const snapshot = snapshotFromCopies(store, columnsOf);
-  await writeFile(`${storePath}.tmp`, encodeCopies(store));
+  await writeFile(`${storePath}.tmp`, encodeCopies(store, key));
   await rename(`${storePath}.tmp`, storePath);
   const target = resolve(args.out);
   await writeFile(`${target}.tmp`, JSON.stringify(snapshot));
   await rename(`${target}.tmp`, target);
   console.log(
-    `Copy store: ${before} → ${copies} copies of ${store.weapons.size} weapons, from ${store.runs.length} crawls over the last ${days} days → ${storePath}, snapshot → ${target}.`,
+    `Copy store: ${before} → ${copies} copies of ${store.weapons.size} weapons, from ${store.owners.ids.length} players who've played in the last ${days} days (${store.runs.length} crawls in that time) → ${storePath}, snapshot → ${target}.`,
   );
 }
 

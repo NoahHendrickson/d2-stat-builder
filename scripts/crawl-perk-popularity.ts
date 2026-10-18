@@ -10,8 +10,15 @@ import {
   type CrawlSample,
   type PopularityCatalog,
 } from "../src/lib/weapons/perk-popularity";
-import { storeDay, storeFromCopies, type SeenCopy } from "../src/lib/weapons/popularity-copies";
-import { encodeCopies } from "./copy-store-file";
+import {
+  dueOwners,
+  ownerIndex,
+  storeDay,
+  storeFromCrawl,
+  type SeenCopy,
+  type SeenOwner,
+} from "../src/lib/weapons/popularity-copies";
+import { decodeCopies, encodeCopies, storeKey } from "./copy-store-file";
 
 /**
  * Finds players through Bungie's public API and records the perks on every
@@ -31,17 +38,22 @@ import { encodeCopies } from "./copy-store-file";
  * it stops; that search is only precise to a minute or so, so a report that
  * ended outside a fixed window is skipped. PvP matches are skipped too:
  * players are found through PvE.
- * For each player it hasn't seen, one profile read gives the weapons equipped
- * on every character, which are public on every profile, so no one signs in,
- * plus the vault and character inventories for the few (about 3%) who have
- * made them public; private ones cost nothing extra. Each weapon's columns are
- * read from their own sockets, learned from all its copies at the end (see
- * columnSockets). Nothing about a player is kept, only their copies by
- * instance id. All requests share one rate limit, which slows down for good
- * each time Bungie throttles; only throttles, server errors and network
- * failures are retried.
+ * For each player it hasn't seen, one profile read gives when they last
+ * played and the weapons equipped on every character, which are public on
+ * every profile, so no one signs in, plus the vault and character inventories
+ * for the few (about 4%) who have made them public; private ones cost nothing
+ * extra. Given the running store (--store), it also reads again the players
+ * in it it hasn't read for RECHECK_AFTER_DAYS, the longest unread first, with
+ * up to half its reads: that keeps their copies, and when they last played,
+ * current, so the merge can keep a player's copies for as long as they play.
+ * Players in the store read more recently are passed over when found again.
+ * Each weapon's columns are read from their own sockets, learned from all its
+ * copies at the end (see columnSockets). The crawl's file lists the players it
+ * read, so it's encrypted like the store (scripts/copy-store-file.ts). All
+ * requests share one rate limit, which slows down for good each time Bungie
+ * throttles; only throttles, server errors and network failures are retried.
  *
- *   tsx scripts/crawl-perk-popularity.ts --players=500 --out=crawl.bin.gz
+ *   tsx scripts/crawl-perk-popularity.ts --players=500 --store=store.bin --out=crawl.bin
  *
  * Options: --players (stop once this many profiles have been read, default 20000), --minutes (time
  * budget, default 300), --rate (requests per second to start at, default 20, or 8 on the app's key),
@@ -49,18 +61,23 @@ import { encodeCopies } from "./copy-store-file";
  * about a second), --recent=<minutes> (sample the reports that ended in the last
  * this many minutes as the crawl goes, instead of a fixed window), --hours (how far back to
  * sample, default 24), --catalog (weapons.json path, default
- * public/data/weapons.json), --out (required).
+ * public/data/weapons.json), --store (the running copy store, for the players to
+ * read again; without it every player found is new), --out (required).
  * The key comes from BUNGIE_CRAWLER_API_KEY, falling back to
- * NEXT_PUBLIC_BUNGIE_API_KEY for small local runs.
+ * NEXT_PUBLIC_BUNGIE_API_KEY for small local runs; the files' key from
+ * POPULARITY_STORE_KEY.
  */
 
 /** DestinyActivityModeType.AllPvP: these reports are skipped, players are found through PvE. */
 const ALL_PVP = 5;
 /**
- * Profile components: 102 vault, 201 character inventories (both empty unless
- * the player made them public), 205 every character's equipment, 305 sockets.
+ * Profile components: 100 profile (when they last played), 102 vault, 201
+ * character inventories (both empty unless the player made them public), 205
+ * every character's equipment, 305 sockets.
  */
-const PROFILE_COMPONENTS = "102,201,205,305";
+const PROFILE_COMPONENTS = "100,102,201,205,305";
+/** How long after reading a player the crawl reads them again. */
+const RECHECK_AFTER_DAYS = 7;
 
 interface Options {
   players: number;
@@ -70,6 +87,7 @@ interface Options {
   /** Which reports to draw from (see the Sampler each one builds), as the crawl file records it. */
   sample: CrawlSample;
   catalog: string;
+  store?: string;
   out: string;
 }
 
@@ -78,7 +96,7 @@ function readOptions(defaultRate: number): Options {
   // Strict: an unknown flag (a typo like --recnet) or one missing its value is an error, not a default crawl.
   const { values: args } = parseArgs({
     options: Object.fromEntries(
-      ["players", "minutes", "rate", "workers", "recent", "hours", "catalog", "out"].map((key) => [
+      ["players", "minutes", "rate", "workers", "recent", "hours", "catalog", "store", "out"].map((key) => [
         key,
         { type: "string" } as const,
       ]),
@@ -106,6 +124,7 @@ function readOptions(defaultRate: number): Options {
     workers: number("workers", Math.ceil(rate * 1.2)),
     sample,
     catalog: args.catalog || "public/data/weapons.json",
+    store: args.store,
     out: args.out,
   };
 }
@@ -226,6 +245,7 @@ interface Item {
  * privacy setting, no `data`.
  */
 interface Profile {
+  profile?: { data?: { dateLastPlayed?: string } };
   profileInventory?: { data?: { items: Item[] } };
   characterInventories?: { data?: Record<string, { items: Item[] }> };
   characterEquipment?: { data?: Record<string, { items: Item[] }> };
@@ -407,8 +427,16 @@ async function main() {
   // default to the old 8/s there, and leave 20/s to the crawler key.
   const options = readOptions(appKey ? 8 : 20);
 
+  const key = storeKey();
   const catalog = JSON.parse(await readFile(resolve(options.catalog), "utf8")) as PopularityCatalog;
   const lookup = popularityLookup(catalog);
+  const today = storeDay();
+  // The running store: who to read again, and who was read too recently to read now.
+  const store = options.store ? decodeCopies(await readFile(resolve(options.store)), key) : undefined;
+  const due = store ? dueOwners(store, today - RECHECK_AFTER_DAYS) : [];
+  const lastRead = new Map<string, number>();
+  if (store) for (const [id, i] of ownerIndex(store.owners)) lastRead.set(id.toString(), store.owners.read[i]!);
+  if (store) console.log(`The store has ${lastRead.size} players; ${due.length} are due to be read again.`);
   const client = bungieClient(apiKey, options.rate);
   const deadline = Date.now() + options.minutes * 60_000;
 
@@ -421,42 +449,54 @@ async function main() {
       : await fixedWindow(client.get, newest, sample);
   console.log(`Sampling reports ${sampler.describe()} at random.`);
 
-  // Each weapon's copies (instance id, plugs by socket), read into columns once every copy is in.
-  const copiesByWeapon = new Map<number, { id: bigint; plugs: (number | undefined)[] }[]>();
+  // The players read (an owner number is an index here) and each weapon's
+  // copies (instance id, owner, plugs by socket), read into columns once every copy is in.
+  const owners: SeenOwner[] = [];
+  const copiesByWeapon = new Map<number, { id: bigint; owner: number; plugs: (number | undefined)[] }[]>();
   // Players tried, so none is read twice; `players` is how many answered, which
-  // is what --players caps and the snapshot reports. Reads still in flight
+  // is what --players caps and the crawl records. Reads still in flight
   // count towards the cap, so it isn't overshot by one per worker.
   const seen = new Set<string>();
   let players = 0;
-  /** Players whose vault or character inventories were public. */
+  /** Players read again from the store. */
+  let rechecked = 0;
+  /** Players found in a report but read too recently to read again. */
+  let fresh = 0;
+  /** Players whose vault and character inventories were public. */
   let vaults = 0;
   let reading = 0;
   let reports = 0;
   /** Reports drawn that the sampler didn't count (see Sampler.counts). */
   let outside = 0;
   let copies = 0;
+  /** The next of `due` to read. */
+  let nextDue = 0;
   // When the earliest and latest reports counted ended (ms).
   let first = Infinity;
   let last = -Infinity;
   const done = () =>
     players + reading >= options.players || Date.now() > deadline || sampler.stalled() !== undefined;
 
-  async function samplePlayer(entry: PgcrEntry) {
-    const user = entry.player?.destinyUserInfo;
-    if (!user?.membershipId || seen.has(user.membershipId) || done()) return;
-    seen.add(user.membershipId);
+  /** Reads one player's profile and records them and their copies; `known` when they're in the store. */
+  async function readPlayer(type: number, id: string, known: boolean) {
+    seen.add(id);
     reading++;
     const profile = await client.get<Profile>(
-      `https://www.bungie.net/Platform/Destiny2/${user.membershipType}/Profile/${user.membershipId}/?components=${PROFILE_COMPONENTS}`,
+      `https://www.bungie.net/Platform/Destiny2/${type}/Profile/${id}/?components=${PROFILE_COMPONENTS}`,
     );
     reading--;
     if (!profile) return;
     players++;
+    if (known) rechecked++;
+    const whole = profile.profileInventory?.data !== undefined && profile.characterInventories?.data !== undefined;
+    if (whole) vaults++;
     const vault = profile.profileInventory?.data?.items ?? [];
     const inventories = Object.values(profile.characterInventories?.data ?? {}).flatMap((c) => c.items);
-    if (vault.length > 0 || inventories.length > 0) vaults++;
     const equipped = Object.values(profile.characterEquipment?.data ?? {}).flatMap((c) => c.items);
     const sockets = profile.itemComponents?.sockets?.data ?? {};
+    const lastPlayed = Date.parse(profile.profile?.data?.dateLastPlayed ?? "");
+    const owner = owners.length;
+    let found = 0;
     // Only the tally's weapons (random-rolled legendaries) are in the lookup, so
     // it picks them out of every bucket, the vault's included. Every copy counts,
     // several of one weapon included: a player keeping more than one roll of it
@@ -466,14 +506,38 @@ async function main() {
       const plugs = sockets[item.itemInstanceId]?.sockets.map((s) => s.plugHash);
       if (!plugs) continue;
       const list = copiesByWeapon.get(item.itemHash) ?? [];
-      list.push({ id: BigInt(item.itemInstanceId), plugs });
+      list.push({ id: BigInt(item.itemInstanceId), owner, plugs });
       copiesByWeapon.set(item.itemHash, list);
-      copies++;
+      found++;
     }
+    copies += found;
+    // A new player with none of the tally's weapons adds nothing; a known one
+    // still updates when they last played (and, read whole, that they have none now).
+    if (found > 0 || known)
+      owners.push({ id: BigInt(id), type, played: Number.isNaN(lastPlayed) ? today : storeDay(lastPlayed), whole });
+  }
+
+  async function samplePlayer(entry: PgcrEntry) {
+    const user = entry.player?.destinyUserInfo;
+    if (!user?.membershipId || seen.has(user.membershipId) || done()) return;
+    const read = lastRead.get(user.membershipId);
+    if (read !== undefined && read > today - RECHECK_AFTER_DAYS) {
+      fresh++;
+      seen.add(user.membershipId);
+      return;
+    }
+    await readPlayer(user.membershipType, user.membershipId, read !== undefined);
   }
 
   async function worker() {
     while (!done()) {
+      // Up to half the reads go to players due to be read again.
+      if (nextDue < due.length && rechecked <= players - rechecked) {
+        const owner = due[nextDue++]!;
+        const id = owner.id.toString();
+        if (!seen.has(id)) await readPlayer(owner.type, id, true);
+        continue;
+      }
       const report = await client.get<Pgcr>(pgcrUrl(sampler.randomId()));
       if (!report) continue;
       // Ended outside a fixed window by the id search's slack, too long ago for a
@@ -493,10 +557,10 @@ async function main() {
     }
   }
 
+  const summary = () =>
+    `${players} players (${rechecked} read again, ${fresh} passed over as read recently, ${vaults} public vaults), ${copies} copies, ${reports} reports (${outside} outside the window), ${client.requests()} requests, ${client.throttles()} throttles`;
   const progress = setInterval(() => {
-    console.log(
-      `${players} players (${vaults} public vaults), ${copies} copies, ${reports} reports (${outside} outside the window), ${client.requests()} requests, ${client.throttles()} throttles (${client.rate()}/s), sampling ${sampler.describe()}`,
-    );
+    console.log(`${summary()} (${client.rate()}/s), ${due.length - nextDue} still due, sampling ${sampler.describe()}`);
   }, 30_000);
   await Promise.all(Array.from({ length: options.workers }, worker));
   clearInterval(progress);
@@ -504,7 +568,7 @@ async function main() {
   const stalled = sampler.stalled();
   if (stalled) console.warn(`Ended early: ${stalled}.`);
 
-  if (copies === 0) throw new Error("No weapons were read; nothing written.");
+  if (owners.length === 0) throw new Error("No players were read; nothing written.");
   const perksByWeapon = new Map<number, SeenCopy[]>();
   for (const [hash, list] of copiesByWeapon) {
     const columns = lookup.get(hash)!;
@@ -514,26 +578,25 @@ async function main() {
     );
     perksByWeapon.set(
       hash,
-      list.map(({ id, plugs }) => ({ id, perks: perksAtSockets(columns, placed, plugs) })),
+      list.map(({ id, owner, plugs }) => ({ id, owner, perks: perksAtSockets(columns, placed, plugs) })),
     );
   }
   const target = resolve(options.out);
   const generatedAt = new Date().toISOString();
-  const crawl = storeFromCopies(perksByWeapon, storeDay(Date.parse(generatedAt)), {
+  const crawl = storeFromCrawl(owners, perksByWeapon, storeDay(Date.parse(generatedAt)), {
     generatedAt,
-    // Copies were read, so at least one report was counted.
-    from: isoSeconds(first),
-    to: isoSeconds(last),
+    // With no report counted (every read a re-read), the span is just this crawl's moment.
+    from: isoSeconds(Number.isFinite(first) ? first : Date.parse(generatedAt)),
+    to: isoSeconds(Number.isFinite(last) ? last : Date.parse(generatedAt)),
     players,
+    rechecked,
     copies,
     vaults,
     sample,
   });
-  await writeFile(`${target}.tmp`, encodeCopies(crawl));
+  await writeFile(`${target}.tmp`, encodeCopies(crawl, key));
   await rename(`${target}.tmp`, target);
-  console.log(
-    `Wrote ${copies} copies of ${copiesByWeapon.size} weapons (${players} players, ${vaults} public vaults, ${reports} reports (${outside} outside the window), ${client.requests()} requests, ${client.throttles()} throttles, ending at ${client.rate()}/s) to ${target}.`,
-  );
+  console.log(`Wrote ${copies} copies of ${copiesByWeapon.size} weapons: ${summary()}, ending at ${client.rate()}/s, to ${target}.`);
 }
 
 main().catch((error: unknown) => {
