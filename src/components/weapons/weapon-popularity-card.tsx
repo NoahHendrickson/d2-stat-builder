@@ -47,7 +47,7 @@ function columnLabel(weapon: WeaponSummary, column: number) {
 }
 
 /**
- * How often players run this weapon's perks in PvE, beside the perk grid: the
+ * How many copies of this weapon carry each perk, beside the perk grid: the
  * most run left + right combos as pairs of icons, then each column's perks in
  * columns like the grid's, every one with its share under it. Each picks its
  * perks in the grid (a combo picks both), so the stats show that roll; names
@@ -151,7 +151,7 @@ export function WeaponPopularityCard({
 
 /**
  * The info icon at the right of the Popularity heading: how the numbers are
- * worked out, and how many sightings of this weapon they come from.
+ * worked out, and how many copies of this weapon they come from.
  */
 function HowPopularityWorks({ view }: { view: WeaponPopularityView }) {
   const sampled = view.generatedAt ? sampledAt.format(new Date(view.generatedAt)) : undefined;
@@ -171,16 +171,16 @@ function HowPopularityWorks({ view }: { view: WeaponPopularityView }) {
       </TooltipTrigger>
       <TooltipContent side="bottom" align="end" className="grid max-w-72 gap-1.5 text-xs">
         <p>
-          We sample players from PvE matches as they end and read the perks on the legendary
-          weapons they actually used in that match, over about the last week. Someone who plays a
-          lot can be seen more than once.
+          We find players through PvE matches and read the perks on the legendary weapons they
+          have equipped, plus the ones in their vault when it&apos;s public. Each copy counts once, until
+          we haven&apos;t seen it for two weeks.
         </p>
         <p>
-          Each percentage is the share of those sightings running that perk, or that left and right
+          Each percentage is the share of those copies with that perk, or with that left and right
           perk together.
         </p>
         <p className="text-muted-foreground">
-          Seen {view.copies === 1 ? "once" : `${view.copies.toLocaleString("en-US")} times`}
+          {view.copies === 1 ? "One copy" : `${view.copies.toLocaleString("en-US")} copies`}
           {sampled ? `, as of ${sampled}` : ""}.
           {view.copies < SMALL_SAMPLE && " A small sample, so treat these as rough."}
         </p>

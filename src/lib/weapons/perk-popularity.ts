@@ -1,14 +1,14 @@
 /**
- * Perk popularity: which perks players actually run in PvE on each legendary
- * weapon.
+ * Perk popularity: which perks players have on each legendary weapon.
  *
- * `scripts/crawl-perk-popularity.ts` samples recently active players through
- * Bungie's public API (recent PvE post-game reports give the players; their
- * profiles give the rolls on the weapons they used) and tallies each weapon's
- * perks per column, and the left + right trait pair as a combo. PvP matches are
- * skipped. Each crawl samples matches as they end; a merge adds up the last
- * week's crawls (mergePopularity) into the snapshot published off Vercel, on
- * GitHub Pages, which the weapon page reads.
+ * `scripts/crawl-perk-popularity.ts` finds active players through Bungie's
+ * public API (recent PvE post-game reports give the players) and reads the
+ * perks on every copy of a legendary they have equipped, or in a vault they've
+ * made public. Each copy counts once, kept in a copy store until it goes
+ * unseen for two weeks (popularity-copies.ts); the merge tallies the store
+ * into the snapshot published off Vercel, on GitHub Pages, which the weapon
+ * page reads: each weapon's perks per column, and the left + right trait pair
+ * as a combo.
  */
 
 import type { CompactWeaponIndex } from "./transport";
@@ -18,7 +18,7 @@ export const PERK_POPULARITY_URL =
   "https://noahhendrickson.github.io/d2-conflux-data/perk-popularity.json";
 
 export interface WeaponPopularity {
-  /** Copies seen used in PvE. */
+  /** Distinct copies seen in the last two weeks, equipped or in a public vault. */
   copies: number;
   /**
    * Per catalog column (same index as `weapon.columns`): base perk hash → copies
@@ -35,50 +35,49 @@ export interface WeaponPopularity {
 
 /** The tally every snapshot carries, and all the app reads. */
 export interface PerkPopularityIndex {
-  /** 2: PvE only, plain counts (1 held [PvE, PvP] pairs). */
+  /**
+   * 2: plain counts (1 held [PvE, PvP] pairs). Since the copy store, counts
+   * are distinct copies rather than sightings, in the same shape.
+   */
   schema: 2;
   generatedAt: string;
-  /** The span of the post-game reports sampled, by when they ended. */
+  /** The span of the post-game reports the players were found through, by when they ended. */
   from: string;
   to: string;
   /**
-   * Characters read: distinct players within one crawl, but added up across
-   * crawls by the merge, so a player seen in several crawls (common, with
-   * several a day) counts once per crawl. Player-crawls, not players.
+   * Profiles read, added up across the crawls in the snapshot, so a player
+   * found in several crawls counts once per crawl. Player-crawls, not players
+   * (their copies, though, count once).
    */
   players: number;
   /** By weapon item hash. */
   weapons: Record<string, WeaponPopularity>;
 }
 
-/** One crawl's output, a file in the data repo's daily/. */
-export interface CrawlFile extends PerkPopularityIndex {
-  /** How it drew its reports; missing only in crawls from before it was recorded. */
-  sample?: CrawlSample;
-}
-
-/** The published snapshot: the merge of the crawl files. */
+/** The published snapshot: the copy store tallied. */
 export interface MergedPopularity extends PerkPopularityIndex {
-  /** Its inputs, one per crawl file in file order: where every count came from. */
+  /** The crawls whose copies are in it, oldest first: where every count came from. */
   crawls: CrawlSource[];
 }
 
 /**
- * Matches that just ended (`recent`, read minutes later), or a fixed window
- * (`window`; an `until` well before the crawl's generatedAt is a backfill, read
- * days after the matches).
+ * Players found through matches that just ended (`recent`), or through a fixed
+ * window of matches (`window`) up to `until`.
  */
 export type CrawlSample = { kind: "recent"; minutes: number } | { kind: "window"; hours: number; until: string };
 
-/** One crawl file, as the merged snapshot lists it. */
+/** One crawl, as the copy store and the snapshot list it. */
 export interface CrawlSource {
-  file: string;
+  /** When it finished, which is also what tells two crawls apart. */
   generatedAt: string;
   from: string;
   to: string;
   players: number;
+  /** Copies it read, before any were found to be already in the store. */
   copies: number;
-  sample?: CrawlSample;
+  /** Players among them whose vault or character inventories were public. */
+  vaults: number;
+  sample: CrawlSample;
 }
 
 /** The catalog fields the tally needs: public/data/weapons.json, narrowed. */
@@ -184,32 +183,6 @@ export function traitColumns(
 /** A combo's key in `WeaponPopularity.combos`. */
 export const comboKey = (left: number, right: number) => `${left},${right}`;
 
-/**
- * Adds one copy to the tally: its perk in each column, and, given the weapon's
- * `traits` columns, its left + right combo when both were identified.
- */
-export function addCopy(
-  tally: Record<string, WeaponPopularity>,
-  weaponHash: number,
-  perks: (number | undefined)[],
-  traits?: [left: number, right: number],
-) {
-  const weapon = (tally[weaponHash] ??= { copies: 0, columns: perks.map(() => ({})) });
-  weapon.copies++;
-  perks.forEach((perk, column) => {
-    if (perk === undefined) return;
-    const counts = weapon.columns[column]!;
-    counts[perk] = (counts[perk] ?? 0) + 1;
-  });
-  const left = traits && perks[traits[0]];
-  const right = traits && perks[traits[1]];
-  if (left !== undefined && right !== undefined) {
-    const combos = (weapon.combos ??= {});
-    const key = comboKey(left, right);
-    combos[key] = (combos[key] ?? 0) + 1;
-  }
-}
-
 /** One perk's share of a column, for display. */
 export interface PerkShare {
   hash: number;
@@ -254,58 +227,4 @@ export function comboShares(weapon: WeaponPopularity): ComboShare[] {
       return { left: left!, right: right!, count, share: count / total };
     })
     .sort((a, b) => b.count - a.count);
-}
-
-/** Every weapon's copies in a snapshot, added up. */
-export function totalCopies(index: PerkPopularityIndex) {
-  return Object.values(index.weapons).reduce((sum, w) => sum + w.copies, 0);
-}
-
-/**
- * Crawls added up into one snapshot: copies, perk and combo counts summed per
- * weapon, players summed, the span from the earliest crawl to the latest. A
- * column a weapon gained between crawls just starts later. Each file is listed
- * in `crawls`, so a count can be traced to how and when it was crawled.
- */
-export function mergePopularity(
-  files: readonly { file: string; crawl: CrawlFile }[],
-  generatedAt = new Date().toISOString(),
-): MergedPopularity {
-  const crawls = files.map((f) => f.crawl);
-  const weapons: Record<string, WeaponPopularity> = {};
-  for (const crawl of crawls) {
-    for (const [hash, counts] of Object.entries(crawl.weapons)) {
-      const weapon = (weapons[hash] ??= { copies: 0, columns: [] });
-      weapon.copies += counts.copies;
-      counts.columns.forEach((column, i) => {
-        const into = (weapon.columns[i] ??= {});
-        for (const [perk, n] of Object.entries(column)) into[perk] = (into[perk] ?? 0) + n;
-      });
-      for (const [key, n] of Object.entries(counts.combos ?? {})) {
-        const combos = (weapon.combos ??= {});
-        combos[key] = (combos[key] ?? 0) + n;
-      }
-    }
-  }
-  // Fill holes, so every weapon's columns line up with its catalog columns.
-  for (const weapon of Object.values(weapons))
-    weapon.columns = Array.from(weapon.columns, (column) => column ?? {});
-  const spans = crawls.map((c) => [c.from, c.to]).filter(([from, to]) => from && to);
-  return {
-    schema: 2,
-    generatedAt,
-    from: spans.map(([from]) => from!).sort()[0] ?? "",
-    to: spans.map(([, to]) => to!).sort().at(-1) ?? "",
-    players: crawls.reduce((sum, c) => sum + c.players, 0),
-    weapons,
-    crawls: files.map(({ file, crawl }) => ({
-      file,
-      generatedAt: crawl.generatedAt,
-      from: crawl.from,
-      to: crawl.to,
-      players: crawl.players,
-      copies: totalCopies(crawl),
-      ...(crawl.sample && { sample: crawl.sample }),
-    })),
-  };
 }

@@ -1,62 +1,76 @@
-import { readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { readFile, rename, writeFile } from "node:fs/promises";
+import { resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { mergePopularity, totalCopies, type CrawlFile } from "../src/lib/weapons/perk-popularity";
+import type { PopularityCatalog } from "../src/lib/weapons/perk-popularity";
+import {
+  copyCount,
+  emptyStore,
+  mergeCopies,
+  pruneCopies,
+  snapshotFromCopies,
+  storeDay,
+} from "../src/lib/weapons/popularity-copies";
+import { decodeCopies, encodeCopies } from "./copy-store-file";
 
 /**
- * Adds up the last week of perk-popularity crawls into the published snapshot.
- * Each file is named for the UTC day it was crawled (2026-10-18.json), with the
- * hour after a T when a day has several crawls (2026-10-18T06.json); the
- * crawls of the days within --days of today are merged (see mergePopularity)
- * into --out.
- * With --prune, files older than that are deleted, so the data repo only
- * keeps what the snapshot is built from.
+ * Folds crawls into the copy store and tallies it into the published snapshot
+ * (see src/lib/weapons/popularity-copies.ts). Each --add is a crawl's file;
+ * a copy seen again keeps its latest sighting, and a crawl already in the
+ * store is skipped. Copies last seen more than --days ago (today included)
+ * drop out. The store is rewritten in place; a missing one starts empty.
+ * Nothing is written when the store would be left empty, so a run of failed
+ * crawls can't publish a blank snapshot.
  *
- *   tsx scripts/merge-perk-popularity.ts --dir=daily --days=7 --out=perk-popularity.json --prune
+ *   tsx scripts/merge-perk-popularity.ts --store=copies.bin.gz --add=crawl.bin.gz --days=14 --out=perk-popularity.json
+ *
+ * --catalog (weapons.json path, default public/data/weapons.json) holds every
+ * copy to the weapon's current columns (see mergeCopies).
  */
-
-const DAY_FILE = /^(\d{4}-\d{2}-\d{2})(?:T\d{2})?\.json$/;
 
 async function main() {
   const { values: args } = parseArgs({
     options: {
-      dir: { type: "string" },
+      store: { type: "string" },
+      add: { type: "string", multiple: true },
       days: { type: "string" },
+      catalog: { type: "string" },
       out: { type: "string" },
-      prune: { type: "boolean" },
     },
   });
-  if (!args.dir || !args.out) throw new Error("Pass --dir=<crawl files> and --out=<snapshot>.");
-  const days = Number(args.days ?? 7);
+  if (!args.store || !args.out) throw new Error("Pass --store=<copy store> and --out=<snapshot>.");
+  const days = Number(args.days ?? 14);
   if (!Number.isInteger(days) || days < 1) throw new Error("--days must be a whole number of days.");
-  const dir = resolve(args.dir);
-  // The earliest UTC day still in the window: today and the days - 1 before it.
-  const since = new Date(Date.now() - (days - 1) * 86_400_000).toISOString().slice(0, 10);
 
-  const files = (await readdir(dir)).flatMap((name) => {
-    const day = DAY_FILE.exec(name)?.[1];
-    return day ? [{ name, day }] : [];
+  const catalog = JSON.parse(
+    await readFile(resolve(args.catalog || "public/data/weapons.json"), "utf8"),
+  ) as PopularityCatalog;
+  const columns = new Map(catalog.weapons.map((w) => [w.hash, w.columns]));
+  const columnsOf = (hash: number) => columns.get(hash);
+
+  const storePath = resolve(args.store);
+  let store = await readFile(storePath).then(decodeCopies, (error: NodeJS.ErrnoException) => {
+    if (error.code !== "ENOENT") throw error;
+    console.log(`No copy store at ${storePath} yet; starting one.`);
+    return emptyStore();
   });
-  const kept = files.filter((f) => f.day >= since).sort((a, b) => a.name.localeCompare(b.name));
-  if (kept.length === 0) throw new Error(`No crawl files since ${since} in ${dir}; nothing written.`);
-  const crawls = await Promise.all(
-    kept.map(async (f) => ({ file: f.name, crawl: JSON.parse(await readFile(join(dir, f.name), "utf8")) as CrawlFile })),
-  );
-  const merged = mergePopularity(crawls);
-  const target = resolve(args.out);
-  await writeFile(`${target}.tmp`, JSON.stringify(merged));
-  await rename(`${target}.tmp`, target);
-  const copies = totalCopies(merged);
-  console.log(
-    `Merged ${kept.length} crawls (${kept.map((f) => f.name.replace(".json", "")).join(", ")}): ${merged.players} players, ${copies} copies, ${Object.keys(merged.weapons).length} weapons → ${target}.`,
-  );
+  const before = copyCount(store);
+  const crawls = await Promise.all((args.add ?? []).map((file) => readFile(resolve(file)).then(decodeCopies)));
+  // The empty first merge holds the store to today's catalog even with nothing to add.
+  for (const crawl of [emptyStore(), ...crawls]) store = mergeCopies(store, crawl, columnsOf);
+  store = pruneCopies(store, storeDay() - (days - 1));
+  const copies = copyCount(store);
+  if (store.runs.length === 0 || copies === 0)
+    throw new Error(`No crawl in the last ${days} days left any copies; nothing written.`);
 
-  if (args.prune) {
-    for (const f of files.filter((f) => f.day < since)) {
-      await rm(join(dir, f.name));
-      console.log(`Pruned ${f.name}.`);
-    }
-  }
+  const snapshot = snapshotFromCopies(store, columnsOf);
+  await writeFile(`${storePath}.tmp`, encodeCopies(store));
+  await rename(`${storePath}.tmp`, storePath);
+  const target = resolve(args.out);
+  await writeFile(`${target}.tmp`, JSON.stringify(snapshot));
+  await rename(`${target}.tmp`, target);
+  console.log(
+    `Copy store: ${before} → ${copies} copies of ${store.weapons.size} weapons, from ${store.runs.length} crawls over the last ${days} days → ${storePath}, snapshot → ${target}.`,
+  );
 }
 
 main().catch((error: unknown) => {

@@ -21,6 +21,7 @@ export const CHANGELOG: readonly ChangelogEntry[] = [
     changes: [
       "Weapon search: Popularity now updates every 3 hours.",
       "Weapon search: Try most popular roll picks the trait pair players run together.",
+      "Weapon search: Popularity now counts each copy once, from equipped weapons and public vaults.",
     ],
   },
   {
