@@ -264,6 +264,31 @@ describe("collectSocketPlugCandidates", () => {
     ]);
   });
 
+  it("reads a socket's own plug list when it has no plug set (two origin traits)", () => {
+    expect(
+      collectSocketPlugCandidates(
+        {
+          singleInitialItemHash: 98,
+          reusablePlugItems: [{ plugItemHash: 98 }, { plugItemHash: 99 }, { plugItemHash: 98 }],
+        },
+        {},
+      ),
+    ).toEqual([
+      { hash: 98, canRoll: true },
+      { hash: 99, canRoll: true },
+    ]);
+  });
+
+  it("ignores a socket's own plug list when it has a random pool (curated roll)", () => {
+    const plugSets = { 10: { reusablePlugItems: [{ plugItemHash: 1 }] } };
+    expect(
+      collectSocketPlugCandidates(
+        { randomizedPlugSetHash: 10, reusablePlugItems: [{ plugItemHash: 2 }] },
+        plugSets,
+      ),
+    ).toEqual([{ hash: 1, canRoll: true }]);
+  });
+
   it("merges singleInitialItemHash when a reusable plug set only has an empty crafting socket", () => {
     const plugSets = {
       10: {

@@ -15,6 +15,8 @@ export interface SocketPlugSource {
   randomizedPlugSetHash?: number;
   reusablePlugSetHash?: number;
   singleInitialItemHash?: number;
+  /** Plugs listed on the socket itself rather than in a plug set. */
+  reusablePlugItems?: { plugItemHash: number }[];
 }
 
 /**
@@ -99,6 +101,14 @@ export function collectSocketPlugCandidates(
       const canRoll = plugSetEntryCanRoll(socketEntry, plugSetHash, plug);
       const existing = byHash.get(plug.plugItemHash);
       byHash.set(plug.plugItemHash, existing == null ? canRoll : existing || canRoll);
+    }
+  }
+  if (plugSetHash == null) {
+    // No plug set: the socket lists its own choices. Origin sockets do this, so
+    // Yeartide Apex offers Dream Work or Tex Balanced Stock. Sockets with a random
+    // pool only list their curated roll here, which the pool rules decide.
+    for (const { plugItemHash } of socketEntry.reusablePlugItems ?? []) {
+      byHash.set(plugItemHash, true);
     }
   }
   if (socketEntry.singleInitialItemHash) {
