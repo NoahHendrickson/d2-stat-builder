@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   addCopy,
   columnShares,
+  comboShares,
+  mergePopularity,
+  traitColumns,
   columnSockets,
   perksAtSockets,
   popularityLookup,
@@ -25,13 +28,13 @@ const CATALOG: PopularityCatalog = {
       hash: 1,
       rarity: "Legendary",
       columns: [
-        { perkIndices: [0] },
-        { perkIndices: [1, 2] },
-        { perkIndices: [3, 4] },
-        { perkIndices: [3, 5] },
+        { kind: "Intrinsic", perkIndices: [0] },
+        { kind: "Barrel", perkIndices: [1, 2] },
+        { kind: "Trait", perkIndices: [3, 4] },
+        { kind: "Trait", perkIndices: [3, 5] },
       ],
     },
-    { hash: 2, rarity: "Exotic", columns: [{ perkIndices: [1, 2] }] },
+    { hash: 2, rarity: "Exotic", columns: [{ kind: "Barrel", perkIndices: [1, 2] }] },
   ],
 };
 
@@ -101,5 +104,68 @@ describe("tally and shares", () => {
 
   it("has nothing for a fixed column", () => {
     expect(columnShares(weapon, 0)).toEqual([]);
+  });
+});
+
+describe("combos", () => {
+  it("finds the left and right trait columns, only when there are exactly two", () => {
+    expect(traitColumns(CATALOG.weapons[0]!.columns)).toEqual([2, 3]);
+    expect(traitColumns([{ kind: "Trait" }, { kind: "Barrel" }])).toBeUndefined();
+  });
+
+  const tally: Record<string, WeaponPopularity> = {};
+  addCopy(tally, 1, [undefined, 11, 14, 15], [2, 3]);
+  addCopy(tally, 1, [undefined, 11, 14, 15], [2, 3]);
+  addCopy(tally, 1, [undefined, 12, 13, 15], [2, 3]);
+  // A copy whose left perk wasn't identified has no combo, but still counts.
+  addCopy(tally, 1, [undefined, 12, undefined, 13], [2, 3]);
+
+  it("counts a combo only when both trait perks were identified", () => {
+    expect(tally[1]!.copies).toBe(4);
+    expect(tally[1]!.combos).toEqual({ "14,15": 2, "13,15": 1 });
+  });
+
+  it("ranks combos by copies, as shares of the copies with both perks", () => {
+    expect(comboShares(tally[1]!)).toEqual([
+      { left: 14, right: 15, count: 2, share: 2 / 3 },
+      { left: 13, right: 15, count: 1, share: 1 / 3 },
+    ]);
+  });
+});
+
+describe("mergePopularity", () => {
+  const day = (players: number, from: string, to: string, weapons: Record<string, WeaponPopularity>) => ({
+    schema: 2 as const,
+    generatedAt: to,
+    from,
+    to,
+    players,
+    weapons,
+  });
+
+  it("adds up days: copies, perks and combos per weapon, players, and the whole span", () => {
+    const merged = mergePopularity(
+      [
+        day(10, "2026-10-16T00:00:00Z", "2026-10-17T00:00:00Z", {
+          1: { copies: 3, columns: [{}, { 11: 3 }] },
+        }),
+        day(20, "2026-10-17T00:00:00Z", "2026-10-18T00:00:00Z", {
+          1: { copies: 2, columns: [{}, { 11: 1, 12: 1 }], combos: { "14,15": 2 } },
+          2: { copies: 1, columns: [{ 11: 1 }] },
+        }),
+      ],
+      "2026-10-18T06:00:00Z",
+    );
+    expect(merged).toEqual({
+      schema: 2,
+      generatedAt: "2026-10-18T06:00:00Z",
+      from: "2026-10-16T00:00:00Z",
+      to: "2026-10-18T00:00:00Z",
+      players: 30,
+      weapons: {
+        1: { copies: 5, columns: [{}, { 11: 4, 12: 1 }], combos: { "14,15": 2 } },
+        2: { copies: 1, columns: [{ 11: 1 }] },
+      },
+    });
   });
 });

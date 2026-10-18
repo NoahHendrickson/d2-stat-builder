@@ -2,10 +2,11 @@
 
 import { useMemo } from "react";
 import { useStaticJson } from "@/lib/use-static-json";
-import { createValueStore, useStoreValue } from "@/lib/value-store";
 import {
   PERK_POPULARITY_URL,
   columnShares,
+  comboShares,
+  traitColumns,
   type PerkPopularityIndex,
 } from "./perk-popularity";
 import type { WeaponCatalog } from "./catalog";
@@ -36,75 +37,87 @@ export function usePerkPopularityIndex() {
   });
 }
 
-/**
- * Whether popularity is showing: one choice for the whole page, so it stays as
- * the user moves from weapon to weapon (and between the pane and the dialog).
- * Not saved across visits.
- */
-const popularityShown = createValueStore(false);
+/** One perk's share of its column, as the Popularity card lists it. */
+export interface PerkPopularity {
+  perkIndex: number;
+  share: number;
+}
+
+/** One left + right combo, as the Popularity card lists it. */
+export interface ComboPopularity {
+  /** The trait columns and the catalog perk index in each. */
+  leftColumn: number;
+  left: number;
+  rightColumn: number;
+  right: number;
+  share: number;
+}
 
 export interface WeaponPopularityView {
   /** The snapshot has this weapon. */
   available: boolean;
-  shown: boolean;
-  setShown: (shown: boolean) => void;
   /** Copies seen used in PvE. */
   copies: number;
-  /** When the snapshot was taken. */
+  /** When the snapshot was built. */
   generatedAt?: string;
-  /** A perk's share of its column (0–1), or undefined when the column has no data. */
-  share: (column: number, perkIndex: number) => number | undefined;
-  /** The most run perk in the column (ties: every one of them). */
-  isTop: (column: number, perkIndex: number) => boolean;
+  /** Each perk column with data, its perks most run first (perks no one ran left out). */
+  columns: { column: number; perks: PerkPopularity[] }[];
+  /** The most run left + right combos, most run first. */
+  combos: ComboPopularity[];
   /** The most run perk in each column with data, keyed like picks (by column). */
-  topRoll: () => Roll;
+  topRoll: Roll;
 }
 
-/** Popularity for one weapon, as the perk grid reads it. */
+const NO_POPULARITY: WeaponPopularityView = {
+  available: false,
+  copies: 0,
+  columns: [],
+  combos: [],
+  topRoll: {},
+};
+
+/**
+ * Popularity for one weapon, mapped onto its own catalog perks: the shares the
+ * crawl counted by perk hash, as the perk indices the grid picks by. Only
+ * changes with the snapshot or the weapon, not with every hover.
+ */
 export function useWeaponPopularity(
   weapon: WeaponSummary,
   catalog: WeaponCatalog,
 ): WeaponPopularityView {
-  const shown = useStoreValue(popularityShown);
   const index = usePerkPopularityIndex().data;
-  const data = index?.weapons[weapon.hash];
-
-  // Per column: catalog perk index → share, and the top share. Only changes with
-  // the snapshot or the weapon, not with every hover.
-  const columns = useMemo(
-    () =>
-      weapon.columns.map((column, i) => {
-        const shares = new Map<number, number>();
-        if (!data) return { shares, top: 0 };
-        const byHash = new Map(columnShares(data, i).map((s) => [s.hash, s.share]));
-        if (byHash.size === 0) return { shares, top: 0 };
-        for (const perkIndex of column.perkIndices) {
-          const hash = catalog.perks[perkIndex]?.hash;
-          if (hash !== undefined) shares.set(perkIndex, byHash.get(hash) ?? 0);
-        }
-        return { shares, top: Math.max(0, ...shares.values()) };
-      }),
-    [data, weapon, catalog],
-  );
-
-  return {
-    available: !!data && data.copies > 0,
-    shown,
-    setShown: (next) => popularityShown.set(next),
-    copies: data?.copies ?? 0,
-    generatedAt: index?.generatedAt,
-    share: (column, perkIndex) => columns[column]?.shares.get(perkIndex),
-    isTop: (column, perkIndex) => {
-      const c = columns[column];
-      return !!c && c.top > 0 && c.shares.get(perkIndex) === c.top;
-    },
-    topRoll: () => {
-      const roll: Roll = {};
-      columns.forEach((c, column) => {
-        for (const [perkIndex, share] of c.shares)
-          if (c.top > 0 && share === c.top && roll[column] === undefined) roll[column] = perkIndex;
+  return useMemo(() => {
+    const data = index?.weapons[weapon.hash];
+    if (!data || data.copies === 0) return NO_POPULARITY;
+    // A perk hash → its index in one of this weapon's columns.
+    const indexIn = (column: number, hash: number) =>
+      weapon.columns[column]?.perkIndices.find((i) => catalog.perks[i]?.hash === hash);
+    const columns = weapon.columns.flatMap((_, column) => {
+      const perks = columnShares(data, column).flatMap(({ hash, share }) => {
+        const perkIndex = indexIn(column, hash);
+        return perkIndex === undefined ? [] : [{ perkIndex, share }];
       });
-      return roll;
-    },
-  };
+      return perks.length > 0 ? [{ column, perks }] : [];
+    });
+    const traits = traitColumns(weapon.columns);
+    const combos = traits
+      ? comboShares(data).flatMap(({ left, right, share }) => {
+          const l = indexIn(traits[0], left);
+          const r = indexIn(traits[1], right);
+          return l === undefined || r === undefined
+            ? []
+            : [{ leftColumn: traits[0], left: l, rightColumn: traits[1], right: r, share }];
+        })
+      : [];
+    const topRoll: Roll = {};
+    for (const { column, perks } of columns) topRoll[column] = perks[0]!.perkIndex;
+    return {
+      available: true,
+      copies: data.copies,
+      generatedAt: index?.generatedAt,
+      columns,
+      combos,
+      topRoll,
+    };
+  }, [index, weapon, catalog]);
 }

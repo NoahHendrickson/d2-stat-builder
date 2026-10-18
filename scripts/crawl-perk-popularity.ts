@@ -7,6 +7,7 @@ import {
   columnSockets,
   perksAtSockets,
   popularityLookup,
+  traitColumns,
   type PerkPopularityIndex,
   type PopularityCatalog,
   type WeaponPopularity,
@@ -16,8 +17,10 @@ import {
  * Samples which perks players run on legendary weapons, from Bungie's public
  * API, and writes a perk-popularity snapshot (see src/lib/weapons/perk-popularity.ts).
  *
- * It walks back from the newest post-game report, a few report ids apart so the
- * sample spreads over time, skipping PvP matches (popularity is PvE only), and
+ * It samples post-game reports at random from the last day (report ids grow
+ * over time, so it finds the id range the day spans and picks ids uniformly
+ * inside it, which spreads the sample over every hour however early it stops),
+ * skipping PvP matches (popularity is PvE only), and
  * for each player it hasn't seen reads the weapons the character in that report
  * has equipped, with their perks. Equipped items are public on every profile, so
  * no one signs in. A weapon only counts if the report lists it among the weapons
@@ -32,7 +35,7 @@ import {
  *
  * Options: --players (stop after this many, default 20000), --minutes (time
  * budget, default 300), --rate (requests per second, default 8), --workers
- * (default 6), --step (report ids between samples, default 23), --catalog
+ * (default 6), --hours (how far back to sample, default 24), --catalog
  * (weapons.json path, default public/data/weapons.json), --out (required).
  * The key comes from BUNGIE_CRAWLER_API_KEY, falling back to
  * NEXT_PUBLIC_BUNGIE_API_KEY for small local runs.
@@ -47,7 +50,7 @@ interface Options {
   minutes: number;
   rate: number;
   workers: number;
-  step: number;
+  hours: number;
   catalog: string;
   out: string;
 }
@@ -70,7 +73,7 @@ function readOptions(): Options {
     minutes: number("minutes", 300),
     rate: number("rate", 8),
     workers: number("workers", 6),
-    step: number("step", 23),
+    hours: number("hours", 24),
     catalog: args.catalog || "public/data/weapons.json",
     out: args.out,
   };
@@ -153,7 +156,9 @@ const pgcrUrl = (id: number) =>
   `https://stats.bungie.net/Platform/Destiny2/Stats/PostGameCarnageReport/${id}/`;
 
 /** The newest report id that exists: ids only grow, so binary-search the edge. */
-async function newestPgcr(get: ReturnType<typeof bungieClient>["get"]) {
+type Get = ReturnType<typeof bungieClient>["get"];
+
+async function newestPgcr(get: Get) {
   let low = 10_000_000_000;
   let high = 40_000_000_000;
   while (high - low > 20_000) {
@@ -166,6 +171,32 @@ async function newestPgcr(get: ReturnType<typeof bungieClient>["get"]) {
   throw new Error("Couldn't find a recent post-game report.");
 }
 
+/** When the report at or just after `id` was played (a few ids can be missing). */
+async function periodNear(get: Get, id: number) {
+  for (let near = id; near < id + 50; near++) {
+    const report = await get<Pgcr>(pgcrUrl(near));
+    if (report) return Date.parse(report.period);
+  }
+  return undefined;
+}
+
+/**
+ * The first report id played at or after `since` (ms): ids grow with time, so
+ * binary-search on each report's period. Precise to a few thousand ids, which is
+ * seconds of play.
+ */
+async function firstPgcrSince(get: Get, newest: number, since: number) {
+  let low = 10_000_000_000;
+  let high = newest;
+  while (high - low > 5_000) {
+    const middle = Math.floor((low + high) / 2);
+    const period = await periodNear(get, middle);
+    if (period !== undefined && period < since) low = middle;
+    else high = middle;
+  }
+  return high;
+}
+
 async function main() {
   loadEnvConfig(process.cwd());
   const options = readOptions();
@@ -176,17 +207,25 @@ async function main() {
 
   const catalog = JSON.parse(await readFile(resolve(options.catalog), "utf8")) as PopularityCatalog;
   const lookup = popularityLookup(catalog);
+  // Each weapon's left and right trait columns, for its combos.
+  const traitsByWeapon = new Map(
+    catalog.weapons.flatMap((w) => {
+      const traits = traitColumns(w.columns);
+      return traits ? [[w.hash, traits] as const] : [];
+    }),
+  );
   const client = bungieClient(apiKey, options.rate);
   const deadline = Date.now() + options.minutes * 60_000;
 
   console.log("Finding the newest post-game report…");
   const newest = await newestPgcr(client.get);
-  console.log(`Walking back from report ${newest}.`);
+  const oldest = await firstPgcrSince(client.get, newest, Date.now() - options.hours * 3_600_000);
+  console.log(`Sampling reports ${oldest}–${newest} (the last ${options.hours} hours) at random.`);
+  const randomId = () => oldest + Math.floor(Math.random() * (newest - oldest + 1));
 
   // Each weapon's copies (plugs by socket), tallied once every copy is in.
   const copiesByWeapon = new Map<number, (number | undefined)[][]>();
   const seen = new Set<string>();
-  let nextId = newest;
   let reports = 0;
   let copies = 0;
   let from = "";
@@ -217,9 +256,7 @@ async function main() {
 
   async function worker() {
     while (!done()) {
-      const id = nextId;
-      nextId -= options.step;
-      const report = await client.get<Pgcr>(pgcrUrl(id));
+      const report = await client.get<Pgcr>(pgcrUrl(randomId()));
       if (!report) continue;
       // PvE only: a PvP match is passed over entirely (not counted, its players not sampled).
       const modes = report.activityDetails.modes ?? [report.activityDetails.mode];
@@ -244,7 +281,8 @@ async function main() {
   for (const [hash, list] of copiesByWeapon) {
     const columns = lookup.get(hash)!;
     const placed = columnSockets(columns, list);
-    for (const plugs of list) addCopy(tally, hash, perksAtSockets(columns, placed, plugs));
+    const traits = traitsByWeapon.get(hash);
+    for (const plugs of list) addCopy(tally, hash, perksAtSockets(columns, placed, plugs), traits);
   }
   const snapshot: PerkPopularityIndex = {
     schema: 2,

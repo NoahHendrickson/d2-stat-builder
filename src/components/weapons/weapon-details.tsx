@@ -12,11 +12,6 @@ import {
 } from "react";
 import { DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import {
-  PopularityBar,
-  PopularityShare,
-  PopularityToggle,
-} from "@/components/weapons/perk-popularity-controls";
 import { PerkTooltip } from "@/components/weapons/perk-tooltip";
 import {
   CollapsibleDetailSection,
@@ -33,6 +28,7 @@ import {
   TypeSilhouette,
   WeaponIcon,
 } from "@/components/weapons/weapon-icons";
+import { WeaponPopularityCard } from "@/components/weapons/weapon-popularity-card";
 import { WeaponStats } from "@/components/weapons/weapon-stats";
 import type { WeaponCatalog } from "@/lib/weapons/catalog";
 import { clarityLines } from "@/lib/weapons/clarity";
@@ -247,6 +243,16 @@ export const WeaponDetails = memo(function WeaponDetails({
   // A setup's roll replaces whatever is picked in the slots any setup uses,
   // so going from one setup to another leaves none of the first behind; the
   // user's picks elsewhere stay.
+  // A popular roll (a combo, a perk, the most popular in every column) picks its
+  // perks; one that's already picked un-picks them.
+  function pickRoll(roll: Roll) {
+    setPicked((picks) => {
+      const keys = Object.keys(roll).map(Number);
+      if (keys.every((key) => picks[key] === roll[key]))
+        return Object.fromEntries(Object.entries(picks).filter(([key]) => !keys.includes(Number(key))));
+      return { ...picks, ...roll };
+    });
+  }
   function pickDpsRoll(roll: Roll) {
     const used = new Set(dpsRolls.flatMap((r) => Object.keys(r ?? {})));
     setPicked((picks) => ({
@@ -375,14 +381,7 @@ export const WeaponDetails = memo(function WeaponDetails({
         </TooltipContent>
       </Tooltip>
     );
-    // A perk column's tile carries its popularity under it while that shows.
-    return slot.kind === "perk" ? (
-      <PopularityShare key={index} view={popularity} column={slot.key} perkIndex={index} selected={selected}>
-        {tile}
-      </PopularityShare>
-    ) : (
-      tile
-    );
+    return tile;
   }
 
   const poolLabel = catalog.poolLabel(weapon.hash);
@@ -482,28 +481,17 @@ export const WeaponDetails = memo(function WeaponDetails({
         </div>
       </div>
       <div aria-hidden className="d2-rule" />
-      {/* Two cards. From md up the stats card sits on the left, with the
-          advanced stats under the stats, and the perks card on the right, with
-          the masterworks and mods under the perks; the stats card takes what
-          width is left, going above once that is under 16rem. Phones keep the
-          perks first. */}
+      {/* From md up the stats card sits on the left, with the advanced stats
+          under the stats; then the perks card, with the masterworks and mods
+          under the perks; then, for weapons the popularity crawl has seen, the
+          popularity card. Cards wrap onto another line when the pane is too
+          narrow; the stats card takes what width is left, going above once that
+          is under 16rem. Phones keep the perks first. */}
       <div className="flex flex-wrap items-start gap-4">
         {slots.length > 0 && (
           <DetailCard className="min-w-0 max-w-full">
             {perkSlots.length > 0 && (
-              <DetailSection
-                title="Perks"
-                action={popularity.available && <PopularityToggle view={popularity} />}
-                description={
-                  popularity.available &&
-                  popularity.shown && (
-                    <PopularityBar
-                      view={popularity}
-                      onTryTop={(roll) => setPicked((picks) => ({ ...picks, ...roll }))}
-                    />
-                  )
-                }
-              >
+              <DetailSection title="Perks">
                 <div className="flex max-w-full gap-2.5 overflow-x-auto pb-1 max-md:gap-1.5">
                   {perkSlots.map((slot) => (
                     <section
@@ -534,6 +522,16 @@ export const WeaponDetails = memo(function WeaponDetails({
               </DetailSection>
             ))}
           </DetailCard>
+        )}
+        {popularity.available && (
+          <WeaponPopularityCard
+            weapon={weapon}
+            view={popularity}
+            perks={catalog.perks}
+            picked={picked}
+            onPick={pickRoll}
+            className="min-w-60 max-w-sm flex-1 basis-60"
+          />
         )}
         {/* Touch has no hover: phones open a perk's tooltip on a held finger. */}
         <p className="-mt-2 basis-full text-xs text-muted-foreground md:hidden">

@@ -5,8 +5,10 @@
  * `scripts/crawl-perk-popularity.ts` samples recently active players through
  * Bungie's public API (recent PvE post-game reports give the players; their
  * profiles give the rolls on the weapons they used) and tallies each weapon's
- * perks per column. PvP matches are skipped. The snapshot is published off
- * Vercel, on GitHub Pages, and the weapon page reads it from there.
+ * perks per column, and the left + right trait pair as a combo. PvP matches are
+ * skipped. It runs daily on the last day's matches; a merge adds up the last
+ * week's days (mergePopularity) into the snapshot published off Vercel, on
+ * GitHub Pages, which the weapon page reads.
  */
 
 import type { CompactWeaponIndex } from "./transport";
@@ -23,6 +25,12 @@ export interface WeaponPopularity {
    * running it. Columns with a single perk are left empty.
    */
   columns: Record<string, number>[];
+  /**
+   * Left + right trait combos ("leftHash,rightHash", base perk hashes) → copies
+   * running both. Only weapons with exactly two trait columns; missing in days
+   * crawled before combos were counted.
+   */
+  combos?: Record<string, number>;
 }
 
 export interface PerkPopularityIndex {
@@ -42,7 +50,7 @@ export interface PerkPopularityIndex {
 export type PopularityCatalog = {
   perks: Pick<CompactWeaponIndex["perks"][number], "hash" | "alternateHashes">[];
   weapons: (Pick<CatalogWeapon, "hash" | "rarity"> & {
-    columns: Pick<CatalogWeapon["columns"][number], "perkIndices">[];
+    columns: Pick<CatalogWeapon["columns"][number], "perkIndices" | "kind">[];
   })[];
 };
 type CatalogWeapon = CompactWeaponIndex["weapons"][number];
@@ -127,11 +135,29 @@ export function perksAtSockets(
   });
 }
 
-/** Adds one copy to the tally. */
+/**
+ * A weapon's left and right trait columns, by index: its two "Trait" columns,
+ * or undefined when it doesn't have exactly two (no combos for it).
+ */
+export function traitColumns(
+  columns: readonly { kind: string }[],
+): [left: number, right: number] | undefined {
+  const traits = columns.flatMap((column, i) => (column.kind === "Trait" ? [i] : []));
+  return traits.length === 2 ? [traits[0]!, traits[1]!] : undefined;
+}
+
+/** A combo's key in `WeaponPopularity.combos`. */
+export const comboKey = (left: number, right: number) => `${left},${right}`;
+
+/**
+ * Adds one copy to the tally: its perk in each column, and, given the weapon's
+ * `traits` columns, its left + right combo when both were identified.
+ */
 export function addCopy(
   tally: Record<string, WeaponPopularity>,
   weaponHash: number,
   perks: (number | undefined)[],
+  traits?: [left: number, right: number],
 ) {
   const weapon = (tally[weaponHash] ??= { copies: 0, columns: perks.map(() => ({})) });
   weapon.copies++;
@@ -140,6 +166,13 @@ export function addCopy(
     const counts = weapon.columns[column]!;
     counts[perk] = (counts[perk] ?? 0) + 1;
   });
+  const left = traits && perks[traits[0]];
+  const right = traits && perks[traits[1]];
+  if (left !== undefined && right !== undefined) {
+    const combos = (weapon.combos ??= {});
+    const key = comboKey(left, right);
+    combos[key] = (combos[key] ?? 0) + 1;
+  }
 }
 
 /** One perk's share of a column, for display. */
@@ -165,4 +198,63 @@ export function columnShares(weapon: WeaponPopularity, column: number): PerkShar
     .filter((c) => c.count > 0)
     .map((c) => ({ ...c, share: c.count / total }))
     .sort((a, b) => b.count - a.count);
+}
+
+/** One left + right combo's share, for display. */
+export interface ComboShare {
+  left: number;
+  right: number;
+  count: number;
+  /** Its share of the copies whose left and right perks were both identified, 0–1. */
+  share: number;
+}
+
+/** A weapon's combos by popularity, most run first. */
+export function comboShares(weapon: WeaponPopularity): ComboShare[] {
+  const entries = Object.entries(weapon.combos ?? {});
+  const total = entries.reduce((sum, [, count]) => sum + count, 0);
+  return entries
+    .map(([key, count]) => {
+      const [left, right] = key.split(",").map(Number);
+      return { left: left!, right: right!, count, share: count / total };
+    })
+    .sort((a, b) => b.count - a.count);
+}
+
+/**
+ * Days of crawling added up into one snapshot: copies, perk and combo counts
+ * summed per weapon, players summed, the span from the earliest day to the
+ * latest. A column a weapon gained between days just starts later.
+ */
+export function mergePopularity(
+  days: readonly PerkPopularityIndex[],
+  generatedAt = new Date().toISOString(),
+): PerkPopularityIndex {
+  const weapons: Record<string, WeaponPopularity> = {};
+  for (const day of days) {
+    for (const [hash, counts] of Object.entries(day.weapons)) {
+      const weapon = (weapons[hash] ??= { copies: 0, columns: [] });
+      weapon.copies += counts.copies;
+      counts.columns.forEach((column, i) => {
+        const into = (weapon.columns[i] ??= {});
+        for (const [perk, n] of Object.entries(column)) into[perk] = (into[perk] ?? 0) + n;
+      });
+      for (const [key, n] of Object.entries(counts.combos ?? {})) {
+        const combos = (weapon.combos ??= {});
+        combos[key] = (combos[key] ?? 0) + n;
+      }
+    }
+  }
+  // Fill holes, so every weapon's columns line up with its catalog columns.
+  for (const weapon of Object.values(weapons))
+    weapon.columns = Array.from(weapon.columns, (column) => column ?? {});
+  const spans = days.map((d) => [d.from, d.to]).filter(([from, to]) => from && to);
+  return {
+    schema: 2,
+    generatedAt,
+    from: spans.map(([from]) => from!).sort()[0] ?? "",
+    to: spans.map(([, to]) => to!).sort().at(-1) ?? "",
+    players: days.reduce((sum, d) => sum + d.players, 0),
+    weapons,
+  };
 }
