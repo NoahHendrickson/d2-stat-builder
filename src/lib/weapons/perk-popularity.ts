@@ -68,17 +68,16 @@ export type CrawlSample = { kind: "recent"; minutes: number } | { kind: "window"
 
 /** One crawl, as the copy store and the snapshot list it. */
 export interface CrawlSource {
-  /** Its name: the crawl file's name without extensions ("2026-10-18T13"). */
-  file: string;
+  /** When it finished, which is also what tells two crawls apart. */
   generatedAt: string;
   from: string;
   to: string;
   players: number;
   /** Copies it read, before any were found to be already in the store. */
   copies: number;
-  /** Players among them whose vault or character inventories were public. Missing before vaults were read. */
-  vaults?: number;
-  sample?: CrawlSample;
+  /** Players among them whose vault or character inventories were public. */
+  vaults: number;
+  sample: CrawlSample;
 }
 
 /** The catalog fields the tally needs: public/data/weapons.json, narrowed. */

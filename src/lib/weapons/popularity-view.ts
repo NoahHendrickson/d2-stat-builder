@@ -49,8 +49,11 @@ export interface WeaponPopularityView {
  * columns' own winners: on a thin sample one or two copies shouldn't
  * override a column's clear lead.
  */
-/** The fewest copies with a combo for it to set the roll's traits. */
-export const MIN_COMBO_COUNT = 3;
+/**
+ * The fewest copies with a combo for it to set the roll's traits: one more than
+ * a single player can add (COPIES_PER_PLAYER in the crawler), so it takes two.
+ */
+export const MIN_COMBO_COUNT = 4;
 
 export function mostPopularRoll(
   columns: WeaponPopularityView["columns"],

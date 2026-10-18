@@ -1,26 +1,29 @@
 /**
  * The copy store behind perk popularity: every copy of a legendary weapon the
  * crawler has seen, once each, keyed by its item instance id, with the perk in
- * each column and the day it was last seen. A copy seen again (in a later
- * crawl, or by another route the same day) replaces its earlier record, so a
- * player who turns up in many crawls still counts each of their weapons once;
- * a copy not seen for --days drops out. The snapshot the app reads is the
- * store tallied (tallyCopies).
+ * each column and the day it was last seen. A copy seen again replaces its
+ * earlier record, so a player who turns up in many crawls still counts each of
+ * their weapons once; a copy not seen for --days drops out. The snapshot the
+ * app reads is the store tallied (snapshotFromCopies).
  *
- * Kept as one gzipped binary file (encodeCopies) in a release of the data repo:
- * millions of copies, which JSON in git couldn't carry. Nothing about a player
- * is in it: an instance id only leads back to its owner through their profile,
- * and everything stored was public on that profile anyway.
+ * Pure data, no Node: the file format is scripts/copy-store-file.ts. Nothing
+ * about a player is in it: an instance id only leads back to its owner
+ * through their profile, and everything stored was public on that profile.
  */
 
-import { gunzipSync, gzipSync } from "node:zlib";
-import { comboKey, type CrawlSource, type MergedPopularity, type WeaponPopularity } from "./perk-popularity";
+import {
+  comboKey,
+  traitColumns,
+  type CrawlSource,
+  type MergedPopularity,
+  type WeaponPopularity,
+} from "./perk-popularity";
 
 /** One weapon's copies, sorted by id. Parallel arrays, so millions of copies stay compact. */
 export interface WeaponCopies {
-  /** How many columns each copy has a perk for (the catalog's column count when it was seen). */
+  /** How many columns each copy has a pick for: the catalog's column count. */
   columns: number;
-  /** Base perk hashes the copies' perks index into. */
+  /** Base perk hashes the picks index into. */
   perks: number[];
   ids: BigUint64Array;
   /** The UTC day (days since 1970-01-01) each copy was last seen. */
@@ -32,60 +35,56 @@ export interface WeaponCopies {
 export interface CopyStore {
   /** By weapon item hash. */
   weapons: Map<number, WeaponCopies>;
-  /** The crawls whose copies are in it, oldest first. */
+  /** The crawls whose copies are in it, oldest first; `generatedAt` tells them apart. */
   runs: CrawlSource[];
 }
 
+/** A weapon's catalog columns, by hash; undefined for a weapon the catalog doesn't have. */
+export type CatalogColumns = (hash: number) => readonly { kind: string }[] | undefined;
+
 /** A pick for a column whose perk wasn't identified. */
-const UNKNOWN = 255;
+export const UNKNOWN = 255;
 
 /** Today, or the day `ms` falls on, as a store day (UTC). */
 export const storeDay = (ms = Date.now()) => Math.floor(ms / 86_400_000);
 
 export const emptyStore = (): CopyStore => ({ weapons: new Map(), runs: [] });
 
-/** One copy as the crawler hands it over: its instance id and base perk per column. */
-export interface SeenCopy {
-  id: bigint;
-  perks: readonly (number | undefined)[];
+export const copyCount = (store: CopyStore) =>
+  [...store.weapons.values()].reduce((sum, weapon) => sum + weapon.ids.length, 0);
+
+/** Room for `length` copies of a weapon with `columns` columns. */
+export function allocWeapon(columns: number, perks: number[], length: number): WeaponCopies {
+  return {
+    columns,
+    perks,
+    ids: new BigUint64Array(length),
+    seen: new Uint16Array(length),
+    picks: new Uint8Array(length * columns).fill(UNKNOWN),
+  };
 }
 
 /**
- * One crawl's copies as a store, every one seen on `day`. A copy that shows up
- * twice (it can't, from one profile read, but cheap to be sure) keeps its last.
+ * Copies `from`'s copy `i` into `to`'s row `k`, its picks through `remap`
+ * (`from`'s perk index → `to`'s) when the two have different perk tables.
  */
-export function storeFromCopies(
-  copies: ReadonlyMap<number, readonly SeenCopy[]>,
-  day: number,
-  run?: CrawlSource,
-): CopyStore {
-  const store = emptyStore();
-  for (const [hash, list] of copies) {
-    if (list.length === 0) continue;
-    const columns = list[0]!.perks.length;
-    const byId = new Map<bigint, SeenCopy>();
-    for (const copy of list) if (copy.perks.length === columns) byId.set(copy.id, copy);
-    const sorted = [...byId.values()].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
-    const perks: number[] = [];
-    const indexOf = new Map<number, number>();
-    const weapon: WeaponCopies = {
-      columns,
-      perks,
-      ids: new BigUint64Array(sorted.length),
-      seen: new Uint16Array(sorted.length).fill(day),
-      picks: new Uint8Array(sorted.length * columns),
-    };
-    sorted.forEach((copy, i) => {
-      weapon.ids[i] = copy.id;
-      copy.perks.forEach((perk, column) => {
-        weapon.picks[i * columns + column] = perk === undefined ? UNKNOWN : pickFor(perk, perks, indexOf);
-      });
-    });
-    store.weapons.set(hash, weapon);
+function copyRow(from: WeaponCopies, i: number, to: WeaponCopies, k: number, remap?: readonly number[]) {
+  to.ids[k] = from.ids[i]!;
+  to.seen[k] = from.seen[i]!;
+  const { columns } = from;
+  for (let column = 0; column < columns; column++) {
+    const pick = from.picks[i * columns + column]!;
+    to.picks[k * columns + column] = pick === UNKNOWN || !remap ? pick : remap[pick]!;
   }
-  if (run) store.runs.push(run);
-  return store;
 }
+
+/** The first `length` rows of `weapon`, in arrays of their own. */
+const trimmed = (weapon: WeaponCopies, length: number): WeaponCopies => ({
+  ...weapon,
+  ids: weapon.ids.slice(0, length),
+  seen: weapon.seen.slice(0, length),
+  picks: weapon.picks.slice(0, length * weapon.columns),
+});
 
 /** `perk`'s index in `perks`, added if it's new. */
 function pickFor(perk: number, perks: number[], indexOf: Map<number, number>) {
@@ -99,22 +98,57 @@ function pickFor(perk: number, perks: number[], indexOf: Map<number, number>) {
   return index;
 }
 
-/**
- * `older` and `newer` as one store: every copy once, a copy in both taking
- * `newer`'s record (its perks may have changed, and it was seen later). A
- * weapon whose column count differs between the two (the catalog changed in
- * between) keeps only `newer`'s copies; the rest come back as they're seen
- * again. `newer`'s runs follow `older`'s, a run in both (the same crawl file
- * merged twice) listed once, in `newer`'s place.
- */
-export function mergeCopies(older: CopyStore, newer: CopyStore): CopyStore {
-  const weapons = new Map(older.weapons);
-  for (const [hash, b] of newer.weapons) {
-    const a = older.weapons.get(hash);
-    weapons.set(hash, a && a.columns === b.columns ? mergeWeapon(a, b) : b);
+/** One copy as the crawler hands it over: its instance id and base perk per catalog column. */
+export interface SeenCopy {
+  id: bigint;
+  perks: readonly (number | undefined)[];
+}
+
+/** One crawl's copies as a store, every one seen on `day`. */
+export function storeFromCopies(copies: ReadonlyMap<number, readonly SeenCopy[]>, day: number, run: CrawlSource): CopyStore {
+  const weapons = new Map<number, WeaponCopies>();
+  for (const [hash, list] of copies) {
+    if (list.length === 0) continue;
+    const sorted = [...list].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+    const indexOf = new Map<number, number>();
+    const weapon = allocWeapon(sorted[0]!.perks.length, [], sorted.length);
+    weapon.seen.fill(day);
+    sorted.forEach((copy, k) => {
+      weapon.ids[k] = copy.id;
+      copy.perks.forEach((perk, column) => {
+        if (perk !== undefined) weapon.picks[k * weapon.columns + column] = pickFor(perk, weapon.perks, indexOf);
+      });
+    });
+    weapons.set(hash, weapon);
   }
-  const again = new Set(newer.runs.map((run) => run.file));
-  return { weapons, runs: [...older.runs.filter((run) => !again.has(run.file)), ...newer.runs] };
+  return { weapons, runs: [run] };
+}
+
+/**
+ * `older` and `newer` as one store, against the catalog: this is the one place
+ * copies are held to it, so a weapon gone from the catalog, or whose column
+ * count has changed since a side's copies were seen, loses that side's copies
+ * (they come back as they're seen again), and the store that comes out always
+ * lines up with `columnsOf`.
+ * A copy in both keeps the record seen on the later day (`newer`'s on the same
+ * day), and where that record has a column unidentified, the other's pick for
+ * it. A `newer` whose crawls are all in `older` already (a crawl file merged
+ * twice) changes nothing but the catalog check.
+ */
+export function mergeCopies(older: CopyStore, newer: CopyStore, columnsOf: CatalogColumns): CopyStore {
+  const applied = new Set(older.runs.map((run) => run.generatedAt));
+  const fresh = newer.runs.filter((run) => !applied.has(run.generatedAt));
+  const adding = fresh.length > 0 ? newer.weapons : new Map<number, WeaponCopies>();
+  const weapons = new Map<number, WeaponCopies>();
+  for (const hash of new Set([...older.weapons.keys(), ...adding.keys()])) {
+    const columns = columnsOf(hash)?.length;
+    const fits = (weapon: WeaponCopies | undefined) => (weapon?.columns === columns ? weapon : undefined);
+    const a = fits(older.weapons.get(hash));
+    const b = fits(adding.get(hash));
+    const merged = a && b ? mergeWeapon(a, b) : (a ?? b);
+    if (merged) weapons.set(hash, merged);
+  }
+  return { weapons, runs: [...older.runs, ...fresh] };
 }
 
 function mergeWeapon(a: WeaponCopies, b: WeaponCopies): WeaponCopies {
@@ -123,39 +157,30 @@ function mergeWeapon(a: WeaponCopies, b: WeaponCopies): WeaponCopies {
   const indexOf = new Map<number, number>();
   const remapA = a.perks.map((perk) => pickFor(perk, perks, indexOf));
   const remapB = b.perks.map((perk) => pickFor(perk, perks, indexOf));
-  // A merge join of the two sorted id lists, walked twice: once to size the
-  // result, once to fill it. On a tie b's record wins.
-  const join = (visit: (from: WeaponCopies, at: number, remap: number[]) => void) => {
-    let i = 0;
-    let j = 0;
-    while (i < a.ids.length || j < b.ids.length) {
-      if (j >= b.ids.length || (i < a.ids.length && a.ids[i]! < b.ids[j]!)) visit(a, i++, remapA);
-      else {
-        if (i < a.ids.length && a.ids[i] === b.ids[j]) i++;
-        visit(b, j++, remapB);
-      }
-    }
-  };
-  let length = 0;
-  join(() => length++);
-  const merged: WeaponCopies = {
-    columns,
-    perks,
-    ids: new BigUint64Array(length),
-    seen: new Uint16Array(length),
-    picks: new Uint8Array(length * columns),
-  };
+  // A merge join of the two sorted id lists into room for both, trimmed after.
+  const out = allocWeapon(columns, perks, a.ids.length + b.ids.length);
+  let i = 0;
+  let j = 0;
   let k = 0;
-  join((from, at, remap) => {
-    merged.ids[k] = from.ids[at]!;
-    merged.seen[k] = from.seen[at]!;
-    for (let column = 0; column < columns; column++) {
-      const pick = from.picks[at * columns + column]!;
-      merged.picks[k * columns + column] = pick === UNKNOWN ? UNKNOWN : remap[pick]!;
+  while (i < a.ids.length || j < b.ids.length) {
+    if (j >= b.ids.length || (i < a.ids.length && a.ids[i]! < b.ids[j]!)) copyRow(a, i++, out, k++, remapA);
+    else if (i >= a.ids.length || b.ids[j]! < a.ids[i]!) copyRow(b, j++, out, k++, remapB);
+    else {
+      // The same copy: the later sighting, its gaps filled from the other.
+      const aLater = a.seen[i]! > b.seen[j]!;
+      copyRow(aLater ? a : b, aLater ? i : j, out, k, aLater ? remapA : remapB);
+      const [other, at, remap] = aLater ? [b, j, remapB] : [a, i, remapA];
+      for (let column = 0; column < columns; column++) {
+        const pick = other.picks[at * columns + column]!;
+        if (out.picks[k * columns + column] === UNKNOWN && pick !== UNKNOWN)
+          out.picks[k * columns + column] = remap[pick]!;
+      }
+      i++;
+      j++;
+      k++;
     }
-    k++;
-  });
-  return merged;
+  }
+  return trimmed(out, k);
 }
 
 /**
@@ -165,54 +190,30 @@ function mergeWeapon(a: WeaponCopies, b: WeaponCopies): WeaponCopies {
 export function pruneCopies(store: CopyStore, firstDay: number): CopyStore {
   const weapons = new Map<number, WeaponCopies>();
   for (const [hash, weapon] of store.weapons) {
-    const keep: number[] = [];
+    const kept = allocWeapon(weapon.columns, weapon.perks, weapon.ids.length);
+    let k = 0;
     weapon.seen.forEach((day, i) => {
-      if (day >= firstDay) keep.push(i);
+      if (day >= firstDay) copyRow(weapon, i, kept, k++);
     });
-    if (keep.length === 0) continue;
-    if (keep.length === weapon.ids.length) {
-      weapons.set(hash, weapon);
-      continue;
-    }
-    const { columns } = weapon;
-    const kept: WeaponCopies = {
-      columns,
-      perks: weapon.perks,
-      ids: new BigUint64Array(keep.length),
-      seen: new Uint16Array(keep.length),
-      picks: new Uint8Array(keep.length * columns),
-    };
-    keep.forEach((i, k) => {
-      kept.ids[k] = weapon.ids[i]!;
-      kept.seen[k] = weapon.seen[i]!;
-      kept.picks.set(weapon.picks.subarray(i * columns, (i + 1) * columns), k * columns);
-    });
-    weapons.set(hash, kept);
+    if (k > 0) weapons.set(hash, k === weapon.ids.length ? weapon : trimmed(kept, k));
   }
   return { weapons, runs: store.runs.filter((run) => storeDay(Date.parse(run.generatedAt)) >= firstDay) };
 }
 
-export const copyCount = (store: CopyStore) =>
-  [...store.weapons.values()].reduce((sum, weapon) => sum + weapon.ids.length, 0);
-
 /**
- * The tally the app reads: per weapon, its copies, each column's perks and
- * the left + right trait combo, counted from the store. `columnsOf` gives a
- * weapon's catalog column count and `traitsOf` its trait columns (see
- * traitColumns); a weapon no longer in the catalog, or whose column count has
- * changed since its copies were seen, is left out until it's seen again.
+ * The tally the app reads: per weapon, its copies, each column's perks and the
+ * left + right trait combo. `store` must have come through mergeCopies with
+ * the same catalog, so every weapon lines up with it.
  */
-export function tallyCopies(
-  store: CopyStore,
-  columnsOf: (hash: number) => number | undefined,
-  traitsOf: (hash: number) => readonly [number, number] | undefined,
-): Record<string, WeaponPopularity> {
+export function tallyCopies(store: CopyStore, columnsOf: CatalogColumns): Record<string, WeaponPopularity> {
   const tally: Record<string, WeaponPopularity> = {};
   for (const [hash, weapon] of store.weapons) {
     const { columns, perks, picks } = weapon;
-    if (columnsOf(hash) !== columns) continue;
+    const catalog = columnsOf(hash);
+    if (catalog?.length !== columns)
+      throw new Error(`Weapon ${hash} has ${columns} columns in the store but not in the catalog; merge first.`);
     const counts = Array.from({ length: columns }, () => new Uint32Array(perks.length));
-    const traits = traitsOf(hash);
+    const traits = traitColumns(catalog);
     const combos = new Map<number, number>();
     for (let copy = 0; copy < weapon.ids.length; copy++) {
       const row = copy * columns;
@@ -255,8 +256,7 @@ export function tallyCopies(
  */
 export function snapshotFromCopies(
   store: CopyStore,
-  columnsOf: (hash: number) => number | undefined,
-  traitsOf: (hash: number) => readonly [number, number] | undefined,
+  columnsOf: CatalogColumns,
   generatedAt = new Date().toISOString(),
 ): MergedPopularity {
   const { runs } = store;
@@ -266,76 +266,7 @@ export function snapshotFromCopies(
     from: runs.map((run) => run.from).sort()[0] ?? "",
     to: runs.map((run) => run.to).sort().at(-1) ?? "",
     players: runs.reduce((sum, run) => sum + run.players, 0),
-    weapons: tallyCopies(store, columnsOf, traitsOf),
+    weapons: tallyCopies(store, columnsOf),
     crawls: runs,
   };
-}
-
-/** "D2PC": the file's first four bytes. */
-const MAGIC = 0x43503244;
-const VERSION = 1;
-
-/**
- * The store as a gzipped file. Little-endian throughout: magic, version, a
- * JSON header (the runs), then each weapon: hash, column count, perk table,
- * copy count, then its ids, last-seen days and picks.
- */
-export function encodeCopies(store: CopyStore): Buffer {
-  const header = Buffer.from(JSON.stringify({ runs: store.runs }));
-  let size = 4 + 1 + 4 + header.length + 4;
-  for (const weapon of store.weapons.values())
-    size += 4 + 1 + 1 + weapon.perks.length * 4 + 4 + weapon.ids.length * (8 + 2 + weapon.columns);
-  const out = Buffer.alloc(size);
-  let at = 0;
-  at = out.writeUInt32LE(MAGIC, at);
-  at = out.writeUInt8(VERSION, at);
-  at = out.writeUInt32LE(header.length, at);
-  at += header.copy(out, at);
-  at = out.writeUInt32LE(store.weapons.size, at);
-  for (const [hash, weapon] of store.weapons) {
-    at = out.writeUInt32LE(hash, at);
-    at = out.writeUInt8(weapon.columns, at);
-    at = out.writeUInt8(weapon.perks.length, at);
-    for (const perk of weapon.perks) at = out.writeUInt32LE(perk, at);
-    at = out.writeUInt32LE(weapon.ids.length, at);
-    for (const id of weapon.ids) at = out.writeBigUInt64LE(id, at);
-    for (const day of weapon.seen) at = out.writeUInt16LE(day, at);
-    out.set(weapon.picks, at);
-    at += weapon.picks.length;
-  }
-  return gzipSync(out);
-}
-
-export function decodeCopies(file: Buffer): CopyStore {
-  const data = gunzipSync(file);
-  let at = 0;
-  if (data.readUInt32LE(at) !== MAGIC) throw new Error("Not a copy store.");
-  at += 4;
-  const version = data.readUInt8(at++);
-  if (version !== VERSION) throw new Error(`Copy store version ${version}; this reads ${VERSION}.`);
-  const headerLength = data.readUInt32LE(at);
-  at += 4;
-  const header = JSON.parse(data.toString("utf8", at, at + headerLength)) as { runs: CrawlSource[] };
-  at += headerLength;
-  const weapons = new Map<number, WeaponCopies>();
-  const count = data.readUInt32LE(at);
-  at += 4;
-  for (let w = 0; w < count; w++) {
-    const hash = data.readUInt32LE(at);
-    const columns = data.readUInt8(at + 4);
-    const perkCount = data.readUInt8(at + 5);
-    at += 6;
-    const perks = Array.from({ length: perkCount }, (_, i) => data.readUInt32LE(at + i * 4));
-    at += perkCount * 4;
-    const copies = data.readUInt32LE(at);
-    at += 4;
-    const ids = new BigUint64Array(copies);
-    for (let i = 0; i < copies; i++, at += 8) ids[i] = data.readBigUInt64LE(at);
-    const seen = new Uint16Array(copies);
-    for (let i = 0; i < copies; i++, at += 2) seen[i] = data.readUInt16LE(at);
-    const picks = Uint8Array.from(data.subarray(at, at + copies * columns));
-    at += copies * columns;
-    weapons.set(hash, { columns, perks, ids, seen, picks });
-  }
-  return { weapons, runs: header.runs };
 }

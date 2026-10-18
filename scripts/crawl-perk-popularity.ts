@@ -1,6 +1,6 @@
 import { loadEnvConfig } from "@next/env";
 import { readFile, rename, writeFile } from "node:fs/promises";
-import { basename, resolve } from "node:path";
+import { resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { THROTTLE_CODES } from "../src/lib/bungie/throttle";
 import {
@@ -10,7 +10,8 @@ import {
   type CrawlSample,
   type PopularityCatalog,
 } from "../src/lib/weapons/perk-popularity";
-import { encodeCopies, storeDay, storeFromCopies, type SeenCopy } from "../src/lib/weapons/popularity-copies";
+import { storeDay, storeFromCopies, type SeenCopy } from "../src/lib/weapons/popularity-copies";
+import { encodeCopies } from "./copy-store-file";
 
 /**
  * Finds players through Bungie's public API and records the perks on every
@@ -48,8 +49,7 @@ import { encodeCopies, storeDay, storeFromCopies, type SeenCopy } from "../src/l
  * about a second), --recent=<minutes> (sample the reports that ended in the last
  * this many minutes as the crawl goes, instead of a fixed window), --hours (how far back to
  * sample, default 24), --catalog (weapons.json path, default
- * public/data/weapons.json), --out (required; the crawl's name in the merged
- * snapshot is this file's name up to its first dot).
+ * public/data/weapons.json), --out (required).
  * The key comes from BUNGIE_CRAWLER_API_KEY, falling back to
  * NEXT_PUBLIC_BUNGIE_API_KEY for small local runs.
  */
@@ -61,6 +61,16 @@ const ALL_PVP = 5;
  * the player made them public), 205 every character's equipment, 305 sockets.
  */
 const PROFILE_COMPONENTS = "102,201,205,305";
+/**
+ * The most copies of one weapon a player adds, equipped ones first, then
+ * inventory, then vault. A public vault can hold a dozen copies of one weapon
+ * (leftovers from farming it); a cap keeps one hoard from setting a thin
+ * weapon's numbers alone, while dropping only the hoard's tail: about 7% of
+ * vault copies in a sample of 25 public vaults, where 30% were second or later
+ * copies. MIN_COMBO_COUNT (popularity-view.ts) sits just above it, so a combo
+ * needs more than one player to set a roll.
+ */
+export const COPIES_PER_PLAYER = 3;
 
 interface Options {
   players: number;
@@ -459,10 +469,13 @@ async function main() {
     const sockets = profile.itemComponents?.sockets?.data ?? {};
     // Only the tally's weapons (random-rolled legendaries) are in the lookup, so
     // it picks them out of every bucket, the vault's included.
+    const added = new Map<number, number>();
     for (const item of [...equipped, ...inventories, ...vault]) {
       if (!item.itemInstanceId || !lookup.has(item.itemHash)) continue;
       const plugs = sockets[item.itemInstanceId]?.sockets.map((s) => s.plugHash);
-      if (!plugs) continue;
+      const already = added.get(item.itemHash) ?? 0;
+      if (!plugs || already >= COPIES_PER_PLAYER) continue;
+      added.set(item.itemHash, already + 1);
       const list = copiesByWeapon.get(item.itemHash) ?? [];
       list.push({ id: BigInt(item.itemInstanceId), plugs });
       copiesByWeapon.set(item.itemHash, list);
@@ -518,8 +531,6 @@ async function main() {
   const target = resolve(options.out);
   const generatedAt = new Date().toISOString();
   const crawl = storeFromCopies(perksByWeapon, storeDay(Date.parse(generatedAt)), {
-    // "2026-10-18T13.bin.gz" is "2026-10-18T13".
-    file: basename(target).split(".")[0]!,
     generatedAt,
     // Copies were read, so at least one report was counted.
     from: isoSeconds(first),

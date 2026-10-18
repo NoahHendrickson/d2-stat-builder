@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mostPopularRoll } from "./popularity-view";
+import { MIN_COMBO_COUNT, mostPopularRoll } from "./popularity-view";
 
 // Columns 0 (barrel), 1 and 2 (the traits), perks by catalog index.
 const columns = [
@@ -24,7 +24,8 @@ describe("mostPopularRoll", () => {
   });
 
   it("keeps the columns' winners when the top combo is too thin to go on", () => {
-    expect(mostPopularRoll(columns, [combo(4, 6, 2)])).toEqual({ 0: 2, 1: 3, 2: 5 });
+    // As many as one player can add (the crawler's cap) isn't enough.
+    expect(mostPopularRoll(columns, [combo(4, 6, MIN_COMBO_COUNT - 1)])).toEqual({ 0: 2, 1: 3, 2: 5 });
   });
 
   it("breaks a combo tie in grid order, as the columns do", () => {
