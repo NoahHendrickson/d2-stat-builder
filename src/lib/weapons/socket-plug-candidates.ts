@@ -1,4 +1,7 @@
-import type { DestinyInventoryItemDefinition } from "bungie-api-ts/destiny2";
+import type {
+  DestinyInventoryItemDefinition,
+  DestinyItemSocketEntryPlugItemDefinition,
+} from "bungie-api-ts/destiny2";
 
 import type { StatMod } from "./types";
 
@@ -15,6 +18,8 @@ export interface SocketPlugSource {
   randomizedPlugSetHash?: number;
   reusablePlugSetHash?: number;
   singleInitialItemHash?: number;
+  /** Plugs listed on the socket itself rather than in a plug set. */
+  reusablePlugItems?: Pick<DestinyItemSocketEntryPlugItemDefinition, "plugItemHash">[];
 }
 
 /**
@@ -77,13 +82,18 @@ export function pairedPoolPlugs(
 /**
  * Collect deduped plug candidates for one socket, OR-merging rollability per hash.
  * Pass `items` to drop never-rolling entries from randomized pools (see `pairedPoolPlugs`).
+ *
+ * A random pool is the socket's full option list; the plugs the socket lists itself
+ * are only its curated roll. Any other socket also offers the plugs it lists itself,
+ * after its plug set and initial plug: origin sockets list their choices there
+ * (Yeartide Apex: Dream Work or Tex Balanced Stock), with no plug set or one holding
+ * only the crafting empty socket.
  */
 export function collectSocketPlugCandidates(
   socketEntry: SocketPlugSource,
   plugSets: Record<number, { reusablePlugItems?: SocketPlugSetEntry[] }>,
   items?: PoolPlugDefs,
 ): { hash: number; canRoll: boolean }[] {
-  const byHash = new Map<number, boolean>();
   const plugSetHash = socketEntry.randomizedPlugSetHash ?? socketEntry.reusablePlugSetHash;
   const pool = plugSetHash != null ? (plugSets[plugSetHash]?.reusablePlugItems ?? []) : [];
   const poolHashes = pool.map((plug) => plug.plugItemHash);
@@ -93,24 +103,25 @@ export function collectSocketPlugCandidates(
       : undefined;
   const rulesOut = (hash: number) => paired != null && !paired.has(hash) && poolHashes.includes(hash);
 
-  if (plugSetHash != null) {
-    for (const plug of pool) {
-      if (rulesOut(plug.plugItemHash)) continue;
-      const canRoll = plugSetEntryCanRoll(socketEntry, plugSetHash, plug);
-      const existing = byHash.get(plug.plugItemHash);
-      byHash.set(plug.plugItemHash, existing == null ? canRoll : existing || canRoll);
-    }
-  }
-  if (socketEntry.singleInitialItemHash) {
-    // Fixed socket plug (e.g. origin trait). Older raid weapons also list a crafting
-    // empty-socket plug set on the same socket — merge this in regardless. A curated
-    // default the paired pool rules out stays out: VS Chill Inhibitor ships with
-    // Sticky Grenades, but no random roll can have it.
-    if (!rulesOut(socketEntry.singleInitialItemHash)) {
-      byHash.set(socketEntry.singleInitialItemHash, true);
+  const options: [hash: number, canRoll: boolean][] =
+    plugSetHash == null
+      ? []
+      : pool
+          .filter((plug) => !rulesOut(plug.plugItemHash))
+          .map((plug) => [plug.plugItemHash, plugSetEntryCanRoll(socketEntry, plugSetHash, plug)]);
+  // Fixed socket plug, merged regardless (older raid weapons pair it with a crafting
+  // empty-socket plug set). A curated default the paired pool rules out stays out:
+  // VS Chill Inhibitor ships with Sticky Grenades, but no random roll can have it.
+  const initial = socketEntry.singleInitialItemHash;
+  if (initial && !rulesOut(initial)) options.push([initial, true]);
+  if (socketEntry.randomizedPlugSetHash == null) {
+    for (const { plugItemHash } of socketEntry.reusablePlugItems ?? []) {
+      options.push([plugItemHash, true]);
     }
   }
 
+  const byHash = new Map<number, boolean>();
+  for (const [hash, canRoll] of options) byHash.set(hash, byHash.get(hash) || canRoll);
   return [...byHash.entries()].map(([hash, canRoll]) => ({ hash, canRoll }));
 }
 

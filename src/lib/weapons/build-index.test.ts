@@ -264,6 +264,62 @@ describe("collectSocketPlugCandidates", () => {
     ]);
   });
 
+  it("reads a socket's own plug list when it has no plug set, initial plug first", () => {
+    expect(
+      collectSocketPlugCandidates(
+        {
+          singleInitialItemHash: 98,
+          reusablePlugItems: [{ plugItemHash: 99 }, { plugItemHash: 98 }, { plugItemHash: 99 }],
+        },
+        {},
+      ),
+    ).toEqual([
+      { hash: 98, canRoll: true },
+      { hash: 99, canRoll: true },
+    ]);
+  });
+
+  it("ignores a socket's own plug list when it has a random pool (curated roll)", () => {
+    const plugSets = { 10: { reusablePlugItems: [{ plugItemHash: 1 }] } };
+    expect(
+      collectSocketPlugCandidates(
+        { randomizedPlugSetHash: 10, reusablePlugItems: [{ plugItemHash: 2 }] },
+        plugSets,
+      ),
+    ).toEqual([{ hash: 1, canRoll: true }]);
+  });
+
+  it("reads a socket's own plug list beside a reusable plug set (Goldtusk's origin socket)", () => {
+    const plugSets = { 10: { reusablePlugItems: [{ plugItemHash: 1, currentlyCanRoll: true }] } };
+    const socket = {
+      reusablePlugSetHash: 10,
+      singleInitialItemHash: 98,
+      reusablePlugItems: [{ plugItemHash: 98 }, { plugItemHash: 99 }],
+    };
+    const items: Record<number, DestinyInventoryItemDefinition> = {
+      1: {
+        hash: 1,
+        displayProperties: { name: "Empty Origins Socket", icon: "" },
+        plug: { plugCategoryIdentifier: "crafting.recipes.empty_socket" },
+      } as DestinyInventoryItemDefinition,
+      98: {
+        hash: 98,
+        displayProperties: { name: "To Excess", icon: "" },
+        inventory: { tierType: 2 },
+        plug: { plugCategoryIdentifier: "origins" },
+      } as DestinyInventoryItemDefinition,
+      99: {
+        hash: 99,
+        displayProperties: { name: "Veist Stinger", icon: "" },
+        inventory: { tierType: 2 },
+        plug: { plugCategoryIdentifier: "origins" },
+      } as DestinyInventoryItemDefinition,
+    };
+
+    const { perks } = buildColumnPerks(collectSocketPlugCandidates(socket, plugSets), items);
+    expect(perks.map((perk) => perk.name)).toEqual(["To Excess", "Veist Stinger"]);
+  });
+
   it("merges singleInitialItemHash when a reusable plug set only has an empty crafting socket", () => {
     const plugSets = {
       10: {
