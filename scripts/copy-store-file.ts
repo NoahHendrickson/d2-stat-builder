@@ -28,8 +28,8 @@ import {
 
 /** "D2PC": the store's first four bytes, once decrypted and unzipped. */
 export const MAGIC = 0x43503244;
-/** 2: owners (1 had none, and wasn't encrypted). */
-export const VERSION = 2;
+/** 3: owners read to the minute (2 kept the day; 1 had no owners, and wasn't encrypted). */
+export const VERSION = 3;
 /** "D2PE": the encrypted file's first four bytes. */
 const SEALED = Buffer.from("D2PE");
 

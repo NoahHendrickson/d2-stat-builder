@@ -29,10 +29,17 @@ const OWNER_ARRAYS = {
   ids: BigUint64Array,
   /** Bungie membership type (platform), which a profile read needs alongside the id. */
   types: Uint8Array,
-  /** The UTC day (days since 1970-01-01) they last played, as of our last read; 0 when a crawl couldn't tell. */
+  /**
+   * The latest UTC day (days since 1970-01-01) they're known to have played:
+   * from their profile, or from a report they turned up in; 0 when a crawl
+   * couldn't tell.
+   */
   played: Uint16Array,
-  /** The day we last read their profile. */
-  read: Uint16Array,
+  /**
+   * The minute (since 1970) we last read their profile, to the minute so two
+   * crawls of one day still order; 0 in a crawl that only saw them in a report.
+   */
+  read: Uint32Array,
   /** 1 when that read saw their vault and inventories, so it listed every copy they have. */
   whole: Uint8Array,
 };
@@ -82,6 +89,12 @@ export const UNKNOWN = 255;
 
 /** Today, or the day `ms` falls on, as a store day (UTC). */
 export const storeDay = (ms = Date.now()) => Math.floor(ms / 86_400_000);
+
+/** The minute `ms` falls in, as Owners.read keeps it. */
+export const storeMinute = (ms: number) => Math.floor(ms / 60_000);
+
+/** The day a store minute falls on. */
+const dayOfMinute = (minute: number) => Math.floor(minute / 1_440);
 
 type AnyArray = BigUint64Array | Uint32Array | Uint16Array | Uint8Array;
 /** The bytes behind a typed array, as they are in memory. */
@@ -145,7 +158,7 @@ function pickFor(perk: number, perks: number[], indexOf: Map<number, number>) {
   return index;
 }
 
-/** A player as the crawler read them. */
+/** A player as the crawler read them, or only saw them in a report. */
 export interface SeenOwner {
   id: bigint;
   type: number;
@@ -153,6 +166,11 @@ export interface SeenOwner {
   played: number | undefined;
   /** Whether the read saw their vault and inventories, with every weapon's sockets, so it listed every copy they have. */
   whole: boolean;
+  /**
+   * Seen in a report but not read (read too recently to read again): proof
+   * they played that day, and nothing else. They stay due by their last read.
+   */
+  sightedOnly?: boolean;
 }
 
 /** One copy as the crawler hands it over: its instance id, its owner (an index into the crawl's owners) and base perk per catalog column. */
@@ -162,20 +180,21 @@ export interface SeenCopy {
   perks: readonly (number | undefined)[];
 }
 
-/** One crawl as a store: its players, all read on `day`, and their copies, all seen that day. */
+/** One crawl as a store: its players, read at `readAt` (ms), and their copies, all seen that day. */
 export function storeFromCrawl(
   owners: readonly SeenOwner[],
   copies: ReadonlyMap<number, readonly SeenCopy[]>,
-  day: number,
+  readAt: number,
   run: CrawlSource,
 ): CopyStore {
+  const day = storeDay(readAt);
   const table = allocOwners(owners.length);
   owners.forEach((owner, k) => {
     table.ids[k] = owner.id;
     table.types[k] = owner.type;
     table.played[k] = owner.played ?? 0;
-    table.read[k] = day;
-    table.whole[k] = owner.whole ? 1 : 0;
+    table.read[k] = owner.sightedOnly ? 0 : storeMinute(readAt);
+    table.whole[k] = owner.whole && !owner.sightedOnly ? 1 : 0;
   });
   const weapons = new Map<number, WeaponCopies>();
   for (const [hash, list] of copies) {
@@ -209,12 +228,15 @@ export function ownerIndex(owners: Owners) {
  * count has changed since a side's copies were seen, loses that side's copies
  * (they come back as they're seen again), and the store that comes out always
  * lines up with `columnsOf`.
- * Whichever read of a player is later wins, whatever order the two come in:
+ * Whichever read of a player is later (to the minute) wins, whatever order the
+ * two come in; reads in the same minute keep the store's record and drop
+ * nothing:
  * - a copy in both keeps the record seen on the later day (`newer`'s on the
  *   same day), with any column it couldn't identify filled from the other;
  * - when the later read saw the player's whole inventory, a copy of theirs
  *   only the earlier read lists is gone (dismantled), on either side;
- * - a later read that couldn't tell when they last played keeps the earlier's.
+ * - when they last played is the latest either side knows, so a sighting in a
+ *   report (no read) moves only that, and a read that couldn't tell moves nothing.
  * A `newer` whose crawls are all in `older` already (a crawl file merged
  * twice) changes nothing but the catalog check.
  */
@@ -238,12 +260,20 @@ export function mergeCopies(older: CopyStore, newer: CopyStore, columnsOf: Catal
     const known = index.get(adding.owners.ids[i]!);
     const k = known ?? ownerCount++;
     ownerMap[i] = k;
-    if (known === undefined || adding.owners.read[i]! >= owners.read[k]!) {
-      const played = owners.played[k]!;
+    if (known === undefined) {
       copyOwner(adding.owners, i, owners, k);
-      if (known !== undefined && owners.played[k] === 0) owners.played[k] = played;
-      if (known !== undefined && adding.owners.whole[i]) goneFromOlder.add(k);
-    } else if (owners.whole[k]) goneFromNewer.add(k);
+      continue;
+    }
+    owners.played[k] = Math.max(owners.played[k]!, adding.owners.played[i]!);
+    const read = adding.owners.read[i]!;
+    // Only seen in a report: when they played is all it says.
+    if (read === 0) continue;
+    if (read > owners.read[k]!) {
+      owners.types[k] = adding.owners.types[i]!;
+      owners.read[k] = read;
+      owners.whole[k] = adding.owners.whole[i]!;
+      if (adding.owners.whole[i]) goneFromOlder.add(k);
+    } else if (read < owners.read[k]! && owners.whole[k]) goneFromNewer.add(k);
   }
 
   const weapons = new Map<number, WeaponCopies>();
@@ -264,6 +294,8 @@ export function mergeCopies(older: CopyStore, newer: CopyStore, columnsOf: Catal
 /**
  * A merge join of `a` and `b`'s sorted ids into room for both, trimmed after.
  * A copy on one side only is kept unless its owner is in that side's gone set.
+ * A side with nothing to add or drop comes back as it is: most weapons, most
+ * merges, since a crawl touches a fraction of the store.
  */
 function mergeWeapon(
   a: WeaponCopies,
@@ -271,6 +303,10 @@ function mergeWeapon(
   goneFromA: ReadonlySet<number>,
   goneFromB: ReadonlySet<number>,
 ): WeaponCopies {
+  const untouched = (side: WeaponCopies, gone: ReadonlySet<number>) =>
+    gone.size === 0 || !side.owners.some((owner) => gone.has(owner));
+  if (b.ids.length === 0 && untouched(a, goneFromA)) return a;
+  if (a.ids.length === 0 && untouched(b, goneFromB)) return b;
   const { columns } = a;
   const perks: number[] = [];
   const indexOf = new Map<number, number>();
@@ -355,11 +391,13 @@ export interface DuePlayer {
  * reads, and which players it found it should pass over as read too recently.
  */
 export function recheckPlan(owners: Owners, today: number, afterDays: number) {
+  /** Each player's last read, as a day. */
   const lastRead = new Map<string, number>();
   const due: number[] = [];
   owners.ids.forEach((id, i) => {
-    lastRead.set(id.toString(), owners.read[i]!);
-    if (owners.read[i]! <= today - afterDays) due.push(i);
+    const day = dayOfMinute(owners.read[i]!);
+    lastRead.set(id.toString(), day);
+    if (day <= today - afterDays) due.push(i);
   });
   const queue: DuePlayer[] = due
     .sort((a, b) => owners.read[a]! - owners.read[b]!)
@@ -385,17 +423,22 @@ export function recheckPlan(owners: Owners, today: number, afterDays: number) {
 }
 
 /**
- * A short fingerprint of the weapons a crawl could list (its catalog's
- * random-rolled legendaries), so the merge can tell when a crawl ran on a
- * different catalog and can't vouch that a weapon it didn't list is gone.
+ * A short fingerprint of the weapons a crawl could list and their column
+ * counts (its catalog's random-rolled legendaries, by hash → columns), so the
+ * merge can tell when a crawl ran on a different catalog and can't vouch that
+ * a copy it didn't list is gone.
  */
-export function lookupFingerprint(hashes: Iterable<number>) {
+export function lookupFingerprint(lookup: ReadonlyMap<number, readonly unknown[]>) {
   let hash = 0x811c9dc5;
-  for (const weapon of [...hashes].sort((a, b) => a - b)) {
+  const mix = (value: number) => {
     for (let shift = 0; shift < 32; shift += 8) {
-      hash ^= (weapon >>> shift) & 0xff;
+      hash ^= (value >>> shift) & 0xff;
       hash = Math.imul(hash, 0x01000193) >>> 0;
     }
+  };
+  for (const weapon of [...lookup.keys()].sort((a, b) => a - b)) {
+    mix(weapon);
+    mix(lookup.get(weapon)!.length);
   }
   return hash.toString(16).padStart(8, "0");
 }

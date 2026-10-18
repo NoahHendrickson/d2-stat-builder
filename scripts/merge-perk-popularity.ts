@@ -60,7 +60,7 @@ async function main() {
     return emptyStore();
   });
   const before = copyCount(store);
-  const fingerprint = lookupFingerprint(popularityLookup(catalog).keys());
+  const fingerprint = lookupFingerprint(popularityLookup(catalog));
   const crawls = await Promise.all(
     (args.add ?? []).map(async (file) => {
       const crawl = decodeCopies(await readFile(resolve(file)), key);

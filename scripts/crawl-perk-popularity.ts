@@ -539,8 +539,11 @@ async function main() {
     const user = entry.player?.destinyUserInfo;
     if (!user?.membershipId || seen.has(user.membershipId) || done()) return;
     if (plan.recentlyRead(user.membershipId)) {
+      // Not worth a read yet, but the report proves they played: that keeps
+      // them in the store even if their next read is a while coming.
       fresh++;
       seen.add(user.membershipId);
+      owners.push({ id: BigInt(user.membershipId), type: user.membershipType, played: endedOn, whole: false, sightedOnly: true });
       return;
     }
     await readPlayer(user.membershipType, user.membershipId, plan.known(user.membershipId), endedOn);
@@ -599,7 +602,7 @@ async function main() {
   const target = resolve(options.out);
   const generatedAt = new Date().toISOString();
   const now = Date.parse(generatedAt);
-  const crawl = storeFromCrawl(owners, perksByWeapon, storeDay(now), {
+  const crawl = storeFromCrawl(owners, perksByWeapon, now, {
     generatedAt,
     // With no report counted (every read a read again), the span is just this crawl's moment.
     from: isoSeconds(Number.isFinite(first) ? first : now),
@@ -609,7 +612,7 @@ async function main() {
     copies,
     vaults,
     sample,
-    catalog: lookupFingerprint(lookup.keys()),
+    catalog: lookupFingerprint(lookup),
   });
   await writeFile(`${target}.tmp`, encodeCopies(crawl, key));
   await rename(`${target}.tmp`, target);

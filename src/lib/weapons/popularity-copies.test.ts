@@ -40,15 +40,18 @@ const player = (id: number, played: number | undefined, whole = false): SeenOwne
 /** A copy of `weapon` as [weapon, instance id, owner's membership id, perks]. */
 type Copy = [weapon: number, id: number, owner: number, perks: (number | undefined)[]];
 
-/** One crawl read on `day`: its players, and their copies. */
-function crawl(day: number, at: string, players: SeenOwner[], copies: Copy[]) {
+/** `day` and `hour` (UTC) as ms. */
+const when = (day: number, hour = 0) => day * 86_400_000 + hour * 3_600_000;
+
+/** One crawl read on `day` (at `hour`): its players, and their copies. */
+function crawl(day: number, at: string, players: SeenOwner[], copies: Copy[], hour = 0) {
   const byWeapon = new Map<number, { id: bigint; owner: number; perks: (number | undefined)[] }[]>();
   for (const [weapon, id, owner, perks] of copies) {
     const list = byWeapon.get(weapon) ?? [];
     list.push({ id: BigInt(id), owner: players.findIndex((p) => p.id === BigInt(owner)), perks });
     byWeapon.set(weapon, list);
   }
-  return storeFromCrawl(players, byWeapon, day, run(at, players.length));
+  return storeFromCrawl(players, byWeapon, when(day, hour), run(at, players.length));
 }
 
 /** Every copy as [id, day seen, owner's membership id, perks], by weapon. */
@@ -65,9 +68,9 @@ function contents(store: CopyStore) {
     ]),
   );
 }
-/** Every player as [membership id, last played, last read]. */
+/** Every player as [membership id, last played, day last read]. */
 const players = (store: CopyStore) =>
-  Array.from(store.owners.ids, (id, i) => [Number(id), store.owners.played[i], store.owners.read[i]]);
+  Array.from(store.owners.ids, (id, i) => [Number(id), store.owners.played[i], Math.floor(store.owners.read[i]! / 1_440)]);
 
 const merge = (...stores: CopyStore[]) => stores.reduce((a, b) => mergeCopies(a, b, columnsOf), emptyStore());
 
@@ -92,7 +95,7 @@ describe("storeFromCrawl", () => {
 
   it("handles ids past 2^53 exactly", () => {
     const id = BigInt("6917529123456789012");
-    const store = storeFromCrawl([player(1, 1)], new Map([[2, [{ id, owner: 0, perks: [11] }]]]), 1, run("a"));
+    const store = storeFromCrawl([player(1, 1)], new Map([[2, [{ id, owner: 0, perks: [11] }]]]), when(1), run("a"));
     expect(store.weapons.get(2)!.ids[0]).toBe(id);
   });
 });
@@ -181,6 +184,33 @@ describe("mergeCopies", () => {
     expect(contents(inOrder)).toEqual({ 1: [[1, 114, 7, [undefined, 11, 13, 15]]] });
     expect(contents(reversed)).toEqual(contents(inOrder));
     expect(players(reversed)).toEqual(players(inOrder));
+  });
+
+  it("orders two whole reads of one day by the minute, whatever order they're merged in", () => {
+    // 09:00 saw only copy 1; 15:00 saw copies 1 and 2.
+    const morning = crawl(100, "a", [player(7, 100, true)], [[1, 1, 7, [undefined, 11, 13, 15]]], 9);
+    const afternoon = crawl(100, "b", [player(7, 100, true)], [
+      [1, 1, 7, [undefined, 11, 13, 15]],
+      [1, 2, 7, [undefined, 12, 13, 15]],
+    ], 15);
+    expect(copyCount(merge(morning, afternoon))).toBe(2);
+    expect(copyCount(merge(afternoon, morning))).toBe(2);
+  });
+
+  it("takes a sighting in a report as when they last played, and nothing more", () => {
+    const read = crawl(100, "a", [player(7, 100, true)], [[2, 1, 7, [11]]]);
+    const sighting = crawl(110, "b", [{ ...player(7, 110, true), sightedOnly: true }], []);
+    const merged = merge(read, sighting);
+    // Played on day 110, still last read on day 100 (so still due), and nothing dropped.
+    expect(players(merged)).toEqual([[7, 110, 100]]);
+    expect(copyCount(merged)).toBe(1);
+    expect(copyCount(pruneCopies(merged, 110 - 13))).toBe(1);
+  });
+
+  it("leaves a weapon the crawl didn't touch as it was", () => {
+    const store = merge(crawl(10, "a", [player(7, 10), player(8, 10)], [[2, 1, 7, [11]], [1, 2, 8, [undefined, 11, 13, 15]]]));
+    const merged = mergeCopies(store, crawl(11, "b", [player(8, 11)], [[1, 3, 8, [undefined, 12, 13, 15]]]), columnsOf);
+    expect(merged.weapons.get(2)).toBe(store.weapons.get(2));
   });
 
   it("keeps when a player last played when a later read couldn't tell", () => {
@@ -278,9 +308,12 @@ describe("recheckPlan", () => {
 });
 
 describe("lookupFingerprint", () => {
-  it("is the same for the same weapons in any order, and differs when one is missing", () => {
-    expect(lookupFingerprint([3, 1, 2])).toBe(lookupFingerprint([1, 2, 3]));
-    expect(lookupFingerprint([1, 2])).not.toBe(lookupFingerprint([1, 2, 3]));
+  it("is the same for the same weapons in any order, and differs when one is missing or changes columns", () => {
+    const lookup = (...weapons: [number, number][]) => new Map(weapons.map(([hash, columns]) => [hash, Array(columns)]));
+    expect(lookupFingerprint(lookup([3, 4], [1, 2], [2, 5]))).toBe(lookupFingerprint(lookup([1, 2], [2, 5], [3, 4])));
+    expect(lookupFingerprint(lookup([1, 2], [2, 5]))).not.toBe(lookupFingerprint(lookup([1, 2], [2, 5], [3, 4])));
+    // A weapon that gained a column is a different catalog too.
+    expect(lookupFingerprint(lookup([1, 2], [2, 6]))).not.toBe(lookupFingerprint(lookup([1, 2], [2, 5])));
   });
 });
 
@@ -310,11 +343,11 @@ describe("tallyCopies", () => {
 describe("snapshotFromCopies", () => {
   it("tallies the store, counts its players, and spans and lists its crawls", () => {
     const store = merge(
-      storeFromCrawl([player(7, 10)], new Map([[2, [{ id: BigInt(1), owner: 0, perks: [11] }]]]), 10, {
+      storeFromCrawl([player(7, 10)], new Map([[2, [{ id: BigInt(1), owner: 0, perks: [11] }]]]), when(10), {
         ...run("2026-10-17T01:00:00Z", 4),
         from: "2026-10-17T00:00:00Z",
       }),
-      storeFromCrawl([player(7, 11), player(8, 11)], new Map([[2, [{ id: BigInt(1), owner: 0, perks: [12] }]]]), 11, {
+      storeFromCrawl([player(7, 11), player(8, 11)], new Map([[2, [{ id: BigInt(1), owner: 0, perks: [12] }]]]), when(11), {
         ...run("2026-10-18T01:00:00Z", 6),
         from: "2026-10-18T00:00:00Z",
       }),
