@@ -243,8 +243,8 @@ export const WeaponDetails = memo(function WeaponDetails({
   // A setup's roll replaces whatever is picked in the slots any setup uses,
   // so going from one setup to another leaves none of the first behind; the
   // user's picks elsewhere stay.
-  // A popular roll (a combo, a perk, the most popular in every column) picks its
-  // perks; one that's already picked un-picks them.
+  // A popular roll (a combo, a perk, or the most popular roll: see
+  // mostPopularRoll) picks its perks; one that's already picked un-picks them.
   function pickRoll(roll: Roll) {
     setPicked((picks) => {
       const keys = Object.keys(roll).map(Number);

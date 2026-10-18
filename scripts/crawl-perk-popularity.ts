@@ -338,6 +338,8 @@ interface Sampler {
   counts(ended: number): boolean;
   /** The ids drawn from now, for the log. */
   describe(): string;
+  /** Why the crawl should end early (its window stopped following the clock), or undefined. */
+  stalled(): string | undefined;
   /** Stops following the clock; resolves once a move in flight has finished. */
   stop(): Promise<void>;
 }
@@ -361,6 +363,7 @@ async function fixedWindow(get: Get, newest: number, window: { hours: number; un
     randomId: () => between(ids),
     counts: (ended) => ended >= since && ended < until,
     describe: () => range,
+    stalled: () => undefined,
     stop: async () => {},
   };
 }
@@ -370,21 +373,35 @@ async function fixedWindow(get: Get, newest: number, window: { hours: number; un
  * about once a minute the newest id and the first that ended `minutes` ago are
  * searched again from where they were (a dozen requests). Both edges are found
  * to within a few hundred ids, so even a short window off-peak keeps its width.
- * A report drawn counts unless it ended well before the window, which only
- * happens once the window has stopped moving; the log line counts those.
+ * A report drawn counts if it ended after the window's start as of its last
+ * move, give or take the edge search's slack. If the window stops moving
+ * (every move failing for STALL_MS), the crawl ends early instead of drawing
+ * from a range that is no longer recent.
  */
+/**
+ * How far before a moving window's start a counted report may have ended: the
+ * low edge is searched to 300 ids, which is seconds at peak and a minute or so
+ * when quiet.
+ */
+const EDGE_SLACK_MS = 2 * 60_000;
+/** A moving window whose moves have all failed for this long ends the crawl. */
+const STALL_MS = 10 * 60_000;
+
 async function movingWindow(get: Get, newest: number, minutes: number): Promise<Sampler> {
-  // How much older than `minutes` a counted report may be: the edges move once a minute
-  // and are searched to a few hundred ids, so a report in range ended a minute or two early
-  // at most. Anything older means the window has stopped moving (every move failing).
-  const slack = 5 * 60_000;
-  const firstRecent = (high: number, low?: number) => firstPgcrSince(get, high, Date.now() - minutes * 60_000, low, 300);
-  const ids = { low: await firstRecent(newest), high: newest };
+  /** The window's low edge (ms) as of its last move, and when that move finished. */
+  let since = Date.now() - minutes * 60_000;
+  let movedAt = Date.now();
+  const firstRecent = (high: number, start: number, low?: number) => firstPgcrSince(get, high, start, low, 300);
+  const ids = { low: await firstRecent(newest, since), high: newest };
   let moving: Promise<void> | undefined;
   const timer = setInterval(() => {
     moving ??= (async () => {
+      // The start is fixed before the searches, which can take minutes once throttled.
+      const start = Date.now() - minutes * 60_000;
       const high = await advanceNewest(get, ids.high);
-      Object.assign(ids, { low: await firstRecent(high, ids.low), high });
+      Object.assign(ids, { low: await firstRecent(high, start, ids.low), high });
+      since = start;
+      movedAt = Date.now();
     })()
       .catch((error: unknown) =>
         console.warn(`Couldn't move the window along: ${error instanceof Error ? error.message : error}`),
@@ -395,8 +412,12 @@ async function movingWindow(get: Get, newest: number, minutes: number): Promise<
   }, 60_000);
   return {
     randomId: () => between(ids),
-    counts: (ended) => ended >= Date.now() - minutes * 60_000 - slack,
+    counts: (ended) => ended >= since - EDGE_SLACK_MS,
     describe: () => `${ids.low}–${ids.high} (the last ${minutes} minutes)`,
+    stalled: () =>
+      Date.now() - movedAt > STALL_MS
+        ? `the window hasn't moved since ${new Date(movedAt).toISOString()}`
+        : undefined,
     async stop() {
       clearInterval(timer);
       await moving;
@@ -450,7 +471,8 @@ async function main() {
   // When the earliest and latest reports counted ended (ms).
   let first = Infinity;
   let last = -Infinity;
-  const done = () => players + reading >= options.players || Date.now() > deadline;
+  const done = () =>
+    players + reading >= options.players || Date.now() > deadline || sampler.stalled() !== undefined;
 
   async function samplePlayer(entry: PgcrEntry) {
     const user = entry.player?.destinyUserInfo;
@@ -511,6 +533,8 @@ async function main() {
   await Promise.all(Array.from({ length: options.workers }, worker));
   clearInterval(progress);
   await sampler.stop();
+  const stalled = sampler.stalled();
+  if (stalled) console.warn(`Ended early: ${stalled}.`);
 
   if (copies === 0) throw new Error("No weapons were tallied; nothing written.");
   const tally: Record<string, WeaponPopularity> = {};

@@ -75,12 +75,12 @@ export function useWeaponPopularity(
     });
     const traits = traitColumns(weapon.columns);
     const combos = traits
-      ? comboShares(data).flatMap(({ left, right, share }) => {
+      ? comboShares(data).flatMap(({ left, right, count, share }) => {
           const l = indexIn(traits[0], left);
           const r = indexIn(traits[1], right);
           return l === undefined || r === undefined
             ? []
-            : [{ leftColumn: traits[0], left: l, rightColumn: traits[1], right: r, share }];
+            : [{ leftColumn: traits[0], left: l, rightColumn: traits[1], right: r, count, share }];
         })
       : [];
     return {

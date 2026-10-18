@@ -18,6 +18,8 @@ export interface ComboPopularity {
   left: number;
   rightColumn: number;
   right: number;
+  /** Copies seen running both. */
+  count: number;
   share: number;
 }
 
@@ -42,10 +44,14 @@ export interface WeaponPopularityView {
 /**
  * The roll "Try most popular roll" picks: the most run perk in each column
  * (the first of any tie, in grid order), except the two trait columns, which
- * take the most run combo, so the traits picked were seen together. Without a
- * combo (none counted, or none on this weapon's perks) they fall back to their
- * columns' own winners.
+ * take the most run combo (ties also in grid order), so the traits picked were
+ * seen together. Only a combo seen at least MIN_COMBO_COUNT times replaces the
+ * columns' own winners: on a thin sample one or two sightings shouldn't
+ * override a column's clear lead.
  */
+/** The fewest sightings of a combo for it to set the roll's traits. */
+export const MIN_COMBO_COUNT = 3;
+
 export function mostPopularRoll(
   columns: WeaponPopularityView["columns"],
   combos: readonly ComboPopularity[],
@@ -53,8 +59,16 @@ export function mostPopularRoll(
   const roll: Roll = {};
   for (const { column, perks } of columns)
     roll[column] = perks.reduce((best, p) => (p.share > best.share ? p : best)).perkIndex;
-  const top = combos.reduce<ComboPopularity | undefined>((best, c) => (!best || c.share > best.share ? c : best), undefined);
-  if (top) {
+  // Where a perk sits in its column, for breaking ties the way the grid reads.
+  const position = (column: number, perkIndex: number) =>
+    columns.find((c) => c.column === column)?.perks.findIndex((p) => p.perkIndex === perkIndex) ?? -1;
+  const before = (a: ComboPopularity, b: ComboPopularity) => {
+    if (a.count !== b.count) return a.count > b.count;
+    const left = position(a.leftColumn, a.left) - position(b.leftColumn, b.left);
+    return left !== 0 ? left < 0 : position(a.rightColumn, a.right) < position(b.rightColumn, b.right);
+  };
+  const top = combos.reduce<ComboPopularity | undefined>((best, c) => (!best || before(c, best) ? c : best), undefined);
+  if (top && top.count >= MIN_COMBO_COUNT) {
     roll[top.leftColumn] = top.left;
     roll[top.rightColumn] = top.right;
   }
