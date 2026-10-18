@@ -69,7 +69,7 @@ export interface WeaponPopularityView {
   columns: { column: number; perks: PerkPopularity[] }[];
   /** The most run left + right combos, most run first. */
   combos: ComboPopularity[];
-  /** The most run perk in each column with data, keyed like picks (by column). */
+  /** The roll to try, keyed like picks (by column): see mostPopularRoll. */
   topRoll: Roll;
 }
 
@@ -117,17 +117,36 @@ export function useWeaponPopularity(
             : [{ leftColumn: traits[0], left: l, rightColumn: traits[1], right: r, share }];
         })
       : [];
-    const topRoll: Roll = {};
-    // The most run perk in each column (the first of any tie, in grid order).
-    for (const { column, perks } of columns)
-      topRoll[column] = perks.reduce((best, p) => (p.share > best.share ? p : best)).perkIndex;
     return {
       available: true,
       copies: data.copies,
       generatedAt: index?.generatedAt,
       columns,
       combos,
-      topRoll,
+      topRoll: mostPopularRoll(columns, combos),
     };
   }, [index, weapon, catalog]);
+}
+
+/**
+ * The roll "Try most popular roll" picks: the most run perk in each column
+ * (the first of any tie, in grid order), except the two trait columns, which
+ * take the most run combo, so the traits picked were seen together. Without a
+ * combo (none counted, or none on this weapon's perks) they fall back to their
+ * columns' own winners.
+ */
+export function mostPopularRoll(
+  columns: WeaponPopularityView["columns"],
+  combos: readonly ComboPopularity[],
+): Roll {
+  const roll: Roll = {};
+  for (const { column, perks } of columns)
+    roll[column] = perks.reduce((best, p) => (p.share > best.share ? p : best)).perkIndex;
+  // Combos come most run first.
+  const top = combos[0];
+  if (top) {
+    roll[top.leftColumn] = top.left;
+    roll[top.rightColumn] = top.right;
+  }
+  return roll;
 }

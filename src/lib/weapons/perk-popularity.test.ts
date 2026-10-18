@@ -3,6 +3,7 @@ import {
   addCopy,
   columnShares,
   comboShares,
+  crawlSource,
   mergePopularity,
   traitColumns,
   columnSockets,
@@ -167,5 +168,32 @@ describe("mergePopularity", () => {
         2: { copies: 1, columns: [{ 11: 1 }] },
       },
     });
+  });
+});
+
+describe("crawlSource", () => {
+  const crawl = {
+    schema: 2 as const,
+    generatedAt: "2026-10-18T14:25:00.000Z",
+    from: "2026-10-18T13:45:00Z",
+    to: "2026-10-18T14:24:00Z",
+    players: 9,
+    weapons: { 1: { copies: 3, columns: [] }, 2: { copies: 4, columns: [] } },
+  };
+
+  it("lists a crawl by its file, times, players and copies, with how it sampled", () => {
+    expect(crawlSource("2026-10-18T13.json", { ...crawl, sample: { kind: "recent", minutes: 15 } })).toEqual({
+      file: "2026-10-18T13.json",
+      generatedAt: "2026-10-18T14:25:00.000Z",
+      from: "2026-10-18T13:45:00Z",
+      to: "2026-10-18T14:24:00Z",
+      players: 9,
+      copies: 7,
+      sample: { kind: "recent", minutes: 15 },
+    });
+  });
+
+  it("leaves sample out for a crawl from before it was recorded", () => {
+    expect(crawlSource("2026-10-15.json", crawl)).not.toHaveProperty("sample");
   });
 });

@@ -48,6 +48,27 @@ export interface PerkPopularityIndex {
   players: number;
   /** By weapon item hash. */
   weapons: Record<string, WeaponPopularity>;
+  /** How one crawl drew its reports; missing in crawls from before it was recorded. */
+  sample?: CrawlSample;
+  /** A merged snapshot's inputs, one per crawl file in file order: where every count came from. */
+  crawls?: CrawlSource[];
+}
+
+/**
+ * Matches that just ended (`recent`, read minutes later), or a fixed window
+ * (`window`; an `until` well before the crawl's generatedAt is a backfill, read
+ * days after the matches).
+ */
+export type CrawlSample = { kind: "recent"; minutes: number } | { kind: "window"; hours: number; until: string };
+
+export interface CrawlSource {
+  file: string;
+  generatedAt: string;
+  from: string;
+  to: string;
+  players: number;
+  copies: number;
+  sample?: CrawlSample;
 }
 
 /** The catalog fields the tally needs: public/data/weapons.json, narrowed. */
@@ -223,6 +244,19 @@ export function comboShares(weapon: WeaponPopularity): ComboShare[] {
       return { left: left!, right: right!, count, share: count / total };
     })
     .sort((a, b) => b.count - a.count);
+}
+
+/** One crawl file, as a merged snapshot lists it among its `crawls`. */
+export function crawlSource(file: string, crawl: PerkPopularityIndex): CrawlSource {
+  return {
+    file,
+    generatedAt: crawl.generatedAt,
+    from: crawl.from,
+    to: crawl.to,
+    players: crawl.players,
+    copies: Object.values(crawl.weapons).reduce((sum, w) => sum + w.copies, 0),
+    ...(crawl.sample && { sample: crawl.sample }),
+  };
 }
 
 /**

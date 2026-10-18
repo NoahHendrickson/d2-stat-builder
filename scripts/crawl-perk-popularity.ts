@@ -374,9 +374,15 @@ async function fixedWindow(get: Get, newest: number, { hours, until }: { hours: 
  * about once a minute the newest id and the first that ended `minutes` ago are
  * searched again from where they were (a dozen requests). Both edges are found
  * to within a few hundred ids, so even a short window off-peak keeps its width.
- * Every report drawn counts.
+ * A report drawn counts unless it ended well before the window, which only
+ * happens once the window has stopped moving; the log line counts those.
  */
 async function movingWindow(get: Get, newest: number, minutes: number): Promise<Sampler> {
+  // How much older than `minutes` a counted report may be: the edges move once a minute
+  // and are searched to a few hundred ids, so a report in range ended a minute or two early
+  // at most. Anything older means the window has stopped moving (every move failing).
+  const slack = 5 * 60_000;
+  let stale = 0;
   const firstRecent = (high: number, low?: number) => firstPgcrSince(get, high, Date.now() - minutes * 60_000, low, 300);
   const ids = { low: await firstRecent(newest), high: newest };
   let moving: Promise<void> | undefined;
@@ -394,8 +400,12 @@ async function movingWindow(get: Get, newest: number, minutes: number): Promise<
   }, 60_000);
   return {
     randomId: () => between(ids),
-    counts: () => true,
-    describe: () => `${ids.low}–${ids.high} (the last ${minutes} minutes)`,
+    counts: (ended) => {
+      if (ended >= Date.now() - minutes * 60_000 - slack) return true;
+      stale++;
+      return false;
+    },
+    describe: () => `${ids.low}–${ids.high} (the last ${minutes} minutes${stale ? `, ${stale} too old to count` : ""})`,
     async stop() {
       clearInterval(timer);
       await moving;
@@ -483,8 +493,8 @@ async function main() {
     while (!done()) {
       const report = await client.get<Pgcr>(pgcrUrl(sampler.randomId()));
       if (!report) continue;
-      // Ended outside a fixed window, by the id search's slack (or can't be
-      // placed at all): not this crawl's to count.
+      // Ended outside a fixed window by the id search's slack, too long ago for a
+      // moving one, or can't be placed at all: not this crawl's to count.
       const ended = endedAt(report);
       if (ended === undefined || !sampler.counts(ended)) continue;
       // PvE only: a PvP match is passed over entirely (not counted, its players not sampled).
@@ -520,6 +530,10 @@ async function main() {
     // Copies were tallied, so at least one report was counted.
     from: isoSeconds(first),
     to: isoSeconds(last),
+    sample:
+      sample.kind === "recent"
+        ? { kind: "recent", minutes: sample.minutes }
+        : { kind: "window", hours: sample.hours, until: new Date(sample.until).toISOString() },
     players,
     weapons: tally,
   };

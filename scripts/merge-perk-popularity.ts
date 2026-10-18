@@ -1,7 +1,7 @@
 import { readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { mergePopularity, type PerkPopularityIndex } from "../src/lib/weapons/perk-popularity";
+import { crawlSource, mergePopularity, type PerkPopularityIndex } from "../src/lib/weapons/perk-popularity";
 
 /**
  * Adds up the last week of perk-popularity crawls into the published snapshot.
@@ -42,7 +42,8 @@ async function main() {
   const snapshots = await Promise.all(
     kept.map(async (f) => JSON.parse(await readFile(join(dir, f.name), "utf8")) as PerkPopularityIndex),
   );
-  const merged = mergePopularity(snapshots);
+  // With the files it came from, so each count can be traced to how and when it was crawled.
+  const merged = { ...mergePopularity(snapshots), crawls: kept.map((f, i) => crawlSource(f.name, snapshots[i]!)) };
   const target = resolve(args.out);
   await writeFile(`${target}.tmp`, JSON.stringify(merged));
   await rename(`${target}.tmp`, target);
