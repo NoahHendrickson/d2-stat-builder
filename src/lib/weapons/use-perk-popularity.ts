@@ -15,16 +15,17 @@ import type { WeaponSummary } from "./types";
 
 /**
  * The popularity snapshot. In development it's the local crawler output
- * (public/dev-data, git-ignored) when there is one, else the published copy on
- * GitHub Pages, which is all production reads, so Vercel never serves it.
- * Optional: if it can't load, the weapon page just goes without popularity.
+ * (public/dev-data, git-ignored) when there is a usable one, else the published
+ * copy on GitHub Pages, which is all production reads, so Vercel never serves
+ * it. Optional: if it can't load, the weapon page just goes without popularity.
  */
 export function usePerkPopularityIndex() {
-  const isDev = process.env.NODE_ENV === "development";
   return useStaticJson({
     key: "perk-popularity",
-    url: isDev ? "/dev-data/perk-popularity.json" : PERK_POPULARITY_URL,
-    fallbackUrl: isDev ? PERK_POPULARITY_URL : undefined,
+    urls:
+      process.env.NODE_ENV === "development"
+        ? ["/dev-data/perk-popularity.json", PERK_POPULARITY_URL]
+        : [PERK_POPULARITY_URL],
     what: "Perk popularity",
     retry: false,
     parse: (json) => {

@@ -11,17 +11,19 @@ import { useQuery } from "@tanstack/react-query";
  */
 export function useStaticJson<T>({
   key,
-  url,
-  fallbackUrl,
+  urls,
   what,
   parse,
   retry = 3,
   revalidateInDev = false,
 }: {
   key: string;
-  url: string;
-  /** Fetched instead when `url` answers 404 (a local copy that may not exist). */
-  fallbackUrl?: string;
+  /**
+   * Tried in order: one that is missing (404) or that `parse` rejects moves on
+   * to the next, with a warning naming which one was used instead. The last
+   * one's failure is the query's error.
+   */
+  urls: readonly string[];
   /** For the error message: "<what> could not be loaded (404)." */
   what: string;
   parse: (json: unknown) => T;
@@ -40,10 +42,22 @@ export function useStaticJson<T>({
     retry,
     queryFn: async ({ signal }) => {
       const cache = revalidateInDev && process.env.NODE_ENV === "development" ? "no-cache" : "default";
-      let response = await fetch(url, { signal, cache });
-      if (response.status === 404 && fallbackUrl) response = await fetch(fallbackUrl, { signal, cache });
-      if (!response.ok) throw new Error(`${what} could not be loaded (${response.status}).`);
-      return parse(await response.json());
+      for (const [i, url] of urls.entries()) {
+        const last = i === urls.length - 1;
+        const response = await fetch(url, { signal, cache });
+        if (response.status === 404 && !last) {
+          console.warn(`${what}: ${url} is missing; using ${urls[i + 1]} instead.`);
+          continue;
+        }
+        if (!response.ok) throw new Error(`${what} could not be loaded (${response.status}).`);
+        try {
+          return parse(await response.json());
+        } catch (error) {
+          if (last) throw error;
+          console.warn(`${what}: ${url} is unusable; using ${urls[i + 1]} instead.`, error);
+        }
+      }
+      throw new Error(`${what} has nowhere to load from.`);
     },
   });
 }

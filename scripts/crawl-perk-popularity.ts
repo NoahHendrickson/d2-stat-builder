@@ -38,7 +38,7 @@ import {
  *
  *   tsx scripts/crawl-perk-popularity.ts --players=500 --out=public/dev-data/perk-popularity.json
  *
- * Options: --players (stop after this many, default 20000), --minutes (time
+ * Options: --players (stop once this many profiles have been read, default 20000), --minutes (time
  * budget, default 300), --rate (requests per second, default 8), --workers
  * (default 6), --hours (how far back to sample, default 24), --day (YYYY-MM-DD to
  * backfill; needs --hours=24, and a day the merge still keeps), --catalog
@@ -189,13 +189,17 @@ interface Pgcr {
 /**
  * When the activity ended (ms): its start plus its length. Report ids follow
  * this, not the start (a raid that ran for hours sits among the reports of the
- * minute it ended), so every window is measured by it.
+ * minute it ended), so every window is measured by it. A report without a
+ * length can't be placed, so it's undefined rather than its start, which could
+ * be hours early.
  */
 function endedAt(report: Pgcr) {
-  const seconds = report.entries.find((e) => e.values?.activityDurationSeconds)?.values
-    ?.activityDurationSeconds?.basic?.value;
-  return Date.parse(report.period) + (seconds ?? 0) * 1000;
+  const seconds = report.entries[0]?.values?.activityDurationSeconds?.basic?.value;
+  return seconds === undefined ? undefined : Date.parse(report.period) + seconds * 1000;
 }
+
+/** An instant as Bungie writes its `period`: whole seconds, "2026-10-18T06:00:00Z". */
+const isoSeconds = (ms: number) => new Date(ms).toISOString().replace(".000Z", "Z");
 interface Profile {
   characterEquipment?: {
     data?: Record<string, { items: { itemHash: number; itemInstanceId?: string; bucketHash: number }[] }>;
@@ -224,11 +228,12 @@ async function newestPgcr(get: Get) {
   throw new Error("Couldn't find a recent post-game report.");
 }
 
-/** When the report at or just after `id` ended (a few ids can be missing). */
+/** When the report at or just after `id` ended (a few ids can be missing, or have no length). */
 async function endNear(get: Get, id: number) {
   for (let near = id; near < id + 50; near++) {
     const report = await get<Pgcr>(pgcrUrl(near));
-    if (report) return endedAt(report);
+    const ended = report && endedAt(report);
+    if (ended !== undefined) return ended;
   }
   return undefined;
 }
@@ -286,23 +291,29 @@ async function main() {
 
   // Each weapon's copies (plugs by socket), tallied once every copy is in.
   const copiesByWeapon = new Map<number, (number | undefined)[][]>();
-  // Players tried, so none is read twice; `players` is how many answered.
+  // Players tried, so none is read twice; `players` is how many answered, which
+  // is what --players caps and the snapshot reports. Reads still in flight
+  // count towards the cap, so it isn't overshot by one per worker.
   const seen = new Set<string>();
   let players = 0;
+  let reading = 0;
   let reports = 0;
   let copies = 0;
-  let from = "";
-  let to = "";
-  const done = () => seen.size >= options.players || Date.now() > deadline;
+  // When the earliest and latest reports counted ended (ms).
+  let first = Infinity;
+  let last = -Infinity;
+  const done = () => players + reading >= options.players || Date.now() > deadline;
 
   async function samplePlayer(entry: PgcrEntry) {
     const user = entry.player?.destinyUserInfo;
     const used = new Set(entry.extended?.weapons?.map((w) => w.referenceId));
     if (!user?.membershipId || used.size === 0 || seen.has(user.membershipId) || done()) return;
     seen.add(user.membershipId);
+    reading++;
     const profile = await client.get<Profile>(
       `https://www.bungie.net/Platform/Destiny2/${user.membershipType}/Profile/${user.membershipId}/?components=205,305`,
     );
+    reading--;
     if (!profile) return;
     players++;
     const items = profile.characterEquipment?.data?.[entry.characterId]?.items ?? [];
@@ -323,16 +334,16 @@ async function main() {
     while (!done()) {
       const report = await client.get<Pgcr>(pgcrUrl(randomId()));
       if (!report) continue;
-      // Ended outside the window, by the id search's slack: not this crawl's to count.
+      // Ended outside the window, by the id search's slack (or can't be placed
+      // at all): not this crawl's to count.
       const ended = endedAt(report);
-      if (ended < since || ended >= options.until) continue;
+      if (ended === undefined || ended < since || ended >= options.until) continue;
       // PvE only: a PvP match is passed over entirely (not counted, its players not sampled).
       const modes = report.activityDetails.modes ?? [report.activityDetails.mode];
       if (modes.includes(ALL_PVP)) continue;
       reports++;
-      const endedIso = new Date(ended).toISOString();
-      if (!to || endedIso > to) to = endedIso;
-      if (!from || endedIso < from) from = endedIso;
+      first = Math.min(first, ended);
+      last = Math.max(last, ended);
       for (const entry of report.entries) await samplePlayer(entry);
     }
   }
@@ -356,8 +367,9 @@ async function main() {
   const snapshot: PerkPopularityIndex = {
     schema: 2,
     generatedAt: new Date().toISOString(),
-    from,
-    to,
+    // Copies were tallied, so at least one report was counted.
+    from: isoSeconds(first),
+    to: isoSeconds(last),
     players,
     weapons: tally,
   };

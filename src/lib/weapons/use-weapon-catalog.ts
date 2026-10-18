@@ -7,7 +7,7 @@ import { expandWeaponIndex, type CompactWeaponIndex } from "./transport";
 export function useWeaponCatalog() {
   return useStaticJson({
     key: "weapon-catalog",
-    url: "/data/weapons.json",
+    urls: ["/data/weapons.json"],
     what: "Weapon catalog",
     revalidateInDev: true,
     parse: (json) => createWeaponCatalog(expandWeaponIndex(json as CompactWeaponIndex)),

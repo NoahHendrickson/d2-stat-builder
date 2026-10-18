@@ -7,7 +7,7 @@ import { CLARITY_URL, type ClarityMap } from "./clarity";
 export function useClarity() {
   return useStaticJson({
     key: "clarity",
-    url: CLARITY_URL,
+    urls: [CLARITY_URL],
     what: "Clarity insights",
     retry: 1,
     parse: (json) => json as ClarityMap,
