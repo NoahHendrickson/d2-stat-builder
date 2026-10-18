@@ -23,6 +23,7 @@ export const CHANGELOG: readonly ChangelogEntry[] = [
       "Weapon search: Try most popular roll picks the trait pair players run together.",
       "Weapon search: Popularity now counts each copy once, from equipped weapons and public vaults.",
       "Weapon search: Popularity keeps a player's weapons for as long as they keep playing.",
+      "Weapon search: Popularity counts the whole vault of everyone signed in to D2 Conflux.",
     ],
   },
   {

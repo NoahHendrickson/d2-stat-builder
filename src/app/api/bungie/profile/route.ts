@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import {
   getProfile,
   type DestinyComponentType,
@@ -22,6 +22,7 @@ import {
   parseHeldProfile,
   type Minted,
 } from "@/lib/armory/profile-mint";
+import { getServerContributionStore } from "@/lib/weapons/contribution-store";
 
 // 100 Profiles (currentSeasonHash) · 102 Vault · 103 ProfileCurrencies · 200 Characters · 201 CharacterInventories
 // 202 CharacterProgressions (seasonal artifact unlocks, for saved loadouts)
@@ -123,6 +124,16 @@ async function loadProfile(held: Minted | undefined): Promise<Response> {
     if (held && !isNewerMint(held, res.Response)) {
       return new Response(null, { status: 304 });
     }
+    // Their weapons count towards perk popularity (contribution-store.ts), saved
+    // after the response so the page never waits on it.
+    const { destinyMembershipId, destinyMembershipType } = user;
+    const profile = res.Response;
+    if (destinyMembershipId && destinyMembershipType != null)
+      after(() =>
+        getServerContributionStore()
+          ?.save(destinyMembershipId, destinyMembershipType, profile)
+          .catch((err: unknown) => console.warn("Couldn't save weapons for perk popularity:", err)),
+      );
     return NextResponse.json(slimProfile(res.Response));
   } catch (err) {
     // The Bungie client throws for platform errors too — `ErrorCode ≠ 1` in the body,

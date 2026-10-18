@@ -4,8 +4,10 @@
  * `scripts/crawl-perk-popularity.ts` finds active players through Bungie's
  * public API (recent PvE post-game reports give the players) and reads the
  * perks on every copy of a legendary they have equipped, or in a vault they've
- * made public. Each copy counts once, kept in a copy store for as long as its
- * owner keeps playing (popularity-copies.ts); the merge tallies the store
+ * made public; players signed in to the site add their whole inventory
+ * (popularity-contribution.ts). Each copy counts once, kept in a copy store
+ * for as long as its owner keeps playing (popularity-copies.ts); the merge
+ * tallies the store
  * into the snapshot published off Vercel, on GitHub Pages, which the weapon
  * page reads: each weapon's perks per column, and the left + right trait pair
  * as a combo.
@@ -58,9 +60,14 @@ export interface MergedPopularity extends PerkPopularityIndex {
 
 /**
  * Players found through matches that just ended (`recent`), or through a fixed
- * window of matches (`window`) up to `until`.
+ * window of matches (`window`) up to `until`; or the weapons players signed in
+ * to the site saved as they loaded their inventory (`signed-in`), when `from`
+ * and `to` span when those were saved.
  */
-export type CrawlSample = { kind: "recent"; minutes: number } | { kind: "window"; hours: number; until: string };
+export type CrawlSample =
+  | { kind: "recent"; minutes: number }
+  | { kind: "window"; hours: number; until: string }
+  | { kind: "signed-in" };
 
 /** One crawl, as the copy store and the snapshot list it. */
 export interface CrawlSource {

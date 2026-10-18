@@ -145,3 +145,6 @@ export const decodeCopies = (file: Buffer, key: Buffer): CopyStore => readStore(
 
 /** Just the store's players: all a crawl needs from it, without building every weapon's copies. */
 export const decodeOwners = (file: Buffer, key: Buffer): Owners => readStore(file, key, () => undefined).owners;
+
+/** Just the store's crawls. */
+export const decodeRuns = (file: Buffer, key: Buffer): CrawlSource[] => readStore(file, key, () => undefined).runs;
