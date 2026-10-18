@@ -214,11 +214,15 @@ interface Pgcr {
  * this, not the start (a raid that ran for hours sits among the reports of the
  * minute it ended), so every window is measured by it. A report without a
  * length can't be placed, so it's undefined rather than its start, which could
- * be hours early.
+ * be hours early. Now and then a report's start or length puts its end hours
+ * ahead of the clock; it can't have ended later than now, which is what a
+ * report that far along the ids says anyway, so that's where it's put, and
+ * nothing downstream (the window, the crawl's span, when a player last played)
+ * sees a time that hasn't come.
  */
 function endedAt(report: Pgcr) {
   const seconds = report.entries[0]?.values?.activityDurationSeconds?.basic?.value;
-  return seconds === undefined ? undefined : Date.parse(report.period) + seconds * 1000;
+  return seconds === undefined ? undefined : Math.min(Date.parse(report.period) + seconds * 1000, Date.now());
 }
 
 /** An instant as Bungie writes its `period`: whole seconds, "2026-10-18T06:00:00Z". */
@@ -530,9 +534,9 @@ async function main() {
   }
 
   const summary = () =>
-    `${players} players (${rechecked} read again, ${fresh} passed over as read recently, ${vaults} read whole), ${copies} copies, ${reports} reports (${outside} outside the window), ${client.requests()} requests, ${client.throttles()} throttles`;
+    `${players} players (${rechecked} read again, ${fresh} passed over as read recently, ${vaults} read whole), ${copies} copies, ${reports} reports (${outside} outside the window), ${client.requests()} requests, ${client.throttles()} throttles, ${plan.remaining()} still due`;
   const progress = setInterval(() => {
-    console.log(`${summary()} (${client.rate()}/s), ${plan.remaining()} still due, sampling ${sampler.describe()}`);
+    console.log(`${summary()} (${client.rate()}/s), sampling ${sampler.describe()}`);
   }, 30_000);
   await Promise.all(Array.from({ length: options.workers }, worker));
   clearInterval(progress);
@@ -555,6 +559,8 @@ async function main() {
     vaults,
     sample,
     catalog: lookupFingerprint(lookup),
+    // Left due when the crawl ended: growing from crawl to crawl, re-reads can't keep up with the store.
+    due: plan.remaining(),
   });
   await writeFile(`${target}.tmp`, encodeCopies(crawl, key));
   await rename(`${target}.tmp`, target);

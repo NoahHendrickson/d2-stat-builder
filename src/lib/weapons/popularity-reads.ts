@@ -13,11 +13,12 @@ import {
 } from "./perk-popularity";
 import { storeFromCrawl, type CopyStore, type SeenCopy, type SeenOwner } from "./popularity-copies";
 
-/** One weapon copy as a profile lists it: its plug hashes by socket index, or undefined when the read had no sockets for it. */
+/** One weapon copy as a profile lists it: its plug hashes by socket index, or undefined when the read had no sockets for it, and whether it was equipped (undefined when the read didn't say). */
 export interface ProfileCopy {
   itemHash: number;
   id: bigint;
   plugs: readonly (number | undefined)[] | undefined;
+  equipped: boolean | undefined;
 }
 
 interface ItemRef {
@@ -51,18 +52,19 @@ export function profileCopies(
   const sockets = profile.itemComponents?.sockets?.data;
   let sawAll = equipment !== undefined && inventories !== undefined && vault !== undefined && sockets !== undefined;
   const copies: ProfileCopy[] = [];
+  const placed = (list: readonly ItemRef[], equipped: boolean) => list.map((item) => ({ item, equipped }));
   const items = [
-    ...Object.values(equipment ?? {}).flatMap((c) => c.items),
-    ...Object.values(inventories ?? {}).flatMap((c) => c.items),
-    ...(vault ?? []),
+    ...placed(Object.values(equipment ?? {}).flatMap((c) => c.items), true),
+    ...placed(Object.values(inventories ?? {}).flatMap((c) => c.items), false),
+    ...placed(vault ?? [], false),
   ];
-  for (const item of items) {
+  for (const { item, equipped } of items) {
     const id = item.itemInstanceId;
     if (!id) continue;
     const kept = keep({ ...item, itemInstanceId: id });
     if (kept === undefined) sawAll = false;
     if (!kept) continue;
-    copies.push({ itemHash: item.itemHash, id: BigInt(id), plugs: sockets?.[id]?.sockets.map((s) => s.plugHash) });
+    copies.push({ itemHash: item.itemHash, id: BigInt(id), plugs: sockets?.[id]?.sockets.map((s) => s.plugHash), equipped });
   }
   return { copies, sawAll };
 }
@@ -73,8 +75,11 @@ export function profileCopies(
  */
 export function readCollector(lookup: PopularityLookup) {
   const owners: SeenOwner[] = [];
-  /** Each weapon's copies (instance id, owner, plugs by socket), read into columns once every copy is in. */
-  const copiesByWeapon = new Map<number, { id: bigint; owner: number; plugs: readonly (number | undefined)[] }[]>();
+  /** Each weapon's copies (instance id, owner, plugs by socket, whether equipped), read into columns once every copy is in. */
+  const copiesByWeapon = new Map<
+    number,
+    { id: bigint; owner: number; plugs: readonly (number | undefined)[]; equipped: boolean | undefined }[]
+  >();
   return {
     /** Players recorded so far. */
     players: () => owners.length,
@@ -100,7 +105,7 @@ export function readCollector(lookup: PopularityLookup) {
           continue;
         }
         const list = copiesByWeapon.get(copy.itemHash) ?? [];
-        list.push({ id: copy.id, owner, plugs: copy.plugs });
+        list.push({ id: copy.id, owner, plugs: copy.plugs, equipped: copy.equipped });
         copiesByWeapon.set(copy.itemHash, list);
         found++;
       }
@@ -123,7 +128,7 @@ export function readCollector(lookup: PopularityLookup) {
         );
         perksByWeapon.set(
           hash,
-          list.map(({ id, owner, plugs }) => ({ id, owner, perks: perksAtSockets(columns, placed, plugs) })),
+          list.map(({ id, owner, plugs, equipped }) => ({ id, owner, perks: perksAtSockets(columns, placed, plugs), equipped })),
         );
       }
       return storeFromCrawl(owners, perksByWeapon, readAt, run);

@@ -56,7 +56,30 @@ export interface PerkPopularityIndex {
 export interface MergedPopularity extends PerkPopularityIndex {
   /** The crawls of the last two weeks, oldest first. A player's copies can be older: they last as long as the player plays. */
   crawls: CrawlSource[];
+  /** What the store has seen of copies going missing (see Hazard); missing in snapshots from before it was kept. */
+  hazard?: Hazard;
 }
+
+/**
+ * How often a copy turns out to be gone, by how long since it was last seen,
+ * measured where it can be: a player read whole (vault and all) and later
+ * read whole again either still has each copy or doesn't. Kept by where the
+ * copy was when last seen, since what's equipped is all the crawler sees of
+ * most players, and what the unseen window (merge --unseen-days) is for: a
+ * copy of theirs unseen that long is taken as gone, and these counts say how
+ * often that's right.
+ */
+export interface Hazard {
+  equipped: HazardTally;
+  stowed: HazardTally;
+}
+/** Copies still there (`kept`) and gone (`gone`) at the next whole read, indexed by days since last seen, up to HAZARD_MAX_GAP. */
+export interface HazardTally {
+  kept: number[];
+  gone: number[];
+}
+/** The longest gap the hazard tells apart; longer gaps count here. */
+export const HAZARD_MAX_GAP = 90;
 
 /**
  * Players found through matches that just ended (`recent`), or through a fixed
@@ -90,6 +113,13 @@ export interface CrawlSource {
   sample: CrawlSample;
   /** lookupFingerprint of the weapons the crawl could list; the merge trusts its whole reads only on the same catalog. */
   catalog: string;
+  /**
+   * Players in the store still due to be read again when the crawl ended
+   * (recheckPlan). Growing crawl after crawl, re-reads aren't keeping up, and
+   * players go unread for longer than the unseen window allows for. Not kept
+   * by signed-in crawls, or by crawls from before it was.
+   */
+  due?: number;
 }
 
 /** The catalog fields the tally needs: public/data/weapons.json, narrowed. */

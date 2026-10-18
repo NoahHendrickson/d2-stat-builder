@@ -29,9 +29,9 @@ describe("contributionFromProfile", () => {
       contribution: {
         sawAll: true,
         copies: [
-          { itemHash: 1, id: BigInt(10), plugs: [100, undefined, 101] },
-          { itemHash: 2, id: BigInt(20), plugs: [] },
-          { itemHash: 1, id: BigInt(11), plugs: [102] },
+          { itemHash: 1, id: BigInt(10), plugs: [100, undefined, 101], equipped: true },
+          { itemHash: 2, id: BigInt(20), plugs: [], equipped: false },
+          { itemHash: 1, id: BigInt(11), plugs: [102], equipped: false },
         ],
       },
     });
@@ -60,21 +60,27 @@ describe("contributionFromProfile", () => {
 });
 
 describe("encodeContribution", () => {
-  it("round-trips, empty sockets and missing sockets included", () => {
+  it("round-trips, empty sockets, missing sockets and where each copy was included", () => {
     const contribution = {
       sawAll: true,
       copies: [
-        { itemHash: 4_000_000_000, id: BigInt("6917529000000000001"), plugs: [1, undefined, 4_294_967_295] },
-        { itemHash: 2, id: BigInt(3), plugs: undefined },
-        { itemHash: 2, id: BigInt(4), plugs: [] },
+        { itemHash: 4_000_000_000, id: BigInt("6917529000000000001"), plugs: [1, undefined, 4_294_967_295], equipped: true },
+        { itemHash: 2, id: BigInt(3), plugs: undefined, equipped: false },
+        { itemHash: 2, id: BigInt(4), plugs: [], equipped: false },
       ],
     };
     expect(decodeContribution(encodeContribution(contribution))).toEqual(contribution);
     expect(decodeContribution(encodeContribution({ sawAll: false, copies: [] }))).toEqual({ sawAll: false, copies: [] });
   });
 
+  it("reads a save from before each copy's place was kept, with the place unknown", () => {
+    // Version 1: no flags byte per copy. One copy, item 1, instance 1, one plug (5).
+    const v1 = Uint8Array.of(1, 1, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 5, 0, 0, 0);
+    expect(decodeContribution(v1)).toEqual({ sawAll: true, copies: [{ itemHash: 1, id: BigInt(1), plugs: [5], equipped: undefined }] });
+  });
+
   it("refuses a cut-off or unknown one", () => {
-    const bytes = encodeContribution({ sawAll: true, copies: [{ itemHash: 1, id: BigInt(1), plugs: [5] }] });
+    const bytes = encodeContribution({ sawAll: true, copies: [{ itemHash: 1, id: BigInt(1), plugs: [5], equipped: true }] });
     expect(() => decodeContribution(bytes.subarray(0, bytes.length - 1))).toThrow();
     expect(() => decodeContribution(Uint8Array.of(9, 0, 0, 0, 0, 0))).toThrow("version 9");
   });
@@ -109,19 +115,22 @@ describe("a signed-in read in the store", () => {
     expect(first.store.owners.read[0]).toBe(Math.floor(savedAt / 60_000));
     expect(Array.from(first.store.weapons.get(1)!.seen)).toEqual([storeDay(savedAt), storeDay(savedAt)]);
 
-    // A day later copy 11 is gone (dismantled): the next save drops it.
-    const second = read([{ itemHash: 1, id: BigInt(10), plugs: [100] }], savedAt + 86_400_000);
+    // A day later copy 11 is gone (dismantled): the next save drops it, and
+    // both copies count towards the hazard, a day after they were seen: the
+    // equipped one kept, the one in the vault gone.
+    const second = read([{ itemHash: 1, id: BigInt(10), plugs: [100], equipped: true }], savedAt + 86_400_000);
     const merged = mergeCopies(first.store, second.store, columnsOf);
     expect(Array.from(merged.weapons.get(1)!.ids)).toEqual([BigInt(10)]);
+    expect(merged.hazard).toEqual({ equipped: { kept: [0, 1], gone: [] }, stowed: { kept: [], gone: [0, 1] } });
   });
 
   it("doesn't stretch the snapshot's span of reports", () => {
     const at = Date.parse("2026-10-18T13:00:00Z");
     const collected = readCollector(lookup);
-    collected.add({ id: BigInt(7), type: 3, played: storeDay(at) }, [{ itemHash: 1, id: BigInt(1), plugs: [100] }], true, true);
+    collected.add({ id: BigInt(7), type: 3, played: storeDay(at) }, [{ itemHash: 1, id: BigInt(1), plugs: [100], equipped: false }], true, true);
     const signedIn = collected.store(at, { ...run("2026-10-18T13:00:00.000Z"), from: "2026-10-05T00:00:00.000Z" });
     const crawled = readCollector(lookup);
-    crawled.add({ id: BigInt(8), type: 3, played: storeDay(at) }, [{ itemHash: 1, id: BigInt(2), plugs: [102] }], false, false);
+    crawled.add({ id: BigInt(8), type: 3, played: storeDay(at) }, [{ itemHash: 1, id: BigInt(2), plugs: [102], equipped: true }], false, false);
     const crawl = crawled.store(at, {
       ...run("2026-10-18T12:00:00.000Z"),
       from: "2026-10-18T11:30:00Z",
@@ -134,7 +143,7 @@ describe("a signed-in read in the store", () => {
 
   it("isn't whole when a tallied weapon came without sockets", () => {
     const collected = readCollector(lookup);
-    expect(collected.add({ id: BigInt(7), type: 3, played: 1 }, [{ itemHash: 1, id: BigInt(1), plugs: undefined }], true, false)).toEqual({
+    expect(collected.add({ id: BigInt(7), type: 3, played: 1 }, [{ itemHash: 1, id: BigInt(1), plugs: undefined, equipped: true }], true, false)).toEqual({
       found: 0,
       whole: false,
     });

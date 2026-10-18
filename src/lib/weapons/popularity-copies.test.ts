@@ -1,15 +1,19 @@
 import { describe, expect, it } from "vitest";
-import type { CrawlSource } from "./perk-popularity";
+import { HAZARD_MAX_GAP, type CrawlSource } from "./perk-popularity";
 import {
   copyCount,
+  describeHazard,
   emptyStore,
+  EQUIPPED,
   lookupFingerprint,
   mergeCopies,
+  PLACE_UNKNOWN,
   pruneCopies,
   recheckPlan,
   snapshotFromCopies,
   storeDay,
   storeFromCrawl,
+  STOWED,
   tallyCopies,
   type CatalogColumns,
   type CopyStore,
@@ -37,22 +41,26 @@ const run = (generatedAt: string, players = 1): CrawlSource => ({
   catalog: "0",
 });
 const player = (id: number, played: number | undefined, whole = false): SeenOwner => ({ id: BigInt(id), type: 3, played, whole });
-/** A copy of `weapon` as [weapon, instance id, owner's membership id, perks]. */
-type Copy = [weapon: number, id: number, owner: number, perks: (number | undefined)[]];
+/** A copy of `weapon` as [weapon, instance id, owner's membership id, perks, equipped (left out: the read didn't say)]. */
+type Copy = [weapon: number, id: number, owner: number, perks: (number | undefined)[], equipped?: boolean];
 
 /** `day` and `hour` (UTC) as ms. */
 const when = (day: number, hour = 0) => day * 86_400_000 + hour * 3_600_000;
 
 /** One crawl read on `day` (at `hour`): its players, and their copies. */
 function crawl(day: number, at: string, players: SeenOwner[], copies: Copy[], hour = 0) {
-  const byWeapon = new Map<number, { id: bigint; owner: number; perks: (number | undefined)[] }[]>();
-  for (const [weapon, id, owner, perks] of copies) {
+  const byWeapon = new Map<number, { id: bigint; owner: number; perks: (number | undefined)[]; equipped: boolean | undefined }[]>();
+  for (const [weapon, id, owner, perks, equipped] of copies) {
     const list = byWeapon.get(weapon) ?? [];
-    list.push({ id: BigInt(id), owner: players.findIndex((p) => p.id === BigInt(owner)), perks });
+    list.push({ id: BigInt(id), owner: players.findIndex((p) => p.id === BigInt(owner)), perks, equipped });
     byWeapon.set(weapon, list);
   }
   return storeFromCrawl(players, byWeapon, when(day, hour), run(at, players.length));
 }
+
+/** Every copy as [id, place], by weapon. */
+const places = (store: CopyStore) =>
+  Object.fromEntries([...store.weapons].map(([hash, w]) => [hash, Array.from(w.ids, (id, i) => [Number(id), w.place[i]])]));
 
 /** Every copy as [id, day seen, owner's membership id, perks], by weapon. */
 function contents(store: CopyStore) {
@@ -95,7 +103,7 @@ describe("storeFromCrawl", () => {
 
   it("handles ids past 2^53 exactly", () => {
     const id = BigInt("6917529123456789012");
-    const store = storeFromCrawl([player(1, 1)], new Map([[2, [{ id, owner: 0, perks: [11] }]]]), when(1), run("a"));
+    const store = storeFromCrawl([player(1, 1)], new Map([[2, [{ id, owner: 0, perks: [11], equipped: false }]]]), when(1), run("a"));
     expect(store.weapons.get(2)!.ids[0]).toBe(id);
   });
 });
@@ -372,11 +380,11 @@ describe("tallyCopies", () => {
 describe("snapshotFromCopies", () => {
   it("tallies the store, counts its players, and spans and lists its crawls", () => {
     const store = merge(
-      storeFromCrawl([player(7, 10)], new Map([[2, [{ id: BigInt(1), owner: 0, perks: [11] }]]]), when(10), {
+      storeFromCrawl([player(7, 10)], new Map([[2, [{ id: BigInt(1), owner: 0, perks: [11], equipped: true }]]]), when(10), {
         ...run("2026-10-17T01:00:00Z", 4),
         from: "2026-10-17T00:00:00Z",
       }),
-      storeFromCrawl([player(7, 11), player(8, 11)], new Map([[2, [{ id: BigInt(1), owner: 0, perks: [12] }]]]), when(11), {
+      storeFromCrawl([player(7, 11), player(8, 11)], new Map([[2, [{ id: BigInt(1), owner: 0, perks: [12], equipped: true }]]]), when(11), {
         ...run("2026-10-18T01:00:00Z", 6),
         from: "2026-10-18T00:00:00Z",
       }),
@@ -391,6 +399,61 @@ describe("snapshotFromCopies", () => {
       // The copy both crawls saw counts once, with the later crawl's perk.
       weapons: { 2: { copies: 1, columns: [{ 12: 1 }] } },
       crawls: store.runs,
+      hazard: emptyStore().hazard,
+    });
+  });
+});
+
+describe("the hazard", () => {
+  const day = storeDay(Date.parse("2026-10-18T12:00:00Z"));
+  /** Zeros up to `gap`, then `n`. */
+  const at = (gap: number, n = 1) => [...Array.from({ length: gap }, () => 0), n];
+
+  it("counts a whole player's copies as kept or gone when they're read whole again, by days since seen and where they were", () => {
+    const before = crawl(day - 7, "a", [player(7, day - 7, true)], [
+      [1, 1, 7, [undefined, 11, 13, 15], true],
+      [1, 2, 7, [undefined, 12, 13, 15], false],
+      [2, 3, 7, [11], false],
+      // Seen before its place was kept: counts nowhere.
+      [2, 4, 7, [12]],
+    ]);
+    expect(places(before)).toEqual({ 1: [[1, EQUIPPED], [2, STOWED]], 2: [[3, STOWED], [4, PLACE_UNKNOWN]] });
+    const again = crawl(day, "b", [player(7, day, true)], [
+      [1, 1, 7, [undefined, 11, 13, 15], false],
+      [2, 3, 7, [11], true],
+    ]);
+    const merged = merge(before, again);
+    expect(merged.hazard).toEqual({ equipped: { kept: at(7), gone: [] }, stowed: { kept: at(7), gone: at(7) } });
+    // A copy's place follows its later sighting.
+    expect(places(merged)).toEqual({ 1: [[1, STOWED]], 2: [[3, EQUIPPED]] });
+    // The hazard stays through a prune, and goes out in the snapshot.
+    expect(pruneCopies(merged, day - 13).hazard).toEqual(merged.hazard);
+    expect(snapshotFromCopies(merged, columnsOf).hazard).toEqual(merged.hazard);
+    expect(describeHazard(merged.hazard)).toBe(
+      "Copies of players read whole again: equipped: 1 checked (after 7 d 0.0% gone of 1); stowed: 2 checked (after 7 d 50.0% gone of 2).",
+    );
+  });
+
+  it("measures nothing from a read that didn't see everything, or of a player whole for the first time", () => {
+    const before = crawl(day - 7, "a", [player(7, day - 7, true), player(8, day - 7)], [
+      [1, 1, 7, [undefined, 11, 13, 15], true],
+      [1, 2, 8, [undefined, 11, 13, 15], true],
+    ]);
+    const again = crawl(day, "b", [player(7, day), player(8, day, true)], [[1, 2, 8, [undefined, 11, 13, 15], true]]);
+    const merged = merge(before, again);
+    expect(merged.hazard).toEqual(emptyStore().hazard);
+    expect(describeHazard(merged.hazard)).toBe(
+      "Copies of players read whole again: equipped: nothing checked yet; stowed: nothing checked yet.",
+    );
+  });
+
+  it("adds to the store's counts crawl after crawl, gaps past the longest told apart counted as it", () => {
+    const first = crawl(day - 100, "a", [player(7, day - 100, true)], [[2, 1, 7, [11], true]]);
+    const second = crawl(day - 7, "b", [player(7, day - 7, true)], [[2, 1, 7, [11], true], [2, 2, 7, [12], true]]);
+    const third = crawl(day, "c", [player(7, day, true)], [[2, 2, 7, [12], true]]);
+    expect(merge(first, second, third).hazard.equipped).toEqual({
+      kept: at(HAZARD_MAX_GAP).map((n, gap) => (gap === 7 ? 1 : n)),
+      gone: at(7),
     });
   });
 });
