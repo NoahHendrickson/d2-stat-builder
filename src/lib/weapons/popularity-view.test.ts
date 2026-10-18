@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mostPopularRoll } from "./use-perk-popularity";
+import { mostPopularRoll } from "./popularity-view";
 
 // Columns 0 (barrel), 1 and 2 (the traits), perks by catalog index.
 const columns = [
@@ -11,9 +11,10 @@ const columns = [
 describe("mostPopularRoll", () => {
   it("takes the top combo for the traits, though each column's winner differs", () => {
     // 3 and 5 win their columns, but are rarely run together.
+    // Not sorted: the best combo is found, not assumed first.
     const combos = [
-      { leftColumn: 1, left: 4, rightColumn: 2, right: 6, share: 0.4 },
       { leftColumn: 1, left: 3, rightColumn: 2, right: 5, share: 0.1 },
+      { leftColumn: 1, left: 4, rightColumn: 2, right: 6, share: 0.4 },
     ];
     expect(mostPopularRoll(columns, combos)).toEqual({ 0: 2, 1: 4, 2: 6 });
   });

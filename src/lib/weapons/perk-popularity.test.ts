@@ -3,7 +3,6 @@ import {
   addCopy,
   columnShares,
   comboShares,
-  crawlSource,
   mergePopularity,
   traitColumns,
   columnSockets,
@@ -144,16 +143,25 @@ describe("mergePopularity", () => {
     weapons,
   });
 
-  it("adds up days: copies, perks and combos per weapon, players, and the whole span", () => {
+  it("adds up crawls: copies, perks and combos per weapon, players, the whole span, and each file", () => {
     const merged = mergePopularity(
       [
-        day(10, "2026-10-16T00:00:00Z", "2026-10-17T00:00:00Z", {
-          1: { copies: 3, columns: [{}, { 11: 3 }] },
-        }),
-        day(20, "2026-10-17T00:00:00Z", "2026-10-18T00:00:00Z", {
-          1: { copies: 2, columns: [{}, { 11: 1, 12: 1 }], combos: { "14,15": 2 } },
-          2: { copies: 1, columns: [{ 11: 1 }] },
-        }),
+        {
+          file: "2026-10-17.json",
+          crawl: day(10, "2026-10-16T00:00:00Z", "2026-10-17T00:00:00Z", {
+            1: { copies: 3, columns: [{}, { 11: 3 }] },
+          }),
+        },
+        {
+          file: "2026-10-18T03.json",
+          crawl: {
+            ...day(20, "2026-10-17T00:00:00Z", "2026-10-18T00:00:00Z", {
+              1: { copies: 2, columns: [{}, { 11: 1, 12: 1 }], combos: { "14,15": 2 } },
+              2: { copies: 1, columns: [{ 11: 1 }] },
+            }),
+            sample: { kind: "recent", minutes: 15 },
+          },
+        },
       ],
       "2026-10-18T06:00:00Z",
     );
@@ -167,33 +175,26 @@ describe("mergePopularity", () => {
         1: { copies: 5, columns: [{}, { 11: 4, 12: 1 }], combos: { "14,15": 2 } },
         2: { copies: 1, columns: [{ 11: 1 }] },
       },
+      // The first crawl is from before `sample` was recorded, so it has none.
+      crawls: [
+        {
+          file: "2026-10-17.json",
+          generatedAt: "2026-10-17T00:00:00Z",
+          from: "2026-10-16T00:00:00Z",
+          to: "2026-10-17T00:00:00Z",
+          players: 10,
+          copies: 3,
+        },
+        {
+          file: "2026-10-18T03.json",
+          generatedAt: "2026-10-18T00:00:00Z",
+          from: "2026-10-17T00:00:00Z",
+          to: "2026-10-18T00:00:00Z",
+          players: 20,
+          copies: 3,
+          sample: { kind: "recent", minutes: 15 },
+        },
+      ],
     });
-  });
-});
-
-describe("crawlSource", () => {
-  const crawl = {
-    schema: 2 as const,
-    generatedAt: "2026-10-18T14:25:00.000Z",
-    from: "2026-10-18T13:45:00Z",
-    to: "2026-10-18T14:24:00Z",
-    players: 9,
-    weapons: { 1: { copies: 3, columns: [] }, 2: { copies: 4, columns: [] } },
-  };
-
-  it("lists a crawl by its file, times, players and copies, with how it sampled", () => {
-    expect(crawlSource("2026-10-18T13.json", { ...crawl, sample: { kind: "recent", minutes: 15 } })).toEqual({
-      file: "2026-10-18T13.json",
-      generatedAt: "2026-10-18T14:25:00.000Z",
-      from: "2026-10-18T13:45:00Z",
-      to: "2026-10-18T14:24:00Z",
-      players: 9,
-      copies: 7,
-      sample: { kind: "recent", minutes: 15 },
-    });
-  });
-
-  it("leaves sample out for a crawl from before it was recorded", () => {
-    expect(crawlSource("2026-10-15.json", crawl)).not.toHaveProperty("sample");
   });
 });

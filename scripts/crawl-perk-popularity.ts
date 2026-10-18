@@ -9,7 +9,8 @@ import {
   perksAtSockets,
   popularityLookup,
   traitColumns,
-  type PerkPopularityIndex,
+  type CrawlFile,
+  type CrawlSample,
   type PopularityCatalog,
   type WeaponPopularity,
 } from "../src/lib/weapons/perk-popularity";
@@ -70,19 +71,13 @@ const BACKFILL_DAY_END_UTC = "06:00";
 /** Days the data repo's merge keeps (merge-perk-popularity.ts --days); it prunes older days. */
 const MERGE_DAYS = 7;
 
-/** Which reports a crawl draws from (see the Sampler each one builds). */
-type Sample =
-  /** The `hours` before `until` (ms): now, or --day's 06:00 UTC. */
-  | { kind: "window"; hours: number; until: number }
-  /** The reports that ended in the last `minutes`, moving along as the crawl goes. */
-  | { kind: "recent"; minutes: number };
-
 interface Options {
   players: number;
   minutes: number;
   rate: number;
   workers: number;
-  sample: Sample;
+  /** Which reports to draw from (see the Sampler each one builds), as the crawl file records it. */
+  sample: CrawlSample;
   catalog: string;
   out: string;
 }
@@ -125,14 +120,14 @@ function readOptions(defaultRate: number): Options {
     if (!Number.isFinite(value) || value <= 0) throw new Error(`--${key} must be a positive number.`);
     return value;
   };
-  let sample: Sample;
+  let sample: CrawlSample;
   if (args.recent !== undefined) {
     if (args.day !== undefined || args.hours !== undefined)
       throw new Error("--recent samples a moving window of its own; drop --hours and --day.");
     sample = { kind: "recent", minutes: number("recent") };
   } else {
     const hours = number("hours", 24);
-    sample = { kind: "window", hours, until: readUntil(args.day, hours) };
+    sample = { kind: "window", hours, until: new Date(readUntil(args.day, hours)).toISOString() };
   }
   const rate = number("rate", defaultRate);
   return {
@@ -356,8 +351,9 @@ const between = ({ low, high }: { low: number; high: number }) => low + Math.flo
  * from the first. Both are only precise to a few thousand ids, so a report
  * drawn that ended outside the window doesn't count.
  */
-async function fixedWindow(get: Get, newest: number, { hours, until }: { hours: number; until: number }): Promise<Sampler> {
-  const since = until - hours * 3_600_000;
+async function fixedWindow(get: Get, newest: number, window: { hours: number; until: string }): Promise<Sampler> {
+  const until = Date.parse(window.until);
+  const since = until - window.hours * 3_600_000;
   const low = await firstPgcrSince(get, newest, since);
   const ids = { low, high: await firstPgcrSince(get, newest, until, low) };
   const range = `${ids.low}–${ids.high} (ended ${new Date(since).toISOString()} to ${new Date(until).toISOString()})`;
@@ -382,7 +378,6 @@ async function movingWindow(get: Get, newest: number, minutes: number): Promise<
   // and are searched to a few hundred ids, so a report in range ended a minute or two early
   // at most. Anything older means the window has stopped moving (every move failing).
   const slack = 5 * 60_000;
-  let stale = 0;
   const firstRecent = (high: number, low?: number) => firstPgcrSince(get, high, Date.now() - minutes * 60_000, low, 300);
   const ids = { low: await firstRecent(newest), high: newest };
   let moving: Promise<void> | undefined;
@@ -400,12 +395,8 @@ async function movingWindow(get: Get, newest: number, minutes: number): Promise<
   }, 60_000);
   return {
     randomId: () => between(ids),
-    counts: (ended) => {
-      if (ended >= Date.now() - minutes * 60_000 - slack) return true;
-      stale++;
-      return false;
-    },
-    describe: () => `${ids.low}–${ids.high} (the last ${minutes} minutes${stale ? `, ${stale} too old to count` : ""})`,
+    counts: (ended) => ended >= Date.now() - minutes * 60_000 - slack,
+    describe: () => `${ids.low}–${ids.high} (the last ${minutes} minutes)`,
     async stop() {
       clearInterval(timer);
       await moving;
@@ -453,6 +444,8 @@ async function main() {
   let players = 0;
   let reading = 0;
   let reports = 0;
+  /** Reports drawn that the sampler didn't count (see Sampler.counts). */
+  let outside = 0;
   let copies = 0;
   // When the earliest and latest reports counted ended (ms).
   let first = Infinity;
@@ -496,7 +489,10 @@ async function main() {
       // Ended outside a fixed window by the id search's slack, too long ago for a
       // moving one, or can't be placed at all: not this crawl's to count.
       const ended = endedAt(report);
-      if (ended === undefined || !sampler.counts(ended)) continue;
+      if (ended === undefined || !sampler.counts(ended)) {
+        outside++;
+        continue;
+      }
       // PvE only: a PvP match is passed over entirely (not counted, its players not sampled).
       const modes = report.activityDetails.modes ?? [report.activityDetails.mode];
       if (modes.includes(ALL_PVP)) continue;
@@ -509,7 +505,7 @@ async function main() {
 
   const progress = setInterval(() => {
     console.log(
-      `${players} players, ${copies} weapons, ${reports} reports, ${client.requests()} requests, ${client.throttles()} throttles (${client.rate()}/s), sampling ${sampler.describe()}`,
+      `${players} players, ${copies} weapons, ${reports} reports (${outside} outside the window), ${client.requests()} requests, ${client.throttles()} throttles (${client.rate()}/s), sampling ${sampler.describe()}`,
     );
   }, 30_000);
   await Promise.all(Array.from({ length: options.workers }, worker));
@@ -524,16 +520,13 @@ async function main() {
     const traits = traitsByWeapon.get(hash);
     for (const plugs of list) addCopy(tally, hash, perksAtSockets(columns, placed, plugs), traits);
   }
-  const snapshot: PerkPopularityIndex = {
+  const snapshot: CrawlFile = {
     schema: 2,
     generatedAt: new Date().toISOString(),
     // Copies were tallied, so at least one report was counted.
     from: isoSeconds(first),
     to: isoSeconds(last),
-    sample:
-      sample.kind === "recent"
-        ? { kind: "recent", minutes: sample.minutes }
-        : { kind: "window", hours: sample.hours, until: new Date(sample.until).toISOString() },
+    sample,
     players,
     weapons: tally,
   };
@@ -541,7 +534,7 @@ async function main() {
   await writeFile(`${target}.tmp`, JSON.stringify(snapshot));
   await rename(`${target}.tmp`, target);
   console.log(
-    `Wrote ${Object.keys(tally).length} weapons from ${copies} equipped copies (${players} players, ${reports} reports, ${client.requests()} requests, ${client.throttles()} throttles, ending at ${client.rate()}/s) to ${target}.`,
+    `Wrote ${Object.keys(tally).length} weapons from ${copies} equipped copies (${players} players, ${reports} reports (${outside} outside the window), ${client.requests()} requests, ${client.throttles()} throttles, ending at ${client.rate()}/s) to ${target}.`,
   );
 }
 
