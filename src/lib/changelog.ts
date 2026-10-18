@@ -18,7 +18,10 @@ export interface ChangelogEntry {
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
     date: "2026-10-18",
-    changes: ["Weapon search: Popularity now updates every 3 hours."],
+    changes: [
+      "Weapon search: Popularity now updates every 3 hours.",
+      "Weapon search: Try most popular roll picks the trait pair players run together.",
+    ],
   },
   {
     date: "2026-10-17",

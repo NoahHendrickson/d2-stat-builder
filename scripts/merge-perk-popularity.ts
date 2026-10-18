@@ -1,7 +1,7 @@
 import { readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
-import { mergePopularity, type PerkPopularityIndex } from "../src/lib/weapons/perk-popularity";
+import { mergePopularity, totalCopies, type CrawlFile } from "../src/lib/weapons/perk-popularity";
 
 /**
  * Adds up the last week of perk-popularity crawls into the published snapshot.
@@ -39,14 +39,14 @@ async function main() {
   });
   const kept = files.filter((f) => f.day >= since).sort((a, b) => a.name.localeCompare(b.name));
   if (kept.length === 0) throw new Error(`No crawl files since ${since} in ${dir}; nothing written.`);
-  const snapshots = await Promise.all(
-    kept.map(async (f) => JSON.parse(await readFile(join(dir, f.name), "utf8")) as PerkPopularityIndex),
+  const crawls = await Promise.all(
+    kept.map(async (f) => ({ file: f.name, crawl: JSON.parse(await readFile(join(dir, f.name), "utf8")) as CrawlFile })),
   );
-  const merged = mergePopularity(snapshots);
+  const merged = mergePopularity(crawls);
   const target = resolve(args.out);
   await writeFile(`${target}.tmp`, JSON.stringify(merged));
   await rename(`${target}.tmp`, target);
-  const copies = Object.values(merged.weapons).reduce((sum, w) => sum + w.copies, 0);
+  const copies = totalCopies(merged);
   console.log(
     `Merged ${kept.length} crawls (${kept.map((f) => f.name.replace(".json", "")).join(", ")}): ${merged.players} players, ${copies} copies, ${Object.keys(merged.weapons).length} weapons → ${target}.`,
   );

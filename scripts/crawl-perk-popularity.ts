@@ -9,7 +9,8 @@ import {
   perksAtSockets,
   popularityLookup,
   traitColumns,
-  type PerkPopularityIndex,
+  type CrawlFile,
+  type CrawlSample,
   type PopularityCatalog,
   type WeaponPopularity,
 } from "../src/lib/weapons/perk-popularity";
@@ -70,19 +71,13 @@ const BACKFILL_DAY_END_UTC = "06:00";
 /** Days the data repo's merge keeps (merge-perk-popularity.ts --days); it prunes older days. */
 const MERGE_DAYS = 7;
 
-/** Which reports a crawl draws from (see the Sampler each one builds). */
-type Sample =
-  /** The `hours` before `until` (ms): now, or --day's 06:00 UTC. */
-  | { kind: "window"; hours: number; until: number }
-  /** The reports that ended in the last `minutes`, moving along as the crawl goes. */
-  | { kind: "recent"; minutes: number };
-
 interface Options {
   players: number;
   minutes: number;
   rate: number;
   workers: number;
-  sample: Sample;
+  /** Which reports to draw from (see the Sampler each one builds), as the crawl file records it. */
+  sample: CrawlSample;
   catalog: string;
   out: string;
 }
@@ -125,14 +120,14 @@ function readOptions(defaultRate: number): Options {
     if (!Number.isFinite(value) || value <= 0) throw new Error(`--${key} must be a positive number.`);
     return value;
   };
-  let sample: Sample;
+  let sample: CrawlSample;
   if (args.recent !== undefined) {
     if (args.day !== undefined || args.hours !== undefined)
       throw new Error("--recent samples a moving window of its own; drop --hours and --day.");
     sample = { kind: "recent", minutes: number("recent") };
   } else {
     const hours = number("hours", 24);
-    sample = { kind: "window", hours, until: readUntil(args.day, hours) };
+    sample = { kind: "window", hours, until: new Date(readUntil(args.day, hours)).toISOString() };
   }
   const rate = number("rate", defaultRate);
   return {
@@ -343,6 +338,8 @@ interface Sampler {
   counts(ended: number): boolean;
   /** The ids drawn from now, for the log. */
   describe(): string;
+  /** Why the crawl should end early (its window stopped following the clock), or undefined. */
+  stalled(): string | undefined;
   /** Stops following the clock; resolves once a move in flight has finished. */
   stop(): Promise<void>;
 }
@@ -356,8 +353,9 @@ const between = ({ low, high }: { low: number; high: number }) => low + Math.flo
  * from the first. Both are only precise to a few thousand ids, so a report
  * drawn that ended outside the window doesn't count.
  */
-async function fixedWindow(get: Get, newest: number, { hours, until }: { hours: number; until: number }): Promise<Sampler> {
-  const since = until - hours * 3_600_000;
+async function fixedWindow(get: Get, newest: number, window: { hours: number; until: string }): Promise<Sampler> {
+  const until = Date.parse(window.until);
+  const since = until - window.hours * 3_600_000;
   const low = await firstPgcrSince(get, newest, since);
   const ids = { low, high: await firstPgcrSince(get, newest, until, low) };
   const range = `${ids.low}–${ids.high} (ended ${new Date(since).toISOString()} to ${new Date(until).toISOString()})`;
@@ -365,6 +363,7 @@ async function fixedWindow(get: Get, newest: number, { hours, until }: { hours: 
     randomId: () => between(ids),
     counts: (ended) => ended >= since && ended < until,
     describe: () => range,
+    stalled: () => undefined,
     stop: async () => {},
   };
 }
@@ -374,16 +373,35 @@ async function fixedWindow(get: Get, newest: number, { hours, until }: { hours: 
  * about once a minute the newest id and the first that ended `minutes` ago are
  * searched again from where they were (a dozen requests). Both edges are found
  * to within a few hundred ids, so even a short window off-peak keeps its width.
- * Every report drawn counts.
+ * A report drawn counts if it ended after the window's start as of its last
+ * move, give or take the edge search's slack. If the window stops moving
+ * (every move failing for STALL_MS), the crawl ends early instead of drawing
+ * from a range that is no longer recent.
  */
+/**
+ * How far before a moving window's start a counted report may have ended: the
+ * low edge is searched to 300 ids, which is seconds at peak and a minute or so
+ * when quiet.
+ */
+const EDGE_SLACK_MS = 2 * 60_000;
+/** A moving window whose moves have all failed for this long ends the crawl. */
+const STALL_MS = 10 * 60_000;
+
 async function movingWindow(get: Get, newest: number, minutes: number): Promise<Sampler> {
-  const firstRecent = (high: number, low?: number) => firstPgcrSince(get, high, Date.now() - minutes * 60_000, low, 300);
-  const ids = { low: await firstRecent(newest), high: newest };
+  /** The window's low edge (ms) as of its last move, and when that move finished. */
+  let since = Date.now() - minutes * 60_000;
+  let movedAt = Date.now();
+  const firstRecent = (high: number, start: number, low?: number) => firstPgcrSince(get, high, start, low, 300);
+  const ids = { low: await firstRecent(newest, since), high: newest };
   let moving: Promise<void> | undefined;
   const timer = setInterval(() => {
     moving ??= (async () => {
+      // The start is fixed before the searches, which can take minutes once throttled.
+      const start = Date.now() - minutes * 60_000;
       const high = await advanceNewest(get, ids.high);
-      Object.assign(ids, { low: await firstRecent(high, ids.low), high });
+      Object.assign(ids, { low: await firstRecent(high, start, ids.low), high });
+      since = start;
+      movedAt = Date.now();
     })()
       .catch((error: unknown) =>
         console.warn(`Couldn't move the window along: ${error instanceof Error ? error.message : error}`),
@@ -394,8 +412,12 @@ async function movingWindow(get: Get, newest: number, minutes: number): Promise<
   }, 60_000);
   return {
     randomId: () => between(ids),
-    counts: () => true,
+    counts: (ended) => ended >= since - EDGE_SLACK_MS,
     describe: () => `${ids.low}–${ids.high} (the last ${minutes} minutes)`,
+    stalled: () =>
+      Date.now() - movedAt > STALL_MS
+        ? `the window hasn't moved since ${new Date(movedAt).toISOString()}`
+        : undefined,
     async stop() {
       clearInterval(timer);
       await moving;
@@ -443,11 +465,14 @@ async function main() {
   let players = 0;
   let reading = 0;
   let reports = 0;
+  /** Reports drawn that the sampler didn't count (see Sampler.counts). */
+  let outside = 0;
   let copies = 0;
   // When the earliest and latest reports counted ended (ms).
   let first = Infinity;
   let last = -Infinity;
-  const done = () => players + reading >= options.players || Date.now() > deadline;
+  const done = () =>
+    players + reading >= options.players || Date.now() > deadline || sampler.stalled() !== undefined;
 
   async function samplePlayer(entry: PgcrEntry) {
     const user = entry.player?.destinyUserInfo;
@@ -483,10 +508,13 @@ async function main() {
     while (!done()) {
       const report = await client.get<Pgcr>(pgcrUrl(sampler.randomId()));
       if (!report) continue;
-      // Ended outside a fixed window, by the id search's slack (or can't be
-      // placed at all): not this crawl's to count.
+      // Ended outside a fixed window by the id search's slack, too long ago for a
+      // moving one, or can't be placed at all: not this crawl's to count.
       const ended = endedAt(report);
-      if (ended === undefined || !sampler.counts(ended)) continue;
+      if (ended === undefined || !sampler.counts(ended)) {
+        outside++;
+        continue;
+      }
       // PvE only: a PvP match is passed over entirely (not counted, its players not sampled).
       const modes = report.activityDetails.modes ?? [report.activityDetails.mode];
       if (modes.includes(ALL_PVP)) continue;
@@ -499,12 +527,14 @@ async function main() {
 
   const progress = setInterval(() => {
     console.log(
-      `${players} players, ${copies} weapons, ${reports} reports, ${client.requests()} requests, ${client.throttles()} throttles (${client.rate()}/s), sampling ${sampler.describe()}`,
+      `${players} players, ${copies} weapons, ${reports} reports (${outside} outside the window), ${client.requests()} requests, ${client.throttles()} throttles (${client.rate()}/s), sampling ${sampler.describe()}`,
     );
   }, 30_000);
   await Promise.all(Array.from({ length: options.workers }, worker));
   clearInterval(progress);
   await sampler.stop();
+  const stalled = sampler.stalled();
+  if (stalled) console.warn(`Ended early: ${stalled}.`);
 
   if (copies === 0) throw new Error("No weapons were tallied; nothing written.");
   const tally: Record<string, WeaponPopularity> = {};
@@ -514,12 +544,13 @@ async function main() {
     const traits = traitsByWeapon.get(hash);
     for (const plugs of list) addCopy(tally, hash, perksAtSockets(columns, placed, plugs), traits);
   }
-  const snapshot: PerkPopularityIndex = {
+  const snapshot: CrawlFile = {
     schema: 2,
     generatedAt: new Date().toISOString(),
     // Copies were tallied, so at least one report was counted.
     from: isoSeconds(first),
     to: isoSeconds(last),
+    sample,
     players,
     weapons: tally,
   };
@@ -527,7 +558,7 @@ async function main() {
   await writeFile(`${target}.tmp`, JSON.stringify(snapshot));
   await rename(`${target}.tmp`, target);
   console.log(
-    `Wrote ${Object.keys(tally).length} weapons from ${copies} equipped copies (${players} players, ${reports} reports, ${client.requests()} requests, ${client.throttles()} throttles, ending at ${client.rate()}/s) to ${target}.`,
+    `Wrote ${Object.keys(tally).length} weapons from ${copies} equipped copies (${players} players, ${reports} reports (${outside} outside the window), ${client.requests()} requests, ${client.throttles()} throttles, ending at ${client.rate()}/s) to ${target}.`,
   );
 }
 

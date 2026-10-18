@@ -10,7 +10,7 @@ import {
   type PerkPopularityIndex,
 } from "./perk-popularity";
 import type { WeaponCatalog } from "./catalog";
-import type { Roll } from "./pick-slots";
+import { mostPopularRoll, type WeaponPopularityView } from "./popularity-view";
 import type { WeaponSummary } from "./types";
 
 /**
@@ -37,40 +37,6 @@ export function usePerkPopularityIndex() {
       return data;
     },
   });
-}
-
-/** One perk's share of its column, as the Popularity card lists it. */
-export interface PerkPopularity {
-  perkIndex: number;
-  share: number;
-}
-
-/** One left + right combo, as the Popularity card lists it. */
-export interface ComboPopularity {
-  /** The trait columns and the catalog perk index in each. */
-  leftColumn: number;
-  left: number;
-  rightColumn: number;
-  right: number;
-  share: number;
-}
-
-export interface WeaponPopularityView {
-  /** The snapshot has this weapon. */
-  available: boolean;
-  /** Copies seen used in PvE. */
-  copies: number;
-  /** When the snapshot was built. */
-  generatedAt?: string;
-  /**
-   * Each perk column with data, every one of its perks in the grid's order (so
-   * the card lines up with it), with its share; perks no one ran are 0.
-   */
-  columns: { column: number; perks: PerkPopularity[] }[];
-  /** The most run left + right combos, most run first. */
-  combos: ComboPopularity[];
-  /** The most run perk in each column with data, keyed like picks (by column). */
-  topRoll: Roll;
 }
 
 const NO_POPULARITY: WeaponPopularityView = {
@@ -109,25 +75,21 @@ export function useWeaponPopularity(
     });
     const traits = traitColumns(weapon.columns);
     const combos = traits
-      ? comboShares(data).flatMap(({ left, right, share }) => {
+      ? comboShares(data).flatMap(({ left, right, count, share }) => {
           const l = indexIn(traits[0], left);
           const r = indexIn(traits[1], right);
           return l === undefined || r === undefined
             ? []
-            : [{ leftColumn: traits[0], left: l, rightColumn: traits[1], right: r, share }];
+            : [{ leftColumn: traits[0], left: l, rightColumn: traits[1], right: r, count, share }];
         })
       : [];
-    const topRoll: Roll = {};
-    // The most run perk in each column (the first of any tie, in grid order).
-    for (const { column, perks } of columns)
-      topRoll[column] = perks.reduce((best, p) => (p.share > best.share ? p : best)).perkIndex;
     return {
       available: true,
       copies: data.copies,
       generatedAt: index?.generatedAt,
       columns,
       combos,
-      topRoll,
+      topRoll: mostPopularRoll(columns, combos),
     };
   }, [index, weapon, catalog]);
 }

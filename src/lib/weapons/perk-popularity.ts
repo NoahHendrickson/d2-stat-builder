@@ -33,6 +33,7 @@ export interface WeaponPopularity {
   combos?: Record<string, number>;
 }
 
+/** The tally every snapshot carries, and all the app reads. */
 export interface PerkPopularityIndex {
   /** 2: PvE only, plain counts (1 held [PvE, PvP] pairs). */
   schema: 2;
@@ -48,6 +49,36 @@ export interface PerkPopularityIndex {
   players: number;
   /** By weapon item hash. */
   weapons: Record<string, WeaponPopularity>;
+}
+
+/** One crawl's output, a file in the data repo's daily/. */
+export interface CrawlFile extends PerkPopularityIndex {
+  /** How it drew its reports; missing only in crawls from before it was recorded. */
+  sample?: CrawlSample;
+}
+
+/** The published snapshot: the merge of the crawl files. */
+export interface MergedPopularity extends PerkPopularityIndex {
+  /** Its inputs, one per crawl file in file order: where every count came from. */
+  crawls: CrawlSource[];
+}
+
+/**
+ * Matches that just ended (`recent`, read minutes later), or a fixed window
+ * (`window`; an `until` well before the crawl's generatedAt is a backfill, read
+ * days after the matches).
+ */
+export type CrawlSample = { kind: "recent"; minutes: number } | { kind: "window"; hours: number; until: string };
+
+/** One crawl file, as the merged snapshot lists it. */
+export interface CrawlSource {
+  file: string;
+  generatedAt: string;
+  from: string;
+  to: string;
+  players: number;
+  copies: number;
+  sample?: CrawlSample;
 }
 
 /** The catalog fields the tally needs: public/data/weapons.json, narrowed. */
@@ -225,15 +256,22 @@ export function comboShares(weapon: WeaponPopularity): ComboShare[] {
     .sort((a, b) => b.count - a.count);
 }
 
+/** Every weapon's copies in a snapshot, added up. */
+export function totalCopies(index: PerkPopularityIndex) {
+  return Object.values(index.weapons).reduce((sum, w) => sum + w.copies, 0);
+}
+
 /**
  * Crawls added up into one snapshot: copies, perk and combo counts summed per
  * weapon, players summed, the span from the earliest crawl to the latest. A
- * column a weapon gained between crawls just starts later.
+ * column a weapon gained between crawls just starts later. Each file is listed
+ * in `crawls`, so a count can be traced to how and when it was crawled.
  */
 export function mergePopularity(
-  crawls: readonly PerkPopularityIndex[],
+  files: readonly { file: string; crawl: CrawlFile }[],
   generatedAt = new Date().toISOString(),
-): PerkPopularityIndex {
+): MergedPopularity {
+  const crawls = files.map((f) => f.crawl);
   const weapons: Record<string, WeaponPopularity> = {};
   for (const crawl of crawls) {
     for (const [hash, counts] of Object.entries(crawl.weapons)) {
@@ -260,5 +298,14 @@ export function mergePopularity(
     to: spans.map(([, to]) => to!).sort().at(-1) ?? "",
     players: crawls.reduce((sum, c) => sum + c.players, 0),
     weapons,
+    crawls: files.map(({ file, crawl }) => ({
+      file,
+      generatedAt: crawl.generatedAt,
+      from: crawl.from,
+      to: crawl.to,
+      players: crawl.players,
+      copies: totalCopies(crawl),
+      ...(crawl.sample && { sample: crawl.sample }),
+    })),
   };
 }

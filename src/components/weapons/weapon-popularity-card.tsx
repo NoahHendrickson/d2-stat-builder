@@ -8,7 +8,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { DetailCard, DetailSection } from "@/components/weapons/weapon-detail-card";
 import type { Roll } from "@/lib/weapons/pick-slots";
 import type { PerkRef, WeaponSummary } from "@/lib/weapons/types";
-import type { WeaponPopularityView } from "@/lib/weapons/use-perk-popularity";
+import type { WeaponPopularityView } from "@/lib/weapons/popularity-view";
 import { traitColumns } from "@/lib/weapons/perk-popularity";
 import { cn } from "@/lib/utils";
 
