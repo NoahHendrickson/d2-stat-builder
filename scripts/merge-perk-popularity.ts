@@ -1,5 +1,6 @@
 import { readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
+import { parseArgs } from "node:util";
 import { mergePopularity, type PerkPopularityIndex } from "../src/lib/weapons/perk-popularity";
 
 /**
@@ -17,12 +18,14 @@ import { mergePopularity, type PerkPopularityIndex } from "../src/lib/weapons/pe
 const DAY_FILE = /^(\d{4}-\d{2}-\d{2})(?:T\d{2})?\.json$/;
 
 async function main() {
-  const args = Object.fromEntries(
-    process.argv.slice(2).map((arg) => {
-      const [, key = "", value = "true"] = /^-*([^=]*)(?:=(.*))?$/s.exec(arg) ?? [];
-      return [key, value];
-    }),
-  );
+  const { values: args } = parseArgs({
+    options: {
+      dir: { type: "string" },
+      days: { type: "string" },
+      out: { type: "string" },
+      prune: { type: "boolean" },
+    },
+  });
   if (!args.dir || !args.out) throw new Error("Pass --dir=<daily files> and --out=<snapshot>.");
   const days = Number(args.days ?? 7);
   if (!Number.isInteger(days) || days < 1) throw new Error("--days must be a whole number of days.");
@@ -48,7 +51,7 @@ async function main() {
     `Merged ${kept.length} crawls (${kept.map((f) => f.name.replace(".json", "")).join(", ")}): ${merged.players} players, ${copies} copies, ${Object.keys(merged.weapons).length} weapons → ${target}.`,
   );
 
-  if (args.prune === "true") {
+  if (args.prune) {
     for (const f of files.filter((f) => f.day < since)) {
       await rm(join(dir, f.name));
       console.log(`Pruned ${f.name}.`);
