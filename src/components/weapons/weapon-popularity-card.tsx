@@ -170,7 +170,7 @@ function HowPopularityWorks({ view }: { view: WeaponPopularityView }) {
       </TooltipTrigger>
       <TooltipContent side="bottom" align="end" className="grid max-w-72 gap-1.5 text-xs">
         <p>
-          Every day we sample players from the last 24 hours of PvE matches and read the perks on
+          Every 3 hours we sample players from PvE matches that just ended and read the perks on
           the legendary weapons they actually used in that match. The last 7 days are added up.
         </p>
         <p>

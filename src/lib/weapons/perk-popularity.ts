@@ -6,8 +6,8 @@
  * Bungie's public API (recent PvE post-game reports give the players; their
  * profiles give the rolls on the weapons they used) and tallies each weapon's
  * perks per column, and the left + right trait pair as a combo. PvP matches are
- * skipped. It runs daily on the last day's matches; a merge adds up the last
- * week's days (mergePopularity) into the snapshot published off Vercel, on
+ * skipped. It runs every 3 hours on the matches that just ended; a merge adds up
+ * the last week's runs (mergePopularity) into the snapshot published off Vercel, on
  * GitHub Pages, which the weapon page reads.
  */
 
