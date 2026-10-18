@@ -158,8 +158,26 @@ function RevealChip({ label, children }: { label: string; children: ReactNode })
   );
 }
 
-/** A perk under the pointer: the slot it picks in (its key), and its catalog index. */
-type PerkHover = { slot: number; perk: number };
+/**
+ * A perk under the pointer: the slot it picks in (its key), and its catalog
+ * index, or null for a slot's empty socket (previewing the slot cleared).
+ */
+type PerkHover = { slot: number; perk: number | null };
+
+/**
+ * Bungie's "Empty Mod Socket" plug (2323986101, `v400.weapon.mod_empty`): the
+ * art the game shows in a weapon's unfilled mod socket. Weapons have no empty
+ * masterwork (every one starts at Tier 1), so the Masterworks section uses it
+ * too.
+ */
+const EMPTY_SOCKET_ICON = "/common/destiny2_content/icons/431cc8304da4f5eb44c5c10a5c1866ce.jpg";
+
+/** Picks without one slot's. */
+function withoutSlot(picks: Roll, slot: number): Roll {
+  const { [slot]: _removed, ...rest } = picks;
+  void _removed;
+  return rest;
+}
 
 /**
  * One weapon's page: the header (the list row, opened up), then the Stats card
@@ -216,7 +234,13 @@ export const WeaponDetails = memo(function WeaponDetails({
   // Picks are the settled roll, drawn plain; a hover shows its change against
   // them in green and red.
   const current = statsFor(picked);
-  const preview = hovered ? statsFor({ ...picked, [hovered.slot]: hovered.perk }) : current;
+  const preview = !hovered
+    ? current
+    : statsFor(
+        hovered.perk === null
+          ? withoutSlot(picked, hovered.slot)
+          : { ...picked, [hovered.slot]: hovered.perk },
+      );
   function toggle(slot: number, perk: number) {
     setPicked(({ [slot]: current, ...rest }) => (current === perk ? rest : { ...rest, [slot]: perk }));
   }
@@ -234,6 +258,45 @@ export const WeaponDetails = memo(function WeaponDetails({
   // the weapon's own (see resolveFrame).
   const frame = resolveFrame(weapon, catalog.perks, picked);
   const frameName = frame.perk?.name ?? weapon.frame ?? "Frame";
+
+  /**
+   * A masterwork or mod slot's empty socket, first in its section, drawn with
+   * the game's empty-socket art: picking it clears the slot, hovering it
+   * previews the stats without that slot's pick. It dims like the others once
+   * something else in the slot is picked.
+   */
+  function emptyTile(slot: PickSlot) {
+    const empty = picked[slot.key] === undefined;
+    const label = slot.kind === "mod" ? "No mod" : "No masterwork";
+    return (
+      <Tooltip key="empty">
+        <TooltipTrigger
+          delay={0}
+          render={
+            <button
+              type="button"
+              aria-label={label}
+              aria-pressed={empty}
+              onClick={() => setPicked((picks) => withoutSlot(picks, slot.key))}
+              onPointerEnter={() => setHovered({ slot: slot.key, perk: null })}
+              onPointerLeave={() =>
+                setHovered((h) => (h?.slot === slot.key && h.perk === null ? null : h))
+              }
+              className={cn(
+                "relative flex size-14 shrink-0 items-center justify-center outline-none transition-[opacity,filter] hover:brightness-125 focus-visible:[&>img]:d2-tile-selected max-md:size-11",
+                !empty && "opacity-40 hover:opacity-100",
+              )}
+            />
+          }
+        >
+          <Image src={`https://www.bungie.net${EMPTY_SOCKET_ICON}`} alt="" width={44} height={44} unoptimized />
+        </TooltipTrigger>
+        <TooltipContent side="right" align="start">
+          {slot.kind === "mod" ? "Empty mod socket" : "No masterwork"}
+        </TooltipContent>
+      </Tooltip>
+    );
+  }
 
   /** One perk's tile in its slot. */
   function perkTile(slot: PickSlot, index: number) {
@@ -465,6 +528,7 @@ export const WeaponDetails = memo(function WeaponDetails({
                     perkSlots.length > 0 && "w-0 min-w-full",
                   )}
                 >
+                  {emptyTile(slot)}
                   {slot.perkIndices.map((index) => perkTile(slot, index))}
                 </div>
               </DetailSection>
