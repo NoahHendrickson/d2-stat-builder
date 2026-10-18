@@ -12,6 +12,7 @@ import { useQuery } from "@tanstack/react-query";
 export function useStaticJson<T>({
   key,
   url,
+  fallbackUrl,
   what,
   parse,
   retry = 3,
@@ -19,6 +20,8 @@ export function useStaticJson<T>({
 }: {
   key: string;
   url: string;
+  /** Fetched instead when `url` answers 404 (a local copy that may not exist). */
+  fallbackUrl?: string;
   /** For the error message: "<what> could not be loaded (404)." */
   what: string;
   parse: (json: unknown) => T;
@@ -36,10 +39,9 @@ export function useStaticJson<T>({
     gcTime: Infinity,
     retry,
     queryFn: async ({ signal }) => {
-      const response = await fetch(url, {
-        signal,
-        cache: revalidateInDev && process.env.NODE_ENV === "development" ? "no-cache" : "default",
-      });
+      const cache = revalidateInDev && process.env.NODE_ENV === "development" ? "no-cache" : "default";
+      let response = await fetch(url, { signal, cache });
+      if (response.status === 404 && fallbackUrl) response = await fetch(fallbackUrl, { signal, cache });
       if (!response.ok) throw new Error(`${what} could not be loaded (${response.status}).`);
       return parse(await response.json());
     },

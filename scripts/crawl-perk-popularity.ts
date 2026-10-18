@@ -20,10 +20,12 @@ import {
  * It samples post-game reports at random from one window: the --hours before
  * `until`, which is now, or with --day the start of that day's scheduled crawl
  * (so a missed day can be backfilled with exactly the window it would have had).
- * Report ids grow over time, so it finds the id range the window spans and picks
- * ids uniformly inside it, which spreads the sample over every hour however
- * early it stops; that search is only precise to a minute or so, so a report
- * played outside the window is skipped. It skips PvP matches too (popularity is
+ * Report ids are handed out as activities end (consecutive ids ended within
+ * minutes of each other, though they may have started hours apart), so it finds
+ * the id range the window spans by each report's end time and picks ids
+ * uniformly inside it, which spreads the sample over every hour however early
+ * it stops; that search is only precise to a minute or so, so a report that
+ * ended outside the window is skipped. It skips PvP matches too (popularity is
  * PvE only), and for each player it hasn't seen reads the weapons the character in that report
  * has equipped, with their perks. Equipped items are public on every profile, so
  * no one signs in. A weapon only counts if the report lists it among the weapons
@@ -126,6 +128,7 @@ function bungieClient(apiKey: string, rate: number) {
   const spacing = 1000 / rate;
   let nextSlot = 0;
   let requests = 0;
+  let throttles = 0;
   /** Waits for the next free slot under the shared rate limit. */
   async function slot() {
     const now = Date.now();
@@ -156,24 +159,42 @@ function bungieClient(apiKey: string, rate: number) {
       // Throttled, a 5xx, or no answer at all: wait as long as Bungie asks, at least a backoff,
       // and hold every worker back for a throttle.
       const wait = Math.max((body?.ThrottleSeconds ?? 0) * 1000, 1000 * 2 ** attempt);
-      if (throttled) nextSlot = Date.now() + wait;
+      if (throttled) {
+        throttles++;
+        nextSlot = Date.now() + wait;
+      }
       await sleep(wait);
     }
     return undefined;
   }
-  return { get, requests: () => requests };
+  /** `throttles` says whether --rate has room: none over a run means it does. */
+  return { get, requests: () => requests, throttles: () => throttles };
 }
 
 interface PgcrEntry {
   characterId: string;
   player?: { destinyUserInfo?: { membershipType: number; membershipId: string } };
+  /** The activity's length in seconds (the same on every entry). */
+  values?: { activityDurationSeconds?: { basic?: { value?: number } } };
   /** The weapons this player used in the match (got kills with). */
   extended?: { weapons?: { referenceId: number }[] };
 }
 interface Pgcr {
+  /** When the activity started. */
   period: string;
   activityDetails: { mode: number; modes?: number[] };
   entries: PgcrEntry[];
+}
+
+/**
+ * When the activity ended (ms): its start plus its length. Report ids follow
+ * this, not the start (a raid that ran for hours sits among the reports of the
+ * minute it ended), so every window is measured by it.
+ */
+function endedAt(report: Pgcr) {
+  const seconds = report.entries.find((e) => e.values?.activityDurationSeconds)?.values
+    ?.activityDurationSeconds?.basic?.value;
+  return Date.parse(report.period) + (seconds ?? 0) * 1000;
 }
 interface Profile {
   characterEquipment?: {
@@ -203,26 +224,26 @@ async function newestPgcr(get: Get) {
   throw new Error("Couldn't find a recent post-game report.");
 }
 
-/** When the report at or just after `id` was played (a few ids can be missing). */
-async function periodNear(get: Get, id: number) {
+/** When the report at or just after `id` ended (a few ids can be missing). */
+async function endNear(get: Get, id: number) {
   for (let near = id; near < id + 50; near++) {
     const report = await get<Pgcr>(pgcrUrl(near));
-    if (report) return Date.parse(report.period);
+    if (report) return endedAt(report);
   }
   return undefined;
 }
 
 /**
- * The first report id played at or after `since` (ms): ids grow with time, so
- * binary-search on each report's period. Precise to a few thousand ids, which is
- * seconds of play.
+ * The first report id that ended at or after `since` (ms): ids grow with end
+ * time, so binary-search on it. Precise to a few thousand ids, which is seconds
+ * of play.
  */
 async function firstPgcrSince(get: Get, newest: number, since: number, low = 10_000_000_000) {
   let high = newest;
   while (high - low > 5_000) {
     const middle = Math.floor((low + high) / 2);
-    const period = await periodNear(get, middle);
-    if (period !== undefined && period < since) low = middle;
+    const ended = await endNear(get, middle);
+    if (ended !== undefined && ended < since) low = middle;
     else high = middle;
   }
   return high;
@@ -250,22 +271,24 @@ async function main() {
 
   console.log("Finding the newest post-game report…");
   const newest = await newestPgcr(client.get);
-  // The window's ids: from the first report played at its start to the first at
-  // its end (newest when it ends now), the second search starting from the
-  // first. Both are only precise to a few thousand ids; the worker drops reports
-  // played outside the window.
+  // The window's ids: from the first report that ended at its start to the
+  // first that ended at its end (newest when it ends now), the second search
+  // starting from the first. Both are only precise to a few thousand ids; the
+  // worker drops reports that ended outside the window.
   const since = options.until - options.hours * 3_600_000;
   const oldest = await firstPgcrSince(client.get, newest, since);
   const end = await firstPgcrSince(client.get, newest, options.until, oldest);
   if (end < oldest) throw new Error("The window is too short to hold any reports.");
   console.log(
-    `Sampling reports ${oldest}–${end} (played ${new Date(since).toISOString()} to ${new Date(options.until).toISOString()}) at random.`,
+    `Sampling reports ${oldest}–${end} (ended ${new Date(since).toISOString()} to ${new Date(options.until).toISOString()}) at random.`,
   );
   const randomId = () => oldest + Math.floor(Math.random() * (end - oldest + 1));
 
   // Each weapon's copies (plugs by socket), tallied once every copy is in.
   const copiesByWeapon = new Map<number, (number | undefined)[][]>();
+  // Players tried, so none is read twice; `players` is how many answered.
   const seen = new Set<string>();
+  let players = 0;
   let reports = 0;
   let copies = 0;
   let from = "";
@@ -280,8 +303,10 @@ async function main() {
     const profile = await client.get<Profile>(
       `https://www.bungie.net/Platform/Destiny2/${user.membershipType}/Profile/${user.membershipId}/?components=205,305`,
     );
-    const items = profile?.characterEquipment?.data?.[entry.characterId]?.items ?? [];
-    const sockets = profile?.itemComponents?.sockets?.data ?? {};
+    if (!profile) return;
+    players++;
+    const items = profile.characterEquipment?.data?.[entry.characterId]?.items ?? [];
+    const sockets = profile.itemComponents?.sockets?.data ?? {};
     for (const item of items) {
       if (!WEAPON_BUCKETS.has(item.bucketHash) || !item.itemInstanceId) continue;
       if (!used.has(item.itemHash) || !lookup.has(item.itemHash)) continue;
@@ -298,22 +323,23 @@ async function main() {
     while (!done()) {
       const report = await client.get<Pgcr>(pgcrUrl(randomId()));
       if (!report) continue;
-      // Outside the window by the id search's slack: not this crawl's to count.
-      const played = Date.parse(report.period);
-      if (played < since || played >= options.until) continue;
+      // Ended outside the window, by the id search's slack: not this crawl's to count.
+      const ended = endedAt(report);
+      if (ended < since || ended >= options.until) continue;
       // PvE only: a PvP match is passed over entirely (not counted, its players not sampled).
       const modes = report.activityDetails.modes ?? [report.activityDetails.mode];
       if (modes.includes(ALL_PVP)) continue;
       reports++;
-      if (!to || report.period > to) to = report.period;
-      if (!from || report.period < from) from = report.period;
+      const endedIso = new Date(ended).toISOString();
+      if (!to || endedIso > to) to = endedIso;
+      if (!from || endedIso < from) from = endedIso;
       for (const entry of report.entries) await samplePlayer(entry);
     }
   }
 
   const progress = setInterval(() => {
     console.log(
-      `${seen.size} players, ${copies} weapons, ${reports} reports, ${client.requests()} requests`,
+      `${players} players, ${copies} weapons, ${reports} reports, ${client.requests()} requests, ${client.throttles()} throttles`,
     );
   }, 30_000);
   await Promise.all(Array.from({ length: options.workers }, worker));
@@ -332,14 +358,14 @@ async function main() {
     generatedAt: new Date().toISOString(),
     from,
     to,
-    players: seen.size,
+    players,
     weapons: tally,
   };
   const target = resolve(options.out);
   await writeFile(`${target}.tmp`, JSON.stringify(snapshot));
   await rename(`${target}.tmp`, target);
   console.log(
-    `Wrote ${Object.keys(tally).length} weapons from ${copies} equipped copies (${seen.size} players, ${reports} reports, ${client.requests()} requests) to ${target}.`,
+    `Wrote ${Object.keys(tally).length} weapons from ${copies} equipped copies (${players} players, ${reports} reports, ${client.requests()} requests, ${client.throttles()} throttles) to ${target}.`,
   );
 }
 
