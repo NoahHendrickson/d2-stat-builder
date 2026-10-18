@@ -6,8 +6,8 @@
  * Bungie's public API (recent PvE post-game reports give the players; their
  * profiles give the rolls on the weapons they used) and tallies each weapon's
  * perks per column, and the left + right trait pair as a combo. PvP matches are
- * skipped. It runs every 3 hours on the matches that just ended; a merge adds up
- * the last week's runs (mergePopularity) into the snapshot published off Vercel, on
+ * skipped. Each crawl samples matches as they end; a merge adds up the last
+ * week's crawls (mergePopularity) into the snapshot published off Vercel, on
  * GitHub Pages, which the weapon page reads.
  */
 
@@ -27,8 +27,8 @@ export interface WeaponPopularity {
   columns: Record<string, number>[];
   /**
    * Left + right trait combos ("leftHash,rightHash", base perk hashes) → copies
-   * running both. Only weapons with exactly two trait columns; missing in days
-   * crawled before combos were counted.
+   * running both. Only weapons with exactly two trait columns; missing in crawls
+   * from before combos were counted.
    */
   combos?: Record<string, number>;
 }
@@ -41,8 +41,9 @@ export interface PerkPopularityIndex {
   from: string;
   to: string;
   /**
-   * Players whose profile was read: distinct within one crawl, and added up
-   * across days by the merge (a player seen on two days counts twice).
+   * Characters read: distinct players within one crawl, but added up across
+   * crawls by the merge, so a player seen in several crawls (common, with
+   * several a day) counts once per crawl. Player-crawls, not players.
    */
   players: number;
   /** By weapon item hash. */
@@ -225,17 +226,17 @@ export function comboShares(weapon: WeaponPopularity): ComboShare[] {
 }
 
 /**
- * Days of crawling added up into one snapshot: copies, perk and combo counts
- * summed per weapon, players summed, the span from the earliest day to the
- * latest. A column a weapon gained between days just starts later.
+ * Crawls added up into one snapshot: copies, perk and combo counts summed per
+ * weapon, players summed, the span from the earliest crawl to the latest. A
+ * column a weapon gained between crawls just starts later.
  */
 export function mergePopularity(
-  days: readonly PerkPopularityIndex[],
+  crawls: readonly PerkPopularityIndex[],
   generatedAt = new Date().toISOString(),
 ): PerkPopularityIndex {
   const weapons: Record<string, WeaponPopularity> = {};
-  for (const day of days) {
-    for (const [hash, counts] of Object.entries(day.weapons)) {
+  for (const crawl of crawls) {
+    for (const [hash, counts] of Object.entries(crawl.weapons)) {
       const weapon = (weapons[hash] ??= { copies: 0, columns: [] });
       weapon.copies += counts.copies;
       counts.columns.forEach((column, i) => {
@@ -251,13 +252,13 @@ export function mergePopularity(
   // Fill holes, so every weapon's columns line up with its catalog columns.
   for (const weapon of Object.values(weapons))
     weapon.columns = Array.from(weapon.columns, (column) => column ?? {});
-  const spans = days.map((d) => [d.from, d.to]).filter(([from, to]) => from && to);
+  const spans = crawls.map((c) => [c.from, c.to]).filter(([from, to]) => from && to);
   return {
     schema: 2,
     generatedAt,
     from: spans.map(([from]) => from!).sort()[0] ?? "",
     to: spans.map(([, to]) => to!).sort().at(-1) ?? "",
-    players: days.reduce((sum, d) => sum + d.players, 0),
+    players: crawls.reduce((sum, c) => sum + c.players, 0),
     weapons,
   };
 }
