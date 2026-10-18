@@ -173,6 +173,8 @@ export interface SeenOwner {
    * they played that day, and nothing else. They stay due by their last read.
    */
   sightedOnly?: boolean;
+  /** When they were read (ms), if not when the crawl was: a signed-in player's inventory, saved as they loaded it. */
+  readAt?: number;
 }
 
 /** One copy as the crawler hands it over: its instance id, its owner (an index into the crawl's owners) and base perk per catalog column. */
@@ -182,20 +184,19 @@ export interface SeenCopy {
   perks: readonly (number | undefined)[];
 }
 
-/** One crawl as a store: its players, read at `readAt` (ms), and their copies, all seen that day. */
+/** One crawl as a store: its players, read at `readAt` (ms) unless they say otherwise, and their copies, each seen the day its owner was read. */
 export function storeFromCrawl(
   owners: readonly SeenOwner[],
   copies: ReadonlyMap<number, readonly SeenCopy[]>,
   readAt: number,
   run: CrawlSource,
 ): CopyStore {
-  const day = storeDay(readAt);
   const table = allocOwners(owners.length);
   owners.forEach((owner, k) => {
     table.ids[k] = owner.id;
     table.types[k] = owner.type;
     table.played[k] = owner.played ?? 0;
-    table.read[k] = owner.sightedOnly ? 0 : storeMinute(readAt);
+    table.read[k] = owner.sightedOnly ? 0 : storeMinute(owner.readAt ?? readAt);
     table.whole[k] = owner.whole && !owner.sightedOnly ? 1 : 0;
   });
   const weapons = new Map<number, WeaponCopies>();
@@ -204,9 +205,9 @@ export function storeFromCrawl(
     const sorted = [...list].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
     const indexOf = new Map<number, number>();
     const weapon = allocWeapon(sorted[0]!.perks.length, [], sorted.length);
-    weapon.seen.fill(day);
     sorted.forEach((copy, k) => {
       weapon.ids[k] = copy.id;
+      weapon.seen[k] = dayOfMinute(table.read[copy.owner]!);
       weapon.owners[k] = copy.owner;
       copy.perks.forEach((perk, column) => {
         if (perk !== undefined) weapon.picks[k * weapon.columns + column] = pickFor(perk, weapon.perks, indexOf);
@@ -518,7 +519,9 @@ export function tallyCopies(store: CopyStore, columnsOf: CatalogColumns): Record
 
 /**
  * The snapshot the app reads: the store tallied (see tallyCopies), its players,
- * the span of the crawls it lists, and the crawls.
+ * the span of the reports its crawls found players through (signed-in crawls
+ * span when inventories were saved, so they don't count towards it), and the
+ * crawls.
  */
 export function snapshotFromCopies(
   store: CopyStore,
@@ -526,11 +529,12 @@ export function snapshotFromCopies(
   generatedAt = new Date().toISOString(),
 ): MergedPopularity {
   const { runs } = store;
+  const reports = runs.filter((run) => run.sample.kind !== "signed-in");
   return {
     schema: 2,
     generatedAt,
-    from: runs.map((run) => run.from).sort()[0] ?? "",
-    to: runs.map((run) => run.to).sort().at(-1) ?? "",
+    from: reports.map((run) => run.from).sort()[0] ?? "",
+    to: reports.map((run) => run.to).sort().at(-1) ?? "",
     players: store.owners.ids.length,
     weapons: tallyCopies(store, columnsOf),
     crawls: runs,

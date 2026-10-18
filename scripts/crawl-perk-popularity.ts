@@ -3,22 +3,9 @@ import { readFile, rename, writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { THROTTLE_CODES } from "../src/lib/bungie/throttle";
-import {
-  columnSockets,
-  perksAtSockets,
-  popularityLookup,
-  type CrawlSample,
-  type PopularityCatalog,
-} from "../src/lib/weapons/perk-popularity";
-import {
-  allocOwners,
-  lookupFingerprint,
-  recheckPlan,
-  storeDay,
-  storeFromCrawl,
-  type SeenCopy,
-  type SeenOwner,
-} from "../src/lib/weapons/popularity-copies";
+import { popularityLookup, type CrawlSample, type PopularityCatalog } from "../src/lib/weapons/perk-popularity";
+import { allocOwners, lookupFingerprint, recheckPlan, storeDay } from "../src/lib/weapons/popularity-copies";
+import { profileCopies, readCollector, type ProfileRead } from "../src/lib/weapons/popularity-reads";
 import { decodeOwners, encodeCopies, storeKey } from "./copy-store-file";
 
 /**
@@ -86,7 +73,7 @@ interface Options {
   rate: number;
   workers: number;
   /** Which reports to draw from (see the Sampler each one builds), as the crawl file records it. */
-  sample: CrawlSample;
+  sample: Exclude<CrawlSample, { kind: "signed-in" }>;
   catalog: string;
   store?: string;
   out: string;
@@ -109,7 +96,7 @@ function readOptions(defaultRate: number): Options {
     if (!Number.isFinite(value) || value <= 0) throw new Error(`--${key} must be a positive number.`);
     return value;
   };
-  let sample: CrawlSample;
+  let sample: Options["sample"];
   if (args.recent !== undefined) {
     if (args.hours !== undefined) throw new Error("--recent samples a moving window of its own; drop --hours.");
     sample = { kind: "recent", minutes: number("recent") };
@@ -236,23 +223,13 @@ function endedAt(report: Pgcr) {
 
 /** An instant as Bungie writes its `period`: whole seconds, "2026-10-18T06:00:00Z". */
 const isoSeconds = (ms: number) => new Date(ms).toISOString().replace(".000Z", "Z");
-interface Item {
-  itemHash: number;
-  itemInstanceId?: string;
-}
 /**
  * A profile read with PROFILE_COMPONENTS: 200–800 KB, and no slower than one
  * character's 13 KB. A private vault or inventory comes back as just its
  * privacy setting, no `data`.
  */
-interface Profile {
+interface Profile extends ProfileRead {
   profile?: { data?: { dateLastPlayed?: string } };
-  profileInventory?: { data?: { items: Item[] } };
-  characterInventories?: { data?: Record<string, { items: Item[] }> };
-  characterEquipment?: { data?: Record<string, { items: Item[] }> };
-  itemComponents?: {
-    sockets?: { data?: Record<string, { sockets: { plugHash?: number }[] }> };
-  };
 }
 
 const pgcrUrl = (id: number) =>
@@ -451,10 +428,8 @@ async function main() {
       : await fixedWindow(client.get, newest, sample);
   console.log(`Sampling reports ${sampler.describe()} at random.`);
 
-  // The players read (an owner number is an index here) and each weapon's
-  // copies (instance id, owner, plugs by socket), read into columns once every copy is in.
-  const owners: SeenOwner[] = [];
-  const copiesByWeapon = new Map<number, { id: bigint; owner: number; plugs: (number | undefined)[] }[]>();
+  // The players read and their copies (see readCollector).
+  const collected = readCollector(lookup);
   // Players tried, so none is read twice; `players` is how many answered, which
   // is what --players caps and the crawl records. Reads still in flight
   // count towards the cap, so it isn't overshot by one per worker.
@@ -498,47 +473,20 @@ async function main() {
       // A player in the store who won't read (account gone, moved platform): count
       // it as a read, of nothing, so they wait a week like the rest instead of
       // heading the queue every crawl until they're pruned. When they played stays.
-      if (known) owners.push({ id: BigInt(id), type, played: undefined, whole: false });
+      if (known) collected.add({ id: BigInt(id), type, played: undefined }, [], false, true);
       return;
     }
     players++;
     if (known) rechecked++;
-    const vault = profile.profileInventory?.data?.items;
-    const inventories = profile.characterInventories?.data;
-    const sockets = profile.itemComponents?.sockets?.data;
-    const equipped = Object.values(profile.characterEquipment?.data ?? {}).flatMap((c) => c.items);
-    const owner = owners.length;
-    let found = 0;
-    /** The tally's weapons the read had no sockets for: their copies can't be listed. */
-    let unlisted = 0;
-    // Only the tally's weapons (random-rolled legendaries) are in the lookup, so
-    // it picks them out of every bucket, the vault's included. Every copy counts,
-    // several of one weapon included: a player keeping more than one roll of it
-    // is keeping each for a reason.
-    for (const item of [...equipped, ...Object.values(inventories ?? {}).flatMap((c) => c.items), ...(vault ?? [])]) {
-      if (!item.itemInstanceId || !lookup.has(item.itemHash)) continue;
-      const plugs = sockets?.[item.itemInstanceId]?.sockets.map((s) => s.plugHash);
-      if (!plugs) {
-        unlisted++;
-        continue;
-      }
-      const list = copiesByWeapon.get(item.itemHash) ?? [];
-      list.push({ id: BigInt(item.itemInstanceId), owner, plugs });
-      copiesByWeapon.set(item.itemHash, list);
-      found++;
-    }
-    copies += found;
-    // Whole only when the read listed every copy: the merge takes anything of
-    // theirs it didn't list as dismantled.
-    const whole = vault !== undefined && inventories !== undefined && sockets !== undefined && unlisted === 0;
-    if (whole) vaults++;
+    // Every bucket, the vault's included, for the tally's weapons only (the lookup's).
+    const read = profileCopies(profile, ({ itemHash }) => lookup.has(itemHash));
     // A profile that doesn't say when they last played: a known player keeps
     // what the store knew, a new one goes by the report they were found in.
     const lastPlayed = Date.parse(profile.profile?.data?.dateLastPlayed ?? "");
     const played = Number.isNaN(lastPlayed) ? (known ? undefined : foundOn) : storeDay(lastPlayed);
-    // A new player with none of the tally's weapons adds nothing; a known one
-    // still updates when they last played (and, read whole, that they have none now).
-    if (found > 0 || known) owners.push({ id: BigInt(id), type, played, whole });
+    const { found, whole } = collected.add({ id: BigInt(id), type, played }, read.copies, read.sawAll, known);
+    copies += found;
+    if (whole) vaults++;
   }
 
   async function samplePlayer(entry: PgcrEntry, endedOn: number) {
@@ -549,7 +497,7 @@ async function main() {
       // them in the store even if their next read is a while coming.
       fresh++;
       seen.add(user.membershipId);
-      owners.push({ id: BigInt(user.membershipId), type: user.membershipType, played: endedOn, whole: false, sightedOnly: true });
+      collected.sight({ id: BigInt(user.membershipId), type: user.membershipType, played: endedOn });
       return;
     }
     await readPlayer(user.membershipType, user.membershipId, plan.known(user.membershipId), endedOn);
@@ -592,23 +540,11 @@ async function main() {
   const stalled = sampler.stalled();
   if (stalled) console.warn(`Ended early: ${stalled}.`);
 
-  if (owners.length === 0) throw new Error("No players were read; nothing written.");
-  const perksByWeapon = new Map<number, SeenCopy[]>();
-  for (const [hash, list] of copiesByWeapon) {
-    const columns = lookup.get(hash)!;
-    const placed = columnSockets(
-      columns,
-      list.map((copy) => copy.plugs),
-    );
-    perksByWeapon.set(
-      hash,
-      list.map(({ id, owner, plugs }) => ({ id, owner, perks: perksAtSockets(columns, placed, plugs) })),
-    );
-  }
+  if (collected.players() === 0) throw new Error("No players were read; nothing written.");
   const target = resolve(options.out);
   const generatedAt = new Date().toISOString();
   const now = Date.parse(generatedAt);
-  const crawl = storeFromCrawl(owners, perksByWeapon, now, {
+  const crawl = collected.store(now, {
     generatedAt,
     // With no report counted (every read a read again), the span is just this crawl's moment.
     from: isoSeconds(Number.isFinite(first) ? first : now),
@@ -622,7 +558,7 @@ async function main() {
   });
   await writeFile(`${target}.tmp`, encodeCopies(crawl, key));
   await rename(`${target}.tmp`, target);
-  console.log(`Wrote ${copies} copies of ${copiesByWeapon.size} weapons: ${summary()}, ending at ${client.rate()}/s, to ${target}.`);
+  console.log(`Wrote ${copies} copies of ${collected.weapons()} weapons: ${summary()}, ending at ${client.rate()}/s, to ${target}.`);
 }
 
 main().catch((error: unknown) => {
