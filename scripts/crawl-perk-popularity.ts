@@ -47,7 +47,7 @@ import {
  *   tsx scripts/crawl-perk-popularity.ts --players=500 --out=public/dev-data/perk-popularity.json
  *
  * Options: --players (stop once this many profiles have been read, default 20000), --minutes (time
- * budget, default 300), --rate (requests per second to start at, default 20),
+ * budget, default 300), --rate (requests per second to start at, default 20, or 8 on the app's key),
  * --workers (requests in flight, default 1.2 × --rate: a character read takes
  * about a second), --recent=<minutes> (sample the reports that ended in the last
  * this many minutes as the crawl goes, instead of a fixed window), --hours (how far back to
@@ -104,7 +104,8 @@ function readUntil(day: string | undefined, hours: number) {
   return until;
 }
 
-function readOptions(): Options {
+/** `defaultRate` is the --rate when none is passed (see main). */
+function readOptions(defaultRate: number): Options {
   // Strict: an unknown flag (a typo like --recnet) or one missing its value is an error, not a default crawl.
   const { values: args } = parseArgs({
     options: Object.fromEntries(
@@ -129,7 +130,7 @@ function readOptions(): Options {
     const hours = number("hours", 24);
     sample = { kind: "window", hours, until: readUntil(args.day, hours) };
   }
-  const rate = number("rate", 20);
+  const rate = number("rate", defaultRate);
   return {
     players: number("players", 20_000),
     minutes: number("minutes", 300),
@@ -400,11 +401,13 @@ async function movingWindow(get: Get, newest: number, minutes: number): Promise<
 
 async function main() {
   loadEnvConfig(process.cwd());
-  const options = readOptions();
   const apiKey = process.env.BUNGIE_CRAWLER_API_KEY || process.env.NEXT_PUBLIC_BUNGIE_API_KEY;
   if (!apiKey) throw new Error("Set BUNGIE_CRAWLER_API_KEY to crawl.");
-  if (!process.env.BUNGIE_CRAWLER_API_KEY)
-    console.warn("No BUNGIE_CRAWLER_API_KEY; using the app's key. Keep this run small.");
+  const appKey = !process.env.BUNGIE_CRAWLER_API_KEY;
+  if (appKey) console.warn("No BUNGIE_CRAWLER_API_KEY; using the app's key. Keep this run small.");
+  // The app's key is the one d2conflux.com users share, so a throttle on it would hit them:
+  // default to the old 8/s there, and leave 20/s to the crawler key.
+  const options = readOptions(appKey ? 8 : 20);
 
   const catalog = JSON.parse(await readFile(resolve(options.catalog), "utf8")) as PopularityCatalog;
   const lookup = popularityLookup(catalog);
