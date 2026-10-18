@@ -15,17 +15,17 @@ import type { WeaponSummary } from "./types";
 
 /**
  * The popularity snapshot. In development it's the local crawler output
- * (public/dev-data, git-ignored); otherwise the published copy on GitHub Pages,
- * so Vercel never serves it. Optional: if it can't load, the weapon page just
- * goes without popularity.
+ * (public/dev-data, git-ignored) when there is a usable one, else the published
+ * copy on GitHub Pages, which is all production reads, so Vercel never serves
+ * it. Optional: if it can't load, the weapon page just goes without popularity.
  */
 export function usePerkPopularityIndex() {
   return useStaticJson({
     key: "perk-popularity",
-    url:
+    urls:
       process.env.NODE_ENV === "development"
-        ? "/dev-data/perk-popularity.json"
-        : PERK_POPULARITY_URL,
+        ? ["/dev-data/perk-popularity.json", PERK_POPULARITY_URL]
+        : [PERK_POPULARITY_URL],
     what: "Perk popularity",
     retry: false,
     parse: (json) => {
@@ -97,7 +97,8 @@ export function useWeaponPopularity(
       weapon.columns[column]?.perkIndices.find((i) => catalog.perks[i]?.hash === hash);
     const columns = weapon.columns.flatMap(({ perkIndices }, column) => {
       const byHash = new Map(columnShares(data, column).map(({ hash, share }) => [hash, share]));
-      if (byHash.size === 0) return [];
+      // Nothing counted here, or (a catalog that has since changed) no perks to show it on.
+      if (byHash.size === 0 || perkIndices.length === 0) return [];
       const perks = perkIndices.map((perkIndex) => ({
         perkIndex,
         share: byHash.get(catalog.perks[perkIndex]?.hash ?? -1) ?? 0,

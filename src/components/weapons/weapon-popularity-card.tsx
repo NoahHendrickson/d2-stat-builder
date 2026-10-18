@@ -20,7 +20,9 @@ const SMALL_SAMPLE = 30;
 
 const shortDate = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" });
 
-const percent = (share: number) => (share < 0.01 ? "<1%" : `${Math.round(share * 100)}%`);
+/** A share as a whole percent; nobody at all is "0%", a few people "<1%". */
+const percent = (share: number) =>
+  share === 0 ? "0%" : share < 0.01 ? "<1%" : `${Math.round(share * 100)}%`;
 
 /**
  * A share bar's colour within its column: green for the most run perk, red for

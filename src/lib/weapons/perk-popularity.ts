@@ -37,10 +37,13 @@ export interface PerkPopularityIndex {
   /** 2: PvE only, plain counts (1 held [PvE, PvP] pairs). */
   schema: 2;
   generatedAt: string;
-  /** The span of the post-game reports sampled. */
+  /** The span of the post-game reports sampled, by when they ended. */
   from: string;
   to: string;
-  /** Distinct players sampled. */
+  /**
+   * Players whose profile was read: distinct within one crawl, and added up
+   * across days by the merge (a player seen on two days counts twice).
+   */
   players: number;
   /** By weapon item hash. */
   weapons: Record<string, WeaponPopularity>;

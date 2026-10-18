@@ -10,7 +10,7 @@ import type { WeaponDpsIndex } from "./weapon-dps";
 export function useWeaponDps() {
   return useStaticJson({
     key: "weapon-dps",
-    url: "/data/weapon-dps.json",
+    urls: ["/data/weapon-dps.json"],
     what: "Weapon DPS",
     revalidateInDev: true,
     parse: (json) => {
