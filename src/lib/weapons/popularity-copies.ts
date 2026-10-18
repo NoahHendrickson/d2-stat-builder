@@ -5,8 +5,10 @@
  * earlier record. A player's copies count for as long as they keep playing:
  * each crawl reads again players it hasn't read for a while (recheckPlan),
  * which refreshes their copies and when they last played, and a player who
- * hasn't played for --days drops out with all their copies (pruneCopies). The
- * snapshot the app reads is the store tallied (snapshotFromCopies).
+ * hasn't played for --days drops out with all their copies (pruneCopies). A
+ * read that saw their whole inventory drops what they no longer have; for
+ * everyone else a copy unseen for --unseen-days drops out. The snapshot the
+ * app reads is the store tallied (snapshotFromCopies).
  *
  * Pure data, no Node: the file format is scripts/copy-store-file.ts, which
  * encrypts it, since the store lists the players it found.
@@ -355,18 +357,29 @@ function mergeWeapon(
 
 /**
  * The store without players who last played before `firstDay`, their copies
- * with them, and without players left with no copies; crawls that finished
+ * with them; without the copies of a player whose latest read didn't see
+ * everything (a private vault) that haven't been seen since `firstSeen`, since
+ * nothing else can tell those were dismantled (a whole read drops what's gone
+ * itself); and without players left with no copies. Crawls that finished
  * before `firstDay` drop off the list too. A weapon left with no copies is
- * dropped. When no player goes, the copies are kept as they are.
+ * dropped. When nothing goes, the copies are kept as they are.
  */
-export function pruneCopies(store: CopyStore, firstDay: number): CopyStore {
+export function pruneCopies(store: CopyStore, firstDay: number, firstSeen = 0): CopyStore {
   const { owners } = store;
   const runs = store.runs.filter((run) => storeDay(Date.parse(run.generatedAt)) >= firstDay);
-  const playing = (owner: number) => owners.played[owner]! >= firstDay;
-  // Players kept: still playing, with a copy.
+  const keeps = (weapon: WeaponCopies, i: number) => {
+    const owner = weapon.owners[i]!;
+    return owners.played[owner]! >= firstDay && (owners.whole[owner] === 1 || weapon.seen[i]! >= firstSeen);
+  };
+  // Players kept: still playing, with a copy kept.
   const kept = new Uint8Array(owners.ids.length);
-  for (const weapon of store.weapons.values()) for (const owner of weapon.owners) if (playing(owner)) kept[owner] = 1;
-  if (kept.every(Boolean)) return { ...store, runs };
+  let copiesGo = false;
+  for (const weapon of store.weapons.values())
+    for (let i = 0; i < weapon.ids.length; i++) {
+      if (keeps(weapon, i)) kept[weapon.owners[i]!] = 1;
+      else copiesGo = true;
+    }
+  if (!copiesGo && kept.every(Boolean)) return { ...store, runs };
 
   // Number the players kept afresh, in their old order.
   const renumber = new Uint32Array(owners.ids.length);
@@ -381,9 +394,7 @@ export function pruneCopies(store: CopyStore, firstDay: number): CopyStore {
   for (const [hash, weapon] of store.weapons) {
     const out = allocWeapon(weapon.columns, weapon.perks, weapon.ids.length);
     let k = 0;
-    weapon.owners.forEach((owner, i) => {
-      if (kept[owner]) copyRow(weapon, i, out, k++);
-    });
+    for (let i = 0; i < weapon.ids.length; i++) if (keeps(weapon, i)) copyRow(weapon, i, out, k++);
     if (k === 0) continue;
     const left = k === weapon.ids.length ? weapon : trimmed(out, k);
     weapons.set(hash, { ...left, owners: left.owners.map((owner) => renumber[owner]!) });

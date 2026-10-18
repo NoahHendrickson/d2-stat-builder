@@ -18,7 +18,10 @@ import { decodeCopies, encodeCopies, storeKey } from "./copy-store-file";
  * (see src/lib/weapons/popularity-copies.ts). Each --add is a crawl's file;
  * a copy seen again keeps its latest sighting, a player read again keeps their
  * latest read, and a crawl already in the store is skipped. A player who last
- * played more than --days ago (today included) drops out with their copies.
+ * played more than --days ago (today included) drops out with their copies,
+ * and a copy of a player whose latest read didn't see their vault drops out
+ * once it hasn't been seen for --unseen-days (default 30): only a whole read
+ * can tell a copy was dismantled.
  * The store is rewritten in place; a missing one starts empty. Both files are
  * encrypted with POPULARITY_STORE_KEY (see scripts/copy-store-file.ts).
  * Nothing is written when the store would be left empty, so a run of failed
@@ -38,6 +41,7 @@ async function main() {
       store: { type: "string" },
       add: { type: "string", multiple: true },
       days: { type: "string" },
+      "unseen-days": { type: "string" },
       catalog: { type: "string" },
       out: { type: "string" },
     },
@@ -45,6 +49,8 @@ async function main() {
   if (!args.store || !args.out) throw new Error("Pass --store=<copy store> and --out=<snapshot>.");
   const days = Number(args.days ?? 14);
   if (!Number.isInteger(days) || days < 1) throw new Error("--days must be a whole number of days.");
+  const unseenDays = Number(args["unseen-days"] ?? 30);
+  if (!Number.isInteger(unseenDays) || unseenDays < 1) throw new Error("--unseen-days must be a whole number of days.");
 
   const catalog = JSON.parse(
     await readFile(resolve(args.catalog || "public/data/weapons.json"), "utf8"),
@@ -73,7 +79,7 @@ async function main() {
   );
   // The empty first merge holds the store to today's catalog even with nothing to add.
   for (const crawl of [emptyStore(), ...crawls]) store = mergeCopies(store, crawl, columnsOf);
-  store = pruneCopies(store, storeDay() - (days - 1));
+  store = pruneCopies(store, storeDay() - (days - 1), storeDay() - (unseenDays - 1));
   const copies = copyCount(store);
   if (copies === 0) throw new Error(`No player who's played in the last ${days} days has any copies; nothing written.`);
 

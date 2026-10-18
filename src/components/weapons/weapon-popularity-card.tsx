@@ -172,8 +172,8 @@ function HowPopularityWorks({ view }: { view: WeaponPopularityView }) {
       <TooltipContent side="bottom" align="end" className="grid max-w-72 gap-1.5 text-xs">
         <p>
           We find players through PvE matches and read the perks on the legendary weapons they
-          have equipped, plus the ones in their vault when it&apos;s public. Each copy counts once, for
-          as long as its owner keeps playing.
+          have equipped, plus the ones in their vault when it&apos;s public. Each copy counts once, while
+          its owner keeps playing and still has it.
         </p>
         <p>
           Each percentage is the share of those copies with that perk, or with that left and right

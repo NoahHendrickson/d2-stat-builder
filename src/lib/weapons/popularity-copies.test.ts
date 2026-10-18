@@ -247,13 +247,29 @@ describe("mergeCopies", () => {
 describe("pruneCopies", () => {
   const day = storeDay(Date.parse("2026-10-18T12:00:00Z"));
 
-  it("keeps a player's copies for as long as they play, however long ago they were seen", () => {
-    const seenLongAgo = crawl(day - 40, "2026-09-08T12:00:00Z", [player(7, day - 40)], [[1, 1, 7, [undefined, 11, 13, 15]]]);
+  it("keeps a private player's copy while they play until it goes unseen for the unseen window", () => {
+    const seenAgo = (days: number) => crawl(day - days, "2026-09-01T12:00:00Z", [player(7, day - days)], [[1, 1, 7, [undefined, 11, 13, 15]]]);
     // Read again today without the vault: copy 1 wasn't equipped, but they still play.
     const readToday = crawl(day, "2026-10-18T12:00:00Z", [player(7, day)], [[2, 2, 7, [12]]]);
-    const pruned = pruneCopies(merge(seenLongAgo, readToday), day - 13);
-    expect(contents(pruned)).toEqual({ 1: [[1, day - 40, 7, [undefined, 11, 13, 15]]], 2: [[2, day, 7, [12]]] });
-    expect(pruned.runs.map((r) => r.generatedAt)).toEqual(["2026-10-18T12:00:00Z"]);
+    const kept = pruneCopies(merge(seenAgo(25), readToday), day - 13, day - 29);
+    expect(contents(kept)).toEqual({ 1: [[1, day - 25, 7, [undefined, 11, 13, 15]]], 2: [[2, day, 7, [12]]] });
+    expect(kept.runs.map((r) => r.generatedAt)).toEqual(["2026-10-18T12:00:00Z"]);
+    // Unseen for 40 days: only a whole read could say it's gone, so it goes.
+    expect(contents(pruneCopies(merge(seenAgo(40), readToday), day - 13, day - 29))).toEqual({ 2: [[2, day, 7, [12]]] });
+  });
+
+  it("drops a private player whose every copy went unseen, and keeps a whole read's copies", () => {
+    const store = merge(
+      crawl(day - 40, "2026-09-08T12:00:00Z", [player(7, day - 40), player(8, day - 40, true)], [
+        [1, 1, 7, [undefined, 11, 13, 15]],
+        [1, 2, 8, [undefined, 12, 13, 15]],
+      ]),
+    );
+    // Both still play (a sighting today), neither re-read.
+    store.owners.played.fill(day);
+    const pruned = pruneCopies(store, day - 13, day - 29);
+    expect(players(pruned).map(([id]) => id)).toEqual([8]);
+    expect(contents(pruned)[1]).toEqual([[2, day - 40, 8, [undefined, 12, 13, 15]]]);
   });
 
   it("drops players who haven't played for the window, their copies with them, and renumbers the rest", () => {
