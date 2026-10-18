@@ -35,7 +35,9 @@ import {
  *
  * Options: --players (stop after this many, default 20000), --minutes (time
  * budget, default 300), --rate (requests per second, default 8), --workers
- * (default 6), --hours (how far back to sample, default 24), --catalog
+ * (default 6), --hours (how far back to sample, default 24), --day (backfill: sample
+ * the --hours before 06:00 UTC on that YYYY-MM-DD, the window the scheduled
+ * crawl that day would have had, instead of the hours before now), --catalog
  * (weapons.json path, default public/data/weapons.json), --out (required).
  * The key comes from BUNGIE_CRAWLER_API_KEY, falling back to
  * NEXT_PUBLIC_BUNGIE_API_KEY for small local runs.
@@ -51,8 +53,18 @@ interface Options {
   rate: number;
   workers: number;
   hours: number;
+  /** Backfill: the day whose scheduled crawl to stand in for. */
+  day?: string;
   catalog: string;
   out: string;
+}
+
+/** A --day value: a real YYYY-MM-DD date, or undefined when not given. */
+function readDay(value: string | undefined) {
+  if (!value) return undefined;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || Number.isNaN(Date.parse(`${value}T06:00:00Z`)))
+    throw new Error("--day must be a date like 2026-10-15.");
+  return value;
 }
 
 function readOptions(): Options {
@@ -74,6 +86,7 @@ function readOptions(): Options {
     rate: number("rate", 8),
     workers: number("workers", 6),
     hours: number("hours", 24),
+    day: readDay(args.day),
     catalog: args.catalog || "public/data/weapons.json",
     out: args.out,
   };
@@ -219,9 +232,16 @@ async function main() {
 
   console.log("Finding the newest post-game report…");
   const newest = await newestPgcr(client.get);
-  const oldest = await firstPgcrSince(client.get, newest, Date.now() - options.hours * 3_600_000);
-  console.log(`Sampling reports ${oldest}–${newest} (the last ${options.hours} hours) at random.`);
-  const randomId = () => oldest + Math.floor(Math.random() * (newest - oldest + 1));
+  // The window ends now, or for a backfill at 06:00 UTC on --day, when that
+  // day's scheduled crawl would have started.
+  const until = options.day ? Date.parse(`${options.day}T06:00:00Z`) : Date.now();
+  if (until > Date.now()) throw new Error(`--day ${options.day} hasn't reached 06:00 UTC yet.`);
+  const oldest = await firstPgcrSince(client.get, newest, until - options.hours * 3_600_000);
+  const last = options.day ? (await firstPgcrSince(client.get, newest, until)) - 1 : newest;
+  console.log(
+    `Sampling reports ${oldest}–${last} (the ${options.hours} hours before ${new Date(until).toISOString()}) at random.`,
+  );
+  const randomId = () => oldest + Math.floor(Math.random() * (last - oldest + 1));
 
   // Each weapon's copies (plugs by socket), tallied once every copy is in.
   const copiesByWeapon = new Map<number, (number | undefined)[][]>();
