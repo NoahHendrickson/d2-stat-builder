@@ -473,7 +473,7 @@ async function main() {
       // A player in the store who won't read (account gone, moved platform): count
       // it as a read, of nothing, so they wait a week like the rest instead of
       // heading the queue every crawl until they're pruned. When they played stays.
-      if (known) owners.push({ id: BigInt(id), type, played: undefined, whole: false });
+      if (known) collected.add({ id: BigInt(id), type, played: undefined }, [], false, true);
       return;
     }
     players++;
