@@ -7,7 +7,8 @@
  * through the same collector as the crawler's reads (popularity-reads.ts).
  *
  * The saved form is small and pure binary, no Node: version, flags, the copy
- * count, then per copy its instance id, item hash and plug hash per socket.
+ * count, then per copy its instance id, item hash, whether it's equipped and
+ * its plug hash per socket.
  * Weapons only (an instance with a damage type); which of them the tally
  * counts is decided when it's folded in, against that run's catalog.
  */
@@ -21,9 +22,13 @@ export interface Contribution {
   copies: ProfileCopy[];
 }
 
-const VERSION = 1;
+/** 2: a flags byte per copy (1 had none, so whether a copy was equipped isn't known). Rows of both are in the database, so both are read. */
+const VERSION = 2;
 /** Flags bit: sawAll. */
 const SAW_ALL = 1;
+/** A copy's flags bits: whether it was equipped, and whether that was known at all (so a copy from a version 1 row, passed on, stays unknown). */
+const EQUIPPED = 1;
+const PLACE_KNOWN = 2;
 /** A copy's plug count when the read had no sockets for it. */
 const NO_SOCKETS = 255;
 
@@ -48,19 +53,20 @@ export function contributionFromProfile(
 
 export function encodeContribution({ sawAll, copies }: Contribution): Uint8Array {
   let size = 1 + 1 + 4;
-  for (const copy of copies) size += 8 + 4 + 1 + (copy.plugs?.length ?? 0) * 4;
+  for (const copy of copies) size += 8 + 4 + 1 + 1 + (copy.plugs?.length ?? 0) * 4;
   const bytes = new Uint8Array(size);
   const view = new DataView(bytes.buffer);
   view.setUint8(0, VERSION);
   view.setUint8(1, sawAll ? SAW_ALL : 0);
   view.setUint32(2, copies.length, true);
   let at = 6;
-  for (const { id, itemHash, plugs } of copies) {
+  for (const { id, itemHash, plugs, equipped } of copies) {
     if (plugs && plugs.length >= NO_SOCKETS) throw new Error(`An item with ${plugs.length} sockets.`);
     view.setBigUint64(at, id, true);
     view.setUint32(at + 8, itemHash, true);
-    view.setUint8(at + 12, plugs ? plugs.length : NO_SOCKETS);
-    at += 13;
+    view.setUint8(at + 12, equipped === undefined ? 0 : PLACE_KNOWN | (equipped ? EQUIPPED : 0));
+    view.setUint8(at + 13, plugs ? plugs.length : NO_SOCKETS);
+    at += 14;
     // 0 for an empty socket: no plug has hash 0.
     for (const plug of plugs ?? []) {
       view.setUint32(at, plug ?? 0, true);
@@ -72,21 +78,30 @@ export function encodeContribution({ sawAll, copies }: Contribution): Uint8Array
 
 export function decodeContribution(bytes: Uint8Array): Contribution {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
-  if (view.getUint8(0) !== VERSION) throw new Error(`Contribution version ${view.getUint8(0)}; this reads ${VERSION}.`);
+  const version = view.getUint8(0);
+  if (version !== 1 && version !== VERSION) throw new Error(`Contribution version ${version}; this reads 1 and ${VERSION}.`);
   const sawAll = (view.getUint8(1) & SAW_ALL) !== 0;
   const copies: ProfileCopy[] = Array.from({ length: view.getUint32(2, true) });
   let at = 6;
   for (let i = 0; i < copies.length; i++) {
     const id = view.getBigUint64(at, true);
     const itemHash = view.getUint32(at + 8, true);
-    const count = view.getUint8(at + 12);
-    at += 13;
+    at += 12;
+    // A save from before each copy's flags were kept doesn't say whether it was equipped.
+    let equipped: boolean | undefined;
+    if (version >= 2) {
+      const flags = view.getUint8(at);
+      if (flags & PLACE_KNOWN) equipped = (flags & EQUIPPED) !== 0;
+      at += 1;
+    }
+    const count = view.getUint8(at);
+    at += 1;
     let plugs: (number | undefined)[] | undefined;
     if (count !== NO_SOCKETS) {
       plugs = [];
       for (let socket = 0; socket < count; socket++, at += 4) plugs.push(view.getUint32(at, true) || undefined);
     }
-    copies[i] = { id, itemHash, plugs };
+    copies[i] = { id, itemHash, plugs, equipped };
   }
   if (at !== bytes.byteLength) throw new Error("A damaged contribution.");
   return { sawAll, copies };

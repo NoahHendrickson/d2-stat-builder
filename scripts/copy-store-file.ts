@@ -13,6 +13,7 @@ import {
   type Owners,
   type WeaponCopies,
 } from "../src/lib/weapons/popularity-copies";
+import type { Hazard } from "../src/lib/weapons/popularity-hazard";
 
 /**
  * The copy store's file (src/lib/weapons/popularity-copies.ts). The store lists
@@ -21,16 +22,32 @@ import {
  * sit in a public release: "D2PE", a 12-byte IV, the 16-byte auth tag, then
  * the encrypted gzip of the store.
  * The store itself is little-endian throughout: "D2PC", version, a JSON header
- * (the runs), the owner count and each of OWNER_FIELDS in turn, then each
- * weapon: hash, column count, perk table, copy count, then each of
- * COPY_FIELDS in turn. Typed arrays are copied in bulk, so this only runs on a
- * little-endian machine (every one the crawl runs on).
+ * (the runs, and the merged store's hazard), the owner count and each of
+ * OWNER_FIELDS in turn, then each weapon: hash, column count, perk table, copy
+ * count, then each of COPY_FIELDS in turn. Typed arrays are copied in bulk, so
+ * this only runs on a little-endian machine (every one the crawl runs on).
  */
 
 /** "D2PC": the store's first four bytes, once decrypted and unzipped. */
 export const MAGIC = 0x43503244;
-/** 3: owners read to the minute (2 kept the day; 1 had no owners, and wasn't encrypted). */
-export const VERSION = 3;
+/**
+ * 4: each copy's equipped day, and the hazard in the header (2 kept owners'
+ * reads to the day; 1 had no owners, and wasn't encrypted). The change is
+ * one-way: code from before it can't read a version 4 store, so going back
+ * means starting the store over.
+ */
+export const VERSION = 4;
+/**
+ * Version 3 (no equipped days, no hazard) is still read, so the store on the
+ * release carries over: its copies come out never seen equipped. Needed only
+ * until the first version 4 merge rewrites that store, since crawl files
+ * always come from the same commit as the merge; drop it, V3_COPY_FIELDS and
+ * copyFieldsOf after that.
+ */
+const OLDEST_READ = 3;
+/** COPY_FIELDS a version 3 file has: all but `equipped`. */
+const V3_COPY_FIELDS = COPY_FIELDS.filter((field) => field !== "equipped");
+const copyFieldsOf = (version: number) => (version >= 4 ? COPY_FIELDS : V3_COPY_FIELDS);
 /** "D2PE": the encrypted file's first four bytes. */
 const SEALED = Buffer.from("D2PE");
 
@@ -67,7 +84,8 @@ function unseal(file: Buffer, key: Buffer) {
 
 export function encodeCopies(store: CopyStore, key: Buffer): Buffer {
   littleEndianOnly();
-  const header = Buffer.from(JSON.stringify({ runs: store.runs }));
+  // A crawl's store has no hazard; JSON leaves the field out.
+  const header = Buffer.from(JSON.stringify({ runs: store.runs, hazard: store.hazard }));
   const ownerArrays = OWNER_FIELDS.map((field) => store.owners[field]);
   const copyArrays = (weapon: WeaponCopies) => COPY_FIELDS.map((field) => weapon[field]);
   const bytes = (arrays: AnyArray[]) => arrays.reduce((sum, array) => sum + array.byteLength, 0);
@@ -104,24 +122,25 @@ function fill(array: AnyArray, data: Buffer, at: number) {
 }
 
 /** Reads the file through the owners; `weapons` then reads on from there, if it's wanted. */
-function readStore<T>(file: Buffer, key: Buffer, weapons: (data: Buffer, at: number) => T) {
+function readStore<T>(file: Buffer, key: Buffer, weapons: (data: Buffer, at: number, version: number) => T) {
   littleEndianOnly();
   const data = gunzipSync(unseal(file, key));
   if (data.length < 5 || data.readUInt32LE(0) !== MAGIC) throw new Error("Not a copy store.");
   const version = data.readUInt8(4);
-  if (version !== VERSION) throw new Error(`Copy store version ${version}; this reads ${VERSION}.`);
+  if (version < OLDEST_READ || version > VERSION)
+    throw new Error(`Copy store version ${version}; this reads ${OLDEST_READ} to ${VERSION}.`);
   let at = 5;
   const headerLength = data.readUInt32LE(at);
   at += 4;
-  const header = JSON.parse(data.toString("utf8", at, at + headerLength)) as { runs: CrawlSource[] };
+  const header = JSON.parse(data.toString("utf8", at, at + headerLength)) as { runs: CrawlSource[]; hazard?: Hazard };
   at += headerLength;
   const owners = allocOwners(data.readUInt32LE(at));
   at += 4;
   for (const field of OWNER_FIELDS) at = fill(owners[field], data, at);
-  return { runs: header.runs, owners, weapons: weapons(data, at) };
+  return { runs: header.runs, hazard: header.hazard, owners, weapons: weapons(data, at, version) };
 }
 
-function readWeapons(data: Buffer, start: number) {
+function readWeapons(data: Buffer, start: number, version: number) {
   let at = start;
   const weapons = new Map<number, WeaponCopies>();
   const count = data.readUInt32LE(at);
@@ -133,9 +152,10 @@ function readWeapons(data: Buffer, start: number) {
     at += 6;
     const perks = Array.from({ length: perkCount }, (_, i) => data.readUInt32LE(at + i * 4));
     at += perkCount * 4;
+    // A version 3 weapon has no equipped days: its copies keep allocWeapon's 0, never seen equipped.
     const weapon = allocWeapon(columns, perks, data.readUInt32LE(at));
     at += 4;
-    for (const field of COPY_FIELDS) at = fill(weapon[field], data, at);
+    for (const field of copyFieldsOf(version)) at = fill(weapon[field], data, at);
     weapons.set(hash, weapon);
   }
   return weapons;

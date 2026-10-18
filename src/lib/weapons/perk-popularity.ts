@@ -13,6 +13,7 @@
  * as a combo.
  */
 
+import type { Hazard } from "./popularity-hazard";
 import type { CompactWeaponIndex } from "./transport";
 
 /** Where the published snapshot lives (GitHub Pages, so serving it costs Vercel nothing). */
@@ -56,6 +57,8 @@ export interface PerkPopularityIndex {
 export interface MergedPopularity extends PerkPopularityIndex {
   /** The crawls of the last two weeks, oldest first. A player's copies can be older: they last as long as the player plays. */
   crawls: CrawlSource[];
+  /** How often a copy out of the loadout turns out to be gone, by days since last equipped (popularity-hazard.ts); missing in snapshots from before it was kept. */
+  hazard?: Hazard;
 }
 
 /**
@@ -90,6 +93,15 @@ export interface CrawlSource {
   sample: CrawlSample;
   /** lookupFingerprint of the weapons the crawl could list; the merge trusts its whole reads only on the same catalog. */
   catalog: string;
+  /**
+   * Players in the store due to be read again (recheckPlan) that the crawl
+   * didn't read, however it found them, by the time it ended: for its cap on
+   * re-reads, its time, or an early end. Growing over crawls of one length,
+   * re-reads aren't keeping up, and players go unread for longer than the
+   * unseen window allows for. Not kept by signed-in crawls, or by crawls from
+   * before it was.
+   */
+  due?: number;
 }
 
 /** The catalog fields the tally needs: public/data/weapons.json, narrowed. */
