@@ -4,20 +4,22 @@ import { mergePopularity, type PerkPopularityIndex } from "../src/lib/weapons/pe
 
 /**
  * Adds up the last week of daily perk-popularity crawls into the published
- * snapshot. Each daily file is named for its UTC day (2026-10-18.json); the
- * days within --days of today are merged (see mergePopularity) into --out.
+ * snapshot. Each file is named for the UTC day it was crawled (2026-10-18.json),
+ * with the hour after a T when a day has several runs (2026-10-18T06.json); the
+ * files of the days within --days of today are merged (see mergePopularity)
+ * into --out.
  * With --prune, daily files older than that are deleted, so the data repo only
  * keeps what the snapshot is built from.
  *
  *   tsx scripts/merge-perk-popularity.ts --dir=daily --days=7 --out=perk-popularity.json --prune
  */
 
-const DAY_FILE = /^(\d{4}-\d{2}-\d{2})\.json$/;
+const DAY_FILE = /^(\d{4}-\d{2}-\d{2})(?:T\d{2})?\.json$/;
 
 async function main() {
   const args = Object.fromEntries(
     process.argv.slice(2).map((arg) => {
-      const [key, value = "true"] = arg.replace(/^--/, "").split("=");
+      const [, key = "", value = "true"] = /^-*([^=]*)(?:=(.*))?$/s.exec(arg) ?? [];
       return [key, value];
     }),
   );
@@ -32,7 +34,7 @@ async function main() {
     const day = DAY_FILE.exec(name)?.[1];
     return day ? [{ name, day }] : [];
   });
-  const kept = files.filter((f) => f.day >= since).sort((a, b) => a.day.localeCompare(b.day));
+  const kept = files.filter((f) => f.day >= since).sort((a, b) => a.name.localeCompare(b.name));
   if (kept.length === 0) throw new Error(`No daily files since ${since} in ${dir}; nothing written.`);
   const snapshots = await Promise.all(
     kept.map(async (f) => JSON.parse(await readFile(join(dir, f.name), "utf8")) as PerkPopularityIndex),
@@ -43,7 +45,7 @@ async function main() {
   await rename(`${target}.tmp`, target);
   const copies = Object.values(merged.weapons).reduce((sum, w) => sum + w.copies, 0);
   console.log(
-    `Merged ${kept.length} days (${kept.map((f) => f.day).join(", ")}): ${merged.players} players, ${copies} copies, ${Object.keys(merged.weapons).length} weapons → ${target}.`,
+    `Merged ${kept.length} crawls (${kept.map((f) => f.name.replace(".json", "")).join(", ")}): ${merged.players} players, ${copies} copies, ${Object.keys(merged.weapons).length} weapons → ${target}.`,
   );
 
   if (args.prune === "true") {

@@ -17,32 +17,42 @@ import {
  * Samples which perks players run on legendary weapons, from Bungie's public
  * API, and writes a perk-popularity snapshot (see src/lib/weapons/perk-popularity.ts).
  *
- * It samples post-game reports at random from one window: the --hours before
- * `until`, which is now, or with --day the start of that day's scheduled crawl
- * (so a missed day can be backfilled with exactly the window it would have had).
+ * It samples post-game reports at random from one of two windows. With
+ * --recent, the reports that ended in the last few minutes, the window moving
+ * along with the crawl: a player's equipped weapons are read minutes after the
+ * match, so they're still the ones they used (more copies per read, and the
+ * right copy when they own two rolls of one weapon). Several short runs spread
+ * over the day cover it. Otherwise, the --hours before `until`, which is now,
+ * or with --day the start of that day's scheduled crawl (so a missed day can be
+ * backfilled with exactly the window it would have had).
  * Report ids are handed out as activities end (consecutive ids ended within
  * minutes of each other, though they may have started hours apart), so it finds
  * the id range the window spans by each report's end time and picks ids
  * uniformly inside it, which spreads the sample over every hour however early
  * it stops; that search is only precise to a minute or so, so a report that
- * ended outside the window is skipped. It skips PvP matches too (popularity is
+ * ended outside a fixed window is skipped. It skips PvP matches too (popularity is
  * PvE only), and for each player it hasn't seen reads the weapons the character in that report
  * has equipped, with their perks. Equipped items are public on every profile, so
  * no one signs in. A weapon only counts if the report lists it among the weapons
  * used in that match, so a PvE count is a weapon used in PvE, not whatever the
- * player went on to equip.
+ * player went on to equip; a player who used none the tally covers (only
+ * exotics, say) isn't read at all.
  * Each weapon's columns are read from their own sockets, learned from all its
  * copies at the end (see columnSockets). Nothing about a player is kept except
- * the tally. All requests share one rate limit; only throttles, server errors
- * and network failures are retried.
+ * the tally. All requests share one rate limit, which slows down for good each
+ * time Bungie throttles; only throttles, server errors and network failures
+ * are retried.
  *
  *   tsx scripts/crawl-perk-popularity.ts --players=500 --out=public/dev-data/perk-popularity.json
  *
  * Options: --players (stop once this many profiles have been read, default 20000), --minutes (time
- * budget, default 300), --rate (requests per second, default 8), --workers
- * (default 6), --hours (how far back to sample, default 24), --day (YYYY-MM-DD to
- * backfill; needs --hours=24, and a day the merge still keeps), --catalog
- * (weapons.json path, default public/data/weapons.json), --out (required).
+ * budget, default 300), --rate (requests per second to start at, default 20),
+ * --workers (requests in flight, default 24; a character read takes about a
+ * second, so this needs to be about --rate), --recent (sample the last this many
+ * minutes as the crawl goes, instead of a fixed window), --hours (how far back to
+ * sample, default 24), --day (YYYY-MM-DD to backfill; needs --hours=24, and a day
+ * the merge still keeps), --catalog (weapons.json path, default
+ * public/data/weapons.json), --out (required).
  * The key comes from BUNGIE_CRAWLER_API_KEY, falling back to
  * NEXT_PUBLIC_BUNGIE_API_KEY for small local runs.
  */
@@ -60,9 +70,14 @@ interface Options {
   minutes: number;
   rate: number;
   workers: number;
-  hours: number;
-  /** When the sampled window ends (ms): now, or the start of --day's scheduled crawl. */
-  until: number;
+  /** The fixed window: the `hours` before `until`; undefined with --recent. */
+  window?: {
+    hours: number;
+    /** When it ends (ms): now, or the start of --day's scheduled crawl. */
+    until: number;
+  };
+  /** With --recent: sample the reports that ended in the last this many minutes, as the crawl goes. */
+  recent?: number;
   catalog: string;
   out: string;
 }
@@ -91,7 +106,7 @@ function readUntil(day: string | undefined, hours: number) {
 function readOptions(): Options {
   const args = Object.fromEntries(
     process.argv.slice(2).map((arg) => {
-      const [key, value = ""] = arg.replace(/^--/, "").split("=");
+      const [, key = "", value = ""] = /^-*([^=]*)(?:=(.*))?$/s.exec(arg) ?? [];
       return [key, value];
     }),
   );
@@ -101,13 +116,16 @@ function readOptions(): Options {
     if (!Number.isFinite(value) || value <= 0) throw new Error(`--${key} must be a positive number.`);
     return value;
   };
+  const recent = args.recent ? number("recent", 15) : undefined;
+  if (recent && (args.day || args.hours))
+    throw new Error("--recent samples a moving window of its own; drop --hours and --day.");
   return {
     players: number("players", 20_000),
     minutes: number("minutes", 300),
-    rate: number("rate", 8),
-    workers: number("workers", 6),
-    hours: number("hours", 24),
-    until: readUntil(args.day, number("hours", 24)),
+    rate: number("rate", 20),
+    workers: number("workers", 24),
+    window: recent ? undefined : { hours: number("hours", 24), until: readUntil(args.day, number("hours", 24)) },
+    recent,
     catalog: args.catalog || "public/data/weapons.json",
     out: args.out,
   };
@@ -124,11 +142,18 @@ interface BungieResponse<T> {
 }
 
 
+/** How much slower the rate gets for each throttle, and the slowest it goes (requests per second). */
+const THROTTLE_SLOWDOWN = 0.8;
+const SLOWEST_RATE = 2;
+/** Throttles closer together than this are one burst (every request in flight hears it) and slow the rate once. */
+const THROTTLE_BURST_MS = 5_000;
+
 function bungieClient(apiKey: string, rate: number) {
-  const spacing = 1000 / rate;
+  let spacing = 1000 / rate;
   let nextSlot = 0;
   let requests = 0;
   let throttles = 0;
+  let slowedAt = 0;
   /** Waits for the next free slot under the shared rate limit. */
   async function slot() {
     const now = Date.now();
@@ -156,19 +181,31 @@ function bungieClient(apiKey: string, rate: number) {
       const throttled = status === 429 || (body !== undefined && THROTTLE_CODES.has(body.ErrorCode));
       // Any other answer (not found, private, bad parameters, …) won't change on retry.
       if (body && !throttled && status < 500) return undefined;
-      // Throttled, a 5xx, or no answer at all: wait as long as Bungie asks, at least a backoff,
-      // and hold every worker back for a throttle.
+      // Throttled, a 5xx, or no answer at all: wait as long as Bungie asks, at least a backoff.
+      // A throttle also holds every worker back and slows the rate for the rest of the run.
       const wait = Math.max((body?.ThrottleSeconds ?? 0) * 1000, 1000 * 2 ** attempt);
       if (throttled) {
         throttles++;
         nextSlot = Date.now() + wait;
+        if (Date.now() - slowedAt > THROTTLE_BURST_MS) {
+          slowedAt = Date.now();
+          spacing = Math.min(spacing / THROTTLE_SLOWDOWN, 1000 / SLOWEST_RATE);
+        }
       }
       await sleep(wait);
     }
     return undefined;
   }
-  /** `throttles` says whether --rate has room: none over a run means it does. */
-  return { get, requests: () => requests, throttles: () => throttles };
+  /**
+   * `throttles` and the `rate` it ended at say whether --rate has room: no
+   * throttles over a run means it does.
+   */
+  return {
+    get,
+    requests: () => requests,
+    throttles: () => throttles,
+    rate: () => Math.round((1000 / spacing) * 10) / 10,
+  };
 }
 
 interface PgcrEntry {
@@ -200,9 +237,13 @@ function endedAt(report: Pgcr) {
 
 /** An instant as Bungie writes its `period`: whole seconds, "2026-10-18T06:00:00Z". */
 const isoSeconds = (ms: number) => new Date(ms).toISOString().replace(".000Z", "Z");
-interface Profile {
-  characterEquipment?: {
-    data?: Record<string, { items: { itemHash: number; itemInstanceId?: string; bucketHash: number }[] }>;
+/**
+ * One character's equipment and its sockets (GetCharacter, components 205,305):
+ * about 13 KB, where the whole profile's is about 500 KB and no faster.
+ */
+interface Character {
+  equipment?: {
+    data?: { items: { itemHash: number; itemInstanceId?: string; bucketHash: number }[] };
   };
   itemComponents?: {
     sockets?: { data?: Record<string, { sockets: { plugHash?: number }[] }> };
@@ -226,6 +267,28 @@ async function newestPgcr(get: Get) {
   // Reports can be missing here and there; step back to one that exists.
   for (let id = low; id > low - 500; id--) if (await get<Pgcr>(pgcrUrl(id))) return id;
   throw new Error("Couldn't find a recent post-game report.");
+}
+
+/**
+ * The newest report id now, from one that existed earlier (`from`): gallop
+ * forward until an id is missing, then binary-search back to within a few
+ * hundred ids (a fraction of a minute). A missing id along the way only stops
+ * it short; the next call carries on.
+ */
+async function advanceNewest(get: Get, from: number) {
+  let low = from;
+  let step = 1_000;
+  while (await get<Pgcr>(pgcrUrl(low + step))) {
+    low += step;
+    step *= 2;
+  }
+  let high = low + step;
+  while (high - low > 300) {
+    const middle = Math.floor((low + high) / 2);
+    if (await get<Pgcr>(pgcrUrl(middle))) low = middle;
+    else high = middle;
+  }
+  return low;
 }
 
 /** When the report at or just after `id` ended (a few ids can be missing, or have no length). */
@@ -276,18 +339,47 @@ async function main() {
 
   console.log("Finding the newest post-game report…");
   const newest = await newestPgcr(client.get);
-  // The window's ids: from the first report that ended at its start to the
-  // first that ended at its end (newest when it ends now), the second search
-  // starting from the first. Both are only precise to a few thousand ids; the
-  // worker drops reports that ended outside the window.
-  const since = options.until - options.hours * 3_600_000;
-  const oldest = await firstPgcrSince(client.get, newest, since);
-  const end = await firstPgcrSince(client.get, newest, options.until, oldest);
-  if (end < oldest) throw new Error("The window is too short to hold any reports.");
-  console.log(
-    `Sampling reports ${oldest}–${end} (ended ${new Date(since).toISOString()} to ${new Date(options.until).toISOString()}) at random.`,
-  );
-  const randomId = () => oldest + Math.floor(Math.random() * (end - oldest + 1));
+  // The ids sampled, uniformly: [low, high].
+  const ids = { low: 0, high: 0 };
+  const { window, recent } = options;
+  let since = -Infinity;
+  if (window) {
+    // From the first report that ended at the window's start to the first that
+    // ended at its end (newest when it ends now), the second search starting
+    // from the first. Both are only precise to a few thousand ids; the worker
+    // drops reports that ended outside the window.
+    since = window.until - window.hours * 3_600_000;
+    ids.low = await firstPgcrSince(client.get, newest, since);
+    ids.high = await firstPgcrSince(client.get, newest, window.until, ids.low);
+    if (ids.high < ids.low) throw new Error("The window is too short to hold any reports.");
+    console.log(
+      `Sampling reports ${ids.low}–${ids.high} (ended ${new Date(since).toISOString()} to ${new Date(window.until).toISOString()}) at random.`,
+    );
+  } else {
+    // newestPgcr is only near the edge; close in on it, then find where the
+    // last `recent` minutes start.
+    ids.high = await advanceNewest(client.get, newest);
+    ids.low = await firstPgcrSince(client.get, ids.high, Date.now() - recent! * 60_000);
+    console.log(`Sampling the reports that ended in the last ${recent} minutes as the crawl goes (${ids.low}–${ids.high} now).`);
+  }
+  const randomId = () => ids.low + Math.floor(Math.random() * (ids.high - ids.low + 1));
+  /**
+   * With --recent, moves the sampled ids along with the clock: the newest id
+   * and the first that ended `recent` minutes ago, each searched from where it
+   * was (a dozen requests). Run about once a minute, one at a time.
+   */
+  let following = false;
+  async function followRecent() {
+    if (following) return;
+    following = true;
+    try {
+      const high = await advanceNewest(client.get, ids.high);
+      const low = await firstPgcrSince(client.get, high, Date.now() - recent! * 60_000, ids.low);
+      Object.assign(ids, { low, high });
+    } finally {
+      following = false;
+    }
+  }
 
   // Each weapon's copies (plugs by socket), tallied once every copy is in.
   const copiesByWeapon = new Map<number, (number | undefined)[][]>();
@@ -307,17 +399,21 @@ async function main() {
   async function samplePlayer(entry: PgcrEntry) {
     const user = entry.player?.destinyUserInfo;
     const used = new Set(entry.extended?.weapons?.map((w) => w.referenceId));
-    if (!user?.membershipId || used.size === 0 || seen.has(user.membershipId) || done()) return;
+    if (!user?.membershipId || seen.has(user.membershipId) || done()) return;
+    // Used nothing the tally covers (only exotics, or no weapon at all): reading
+    // their weapons couldn't add a copy, so don't spend a request on it. A
+    // quarter of the players with weapon kills.
+    if (![...used].some((hash) => lookup.has(hash))) return;
     seen.add(user.membershipId);
     reading++;
-    const profile = await client.get<Profile>(
-      `https://www.bungie.net/Platform/Destiny2/${user.membershipType}/Profile/${user.membershipId}/?components=205,305`,
+    const character = await client.get<Character>(
+      `https://www.bungie.net/Platform/Destiny2/${user.membershipType}/Profile/${user.membershipId}/Character/${entry.characterId}/?components=205,305`,
     );
     reading--;
-    if (!profile) return;
+    if (!character) return;
     players++;
-    const items = profile.characterEquipment?.data?.[entry.characterId]?.items ?? [];
-    const sockets = profile.itemComponents?.sockets?.data ?? {};
+    const items = character.equipment?.data?.items ?? [];
+    const sockets = character.itemComponents?.sockets?.data ?? {};
     for (const item of items) {
       if (!WEAPON_BUCKETS.has(item.bucketHash) || !item.itemInstanceId) continue;
       if (!used.has(item.itemHash) || !lookup.has(item.itemHash)) continue;
@@ -334,10 +430,10 @@ async function main() {
     while (!done()) {
       const report = await client.get<Pgcr>(pgcrUrl(randomId()));
       if (!report) continue;
-      // Ended outside the window, by the id search's slack (or can't be placed
-      // at all): not this crawl's to count.
+      // Ended outside a fixed window, by the id search's slack (or can't be
+      // placed at all): not this crawl's to count.
       const ended = endedAt(report);
-      if (ended === undefined || ended < since || ended >= options.until) continue;
+      if (ended === undefined || (window && (ended < since || ended >= window.until))) continue;
       // PvE only: a PvP match is passed over entirely (not counted, its players not sampled).
       const modes = report.activityDetails.modes ?? [report.activityDetails.mode];
       if (modes.includes(ALL_PVP)) continue;
@@ -350,11 +446,19 @@ async function main() {
 
   const progress = setInterval(() => {
     console.log(
-      `${players} players, ${copies} weapons, ${reports} reports, ${client.requests()} requests, ${client.throttles()} throttles`,
+      `${players} players, ${copies} weapons, ${reports} reports, ${client.requests()} requests, ${client.throttles()} throttles (${client.rate()}/s)${recent ? `, sampling ${ids.low}–${ids.high}` : ""}`,
     );
   }, 30_000);
+  const follow = recent
+    ? setInterval(() => {
+        followRecent().catch((error: unknown) =>
+          console.warn(`Couldn't move the window along: ${error instanceof Error ? error.message : error}`),
+        );
+      }, 60_000)
+    : undefined;
   await Promise.all(Array.from({ length: options.workers }, worker));
   clearInterval(progress);
+  clearInterval(follow);
 
   if (copies === 0) throw new Error("No weapons were tallied; nothing written.");
   const tally: Record<string, WeaponPopularity> = {};
@@ -377,7 +481,7 @@ async function main() {
   await writeFile(`${target}.tmp`, JSON.stringify(snapshot));
   await rename(`${target}.tmp`, target);
   console.log(
-    `Wrote ${Object.keys(tally).length} weapons from ${copies} equipped copies (${players} players, ${reports} reports, ${client.requests()} requests, ${client.throttles()} throttles) to ${target}.`,
+    `Wrote ${Object.keys(tally).length} weapons from ${copies} equipped copies (${players} players, ${reports} reports, ${client.requests()} requests, ${client.throttles()} throttles, ending at ${client.rate()}/s) to ${target}.`,
   );
 }
 
