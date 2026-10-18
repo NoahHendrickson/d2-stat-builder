@@ -24,8 +24,8 @@ import {
  * match, so they're still the ones they used (more copies per read, and the
  * right copy when they own two rolls of one weapon). Several short runs spread
  * over the day cover it. Otherwise, the --hours before `until`, which is now,
- * or with --day the start of that day's scheduled crawl (so a missed day can be
- * backfilled with exactly the window it would have had).
+ * or with --day 06:00 UTC that day (so a missed day can be backfilled with
+ * the 24 hours the old daily crawl would have had).
  * Report ids are handed out as activities end (consecutive ids ended within
  * minutes of each other, though they may have started hours apart), so it finds
  * the id range the window spans by each report's end time and picks ids
@@ -61,14 +61,18 @@ import {
 const WEAPON_BUCKETS = new Set([1498876634, 2465295065, 953998645]);
 /** DestinyActivityModeType.AllPvP: these reports are skipped, popularity is PvE only. */
 const ALL_PVP = 5;
-/** When the data repo's scheduled crawl starts each day, UTC (its workflow cron, "0 6 * * *"). */
-const SCHEDULED_CRAWL_UTC = "06:00";
+/**
+ * Where a --day backfill's 24 hours end, UTC: the day's 06:00, when the data
+ * repo's daily crawl used to start (it crawls every few hours now), so backfilled
+ * days line up with the daily ones they sit beside.
+ */
+const BACKFILL_DAY_END_UTC = "06:00";
 /** Days the data repo's merge keeps (merge-perk-popularity.ts --days); it prunes older days. */
 const MERGE_DAYS = 7;
 
 /** Which reports a crawl draws from (see the Sampler each one builds). */
 type Sample =
-  /** The `hours` before `until` (ms): now, or the start of --day's scheduled crawl. */
+  /** The `hours` before `until` (ms): now, or --day's 06:00 UTC. */
   | { kind: "window"; hours: number; until: number }
   /** The reports that ended in the last `minutes`, moving along as the crawl goes. */
   | { kind: "recent"; minutes: number };
@@ -84,20 +88,20 @@ interface Options {
 }
 
 /**
- * The end of the sampled window: now, or with --day the start of that day's
- * scheduled crawl. A --day is checked here, before any request: a real date
+ * The end of the sampled window: now, or with --day that day's 06:00 UTC. A
+ * --day is checked here, before any request: a real date
  * (Date.parse rolls 2026-02-30 over to March 2 rather than failing), not still
  * ahead, a 24-hour window (so it lines up with its neighbours instead of
  * overlapping them), and a day the merge still keeps.
  */
 function readUntil(day: string | undefined, hours: number) {
   if (day === undefined) return Date.now();
-  const until = Date.parse(`${day}T${SCHEDULED_CRAWL_UTC}:00Z`);
+  const until = Date.parse(`${day}T${BACKFILL_DAY_END_UTC}:00Z`);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || Number.isNaN(until) || !new Date(until).toISOString().startsWith(day))
     throw new Error(`--day must be a real date like 2026-10-15, not "${day}".`);
-  if (until > Date.now()) throw new Error(`--day ${day} hasn't reached ${SCHEDULED_CRAWL_UTC} UTC yet.`);
+  if (until > Date.now()) throw new Error(`--day ${day} hasn't reached ${BACKFILL_DAY_END_UTC} UTC yet.`);
   if (hours !== 24)
-    throw new Error("--day stands in for one scheduled crawl, so --hours must be 24; any other length overlaps the days beside it.");
+    throw new Error("--day stands in for one day's crawl, so --hours must be 24; any other length overlaps the days beside it.");
   const oldestKept = new Date(Date.now() - (MERGE_DAYS - 1) * 86_400_000).toISOString().slice(0, 10);
   if (day < oldestKept)
     throw new Error(`--day ${day} is older than the ${MERGE_DAYS} days the merge keeps (${oldestKept} on), so it would be pruned straight away.`);

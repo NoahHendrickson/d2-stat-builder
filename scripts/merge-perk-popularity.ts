@@ -4,12 +4,12 @@ import { parseArgs } from "node:util";
 import { mergePopularity, type PerkPopularityIndex } from "../src/lib/weapons/perk-popularity";
 
 /**
- * Adds up the last week of daily perk-popularity crawls into the published
- * snapshot. Each file is named for the UTC day it was crawled (2026-10-18.json),
- * with the hour after a T when a day has several runs (2026-10-18T06.json); the
- * files of the days within --days of today are merged (see mergePopularity)
+ * Adds up the last week of perk-popularity crawls into the published snapshot.
+ * Each file is named for the UTC day it was crawled (2026-10-18.json), with the
+ * hour after a T when a day has several crawls (2026-10-18T06.json); the
+ * crawls of the days within --days of today are merged (see mergePopularity)
  * into --out.
- * With --prune, daily files older than that are deleted, so the data repo only
+ * With --prune, files older than that are deleted, so the data repo only
  * keeps what the snapshot is built from.
  *
  *   tsx scripts/merge-perk-popularity.ts --dir=daily --days=7 --out=perk-popularity.json --prune
@@ -26,7 +26,7 @@ async function main() {
       prune: { type: "boolean" },
     },
   });
-  if (!args.dir || !args.out) throw new Error("Pass --dir=<daily files> and --out=<snapshot>.");
+  if (!args.dir || !args.out) throw new Error("Pass --dir=<crawl files> and --out=<snapshot>.");
   const days = Number(args.days ?? 7);
   if (!Number.isInteger(days) || days < 1) throw new Error("--days must be a whole number of days.");
   const dir = resolve(args.dir);
@@ -38,7 +38,7 @@ async function main() {
     return day ? [{ name, day }] : [];
   });
   const kept = files.filter((f) => f.day >= since).sort((a, b) => a.name.localeCompare(b.name));
-  if (kept.length === 0) throw new Error(`No daily files since ${since} in ${dir}; nothing written.`);
+  if (kept.length === 0) throw new Error(`No crawl files since ${since} in ${dir}; nothing written.`);
   const snapshots = await Promise.all(
     kept.map(async (f) => JSON.parse(await readFile(join(dir, f.name), "utf8")) as PerkPopularityIndex),
   );

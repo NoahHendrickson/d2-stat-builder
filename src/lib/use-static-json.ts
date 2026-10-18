@@ -3,10 +3,11 @@
 import { useQuery } from "@tanstack/react-query";
 
 /**
- * A JSON snapshot fetched once and kept for the session (the weapon catalog,
- * boss DPS, perk popularity, Clarity's insights). `parse` checks what arrived
- * and shapes it, throwing if it isn't usable; a failed fetch or parse leaves
- * the query in error, and callers that treat the data as optional go without.
+ * A JSON snapshot fetched once and kept for the session, or for `staleTime`
+ * (the weapon catalog, boss DPS, perk popularity, Clarity's insights). `parse`
+ * checks what arrived and shapes it, throwing if it isn't usable; a failed
+ * fetch or parse leaves the query in error, and callers that treat the data as
+ * optional go without.
  * Returns the query, so callers choose between `.data` and the loading state.
  */
 export function useStaticJson<T>({
@@ -16,6 +17,7 @@ export function useStaticJson<T>({
   parse,
   retry = 3,
   revalidateInDev = false,
+  staleTime = Infinity,
 }: {
   key: string;
   /**
@@ -34,11 +36,19 @@ export function useStaticJson<T>({
    * the next reload.
    */
   revalidateInDev?: boolean;
+  /**
+   * How long a load stays current (ms). Kept for the session by default; a
+   * snapshot rebuilt during the day sets one, so an open tab picks up the new
+   * copy on its next focus or mount after that.
+   */
+  staleTime?: number;
 }) {
   return useQuery({
     queryKey: [key],
-    staleTime: Infinity,
+    staleTime,
     gcTime: Infinity,
+    // The app turns focus refetches off; a snapshot that goes stale wants them back.
+    refetchOnWindowFocus: staleTime !== Infinity,
     retry,
     queryFn: async ({ signal }) => {
       const cache = revalidateInDev && process.env.NODE_ENV === "development" ? "no-cache" : "default";
