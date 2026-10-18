@@ -5,7 +5,7 @@ import { parseArgs } from "node:util";
 import { THROTTLE_CODES } from "../src/lib/bungie/throttle";
 import { popularityLookup, type CrawlSample, type PopularityCatalog } from "../src/lib/weapons/perk-popularity";
 import { allocOwners, lookupFingerprint, recheckPlan, storeDay } from "../src/lib/weapons/popularity-copies";
-import { readCollector } from "../src/lib/weapons/popularity-reads";
+import { profileCopies, readCollector, type ProfileRead } from "../src/lib/weapons/popularity-reads";
 import { decodeOwners, encodeCopies, storeKey } from "./copy-store-file";
 
 /**
@@ -223,23 +223,13 @@ function endedAt(report: Pgcr) {
 
 /** An instant as Bungie writes its `period`: whole seconds, "2026-10-18T06:00:00Z". */
 const isoSeconds = (ms: number) => new Date(ms).toISOString().replace(".000Z", "Z");
-interface Item {
-  itemHash: number;
-  itemInstanceId?: string;
-}
 /**
  * A profile read with PROFILE_COMPONENTS: 200–800 KB, and no slower than one
  * character's 13 KB. A private vault or inventory comes back as just its
  * privacy setting, no `data`.
  */
-interface Profile {
+interface Profile extends ProfileRead {
   profile?: { data?: { dateLastPlayed?: string } };
-  profileInventory?: { data?: { items: Item[] } };
-  characterInventories?: { data?: Record<string, { items: Item[] }> };
-  characterEquipment?: { data?: Record<string, { items: Item[] }> };
-  itemComponents?: {
-    sockets?: { data?: Record<string, { sockets: { plugHash?: number }[] }> };
-  };
 }
 
 const pgcrUrl = (id: number) =>
@@ -488,26 +478,13 @@ async function main() {
     }
     players++;
     if (known) rechecked++;
-    const vault = profile.profileInventory?.data?.items;
-    const inventories = profile.characterInventories?.data;
-    const sockets = profile.itemComponents?.sockets?.data;
-    const equipped = Object.values(profile.characterEquipment?.data ?? {}).flatMap((c) => c.items);
-    // Every bucket, the vault's included; the collector keeps the tally's weapons.
-    const items = [...equipped, ...Object.values(inventories ?? {}).flatMap((c) => c.items), ...(vault ?? [])];
+    // Every bucket, the vault's included, for the tally's weapons only (the lookup's).
+    const read = profileCopies(profile, ({ itemHash }) => lookup.has(itemHash));
     // A profile that doesn't say when they last played: a known player keeps
     // what the store knew, a new one goes by the report they were found in.
     const lastPlayed = Date.parse(profile.profile?.data?.dateLastPlayed ?? "");
     const played = Number.isNaN(lastPlayed) ? (known ? undefined : foundOn) : storeDay(lastPlayed);
-    const { found, whole } = collected.add(
-      { id: BigInt(id), type, played },
-      items.flatMap((item) =>
-        item.itemInstanceId
-          ? [{ itemHash: item.itemHash, id: BigInt(item.itemInstanceId), plugs: sockets?.[item.itemInstanceId]?.sockets.map((s) => s.plugHash) }]
-          : [],
-      ),
-      vault !== undefined && inventories !== undefined && sockets !== undefined,
-      known,
-    );
+    const { found, whole } = collected.add({ id: BigInt(id), type, played }, read.copies, read.sawAll, known);
     copies += found;
     if (whole) vaults++;
   }

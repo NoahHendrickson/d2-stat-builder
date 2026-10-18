@@ -20,6 +20,53 @@ export interface ProfileCopy {
   plugs: readonly (number | undefined)[] | undefined;
 }
 
+interface ItemRef {
+  itemHash: number;
+  itemInstanceId?: string;
+}
+type ItemsBy = Record<string, { items: readonly ItemRef[] }>;
+/** The profile components a read of copies needs (DestinyProfileResponse fits). */
+export interface ProfileRead {
+  profileInventory?: { data?: { items: readonly ItemRef[] } };
+  characterInventories?: { data?: ItemsBy };
+  characterEquipment?: { data?: ItemsBy };
+  itemComponents?: { sockets?: { data?: Record<string, { sockets: readonly { plugHash?: number }[] }> } };
+}
+
+/**
+ * The instanced items of `profile` that `keep` takes (equipped, character
+ * inventories, vault), each with its plugs by socket, and whether the read
+ * saw everything: the equipment, the inventories, the vault and the sockets
+ * all came back, and `keep` could tell every item (undefined: it couldn't).
+ * A private vault or inventory comes back as just its privacy setting, no
+ * `data`, so only a public or signed-in read sees everything.
+ */
+export function profileCopies(
+  profile: ProfileRead,
+  keep: (item: ItemRef & { itemInstanceId: string }) => boolean | undefined,
+): { copies: ProfileCopy[]; sawAll: boolean } {
+  const equipment = profile.characterEquipment?.data;
+  const inventories = profile.characterInventories?.data;
+  const vault = profile.profileInventory?.data?.items;
+  const sockets = profile.itemComponents?.sockets?.data;
+  let sawAll = equipment !== undefined && inventories !== undefined && vault !== undefined && sockets !== undefined;
+  const copies: ProfileCopy[] = [];
+  const items = [
+    ...Object.values(equipment ?? {}).flatMap((c) => c.items),
+    ...Object.values(inventories ?? {}).flatMap((c) => c.items),
+    ...(vault ?? []),
+  ];
+  for (const item of items) {
+    const id = item.itemInstanceId;
+    if (!id) continue;
+    const kept = keep({ ...item, itemInstanceId: id });
+    if (kept === undefined) sawAll = false;
+    if (!kept) continue;
+    copies.push({ itemHash: item.itemHash, id: BigInt(id), plugs: sockets?.[id]?.sockets.map((s) => s.plugHash) });
+  }
+  return { copies, sawAll };
+}
+
 /**
  * Collects players and their copies of the tally's weapons (random-rolled
  * legendaries, the lookup's), then builds the crawl's store from them.

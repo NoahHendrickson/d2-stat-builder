@@ -21,12 +21,19 @@ import { decodeRuns, encodeCopies, storeKey } from "./copy-store-file";
  *
  * It takes the players saved since the latest signed-in crawl in --store (the
  * store as the merge will add to it), or in the last --hours (default 336, two
- * weeks) without one, and writes nothing when there are none. --catalog
+ * weeks) without one, up to SETTLE_MS ago by the database's clock, and writes
+ * nothing when there are none. A save's time is when its transaction started,
+ * so one still committing as this reads can land just before the newest row
+ * it sees; stopping short, and starting the next run from where this one
+ * stopped (its `to`), picks it up then. --catalog
  * (weapons.json path, default public/data/weapons.json) picks the tally's
  * weapons, as in the crawler. The database comes from POPULARITY_DATABASE_URL
  * (a role that can only read popularity_contributions), falling back to
  * DATABASE_URL for local runs; the file's key from POPULARITY_STORE_KEY.
  */
+
+/** How far behind the database's clock the read stops: far longer than a save takes. */
+const SETTLE_MS = 5 * 60_000;
 
 interface Row {
   id: string;
@@ -71,6 +78,10 @@ async function main() {
   const since = new Date(Number.isFinite(latest) ? latest : Date.now() - hours * 3_600_000).toISOString();
 
   const sql = neon(url);
+  const [{ until }] = (await sql`
+    SELECT (extract(epoch FROM date_trunc('milliseconds', now())) * 1000)::float8 - ${SETTLE_MS} AS until`) as {
+    until: number;
+  }[];
   const rows = (await sql`
     SELECT membership_id::text AS id,
       membership_type::int AS type,
@@ -79,9 +90,10 @@ async function main() {
       encode(weapons, 'base64') AS weapons
     FROM popularity_contributions
     WHERE date_trunc('milliseconds', saved_at) > ${since}::timestamptz
+      AND date_trunc('milliseconds', saved_at) <= ${new Date(until).toISOString()}::timestamptz
     ORDER BY saved_at`) as Row[];
   if (rows.length === 0) {
-    console.log(`No signed-in players saved since ${since}; nothing written.`);
+    console.log(`No signed-in players saved from ${since} to ${new Date(until).toISOString()}; nothing written.`);
     return;
   }
 
@@ -108,9 +120,9 @@ async function main() {
   const generatedAt = new Date().toISOString();
   const crawl = collected.store(Date.parse(generatedAt), {
     generatedAt,
-    // When the first and last of them were saved, to the millisecond: the next run starts after `to`.
+    // When the first of them was saved, and where this read stopped: the next run starts after `to`.
     from: new Date(rows[0]!.saved).toISOString(),
-    to: new Date(rows.at(-1)!.saved).toISOString(),
+    to: new Date(until).toISOString(),
     players: rows.length,
     // Whether they were in the store already isn't known here.
     rechecked: 0,

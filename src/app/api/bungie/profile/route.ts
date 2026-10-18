@@ -125,15 +125,13 @@ async function loadProfile(held: Minted | undefined): Promise<Response> {
       return new Response(null, { status: 304 });
     }
     // Their weapons count towards perk popularity (contribution-store.ts), saved
-    // after the response so the page never waits on it.
+    // after the response so the page never waits on the write.
     const { destinyMembershipId, destinyMembershipType } = user;
-    const profile = res.Response;
-    if (destinyMembershipId && destinyMembershipType != null)
-      after(() =>
-        getServerContributionStore()
-          ?.save(destinyMembershipId, destinyMembershipType, profile)
-          .catch((err: unknown) => console.warn("Couldn't save weapons for perk popularity:", err)),
-      );
+    const save =
+      destinyMembershipId && destinyMembershipType != null
+        ? getServerContributionStore()?.prepare(destinyMembershipId, destinyMembershipType, res.Response)
+        : undefined;
+    if (save) after(() => save().catch((err: unknown) => console.warn("Couldn't save weapons for perk popularity:", err)));
     return NextResponse.json(slimProfile(res.Response));
   } catch (err) {
     // The Bungie client throws for platform errors too — `ErrorCode ≠ 1` in the body,

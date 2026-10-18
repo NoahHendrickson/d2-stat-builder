@@ -13,7 +13,7 @@
  */
 
 import type { DestinyProfileResponse } from "bungie-api-ts/destiny2";
-import type { ProfileCopy } from "./popularity-reads";
+import { profileCopies, type ProfileCopy } from "./popularity-reads";
 
 export interface Contribution {
   /** The read had the vault, character inventories and sockets, so it lists every weapon they have. */
@@ -27,31 +27,23 @@ const SAW_ALL = 1;
 /** A copy's plug count when the read had no sockets for it. */
 const NO_SOCKETS = 255;
 
-/** Their weapons and when they last played, from a profile read with components 100, 102, 201, 205, 300 and 305; undefined when it lacks the instances to tell weapons apart. */
+/**
+ * Their weapons and when they last played, from a profile read with
+ * components 100, 102, 201, 205, 300 and 305; undefined when it lacks the
+ * instances to tell weapons apart. An item whose instance is missing can't be
+ * told apart either, so the read then doesn't count as seeing everything.
+ */
 export function contributionFromProfile(
   profile: DestinyProfileResponse,
 ): { contribution: Contribution; lastPlayed: string | undefined } | undefined {
   const instances = profile.itemComponents?.instances?.data;
   if (!instances) return undefined;
-  const vault = profile.profileInventory?.data?.items;
-  const inventories = profile.characterInventories?.data;
-  const sockets = profile.itemComponents?.sockets?.data;
-  const items = [
-    ...Object.values(profile.characterEquipment?.data ?? {}).flatMap((c) => c.items),
-    ...Object.values(inventories ?? {}).flatMap((c) => c.items),
-    ...(vault ?? []),
-  ];
-  const copies: ProfileCopy[] = [];
-  for (const item of items) {
-    const id = item.itemInstanceId;
-    // Armor, ghosts and the rest have no damage type.
-    if (!id || !instances[id]?.damageType) continue;
-    copies.push({ itemHash: item.itemHash, id: BigInt(id), plugs: sockets?.[id]?.sockets.map((s) => s.plugHash) });
-  }
-  return {
-    contribution: { sawAll: vault !== undefined && inventories !== undefined && sockets !== undefined, copies },
-    lastPlayed: profile.profile?.data?.dateLastPlayed,
-  };
+  // Weapons have a damage type; armor, ghosts and the rest have none.
+  const contribution = profileCopies(profile, ({ itemInstanceId }) => {
+    const instance = instances[itemInstanceId];
+    return instance ? instance.damageType > 0 : undefined;
+  });
+  return { contribution, lastPlayed: profile.profile?.data?.dateLastPlayed };
 }
 
 export function encodeContribution({ sawAll, copies }: Contribution): Uint8Array {

@@ -519,7 +519,9 @@ export function tallyCopies(store: CopyStore, columnsOf: CatalogColumns): Record
 
 /**
  * The snapshot the app reads: the store tallied (see tallyCopies), its players,
- * the span of the crawls it lists, and the crawls.
+ * the span of the reports its crawls found players through (signed-in crawls
+ * span when inventories were saved, so they don't count towards it), and the
+ * crawls.
  */
 export function snapshotFromCopies(
   store: CopyStore,
@@ -527,11 +529,12 @@ export function snapshotFromCopies(
   generatedAt = new Date().toISOString(),
 ): MergedPopularity {
   const { runs } = store;
+  const reports = runs.filter((run) => run.sample.kind !== "signed-in");
   return {
     schema: 2,
     generatedAt,
-    from: runs.map((run) => run.from).sort()[0] ?? "",
-    to: runs.map((run) => run.to).sort().at(-1) ?? "",
+    from: reports.map((run) => run.from).sort()[0] ?? "",
+    to: reports.map((run) => run.to).sort().at(-1) ?? "",
     players: store.owners.ids.length,
     weapons: tallyCopies(store, columnsOf),
     crawls: runs,
