@@ -1,24 +1,21 @@
 import { describe, expect, it } from "vitest";
-import { HAZARD_MAX_GAP, type CrawlSource } from "./perk-popularity";
+import type { CrawlSource } from "./perk-popularity";
 import {
   copyCount,
-  describeHazard,
   emptyStore,
-  EQUIPPED,
   lookupFingerprint,
   mergeCopies,
-  PLACE_UNKNOWN,
   pruneCopies,
   recheckPlan,
   snapshotFromCopies,
   storeDay,
   storeFromCrawl,
-  STOWED,
   tallyCopies,
   type CatalogColumns,
   type CopyStore,
   type SeenOwner,
 } from "./popularity-copies";
+import { emptyHazard, HAZARD_MAX_GAP, HAZARD_WEEKS } from "./popularity-hazard";
 
 // Weapon 1: an intrinsic column (single perk, never identified), barrel 11/12,
 // traits 13/14 and 13/15. Weapon 2: one barrel column.
@@ -58,9 +55,9 @@ function crawl(day: number, at: string, players: SeenOwner[], copies: Copy[], ho
   return storeFromCrawl(players, byWeapon, when(day, hour), run(at, players.length));
 }
 
-/** Every copy as [id, place], by weapon. */
-const places = (store: CopyStore) =>
-  Object.fromEntries([...store.weapons].map(([hash, w]) => [hash, Array.from(w.ids, (id, i) => [Number(id), w.place[i]])]));
+/** Every copy as [id, day last seen equipped], by weapon. */
+const equippedDays = (store: CopyStore) =>
+  Object.fromEntries([...store.weapons].map(([hash, w]) => [hash, Array.from(w.ids, (id, i) => [Number(id), w.equipped[i]])]));
 
 /** Every copy as [id, day seen, owner's membership id, perks], by weapon. */
 function contents(store: CopyStore) {
@@ -399,39 +396,62 @@ describe("snapshotFromCopies", () => {
       // The copy both crawls saw counts once, with the later crawl's perk.
       weapons: { 2: { copies: 1, columns: [{ 12: 1 }] } },
       crawls: store.runs,
-      hazard: emptyStore().hazard,
+      hazard: emptyHazard(),
     });
   });
 });
 
 describe("the hazard", () => {
+  // A store week starts on a multiple of 7 store days; `day` is 3 into one.
   const day = storeDay(Date.parse("2026-10-18T12:00:00Z"));
+  const week = (d: number) => d - (d % 7);
   /** Zeros up to `gap`, then `n`. */
   const at = (gap: number, n = 1) => [...Array.from({ length: gap }, () => 0), n];
 
-  it("counts a whole player's copies as kept or gone when they're read whole again, by days since seen and where they were", () => {
-    const before = crawl(day - 7, "a", [player(7, day - 7, true)], [
+  it("keeps the day a copy was last seen equipped, through later sightings of it stowed", () => {
+    const before = crawl(day - 7, "a", [player(7, day - 7)], [
       [1, 1, 7, [undefined, 11, 13, 15], true],
       [1, 2, 7, [undefined, 12, 13, 15], false],
-      [2, 3, 7, [11], false],
-      // Seen before its place was kept: counts nowhere.
-      [2, 4, 7, [12]],
+      // From a read that didn't say: never seen equipped.
+      [2, 3, 7, [11]],
     ]);
-    expect(places(before)).toEqual({ 1: [[1, EQUIPPED], [2, STOWED]], 2: [[3, STOWED], [4, PLACE_UNKNOWN]] });
+    expect(equippedDays(before)).toEqual({ 1: [[1, day - 7], [2, 0]], 2: [[3, 0]] });
+    const again = crawl(day, "b", [player(7, day)], [
+      [1, 1, 7, [undefined, 11, 13, 15], false],
+      [1, 2, 7, [undefined, 12, 13, 15], true],
+      [2, 3, 7, [11]],
+    ]);
+    expect(equippedDays(merge(before, again))).toEqual({ 1: [[1, day - 7], [2, day]], 2: [[3, 0]] });
+    // Whichever order the two come in.
+    expect(equippedDays(merge(again, before))).toEqual({ 1: [[1, day - 7], [2, day]], 2: [[3, 0]] });
+    // A crawl's store has no hazard; a merged one always has.
+    expect(before.hazard).toBeUndefined();
+    expect(merge(before, again).hazard).toEqual(emptyHazard());
+  });
+
+  it("checks a whole player's copies out of the loadout when they're read whole again: stowed or gone, by days since equipped", () => {
+    const before = crawl(day - 7, "a", [player(7, day - 7, true)], [
+      // Still there, stowed, at the next read: checked and kept.
+      [1, 1, 7, [undefined, 11, 13, 15], true],
+      // Gone by the next read: checked and gone.
+      [1, 2, 7, [undefined, 12, 13, 15], true],
+      // Equipped again at the next read: not out of the loadout, so not checked.
+      [2, 3, 7, [11], true],
+      // Never seen equipped: nothing to measure the gap from, whether kept (4) or gone (5).
+      [2, 4, 7, [12], false],
+      [2, 5, 7, [12]],
+    ]);
     const again = crawl(day, "b", [player(7, day, true)], [
       [1, 1, 7, [undefined, 11, 13, 15], false],
       [2, 3, 7, [11], true],
+      [2, 4, 7, [12], false],
     ]);
     const merged = merge(before, again);
-    expect(merged.hazard).toEqual({ equipped: { kept: at(7), gone: [] }, stowed: { kept: at(7), gone: at(7) } });
-    // A copy's place follows its later sighting.
-    expect(places(merged)).toEqual({ 1: [[1, STOWED]], 2: [[3, EQUIPPED]] });
+    expect(merged.hazard).toEqual({ weeks: [{ day: week(day), checked: at(7, 2), gone: at(7) }] });
+    expect(equippedDays(merged)).toEqual({ 1: [[1, day - 7]], 2: [[3, day], [4, 0]] });
     // The hazard stays through a prune, and goes out in the snapshot.
     expect(pruneCopies(merged, day - 13).hazard).toEqual(merged.hazard);
     expect(snapshotFromCopies(merged, columnsOf).hazard).toEqual(merged.hazard);
-    expect(describeHazard(merged.hazard)).toBe(
-      "Copies of players read whole again: equipped: 1 checked (after 7 d 0.0% gone of 1); stowed: 2 checked (after 7 d 50.0% gone of 2).",
-    );
   });
 
   it("measures nothing from a read that didn't see everything, or of a player whole for the first time", () => {
@@ -439,21 +459,32 @@ describe("the hazard", () => {
       [1, 1, 7, [undefined, 11, 13, 15], true],
       [1, 2, 8, [undefined, 11, 13, 15], true],
     ]);
-    const again = crawl(day, "b", [player(7, day), player(8, day, true)], [[1, 2, 8, [undefined, 11, 13, 15], true]]);
-    const merged = merge(before, again);
-    expect(merged.hazard).toEqual(emptyStore().hazard);
-    expect(describeHazard(merged.hazard)).toBe(
-      "Copies of players read whole again: equipped: nothing checked yet; stowed: nothing checked yet.",
-    );
+    const again = crawl(day, "b", [player(7, day), player(8, day, true)], [[1, 2, 8, [undefined, 11, 13, 15], false]]);
+    expect(merge(before, again).hazard).toEqual(emptyHazard());
   });
 
-  it("adds to the store's counts crawl after crawl, gaps past the longest told apart counted as it", () => {
+  it("checks a copy again at every later whole read until it's gone, the gap from when it was last equipped", () => {
     const first = crawl(day - 100, "a", [player(7, day - 100, true)], [[2, 1, 7, [11], true]]);
-    const second = crawl(day - 7, "b", [player(7, day - 7, true)], [[2, 1, 7, [11], true], [2, 2, 7, [12], true]]);
-    const third = crawl(day, "c", [player(7, day, true)], [[2, 2, 7, [12], true]]);
-    expect(merge(first, second, third).hazard.equipped).toEqual({
-      kept: at(HAZARD_MAX_GAP).map((n, gap) => (gap === 7 ? 1 : n)),
-      gone: at(7),
+    // Stowed 93 days later: checked at the longest gap told apart, kept.
+    const second = crawl(day - 7, "b", [player(7, day - 7, true)], [[2, 1, 7, [11], false], [2, 2, 7, [12], true]]);
+    // Gone another week on, as is copy 2, out of the loadout for 7 days.
+    const third = crawl(day, "c", [player(7, day, true)], []);
+    expect(merge(first, second, third).hazard).toEqual({
+      weeks: [
+        { day: week(day - 7), checked: at(HAZARD_MAX_GAP), gone: [] },
+        { day: week(day), checked: at(HAZARD_MAX_GAP).map((n, gap) => (gap === 7 ? 1 : n)), gone: at(HAZARD_MAX_GAP).map((n, gap) => (gap === 7 ? 1 : n)) },
+      ],
     });
+  });
+
+  it("drops the hazard's old weeks with the prune", () => {
+    // Two weeks past the weeks kept, so the check's week starts HAZARD_WEEKS or more before the window however `day` falls in its week.
+    const long = HAZARD_WEEKS * 7 + 14;
+    const first = crawl(day - long - 7, "a", [player(7, day - long - 7, true)], [[2, 1, 7, [11], true]]);
+    const second = crawl(day - long, "b", [player(7, day - long, true)], [[2, 1, 7, [11], false]]);
+    const third = crawl(day, "c", [player(7, day, true)], [[2, 1, 7, [11], false]]);
+    const merged = merge(first, second, third);
+    expect(merged.hazard!.weeks.map((w) => w.day)).toEqual([week(day - long), week(day)]);
+    expect(pruneCopies(merged, day - 13).hazard!.weeks.map((w) => w.day)).toEqual([week(day)]);
   });
 });

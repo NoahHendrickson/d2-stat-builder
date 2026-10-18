@@ -60,20 +60,20 @@ describe("contributionFromProfile", () => {
 });
 
 describe("encodeContribution", () => {
-  it("round-trips, empty sockets, missing sockets and where each copy was included", () => {
+  it("round-trips, empty sockets, missing sockets and whether each copy was equipped (or that wasn't known) included", () => {
     const contribution = {
       sawAll: true,
       copies: [
         { itemHash: 4_000_000_000, id: BigInt("6917529000000000001"), plugs: [1, undefined, 4_294_967_295], equipped: true },
         { itemHash: 2, id: BigInt(3), plugs: undefined, equipped: false },
-        { itemHash: 2, id: BigInt(4), plugs: [], equipped: false },
+        { itemHash: 2, id: BigInt(4), plugs: [], equipped: undefined },
       ],
     };
     expect(decodeContribution(encodeContribution(contribution))).toEqual(contribution);
     expect(decodeContribution(encodeContribution({ sawAll: false, copies: [] }))).toEqual({ sawAll: false, copies: [] });
   });
 
-  it("reads a save from before each copy's place was kept, with the place unknown", () => {
+  it("reads a save from before each copy's flags were kept, without saying whether it was equipped", () => {
     // Version 1: no flags byte per copy. One copy, item 1, instance 1, one plug (5).
     const v1 = Uint8Array.of(1, 1, 1, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 5, 0, 0, 0);
     expect(decodeContribution(v1)).toEqual({ sawAll: true, copies: [{ itemHash: 1, id: BigInt(1), plugs: [5], equipped: undefined }] });
@@ -115,13 +115,14 @@ describe("a signed-in read in the store", () => {
     expect(first.store.owners.read[0]).toBe(Math.floor(savedAt / 60_000));
     expect(Array.from(first.store.weapons.get(1)!.seen)).toEqual([storeDay(savedAt), storeDay(savedAt)]);
 
-    // A day later copy 11 is gone (dismantled): the next save drops it, and
-    // both copies count towards the hazard, a day after they were seen: the
-    // equipped one kept, the one in the vault gone.
-    const second = read([{ itemHash: 1, id: BigInt(10), plugs: [100], equipped: true }], savedAt + 86_400_000);
+    // A day later copy 11 is gone (dismantled) and copy 10 is in the vault:
+    // the next save drops 11, and checks 10, equipped a day before and still
+    // there, for the hazard. 11 was never seen equipped, so it isn't checked.
+    const second = read([{ itemHash: 1, id: BigInt(10), plugs: [100], equipped: false }], savedAt + 86_400_000);
     const merged = mergeCopies(first.store, second.store, columnsOf);
     expect(Array.from(merged.weapons.get(1)!.ids)).toEqual([BigInt(10)]);
-    expect(merged.hazard).toEqual({ equipped: { kept: [0, 1], gone: [] }, stowed: { kept: [], gone: [0, 1] } });
+    const readDay = storeDay(savedAt + 86_400_000);
+    expect(merged.hazard).toEqual({ weeks: [{ day: readDay - (readDay % 7), checked: [0, 1], gone: [] }] });
   });
 
   it("doesn't stretch the snapshot's span of reports", () => {

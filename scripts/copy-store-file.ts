@@ -1,19 +1,19 @@
 import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import { endianness } from "node:os";
 import { gunzipSync, gzipSync } from "node:zlib";
-import type { CrawlSource, Hazard } from "../src/lib/weapons/perk-popularity";
+import type { CrawlSource } from "../src/lib/weapons/perk-popularity";
 import {
   allocOwners,
   allocWeapon,
   bytesOf,
   COPY_FIELDS,
-  emptyHazard,
   OWNER_FIELDS,
   type AnyArray,
   type CopyStore,
   type Owners,
   type WeaponCopies,
 } from "../src/lib/weapons/popularity-copies";
+import type { Hazard } from "../src/lib/weapons/popularity-hazard";
 
 /**
  * The copy store's file (src/lib/weapons/popularity-copies.ts). The store lists
@@ -22,24 +22,32 @@ import {
  * sit in a public release: "D2PE", a 12-byte IV, the 16-byte auth tag, then
  * the encrypted gzip of the store.
  * The store itself is little-endian throughout: "D2PC", version, a JSON header
- * (the runs and the hazard), the owner count and each of OWNER_FIELDS in turn,
- * then each weapon: hash, column count, perk table, copy count, then each of
- * COPY_FIELDS in turn. Typed arrays are copied in bulk, so this only runs on a
- * little-endian machine (every one the crawl runs on).
+ * (the runs, and the merged store's hazard), the owner count and each of
+ * OWNER_FIELDS in turn, then each weapon: hash, column count, perk table, copy
+ * count, then each of COPY_FIELDS in turn. Typed arrays are copied in bulk, so
+ * this only runs on a little-endian machine (every one the crawl runs on).
  */
 
 /** "D2PC": the store's first four bytes, once decrypted and unzipped. */
 export const MAGIC = 0x43503244;
 /**
- * 4: each copy's place and the hazard in the header (3 had neither, and is
- * still read: its copies' place unknown, no hazard yet; 2 kept owners' reads
- * to the day; 1 had no owners, and wasn't encrypted).
+ * 4: each copy's equipped day, and the hazard in the header (2 kept owners'
+ * reads to the day; 1 had no owners, and wasn't encrypted). The change is
+ * one-way: code from before it can't read a version 4 store, so going back
+ * means starting the store over.
  */
 export const VERSION = 4;
-/** The oldest version still read. */
+/**
+ * Version 3 (no equipped days, no hazard) is still read, so the store on the
+ * release carries over: its copies come out never seen equipped. Needed only
+ * until the first version 4 merge rewrites that store, since crawl files
+ * always come from the same commit as the merge; drop it, V3_COPY_FIELDS and
+ * copyFieldsOf after that.
+ */
 const OLDEST_READ = 3;
-/** COPY_FIELDS a version 3 file has: all but `place`. */
-const V3_COPY_FIELDS = COPY_FIELDS.filter((field) => field !== "place");
+/** COPY_FIELDS a version 3 file has: all but `equipped`. */
+const V3_COPY_FIELDS = COPY_FIELDS.filter((field) => field !== "equipped");
+const copyFieldsOf = (version: number) => (version >= 4 ? COPY_FIELDS : V3_COPY_FIELDS);
 /** "D2PE": the encrypted file's first four bytes. */
 const SEALED = Buffer.from("D2PE");
 
@@ -74,23 +82,19 @@ function unseal(file: Buffer, key: Buffer) {
   }
 }
 
-/**
- * `store` as a file. `version` is for the test of reading the version before
- * this one, which drops what it didn't have; everything real writes VERSION.
- */
-export function encodeCopies(store: CopyStore, key: Buffer, version: number = VERSION): Buffer {
+export function encodeCopies(store: CopyStore, key: Buffer): Buffer {
   littleEndianOnly();
-  if (version !== VERSION && version !== OLDEST_READ) throw new Error(`Can't write copy store version ${version}.`);
-  const header = Buffer.from(JSON.stringify(version >= 4 ? { runs: store.runs, hazard: store.hazard } : { runs: store.runs }));
+  // A crawl's store has no hazard; JSON leaves the field out.
+  const header = Buffer.from(JSON.stringify({ runs: store.runs, hazard: store.hazard }));
   const ownerArrays = OWNER_FIELDS.map((field) => store.owners[field]);
-  const copyArrays = (weapon: WeaponCopies) => (version >= 4 ? COPY_FIELDS : V3_COPY_FIELDS).map((field) => weapon[field]);
+  const copyArrays = (weapon: WeaponCopies) => COPY_FIELDS.map((field) => weapon[field]);
   const bytes = (arrays: AnyArray[]) => arrays.reduce((sum, array) => sum + array.byteLength, 0);
   let size = 4 + 1 + 4 + header.length + 4 + bytes(ownerArrays) + 4;
   for (const weapon of store.weapons.values())
     size += 4 + 1 + 1 + weapon.perks.length * 4 + 4 + bytes(copyArrays(weapon));
   const out = Buffer.alloc(size);
   let at = out.writeUInt32LE(MAGIC, 0);
-  at = out.writeUInt8(version, at);
+  at = out.writeUInt8(VERSION, at);
   at = out.writeUInt32LE(header.length, at);
   at += header.copy(out, at);
   const put = (array: AnyArray) => {
@@ -133,7 +137,7 @@ function readStore<T>(file: Buffer, key: Buffer, weapons: (data: Buffer, at: num
   const owners = allocOwners(data.readUInt32LE(at));
   at += 4;
   for (const field of OWNER_FIELDS) at = fill(owners[field], data, at);
-  return { runs: header.runs, hazard: header.hazard ?? emptyHazard(), owners, weapons: weapons(data, at, version) };
+  return { runs: header.runs, hazard: header.hazard, owners, weapons: weapons(data, at, version) };
 }
 
 function readWeapons(data: Buffer, start: number, version: number) {
@@ -148,10 +152,10 @@ function readWeapons(data: Buffer, start: number, version: number) {
     at += 6;
     const perks = Array.from({ length: perkCount }, (_, i) => data.readUInt32LE(at + i * 4));
     at += perkCount * 4;
-    // A version 3 weapon has no place array: its copies stay PLACE_UNKNOWN (allocWeapon's 0).
+    // A version 3 weapon has no equipped days: its copies keep allocWeapon's 0, never seen equipped.
     const weapon = allocWeapon(columns, perks, data.readUInt32LE(at));
     at += 4;
-    for (const field of version >= 4 ? COPY_FIELDS : V3_COPY_FIELDS) at = fill(weapon[field], data, at);
+    for (const field of copyFieldsOf(version)) at = fill(weapon[field], data, at);
     weapons.set(hash, weapon);
   }
   return weapons;

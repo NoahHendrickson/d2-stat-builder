@@ -467,7 +467,10 @@ async function main() {
   async function readPlayer(type: number, id: string, known: boolean, foundOn?: number) {
     seen.add(id);
     started++;
-    if (known) rereads++;
+    if (known) {
+      rereads++;
+      plan.read(id);
+    }
     reading++;
     const profile = await client.get<Profile>(
       `https://www.bungie.net/Platform/Destiny2/${type}/Profile/${id}/?components=${PROFILE_COMPONENTS}`,
@@ -559,7 +562,7 @@ async function main() {
     vaults,
     sample,
     catalog: lookupFingerprint(lookup),
-    // Left due when the crawl ended: growing from crawl to crawl, re-reads can't keep up with the store.
+    // Due players left unread when the crawl ended: growing over crawls of one length, re-reads can't keep up with the store.
     due: plan.remaining(),
   });
   await writeFile(`${target}.tmp`, encodeCopies(crawl, key));

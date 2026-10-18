@@ -8,9 +8,10 @@
  * hasn't played for --days drops out with all their copies (pruneCopies). A
  * read that saw their whole inventory drops what they no longer have; for
  * everyone else a copy unseen for --unseen-days drops out. How well that
- * window fits is measured as it goes (Hazard): each time a player read whole
- * is read whole again, their copies from before are each still there or gone.
- * The snapshot the app reads is the store tallied (snapshotFromCopies).
+ * window fits is measured as it goes (measureHazard, popularity-hazard.ts):
+ * each time a player read whole is read whole again, their copies out of the
+ * loadout are each still there or gone. The snapshot the app reads is the
+ * store tallied (snapshotFromCopies).
  *
  * Pure data, no Node: the file format is scripts/copy-store-file.ts, which
  * encrypts it, since the store lists the players it found.
@@ -18,14 +19,12 @@
 
 import {
   comboKey,
-  HAZARD_MAX_GAP,
   traitColumns,
   type CrawlSource,
-  type Hazard,
-  type HazardTally,
   type MergedPopularity,
   type WeaponPopularity,
 } from "./perk-popularity";
+import { cloneHazard, emptyHazard, pruneHazard, recordHazard, type Hazard } from "./popularity-hazard";
 
 /**
  * The players whose copies are in the store, one array per field: owner n is
@@ -66,8 +65,8 @@ const COPY_ARRAYS = {
   owners: Uint32Array,
   /** Per copy, `columns` indices into `perks`; UNKNOWN where the column's perk wasn't identified. */
   picks: Uint8Array,
-  /** Where each copy was when last seen: EQUIPPED, STOWED (an inventory or the vault) or PLACE_UNKNOWN. */
-  place: Uint8Array,
+  /** The day each copy was last seen equipped; 0 when it never was (or was seen only by reads from before this was kept). */
+  equipped: Uint16Array,
 };
 type CopyArrays = { [F in keyof typeof COPY_ARRAYS]: InstanceType<(typeof COPY_ARRAYS)[F]> };
 export const COPY_FIELDS = Object.keys(COPY_ARRAYS) as (keyof CopyArrays)[];
@@ -88,8 +87,8 @@ export interface CopyStore {
    * within it, not a full ledger: copies outlive the crawls that found them.
    */
   runs: CrawlSource[];
-  /** What the store has seen of copies going missing, added to by every merge (see Hazard). */
-  hazard: Hazard;
+  /** The merged store's checks of copies out of the loadout (popularity-hazard.ts); a crawl's store has none. */
+  hazard?: Hazard;
 }
 
 /** A weapon's catalog columns, by hash; undefined for a weapon the catalog doesn't have. */
@@ -97,11 +96,6 @@ export type CatalogColumns = (hash: number) => readonly { kind: string }[] | und
 
 /** A pick for a column whose perk wasn't identified. */
 export const UNKNOWN = 255;
-
-/** WeaponCopies.place: a copy seen before its place was kept, equipped on a character, or in an inventory or the vault. */
-export const PLACE_UNKNOWN = 0;
-export const EQUIPPED = 1;
-export const STOWED = 2;
 
 /** Today, or the day `ms` falls on, as a store day (UTC). */
 export const storeDay = (ms = Date.now()) => Math.floor(ms / 86_400_000);
@@ -128,52 +122,7 @@ function copyOwner(from: Owners, i: number, to: Owners, k: number) {
   for (const field of OWNER_FIELDS) to[field][k] = from[field][i]!;
 }
 
-const emptyTally = (): HazardTally => ({ kept: [], gone: [] });
-export const emptyHazard = (): Hazard => ({ equipped: emptyTally(), stowed: emptyTally() });
-const cloneTally = ({ kept, gone }: HazardTally): HazardTally => ({ kept: [...kept], gone: [...gone] });
-const cloneHazard = (hazard: Hazard): Hazard => ({ equipped: cloneTally(hazard.equipped), stowed: cloneTally(hazard.stowed) });
-
-/** Counts one copy last seen `gap` days before a whole read of its owner, which found it `kept` or gone; a copy whose place isn't known counts nowhere. */
-function recordHazard(hazard: Hazard, place: number, gap: number, kept: boolean) {
-  if (place === PLACE_UNKNOWN) return;
-  const tally = place === EQUIPPED ? hazard.equipped : hazard.stowed;
-  const counts = kept ? tally.kept : tally.gone;
-  const at = Math.min(Math.max(gap, 0), HAZARD_MAX_GAP);
-  while (counts.length <= at) counts.push(0);
-  counts[at]!++;
-}
-
-/** The copies a tally has seen at each gap, and how many of those were gone, as a share: index = gap in days. */
-function hazardByGap(tally: HazardTally) {
-  const gaps = Math.max(tally.kept.length, tally.gone.length);
-  return Array.from({ length: gaps }, (_, gap) => {
-    const gone = tally.gone[gap] ?? 0;
-    const seen = (tally.kept[gap] ?? 0) + gone;
-    return { gap, seen, gone };
-  }).filter((row) => row.seen > 0);
-}
-
-/**
- * The hazard in a few words for a log: for each place, how many copies have
- * been checked and, at the gaps seen most, how many of those were gone, so
- * the unseen window can be judged against what whole reads show.
- */
-export function describeHazard(hazard: Hazard, gaps = 4): string {
-  const places = (["equipped", "stowed"] as const).map((place) => {
-    const rows = hazardByGap(hazard[place]);
-    const seen = rows.reduce((sum, row) => sum + row.seen, 0);
-    if (seen === 0) return `${place}: nothing checked yet`;
-    const busiest = [...rows]
-      .sort((a, b) => b.seen - a.seen)
-      .slice(0, gaps)
-      .sort((a, b) => a.gap - b.gap)
-      .map((row) => `after ${row.gap} d ${((row.gone / row.seen) * 100).toFixed(1)}% gone of ${row.seen}`);
-    return `${place}: ${seen} checked (${busiest.join(", ")})`;
-  });
-  return `Copies of players read whole again: ${places.join("; ")}.`;
-}
-
-export const emptyStore = (): CopyStore => ({ owners: allocOwners(0), weapons: new Map(), runs: [], hazard: emptyHazard() });
+export const emptyStore = (): CopyStore => ({ owners: allocOwners(0), weapons: new Map(), runs: [] });
 
 export const copyCount = (store: CopyStore) =>
   [...store.weapons.values()].reduce((sum, weapon) => sum + weapon.ids.length, 0);
@@ -200,7 +149,7 @@ function copyRow(from: WeaponCopies, i: number, to: WeaponCopies, k: number, per
   to.ids[k] = from.ids[i]!;
   to.seen[k] = from.seen[i]!;
   to.owners[k] = from.owners[i]!;
-  to.place[k] = from.place[i]!;
+  to.equipped[k] = from.equipped[i]!;
   const { columns } = from;
   for (let column = 0; column < columns; column++) {
     const pick = from.picks[i * columns + column]!;
@@ -270,14 +219,14 @@ export function storeFromCrawl(
       weapon.ids[k] = copy.id;
       weapon.seen[k] = dayOfMinute(table.read[copy.owner]!);
       weapon.owners[k] = copy.owner;
-      weapon.place[k] = copy.equipped === undefined ? PLACE_UNKNOWN : copy.equipped ? EQUIPPED : STOWED;
+      if (copy.equipped) weapon.equipped[k] = weapon.seen[k]!;
       copy.perks.forEach((perk, column) => {
         if (perk !== undefined) weapon.picks[k * weapon.columns + column] = pickFor(perk, weapon.perks, indexOf);
       });
     });
     weapons.set(hash, weapon);
   }
-  return { owners: table, weapons, runs: [run], hazard: emptyHazard() };
+  return { owners: table, weapons, runs: [run] };
 }
 
 /** Each owner's index, by membership id. */
@@ -298,15 +247,15 @@ export function ownerIndex(owners: Owners) {
  * nothing:
  * - a copy in both keeps the record seen on the later day, or on the same
  *   day the one whose owner's read is the later, with any column it couldn't
- *   identify filled from the other;
+ *   identify filled from the other, and the later of the days it was seen
+ *   equipped;
  * - when the later read saw the player's whole inventory, a copy of theirs
  *   only the earlier read lists is gone (dismantled), on either side;
  * - when they last played is the latest either side knows, so a sighting in a
  *   report (no read) moves only that, and a read that couldn't tell moves nothing.
- * A player whole on both sides, `newer`'s read the later, has every older copy
- * of theirs checked by it: each adds to the hazard as kept or gone, by how
- * long since it was seen (`older`'s hazard carried over; `newer`'s is its own
- * and isn't).
+ * A player whole on both sides, `newer`'s read the later, has `older`'s copies
+ * of theirs checked against it for the hazard (measureHazard), added to
+ * `older`'s; `newer`'s own hazard, if any, isn't.
  * A `newer` whose crawls are all in `older` already (a crawl file merged
  * twice) changes nothing but the catalog check.
  */
@@ -314,7 +263,7 @@ export function mergeCopies(older: CopyStore, newer: CopyStore, columnsOf: Catal
   const applied = new Set(older.runs.map((run) => run.generatedAt));
   const fresh = newer.runs.filter((run) => !applied.has(run.generatedAt));
   const adding = fresh.length > 0 ? newer : emptyStore();
-  const hazard = cloneHazard(older.hazard);
+  const hazard = older.hazard ? cloneHazard(older.hazard) : emptyHazard();
 
   // Owners: older's keep their indices; newer's are updated in place or appended.
   // With no one to add (the merge that only holds the store to the catalog), older's as they are.
@@ -331,7 +280,7 @@ export function mergeCopies(older: CopyStore, newer: CopyStore, columnsOf: Catal
   const goneFromNewer = new Set<number>();
   /** Players whose newer read is the later one (or who are new): a copy both list, seen the same day, is newer's. */
   const newerLater = new Set<number>();
-  /** Players whole on both sides, newer's read the later: older's copies of theirs are checked against it, by the day it read them. */
+  /** Players whole on both sides, newer's read the later: older's copies of theirs are checked against it (measureHazard), by the day it read them. */
   const checked = new Map<number, number>();
   for (let i = 0; i < adding.owners.ids.length; i++) {
     const known = index.get(adding.owners.ids[i]!);
@@ -355,11 +304,6 @@ export function mergeCopies(older: CopyStore, newer: CopyStore, columnsOf: Catal
       if (adding.owners.whole[i]) goneFromOlder.add(k);
     } else if (read < owners.read[k]! && owners.whole[k]) goneFromNewer.add(k);
   }
-  /** Counts older's copy `i` of `weapon` towards the hazard when its owner is checked by this merge. */
-  const check = (weapon: WeaponCopies, i: number, kept: boolean) => {
-    const readDay = checked.get(weapon.owners[i]!);
-    if (readDay !== undefined) recordHazard(hazard, weapon.place[i]!, readDay - weapon.seen[i]!, kept);
-  };
 
   const weapons = new Map<number, WeaponCopies>();
   for (const hash of new Set([...older.weapons.keys(), ...adding.weapons.keys()])) {
@@ -370,18 +314,53 @@ export function mergeCopies(older: CopyStore, newer: CopyStore, columnsOf: Catal
     const b = fits(adding.weapons.get(hash));
     // Newer's copies in the merged owner numbering, so the join sees one numbering.
     const rebased = { ...b, owners: b.owners.map((owner) => ownerMap[owner]!) };
-    const merged = mergeWeapon(fits(older.weapons.get(hash)), rebased, goneFromOlder, goneFromNewer, newerLater, check);
+    const a = fits(older.weapons.get(hash));
+    if (checked.size > 0) measureHazard(a, rebased, checked, hazard);
+    const merged = mergeWeapon(a, rebased, goneFromOlder, goneFromNewer, newerLater);
     if (merged.ids.length > 0) weapons.set(hash, merged);
   }
   return { owners: adds ? trimmedOwners(owners, ownerCount) : owners, weapons, runs: [...older.runs, ...fresh], hazard };
+}
+
+/** Where `id` is in the sorted `ids`, or -1. */
+function sortedIndexOf(ids: BigUint64Array, id: bigint) {
+  let low = 0;
+  let high = ids.length - 1;
+  while (low <= high) {
+    const middle = (low + high) >> 1;
+    const at = ids[middle]!;
+    if (at === id) return middle;
+    if (at < id) low = middle + 1;
+    else high = middle - 1;
+  }
+  return -1;
+}
+
+/**
+ * Checks `older`'s copies of the players in `checked` (read whole on both
+ * sides, `newer`'s read the later, on the day given) against `newer`'s read
+ * of them, into `hazard`: a copy last seen equipped so many days before that
+ * read is out of the loadout, and `newer` either still lists it (stowed) or
+ * doesn't (gone). One `newer` has seen equipped since isn't out of it, and a
+ * copy never seen equipped (or seen only by reads from before that was kept)
+ * says nothing about the gap, so neither is checked.
+ */
+function measureHazard(older: WeaponCopies, newer: WeaponCopies, checked: ReadonlyMap<number, number>, hazard: Hazard) {
+  for (let i = 0; i < older.ids.length; i++) {
+    const readDay = checked.get(older.owners[i]!);
+    const equipped = older.equipped[i]!;
+    if (readDay === undefined || equipped === 0) continue;
+    const j = sortedIndexOf(newer.ids, older.ids[i]!);
+    if (j >= 0 && newer.equipped[j]! > equipped) continue;
+    recordHazard(hazard, readDay, readDay - equipped, j < 0);
+  }
 }
 
 /**
  * A merge join of `a` and `b`'s sorted ids into room for both, trimmed after.
  * A copy on one side only is kept unless its owner is in that side's gone set;
  * a copy on both is the later sighting, `b`'s on the same day when its owner
- * is in `bLater`. Each of `a`'s copies that `b` lists, or whose owner is in
- * `goneFromA`, is passed to `check` as kept or gone.
+ * is in `bLater`.
  * A side with nothing to add or drop comes back as it is: most weapons, most
  * merges, since a crawl touches a fraction of the store.
  */
@@ -391,7 +370,6 @@ function mergeWeapon(
   goneFromA: ReadonlySet<number>,
   goneFromB: ReadonlySet<number>,
   bLater: ReadonlySet<number>,
-  check: (weapon: WeaponCopies, i: number, kept: boolean) => void,
 ): WeaponCopies {
   const untouched = (side: WeaponCopies, gone: ReadonlySet<number>) =>
     gone.size === 0 || !side.owners.some((owner) => gone.has(owner));
@@ -409,19 +387,18 @@ function mergeWeapon(
   while (i < a.ids.length || j < b.ids.length) {
     if (j >= b.ids.length || (i < a.ids.length && a.ids[i]! < b.ids[j]!)) {
       if (!goneFromA.has(a.owners[i]!)) copyRow(a, i, out, k++, remapA);
-      else check(a, i, false);
       i++;
     } else if (i >= a.ids.length || b.ids[j]! < a.ids[i]!) {
       if (!goneFromB.has(b.owners[j]!)) copyRow(b, j, out, k++, remapB);
       j++;
     } else {
-      check(a, i, true);
-      // The same copy: the later sighting, its gaps filled from the other.
+      // The same copy: the later sighting, its gaps filled from the other, the later day it was seen equipped.
       const bIsLater = a.seen[i]! === b.seen[j]! ? bLater.has(b.owners[j]!) : b.seen[j]! > a.seen[i]!;
       const [later, at, remap, other, otherAt, otherRemap] = bIsLater
         ? [b, j, remapB, a, i, remapA]
         : [a, i, remapA, b, j, remapB];
       copyRow(later, at, out, k, remap);
+      out.equipped[k] = Math.max(a.equipped[i]!, b.equipped[j]!);
       for (let column = 0; column < columns; column++) {
         const pick = other.picks[otherAt * columns + column]!;
         if (out.picks[k * columns + column] === UNKNOWN && pick !== UNKNOWN)
@@ -441,12 +418,14 @@ function mergeWeapon(
  * everything (a private vault) that haven't been seen since `firstSeen`, since
  * nothing else can tell those were dismantled (a whole read drops what's gone
  * itself); and without players left with no copies. Crawls that finished
- * before `firstDay` drop off the list too. A weapon left with no copies is
- * dropped. When nothing goes, the copies are kept as they are.
+ * before `firstDay` drop off the list too, and so do the hazard's old weeks
+ * (pruneHazard). A weapon left with no copies is dropped. When nothing goes,
+ * the copies are kept as they are.
  */
 export function pruneCopies(store: CopyStore, firstDay: number, firstSeen = 0): CopyStore {
   const { owners } = store;
   const runs = store.runs.filter((run) => storeDay(Date.parse(run.generatedAt)) >= firstDay);
+  const hazard = pruneHazard(store.hazard, firstDay);
   const keeps = (weapon: WeaponCopies, i: number) => {
     const owner = weapon.owners[i]!;
     return owners.played[owner]! >= firstDay && (owners.whole[owner] === 1 || weapon.seen[i]! >= firstSeen);
@@ -459,7 +438,7 @@ export function pruneCopies(store: CopyStore, firstDay: number, firstSeen = 0): 
       if (keeps(weapon, i)) kept[weapon.owners[i]!] = 1;
       else copiesGo = true;
     }
-  if (!copiesGo && kept.every(Boolean)) return { ...store, runs };
+  if (!copiesGo && kept.every(Boolean)) return { ...store, runs, hazard };
 
   // Number the players kept afresh, in their old order.
   const renumber = new Uint32Array(owners.ids.length);
@@ -479,7 +458,7 @@ export function pruneCopies(store: CopyStore, firstDay: number, firstSeen = 0): 
     const left = k === weapon.ids.length ? weapon : trimmed(out, k);
     weapons.set(hash, { ...left, owners: left.owners.map((owner) => renumber[owner]!) });
   }
-  return { owners: trimmedOwners(keptOwners, ownerCount), weapons, runs, hazard: store.hazard };
+  return { owners: trimmedOwners(keptOwners, ownerCount), weapons, runs, hazard };
 }
 
 /** A player to read again: the membership type and id a profile read takes. */
@@ -497,10 +476,15 @@ export function recheckPlan(owners: Owners, today: number, afterDays: number) {
   /** Each player's last read, as a day. */
   const lastRead = new Map<string, number>();
   const due: number[] = [];
+  /** The due players the crawl hasn't read yet, however it comes to read them. */
+  const outstanding = new Set<string>();
   owners.ids.forEach((id, i) => {
     const day = dayOfMinute(owners.read[i]!);
     lastRead.set(id.toString(), day);
-    if (day <= today - afterDays) due.push(i);
+    if (day <= today - afterDays) {
+      due.push(i);
+      outstanding.add(id.toString());
+    }
   });
   const queue: DuePlayer[] = due
     .sort((a, b) => owners.read[a]! - owners.read[b]!)
@@ -515,13 +499,21 @@ export function recheckPlan(owners: Owners, today: number, afterDays: number) {
     /**
      * The next player to read again, if reading them keeps re-reads at half or
      * less of the reads `started` so far (every read, re-reads included,
-     * counted when it starts, whether or not it succeeds).
+     * counted when it starts, whether or not it succeeds). It may be one the
+     * crawl has read already (found in a report first); the crawl skips those.
      */
     next(started: number, rereads: number): DuePlayer | undefined {
       if (next >= queue.length || (rereads + 1) * 2 > started + 1) return undefined;
-      return queue[next++];
+      const player = queue[next++]!;
+      outstanding.delete(player.id);
+      return player;
     },
-    remaining: () => queue.length - next,
+    /** A player in the store read, by whichever path: no longer due. */
+    read: (id: string) => {
+      outstanding.delete(id);
+    },
+    /** Due players not read yet (CrawlSource.due at the end). */
+    remaining: () => outstanding.size,
   };
 }
 

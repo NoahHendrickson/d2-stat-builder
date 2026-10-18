@@ -22,12 +22,13 @@ export interface Contribution {
   copies: ProfileCopy[];
 }
 
-/** 2: a flags byte per copy (1 had none, so whether a copy was equipped isn't known). */
+/** 2: a flags byte per copy (1 had none, so whether a copy was equipped isn't known). Rows of both are in the database, so both are read. */
 const VERSION = 2;
 /** Flags bit: sawAll. */
 const SAW_ALL = 1;
-/** A copy's flags bit: equipped. */
+/** A copy's flags bits: whether it was equipped, and whether that was known at all (so a copy from a version 1 row, passed on, stays unknown). */
 const EQUIPPED = 1;
+const PLACE_KNOWN = 2;
 /** A copy's plug count when the read had no sockets for it. */
 const NO_SOCKETS = 255;
 
@@ -63,8 +64,7 @@ export function encodeContribution({ sawAll, copies }: Contribution): Uint8Array
     if (plugs && plugs.length >= NO_SOCKETS) throw new Error(`An item with ${plugs.length} sockets.`);
     view.setBigUint64(at, id, true);
     view.setUint32(at + 8, itemHash, true);
-    // A profile read always says where a copy is, so a saved copy is equipped or not.
-    view.setUint8(at + 12, equipped ? EQUIPPED : 0);
+    view.setUint8(at + 12, equipped === undefined ? 0 : PLACE_KNOWN | (equipped ? EQUIPPED : 0));
     view.setUint8(at + 13, plugs ? plugs.length : NO_SOCKETS);
     at += 14;
     // 0 for an empty socket: no plug has hash 0.
@@ -79,7 +79,7 @@ export function encodeContribution({ sawAll, copies }: Contribution): Uint8Array
 export function decodeContribution(bytes: Uint8Array): Contribution {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const version = view.getUint8(0);
-  if (version !== 1 && version !== VERSION) throw new Error(`Contribution version ${version}; this reads ${VERSION}.`);
+  if (version !== 1 && version !== VERSION) throw new Error(`Contribution version ${version}; this reads 1 and ${VERSION}.`);
   const sawAll = (view.getUint8(1) & SAW_ALL) !== 0;
   const copies: ProfileCopy[] = Array.from({ length: view.getUint32(2, true) });
   let at = 6;
@@ -90,7 +90,8 @@ export function decodeContribution(bytes: Uint8Array): Contribution {
     // A save from before each copy's flags were kept doesn't say whether it was equipped.
     let equipped: boolean | undefined;
     if (version >= 2) {
-      equipped = (view.getUint8(at) & EQUIPPED) !== 0;
+      const flags = view.getUint8(at);
+      if (flags & PLACE_KNOWN) equipped = (flags & EQUIPPED) !== 0;
       at += 1;
     }
     const count = view.getUint8(at);

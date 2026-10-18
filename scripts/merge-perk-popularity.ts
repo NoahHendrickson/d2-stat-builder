@@ -4,7 +4,6 @@ import { parseArgs } from "node:util";
 import { popularityLookup, type PopularityCatalog } from "../src/lib/weapons/perk-popularity";
 import {
   copyCount,
-  describeHazard,
   emptyStore,
   lookupFingerprint,
   mergeCopies,
@@ -12,6 +11,7 @@ import {
   snapshotFromCopies,
   storeDay,
 } from "../src/lib/weapons/popularity-copies";
+import { describeHazard } from "../src/lib/weapons/popularity-hazard";
 import { decodeCopies, encodeCopies, storeKey } from "./copy-store-file";
 
 /**
@@ -22,9 +22,9 @@ import { decodeCopies, encodeCopies, storeKey } from "./copy-store-file";
  * played more than --days ago (today included) drops out with their copies,
  * and a copy of a player whose latest read didn't see their vault drops out
  * once it hasn't been seen for --unseen-days (default 30): only a whole read
- * can tell a copy was dismantled. How often a copy unseen that long really is
- * gone is what the hazard the store keeps measures (see Hazard); each merge
- * logs it, to judge --unseen-days by.
+ * can tell a copy was dismantled. How often a copy out of the loadout that
+ * long really is gone is what the hazard the store keeps measures
+ * (popularity-hazard.ts); each merge logs it, to judge --unseen-days by.
  * The store is rewritten in place; a missing one starts empty. Both files are
  * encrypted with POPULARITY_STORE_KEY (see scripts/copy-store-file.ts).
  * Nothing is written when the store would be left empty, so a run of failed

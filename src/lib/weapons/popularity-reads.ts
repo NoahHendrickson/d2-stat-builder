@@ -13,7 +13,7 @@ import {
 } from "./perk-popularity";
 import { storeFromCrawl, type CopyStore, type SeenCopy, type SeenOwner } from "./popularity-copies";
 
-/** One weapon copy as a profile lists it: its plug hashes by socket index, or undefined when the read had no sockets for it, and whether it was equipped (undefined when the read didn't say). */
+/** One weapon copy as a profile lists it: its plug hashes by socket index, or undefined when the read had no sockets for it, and whether it was equipped (undefined only in a save from before that was kept, see popularity-contribution.ts). */
 export interface ProfileCopy {
   itemHash: number;
   id: bigint;
@@ -75,10 +75,10 @@ export function profileCopies(
  */
 export function readCollector(lookup: PopularityLookup) {
   const owners: SeenOwner[] = [];
-  /** Each weapon's copies (instance id, owner, plugs by socket, whether equipped), read into columns once every copy is in. */
+  /** Each weapon's copies (with their owner; only ones with plugs), read into columns once every copy is in. */
   const copiesByWeapon = new Map<
     number,
-    { id: bigint; owner: number; plugs: readonly (number | undefined)[]; equipped: boolean | undefined }[]
+    (Omit<ProfileCopy, "itemHash" | "plugs"> & { owner: number; plugs: NonNullable<ProfileCopy["plugs"]> })[]
   >();
   return {
     /** Players recorded so far. */
