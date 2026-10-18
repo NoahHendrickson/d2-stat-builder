@@ -24,6 +24,7 @@ export const CHANGELOG: readonly ChangelogEntry[] = [
       "Weapon search: boss DPS and total damage for about 160 weapons, under Advanced stats.",
       "Weapon search: Popularity shows the most-used PvE perks and combos. Click one to try it.",
       "Weapon search: an empty masterwork and mod socket, to see stats without one.",
+      "Weapon search: every origin trait a weapon offers, like Dream Work and Tex Balanced Stock on Yeartide Apex.",
     ],
   },
   {
