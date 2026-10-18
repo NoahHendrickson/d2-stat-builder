@@ -17,11 +17,14 @@ import {
  * Samples which perks players run on legendary weapons, from Bungie's public
  * API, and writes a perk-popularity snapshot (see src/lib/weapons/perk-popularity.ts).
  *
- * It samples post-game reports at random from the last day (report ids grow
- * over time, so it finds the id range the day spans and picks ids uniformly
- * inside it, which spreads the sample over every hour however early it stops),
- * skipping PvP matches (popularity is PvE only), and
- * for each player it hasn't seen reads the weapons the character in that report
+ * It samples post-game reports at random from one window: the --hours before
+ * `until`, which is now, or with --day the start of that day's scheduled crawl
+ * (so a missed day can be backfilled with exactly the window it would have had).
+ * Report ids grow over time, so it finds the id range the window spans and picks
+ * ids uniformly inside it, which spreads the sample over every hour however
+ * early it stops; that search is only precise to a minute or so, so a report
+ * played outside the window is skipped. It skips PvP matches too (popularity is
+ * PvE only), and for each player it hasn't seen reads the weapons the character in that report
  * has equipped, with their perks. Equipped items are public on every profile, so
  * no one signs in. A weapon only counts if the report lists it among the weapons
  * used in that match, so a PvE count is a weapon used in PvE, not whatever the
@@ -35,9 +38,8 @@ import {
  *
  * Options: --players (stop after this many, default 20000), --minutes (time
  * budget, default 300), --rate (requests per second, default 8), --workers
- * (default 6), --hours (how far back to sample, default 24), --day (backfill: sample
- * the --hours before 06:00 UTC on that YYYY-MM-DD, the window the scheduled
- * crawl that day would have had, instead of the hours before now), --catalog
+ * (default 6), --hours (how far back to sample, default 24), --day (YYYY-MM-DD to
+ * backfill; needs --hours=24, and a day the merge still keeps), --catalog
  * (weapons.json path, default public/data/weapons.json), --out (required).
  * The key comes from BUNGIE_CRAWLER_API_KEY, falling back to
  * NEXT_PUBLIC_BUNGIE_API_KEY for small local runs.
@@ -46,6 +48,10 @@ import {
 const WEAPON_BUCKETS = new Set([1498876634, 2465295065, 953998645]);
 /** DestinyActivityModeType.AllPvP: these reports are skipped, popularity is PvE only. */
 const ALL_PVP = 5;
+/** When the data repo's scheduled crawl starts each day, UTC (its workflow cron, "0 6 * * *"). */
+const SCHEDULED_CRAWL_UTC = "06:00";
+/** Days the data repo's merge keeps (merge-perk-popularity.ts --days); it prunes older days. */
+const MERGE_DAYS = 7;
 
 interface Options {
   players: number;
@@ -53,18 +59,31 @@ interface Options {
   rate: number;
   workers: number;
   hours: number;
-  /** Backfill: the day whose scheduled crawl to stand in for. */
-  day?: string;
+  /** When the sampled window ends (ms): now, or the start of --day's scheduled crawl. */
+  until: number;
   catalog: string;
   out: string;
 }
 
-/** A --day value: a real YYYY-MM-DD date, or undefined when not given. */
-function readDay(value: string | undefined) {
-  if (!value) return undefined;
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value) || Number.isNaN(Date.parse(`${value}T06:00:00Z`)))
-    throw new Error("--day must be a date like 2026-10-15.");
-  return value;
+/**
+ * The end of the sampled window: now, or with --day the start of that day's
+ * scheduled crawl. A --day is checked here, before any request: a real date
+ * (Date.parse rolls 2026-02-30 over to March 2 rather than failing), not still
+ * ahead, a 24-hour window (so it lines up with its neighbours instead of
+ * overlapping them), and a day the merge still keeps.
+ */
+function readUntil(day: string | undefined, hours: number) {
+  if (!day) return Date.now();
+  const until = Date.parse(`${day}T${SCHEDULED_CRAWL_UTC}:00Z`);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || Number.isNaN(until) || !new Date(until).toISOString().startsWith(day))
+    throw new Error(`--day must be a real date like 2026-10-15, not "${day}".`);
+  if (until > Date.now()) throw new Error(`--day ${day} hasn't reached ${SCHEDULED_CRAWL_UTC} UTC yet.`);
+  if (hours !== 24)
+    throw new Error("--day stands in for one scheduled crawl, so --hours must be 24; any other length overlaps the days beside it.");
+  const oldestKept = new Date(Date.now() - (MERGE_DAYS - 1) * 86_400_000).toISOString().slice(0, 10);
+  if (day < oldestKept)
+    throw new Error(`--day ${day} is older than the ${MERGE_DAYS} days the merge keeps (${oldestKept} on), so it would be pruned straight away.`);
+  return until;
 }
 
 function readOptions(): Options {
@@ -86,7 +105,7 @@ function readOptions(): Options {
     rate: number("rate", 8),
     workers: number("workers", 6),
     hours: number("hours", 24),
-    day: readDay(args.day),
+    until: readUntil(args.day, number("hours", 24)),
     catalog: args.catalog || "public/data/weapons.json",
     out: args.out,
   };
@@ -198,8 +217,7 @@ async function periodNear(get: Get, id: number) {
  * binary-search on each report's period. Precise to a few thousand ids, which is
  * seconds of play.
  */
-async function firstPgcrSince(get: Get, newest: number, since: number) {
-  let low = 10_000_000_000;
+async function firstPgcrSince(get: Get, newest: number, since: number, low = 10_000_000_000) {
   let high = newest;
   while (high - low > 5_000) {
     const middle = Math.floor((low + high) / 2);
@@ -232,16 +250,18 @@ async function main() {
 
   console.log("Finding the newest post-game report…");
   const newest = await newestPgcr(client.get);
-  // The window ends now, or for a backfill at 06:00 UTC on --day, when that
-  // day's scheduled crawl would have started.
-  const until = options.day ? Date.parse(`${options.day}T06:00:00Z`) : Date.now();
-  if (until > Date.now()) throw new Error(`--day ${options.day} hasn't reached 06:00 UTC yet.`);
-  const oldest = await firstPgcrSince(client.get, newest, until - options.hours * 3_600_000);
-  const last = options.day ? (await firstPgcrSince(client.get, newest, until)) - 1 : newest;
+  // The window's ids: from the first report played at its start to the first at
+  // its end (newest when it ends now), the second search starting from the
+  // first. Both are only precise to a few thousand ids; the worker drops reports
+  // played outside the window.
+  const since = options.until - options.hours * 3_600_000;
+  const oldest = await firstPgcrSince(client.get, newest, since);
+  const end = await firstPgcrSince(client.get, newest, options.until, oldest);
+  if (end < oldest) throw new Error("The window is too short to hold any reports.");
   console.log(
-    `Sampling reports ${oldest}–${last} (the ${options.hours} hours before ${new Date(until).toISOString()}) at random.`,
+    `Sampling reports ${oldest}–${end} (played ${new Date(since).toISOString()} to ${new Date(options.until).toISOString()}) at random.`,
   );
-  const randomId = () => oldest + Math.floor(Math.random() * (last - oldest + 1));
+  const randomId = () => oldest + Math.floor(Math.random() * (end - oldest + 1));
 
   // Each weapon's copies (plugs by socket), tallied once every copy is in.
   const copiesByWeapon = new Map<number, (number | undefined)[][]>();
@@ -278,6 +298,9 @@ async function main() {
     while (!done()) {
       const report = await client.get<Pgcr>(pgcrUrl(randomId()));
       if (!report) continue;
+      // Outside the window by the id search's slack: not this crawl's to count.
+      const played = Date.parse(report.period);
+      if (played < since || played >= options.until) continue;
       // PvE only: a PvP match is passed over entirely (not counted, its players not sampled).
       const modes = report.activityDetails.modes ?? [report.activityDetails.mode];
       if (modes.includes(ALL_PVP)) continue;
