@@ -2,9 +2,10 @@
  * The sidebar's Changelog, the one place the app announces what's new: what users can
  * do now that they couldn't before, newest first, back to the first release. When a
  * user-facing change ships, add a line to today's entry (or a new entry at the top).
- * Fixes count when a user would notice them; refactors and internals don't. Write for
- * players: what changed and where to find it, not how it works. Describe features on
- * their own terms, never by comparison to another app or site.
+ * Fixes count when a user would notice them; refactors and internals don't. Keep each
+ * line short and blunt, one sentence where possible: what changed and where, not how it
+ * works or every detail of it. Describe features on their own terms, never by comparison
+ * to another app or site.
  */
 export interface ChangelogEntry {
   /** Release day, YYYY-MM-DD. "Seen" tracks it with the line count: a newer top date, or a new line under it, is news. */
@@ -18,38 +19,36 @@ export const CHANGELOG: readonly ChangelogEntry[] = [
   {
     date: "2026-10-17",
     changes: [
-      "Weapon search: a weapon's details now sit in two cards. Stats are on the left, with the frame at the top and Recoil Direction drawn as the in-game arc; perks, masterworks and mods are on the right.",
-      "Weapon search: the weapon mods each weapon can slot sit under its masterworks. Hover one to preview its stats, or click it to keep it on while you try perks. Adept mods show on adept weapons.",
-      "Weapon search: Advanced stats under a weapon's stats show its boss DPS, total damage from full reserves and the time to fire them for the setups Aegis's boss DPS sheet has tested, for about 160 weapons. Each setup shows the perks it ran; \"See perks\" picks them in the perk grid, and after that, clicking another setup switches the picks to its perks.",
-      "Weapon search: a Popularity card beside the perks shows how often players run each left and right perk combo, and each perk, on that weapon in PvE, from a daily sample of the past week's matches. Click a combo or a perk to try it in the perk grid, or use Try most popular roll; the info icon explains how it's worked out.",
-      "Weapon search: Masterworks and Mods start with an empty socket. Pick it to see the stats without one, or hover it to preview that.",
+      "Weapon search: new two-card layout. Stats on the left, perks and mods on the right.",
+      "Weapon search: weapon mods, with a stat preview on hover.",
+      "Weapon search: boss DPS and total damage for about 160 weapons, under Advanced stats.",
+      "Weapon search: Popularity shows the most-used PvE perks and combos. Click one to try it.",
+      "Weapon search: an empty masterwork and mod socket, to see stats without one.",
     ],
   },
   {
     date: "2026-10-16",
-    changes: [
-      "Stat optimizer: searches with Legacy armor, legacy raid sets or artifice pieces are faster and less likely to hit the time limit. Stat maxima on the sliders also settle sooner.",
-    ],
+    changes: ["Stat optimizer: faster searches with Legacy armor, legacy raid sets and artifice pieces."],
   },
   {
     date: "2026-10-15",
     changes: [
-      "Items has a new layout: each character gets a row laid out like the in-game character screen, with stats, the champions your weapons stun and set bonuses on the nameplate, and the vault scrolls on its own beside them. Prefer the old layout? Switch back with the gear in the search bar.",
-      "Items: the Titan and Hunter class icons were the wrong way round. Fixed.",
-      "Favorite armor: use the heart on an Armor table row (in the row's menu on phones), or the heart beside Equip items on a Stat optimizer build to favorite every piece in it. Builds show a heart beside their Power, and each favorite piece has one when you open the build. Favorites show on the Items page too.",
-      "Loadouts: every loadout's name in a list beside the cards. Click a name to jump to that loadout.",
-      "Stat optimizer: Legacy armor now sits under Advanced settings beside Legacy exotics, and works without Power matters on. The checkbox under Power matters is the same setting.",
+      "Items: new layout, one row per character like the in-game screen. The old one is in the search bar's gear menu.",
+      "Items: fixed the swapped Titan and Hunter icons.",
+      "Favorite armor with the heart on Armor table rows and optimizer builds.",
+      "Loadouts: a name list beside the cards. Click one to jump to it.",
+      "Stat optimizer: Legacy armor moved to Advanced settings and works without Power matters.",
     ],
   },
   {
     date: "2026-10-14",
     changes: [
-      "Legacy raid sets: build with your Armor 2.0 raid armor, Last Wish through Salvation's Edge. Find it under Set bonuses in the Stat optimizer.",
-      "This changelog, the one place to see what's new.",
-      "Items: character nameplates look like the game's character select, with class, race and Power. The vault gets a nameplate of its own showing how full it is, with your currencies beside it, and stays pinned as you scroll.",
-      "Dropdown menus are frosted glass: the page shows through, softly blurred.",
-      "Weapon search: clicking a weapon while filter suggestions are open now opens that weapon.",
-      "Loadout tooltips say what things do: stat mods read +10 Grenade, and armor mods, aspects, fragments and artifact perks show their descriptions, on the Loadouts page and in Edit.",
+      "Legacy raid sets: build with Armor 2.0 raid armor, under Set bonuses.",
+      "This changelog.",
+      "Items: in-game style nameplates, and a pinned vault header with your currencies.",
+      "Frosted glass dropdowns.",
+      "Weapon search: fixed clicks on weapons while suggestions are open.",
+      "Loadout tooltips show what mods, aspects, fragments and artifact perks do.",
     ],
   },
   {
