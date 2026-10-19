@@ -337,8 +337,8 @@ export const WeaponDetails = memo(function WeaponDetails({
           <Image
             src="/manager/perk-enhanced.svg"
             alt=""
-            width={10}
-            height={10}
+            width={13}
+            height={13}
             className="absolute top-1 left-1"
           />
         ) : null}

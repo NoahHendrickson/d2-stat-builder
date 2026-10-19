@@ -441,8 +441,8 @@ function CopyPerks({
                     <Image
                       src="/manager/perk-enhanced.svg"
                       alt=""
-                      width={7}
-                      height={7}
+                      width={9}
+                      height={9}
                       className="absolute top-0.5 left-0.5"
                     />
                   )}

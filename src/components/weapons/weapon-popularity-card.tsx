@@ -201,7 +201,9 @@ function PerkIcon({ perk }: { perk: PerkRef | undefined }) {
 /**
  * One perk or combo in the card: its icon(s), the share under them, and for a
  * perk a bar as wide as the share, in `bar`'s colour, all inside a light
- * hairline. Picked ones take the grid's picked blue; the name is in the tooltip.
+ * hairline. A perk's cell also glows faintly in that colour from the bottom, so
+ * the column reads green to red at a glance. Picked ones take the grid's picked
+ * blue; the name is in the tooltip.
  */
 function ShareCell({
   label,
@@ -233,6 +235,13 @@ function ShareCell({
               "d2-hover-ring flex w-full min-w-13 flex-col items-center gap-1 border border-foreground/15 px-1.5 pt-1.5 pb-1 outline-none focus-visible:d2-tile-selected",
               selected ? "bg-[#305f8e] text-white" : "bg-foreground/4 hover:bg-foreground/8",
             )}
+            // A background image, so it sits over the fill and leaves the hover
+            // outline and focus shadow alone.
+            style={
+              bar
+                ? { backgroundImage: `radial-gradient(ellipse 70% 40% at 50% 112%, color-mix(in oklch, ${bar} 28%, transparent), transparent)` }
+                : undefined
+            }
           />
         }
       >

@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useId, type ReactNode } from "react";
 import type {
   ClarityClass,
   ClarityLine,
@@ -8,6 +8,32 @@ import type { PerkRef } from "@/lib/weapons/types";
 import { cn } from "@/lib/utils";
 
 const ENHANCED = "font-medium text-exotic-line";
+
+/**
+ * The enhanced arrow from the perk icons (public/manager/perk-enhanced.svg), inline
+ * and sized to the text: a solid head over a stem whose fill fades out.
+ */
+function EnhancedArrow() {
+  const fade = useId();
+  return (
+    <svg
+      viewBox="0 0 10 10"
+      aria-hidden
+      className="inline-block size-[0.9em] align-[-0.05em] text-exotic-line"
+    >
+      <defs>
+        <linearGradient id={fade} x1="0" y1="5" x2="0" y2="10" gradientUnits="userSpaceOnUse">
+          <stop stopColor="currentColor" stopOpacity="0.9" />
+          <stop offset="1" stopColor="currentColor" stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <path d="M5 0L9.65 5H0.35L5 0Z" fill="currentColor" />
+      <rect x="3.08" y="5" width="3.84" height="5" fill={`url(#${fade})`} />
+      <rect x="3.08" y="5" width="0.45" height="5" fill="currentColor" />
+      <rect x="6.47" y="5" width="0.45" height="5" fill="currentColor" />
+    </svg>
+  );
+}
 
 const CLASS_STYLE: Partial<Record<ClarityClass, string>> = {
   bold: "font-medium text-foreground",
@@ -38,7 +64,16 @@ function highlight(text: string): ReactNode[] {
         key={match.index}
         className={match[1] ? ENHANCED : "font-medium text-foreground"}
       >
-        {match[1] === "🠚" ? "→" : match[0]}
+        {match[1] === "🠚" ? (
+          "→"
+        ) : match[1] ? (
+          <>
+            (<EnhancedArrow />
+            {match[1].slice(2)}
+          </>
+        ) : (
+          match[0]
+        )}
       </span>,
     );
     at = match.index + match[0].length;
@@ -49,7 +84,11 @@ function highlight(text: string): ReactNode[] {
 
 function Run({ part }: { part: ClarityText }) {
   if (part.classNames?.includes("enhancedArrow"))
-    return <span className={ENHANCED}>↑</span>;
+    return (
+      <span className={cn(ENHANCED, "mr-[0.25em]")}>
+        <EnhancedArrow />
+      </span>
+    );
   if (!part.text) return null;
   // Links can't be followed from a hover tooltip; keep them as plain text.
   return (
@@ -106,7 +145,9 @@ export function PerkTooltip({
       )}
       {enhanced && (
         <p className="text-muted-foreground">
-          <span className={ENHANCED}>↑ Enhanced: </span>
+          <span className={ENHANCED}>
+            <EnhancedArrow /> Enhanced:{" "}
+          </span>
           {enhanced}
         </p>
       )}
