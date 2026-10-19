@@ -1,4 +1,5 @@
-import { useId, type ReactNode } from "react";
+import type { ReactNode } from "react";
+import { EnhancedArrow } from "@/components/enhanced-arrow";
 import type {
   ClarityClass,
   ClarityLine,
@@ -9,31 +10,8 @@ import { cn } from "@/lib/utils";
 
 const ENHANCED = "font-medium text-exotic-line";
 
-/**
- * The enhanced arrow from the perk icons (public/manager/perk-enhanced.svg), inline
- * and sized to the text: a solid head over a stem whose fill fades out.
- */
-function EnhancedArrow() {
-  const fade = useId();
-  return (
-    <svg
-      viewBox="0 0 10 10"
-      aria-hidden
-      className="inline-block size-[0.9em] align-[-0.05em] text-exotic-line"
-    >
-      <defs>
-        <linearGradient id={fade} x1="0" y1="5" x2="0" y2="10" gradientUnits="userSpaceOnUse">
-          <stop stopColor="currentColor" stopOpacity="0.9" />
-          <stop offset="1" stopColor="currentColor" stopOpacity="0" />
-        </linearGradient>
-      </defs>
-      <path d="M5 0L9.65 5H0.35L5 0Z" fill="currentColor" />
-      <rect x="3.08" y="5" width="3.84" height="5" fill={`url(#${fade})`} />
-      <rect x="3.08" y="5" width="0.45" height="5" fill="currentColor" />
-      <rect x="6.47" y="5" width="0.45" height="5" fill="currentColor" />
-    </svg>
-  );
-}
+/** The arrow sized to the surrounding text. */
+const INLINE_ARROW = "inline-block size-[0.9em] align-[-0.05em]";
 
 const CLASS_STYLE: Partial<Record<ClarityClass, string>> = {
   bold: "font-medium text-foreground",
@@ -51,31 +29,30 @@ const CLASS_STYLE: Partial<Record<ClarityClass, string>> = {
   unstoppable: "text-orange-300",
 };
 
-/** Numbers stand out; `(↑ …)` enhanced values and Clarity's `🠚` transitions go gold. */
-const HIGHLIGHT = /(\(↑ [^)]+\)|🠚)|([+-]?\d+(?:\.\d+)?(?:%|x|s|ms|HP)?)/g;
+/**
+ * Numbers stand out; `(↑ …)` enhanced values and Clarity's `🠚` transitions go gold.
+ * Groups, in order: an enhanced value (inside the brackets), a transition, a number.
+ */
+const HIGHLIGHT = /\(↑ ([^)]+)\)|(🠚)|([+-]?\d+(?:\.\d+)?(?:%|x|s|ms|HP)?)/g;
+
+function Token({ match }: { match: RegExpMatchArray }) {
+  const [, enhanced, transition, number] = match;
+  if (enhanced !== undefined)
+    return (
+      <span className={ENHANCED}>
+        (<EnhancedArrow className={INLINE_ARROW} /> {enhanced})
+      </span>
+    );
+  if (transition) return <span className={ENHANCED}>→</span>;
+  return <span className="font-medium text-foreground">{number}</span>;
+}
 
 function highlight(text: string): ReactNode[] {
   const nodes: ReactNode[] = [];
   let at = 0;
   for (const match of text.matchAll(HIGHLIGHT)) {
     if (match.index > at) nodes.push(text.slice(at, match.index));
-    nodes.push(
-      <span
-        key={match.index}
-        className={match[1] ? ENHANCED : "font-medium text-foreground"}
-      >
-        {match[1] === "🠚" ? (
-          "→"
-        ) : match[1] ? (
-          <>
-            (<EnhancedArrow />
-            {match[1].slice(2)}
-          </>
-        ) : (
-          match[0]
-        )}
-      </span>,
-    );
+    nodes.push(<Token key={match.index} match={match} />);
     at = match.index + match[0].length;
   }
   if (at < text.length) nodes.push(text.slice(at));
@@ -86,7 +63,7 @@ function Run({ part }: { part: ClarityText }) {
   if (part.classNames?.includes("enhancedArrow"))
     return (
       <span className={cn(ENHANCED, "mr-[0.25em]")}>
-        <EnhancedArrow />
+        <EnhancedArrow className={INLINE_ARROW} />
       </span>
     );
   if (!part.text) return null;
@@ -146,7 +123,7 @@ export function PerkTooltip({
       {enhanced && (
         <p className="text-muted-foreground">
           <span className={ENHANCED}>
-            <EnhancedArrow /> Enhanced:{" "}
+            <EnhancedArrow className={INLINE_ARROW} /> Enhanced:{" "}
           </span>
           {enhanced}
         </p>

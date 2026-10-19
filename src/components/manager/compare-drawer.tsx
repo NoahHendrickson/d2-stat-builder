@@ -4,6 +4,7 @@ import { useMemo, useState, useSyncExternalStore } from "react";
 import Image from "next/image";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { ArrowDown01Icon, ArrowUp01Icon, Cancel01Icon, Search01Icon } from "@hugeicons/core-free-icons";
+import { EnhancedArrow } from "@/components/enhanced-arrow";
 import { Button } from "@/components/ui/button";
 import { Drawer, DrawerContent, DrawerTitle } from "@/components/ui/drawer";
 import { CLASS_NAMES } from "@/lib/armory/stats";
@@ -438,13 +439,7 @@ function CopyPerks({
                     <span className="bg-muted size-[28px]" />
                   )}
                   {plug.enhanced && (
-                    <Image
-                      src="/manager/perk-enhanced.svg"
-                      alt=""
-                      width={9}
-                      height={9}
-                      className="absolute top-0.5 left-0.5"
-                    />
+                    <EnhancedArrow className="absolute top-0.5 left-0.5 size-[9px] text-exotic-line" />
                   )}
                 </span>
               );

@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { InformationCircleIcon } from "@hugeicons/core-free-icons";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
@@ -24,6 +24,10 @@ const sampledAt = new Intl.DateTimeFormat("en-US", { month: "short", day: "numer
 /** A share as a whole percent; nobody at all is "0%", a few people "<1%". */
 const percent = (share: number) =>
   share === 0 ? "0%" : share < 0.01 ? "<1%" : `${Math.round(share * 100)}%`;
+
+/** A perk cell's glow: a low rounded dome in its share bar's colour (`--grade`), rising from the bottom. */
+const GRADE_GLOW =
+  "bg-[radial-gradient(ellipse_70%_40%_at_50%_112%,color-mix(in_oklch,var(--grade)_28%,transparent),transparent)]";
 
 /**
  * A share bar's colour within its column: green for the most run perk, red for
@@ -134,6 +138,7 @@ export function WeaponPopularityCard({
                     label={`${columnLabel(weapon, column)}: ${perks[perkIndex]?.name ?? ""}`}
                     share={share}
                     bar={gradeColor(share, low, high)}
+                    glow={high > low}
                     selected={isPicked({ [column]: perkIndex })}
                     onClick={() => onPick({ [column]: perkIndex })}
                   >
@@ -201,14 +206,15 @@ function PerkIcon({ perk }: { perk: PerkRef | undefined }) {
 /**
  * One perk or combo in the card: its icon(s), the share under them, and for a
  * perk a bar as wide as the share, in `bar`'s colour, all inside a light
- * hairline. A perk's cell also glows faintly in that colour from the bottom, so
- * the column reads green to red at a glance. Picked ones take the grid's picked
- * blue; the name is in the tooltip.
+ * hairline. With `glow`, an unpicked perk's cell also glows faintly in that colour
+ * from the bottom, so the column reads green to red at a glance. Picked ones take
+ * the grid's picked blue; the name is in the tooltip.
  */
 function ShareCell({
   label,
   share,
   bar,
+  glow = false,
   selected,
   onClick,
   children,
@@ -217,6 +223,8 @@ function ShareCell({
   share: number;
   /** The share bar's colour; no bar without one. */
   bar?: string;
+  /** Glow in `bar`'s colour; off for a column whose perks all share one value. */
+  glow?: boolean;
   selected: boolean;
   onClick: () => void;
   children: ReactNode;
@@ -234,14 +242,9 @@ function ShareCell({
             className={cn(
               "d2-hover-ring flex w-full min-w-13 flex-col items-center gap-1 border border-foreground/15 px-1.5 pt-1.5 pb-1 outline-none focus-visible:d2-tile-selected",
               selected ? "bg-[#305f8e] text-white" : "bg-foreground/4 hover:bg-foreground/8",
+              bar && glow && !selected && GRADE_GLOW,
             )}
-            // A background image, so it sits over the fill and leaves the hover
-            // outline and focus shadow alone.
-            style={
-              bar
-                ? { backgroundImage: `radial-gradient(ellipse 70% 40% at 50% 112%, color-mix(in oklch, ${bar} 28%, transparent), transparent)` }
-                : undefined
-            }
+            style={bar ? ({ "--grade": bar } as CSSProperties) : undefined}
           />
         }
       >
@@ -250,8 +253,8 @@ function ShareCell({
         {bar && (
           <span aria-hidden className="block h-1 w-full bg-foreground/15">
             <span
-              className="block h-full"
-              style={{ width: `${Math.max(share * 100, 2)}%`, backgroundColor: bar }}
+              className="block h-full bg-(--grade)"
+              style={{ width: `${Math.max(share * 100, 2)}%` }}
             />
           </span>
         )}
