@@ -5,6 +5,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import Image from "next/image";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { GitCompareIcon, SquareLock02Icon, SquareUnlock02Icon } from "@hugeicons/core-free-icons";
+import { EnhancedArrow } from "@/components/enhanced-arrow";
 import { PerkTooltip } from "@/components/weapons/perk-tooltip";
 import { ItemWatermark, TierPips } from "@/components/armor-thumb";
 import { PowerValue } from "@/components/power-value";
@@ -830,13 +831,7 @@ function PerkColumnView({
             >
               <PlugIcon plug={option} size={30} />
               {option.enhanced && (
-                <Image
-                  src="/manager/perk-enhanced.svg"
-                  alt=""
-                  width={8}
-                  height={8}
-                  className="absolute top-0.5 left-0.5"
-                />
+                <EnhancedArrow className="absolute top-0.5 left-0.5 size-[10px] text-exotic-line" />
               )}
             </TooltipTrigger>
             <TooltipContent side="right" align="start" className="max-w-sm">

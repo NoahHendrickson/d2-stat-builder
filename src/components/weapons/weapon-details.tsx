@@ -10,6 +10,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { EnhancedArrow } from "@/components/enhanced-arrow";
 import { DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { PerkTooltip } from "@/components/weapons/perk-tooltip";
@@ -334,13 +335,7 @@ export const WeaponDetails = memo(function WeaponDetails({
           />
         )}
         {perk.alternateHashes?.length ? (
-          <Image
-            src="/manager/perk-enhanced.svg"
-            alt=""
-            width={10}
-            height={10}
-            className="absolute top-1 left-1"
-          />
+          <EnhancedArrow className="absolute top-1 left-1 size-[13px] text-exotic-line" />
         ) : null}
       </>
     );

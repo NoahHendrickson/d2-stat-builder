@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { EnhancedArrow } from "@/components/enhanced-arrow";
 import type {
   ClarityClass,
   ClarityLine,
@@ -8,6 +9,9 @@ import type { PerkRef } from "@/lib/weapons/types";
 import { cn } from "@/lib/utils";
 
 const ENHANCED = "font-medium text-exotic-line";
+
+/** The arrow sized to the surrounding text. */
+const INLINE_ARROW = "inline-block size-[0.9em] align-[-0.05em]";
 
 const CLASS_STYLE: Partial<Record<ClarityClass, string>> = {
   bold: "font-medium text-foreground",
@@ -25,22 +29,30 @@ const CLASS_STYLE: Partial<Record<ClarityClass, string>> = {
   unstoppable: "text-orange-300",
 };
 
-/** Numbers stand out; `(↑ …)` enhanced values and Clarity's `🠚` transitions go gold. */
-const HIGHLIGHT = /(\(↑ [^)]+\)|🠚)|([+-]?\d+(?:\.\d+)?(?:%|x|s|ms|HP)?)/g;
+/**
+ * Numbers stand out; `(↑ …)` enhanced values and Clarity's `🠚` transitions go gold.
+ * Groups, in order: an enhanced value (inside the brackets), a transition, a number.
+ */
+const HIGHLIGHT = /\(↑ ([^)]+)\)|(🠚)|([+-]?\d+(?:\.\d+)?(?:%|x|s|ms|HP)?)/g;
+
+function Token({ match }: { match: RegExpMatchArray }) {
+  const [, enhanced, transition, number] = match;
+  if (enhanced !== undefined)
+    return (
+      <span className={ENHANCED}>
+        (<EnhancedArrow className={INLINE_ARROW} /> {enhanced})
+      </span>
+    );
+  if (transition) return <span className={ENHANCED}>→</span>;
+  return <span className="font-medium text-foreground">{number}</span>;
+}
 
 function highlight(text: string): ReactNode[] {
   const nodes: ReactNode[] = [];
   let at = 0;
   for (const match of text.matchAll(HIGHLIGHT)) {
     if (match.index > at) nodes.push(text.slice(at, match.index));
-    nodes.push(
-      <span
-        key={match.index}
-        className={match[1] ? ENHANCED : "font-medium text-foreground"}
-      >
-        {match[1] === "🠚" ? "→" : match[0]}
-      </span>,
-    );
+    nodes.push(<Token key={match.index} match={match} />);
     at = match.index + match[0].length;
   }
   if (at < text.length) nodes.push(text.slice(at));
@@ -49,7 +61,11 @@ function highlight(text: string): ReactNode[] {
 
 function Run({ part }: { part: ClarityText }) {
   if (part.classNames?.includes("enhancedArrow"))
-    return <span className={ENHANCED}>↑</span>;
+    return (
+      <span className={cn(ENHANCED, "mr-[0.25em]")}>
+        <EnhancedArrow className={INLINE_ARROW} />
+      </span>
+    );
   if (!part.text) return null;
   // Links can't be followed from a hover tooltip; keep them as plain text.
   return (
@@ -106,7 +122,9 @@ export function PerkTooltip({
       )}
       {enhanced && (
         <p className="text-muted-foreground">
-          <span className={ENHANCED}>↑ Enhanced: </span>
+          <span className={ENHANCED}>
+            <EnhancedArrow className={INLINE_ARROW} /> Enhanced:{" "}
+          </span>
           {enhanced}
         </p>
       )}

@@ -17,6 +17,13 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    date: "2026-10-19",
+    changes: [
+      "Perks: a new, bigger enhanced arrow on perk icons and in perk tooltips.",
+      "Weapon search: Popularity perks glow green to red, so the most run ones stand out.",
+    ],
+  },
+  {
     date: "2026-10-18",
     changes: [
       "Weapon search: Popularity now updates every 3 hours.",
