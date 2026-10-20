@@ -55,7 +55,7 @@ import { writeFileAtomic } from "./write-file-atomic";
  *
  * Options: --players (stop once this many profiles have been read, default 20000), --minutes (time
  * budget, default 300), --rate (requests per second to start at, default 20, or 8 on the app's key),
- * --workers (requests in flight, default 1.2 × --rate: a profile read takes
+ * --workers (workers, and requests in flight at most, default 1.2 × --rate: a profile read takes
  * about a second), --recent=<minutes> (sample the reports that ended in the last
  * this many minutes as the crawl goes, instead of a fixed window), --hours (how far back to
  * sample, default 24), --armor-out (the armor crawl's file; without it, no armor tally), --catalog (weapons.json path, default
@@ -147,8 +147,22 @@ const SLOWEST_RATE = 2;
 /** Throttles closer together than this are one burst (every request in flight hears it) and slow the rate once. */
 const THROTTLE_BURST_MS = 5_000;
 
-function bungieClient(apiKey: string, rate: number) {
+/**
+ * Bungie's API under one rate limit and at most `maxInFlight` requests at once
+ * (--workers). The cap is what has kept the crawl unthrottled: reads take a
+ * second or two, so --workers of them in flight run well under --rate. A
+ * report's players are read at once (see samplePlayer's caller), so without
+ * it the crawl would climb to --rate and be throttled.
+ */
+function bungieClient(apiKey: string, rate: number, maxInFlight: number) {
   let spacing = 1000 / rate;
+  let inFlight = 0;
+  /** Requests waiting for one in flight to finish, first come first served. */
+  const queue: (() => void)[] = [];
+  const acquire = () =>
+    inFlight < maxInFlight ? (inFlight++, Promise.resolve()) : new Promise<void>((go) => queue.push(go));
+  // A finished request hands its place straight to the next waiting, if any.
+  const release = () => (queue.length > 0 ? queue.shift()!() : inFlight--);
   let nextSlot = 0;
   let requests = 0;
   let throttles = 0;
@@ -162,17 +176,20 @@ function bungieClient(apiKey: string, rate: number) {
   }
   async function get<T>(url: string): Promise<T | undefined> {
     for (let attempt = 0; attempt < 5; attempt++) {
-      await slot();
-      requests++;
+      await acquire();
       let body: BungieResponse<T> | undefined;
       let status = 0;
       try {
+        await slot();
+        requests++;
         // A read can hang for minutes, holding a worker and, near the end, the whole crawl.
         const response = await fetch(url, { headers: { "X-API-Key": apiKey }, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
         status = response.status;
         body = (await response.json().catch(() => undefined)) as BungieResponse<T> | undefined;
       } catch {
         // Network blip or timeout: back off and retry.
+      } finally {
+        release();
       }
       if (body?.ErrorCode === 1) return body.Response;
       if (body?.ErrorCode === 5) throw new Error("Bungie's API is down for maintenance.");
@@ -434,7 +451,7 @@ async function main() {
     RECHECK_AFTER_DAYS,
   );
   if (options.store) console.log(`The store has ${plan.players} players; ${plan.remaining()} are due to be read again.`);
-  const client = bungieClient(apiKey, options.rate);
+  const client = bungieClient(apiKey, options.rate, options.workers);
   // The armor tally rides along: if it can't start (the manifest won't load), the weapons crawl without it.
   const armor = options.armorOut
     ? await createArmorTally(apiKey).catch((error: unknown) => {
