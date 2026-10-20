@@ -71,7 +71,8 @@ export function seal(data: Buffer, key: Buffer) {
   return Buffer.concat([SEALED, iv, cipher.getAuthTag(), sealed]);
 }
 
-function unseal(file: Buffer, key: Buffer) {
+/** `file` decrypted with `key`; throws on the wrong key or a damaged file. */
+export function unseal(file: Buffer, key: Buffer) {
   if (file.length < 32 || !file.subarray(0, 4).equals(SEALED)) throw new Error("Not an encrypted copy store.");
   const decipher = createDecipheriv("aes-256-gcm", key, file.subarray(4, 16));
   decipher.setAuthTag(file.subarray(16, 32));
