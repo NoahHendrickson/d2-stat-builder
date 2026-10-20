@@ -21,7 +21,9 @@ import { writeFileAtomic } from "./write-file-atomic";
  * crawl hands it each profile read of a player it found in a report, and the
  * players it found but won't read itself; it keeps each character's latest
  * sample per bucket and writes them as an armor crawl file for
- * merge-armor-set-popularity.ts.
+ * merge-armor-set-popularity.ts. It's a passenger on the weapon crawl: an
+ * error in judging a read is counted and logged, never thrown, so it can't
+ * cost the crawl its weapons.
  */
 
 /** The crawl's rate-limited GET (undefined for any answer but success). */
@@ -84,6 +86,11 @@ export async function createArmorTally(apiKey: string): Promise<ArmorTally> {
   /** Characters judged this crawl. */
   const judged = new Set<string>();
   let alone = 0;
+  /** Reads the tally couldn't judge (see the top); the first is logged. */
+  let failures = 0;
+  const failed = (error: unknown) => {
+    if (failures++ === 0) console.warn(`The armor tally couldn't judge a read: ${error instanceof Error ? error.message : error}`);
+  };
 
   const tally: ArmorTally = {
     components: "204",
@@ -91,25 +98,31 @@ export async function createArmorTally(apiKey: string): Promise<ArmorTally> {
       const character = entry.characterId;
       if (!character) return;
       judged.add(character);
-      const loadout = characterLoadout(profile, character, setOf);
-      if (!loadout) return;
-      const { classType, ...side } = reportSide(report, entry);
-      const sample = armorSample({ ...side, ended, readAt, ...loadout }, lookup);
-      if (sample) addSample(samples, { character, ...sample, minute: storeMinute(readAt), classType });
+      try {
+        const loadout = characterLoadout(profile, character, setOf);
+        if (!loadout) return;
+        const { classType, ...side } = reportSide(report, entry);
+        const sample = armorSample({ ...side, ended, readAt, ...loadout }, lookup);
+        if (sample) addSample(samples, { character, ...sample, minute: storeMinute(readAt), classType });
+      } catch (error) {
+        failed(error);
+      }
     },
     async readAlone(get, report, entry, ended) {
       const user = entry.player?.destinyUserInfo;
       if (!user || !entry.characterId || judged.has(entry.characterId)) return;
       judged.add(entry.characterId);
       alone++;
+      // The crawl's get throws only for what stops every read (maintenance, a rejected key): the crawl's own next read will.
       const profile = await get<ArmorProfile>(
         `https://www.bungie.net/Platform/Destiny2/${user.membershipType}/Profile/${user.membershipId}/?components=204,205`,
-      );
+      ).catch(failed);
       if (profile) tally.judge(profile, report, entry, ended, Date.now());
     },
     summary() {
       const by = BUCKETS.map((bucket) => `${[...samples.values()].filter((s) => s.bucket === bucket).length} ${bucket}`);
-      return `armor: ${judged.size} characters judged (${alone} read for armor alone), ${samples.size} samples (${by.join(", ")})`;
+      const errors = failures ? `, ${failures} reads it couldn't judge` : "";
+      return `armor: ${judged.size} characters judged (${alone} read for armor alone), ${samples.size} samples (${by.join(", ")})${errors}`;
     },
     async write(path, key, generatedAt) {
       const runs = [{ generatedAt, reads: judged.size, samples: samples.size }];

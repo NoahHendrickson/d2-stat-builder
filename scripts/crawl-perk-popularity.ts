@@ -435,7 +435,13 @@ async function main() {
   );
   if (options.store) console.log(`The store has ${plan.players} players; ${plan.remaining()} are due to be read again.`);
   const client = bungieClient(apiKey, options.rate);
-  const armor = options.armorOut ? await createArmorTally(apiKey) : undefined;
+  // The armor tally rides along: if it can't start (the manifest won't load), the weapons crawl without it.
+  const armor = options.armorOut
+    ? await createArmorTally(apiKey).catch((error: unknown) => {
+        console.warn(`No armor tally this crawl: ${error instanceof Error ? error.message : error}`);
+        return undefined;
+      })
+    : undefined;
   const components = armor ? `${PROFILE_COMPONENTS},${armor.components}` : PROFILE_COMPONENTS;
   const deadline = Date.now() + options.minutes * 60_000;
 
@@ -590,7 +596,11 @@ async function main() {
     due: plan.remaining(),
   });
   await writeFileAtomic(target, encodeCopies(crawl, key));
-  if (armor && options.armorOut) await armor.write(resolve(options.armorOut), key, generatedAt);
+  // Nor can writing its file cost the weapons theirs, already written: no armor file just means no armor merge.
+  if (armor && options.armorOut)
+    await armor.write(resolve(options.armorOut), key, generatedAt).catch((error: unknown) => {
+      console.warn(`Couldn't write the armor crawl: ${error instanceof Error ? error.message : error}`);
+    });
   console.log(`Wrote ${copies} copies of ${collected.weapons()} weapons: ${summary()}, ending at ${client.rate()}/s, to ${target}.`);
 }
 
