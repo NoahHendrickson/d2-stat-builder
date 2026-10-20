@@ -1,5 +1,5 @@
 import { loadEnvConfig } from "@next/env";
-import { mkdir, rename, writeFile } from "node:fs/promises";
+import { mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
 import {
   buildAmmoTypeCatalog,
@@ -10,6 +10,7 @@ import {
   downloadManifest,
 } from "../src/lib/weapons/manifest";
 import { compactWeaponIndex } from "../src/lib/weapons/transport";
+import { writeFileAtomic } from "./write-file-atomic";
 
 async function main() {
   loadEnvConfig(process.cwd());
@@ -36,8 +37,7 @@ async function main() {
     );
   const target = resolve("public/data/weapons.json");
   await mkdir(resolve("public/data"), { recursive: true });
-  await writeFile(`${target}.tmp`, JSON.stringify(compact));
-  await rename(`${target}.tmp`, target);
+  await writeFileAtomic(target, JSON.stringify(compact));
   console.log(
     `Updated ${compact.weapons.length} weapons from manifest ${version}.`,
   );

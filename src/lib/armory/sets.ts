@@ -146,6 +146,34 @@ export function setSlotIcons(
   return out;
 }
 
+/** setIcon's answers, per manifest, by "<set>:<class>". */
+const setIcons = memoByManifest(() => new Map<string, SetSlotIcon | undefined>());
+
+/**
+ * One thumbnail for a set: `classType`'s helmet, else another of its pieces,
+ * else another class's (helmet first), so a set always has a face whoever is
+ * looking. `null` takes any class. Worked out once per set and class.
+ */
+export function setIcon(manifest: Manifest, setHash: number, classType: number | null): SetSlotIcon | undefined {
+  const cache = setIcons(manifest);
+  const key = `${setHash}:${classType}`;
+  if (cache.has(key)) return cache.get(key);
+  let best: { look: SetSlotIcon; rank: number } | undefined;
+  const set = manifest.def("DestinyEquipableItemSetDefinition", setHash);
+  for (const itemHash of set?.setItems ?? []) {
+    const def = manifest.def("DestinyInventoryItemDefinition", itemHash);
+    const slot = ARMOR_BUCKETS[def?.inventory?.bucketTypeHash as keyof typeof ARMOR_BUCKETS];
+    const icon = def?.displayProperties?.icon;
+    if (!def || !slot || !icon) continue;
+    // Lower is better: the class's own piece first, a helmet first within each.
+    const rank = (classType === null || def.classType === classType ? 0 : 2) + (slot === "helmet" ? 0 : 1);
+    if (!best || rank < best.rank) best = { look: { icon, watermark: itemWatermark(def) }, rank };
+    if (rank === 0) break;
+  }
+  cache.set(key, best?.look);
+  return best?.look;
+}
+
 /**
  * Each legacy raid's own item icon per slot for one class, from the manifest's legendary
  * armor with that raid's mod socket (the first match per slot wins). For drawing the

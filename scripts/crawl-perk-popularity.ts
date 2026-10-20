@@ -1,12 +1,16 @@
 import { loadEnvConfig } from "@next/env";
-import { readFile, rename, writeFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { parseArgs } from "node:util";
+import type { ArmorReport, ArmorReportEntry } from "../src/lib/armory/set-popularity-reads";
 import { THROTTLE_CODES } from "../src/lib/bungie/throttle";
 import { popularityLookup, type CrawlSample, type PopularityCatalog } from "../src/lib/weapons/perk-popularity";
 import { allocOwners, lookupFingerprint, recheckPlan, storeDay } from "../src/lib/weapons/popularity-copies";
 import { profileCopies, readCollector, type ProfileRead } from "../src/lib/weapons/popularity-reads";
-import { decodeOwners, encodeCopies, storeKey } from "./copy-store-file";
+import { createArmorTally } from "./armor-tally";
+import { decodeOwners, encodeCopies } from "./copy-store-file";
+import { storeKey } from "./sealed-file";
+import { writeFileAtomic } from "./write-file-atomic";
 
 /**
  * Finds players through Bungie's public API and records the perks on every
@@ -43,12 +47,18 @@ import { decodeOwners, encodeCopies, storeKey } from "./copy-store-file";
  *
  *   tsx scripts/crawl-perk-popularity.ts --players=500 --store=store.bin --out=crawl.bin
  *
+ * With --armor-out it also tallies the armor sets players wear in endgame
+ * activities (scripts/armor-tally.ts): its reads of players found in reports
+ * add their current activity, and the players found but not read (read
+ * recently, or already this crawl) get a small read for the tally alone.
+ * The armor crawl goes to its own file, for merge-armor-set-popularity.ts.
+ *
  * Options: --players (stop once this many profiles have been read, default 20000), --minutes (time
  * budget, default 300), --rate (requests per second to start at, default 20, or 8 on the app's key),
- * --workers (requests in flight, default 1.2 × --rate: a profile read takes
+ * --workers (workers, and requests in flight at most, default 1.2 × --rate: a profile read takes
  * about a second), --recent=<minutes> (sample the reports that ended in the last
  * this many minutes as the crawl goes, instead of a fixed window), --hours (how far back to
- * sample, default 24), --catalog (weapons.json path, default
+ * sample, default 24), --armor-out (the armor crawl's file; without it, no armor tally), --catalog (weapons.json path, default
  * public/data/weapons.json), --store (the running copy store, for the players to
  * read again; without it every player found is new), --out (required).
  * The key comes from BUNGIE_CRAWLER_API_KEY, falling back to
@@ -77,6 +87,7 @@ interface Options {
   catalog: string;
   store?: string;
   out: string;
+  armorOut?: string;
 }
 
 /** `defaultRate` is the --rate when none is passed (see main). */
@@ -84,7 +95,7 @@ function readOptions(defaultRate: number): Options {
   // Strict: an unknown flag (a typo like --recnet) or one missing its value is an error, not a default crawl.
   const { values: args } = parseArgs({
     options: Object.fromEntries(
-      ["players", "minutes", "rate", "workers", "recent", "hours", "catalog", "store", "out"].map((key) => [
+      ["players", "minutes", "rate", "workers", "recent", "hours", "catalog", "store", "out", "armor-out"].map((key) => [
         key,
         { type: "string" } as const,
       ]),
@@ -114,6 +125,7 @@ function readOptions(defaultRate: number): Options {
     catalog: args.catalog || "public/data/weapons.json",
     store: args.store,
     out: args.out,
+    armorOut: args["armor-out"],
   };
 }
 
@@ -135,8 +147,22 @@ const SLOWEST_RATE = 2;
 /** Throttles closer together than this are one burst (every request in flight hears it) and slow the rate once. */
 const THROTTLE_BURST_MS = 5_000;
 
-function bungieClient(apiKey: string, rate: number) {
+/**
+ * Bungie's API under one rate limit and at most `maxInFlight` requests at once
+ * (--workers). The cap is what has kept the crawl unthrottled: reads take a
+ * second or two, so --workers of them in flight run well under --rate. A
+ * report's players are read at once (see samplePlayer's caller), so without
+ * it the crawl would climb to --rate and be throttled.
+ */
+function bungieClient(apiKey: string, rate: number, maxInFlight: number) {
   let spacing = 1000 / rate;
+  let inFlight = 0;
+  /** Requests waiting for one in flight to finish, first come first served. */
+  const queue: (() => void)[] = [];
+  const acquire = () =>
+    inFlight < maxInFlight ? (inFlight++, Promise.resolve()) : new Promise<void>((go) => queue.push(go));
+  // A finished request hands its place straight to the next waiting, if any.
+  const release = () => (queue.length > 0 ? queue.shift()!() : inFlight--);
   let nextSlot = 0;
   let requests = 0;
   let throttles = 0;
@@ -150,17 +176,20 @@ function bungieClient(apiKey: string, rate: number) {
   }
   async function get<T>(url: string): Promise<T | undefined> {
     for (let attempt = 0; attempt < 5; attempt++) {
-      await slot();
-      requests++;
+      await acquire();
       let body: BungieResponse<T> | undefined;
       let status = 0;
       try {
+        await slot();
+        requests++;
         // A read can hang for minutes, holding a worker and, near the end, the whole crawl.
         const response = await fetch(url, { headers: { "X-API-Key": apiKey }, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
         status = response.status;
         body = (await response.json().catch(() => undefined)) as BungieResponse<T> | undefined;
       } catch {
         // Network blip or timeout: back off and retry.
+      } finally {
+        release();
       }
       if (body?.ErrorCode === 1) return body.Response;
       if (body?.ErrorCode === 5) throw new Error("Bungie's API is down for maintenance.");
@@ -197,15 +226,15 @@ function bungieClient(apiKey: string, rate: number) {
   };
 }
 
-interface PgcrEntry {
-  player?: { destinyUserInfo?: { membershipType: number; membershipId: string } };
+/** A post-game report's entry, with what the armor tally reads of it. */
+type PgcrEntry = ArmorReportEntry & {
   /** The activity's length in seconds (the same on every entry). */
   values?: { activityDurationSeconds?: { basic?: { value?: number } } };
-}
-interface Pgcr {
+};
+interface Pgcr extends ArmorReport {
   /** When the activity started. */
   period: string;
-  activityDetails: { mode: number; modes?: number[] };
+  activityDetails: ArmorReport["activityDetails"] & { mode: number; modes?: number[] };
   entries: PgcrEntry[];
 }
 
@@ -234,6 +263,8 @@ const isoSeconds = (ms: number) => new Date(ms).toISOString().replace(".000Z", "
  */
 interface Profile extends ProfileRead {
   profile?: { data?: { dateLastPlayed?: string } };
+  /** With the armor tally (204). */
+  characterActivities?: { data?: Record<string, { currentActivityHash?: number }> };
 }
 
 const pgcrUrl = (id: number) =>
@@ -420,7 +451,15 @@ async function main() {
     RECHECK_AFTER_DAYS,
   );
   if (options.store) console.log(`The store has ${plan.players} players; ${plan.remaining()} are due to be read again.`);
-  const client = bungieClient(apiKey, options.rate);
+  const client = bungieClient(apiKey, options.rate, options.workers);
+  // The armor tally rides along: if it can't start (the manifest won't load), the weapons crawl without it.
+  const armor = options.armorOut
+    ? await createArmorTally(apiKey).catch((error: unknown) => {
+        console.warn(`No armor tally this crawl: ${error instanceof Error ? error.message : error}`);
+        return undefined;
+      })
+    : undefined;
+  const components = armor ? `${PROFILE_COMPONENTS},${armor.components}` : PROFILE_COMPONENTS;
   const deadline = Date.now() + options.minutes * 60_000;
 
   console.log("Finding the newest post-game report…");
@@ -464,7 +503,7 @@ async function main() {
    * they're in the store, `foundOn` the day of the report a new player was
    * found in, for when the profile doesn't say when they last played.
    */
-  async function readPlayer(type: number, id: string, known: boolean, foundOn?: number) {
+  async function readPlayer(type: number, id: string, known: boolean, foundOn?: number): Promise<Profile | undefined> {
     seen.add(id);
     started++;
     if (known) {
@@ -473,7 +512,7 @@ async function main() {
     }
     reading++;
     const profile = await client.get<Profile>(
-      `https://www.bungie.net/Platform/Destiny2/${type}/Profile/${id}/?components=${PROFILE_COMPONENTS}`,
+      `https://www.bungie.net/Platform/Destiny2/${type}/Profile/${id}/?components=${components}`,
     );
     reading--;
     if (!profile) {
@@ -481,7 +520,7 @@ async function main() {
       // it as a read, of nothing, so they wait a week like the rest instead of
       // heading the queue every crawl until they're pruned. When they played stays.
       if (known) collected.add({ id: BigInt(id), type, played: undefined }, [], false, true);
-      return;
+      return undefined;
     }
     players++;
     if (known) rechecked++;
@@ -494,20 +533,27 @@ async function main() {
     const { found, whole } = collected.add({ id: BigInt(id), type, played }, read.copies, read.sawAll, known);
     copies += found;
     if (whole) vaults++;
+    return profile;
   }
 
-  async function samplePlayer(entry: PgcrEntry, endedOn: number) {
+  /** `ended`: when the report's activity did (ms). */
+  async function samplePlayer(entry: PgcrEntry, report: Pgcr, ended: number) {
     const user = entry.player?.destinyUserInfo;
-    if (!user?.membershipId || seen.has(user.membershipId) || done()) return;
+    if (!user?.membershipId || done()) return;
+    // Read already this crawl (from another report, or again from the store):
+    // no copies to add, but the armor tally wants what they wear now.
+    if (seen.has(user.membershipId)) return armor?.readAlone(client.get, report, entry, ended);
+    const endedOn = storeDay(ended);
     if (plan.recentlyRead(user.membershipId)) {
       // Not worth a read yet, but the report proves they played: that keeps
       // them in the store even if their next read is a while coming.
       fresh++;
       seen.add(user.membershipId);
       collected.sight({ id: BigInt(user.membershipId), type: user.membershipType, played: endedOn });
-      return;
+      return armor?.readAlone(client.get, report, entry, ended);
     }
-    await readPlayer(user.membershipType, user.membershipId, plan.known(user.membershipId), endedOn);
+    const profile = await readPlayer(user.membershipType, user.membershipId, plan.known(user.membershipId), endedOn);
+    if (profile) armor?.judge(profile, report, entry, ended, Date.now());
   }
 
   async function worker() {
@@ -532,12 +578,13 @@ async function main() {
       reports++;
       first = Math.min(first, ended);
       last = Math.max(last, ended);
-      for (const entry of report.entries) await samplePlayer(entry, storeDay(ended));
+      // All at once: the armor tally's orbit reads must land within minutes of the activity's end.
+      await Promise.all(report.entries.map((entry) => samplePlayer(entry, report, ended)));
     }
   }
 
   const summary = () =>
-    `${players} players (${rechecked} read again, ${fresh} passed over as read recently, ${vaults} read whole), ${copies} copies, ${reports} reports (${outside} outside the window), ${client.requests()} requests, ${client.throttles()} throttles, ${plan.remaining()} still due`;
+    `${players} players (${rechecked} read again, ${fresh} passed over as read recently, ${vaults} read whole), ${copies} copies, ${reports} reports (${outside} outside the window), ${client.requests()} requests, ${client.throttles()} throttles, ${plan.remaining()} still due${armor ? `; ${armor.summary()}` : ""}`;
   const progress = setInterval(() => {
     console.log(`${summary()} (${client.rate()}/s), sampling ${sampler.describe()}`);
   }, 30_000);
@@ -565,8 +612,12 @@ async function main() {
     // Due players left unread when the crawl ended: growing over crawls of one length, re-reads can't keep up with the store.
     due: plan.remaining(),
   });
-  await writeFile(`${target}.tmp`, encodeCopies(crawl, key));
-  await rename(`${target}.tmp`, target);
+  await writeFileAtomic(target, encodeCopies(crawl, key));
+  // Nor can writing its file cost the weapons theirs, already written: no armor file just means no armor merge.
+  if (armor && options.armorOut)
+    await armor.write(resolve(options.armorOut), key, generatedAt).catch((error: unknown) => {
+      console.warn(`Couldn't write the armor crawl: ${error instanceof Error ? error.message : error}`);
+    });
   console.log(`Wrote ${copies} copies of ${collected.weapons()} weapons: ${summary()}, ending at ${client.rate()}/s, to ${target}.`);
 }
 

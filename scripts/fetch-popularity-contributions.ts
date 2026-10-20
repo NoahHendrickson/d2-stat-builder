@@ -1,6 +1,6 @@
 import { loadEnvConfig } from "@next/env";
 import { neon } from "@neondatabase/serverless";
-import { readFile, rename, writeFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { gunzipSync } from "node:zlib";
@@ -8,7 +8,9 @@ import { popularityLookup, type PopularityCatalog } from "../src/lib/weapons/per
 import { decodeContribution } from "../src/lib/weapons/popularity-contribution";
 import { lookupFingerprint, storeDay } from "../src/lib/weapons/popularity-copies";
 import { readCollector } from "../src/lib/weapons/popularity-reads";
-import { decodeRuns, encodeCopies, storeKey } from "./copy-store-file";
+import { decodeRuns, encodeCopies } from "./copy-store-file";
+import { storeKey } from "./sealed-file";
+import { writeFileAtomic } from "./write-file-atomic";
 
 /**
  * Turns the weapons signed-in players saved as they loaded their inventory on
@@ -157,8 +159,7 @@ async function main() {
     catalog: lookupFingerprint(lookup),
   });
   const target = resolve(args.out);
-  await writeFile(`${target}.tmp`, encodeCopies(crawl, key));
-  await rename(`${target}.tmp`, target);
+  await writeFileAtomic(target, encodeCopies(crawl, key));
   console.log(
     `Wrote ${copies} copies of ${collected.weapons()} weapons from ${players} signed-in players (${vaults} read whole${skipped ? `, ${skipped} skipped` : ""}) saved since ${since} to ${target}.`,
   );

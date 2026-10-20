@@ -74,6 +74,7 @@ import { useBuilderSearchInputs } from "@/components/builder/use-builder-search-
 import { BuildsSurface } from "@/components/builder/builds-surface";
 import type { BuildsColumnContentProps } from "@/components/builder/builds-column-content";
 import { SetBonusesSection } from "@/components/builder/set-bonuses-section";
+import { SetPopularityButton } from "@/components/builder/set-popularity-button";
 import {
   clearClassBound,
   DEFAULT_TAB,
@@ -1223,7 +1224,10 @@ export function BuilderPanel({
               )}
             </Section>
 
-            <Section title="Set bonuses">
+            <Section
+              title="Set bonuses"
+              trailing={<SetPopularityButton manifest={manifest} classType={classType} />}
+            >
               <SetBonusesSection
                 sets={settingsView.sets}
                 setReqs={settingsView.setReqs}

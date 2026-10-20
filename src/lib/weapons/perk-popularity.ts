@@ -16,9 +16,8 @@
 import type { Hazard } from "./popularity-hazard";
 import type { CompactWeaponIndex } from "./transport";
 
-/** Where the published snapshot lives (GitHub Pages, so serving it costs Vercel nothing). */
-export const PERK_POPULARITY_URL =
-  "https://noahhendrickson.github.io/d2-conflux-data/perk-popularity.json";
+/** The snapshot's file in the data repo (see data-repo.ts). */
+export const PERK_POPULARITY_FILE = "perk-popularity.json";
 
 export interface WeaponPopularity {
   /** Distinct copies, equipped or in a public vault, of players who've played in the last two weeks. */

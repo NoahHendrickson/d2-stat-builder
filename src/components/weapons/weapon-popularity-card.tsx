@@ -10,6 +10,7 @@ import type { Roll } from "@/lib/weapons/pick-slots";
 import type { PerkRef, WeaponSummary } from "@/lib/weapons/types";
 import type { WeaponPopularityView } from "@/lib/weapons/popularity-view";
 import { traitColumns } from "@/lib/weapons/perk-popularity";
+import { percent, sampledAt } from "@/lib/popularity-format";
 import { cn } from "@/lib/utils";
 
 /** Combos shown. */
@@ -17,13 +18,6 @@ const COMBOS_SHOWN = 5;
 
 /** Below this many copies the shares swing on a handful of players. */
 const SMALL_SAMPLE = 30;
-
-// With the hour: the snapshot is rebuilt several times a day.
-const sampledAt = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", hour: "numeric" });
-
-/** A share as a whole percent; nobody at all is "0%", a few people "<1%". */
-const percent = (share: number) =>
-  share === 0 ? "0%" : share < 0.01 ? "<1%" : `${Math.round(share * 100)}%`;
 
 /** A perk cell's glow: a low rounded dome in its share bar's colour (`--grade`), rising from the bottom. */
 const GRADE_GLOW =
@@ -159,7 +153,7 @@ export function WeaponPopularityCard({
  * worked out, and how many copies of this weapon they come from.
  */
 function HowPopularityWorks({ view }: { view: WeaponPopularityView }) {
-  const sampled = view.generatedAt ? sampledAt.format(new Date(view.generatedAt)) : undefined;
+  const sampled = view.generatedAt ? sampledAt(view.generatedAt) : undefined;
   return (
     <Tooltip>
       <TooltipTrigger

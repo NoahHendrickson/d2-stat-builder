@@ -1,4 +1,4 @@
-import { readFile, rename, writeFile } from "node:fs/promises";
+import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { popularityLookup, type PopularityCatalog } from "../src/lib/weapons/perk-popularity";
@@ -12,7 +12,9 @@ import {
   storeDay,
 } from "../src/lib/weapons/popularity-copies";
 import { describeHazard } from "../src/lib/weapons/popularity-hazard";
-import { decodeCopies, encodeCopies, storeKey } from "./copy-store-file";
+import { decodeCopies, encodeCopies } from "./copy-store-file";
+import { readStoreOr, storeKey } from "./sealed-file";
+import { writeFileAtomic } from "./write-file-atomic";
 
 /**
  * Folds crawls into the copy store and tallies it into the published snapshot
@@ -63,11 +65,7 @@ async function main() {
 
   const key = storeKey();
   const storePath = resolve(args.store);
-  let store = await readFile(storePath).then((file) => decodeCopies(file, key), (error: NodeJS.ErrnoException) => {
-    if (error.code !== "ENOENT") throw error;
-    console.log(`No copy store at ${storePath} yet; starting one.`);
-    return emptyStore();
-  });
+  let store = await readStoreOr(storePath, (file) => decodeCopies(file, key), emptyStore, "copy store");
   const before = copyCount(store);
   const fingerprint = lookupFingerprint(popularityLookup(catalog));
   const crawls = await Promise.all(
@@ -87,11 +85,9 @@ async function main() {
   if (copies === 0) throw new Error(`No player who's played in the last ${days} days has any copies; nothing written.`);
 
   const snapshot = snapshotFromCopies(store, columnsOf);
-  await writeFile(`${storePath}.tmp`, encodeCopies(store, key));
-  await rename(`${storePath}.tmp`, storePath);
+  await writeFileAtomic(storePath, encodeCopies(store, key));
   const target = resolve(args.out);
-  await writeFile(`${target}.tmp`, JSON.stringify(snapshot));
-  await rename(`${target}.tmp`, target);
+  await writeFileAtomic(target, JSON.stringify(snapshot));
   console.log(
     `Copy store: ${before} → ${copies} copies of ${store.weapons.size} weapons, from ${store.owners.ids.length} players who've played in the last ${days} days (${store.runs.length} crawls in that time) → ${storePath}, snapshot → ${target}.`,
   );

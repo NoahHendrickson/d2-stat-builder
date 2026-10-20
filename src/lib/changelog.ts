@@ -19,6 +19,7 @@ export const CHANGELOG: readonly ChangelogEntry[] = [
   {
     date: "2026-10-19",
     changes: [
+      "Optimizer: Set bonuses has a Popularity button showing the sets players wear in raids, dungeons, GM Vanguard Alerts and Conquests.",
       "Perks: a new, bigger enhanced arrow on perk icons and in perk tooltips.",
       "Weapon search: Popularity perks glow green to red, so the most run ones stand out.",
     ],
