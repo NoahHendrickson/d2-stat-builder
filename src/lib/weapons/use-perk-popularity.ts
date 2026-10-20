@@ -1,9 +1,9 @@
 "use client";
 
 import { useMemo } from "react";
-import { useStaticJson } from "@/lib/use-static-json";
+import { useDataRepoSnapshot } from "@/lib/use-data-repo-snapshot";
 import {
-  PERK_POPULARITY_URL,
+  PERK_POPULARITY_FILE,
   columnShares,
   comboShares,
   traitColumns,
@@ -13,29 +13,12 @@ import type { WeaponCatalog } from "./catalog";
 import { mostPopularRoll, type WeaponPopularityView } from "./popularity-view";
 import type { WeaponSummary } from "./types";
 
-/**
- * The popularity snapshot. In development it's the local crawler output
- * (public/dev-data, git-ignored) when there is a usable one, else the published
- * copy on GitHub Pages, which is all production reads, so Vercel never serves
- * it. Optional: if it can't load, the weapon page just goes without popularity.
- */
+/** The popularity snapshot (see useDataRepoSnapshot); the weapon page goes without when it can't load. */
 export function usePerkPopularityIndex() {
-  return useStaticJson({
-    key: "perk-popularity",
-    urls:
-      process.env.NODE_ENV === "development"
-        ? ["/dev-data/perk-popularity.json", PERK_POPULARITY_URL]
-        : [PERK_POPULARITY_URL],
+  return useDataRepoSnapshot<PerkPopularityIndex>({
+    file: PERK_POPULARITY_FILE,
     what: "Perk popularity",
-    retry: false,
-    // The data repo rebuilds it several times a day.
-    staleTime: 60 * 60_000,
-    parse: (json) => {
-      const data = json as PerkPopularityIndex;
-      if (data?.schema !== 2 || typeof data.weapons !== "object")
-        throw new Error("The perk popularity snapshot is incomplete.");
-      return data;
-    },
+    isValid: (data) => data.schema === 2 && typeof data.weapons === "object",
   });
 }
 

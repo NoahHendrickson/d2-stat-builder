@@ -1,4 +1,3 @@
-import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import { endianness } from "node:os";
 import { gunzipSync, gzipSync } from "node:zlib";
 import type { CrawlSource } from "../src/lib/weapons/perk-popularity";
@@ -14,13 +13,12 @@ import {
   type WeaponCopies,
 } from "../src/lib/weapons/popularity-copies";
 import type { Hazard } from "../src/lib/weapons/popularity-hazard";
+import { seal, unseal } from "./sealed-file";
 
 /**
  * The copy store's file (src/lib/weapons/popularity-copies.ts). The store lists
- * the players it found, so the file is encrypted (AES-256-GCM, key from the
- * POPULARITY_STORE_KEY environment variable: 32 random bytes, base64) and can
- * sit in a public release: "D2PE", a 12-byte IV, the 16-byte auth tag, then
- * the encrypted gzip of the store.
+ * the players it found, so the file is encrypted (scripts/sealed-file.ts) and
+ * can sit in a public release; sealed inside is the gzip of the store.
  * The store itself is little-endian throughout: "D2PC", version, a JSON header
  * (the runs, and the merged store's hazard), the owner count and each of
  * OWNER_FIELDS in turn, then each weapon: hash, column count, perk table, copy
@@ -48,39 +46,8 @@ const OLDEST_READ = 3;
 /** COPY_FIELDS a version 3 file has: all but `equipped`. */
 const V3_COPY_FIELDS = COPY_FIELDS.filter((field) => field !== "equipped");
 const copyFieldsOf = (version: number) => (version >= 4 ? COPY_FIELDS : V3_COPY_FIELDS);
-/** "D2PE": the encrypted file's first four bytes. */
-const SEALED = Buffer.from("D2PE");
-
 function littleEndianOnly() {
   if (endianness() !== "LE") throw new Error("The copy store file is little-endian; this machine isn't.");
-}
-
-/** The key from POPULARITY_STORE_KEY. */
-export function storeKey(env: Record<string, string | undefined> = process.env): Buffer {
-  const key = Buffer.from(env.POPULARITY_STORE_KEY ?? "", "base64");
-  if (key.length !== 32)
-    throw new Error("Set POPULARITY_STORE_KEY to 32 random bytes, base64 (openssl rand -base64 32).");
-  return key;
-}
-
-/** `data` encrypted with `key`, as the file holds it. */
-export function seal(data: Buffer, key: Buffer) {
-  const iv = randomBytes(12);
-  const cipher = createCipheriv("aes-256-gcm", key, iv);
-  const sealed = Buffer.concat([cipher.update(data), cipher.final()]);
-  return Buffer.concat([SEALED, iv, cipher.getAuthTag(), sealed]);
-}
-
-/** `file` decrypted with `key`; throws on the wrong key or a damaged file. */
-export function unseal(file: Buffer, key: Buffer) {
-  if (file.length < 32 || !file.subarray(0, 4).equals(SEALED)) throw new Error("Not an encrypted copy store.");
-  const decipher = createDecipheriv("aes-256-gcm", key, file.subarray(4, 16));
-  decipher.setAuthTag(file.subarray(16, 32));
-  try {
-    return Buffer.concat([decipher.update(file.subarray(32)), decipher.final()]);
-  } catch {
-    throw new Error("Couldn't decrypt the copy store: wrong POPULARITY_STORE_KEY, or the file is damaged.");
-  }
 }
 
 export function encodeCopies(store: CopyStore, key: Buffer): Buffer {
@@ -125,7 +92,7 @@ function fill(array: AnyArray, data: Buffer, at: number) {
 /** Reads the file through the owners; `weapons` then reads on from there, if it's wanted. */
 function readStore<T>(file: Buffer, key: Buffer, weapons: (data: Buffer, at: number, version: number) => T) {
   littleEndianOnly();
-  const data = gunzipSync(unseal(file, key));
+  const data = gunzipSync(unseal(file, key, "copy store"));
   if (data.length < 5 || data.readUInt32LE(0) !== MAGIC) throw new Error("Not a copy store.");
   const version = data.readUInt8(4);
   if (version < OLDEST_READ || version > VERSION)

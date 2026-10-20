@@ -7,23 +7,11 @@ import type { DestinyItemComponent, DestinyProfileResponse } from "bungie-api-ts
 import type { Manifest } from "../manifest/load";
 import { weaponRoll } from "../inventory/weapon-details";
 import { itemWatermark, type ArmorLocation } from "./normalize";
-import { TIER_EXOTIC } from "./stats";
+import { TIER_EXOTIC, WEAPON_BUCKETS, type WeaponSlot } from "./stats";
 
-export const WEAPON_SLOTS = ["kinetic", "energy", "power"] as const;
-export type WeaponSlot = (typeof WEAPON_SLOTS)[number];
-
-/** Weapon inventory bucket hash → slot. */
-export const WEAPON_BUCKETS: Record<number, WeaponSlot> = {
-  1498876634: "kinetic",
-  2465295065: "energy",
-  953998645: "power",
-};
-/** Slot → its character inventory bucket hash (the inverse of WEAPON_BUCKETS). */
-export const WEAPON_SLOT_BUCKETS: Record<WeaponSlot, number> = {
-  kinetic: 1498876634,
-  energy: 2465295065,
-  power: 953998645,
-};
+// The slots and their buckets live with the armor ones in stats.ts, which has no imports
+// (the popularity crawl reads them without this module's).
+export { WEAPON_BUCKETS, WEAPON_SLOT_BUCKETS, WEAPON_SLOTS, type WeaponSlot } from "./stats";
 export const WEAPON_SLOT_LABELS: Record<WeaponSlot, string> = {
   kinetic: "Kinetic",
   energy: "Energy",

@@ -104,7 +104,7 @@ export const storeDay = (ms = Date.now()) => Math.floor(ms / 86_400_000);
 export const storeMinute = (ms: number) => Math.floor(ms / 60_000);
 
 /** The day a store minute falls on. */
-const dayOfMinute = (minute: number) => Math.floor(minute / 1_440);
+export const dayOfMinute = (minute: number) => Math.floor(minute / 1_440);
 
 export type AnyArray = BigUint64Array | Uint32Array | Uint16Array | Uint8Array;
 /** The bytes behind a typed array, as they are in memory. */

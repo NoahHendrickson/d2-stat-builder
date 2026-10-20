@@ -182,6 +182,22 @@ export function tertiaryStatIndex(base: StatArray): number {
 export const TIER_LEGENDARY = 5;
 export const TIER_EXOTIC = 6;
 
+export const WEAPON_SLOTS = ["kinetic", "energy", "power"] as const;
+export type WeaponSlot = (typeof WEAPON_SLOTS)[number];
+
+/** Weapon inventory bucket hash → slot. */
+export const WEAPON_BUCKETS: Record<number, WeaponSlot> = {
+  1498876634: "kinetic",
+  2465295065: "energy",
+  953998645: "power",
+};
+/** Slot → its character inventory bucket hash (the inverse of WEAPON_BUCKETS). */
+export const WEAPON_SLOT_BUCKETS: Record<WeaponSlot, number> = {
+  kinetic: 1498876634,
+  energy: 2465295065,
+  power: 953998645,
+};
+
 /** Armor inventory bucket hash -> slot. */
 export const ARMOR_BUCKETS = {
   3448274439: "helmet",

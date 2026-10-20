@@ -10,7 +10,8 @@ import {
   storeFromCrawl,
   type CopyStore,
 } from "../src/lib/weapons/popularity-copies";
-import { decodeCopies, decodeOwners, decodeRuns, encodeCopies, MAGIC, seal, storeKey, VERSION } from "./copy-store-file";
+import { decodeCopies, decodeOwners, decodeRuns, encodeCopies, MAGIC, VERSION } from "./copy-store-file";
+import { seal, storeKey } from "./sealed-file";
 
 const key = randomBytes(32);
 const run = (generatedAt: string) => ({
