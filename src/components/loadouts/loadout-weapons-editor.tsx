@@ -63,7 +63,7 @@ export const LOADOUT_SLOT_CLASS = `${LOADOUT_SLOT_WELL_CLASS} d2-hover-ring hove
 /** An unfilled slot: the empty-socket bracket corners around a plus. */
 export function EmptySlotIcon() {
   return (
-    <span className="d2-brackets text-muted-foreground flex size-12 shrink-0 items-center justify-center bg-white/6" aria-hidden>
+    <span className="d2-brackets text-muted-foreground flex size-12 shrink-0 items-center justify-center bg-foreground/6" aria-hidden>
       <HugeiconsIcon icon={Add01Icon} strokeWidth={1.5} className="size-4" />
     </span>
   );
