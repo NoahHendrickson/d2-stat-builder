@@ -33,11 +33,11 @@ import {
 import {
   GROUP_GAP_X_PX,
   MARKER_GAP_PX,
-  TILE_GAP_PX,
   TILE_WIDTH_PX,
   layoutVault,
   lineOfItem,
   linesBetween,
+  type TileMetrics,
   type VaultBucket,
   type VaultCaptionLine,
   type VaultSection,
@@ -48,7 +48,7 @@ import { weaponTypeIcon } from "@/lib/weapons/weapon-type-icon-paths";
 import { useStoreValue } from "@/lib/value-store";
 import { ItemTile } from "./item-tile";
 import { useItemComparator } from "./view-menu";
-import { PINNED_PLATE, dragStore, usePhoneLayout, usePhoneTiles } from "./manager-context";
+import { PINNED_PLATE, dragStore, usePhoneLayout, useTileMetrics } from "./manager-context";
 import { PLATE_HEIGHT, STRIP_HEIGHT } from "./character-plate";
 import { DropZone } from "./manager-drop-zone";
 
@@ -318,7 +318,7 @@ function VaultLines({ sections, pad }: { sections: readonly VaultSection[]; pad?
   const [span, setSpan] = useState<readonly [number, number]>([0, 0]);
   const [focused, setFocused] = useState<string | null>(null);
   const drag = useStoreValue(dragStore);
-  const metrics = usePhoneTiles() ?? undefined;
+  const metrics = useTileMetrics();
   const layout = useMemo(
     () => layoutVault(sections, width, pad, metrics),
     [sections, width, pad, metrics],
@@ -382,7 +382,7 @@ function VaultLines({ sections, pad }: { sections: readonly VaultSection[]; pad?
         ) : line.kind === "caption" ? (
           <VaultCaption key={line.key} line={line} />
         ) : (
-          <VaultLineRow key={line.key} line={line} gap={metrics?.gap ?? TILE_GAP_PX} />
+          <VaultLineRow key={line.key} line={line} tiles={metrics} />
         );
       })}
     </div>
@@ -410,7 +410,7 @@ function VaultCaption({ line }: { line: VaultCaptionLine }) {
 }
 
 /** One line of vault tiles: a group's (or a few small groups'), each after its marker's column. */
-const VaultLineRow = memo(function VaultLineRow({ line, gap }: { line: VaultTileLine; gap: number }) {
+const VaultLineRow = memo(function VaultLineRow({ line, tiles }: { line: VaultTileLine; tiles: TileMetrics }) {
   return (
     <div
       role="group"
@@ -422,15 +422,15 @@ const VaultLineRow = memo(function VaultLineRow({ line, gap }: { line: VaultTile
       {line.cells.map((cell) => (
         <div key={cell.key} className="flex items-start">
           {cell.markerWidth > 0 && (
-            // Centred on the tile's icon (60px), above its footer bar.
+            // Centred on the tile's icon, above its footer bar.
             <span
-              className="flex h-15 shrink-0 items-center"
-              style={{ width: cell.markerWidth, marginRight: MARKER_GAP_PX }}
+              className="flex shrink-0 items-center"
+              style={{ width: cell.markerWidth, height: tiles.tile, marginRight: MARKER_GAP_PX }}
             >
               {cell.marker && <GroupMarker groupBy={line.groupBy} item={cell.marker} />}
             </span>
           )}
-          <div className="flex" style={{ gap }}>
+          <div className="flex" style={{ gap: tiles.gap }}>
             {cell.items.map((item) => (
               <ItemTile key={item.key} item={item} />
             ))}

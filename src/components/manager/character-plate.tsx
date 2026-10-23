@@ -31,7 +31,7 @@ import { cn } from "@/lib/utils";
 import { useStoreValue } from "@/lib/value-store";
 import { ItemTile } from "./item-tile";
 import { farmingStore } from "./farming";
-import { usePhoneTiles } from "./manager-context";
+import { usePhoneTiles, useTileMetrics } from "./manager-context";
 import { useItemComparator } from "./view-menu";
 
 const POSTMASTER_FALLBACK_CAPACITY = 21;
@@ -300,6 +300,7 @@ export function PostmasterCell({ items, capacity }: { items: InventoryItem[]; ca
   // The game warns once the postmaster is close to overflowing (and losing items).
   const nearlyFull = items.length >= capacity - 3;
   const phone = usePhoneTiles();
+  const tiles = useTileMetrics();
   return (
     <div className="flex flex-col gap-2 pt-2">
       <div className="flex items-baseline justify-between gap-2 text-xs">
@@ -314,13 +315,12 @@ export function PostmasterCell({ items, capacity }: { items: InventoryItem[]; ca
         // Full-size tiles like every slot row (smaller ones clip the Power); four across
         // keeps the grid inside the column width the slot rows set.
         <div
-          className="grid grid-cols-[repeat(4,60px)] gap-2"
+          className="grid"
           // Phones: a full line of tiles, like the slots under it.
-          style={
-            phone
-              ? { gridTemplateColumns: `repeat(${phone.cols}, ${phone.tile}px)`, gap: phone.gap }
-              : undefined
-          }
+          style={{
+            gridTemplateColumns: `repeat(${phone ? phone.cols : 4}, ${tiles.tile}px)`,
+            gap: tiles.gap,
+          }}
         >
           {items.map((item) => (
             <ItemTile key={item.key} item={item} />

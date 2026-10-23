@@ -4,9 +4,9 @@
 // do: a bucket's groups stack one per line (grouped by type) or sit side by side and
 // wrap, and a group wider than the pane wraps its own tiles.
 import type { InventoryItem } from "./build";
-import type { GroupKey, ItemGroup } from "./view-settings";
+import type { GroupKey, ItemGroup, TileSize } from "./view-settings";
 
-/** A tile: a 1px frame round a 58px icon over its 16px label bar. */
+/** A large tile: a 1px frame round a 58px icon over its 16px label bar. */
 export const TILE_WIDTH_PX = 60;
 export const TILE_HEIGHT_PX = 76;
 /** Between tiles, across and down. */
@@ -24,7 +24,10 @@ export const HEADING_HEIGHT_PX = 40;
 /** A line naming what follows on phones: a slot ("Kinetic") or a group ("Hand Cannon"). */
 export const CAPTION_HEIGHT_PX = 28;
 
-/** Tile size and spacing to lay out with. Desktop tiles are fixed; phones size them to fit. */
+/**
+ * Tile size and spacing to lay out with. Desktop tiles are the size picked in the Items
+ * settings; phones size them to fit.
+ */
 export interface TileMetrics {
   tile: number;
   /** Tile plus its label bar. */
@@ -34,17 +37,25 @@ export interface TileMetrics {
   cols: number;
 }
 
-export const DESKTOP_TILE_METRICS: TileMetrics = {
-  tile: TILE_WIDTH_PX,
-  height: TILE_HEIGHT_PX,
-  gap: TILE_GAP_PX,
-  cols: 0,
+/** The label bar under the icon, the same height at every tile size. */
+const TILE_FOOTER_PX = TILE_HEIGHT_PX - TILE_WIDTH_PX;
+
+/** Each desktop tile size: the tile's width (frame included) and the gap between tiles. */
+const DESKTOP_TILES: Record<TileSize, { tile: number; gap: number }> = {
+  large: { tile: TILE_WIDTH_PX, gap: TILE_GAP_PX },
+  medium: { tile: 52, gap: 6 },
+  small: { tile: 44, gap: 6 },
 };
+
+export function desktopTileMetrics(size: TileSize): TileMetrics {
+  const { tile, gap } = DESKTOP_TILES[size];
+  return { tile, height: tile + TILE_FOOTER_PX, gap, cols: 0 };
+}
+
+export const DESKTOP_TILE_METRICS: TileMetrics = desktopTileMetrics("large");
 
 const PHONE_TILE_GAP_PX = 6;
 const PHONE_MIN_COLS = 6;
-/** The label bar under the icon, as on desktop (TILE_HEIGHT_PX - TILE_WIDTH_PX). */
-const TILE_FOOTER_PX = TILE_HEIGHT_PX - TILE_WIDTH_PX;
 
 /**
  * Phones: at least six tiles across, as wide as fills `width` in whole columns but never

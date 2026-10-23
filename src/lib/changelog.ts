@@ -17,6 +17,10 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    date: "2026-10-23",
+    changes: ["Items: pick Large, Medium or Small item tiles in the Items settings."],
+  },
+  {
     date: "2026-10-19",
     changes: [
       "Optimizer: Set bonuses has a Popularity button showing the sets players wear in raids, dungeons, GM Vanguard Alerts and Conquests.",

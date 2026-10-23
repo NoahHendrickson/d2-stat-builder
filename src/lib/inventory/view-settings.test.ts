@@ -38,6 +38,7 @@ test("parseViewSettings drops unknown keys and falls back to defaults", () => {
         armorGroup: "rarity",
         vaultTab: "armor",
         layout: "legacy",
+        tileSize: "small",
       }),
     ),
   ).toEqual({
@@ -46,11 +47,12 @@ test("parseViewSettings drops unknown keys and falls back to defaults", () => {
     armorGroup: "rarity",
     vaultTab: "armor",
     layout: "legacy",
+    tileSize: "small",
   });
   // The old single setting carries over to armor; weapons take their default.
   expect(parseViewSettings(JSON.stringify({ vaultGroup: "tier" }))).toEqual({ ...DEFAULT_VIEW, armorGroup: "tier" });
   expect(
-    parseViewSettings(JSON.stringify({ weaponGroup: "nope", vaultGroup: "nope", vaultTab: "nope", layout: "nope" })),
+    parseViewSettings(JSON.stringify({ weaponGroup: "nope", vaultGroup: "nope", vaultTab: "nope", layout: "nope", tileSize: 50 })),
   ).toEqual(DEFAULT_VIEW);
   expect(parseViewSettings("{")).toEqual(DEFAULT_VIEW);
 });
@@ -62,6 +64,7 @@ test("resetSortAndGrouping resets only the sort and grouping", () => {
     armorGroup: "rarity" as const,
     vaultTab: "armor" as const,
     layout: "legacy" as const,
+    tileSize: "medium" as const,
   };
   expect(resetSortAndGrouping(view)).toEqual({
     sort: DEFAULT_VIEW.sort,
@@ -69,6 +72,7 @@ test("resetSortAndGrouping resets only the sort and grouping", () => {
     armorGroup: DEFAULT_VIEW.armorGroup,
     vaultTab: "armor",
     layout: "legacy",
+    tileSize: "medium",
   });
 });
 

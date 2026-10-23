@@ -10,7 +10,13 @@ import { cn } from "@/lib/utils";
 import { useStoreValue } from "@/lib/value-store";
 import { EmptyTile, ItemTile } from "./item-tile";
 import { CharacterNameplate, PostmasterCell, useCharacterSetup } from "./character-plate";
-import { dragStore, useManagerActions, usePhoneTiles, usePinnedPlateClass } from "./manager-context";
+import {
+  dragStore,
+  useManagerActions,
+  usePhoneTiles,
+  usePinnedPlateClass,
+  useTileMetrics,
+} from "./manager-context";
 import { DropZone, canLand } from "./manager-drop-zone";
 import { AlignedVault } from "./manager-vault";
 
@@ -198,6 +204,7 @@ function CharacterCell({
   // Phones: the rest of the slot in as many columns as fill the width (two rows, not three),
   // a double gap after the equipped tile, and no drop padding (touch doesn't drag).
   const phone = usePhoneTiles();
+  const tiles = useTileMetrics();
 
   return (
     // Tiles keep to the top: an aligned row grows with the vault's slot beside it.
@@ -216,12 +223,11 @@ function CharacterCell({
       <DropZone
         to={{ kind: "character", characterId: character.id }}
         bucket={row.hash}
-        className={cn("grid grid-cols-[repeat(3,60px)] content-start gap-2 p-1", phone && "p-0")}
-        style={
-          phone
-            ? { gridTemplateColumns: `repeat(${phone.cols - 1}, ${phone.tile}px)`, gap: phone.gap }
-            : undefined
-        }
+        className={cn("grid content-start p-1", phone && "p-0")}
+        style={{
+          gridTemplateColumns: `repeat(${phone ? phone.cols - 1 : 3}, ${tiles.tile}px)`,
+          gap: tiles.gap,
+        }}
       >
         {items.map((item) => (
           <ItemTile key={item.key} item={item} />

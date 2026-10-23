@@ -28,13 +28,12 @@ import {
   type ManagerInventory,
 } from "@/lib/inventory/build";
 import { CHARACTER_SLOTS } from "@/lib/inventory/moves";
-import { TILE_GAP_PX, TILE_HEIGHT_PX, TILE_WIDTH_PX } from "@/lib/inventory/vault-layout";
 import {
   ROW_COLUMN_GAP_PX,
-  ROW_INFO_PX,
   ROW_INVENTORY_COLUMNS,
   ROW_MIDDLE_PX,
   ZONE_PAD_PX,
+  rowInfoWidth,
   zoneWidth,
 } from "@/lib/inventory/items-page-plan";
 import { ABILITY_LABELS } from "@/lib/dim/subclasses";
@@ -44,6 +43,7 @@ import { ClassGlyph } from "@/components/class-glyph";
 import { EmptyTile, ItemTile } from "./item-tile";
 import { CharacterStrip, PostmasterCell, useCharacterSetup } from "./character-plate";
 import { DropZone } from "./manager-drop-zone";
+import { useTileMetrics } from "./manager-context";
 
 const [GHOST_ROW, SPARROW_ROW, SHIP_ROW] = GENERAL_ROWS as [BucketRow, BucketRow, BucketRow];
 
@@ -96,13 +96,14 @@ function CharacterRow({
   compare: (a: InventoryItem, b: InventoryItem) => number;
   postmasterCapacity: number;
 }) {
-  const inventory = zoneWidth(ROW_INVENTORY_COLUMNS);
-  const equipped = zoneWidth(1);
+  const tiles = useTileMetrics();
+  const inventory = zoneWidth(ROW_INVENTORY_COLUMNS, tiles);
+  const equipped = zoneWidth(1, tiles);
   // Inventory, equipped, the middle gap, equipped, inventory.
   const gear: CSSProperties = {
     gridTemplateColumns: `${inventory}px ${equipped}px ${ROW_MIDDLE_PX}px ${equipped}px ${inventory}px`,
-    columnGap: TILE_GAP_PX,
-    rowGap: TILE_GAP_PX,
+    columnGap: tiles.gap,
+    rowGap: tiles.gap,
   };
 
   return (
@@ -122,7 +123,7 @@ function CharacterRow({
         />
         <div className="flex items-start" style={{ columnGap: ROW_COLUMN_GAP_PX }}>
           {/* pt-1: level with the tiles, which sit inside their drop zones' padding. */}
-          <div className="relative shrink-0 self-stretch pt-1" style={{ width: ROW_INFO_PX }}>
+          <div className="relative shrink-0 self-stretch pt-1" style={{ width: rowInfoWidth(tiles) }}>
             {/* The class's sigil, big and faint behind the column, in place of a banner. */}
             <ClassGlyph
               aria-hidden
@@ -261,6 +262,16 @@ function ChampionStuns({
 }
 
 /**
+ * The subclass line's icons for a tile size: the widest line (four abilities, or six
+ * fragments 2px apart) fits the 3×3 grid's width, and the Super's diamond its column.
+ */
+function subclassIcons(tile: number) {
+  if (tile >= 60) return { ability: "size-10", fragment: "size-[30px]", super: 64 } as const;
+  if (tile >= 52) return { ability: "size-9", fragment: "size-[26px]", super: 48 } as const;
+  return { ability: "size-8", fragment: "size-[22px]", super: 48 } as const;
+}
+
+/**
  * The subclass line: the equipped Super's diamond (the subclass's own icon until the
  * manifest knows the Super), and to its left what it's set up with, like the weapons'
  * 3×3 grids: abilities, then aspects, then fragments, a line each. For show only.
@@ -277,10 +288,12 @@ function SubclassSlot({
   const superHash = setup?.abilities.find((a) => a.kind === "super")?.hash;
   const superDef = manifest?.def("DestinyInventoryItemDefinition", superHash);
   const abilities = setup?.abilities.filter((a) => a.kind !== "super") ?? [];
+  const tiles = useTileMetrics();
+  const icons = subclassIcons(tiles.tile);
   const tile = manifest && {
     manifest,
     size: 40 as const,
-    sizeClassName: "size-10",
+    sizeClassName: icons.ability,
     className: "rounded-none",
     element: setup?.subclass,
   };
@@ -309,7 +322,7 @@ function SubclassSlot({
             </div>
           )}
           {setup.fragments.length > 0 && (
-            // Up to six: 30px each, 2px apart, fits the 3×3 grid's width (204px).
+            // Up to six: 30px each with large tiles, 2px apart, fits the 3×3 grid's width (204px).
             <div className="flex gap-0.5">
               {setup.fragments.map((hash, i) => (
                 <PlugIcon
@@ -319,7 +332,7 @@ function SubclassSlot({
                   classType={character.classType}
                   {...tile}
                   size={32}
-                  sizeClassName="size-[30px]"
+                  sizeClassName={icons.fragment}
                 />
               ))}
             </div>
@@ -328,13 +341,13 @@ function SubclassSlot({
       )}
       <div
         className="flex items-center justify-center self-start"
-        style={{ gridRow: 1, gridColumn: 2, height: TILE_HEIGHT_PX + 2 * ZONE_PAD_PX }}
+        style={{ gridRow: 1, gridColumn: 2, height: tiles.height + 2 * ZONE_PAD_PX }}
       >
         {item && (
           <ManifestIcon
             icon={superDef?.displayProperties?.icon ?? item.icon}
             label={superDef ? `${superDef.displayProperties.name}, ${item.name}` : item.name}
-            size={64}
+            size={icons.super}
             className="rounded-none"
             diamond={superDef?.displayProperties?.icon !== undefined}
             element={setup?.subclass}
@@ -369,6 +382,7 @@ function Slot({
   const items = useMemo(() => [...(unsorted ?? [])].sort(compare), [unsorted, compare]);
   const empty = Math.max(0, CHARACTER_SLOTS - items.length);
   const left = side === "left";
+  const tiles = useTileMetrics();
 
   return (
     <>
@@ -385,11 +399,12 @@ function Slot({
         to={{ kind: "character", characterId: character.id }}
         bucket={row.hash}
         label={row.label}
-        className="grid content-start gap-2 self-start p-1 *:[direction:ltr]"
+        className="grid content-start self-start p-1 *:[direction:ltr]"
         style={{
           gridRow: line,
           gridColumn: left ? 1 : 5,
-          gridTemplateColumns: `repeat(${ROW_INVENTORY_COLUMNS}, ${TILE_WIDTH_PX}px)`,
+          gridTemplateColumns: `repeat(${ROW_INVENTORY_COLUMNS}, ${tiles.tile}px)`,
+          gap: tiles.gap,
           direction: left ? "rtl" : undefined,
         }}
       >

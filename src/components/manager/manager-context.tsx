@@ -7,7 +7,7 @@ import type { MoveStep } from "@/lib/inventory/smart-moves";
 import type { MoveOutcome } from "@/lib/inventory/move-queue";
 import type { PendingToast } from "@/lib/toast";
 import { createValueStore } from "@/lib/value-store";
-import type { TileMetrics } from "@/lib/inventory/vault-layout";
+import { DESKTOP_TILE_METRICS, type TileMetrics } from "@/lib/inventory/vault-layout";
 
 /** The item being dragged and where it came from; drop zones subscribe to this. */
 export interface DragInfo {
@@ -51,16 +51,27 @@ export function useManagerActions(): ManagerActions | null {
 }
 
 /**
- * Whether the page is laid out for a phone (below Tailwind `md`), and there, the tile
- * size and spacing that fill its width (see phoneTileMetrics). Wider screens keep fixed
- * 60px tiles.
+ * Whether the page is laid out for a phone (below Tailwind `md`), and the tile size and
+ * spacing: on phones, what fills its width (see phoneTileMetrics); wider, the size picked
+ * in the Items settings. Outside the page's layout (drawers), tiles are large.
  */
-export type ManagerLayout = { phone: false } | { phone: true; tiles: TileMetrics };
+export interface ManagerLayout {
+  phone: boolean;
+  tiles: TileMetrics;
+}
 
-export const ManagerLayoutContext = createContext<ManagerLayout>({ phone: false });
+export const ManagerLayoutContext = createContext<ManagerLayout>({
+  phone: false,
+  tiles: DESKTOP_TILE_METRICS,
+});
 
 export function usePhoneLayout(): boolean {
   return useContext(ManagerLayoutContext).phone;
+}
+
+/** The page's tile size and spacing. */
+export function useTileMetrics(): TileMetrics {
+  return useContext(ManagerLayoutContext).tiles;
 }
 
 /** Phones: the tile size that fills the page's width. Null on wider screens. */

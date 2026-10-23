@@ -1,5 +1,8 @@
 import { expect, test } from "vitest";
-import { CHARACTER_ROW_PX, itemsPagePlan } from "./items-page-plan";
+import { characterRowWidth, itemsPagePlan } from "./items-page-plan";
+import { DESKTOP_TILE_METRICS, desktopTileMetrics } from "./vault-layout";
+
+const CHARACTER_ROW_PX = characterRowWidth(DESKTOP_TILE_METRICS);
 
 test("phones get the phone layout whatever is picked, measured or not", () => {
   for (const layout of ["rows", "legacy"] as const) {
@@ -42,4 +45,18 @@ test("legacy columns go side by side from 1580px and align the vault from 760px"
     compact: true,
     vault: "below",
   });
+});
+
+test("smaller tiles fit the character rows, and every legacy column, in less width", () => {
+  const small = desktopTileMetrics("small");
+  const width = characterRowWidth(small);
+  expect(width).toBeLessThan(CHARACTER_ROW_PX);
+  expect(itemsPagePlan({ phone: false, layout: "rows", width, tiles: small })).toEqual({ kind: "rows", vault: "below" });
+  expect(itemsPagePlan({ phone: false, layout: "rows", width })).toEqual({
+    kind: "columns",
+    compact: true,
+    vault: "below",
+  });
+  expect(itemsPagePlan({ phone: false, layout: "legacy", width: 1500, tiles: small })).toMatchObject({ compact: false });
+  expect(itemsPagePlan({ phone: false, layout: "legacy", width: 1500 })).toMatchObject({ compact: true });
 });

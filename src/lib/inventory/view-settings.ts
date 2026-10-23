@@ -60,6 +60,10 @@ export const VAULT_TAB_LABELS: Record<VaultTab, string> = { all: "All", weapons:
 export const ITEMS_LAYOUTS = ["rows", "legacy"] as const;
 export type ItemsLayout = (typeof ITEMS_LAYOUTS)[number];
 
+/** How big the Items page draws its tiles on wider screens (phones size them to fit). */
+export const TILE_SIZES = ["large", "medium", "small"] as const;
+export type TileSize = (typeof TILE_SIZES)[number];
+
 export interface ViewSettings {
   /** Sort keys in priority order; name always breaks the last tie. */
   sort: SortKey[];
@@ -69,6 +73,7 @@ export interface ViewSettings {
   armorGroup: GroupKey;
   vaultTab: VaultTab;
   layout: ItemsLayout;
+  tileSize: TileSize;
 }
 
 export const DEFAULT_VIEW: ViewSettings = {
@@ -77,12 +82,13 @@ export const DEFAULT_VIEW: ViewSettings = {
   armorGroup: "class",
   vaultTab: "all",
   layout: "rows",
+  tileSize: "large",
 };
 
 /**
  * `view` with its sort and grouping back to the defaults. Page preferences (the vault tab,
- * the layout) are left alone: listing what resets means a preference added later can't
- * get reset along with them by accident.
+ * the layout, the tile size) are left alone: listing what resets means a preference added
+ * later can't get reset along with them by accident.
  */
 export function resetSortAndGrouping(view: ViewSettings): ViewSettings {
   const { sort, weaponGroup, armorGroup } = DEFAULT_VIEW;
@@ -122,6 +128,9 @@ export function parseViewSettings(raw: string | null): ViewSettings {
       layout: (ITEMS_LAYOUTS as readonly unknown[]).includes(v.layout)
         ? (v.layout as ItemsLayout)
         : DEFAULT_VIEW.layout,
+      tileSize: (TILE_SIZES as readonly unknown[]).includes(v.tileSize)
+        ? (v.tileSize as TileSize)
+        : DEFAULT_VIEW.tileSize,
     };
   } catch {
     return DEFAULT_VIEW;
