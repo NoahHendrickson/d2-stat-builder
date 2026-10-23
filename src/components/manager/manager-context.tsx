@@ -74,12 +74,6 @@ export function useTileMetrics(): TileMetrics {
   return useContext(ManagerLayoutContext).tiles;
 }
 
-/** Phones: the tile size that fills the page's width. Null on wider screens. */
-export function usePhoneTiles(): TileMetrics | null {
-  const layout = useContext(ManagerLayoutContext);
-  return layout.phone ? layout.tiles : null;
-}
-
 /**
  * The classes for a column's nameplate block (a character's, the vault's): pinned under the
  * search bar, filled once something scrolls under it. pt-3 is that filled gap; -mt-3 keeps it

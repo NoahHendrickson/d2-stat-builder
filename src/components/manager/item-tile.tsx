@@ -131,10 +131,10 @@ export const ItemTile = memo(function ItemTile({ item }: { item: InventoryItem }
       </ArmorThumb>
       <span
         className={cn(
-          "flex items-center px-0.5 text-[11px] leading-none font-medium text-black tabular-nums",
-          // A narrower tile closes up a crowded bar (champion + element + Power), and clips
-          // whatever still doesn't fit rather than spilling past the frame.
-          width < ROOMY_FOOTER_PX ? "overflow-hidden" : "gap-0.5",
+          // Whatever doesn't fit is clipped at the frame rather than spilling past it; a
+          // narrower tile closes up a crowded bar (champion + element + Power) first.
+          "flex items-center overflow-hidden px-0.5 text-[11px] leading-none font-medium text-black tabular-nums",
+          width >= ROOMY_FOOTER_PX && "gap-0.5",
         )}
         style={{ height: FOOTER_PX }}
       >

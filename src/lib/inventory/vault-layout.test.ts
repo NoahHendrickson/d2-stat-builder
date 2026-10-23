@@ -7,6 +7,7 @@ import {
   layoutVault,
   lineOfItem,
   linesBetween,
+  DESKTOP_TILE_METRICS,
   phoneTileMetrics,
   type VaultBucket,
   type VaultTileLine,
@@ -48,7 +49,7 @@ const bucket = (groups: ItemGroup[], extra: Partial<VaultBucket> = {}): VaultBuc
 });
 
 const tileLines = (buckets: VaultBucket[], width: number) =>
-  layoutVault([{ heading: "Weapons", buckets }], width).lines.filter(
+  layoutVault([{ heading: "Weapons", buckets }], width, DESKTOP_TILE_METRICS).lines.filter(
     (line): line is VaultTileLine => line.kind === "tiles",
   );
 
@@ -56,7 +57,7 @@ const tileLines = (buckets: VaultBucket[], width: number) =>
 const shape = (lines: VaultTileLine[]) => lines.map((line) => line.cells.map((cell) => cell.items.length));
 
 test("an unmeasured pane has no lines", () => {
-  expect(layoutVault([{ heading: "Weapons", buckets: [bucket([group("a", 3)])] }], 0)).toEqual({
+  expect(layoutVault([{ heading: "Weapons", buckets: [bucket([group("a", 3)])] }], 0, DESKTOP_TILE_METRICS)).toEqual({
     lines: [],
     height: 0,
   });
@@ -107,6 +108,7 @@ test("lines stack with the bucket's padding and the gaps between and within grou
       { heading: "Armor", buckets: [bucket([group("c", 1)], { key: "helmet" })] },
     ],
     332,
+    DESKTOP_TILE_METRICS,
   );
   expect(lines.map((line) => [line.kind, line.top, line.height])).toEqual([
     ["heading", 0, HEADING_HEIGHT_PX],
@@ -146,7 +148,7 @@ test("every item is laid out exactly once at any width", () => {
 });
 
 test("linesBetween finds the lines overlapping a stretch of the list", () => {
-  const { lines } = layoutVault([{ heading: "Weapons", buckets: [bucket([group("a", 50)])] }], 332);
+  const { lines } = layoutVault([{ heading: "Weapons", buckets: [bucket([group("a", 50)])] }], 332, DESKTOP_TILE_METRICS);
   // heading 0–40, then lines at 40 (86 tall), 126, 210, 294, … (84 apart).
   expect(linesBetween(lines, 0, 40)).toEqual([0, 1]);
   expect(linesBetween(lines, 0, 41)).toEqual([0, 2]);
@@ -158,14 +160,14 @@ test("linesBetween finds the lines overlapping a stretch of the list", () => {
 });
 
 test("lineOfItem finds the line an item is on", () => {
-  const { lines } = layoutVault([{ heading: "Weapons", buckets: [bucket([group("a", 12)])] }], 332);
+  const { lines } = layoutVault([{ heading: "Weapons", buckets: [bucket([group("a", 12)])] }], 332, DESKTOP_TILE_METRICS);
   expect(lineOfItem(lines, "a0")).toBe(1);
   expect(lineOfItem(lines, "a11")).toBe(3);
   expect(lineOfItem(lines, "missing")).toBe(-1);
 });
 
 test("a section without a heading starts with its tiles, padded as asked", () => {
-  const { lines, height } = layoutVault([{ buckets: [bucket([group("a", 3)])] }], 1000, 4);
+  const { lines, height } = layoutVault([{ buckets: [bucket([group("a", 3)])] }], 1000, DESKTOP_TILE_METRICS, 4);
   expect(lines.map((line) => line.kind)).toEqual(["tiles"]);
   const [line] = lines as VaultTileLine[];
   expect(line!.top).toBe(0);
@@ -193,7 +195,6 @@ test("phone captions name the bucket and each group above its own lines", () => 
   const { lines, height } = layoutVault(
     [{ heading: "Weapons", buckets: [bucket([labelled("a", 8), labelled("b", 2)], { captions: true })] }],
     358,
-    undefined,
     m,
   );
   expect(lines.map((line) => (line.kind === "caption" ? `${line.level}:${line.label}:${line.count}` : line.kind))).toEqual([
@@ -223,8 +224,8 @@ test("on phones, a bucket with nothing to name keeps its padding", () => {
   const { lines } = layoutVault(
     [{ heading: "Other", buckets: [bucket([group("a", 3)], { label: undefined, captions: true })] }],
     358,
-    4,
     m,
+    4,
   );
   expect(lines.map((line) => line.kind)).toEqual(["heading", "tiles"]);
   expect((lines[1] as VaultTileLine).padTop).toBe(4);

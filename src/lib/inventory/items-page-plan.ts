@@ -1,4 +1,4 @@
-import { DESKTOP_TILE_METRICS, type TileMetrics } from "./vault-layout";
+import type { TileMetrics } from "./vault-layout";
 import type { ItemsLayout } from "./view-settings";
 
 /** Character rows: the postmaster column, four postmaster tiles across. */
@@ -16,27 +16,44 @@ export const ROW_INVENTORY_COLUMNS = 3;
 export const zoneWidth = (tiles: number, m: TileMetrics) =>
   tiles * m.tile + (tiles - 1) * m.gap + 2 * ZONE_PAD_PX;
 
-/** How wide a character row is with `m`'s tiles. */
+/**
+ * Character rows: the narrowest the nameplate strip across a row goes. Measured: the
+ * emblem (64px), six three-digit stats, the champions, and Power over Max (556px), two set
+ * bonuses (80px), and about 100px left for the class name. Large rows are wider anyway;
+ * smaller tiles' rows widen to it.
+ */
+export const ROW_STRIP_MIN_PX = 800;
+
+/** How wide a character row is with `m`'s tiles: the strip, or the gear under it. */
 export const characterRowWidth = (m: TileMetrics) =>
-  rowInfoWidth(m) +
-  ROW_COLUMN_GAP_PX +
-  2 * (zoneWidth(ROW_INVENTORY_COLUMNS, m) + zoneWidth(1, m)) +
-  ROW_MIDDLE_PX +
-  4 * m.gap;
+  Math.max(
+    ROW_STRIP_MIN_PX,
+    rowInfoWidth(m) +
+      ROW_COLUMN_GAP_PX +
+      2 * (zoneWidth(ROW_INVENTORY_COLUMNS, m) + zoneWidth(1, m)) +
+      ROW_MIDDLE_PX +
+      4 * m.gap,
+  );
 
 /** Between the characters and the vault beside them (gap-6). */
 const LAYOUT_GAP_PX = 24;
 /** The vault goes beside the character rows only with room for five tiles across. */
 const vaultBesideMinWidth = (m: TileMetrics) => 5 * m.tile + 4 * m.gap;
-/** Legacy columns: a character column's slot row, the equipped tile then three more. */
-const columnWidth = (m: TileMetrics) => zoneWidth(1, m) + m.gap + zoneWidth(ROW_INVENTORY_COLUMNS, m);
 /**
- * Legacy columns: below this width, three character columns (about 930px with large tiles)
- * would leave the vault only a handful of tiles across, so it shows one character at a
- * time. Smaller tiles leave the vault the same room.
+ * Legacy columns: the narrowest a nameplate's stats line goes (six 14px glyphs and
+ * three-digit values), which holds the column open once its tiles are smaller.
  */
-const columnsAllCharactersMinWidth = (m: TileMetrics) =>
-  1580 - 3 * (columnWidth(DESKTOP_TILE_METRICS) - columnWidth(m));
+const COLUMN_PLATE_MIN_PX = 230;
+/** Legacy columns: a character column, its nameplate or its slot rows (the equipped tile then three more). */
+const columnWidth = (m: TileMetrics) =>
+  Math.max(COLUMN_PLATE_MIN_PX, zoneWidth(1, m) + m.gap + zoneWidth(ROW_INVENTORY_COLUMNS, m));
+/** Legacy columns: what the vault keeps beside three character columns (and the gaps between them). */
+const COLUMNS_VAULT_ROOM_PX = 740;
+/**
+ * Legacy columns: below this width, three character columns would leave the vault only a
+ * handful of tiles across, so it shows one character at a time.
+ */
+const columnsAllCharactersMinWidth = (m: TileMetrics) => 3 * columnWidth(m) + COLUMNS_VAULT_ROOM_PX;
 /**
  * Legacy columns: from this width the vault sits beside the characters, each of its slots
  * on the same row as that slot on the characters. Narrower, it goes below them.
@@ -66,12 +83,12 @@ export function itemsPagePlan({
   phone,
   layout,
   width,
-  tiles = DESKTOP_TILE_METRICS,
+  tiles,
 }: {
   phone: boolean;
   layout: ItemsLayout;
   width: number;
-  tiles?: TileMetrics;
+  tiles: TileMetrics;
 }): ItemsPagePlan | null {
   if (phone) return { kind: "phone" };
   if (width <= 0) return null;

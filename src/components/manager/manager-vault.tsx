@@ -33,7 +33,6 @@ import {
 import {
   GROUP_GAP_X_PX,
   MARKER_GAP_PX,
-  TILE_WIDTH_PX,
   layoutVault,
   lineOfItem,
   linesBetween,
@@ -89,12 +88,12 @@ const HEADER_PLACEMENTS: Record<
 const CLASS_MARKER_PX = 32;
 
 /** Width of a group's marker (see GroupMarker), or 0 when its grouping draws none. */
-function markerWidth(groupBy: GroupKey, { items }: ItemGroup): number {
+function markerWidth(groupBy: GroupKey, { items }: ItemGroup, tiles: TileMetrics): number {
   const item = items[0];
   if (!item) return 0;
   if (groupBy === "class") return classGlyphWidth(item.classType, CLASS_MARKER_PX);
   // Only weapons have an ammo type; a type without a silhouette keeps its column.
-  return groupBy === "type" && item.ammoType !== undefined ? TILE_WIDTH_PX : 0;
+  return groupBy === "type" && item.ammoType !== undefined ? tiles.tile : 0;
 }
 
 /**
@@ -108,6 +107,7 @@ function vaultSections(
   compare: (a: InventoryItem, b: InventoryItem) => number,
   { weaponGroup, armorGroup, vaultTab }: ViewSettings,
   phone: boolean,
+  tiles: TileMetrics,
 ): { gear: VaultSection[]; extra: VaultSection[] } {
   const bucket = (
     key: string,
@@ -123,7 +123,7 @@ function vaultSections(
       ? // Each group on its own lines under its name.
         { stacked: true, markerWidth: () => 0, captions: true }
       : // No text labels: groups sit side by side, except types, which get a line each.
-        { stacked: groupBy === "type", markerWidth: (group: ItemGroup) => markerWidth(groupBy, group) }),
+        { stacked: groupBy === "type", markerWidth: (group: ItemGroup) => markerWidth(groupBy, group, tiles) }),
   });
   // Weapons and armor each follow their own grouping; the rest isn't grouped.
   const groupFor = (label: string): GroupKey =>
@@ -157,9 +157,10 @@ function useVaultSections(inventory: ManagerInventory) {
   const view = useViewSettings();
   const compare = useItemComparator();
   const phone = usePhoneLayout();
+  const tiles = useTileMetrics();
   return useMemo(
-    () => vaultSections(inventory, compare, view, phone),
-    [inventory, compare, view, phone],
+    () => vaultSections(inventory, compare, view, phone, tiles),
+    [inventory, compare, view, phone, tiles],
   );
 }
 
@@ -320,7 +321,7 @@ function VaultLines({ sections, pad }: { sections: readonly VaultSection[]; pad?
   const drag = useStoreValue(dragStore);
   const metrics = useTileMetrics();
   const layout = useMemo(
-    () => layoutVault(sections, width, pad, metrics),
+    () => layoutVault(sections, width, metrics, pad),
     [sections, width, pad, metrics],
   );
 

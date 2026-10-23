@@ -33,6 +33,7 @@ import {
   ROW_INVENTORY_COLUMNS,
   ROW_MIDDLE_PX,
   ZONE_PAD_PX,
+  characterRowWidth,
   rowInfoWidth,
   zoneWidth,
 } from "@/lib/inventory/items-page-plan";
@@ -44,6 +45,7 @@ import { EmptyTile, ItemTile } from "./item-tile";
 import { CharacterStrip, PostmasterCell, useCharacterSetup } from "./character-plate";
 import { DropZone } from "./manager-drop-zone";
 import { useTileMetrics } from "./manager-context";
+import type { TileMetrics } from "@/lib/inventory/vault-layout";
 
 const [GHOST_ROW, SPARROW_ROW, SHIP_ROW] = GENERAL_ROWS as [BucketRow, BucketRow, BucketRow];
 
@@ -56,9 +58,16 @@ const [GHOST_ROW, SPARROW_ROW, SHIP_ROW] = GENERAL_ROWS as [BucketRow, BucketRow
  */
 export function CharacterRows({ inventory }: { inventory: ManagerInventory }) {
   const { manifest, statIcons, compare, postmasterCapacity } = useCharacterSetup(inventory);
+  const tiles = useTileMetrics();
 
   return (
-    <section aria-label="Characters" className="flex shrink-0 flex-col gap-10">
+    // As wide as the page plan counts a row (characterRowWidth), so a long name is cut
+    // short in its strip rather than pushing the row (and the vault beside it) wider.
+    <section
+      aria-label="Characters"
+      className="flex shrink-0 flex-col gap-10"
+      style={{ width: characterRowWidth(tiles) }}
+    >
       {inventory.characters.map((c) => (
         <CharacterRow
           key={c.id}
@@ -262,13 +271,18 @@ function ChampionStuns({
 }
 
 /**
- * The subclass line's icons for a tile size: the widest line (four abilities, or six
- * fragments 2px apart) fits the 3×3 grid's width, and the Super's diamond its column.
+ * The subclass line's icon sizes, worked out from the columns they sit in: the widest line
+ * (four abilities 4px apart, or six fragments 2px apart) fits the 3×3 grid inside its
+ * padding, and the Super's diamond fits the equipped column. Large tiles keep the full 40px
+ * abilities, 30px fragments and 64px diamond.
  */
-function subclassIcons(tile: number) {
-  if (tile >= 60) return { ability: "size-10", fragment: "size-[30px]", super: 64 } as const;
-  if (tile >= 52) return { ability: "size-9", fragment: "size-[26px]", super: 48 } as const;
-  return { ability: "size-8", fragment: "size-[22px]", super: 48 } as const;
+function subclassIcons(tiles: TileMetrics) {
+  const inner = zoneWidth(ROW_INVENTORY_COLUMNS, tiles) - 2 * ZONE_PAD_PX;
+  return {
+    ability: Math.min(40, Math.floor((inner - 3 * 4) / 4)),
+    fragment: Math.min(30, Math.floor((inner - 5 * 2) / 6)),
+    super: zoneWidth(1, tiles) >= 64 ? 64 : 48,
+  } as const;
 }
 
 /**
@@ -289,11 +303,11 @@ function SubclassSlot({
   const superDef = manifest?.def("DestinyInventoryItemDefinition", superHash);
   const abilities = setup?.abilities.filter((a) => a.kind !== "super") ?? [];
   const tiles = useTileMetrics();
-  const icons = subclassIcons(tiles.tile);
+  const icons = subclassIcons(tiles);
   const tile = manifest && {
     manifest,
     size: 40 as const,
-    sizeClassName: icons.ability,
+    sizeClassName: "size-(--ability)",
     className: "rounded-none",
     element: setup?.subclass,
   };
@@ -305,7 +319,14 @@ function SubclassSlot({
           role="group"
           aria-label="Subclass setup"
           className="flex flex-col items-end gap-2 self-start p-1"
-          style={{ gridRow: 1, gridColumn: 1 }}
+          style={
+            {
+              gridRow: 1,
+              gridColumn: 1,
+              "--ability": `${icons.ability}px`,
+              "--fragment": `${icons.fragment}px`,
+            } as CSSProperties
+          }
         >
           {abilities.length > 0 && (
             <div className="flex gap-1">
@@ -322,7 +343,6 @@ function SubclassSlot({
             </div>
           )}
           {setup.fragments.length > 0 && (
-            // Up to six: 30px each with large tiles, 2px apart, fits the 3×3 grid's width (204px).
             <div className="flex gap-0.5">
               {setup.fragments.map((hash, i) => (
                 <PlugIcon
@@ -332,7 +352,7 @@ function SubclassSlot({
                   classType={character.classType}
                   {...tile}
                   size={32}
-                  sizeClassName={icons.fragment}
+                  sizeClassName="size-(--fragment)"
                 />
               ))}
             </div>

@@ -40,19 +40,26 @@ export interface TileMetrics {
 /** The label bar under the icon, the same height at every tile size. */
 const TILE_FOOTER_PX = TILE_HEIGHT_PX - TILE_WIDTH_PX;
 
-/** Each desktop tile size: the tile's width (frame included) and the gap between tiles. */
-const DESKTOP_TILES: Record<TileSize, { tile: number; gap: number }> = {
-  large: { tile: TILE_WIDTH_PX, gap: TILE_GAP_PX },
-  medium: { tile: 52, gap: 6 },
-  small: { tile: 44, gap: 6 },
+const desktopTiles = (tile: number, gap: number): TileMetrics => ({
+  tile,
+  height: tile + TILE_FOOTER_PX,
+  gap,
+  cols: 0,
+});
+
+/**
+ * Each desktop tile size: the tile's width (frame included) and the gap between tiles. One
+ * object per size, so memoized layouts and tile lines keep them across renders.
+ */
+const DESKTOP_TILES: Record<TileSize, TileMetrics> = {
+  large: desktopTiles(TILE_WIDTH_PX, TILE_GAP_PX),
+  medium: desktopTiles(52, 6),
+  small: desktopTiles(44, 6),
 };
 
-export function desktopTileMetrics(size: TileSize): TileMetrics {
-  const { tile, gap } = DESKTOP_TILES[size];
-  return { tile, height: tile + TILE_FOOTER_PX, gap, cols: 0 };
-}
+export const desktopTileMetrics = (size: TileSize): TileMetrics => DESKTOP_TILES[size];
 
-export const DESKTOP_TILE_METRICS: TileMetrics = desktopTileMetrics("large");
+export const DESKTOP_TILE_METRICS: TileMetrics = DESKTOP_TILES.large;
 
 const PHONE_TILE_GAP_PX = 6;
 const PHONE_MIN_COLS = 6;
@@ -203,15 +210,15 @@ function bucketRows(bucket: VaultBucket, width: number, m: TileMetrics): BucketR
 }
 
 /**
- * Every section's heading and tile lines, top to bottom, for a pane `width` px wide,
- * with `pad` px above and below each bucket's tiles. Nothing is left out: each item is
+ * Every section's heading and tile lines, top to bottom, for a pane `width` px wide of
+ * `m`'s tiles, with `pad` px above and below each bucket's tiles. Nothing is left out: each item is
  * in exactly one cell. An unmeasured pane (width 0) has no lines yet.
  */
 export function layoutVault(
   sections: readonly VaultSection[],
   width: number,
+  m: TileMetrics,
   pad = BUCKET_PAD_PX,
-  m: TileMetrics = DESKTOP_TILE_METRICS,
 ): VaultLayout {
   const lines: VaultLine[] = [];
   if (width <= 0) return { lines, height: 0 };

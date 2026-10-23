@@ -85,14 +85,15 @@ export function ManagerView({
   // of below every character slot.
   const phone = usePhoneWidth();
   const view = useViewSettings();
+  // Only a phone's tiles follow the width: a desktop resize keeps the same layout object,
+  // so tiles and vault lines don't re-render for it.
+  const phoneWidth = phone ? layoutWidth || UNMEASURED_PHONE_PX : 0;
   const layout = useMemo<ManagerLayout>(
     () => ({
       phone,
-      tiles: phone
-        ? phoneTileMetrics(layoutWidth || UNMEASURED_PHONE_PX)
-        : desktopTileMetrics(view.tileSize),
+      tiles: phone ? phoneTileMetrics(phoneWidth) : desktopTileMetrics(view.tileSize),
     }),
-    [phone, layoutWidth, view.tileSize],
+    [phone, phoneWidth, view.tileSize],
   );
   // Touch can't drag a tile, so its details offer the moves as buttons.
   const touch = useTouchFirst();
