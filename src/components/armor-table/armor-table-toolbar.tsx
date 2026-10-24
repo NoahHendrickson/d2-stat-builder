@@ -30,6 +30,7 @@ import {
 } from "@/components/armor-table/filter-cascade-menu";
 import { FilterMultiselect } from "@/components/armor-table/filter-multiselect";
 import { CleanupButton, type CleanupButtonProps } from "@/components/armor-table/cleanup-button";
+import { BUILD_USAGE_PAUSED } from "@/lib/build-usage/paused";
 import { SetFilterMenu } from "@/components/set-menu";
 
 const CLASS_OPTIONS: FilterOption<number>[] = [0, 1, 2].map((c) => ({
@@ -290,7 +291,7 @@ export const ArmorTableToolbar = memo(function ArmorTableToolbar({
         </div>
       </div>
       <div className="ml-auto flex shrink-0 items-center gap-2 max-md:order-5">
-        <CleanupButton on={cleanupGroups !== undefined} {...cleanup} />
+        {!BUILD_USAGE_PAUSED && <CleanupButton on={cleanupGroups !== undefined} {...cleanup} />}
         <DuplicatesButton
           on={duplicateGroups !== undefined}
           match={duplicateMatch}

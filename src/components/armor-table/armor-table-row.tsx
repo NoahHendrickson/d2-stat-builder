@@ -19,9 +19,10 @@ import {
   type PieceUsageCounts,
   type UsageBucket,
 } from "@/lib/build-usage/buckets";
+import { BUILD_USAGE_PAUSED } from "@/lib/build-usage/paused";
 import { cn } from "@/lib/utils";
 
-export const COLUMN_COUNT = 13;
+export const COLUMN_COUNT = BUILD_USAGE_PAUSED ? 12 : 13;
 
 /** Column widths: name is capped (with room for the row actions that show on hover);
  *  Class→Set share leftover so wide screens don't leave a huge empty gap after the
@@ -35,7 +36,7 @@ export const TABLE_COLGROUP = (
     <col /* tertiary — flexible */ />
     <col /* tuned — flexible */ />
     <col /* set — flexible */ />
-    <col style={{ width: "5.5rem" }} /* searches */ />
+    {!BUILD_USAGE_PAUSED && <col style={{ width: "5.5rem" }} /* searches */ />}
     {STAT_DISPLAY_ORDER.map((key) => (
       <col key={key} style={{ width: "3.25rem" }} />
     ))}
@@ -153,23 +154,25 @@ export const ArmorRow = memo(function ArmorRow({
         {piece.tunedStat !== undefined ? statLabel(piece.tunedStat) : "—"}
       </td>
       <td className="truncate py-2 pr-3 text-sm">{row.setName ?? "—"}</td>
-      <td
-        title={usageTitle(row.usage, row.inLoadout)}
-        className={cn(
-          "py-2 text-center text-sm tabular-nums",
-          row.usageBucket === "unknown" && "text-muted-foreground",
-        )}
-      >
-        {/* Used in / could have joined: the second number is what makes a 0 mean something. */}
-        {row.usage?.eligible ? (
-          <>
-            {row.usage.used}
-            <span className="text-muted-foreground">/{row.usage.eligible}</span>
-          </>
-        ) : (
-          "—"
-        )}
-      </td>
+      {!BUILD_USAGE_PAUSED && (
+        <td
+          title={usageTitle(row.usage, row.inLoadout)}
+          className={cn(
+            "py-2 text-center text-sm tabular-nums",
+            row.usageBucket === "unknown" && "text-muted-foreground",
+          )}
+        >
+          {/* Used in / could have joined: the second number is what makes a 0 mean something. */}
+          {row.usage?.eligible ? (
+            <>
+              {row.usage.used}
+              <span className="text-muted-foreground">/{row.usage.eligible}</span>
+            </>
+          ) : (
+            "—"
+          )}
+        </td>
+      )}
       {STAT_DISPLAY_ORDER.map((key) => (
         <td key={key} className="py-2 text-center text-sm tabular-nums">
           {piece.stats[STAT_ORDER.indexOf(key)]}

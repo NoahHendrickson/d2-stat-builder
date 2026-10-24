@@ -7,6 +7,7 @@ import type { OptimizerInput, OptimizerLoadout } from "@/lib/optimizer/types";
 import type { BuildUsageSummary } from "./buckets";
 import { queryIdentity, summarizeRun } from "./summarize";
 import { encodeRecord } from "./wire";
+import { BUILD_USAGE_PAUSED } from "./paused";
 
 export const buildUsageKey = (membershipId: string | undefined) => ["build-usage", membershipId] as const;
 
@@ -15,7 +16,7 @@ export function useBuildUsage() {
   const membershipId = sessionMembershipId(useSession().data);
   return useQuery<BuildUsageSummary>({
     queryKey: buildUsageKey(membershipId),
-    enabled: membershipId !== undefined,
+    enabled: membershipId !== undefined && !BUILD_USAGE_PAUSED,
     staleTime: 30_000,
     // 503 (storage not configured) and 401 won't change by retrying.
     retry: false,
