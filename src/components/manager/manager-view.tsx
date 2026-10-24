@@ -28,7 +28,7 @@ import {
   type ManagerActions,
   type ManagerLayout,
 } from "./manager-context";
-import { phoneTileMetrics } from "@/lib/inventory/vault-layout";
+import { desktopTileMetrics, phoneTileMetrics } from "@/lib/inventory/vault-layout";
 import { itemsPagePlan, type ItemsPagePlan } from "@/lib/inventory/items-page-plan";
 import { usePhoneWidth, useTouchFirst } from "@/lib/use-min-width";
 import { characterDropStore } from "./manager-drop-zone";
@@ -84,16 +84,20 @@ export function ManagerView({
   // Phones: tiles sized to fill the width, and the vault behind a tab of its own instead
   // of below every character slot.
   const phone = usePhoneWidth();
+  const view = useViewSettings();
+  // Only a phone's tiles follow the width: a desktop resize keeps the same layout object,
+  // so tiles and vault lines don't re-render for it.
+  const phoneWidth = phone ? layoutWidth || UNMEASURED_PHONE_PX : 0;
   const layout = useMemo<ManagerLayout>(
-    () =>
-      phone
-        ? { phone, tiles: phoneTileMetrics(layoutWidth || UNMEASURED_PHONE_PX) }
-        : { phone },
-    [phone, layoutWidth],
+    () => ({
+      phone,
+      tiles: phone ? phoneTileMetrics(phoneWidth) : desktopTileMetrics(view.tileSize),
+    }),
+    [phone, phoneWidth, view.tileSize],
   );
   // Touch can't drag a tile, so its details offer the moves as buttons.
   const touch = useTouchFirst();
-  const plan = itemsPagePlan({ phone, layout: useViewSettings().layout, width: layoutWidth });
+  const plan = itemsPagePlan({ phone, layout: view.layout, width: layoutWidth, tiles: layout.tiles });
   const [vaultOpen, setVaultOpen] = useState(false);
   /** The weapon (by name) whose copies are open in Compare. */
   const [comparing, setComparing] = useState<string | null>(null);

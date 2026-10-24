@@ -60,6 +60,10 @@ export const VAULT_TAB_LABELS: Record<VaultTab, string> = { all: "All", weapons:
 export const ITEMS_LAYOUTS = ["rows", "legacy"] as const;
 export type ItemsLayout = (typeof ITEMS_LAYOUTS)[number];
 
+/** How big the Items page draws its tiles on wider screens (phones size them to fit). */
+export const TILE_SIZES = ["large", "medium", "small"] as const;
+export type TileSize = (typeof TILE_SIZES)[number];
+
 export interface ViewSettings {
   /** Sort keys in priority order; name always breaks the last tie. */
   sort: SortKey[];
@@ -69,6 +73,7 @@ export interface ViewSettings {
   armorGroup: GroupKey;
   vaultTab: VaultTab;
   layout: ItemsLayout;
+  tileSize: TileSize;
 }
 
 export const DEFAULT_VIEW: ViewSettings = {
@@ -77,12 +82,13 @@ export const DEFAULT_VIEW: ViewSettings = {
   armorGroup: "class",
   vaultTab: "all",
   layout: "rows",
+  tileSize: "large",
 };
 
 /**
  * `view` with its sort and grouping back to the defaults. Page preferences (the vault tab,
- * the layout) are left alone: listing what resets means a preference added later can't
- * get reset along with them by accident.
+ * the layout, the tile size) are left alone: listing what resets means a preference added
+ * later can't get reset along with them by accident.
  */
 export function resetSortAndGrouping(view: ViewSettings): ViewSettings {
   const { sort, weaponGroup, armorGroup } = DEFAULT_VIEW;
@@ -102,6 +108,11 @@ const ELEMENT_ORDER = ["kinetic", "arc", "solar", "void", "stasis", "strand", "p
 const TIER_NAMES: Record<number, string> = { 6: "Exotic", 5: "Legendary", 4: "Rare", 3: "Uncommon", 2: "Common" };
 const AMMO_NAMES: Record<number, string> = { 1: "Primary", 2: "Special", 3: "Heavy" };
 
+/** `value` when it's one of `list`, otherwise `fallback`. */
+function oneOf<T>(list: readonly T[], value: unknown, fallback: T): T {
+  return (list as readonly unknown[]).includes(value) ? (value as T) : fallback;
+}
+
 export function parseViewSettings(raw: string | null): ViewSettings {
   if (!raw) return DEFAULT_VIEW;
   try {
@@ -110,18 +121,13 @@ export function parseViewSettings(raw: string | null): ViewSettings {
     const sort = Array.isArray(v.sort)
       ? [...new Set(v.sort.filter((k): k is SortKey => (SORT_KEYS as readonly unknown[]).includes(k)))]
       : DEFAULT_VIEW.sort;
-    const group = (value: unknown, fallback: GroupKey) =>
-      (GROUP_KEYS as readonly unknown[]).includes(value) ? (value as GroupKey) : fallback;
     return {
       sort,
-      weaponGroup: group(v.weaponGroup, DEFAULT_VIEW.weaponGroup),
-      armorGroup: group(v.armorGroup, group(v.vaultGroup, DEFAULT_VIEW.armorGroup)),
-      vaultTab: (VAULT_TABS as readonly unknown[]).includes(v.vaultTab)
-        ? (v.vaultTab as VaultTab)
-        : DEFAULT_VIEW.vaultTab,
-      layout: (ITEMS_LAYOUTS as readonly unknown[]).includes(v.layout)
-        ? (v.layout as ItemsLayout)
-        : DEFAULT_VIEW.layout,
+      weaponGroup: oneOf(GROUP_KEYS, v.weaponGroup, DEFAULT_VIEW.weaponGroup),
+      armorGroup: oneOf(GROUP_KEYS, v.armorGroup, oneOf(GROUP_KEYS, v.vaultGroup, DEFAULT_VIEW.armorGroup)),
+      vaultTab: oneOf(VAULT_TABS, v.vaultTab, DEFAULT_VIEW.vaultTab),
+      layout: oneOf(ITEMS_LAYOUTS, v.layout, DEFAULT_VIEW.layout),
+      tileSize: oneOf(TILE_SIZES, v.tileSize, DEFAULT_VIEW.tileSize),
     };
   } catch {
     return DEFAULT_VIEW;

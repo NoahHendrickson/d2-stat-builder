@@ -3,7 +3,7 @@
 import { memo, type CSSProperties } from "react";
 import Image from "next/image";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { ArmorThumb, type ArmorThumbSize } from "@/components/armor-thumb";
+import { ArmorThumb } from "@/components/armor-thumb";
 import {
   ArchetypeGlyph,
   ITEM_TILE_FOOTER_PX,
@@ -14,18 +14,19 @@ import { BREAKER_NAMES, type InventoryItem } from "@/lib/inventory/build";
 import { TAG_LABELS, useAnnotation } from "@/lib/inventory/annotations";
 import { useMovePending } from "@/lib/inventory/move-queue";
 import { cn } from "@/lib/utils";
-import { useManagerActions, usePhoneTiles } from "./manager-context";
+import { useManagerActions, usePhoneLayout, useTileMetrics } from "./manager-context";
 import { useSearchState } from "./search-store";
 import { TAG_ICONS } from "./tag-icons";
 import { FavoriteHeart } from "@/components/favorite-heart";
 
 const FOOTER_PX = ITEM_TILE_FOOTER_PX;
-/** The icon sits inside a 1px frame, so it is 2px narrower than the tile. */
-const INNER_SIZE_CLASS: Partial<Record<ArmorThumbSize, string>> = {
-  44: "size-[42px]",
-  56: "size-[54px]",
-  60: "size-[58px]",
-};
+/**
+ * Desktop tiles narrower than this (the picked size) set the label bar's glyphs and Power
+ * flush (champion, element, Power). Phone tiles keep the bar as it was at every width.
+ */
+const ROOMY_FOOTER_PX = 56;
+/** Desktop tiles narrower than this leave a weapon's champion glyph to the tooltip. */
+const CHAMPION_FOOTER_PX = 48;
 
 /**
  * One inventory cell (Figma 127:5757 / 127:5737): the icon inside a 1px frame, over a
@@ -33,19 +34,16 @@ const INNER_SIZE_CLASS: Partial<Record<ArmorThumbSize, string>> = {
  * The frame is grey, or gold with an inner gold glow when masterworked (Figma's
  * dark vignette is left out: on exotics it read as an inner shadow). Every tile
  * carries the bar (blank when there's nothing to show) so rows stay one height.
+ * Its size is the page's (see useTileMetrics): picked in the Items settings, or fitted to a
+ * phone's width.
  * Click (or Enter) opens the move menu; drag it onto a character slot or the vault.
  */
-export const ItemTile = memo(function ItemTile({
-  item,
-  size = 60,
-}: {
-  item: InventoryItem;
-  size?: ArmorThumbSize;
-}) {
+export const ItemTile = memo(function ItemTile({ item }: { item: InventoryItem }) {
   const actions = useManagerActions();
-  // Phones size the page's full-size tiles to fill its width (smaller sizes are deliberate).
-  const phone = usePhoneTiles();
-  const fluid = size === 60 ? phone?.tile : undefined;
+  const width = useTileMetrics().tile;
+  const phone = usePhoneLayout();
+  const roomyFooter = phone || width >= ROOMY_FOOTER_PX;
+  const championInFooter = phone || width >= CHAMPION_FOOTER_PX;
   const pending = useMovePending(item.key);
   const tag = useAnnotation(item.instanceId)?.tag;
   const search = useSearchState(item.key);
@@ -81,11 +79,8 @@ export const ItemTile = memo(function ItemTile({
             ? "opacity-50"
             : search === "none" && tag === "archive" && "opacity-60",
       )}
-      style={
-        fluid
-          ? ({ width: fluid, "--tile-inner": `${fluid - 2}px` } as CSSProperties)
-          : { width: size }
-      }
+      // The icon sits inside a 1px frame, so it is 2px narrower than the tile.
+      style={{ width, "--tile-inner": `${width - 2}px` } as CSSProperties}
       title={label}
       aria-label={label.replaceAll("\n", ", ")}
       aria-busy={pending || undefined}
@@ -109,8 +104,8 @@ export const ItemTile = memo(function ItemTile({
       <ArmorThumb
         icon={item.icon}
         watermark={item.watermark}
-        size={size}
-        className={cn("bg-item-backing", INNER_SIZE_CLASS[size], fluid && "size-(--tile-inner)")}
+        size={60}
+        className="bg-item-backing size-(--tile-inner)"
         gearTier={item.gearTier}
         craft={item.enhanced ? "enhanced" : item.crafted ? "crafted" : undefined}
       >
@@ -142,16 +137,17 @@ export const ItemTile = memo(function ItemTile({
       </ArmorThumb>
       <span
         className={cn(
-          "flex items-center gap-0.5 px-0.5 text-[11px] leading-none font-medium text-black tabular-nums",
-          // A narrower phone tile clips a crowded bar (champion + element + Power) at its edge.
-          fluid && "overflow-hidden",
+          // Whatever doesn't fit is clipped at the frame rather than spilling past it; a
+          // narrower tile closes up a crowded bar (champion + element + Power) first.
+          "flex items-center overflow-hidden px-0.5 text-[11px] leading-none font-medium text-black tabular-nums",
+          roomyFooter && "gap-0.5",
         )}
         style={{ height: FOOTER_PX }}
       >
         <span className="flex-1" />
         {item.archetype?.icon && <ArchetypeGlyph icon={item.archetype.icon} />}
         {/* The champion it stuns, beside the element; Bungie's icon is white, so blacken it. */}
-        {item.breakerIcon && (
+        {item.breakerIcon && championInFooter && (
           <Image
             src={`${BUNGIE_IMAGE_BASE}${item.breakerIcon}`}
             alt=""
@@ -179,9 +175,8 @@ export const ItemTile = memo(function ItemTile({
 });
 
 /** An empty cell, drawn as the game's bracket corners over a faint fill, the same size as a tile. */
-export function EmptyTile({ size = 60 }: { size?: ArmorThumbSize }) {
-  const phone = usePhoneTiles();
-  const width = (size === 60 ? phone?.tile : undefined) ?? size;
+export function EmptyTile() {
+  const width = useTileMetrics().tile;
   return (
     <span
       aria-hidden

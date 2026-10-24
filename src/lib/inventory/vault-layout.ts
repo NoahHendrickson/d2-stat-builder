@@ -4,11 +4,13 @@
 // do: a bucket's groups stack one per line (grouped by type) or sit side by side and
 // wrap, and a group wider than the pane wraps its own tiles.
 import type { InventoryItem } from "./build";
-import type { GroupKey, ItemGroup } from "./view-settings";
+import type { GroupKey, ItemGroup, TileSize } from "./view-settings";
 
-/** A tile: a 1px frame round a 58px icon over its 16px label bar. */
+/** The label bar under the icon, the same height at every tile size (ItemTile draws it). */
+export const TILE_FOOTER_PX = 16;
+/** A large tile: a 1px frame round a 58px icon over its label bar. */
 export const TILE_WIDTH_PX = 60;
-export const TILE_HEIGHT_PX = 76;
+export const TILE_HEIGHT_PX = TILE_WIDTH_PX + TILE_FOOTER_PX;
 /** Between tiles, across and down. */
 export const TILE_GAP_PX = 8;
 /** Between a group's marker and its tiles. */
@@ -24,7 +26,10 @@ export const HEADING_HEIGHT_PX = 40;
 /** A line naming what follows on phones: a slot ("Kinetic") or a group ("Hand Cannon"). */
 export const CAPTION_HEIGHT_PX = 28;
 
-/** Tile size and spacing to lay out with. Desktop tiles are fixed; phones size them to fit. */
+/**
+ * Tile size and spacing to lay out with. Desktop tiles are the size picked in the Items
+ * settings; phones size them to fit.
+ */
 export interface TileMetrics {
   tile: number;
   /** Tile plus its label bar. */
@@ -34,17 +39,29 @@ export interface TileMetrics {
   cols: number;
 }
 
-export const DESKTOP_TILE_METRICS: TileMetrics = {
-  tile: TILE_WIDTH_PX,
-  height: TILE_HEIGHT_PX,
-  gap: TILE_GAP_PX,
+const desktopTiles = (tile: number, gap: number): TileMetrics => ({
+  tile,
+  height: tile + TILE_FOOTER_PX,
+  gap,
   cols: 0,
+});
+
+/**
+ * Each desktop tile size: the tile's width (frame included) and the gap between tiles. One
+ * object per size, so memoized layouts and tile lines keep them across renders.
+ */
+const DESKTOP_TILES: Record<TileSize, TileMetrics> = {
+  large: desktopTiles(TILE_WIDTH_PX, TILE_GAP_PX),
+  medium: desktopTiles(52, 6),
+  small: desktopTiles(44, 6),
 };
+
+export const desktopTileMetrics = (size: TileSize): TileMetrics => DESKTOP_TILES[size];
+
+export const DESKTOP_TILE_METRICS: TileMetrics = DESKTOP_TILES.large;
 
 const PHONE_TILE_GAP_PX = 6;
 const PHONE_MIN_COLS = 6;
-/** The label bar under the icon, as on desktop (TILE_HEIGHT_PX - TILE_WIDTH_PX). */
-const TILE_FOOTER_PX = TILE_HEIGHT_PX - TILE_WIDTH_PX;
 
 /**
  * Phones: at least six tiles across, as wide as fills `width` in whole columns but never
@@ -192,15 +209,15 @@ function bucketRows(bucket: VaultBucket, width: number, m: TileMetrics): BucketR
 }
 
 /**
- * Every section's heading and tile lines, top to bottom, for a pane `width` px wide,
- * with `pad` px above and below each bucket's tiles. Nothing is left out: each item is
+ * Every section's heading and tile lines, top to bottom, for a pane `width` px wide of
+ * `m`'s tiles, with `pad` px above and below each bucket's tiles. Nothing is left out: each item is
  * in exactly one cell. An unmeasured pane (width 0) has no lines yet.
  */
 export function layoutVault(
   sections: readonly VaultSection[],
   width: number,
+  m: TileMetrics,
   pad = BUCKET_PAD_PX,
-  m: TileMetrics = DESKTOP_TILE_METRICS,
 ): VaultLayout {
   const lines: VaultLine[] = [];
   if (width <= 0) return { lines, height: 0 };

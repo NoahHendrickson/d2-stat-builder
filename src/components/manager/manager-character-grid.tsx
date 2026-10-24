@@ -10,7 +10,13 @@ import { cn } from "@/lib/utils";
 import { useStoreValue } from "@/lib/value-store";
 import { EmptyTile, ItemTile } from "./item-tile";
 import { CharacterNameplate, PostmasterCell, useCharacterSetup } from "./character-plate";
-import { dragStore, useManagerActions, usePhoneTiles, usePinnedPlateClass } from "./manager-context";
+import {
+  dragStore,
+  useManagerActions,
+  usePhoneLayout,
+  usePinnedPlateClass,
+  useTileMetrics,
+} from "./manager-context";
 import { DropZone, canLand } from "./manager-drop-zone";
 import { AlignedVault } from "./manager-vault";
 
@@ -197,13 +203,14 @@ function CharacterCell({
   const empty = Math.max(0, CHARACTER_SLOTS - items.length);
   // Phones: the rest of the slot in as many columns as fill the width (two rows, not three),
   // a double gap after the equipped tile, and no drop padding (touch doesn't drag).
-  const phone = usePhoneTiles();
+  const phone = usePhoneLayout();
+  const tiles = useTileMetrics();
 
   return (
     // Tiles keep to the top: an aligned row grows with the vault's slot beside it.
     <div
-      className={cn("flex items-start gap-2 pb-2", groupStart && "pt-5")}
-      style={phone ? { columnGap: phone.gap * 2, paddingBottom: phone.gap } : undefined}
+      className={cn("flex items-start", groupStart && "pt-5")}
+      style={{ columnGap: phone ? tiles.gap * 2 : tiles.gap, paddingBottom: tiles.gap }}
       aria-label={row.label}
     >
       <DropZone
@@ -216,12 +223,11 @@ function CharacterCell({
       <DropZone
         to={{ kind: "character", characterId: character.id }}
         bucket={row.hash}
-        className={cn("grid grid-cols-[repeat(3,60px)] content-start gap-2 p-1", phone && "p-0")}
-        style={
-          phone
-            ? { gridTemplateColumns: `repeat(${phone.cols - 1}, ${phone.tile}px)`, gap: phone.gap }
-            : undefined
-        }
+        className={cn("grid content-start p-1", phone && "p-0")}
+        style={{
+          gridTemplateColumns: `repeat(${phone ? tiles.cols - 1 : 3}, ${tiles.tile}px)`,
+          gap: tiles.gap,
+        }}
       >
         {items.map((item) => (
           <ItemTile key={item.key} item={item} />

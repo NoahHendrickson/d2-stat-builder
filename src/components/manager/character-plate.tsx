@@ -31,7 +31,7 @@ import { cn } from "@/lib/utils";
 import { useStoreValue } from "@/lib/value-store";
 import { ItemTile } from "./item-tile";
 import { farmingStore } from "./farming";
-import { usePhoneTiles } from "./manager-context";
+import { usePhoneLayout, useTileMetrics } from "./manager-context";
 import { useItemComparator } from "./view-menu";
 
 const POSTMASTER_FALLBACK_CAPACITY = 21;
@@ -199,10 +199,12 @@ export function CharacterStrip({
       <DropdownMenu>
         <DropdownMenuTrigger
           render={
+            // contain-inline-size: the emblem and name take what the readout leaves, and never
+            // widen the strip (a character row is as wide as its gear, or the plan's minimum).
             <button
               type="button"
               aria-label={`${name} options`}
-              className="relative flex h-full min-w-0 flex-1 items-center text-left outline-none focus-visible:d2-tile-selected"
+              className="relative flex h-full min-w-0 flex-1 items-center text-left outline-none contain-inline-size focus-visible:d2-tile-selected"
             />
           }
         >
@@ -299,7 +301,8 @@ function CharacterStats({
 export function PostmasterCell({ items, capacity }: { items: InventoryItem[]; capacity: number }) {
   // The game warns once the postmaster is close to overflowing (and losing items).
   const nearlyFull = items.length >= capacity - 3;
-  const phone = usePhoneTiles();
+  const phone = usePhoneLayout();
+  const tiles = useTileMetrics();
   return (
     <div className="flex flex-col gap-2 pt-2">
       <div className="flex items-baseline justify-between gap-2 text-xs">
@@ -311,16 +314,14 @@ export function PostmasterCell({ items, capacity }: { items: InventoryItem[]; ca
         </span>
       </div>
       {items.length > 0 && (
-        // Full-size tiles like every slot row (smaller ones clip the Power); four across
-        // keeps the grid inside the column width the slot rows set.
+        // The slot rows' tile size; four across keeps the grid inside the column width they
+        // set. Phones: a full line of tiles, like the slots under it.
         <div
-          className="grid grid-cols-[repeat(4,60px)] gap-2"
-          // Phones: a full line of tiles, like the slots under it.
-          style={
-            phone
-              ? { gridTemplateColumns: `repeat(${phone.cols}, ${phone.tile}px)`, gap: phone.gap }
-              : undefined
-          }
+          className="grid"
+          style={{
+            gridTemplateColumns: `repeat(${phone ? tiles.cols : 4}, ${tiles.tile}px)`,
+            gap: tiles.gap,
+          }}
         >
           {items.map((item) => (
             <ItemTile key={item.key} item={item} />
