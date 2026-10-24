@@ -11,6 +11,7 @@ import {
   subscribeBuildUsageRecording,
 } from "@/lib/build-usage/recording-pref";
 import { buildUsageKey, recordDisplayedBuilds } from "@/lib/build-usage/use-build-usage";
+import { BUILD_USAGE_PAUSED } from "@/lib/build-usage/paused";
 
 /**
  * How long a result has to stay on screen, with no newer search started, before its
@@ -31,7 +32,7 @@ export function BuildUsageRecorder() {
   const queryClient = useQueryClient();
 
   useEffect(() => {
-    if (!membershipId) return;
+    if (!membershipId || BUILD_USAGE_PAUSED) return;
     const store = getOptimizerStore();
     // What was last recorded: the query plus the displayed builds, so a re-sort that
     // changes what's on screen records again (replacing the query's rows) and anything

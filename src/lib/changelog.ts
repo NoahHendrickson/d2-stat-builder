@@ -18,7 +18,10 @@ export interface ChangelogEntry {
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
     date: "2026-10-24",
-    changes: ["Items: pick Large, Medium or Small item tiles in the Items settings."],
+    changes: [
+      "Items: pick Large, Medium or Small item tiles in the Items settings.",
+      "Armor: Cleanup and the Searches column are paused for now.",
+    ],
   },
   {
     date: "2026-10-19",

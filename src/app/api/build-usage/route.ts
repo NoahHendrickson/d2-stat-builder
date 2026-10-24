@@ -4,6 +4,7 @@ import { getServerBuildUsageStore } from "@/lib/build-usage/neon-store";
 import { decodeRecord } from "@/lib/build-usage/wire";
 import { notConfigured, storageError } from "@/lib/loadouts/api-responses";
 import { rejectCrossSite } from "@/lib/http/same-origin";
+import { BUILD_USAGE_PAUSED } from "@/lib/build-usage/paused";
 
 /** ~30 bytes per piece at MAX_RECORD_PIECES, with room to spare. */
 const MAX_BODY_BYTES = 64 * 1024;
@@ -13,6 +14,7 @@ const WHAT = "Armor usage";
 export async function GET() {
   const user = await readUser();
   if (!user) return NextResponse.json({ error: "Not signed in" }, { status: 401 });
+  if (BUILD_USAGE_PAUSED) return NextResponse.json({ pieces: {} });
   const store = getServerBuildUsageStore();
   if (!store) return notConfigured(WHAT);
   try {
@@ -28,6 +30,8 @@ export async function POST(request: Request) {
   if (refused) return refused;
   const user = await readUser();
   if (!user) return NextResponse.json({ error: "Not signed in" }, { status: 401 });
+  // Accepted and dropped, so open tabs don't retry or show an error.
+  if (BUILD_USAGE_PAUSED) return new NextResponse(null, { status: 204 });
   const store = getServerBuildUsageStore();
   if (!store) return notConfigured(WHAT);
 

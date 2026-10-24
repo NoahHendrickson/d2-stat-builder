@@ -20,6 +20,7 @@ import {
   setBuildUsageRecording,
   useBuildUsageRecording,
 } from "@/lib/build-usage/recording-pref";
+import { BUILD_USAGE_PAUSED } from "@/lib/build-usage/paused";
 
 /** Appearance, theme, site icon, and armor usage recording, all kept per device. */
 export function SettingsPage() {
@@ -50,19 +51,23 @@ export function SettingsPage() {
         </div>
         <SiteIconPicker />
       </section>
-      <div className="d2-rule" />
-      <section aria-labelledby="settings-armor-usage" className="flex flex-col gap-3">
-        <div className="flex flex-col gap-1">
-          <h2 id="settings-armor-usage" className="d2-label">
-            Armor usage history
-          </h2>
-          <p className="text-muted-foreground text-sm">
-            Optimizer searches you stop on are saved to your account, so the Searches column
-            and Cleanup on Armor can show which pieces never make a build.
-          </p>
-        </div>
-        <ArmorUsageSettings />
-      </section>
+      {!BUILD_USAGE_PAUSED && (
+        <>
+          <div className="d2-rule" />
+          <section aria-labelledby="settings-armor-usage" className="flex flex-col gap-3">
+            <div className="flex flex-col gap-1">
+              <h2 id="settings-armor-usage" className="d2-label">
+                Armor usage history
+              </h2>
+              <p className="text-muted-foreground text-sm">
+                Optimizer searches you stop on are saved to your account, so the Searches column
+                and Cleanup on Armor can show which pieces never make a build.
+              </p>
+            </div>
+            <ArmorUsageSettings />
+          </section>
+        </>
+      )}
     </main>
   );
 }
