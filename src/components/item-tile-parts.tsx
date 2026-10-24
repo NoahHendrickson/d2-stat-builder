@@ -1,11 +1,15 @@
 import Image from "next/image";
 import { BUNGIE_IMAGE_BASE } from "@/lib/bungie/constants";
+import { TILE_FOOTER_PX } from "@/lib/inventory/vault-layout";
 
 // Pieces of the Manager's item tile (manager/item-tile.tsx) that other item art reuses
 // (loadout cards), kept apart so those pages don't pull in the Manager's modules.
 
-/** Height of the label bar under the icon (Figma: 12px on a 44px tile, scaled up). */
-export const ITEM_TILE_FOOTER_PX = 16;
+/**
+ * Height of the label bar under the icon (Figma: 12px on a 44px tile, scaled up). The
+ * vault's layout counts it too, so it lives with the tile sizes in vault-layout.
+ */
+export const ITEM_TILE_FOOTER_PX = TILE_FOOTER_PX;
 
 /** The inner gold glow over a masterworked item's icon (its frame turns gold too). */
 export function MasterworkGlow() {

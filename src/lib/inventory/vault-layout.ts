@@ -6,9 +6,11 @@
 import type { InventoryItem } from "./build";
 import type { GroupKey, ItemGroup, TileSize } from "./view-settings";
 
-/** A large tile: a 1px frame round a 58px icon over its 16px label bar. */
+/** The label bar under the icon, the same height at every tile size (ItemTile draws it). */
+export const TILE_FOOTER_PX = 16;
+/** A large tile: a 1px frame round a 58px icon over its label bar. */
 export const TILE_WIDTH_PX = 60;
-export const TILE_HEIGHT_PX = 76;
+export const TILE_HEIGHT_PX = TILE_WIDTH_PX + TILE_FOOTER_PX;
 /** Between tiles, across and down. */
 export const TILE_GAP_PX = 8;
 /** Between a group's marker and its tiles. */
@@ -36,9 +38,6 @@ export interface TileMetrics {
   /** Tiles across a full line (phones only; desktop lines just wrap). */
   cols: number;
 }
-
-/** The label bar under the icon, the same height at every tile size. */
-const TILE_FOOTER_PX = TILE_HEIGHT_PX - TILE_WIDTH_PX;
 
 const desktopTiles = (tile: number, gap: number): TileMetrics => ({
   tile,

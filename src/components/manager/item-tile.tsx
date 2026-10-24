@@ -14,15 +14,18 @@ import { BREAKER_NAMES, type InventoryItem } from "@/lib/inventory/build";
 import { TAG_LABELS, useAnnotation } from "@/lib/inventory/annotations";
 import { useMovePending } from "@/lib/inventory/move-queue";
 import { cn } from "@/lib/utils";
-import { useManagerActions, useTileMetrics } from "./manager-context";
+import { useManagerActions, usePhoneLayout, useTileMetrics } from "./manager-context";
 import { useSearchState } from "./search-store";
 import { TAG_ICONS } from "./tag-icons";
 import { FavoriteHeart } from "@/components/favorite-heart";
 
 const FOOTER_PX = ITEM_TILE_FOOTER_PX;
-/** Narrower than this, the label bar's glyphs and Power sit flush (champion, element, Power). */
+/**
+ * Desktop tiles narrower than this (the picked size) set the label bar's glyphs and Power
+ * flush (champion, element, Power). Phone tiles keep the bar as it was at every width.
+ */
 const ROOMY_FOOTER_PX = 56;
-/** Narrower than this, a weapon's champion glyph leaves the bar to the tooltip. */
+/** Desktop tiles narrower than this leave a weapon's champion glyph to the tooltip. */
 const CHAMPION_FOOTER_PX = 48;
 
 /**
@@ -38,6 +41,9 @@ const CHAMPION_FOOTER_PX = 48;
 export const ItemTile = memo(function ItemTile({ item }: { item: InventoryItem }) {
   const actions = useManagerActions();
   const width = useTileMetrics().tile;
+  const phone = usePhoneLayout();
+  const roomyFooter = phone || width >= ROOMY_FOOTER_PX;
+  const championInFooter = phone || width >= CHAMPION_FOOTER_PX;
   const pending = useMovePending(item.key);
   const tag = useAnnotation(item.instanceId)?.tag;
   const search = useSearchState(item.key);
@@ -134,14 +140,14 @@ export const ItemTile = memo(function ItemTile({ item }: { item: InventoryItem }
           // Whatever doesn't fit is clipped at the frame rather than spilling past it; a
           // narrower tile closes up a crowded bar (champion + element + Power) first.
           "flex items-center overflow-hidden px-0.5 text-[11px] leading-none font-medium text-black tabular-nums",
-          width >= ROOMY_FOOTER_PX && "gap-0.5",
+          roomyFooter && "gap-0.5",
         )}
         style={{ height: FOOTER_PX }}
       >
         <span className="flex-1" />
         {item.archetype?.icon && <ArchetypeGlyph icon={item.archetype.icon} />}
         {/* The champion it stuns, beside the element; Bungie's icon is white, so blacken it. */}
-        {item.breakerIcon && width >= CHAMPION_FOOTER_PX && (
+        {item.breakerIcon && championInFooter && (
           <Image
             src={`${BUNGIE_IMAGE_BASE}${item.breakerIcon}`}
             alt=""

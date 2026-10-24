@@ -199,10 +199,12 @@ export function CharacterStrip({
       <DropdownMenu>
         <DropdownMenuTrigger
           render={
+            // contain-inline-size: the emblem and name take what the readout leaves, and never
+            // widen the strip (a character row is as wide as its gear, or the plan's minimum).
             <button
               type="button"
               aria-label={`${name} options`}
-              className="relative flex h-full min-w-0 flex-1 items-center text-left outline-none focus-visible:d2-tile-selected"
+              className="relative flex h-full min-w-0 flex-1 items-center text-left outline-none contain-inline-size focus-visible:d2-tile-selected"
             />
           }
         >

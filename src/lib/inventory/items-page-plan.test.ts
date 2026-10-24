@@ -61,4 +61,7 @@ test("smaller tiles fit the character rows, and every legacy column, in less wid
   });
   expect(itemsPagePlan({ phone: false, layout: "legacy", width: 1500, tiles: small })).toMatchObject({ compact: false });
   expect(itemsPagePlan({ phone: false, layout: "legacy", width: 1500, tiles: DESKTOP_TILE_METRICS })).toMatchObject({ compact: true });
+  // One column under tabs leaves the aligned vault as many tiles across at every size.
+  expect(itemsPagePlan({ phone: false, layout: "legacy", width: 700, tiles: small })).toMatchObject({ vault: "aligned" });
+  expect(itemsPagePlan({ phone: false, layout: "legacy", width: 700, tiles: DESKTOP_TILE_METRICS })).toMatchObject({ vault: "below" });
 });

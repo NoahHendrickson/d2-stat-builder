@@ -61,12 +61,13 @@ export function CharacterRows({ inventory }: { inventory: ManagerInventory }) {
   const tiles = useTileMetrics();
 
   return (
-    // As wide as the page plan counts a row (characterRowWidth), so a long name is cut
-    // short in its strip rather than pushing the row (and the vault beside it) wider.
+    // At least as wide as the page plan counts a row (characterRowWidth). The strip's name
+    // doesn't count toward its width (see CharacterStrip), so a long one is cut short rather
+    // than widening the row; anything else in the strip that outgrows the plan widens it.
     <section
       aria-label="Characters"
       className="flex shrink-0 flex-col gap-10"
-      style={{ width: characterRowWidth(tiles) }}
+      style={{ minWidth: characterRowWidth(tiles) }}
     >
       {inventory.characters.map((c) => (
         <CharacterRow
@@ -270,14 +271,18 @@ function ChampionStuns({
   );
 }
 
+/** Room the subclass line leaves spare inside the 3×3 grid, so it never fits to the pixel. */
+const SUBCLASS_LINE_SLACK_PX = 2;
+
 /**
  * The subclass line's icon sizes, worked out from the columns they sit in: the widest line
  * (four abilities 4px apart, or six fragments 2px apart) fits the 3×3 grid inside its
- * padding, and the Super's diamond fits the equipped column. Large tiles keep the full 40px
- * abilities, 30px fragments and 64px diamond.
+ * padding with a little to spare, and the Super's diamond fits the equipped column. Large
+ * tiles keep the full 40px abilities, 30px fragments and 64px diamond; Medium gets 38/26/48,
+ * Small 32/22/48.
  */
 function subclassIcons(tiles: TileMetrics) {
-  const inner = zoneWidth(ROW_INVENTORY_COLUMNS, tiles) - 2 * ZONE_PAD_PX;
+  const inner = zoneWidth(ROW_INVENTORY_COLUMNS, tiles) - 2 * ZONE_PAD_PX - SUBCLASS_LINE_SLACK_PX;
   return {
     ability: Math.min(40, Math.floor((inner - 3 * 4) / 4)),
     fragment: Math.min(30, Math.floor((inner - 5 * 2) / 6)),

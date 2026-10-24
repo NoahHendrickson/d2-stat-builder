@@ -1,4 +1,4 @@
-import type { TileMetrics } from "./vault-layout";
+import { DESKTOP_TILE_METRICS, type TileMetrics } from "./vault-layout";
 import type { ItemsLayout } from "./view-settings";
 
 /** Character rows: the postmaster column, four postmaster tiles across. */
@@ -41,24 +41,43 @@ const LAYOUT_GAP_PX = 24;
 const vaultBesideMinWidth = (m: TileMetrics) => 5 * m.tile + 4 * m.gap;
 /**
  * Legacy columns: the narrowest a nameplate's stats line goes (six 14px glyphs and
- * three-digit values), which holds the column open once its tiles are smaller.
+ * three-digit values), measured, which holds the column open once its tiles are smaller.
+ * A wider plate only costs the vault (it takes what's left), never clips anything.
  */
 const COLUMN_PLATE_MIN_PX = 230;
 /** Legacy columns: a character column, its nameplate or its slot rows (the equipped tile then three more). */
 const columnWidth = (m: TileMetrics) =>
   Math.max(COLUMN_PLATE_MIN_PX, zoneWidth(1, m) + m.gap + zoneWidth(ROW_INVENTORY_COLUMNS, m));
-/** Legacy columns: what the vault keeps beside three character columns (and the gaps between them). */
-const COLUMNS_VAULT_ROOM_PX = 740;
+/** Legacy columns: the padding between columns side by side (px-4 each side). */
+const COLUMNS_GAP_PX = 2 * 16;
+/** Legacy columns: after the one column shown under tabs, before the aligned vault (pr-3). */
+const COMPACT_COLUMN_PAD_PX = 12;
+
+/**
+ * The room the vault keeps beside the character columns, given in px at Large and scaled
+ * by the tile pitch, so every size keeps about as many vault tiles across.
+ */
+const vaultRoom = (largePx: number, m: TileMetrics) =>
+  Math.round(
+    (largePx * (m.tile + m.gap)) / (DESKTOP_TILE_METRICS.tile + DESKTOP_TILE_METRICS.gap),
+  );
+/** Beside all three columns: about ten Large tiles across (1580px wide at Large). */
+const ALL_CHARACTERS_VAULT_ROOM_LARGE_PX = 676;
+/** Aligned beside one column: about seven Large tiles across (760px wide at Large). */
+const ALIGNED_VAULT_ROOM_LARGE_PX = 468;
+
 /**
  * Legacy columns: below this width, three character columns would leave the vault only a
  * handful of tiles across, so it shows one character at a time.
  */
-const columnsAllCharactersMinWidth = (m: TileMetrics) => 3 * columnWidth(m) + COLUMNS_VAULT_ROOM_PX;
+const columnsAllCharactersMinWidth = (m: TileMetrics) =>
+  3 * columnWidth(m) + 2 * COLUMNS_GAP_PX + vaultRoom(ALL_CHARACTERS_VAULT_ROOM_LARGE_PX, m);
 /**
  * Legacy columns: from this width the vault sits beside the characters, each of its slots
  * on the same row as that slot on the characters. Narrower, it goes below them.
  */
-const COLUMNS_ALIGNED_MIN_PX = 760;
+const columnsAlignedMinWidth = (m: TileMetrics) =>
+  columnWidth(m) + COMPACT_COLUMN_PAD_PX + vaultRoom(ALIGNED_VAULT_ROOM_LARGE_PX, m);
 
 /**
  * What the Items page draws:
@@ -96,7 +115,7 @@ export function itemsPagePlan({
     return {
       kind: "columns",
       compact: width < columnsAllCharactersMinWidth(tiles),
-      vault: width >= COLUMNS_ALIGNED_MIN_PX ? "aligned" : "below",
+      vault: width >= columnsAlignedMinWidth(tiles) ? "aligned" : "below",
     };
   }
   const row = characterRowWidth(tiles);
