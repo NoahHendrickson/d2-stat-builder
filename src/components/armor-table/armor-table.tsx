@@ -19,6 +19,7 @@ import {
   type ItemTag,
 } from "@/lib/inventory/annotations";
 import { useBuildUsage } from "@/lib/build-usage/use-build-usage";
+import { BUILD_USAGE_PAUSED } from "@/lib/build-usage/paused";
 import { useLoadouts } from "@/lib/loadouts/use-loadouts";
 import {
   MIN_ELIGIBLE_QUERIES,
@@ -105,7 +106,7 @@ const COLUMN_SORT_KEYS: readonly (SortKey | undefined)[] = [
   "tertiary",
   "tuned",
   "set",
-  "builds",
+  ...(BUILD_USAGE_PAUSED ? [] : ["builds" as const]),
   ...STAT_DISPLAY_ORDER.map((key) => `stat-${key}` as const),
 ];
 
@@ -230,18 +231,20 @@ const HeaderRow = memo(function HeaderRow({
           onReorderCustom={reorderCustom}
           onUndoSort={undoSort}
         />
-        <SortMenu
-          label="Searches"
-          title="Searches: optimizer searches whose shown builds used this piece, out of those it could join"
-          sortKey="builds"
-          sort={sort}
-          hovered={hoveredSortKey === "builds"}
-          sortUndo={sortUndo}
-          onApplyMode={applyMode}
-          onClearLevel={clearLevel}
-          onReorderCustom={reorderCustom}
-          onUndoSort={undoSort}
-        />
+        {!BUILD_USAGE_PAUSED && (
+          <SortMenu
+            label="Searches"
+            title="Searches: optimizer searches whose shown builds used this piece, out of those it could join"
+            sortKey="builds"
+            sort={sort}
+            hovered={hoveredSortKey === "builds"}
+            sortUndo={sortUndo}
+            onApplyMode={applyMode}
+            onClearLevel={clearLevel}
+            onReorderCustom={reorderCustom}
+            onUndoSort={undoSort}
+          />
+        )}
         {STAT_DISPLAY_ORDER.map((key) => (
           <SortMenu
             key={key}
