@@ -33,7 +33,7 @@ import { CleanupButton, type CleanupButtonProps } from "@/components/armor-table
 import { BUILD_USAGE_PAUSED } from "@/lib/build-usage/paused";
 import { SetFilterMenu } from "@/components/set-menu";
 
-const CLASS_OPTIONS: FilterOption<number>[] = [0, 1, 2].map((c) => ({
+export const CLASS_OPTIONS: FilterOption<number>[] = [0, 1, 2].map((c) => ({
   value: c,
   label: CLASS_NAMES[c],
 }));
@@ -121,8 +121,8 @@ function DuplicatesButton({
 }
 
 /**
- * The table's filter bar: result count, search, and the six multiselect
- * filters. Sits above the sticky column headers.
+ * The table's filter bar: result count, search, the six multiselect filters,
+ * and the Cleanup and Duplicates buttons. Sits above the sticky column headers.
  */
 export const ArmorTableToolbar = memo(function ArmorTableToolbar({
   search,

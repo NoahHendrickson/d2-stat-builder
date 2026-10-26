@@ -158,7 +158,7 @@ function StatModChip({
             ? "disabled:cursor-default"
             : blocked
               ? "disabled:cursor-not-allowed"
-              : "hover:border-foreground hover:bg-foreground/8",
+              : "d2-hover-ring hover:border-foreground hover:bg-foreground/8",
         )}
       >
         <ItemIcon icon={option?.icon} size={32} className="rounded-none" />

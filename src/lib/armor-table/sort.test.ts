@@ -6,8 +6,13 @@ import {
   compareRows,
   isStatSortKey,
   moveOrderItem,
+  moveSortLevel,
   preferredAsc,
   reorderCustomLevel,
+  soloSortLevel,
+  sortKeyLabel,
+  sortModeLabel,
+  sortModesFor,
   sortValue,
   type SortableRow,
 } from "./sort";
@@ -218,4 +223,46 @@ test("compareRows walks nest levels until a tie breaks", () => {
   expect(compareRows(c, a, sort)).toBeLessThan(0);
   expect(compareRows(b, a, sort)).toBeLessThan(0);
   expect(compareRows(a, b, [])).toBe(0);
+});
+
+test("sortKeyLabel reads header labels, stats included", () => {
+  expect(sortKeyLabel("set")).toBe("Set bonus");
+  expect(sortKeyLabel("stat-class")).toBe("Class");
+  expect(sortKeyLabel("builds")).toBe("Searches");
+});
+
+test("sortModesFor puts the natural direction first and custom last", () => {
+  expect(sortModesFor("name")).toEqual(["asc", "desc"]);
+  expect(sortModesFor("stat-health")).toEqual(["desc", "asc"]);
+  expect(sortModesFor("archetype")).toEqual(["asc", "desc", "custom"]);
+  expect(sortModeLabel("stat-health", "desc")).toBe("High→Low");
+  expect(sortModeLabel("name", "desc")).toBe("Z→A");
+});
+
+const chain = [
+  { key: "class" as const, kind: "dir" as const, asc: true },
+  { key: "archetype" as const, kind: "dir" as const, asc: true },
+  { key: "stat-health" as const, kind: "dir" as const, asc: false },
+];
+
+test("moveSortLevel changes a level's priority and keeps every level", () => {
+  expect(moveSortLevel(chain, 2, 0).map((l) => l.key)).toEqual([
+    "stat-health",
+    "class",
+    "archetype",
+  ]);
+  expect(moveSortLevel(chain, 0, 1).map((l) => l.key)).toEqual([
+    "archetype",
+    "class",
+    "stat-health",
+  ]);
+});
+
+test("soloSortLevel keeps one level and snapshots the chain for undo", () => {
+  expect(soloSortLevel(chain, "archetype")).toEqual({
+    sort: [chain[1]],
+    discardedChain: chain,
+  });
+  expect(soloSortLevel([chain[0]], "class")).toEqual({ sort: [chain[0]] });
+  expect(soloSortLevel(chain, "name")).toEqual({ sort: chain });
 });

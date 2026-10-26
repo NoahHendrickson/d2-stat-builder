@@ -824,7 +824,7 @@ function PerkColumnView({
                       ? "bg-[#305f8e]"
                       : isCurrent
                         ? "bg-[#305f8e]/35"
-                        : "bg-foreground/4 hover:bg-foreground/10",
+                        : "d2-hover-ring bg-foreground/4 hover:bg-foreground/10",
                   )}
                 />
               }

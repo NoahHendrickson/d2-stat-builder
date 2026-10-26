@@ -180,7 +180,8 @@ export function FilterCascadeMenu({
       <div
         className={cn(
           fieldFilterControlShellClasses,
-          "min-w-28 shrink-0",
+          // Hovers like the toolbar's other quick filters and outlined buttons.
+          "d2-hover-ring min-w-28 shrink-0 transition-[color,background-color,border-color,outline-offset]",
           active ? fieldFilterActiveEdgeClasses : fieldFilterIdleClasses,
         )}
         data-active={active || undefined}

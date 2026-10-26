@@ -6,10 +6,12 @@
 // matching the convention in filters.ts / search.ts.
 import {
   CLASS_NAMES,
+  STAT_DISPLAY_ORDER,
   STAT_LABELS,
   STAT_ORDER,
 } from "../armory/stats";
 import type { PieceUsageCounts } from "../build-usage/buckets";
+import { BUILD_USAGE_PAUSED } from "../build-usage/paused";
 import {
   isCustomOrderColumn,
   sortLevelAsc,
@@ -29,6 +31,35 @@ const collator = new Intl.Collator();
 const STAT_SORT_INDEX = new Map<SortKey, number>(
   STAT_ORDER.map((key, i) => [`stat-${key}` as const, i]),
 );
+
+/** The sort key under each header cell, in the table's column order. */
+export const HEADER_SORT_KEYS: readonly SortKey[] = [
+  "name",
+  "class",
+  "archetype",
+  "tertiary",
+  "tuned",
+  "set",
+  ...(BUILD_USAGE_PAUSED ? [] : ["builds" as const]),
+  ...STAT_DISPLAY_ORDER.map((key) => `stat-${key}` as const),
+];
+
+const COLUMN_LABELS: Record<ColumnKey, string> = {
+  name: "Name",
+  class: "Class",
+  archetype: "Archetype",
+  tertiary: "Tertiary",
+  tuned: "Tuned",
+  set: "Set bonus",
+  builds: "Searches",
+};
+
+/** The column's header label ("Mobility", not "stat-mobility"). */
+export function sortKeyLabel(key: SortKey): string {
+  return isStatSortKey(key)
+    ? STAT_LABELS[key.slice(5) as keyof typeof STAT_LABELS]
+    : COLUMN_LABELS[key as ColumnKey];
+}
 
 /** Number columns default to descending (high rolls first); text columns to ascending. */
 export const DESC_FIRST: ReadonlySet<SortKey> = new Set<SortKey>([
@@ -52,6 +83,19 @@ export function preferredAsc(key: SortKey): boolean {
 
 /** Sort-menu tab ids: alphabetical/numeric direction, or custom value order. */
 export type SortMode = "asc" | "desc" | "custom";
+
+/** The modes a column offers, preferred direction first. */
+export function sortModesFor(key: SortKey): SortMode[] {
+  const dirs: SortMode[] = preferredAsc(key) ? ["asc", "desc"] : ["desc", "asc"];
+  return isCustomOrderColumn(key) ? [...dirs, "custom"] : dirs;
+}
+
+/** How a mode reads for this column: "A→Z", "High→Low", "Custom order". */
+export function sortModeLabel(key: SortKey, mode: SortMode): string {
+  if (mode === "custom") return "Custom order";
+  if (isNumericSortKey(key)) return mode === "desc" ? "High→Low" : "Low→High";
+  return mode === "asc" ? "A→Z" : "Z→A";
+}
 
 /** Result of applying a sort action — one atomic chain write (+ optional undo). */
 export interface SortActionResult {
@@ -139,6 +183,25 @@ export function clearSortLevel(
   };
 }
 
+/** Change a level's priority: move it from one place in the chain to another. */
+export function moveSortLevel(
+  sort: SortState,
+  from: number,
+  to: number,
+): SortState {
+  return moveOrderItem(sort, from, to);
+}
+
+/** Keep only `key`'s level, dropping the rest of the chain (undoable). */
+export function soloSortLevel(
+  sort: SortState,
+  key: SortKey,
+): SortActionResult {
+  const level = sortLevelFor(sort, key);
+  if (!level || sort.length === 1) return { sort };
+  return { sort: [level], discardedChain: sort };
+}
+
 /** Reorder values inside a custom level (no-op if that level isn't custom). */
 export function reorderCustomLevel(
   sort: SortState,
@@ -156,11 +219,11 @@ export function reorderCustomLevel(
 }
 
 /** Move `from` to `to` in a custom-order list (used by drag-and-drop / up-down). */
-export function moveOrderItem(
-  order: readonly string[],
+export function moveOrderItem<T>(
+  order: readonly T[],
   from: number,
   to: number,
-): string[] {
+): T[] {
   if (
     from === to ||
     from < 0 ||
@@ -231,7 +294,7 @@ export function sortValue(
  */
 export function applyCustomOrder(
   values: readonly string[],
-  order: string[] | undefined,
+  order: readonly string[] | undefined,
 ): string[] {
   return [...values].sort((a, b) =>
     order ? compareWithCustomOrder(a, b, order) : collator.compare(a, b),
@@ -242,7 +305,11 @@ export function applyCustomOrder(
  * Compare two values under a custom order list: listed values by list index,
  * listed before unlisted, unlisted alphabetically among themselves.
  */
-function compareWithCustomOrder(a: string, b: string, order: string[]): number {
+function compareWithCustomOrder(
+  a: string,
+  b: string,
+  order: readonly string[],
+): number {
   const ia = order.indexOf(a);
   const ib = order.indexOf(b);
   if (ia !== -1 && ib !== -1) return ia - ib;
@@ -262,9 +329,9 @@ function compareOneLevel(
   if (va === undefined && vb === undefined) return 0;
   if (va === undefined) return 1;
   if (vb === undefined) return -1;
-  const order = level.kind === "custom" ? level.order : undefined;
-  const cmp = order
-    ? compareWithCustomOrder(String(va), String(vb), order)
+  const cmp =
+    level.kind === "custom"
+      ? compareWithCustomOrder(String(va), String(vb), level.order)
     : typeof va === "number" && typeof vb === "number"
       ? va - vb
       : collator.compare(String(va), String(vb));

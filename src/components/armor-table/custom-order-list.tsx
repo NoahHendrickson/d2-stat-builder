@@ -1,10 +1,10 @@
 "use client";
 
 import { TooltipLabel } from "@/components/ui/tooltip";
-import { useState, type DragEvent } from "react";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { ArrowDown01Icon, ArrowUp01Icon, DragDropVerticalIcon } from "@hugeicons/core-free-icons";
 import { cn } from "@/lib/utils";
+import { useDragReorder } from "@/components/armor-table/use-drag-reorder";
 
 /**
  * Drag-reorderable list of distinct column values for a custom sort level.
@@ -17,47 +17,7 @@ export function CustomOrderList({
   values: string[];
   onMove: (from: number, to: number) => void;
 }) {
-  const [dragFrom, setDragFrom] = useState<number | null>(null);
-  /** Insertion slot 0…length (before that index / after the last). */
-  const [insertBefore, setInsertBefore] = useState<number | null>(null);
-
-  const clearDrag = () => {
-    setDragFrom(null);
-    setInsertBefore(null);
-  };
-
-  const onDragStart = (e: DragEvent, index: number) => {
-    setDragFrom(index);
-    setInsertBefore(null);
-    e.dataTransfer.effectAllowed = "move";
-    e.dataTransfer.setData("text/plain", String(index));
-  };
-
-  const slotFromPointer = (e: DragEvent, index: number) => {
-    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-    const mid = rect.top + rect.height / 2;
-    return e.clientY < mid ? index : index + 1;
-  };
-
-  const onDragOver = (e: DragEvent, index: number) => {
-    e.preventDefault();
-    e.dataTransfer.dropEffect = "move";
-    setInsertBefore(slotFromPointer(e, index));
-  };
-
-  const onDrop = (e: DragEvent, index: number) => {
-    e.preventDefault();
-    const from =
-      dragFrom ?? Number.parseInt(e.dataTransfer.getData("text/plain"), 10);
-    const slot = insertBefore ?? slotFromPointer(e, index);
-    clearDrag();
-    if (Number.isNaN(from)) return;
-    // No-op if dropping into the gap immediately before/after itself.
-    if (slot === from || slot === from + 1) return;
-    // Convert insertion slot → moveOrderItem `to` (accounts for the remove).
-    const to = from < slot ? slot - 1 : slot;
-    onMove(from, to);
-  };
+  const { dragFrom, rowProps, showSlot } = useDragReorder(onMove);
 
   if (values.length === 0) {
     return (
@@ -66,12 +26,6 @@ export function CustomOrderList({
       </p>
     );
   }
-
-  const showSlot = (slot: number) =>
-    dragFrom !== null &&
-    insertBefore === slot &&
-    slot !== dragFrom &&
-    slot !== dragFrom + 1;
 
   return (
     <ul className="max-h-72 overflow-y-auto p-1">
@@ -84,11 +38,7 @@ export function CustomOrderList({
             />
           )}
           <div
-            draggable
-            onDragStart={(e) => onDragStart(e, i)}
-            onDragOver={(e) => onDragOver(e, i)}
-            onDrop={(e) => onDrop(e, i)}
-            onDragEnd={clearDrag}
+            {...rowProps(i)}
             className={cn(
               "group/row hover:bg-accent flex h-8 cursor-grab items-center gap-1.5 rounded-none normal:rounded-[6px] pr-0.5 pl-1.5 text-sm active:cursor-grabbing",
               dragFrom === i && "bg-accent opacity-60",

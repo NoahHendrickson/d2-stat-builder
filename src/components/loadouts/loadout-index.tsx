@@ -42,8 +42,10 @@ export const LoadoutIndex = memo(function LoadoutIndex({
 
   return (
     <nav aria-label="Loadouts by name" className={cn("flex min-h-0 flex-col", className)}>
-      <div ref={scrollRef} className="d2-scroll relative min-h-0 flex-1 overflow-y-auto overscroll-contain">
-        <ul className="flex flex-col">
+      {/* The list is inset by the hover ring's reach (1px standing 2px off) so the
+          scroller doesn't clip it; the negative margin keeps the names where they were. */}
+      <div ref={scrollRef} className="d2-scroll relative -m-1 min-h-0 flex-1 overflow-y-auto overscroll-contain">
+        <ul className="flex flex-col p-1">
           {loadouts.map((saved, index) => {
             const active = saved.id === activeId;
             return (
@@ -54,7 +56,7 @@ export const LoadoutIndex = memo(function LoadoutIndex({
                   aria-current={active ? "true" : undefined}
                   onClick={() => onJump(index)}
                   className={cn(
-                    "normal:rounded-[8px] focus-visible:ring-outline-strong flex h-8 w-full items-center px-2.5 text-left text-sm outline-none transition-colors focus-visible:ring-1",
+                    "normal:rounded-[8px] focus-visible:ring-outline-strong d2-hover-ring flex h-8 w-full items-center px-2.5 text-left text-sm outline-none transition-[color,background-color,outline-offset] focus-visible:ring-1",
                     active
                       ? "bg-foreground/8 normal:bg-foreground/6 text-foreground"
                       : "text-muted-foreground hover:bg-foreground/5 hover:text-foreground",

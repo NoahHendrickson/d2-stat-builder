@@ -279,7 +279,8 @@ export function FilterMultiselect<V extends string | number>({
   return (
     <div
       // Sized to its label, not stretched: a crowded row still shrinks it to truncate.
-      className={cn("relative w-max min-w-0 max-w-full overflow-visible", className)}
+      // Hovers like the outlined buttons: the ring standing off the control.
+      className={cn("d2-hover-ring relative w-max min-w-0 max-w-full overflow-visible transition-[outline-offset]", className)}
     >
       <DropdownMenu
         modal={false}

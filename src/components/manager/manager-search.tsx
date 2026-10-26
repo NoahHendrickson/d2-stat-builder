@@ -276,7 +276,7 @@ export function ManagerSearch({
             type="button"
             onClick={() => removeChip(chip)}
             aria-label={`Remove filter ${chip}`}
-            className="flex h-7 max-w-full shrink-0 cursor-pointer items-center gap-1.5 bg-foreground/15 px-2.5 font-mono text-[13px] outline-none transition-colors hover:bg-foreground/22 focus-visible:ring-1 focus-visible:ring-outline-strong rounded-full"
+            className="d2-hover-ring flex h-7 max-w-full shrink-0 cursor-pointer items-center gap-1.5 bg-foreground/15 px-2.5 font-mono text-[13px] outline-none transition-[background-color,outline-offset] hover:bg-foreground/22 focus-visible:ring-1 focus-visible:ring-outline-strong rounded-full"
           >
             <ChipLabel term={chip} />
             <HugeiconsIcon icon={Cancel01Icon} strokeWidth={2} className="text-muted-foreground size-3 shrink-0" aria-hidden />

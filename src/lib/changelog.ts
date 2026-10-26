@@ -1,11 +1,11 @@
 /**
- * The sidebar's Changelog, the one place the app announces what's new: what users can
- * do now that they couldn't before, newest first, back to the first release. When a
- * user-facing change ships, add a line to today's entry (or a new entry at the top).
- * Fixes count when a user would notice them; refactors and internals don't. Keep each
- * line short and blunt, one sentence where possible: what changed and where, not how it
- * works or every detail of it. Describe features on their own terms, never by comparison
- * to another app or site.
+ * The sidebar's Changelog highlights meaningful product updates, newest first.
+ * Follow the Changelog rules in AGENTS.md: include new capabilities, substantial
+ * workflow improvements, and significant functional fixes. Routine UI polish
+ * (icons, colors, glows, spacing) does not qualify just because users can see it.
+ * Not every task or release day needs an entry. Keep each line short and plain:
+ * the user benefit and where to find it, without implementation details or
+ * comparisons to other apps.
  */
 export interface ChangelogEntry {
   /** Release day, YYYY-MM-DD. "Seen" tracks it with the line count: a newer top date, or a new line under it, is news. */
@@ -27,8 +27,6 @@ export const CHANGELOG: readonly ChangelogEntry[] = [
     date: "2026-10-19",
     changes: [
       "Optimizer: Set bonuses has a Popularity button showing the sets players wear in raids, dungeons, GM Vanguard Alerts and Conquests.",
-      "Perks: a new, bigger enhanced arrow on perk icons and in perk tooltips.",
-      "Weapon search: Popularity perks glow green to red, so the most run ones stand out.",
     ],
   },
   {
