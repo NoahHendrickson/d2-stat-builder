@@ -60,7 +60,7 @@ function StepButton({
       title={label}
       disabled={disabled}
       onClick={onClick}
-      className="text-muted-foreground hover:text-foreground hover:bg-foreground/8 focus-visible:ring-outline-strong flex size-5 cursor-pointer items-center justify-center border border-foreground/12 outline-none normal:rounded-[6px] focus-visible:ring-1 disabled:cursor-not-allowed disabled:opacity-40 [&_svg]:size-3"
+      className="text-muted-foreground hover:text-foreground hover:bg-foreground/8 focus-visible:ring-outline-strong d2-hover-ring flex size-5 cursor-pointer items-center justify-center border border-foreground/12 outline-none normal:rounded-[6px] focus-visible:ring-1 disabled:cursor-not-allowed disabled:opacity-40 [&_svg]:size-3"
     >
       {children}
     </button>

@@ -241,7 +241,7 @@ export const LoadoutRow = memo(function LoadoutRow({
           aria-expanded={open}
           aria-label={open ? "Hide stat breakdown" : "Show stat breakdown"}
           // Phones: spread across the card's full width so all seven numbers fit on one line.
-          className="text-foreground hover:bg-foreground/6 flex h-9 items-center gap-4 rounded-none normal:rounded-[8px] px-2 text-sm leading-5 tabular-nums outline-none transition-colors focus-visible:ring-1 focus-visible:ring-outline-strong max-md:w-full max-md:justify-between max-md:gap-1 max-md:px-1"
+          className="text-foreground hover:bg-foreground/6 d2-hover-ring flex h-9 items-center gap-4 rounded-none normal:rounded-[8px] px-2 text-sm leading-5 tabular-nums outline-none transition-[background-color,outline-offset] focus-visible:ring-1 focus-visible:ring-outline-strong max-md:w-full max-md:justify-between max-md:gap-1 max-md:px-1"
         >
           {optimizer ? (
             <>
