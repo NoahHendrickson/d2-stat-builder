@@ -38,11 +38,10 @@ export default async function ({ page, app, stub, step, shot, expect, log }) {
     await shot("table");
   });
 
-  await step("arm-usage: the Searches column shows the stored history", async () => {
-    expect(stub.requests.some((r) => r.method === "GET" && r.path === "/api/build-usage"), "GET /api/build-usage was requested");
-    const cells = await page.findAll({ role: "cell", name: /^\d+\/30$/ });
-    expect(cells.length > 0, `rows show used/eligible counts (${cells.length} cells read N/30)`);
-    log(`  first: ${await page.name(cells[0])}`);
+  await step("arm-usage: the Searches column stays hidden while usage is paused", async () => {
+    // BUILD_USAGE_PAUSED (src/lib/build-usage/paused.ts): no column, no Cleanup button.
+    expect(!(await page.exists({ role: "button", name: /^Sort by Searches/ })), "no Searches column header");
+    expect(!(await page.exists({ role: "button", name: "Cleanup" })), "no Cleanup button");
   });
 
   await step("arm-search: searching by name narrows the rows", async () => {
