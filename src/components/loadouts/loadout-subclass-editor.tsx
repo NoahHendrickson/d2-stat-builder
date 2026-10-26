@@ -133,7 +133,6 @@ function PlugOptionButton({
                   : "cursor-pointer border-foreground/25 hover:border-foreground/70",
             checked && !tint && "bg-foreground/10",
             !checked && !disabled && !tint && "hover:bg-foreground/6 focus-visible:bg-foreground/6",
-            !checked && !disabled && "d2-hover-ring",
           )}
         >
           {option.icon ? (

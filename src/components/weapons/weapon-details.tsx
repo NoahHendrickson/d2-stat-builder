@@ -360,7 +360,7 @@ export const WeaponDetails = memo(function WeaponDetails({
               )
             : cn(
                 "rounded-full border border-foreground/12 transition-colors focus-visible:d2-tile-selected",
-                selected ? "bg-[#305f8e]" : "d2-hover-ring bg-foreground/4 hover:bg-foreground/10",
+                selected ? "bg-[#305f8e]" : "bg-foreground/4 hover:bg-foreground/10",
               ),
           !perk.currentlyCanRoll && "opacity-40",
         )}

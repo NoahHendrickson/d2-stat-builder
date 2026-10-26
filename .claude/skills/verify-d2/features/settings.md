@@ -6,13 +6,13 @@ The Settings page sets the app theme, the site icon and the armor usage history,
 
 - `set-theme` makes the Theme radios switch `<html data-app-theme>` and survive a reload.
 - `set-icon` makes a Site icon radio swap the favicon.
-- `set-usage` checks that the usage history section stays hidden while usage is paused (`BUILD_USAGE_PAUSED`).
+- `set-usage` makes "Clear history" delete the account's usage history.
 - `set-sync` makes adding a sidebar link push it to `/api/settings/links`.
 
 ## How to get to it (user POV)
 
 - Load `/settings`, or click the `link "Settings"` (the gear) next to the account menu at the bottom of the sidebar.
-- Appearance: `tablist "Appearance"` (Light/Dark/System), `radiogroup "Theme"` (Scene/Slate/Normal), `radiogroup "Site icon"` (`Icon 1`…`Icon 9`). The usage section (`switch "Record searches on this device"`, `button "Clear history"`) is hidden while usage is paused.
+- Appearance: `tablist "Appearance"` (Light/Dark/System), `radiogroup "Theme"` (Scene/Slate/Normal), `radiogroup "Site icon"` (`Icon 1`…`Icon 9`), `switch "Record searches on this device"`, `button "Clear history"`.
 - Sidebar links: `button "Add a link"` in `region "Links"`.
 
 ## Driving it with verify-d2
@@ -24,7 +24,7 @@ Preconditions:
 - **Open.** Run `app.open("/settings")`. The theme on load is `slate` (the server default).
 - **Theme (`set-theme`).** Within `radiogroup "Theme"`, click `radio "Normal"` → `data-app-theme="normal"`, `radio "Scene"` → the attribute is removed, and `radio "Slate"` → `slate`. Each radio is `aria-checked="true"` after its click. Pick Normal and run `app.open("/settings")` again: it's still `normal`.
 - **Icon (`set-icon`).** Click `radio "Icon 3"`. `link[rel~="icon"]` points at `/favicons/icon-3.svg`.
-- **Usage (`set-usage`).** Neither `button "Clear history"` nor `switch "Record searches on this device"` is shown. When the pause is lifted, Clear history has no confirmation; it toasts `Armor usage history cleared` and sends `DELETE /api/build-usage`.
+- **Usage (`set-usage`).** Click `button "Clear history"`. There is no confirmation. The toast `Armor usage history cleared` appears, and `DELETE /api/build-usage` is sent.
 - **Sync (`set-sync`).** Click `button "Add a link"`. In `dialog "Add a link"`, fill `textbox "URL"` with `https://example.com/verify-d2` and `textbox "Name"` with `verify-d2 link`, then click `button "Add link"`. `PUT /api/settings/links` is sent with `{ value: [{ url, name, id }] }`, the stub stores one link, and `region "Links"` shows `link /verify-d2/`.
 - **Proof.** `01-settings`, `02-theme-normal`, `03-link-form`, `04-link-added`.
 

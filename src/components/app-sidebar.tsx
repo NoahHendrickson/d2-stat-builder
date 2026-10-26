@@ -198,7 +198,7 @@ export const AppSidebar = memo(function AppSidebar({
 
 /** Shared row look for nav items and links: square, 36px (the nav list draws the active highlight). */
 const rowClass =
-  "group/row d2-hover-ring relative flex h-9 items-center gap-3 rounded-none normal:rounded-[8px] text-sm outline-none transition-[color,background-color,outline-offset] focus-visible:ring-1 focus-visible:ring-outline-strong";
+  "group/row relative flex h-9 items-center gap-3 rounded-none normal:rounded-[8px] text-sm outline-none transition-colors focus-visible:ring-1 focus-visible:ring-outline-strong";
 
 function NavItem({
   href,
@@ -375,7 +375,7 @@ function LinksSection({ collapsed }: { collapsed: boolean }) {
 
       <ul
         className={cn(
-          "d2-scroll flex min-h-0 flex-col gap-0.5 overflow-y-auto overscroll-contain py-1 [scrollbar-gutter:auto]!",
+          "d2-scroll flex min-h-0 flex-col gap-0.5 overflow-y-auto overscroll-contain [scrollbar-gutter:auto]!",
           collapsed ? "items-center px-2.5" : "px-2",
         )}
       >
@@ -394,7 +394,7 @@ function LinksSection({ collapsed }: { collapsed: boolean }) {
         <button
           type="button"
           onClick={() => setDialog({ kind: "add" })}
-          className="text-muted-foreground hover:text-foreground d2-hover-ring mx-2 flex items-start gap-3 rounded-none normal:rounded-[8px] px-2.5 py-2 text-left text-sm leading-5 outline-none transition-[color,background-color,outline-offset] hover:bg-foreground/5 focus-visible:ring-1 focus-visible:ring-outline-strong"
+          className="text-muted-foreground hover:text-foreground mx-2 flex items-start gap-3 rounded-none normal:rounded-[8px] px-2.5 py-2 text-left text-sm leading-5 outline-none transition-colors hover:bg-foreground/5 focus-visible:ring-1 focus-visible:ring-outline-strong"
         >
           <HugeiconsIcon icon={Add01Icon} className="mt-0.5 size-4 shrink-0" aria-hidden />
           <span>Pin a spreadsheet or site you use alongside the app</span>

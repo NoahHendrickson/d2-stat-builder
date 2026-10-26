@@ -38,10 +38,10 @@ import type { ArmoryCharacter } from "@/lib/armory/fetch";
 import {
   STAT_DISPLAY_ORDER,
   STAT_HASHES,
-  STAT_LABELS,
   STAT_ORDER,
   tertiaryStatIndex,
   type StatIconMap,
+  type StatKey,
 } from "@/lib/armory/stats";
 import {
   emptyFacets,
@@ -51,7 +51,6 @@ import {
   type SortKey,
   type SortState,
 } from "@/lib/armor-table/filters";
-import { HEADER_SORT_KEYS } from "@/lib/armor-table/sort";
 import {
   normalizeSearchText,
   searchMatcher,
@@ -69,19 +68,19 @@ import {
   saveTableState,
 } from "@/lib/armor-table/filter-storage";
 import { togglePinned, type FilterOption } from "@/lib/armor-table/pinned";
-import { adoptPinnedSets, togglePinnedSet, usePinnedSets } from "@/lib/settings/pinned-sets";
+import type { FacetKey } from "@/lib/armor-table/facets";
+import { adoptPinnedSets } from "@/lib/settings/pinned-sets";
 import {
   PINS_SCHEMA_VERSION,
   loadTablePins,
   saveTablePins,
 } from "@/lib/armor-table/pin-storage";
 import { cn } from "@/lib/utils";
-import { ArmorTableToolbar, CLASS_OPTIONS } from "@/components/armor-table/armor-table-toolbar";
+import { ArmorTableToolbar } from "@/components/armor-table/armor-table-toolbar";
 import {
-  STAT_FILTER_OPTIONS,
-  TUNING_FILTER_OPTIONS,
-} from "@/components/armor-table/filter-cascade-menu";
-import { ColumnFilterMenu } from "@/components/armor-table/column-filter-menu";
+  useFacetSpecs,
+  type FacetFilterState,
+} from "@/components/armor-table/facet-filter-menu";
 import {
   ArmorRow,
   COLUMN_COUNT,
@@ -104,6 +103,34 @@ const NO_ANNOTATIONS: Annotations = {};
 /** Approximate single-row height; the virtualizer remeasures real rows on mount. */
 const ESTIMATED_ROW_HEIGHT_PX = 48;
 
+/**
+ * The header's columns in table order (TABLE_COLGROUP and ArmorRow's cells follow
+ * it). A `facet` puts that toolbar filter's button in the column's header.
+ */
+const HEADER_COLUMNS: readonly {
+  key: SortKey;
+  facet?: FacetKey;
+  stat?: StatKey;
+  title?: string;
+}[] = [
+  { key: "name" },
+  { key: "class", facet: "classes" },
+  { key: "archetype", facet: "archetypes" },
+  { key: "tertiary", facet: "tertiaries" },
+  { key: "tuned", facet: "tunings" },
+  { key: "set", facet: "setHashes" },
+  ...(BUILD_USAGE_PAUSED
+    ? []
+    : [
+        {
+          key: "builds" as const,
+          title:
+            "Searches: optimizer searches whose shown builds used this piece, out of those it could join",
+        },
+      ]),
+  ...STAT_DISPLAY_ORDER.map((stat) => ({ key: `stat-${stat}` as const, stat })),
+];
+
 const HeaderRow = memo(function HeaderRow({
   tableEl,
   sort,
@@ -111,12 +138,7 @@ const HeaderRow = memo(function HeaderRow({
   statIcons,
   columnValues,
   actions,
-  facets,
-  onFacetChange,
-  setOptions,
-  archetypeOptions,
-  pinnedArchetypes,
-  onTogglePinnedArchetype,
+  filters,
 }: {
   tableEl: HTMLTableElement | null;
   sort: SortState;
@@ -125,14 +147,8 @@ const HeaderRow = memo(function HeaderRow({
   columnValues: (key: SortKey) => string[] | undefined;
   actions: SortActions;
   /** The toolbar's filters: each filterable column's header button edits the same state. */
-  facets: FacetFilters;
-  onFacetChange: <K extends keyof FacetFilters>(key: K, value: FacetFilters[K]) => void;
-  setOptions: FilterOption<number>[];
-  archetypeOptions: FilterOption<string>[];
-  pinnedArchetypes: string[];
-  onTogglePinnedArchetype: (name: string) => void;
+  filters: FacetFilterState;
 }) {
-  const pinnedSets = usePinnedSets();
   const [hoveredCol, setHoveredCol] = useState<number | null>(null);
   useEffect(() => {
     if (!tableEl) return;
@@ -150,146 +166,22 @@ const HeaderRow = memo(function HeaderRow({
       tableEl.removeEventListener("pointerleave", onLeave);
     };
   }, [tableEl]);
-  const hoveredSortKey =
-    hoveredCol !== null ? HEADER_SORT_KEYS[hoveredCol] : undefined;
 
   return (
     <thead className={cn("sticky top-0 z-10 backdrop-blur-[20px]", TABLE_HEADER_BG)}>
       <tr className="text-muted-foreground text-left">
-        <SortMenu
-          label="Name"
-          sortKey="name"
-          sort={sort}
-          hovered={hoveredSortKey === "name"}
-          sortUndo={sortUndo}
-          values={columnValues("name")}
-          actions={actions}
-        />
-        <SortMenu
-          label="Class"
-          sortKey="class"
-          sort={sort}
-          hovered={hoveredSortKey === "class"}
-          sortUndo={sortUndo}
-          values={columnValues("class")}
-          actions={actions}
-          filter={
-            <ColumnFilterMenu
-              label="Class"
-              allLabel="All classes"
-              options={CLASS_OPTIONS}
-              value={facets.classes}
-              onChange={(v) => onFacetChange("classes", v)}
-              hovered={hoveredSortKey === "class"}
-            />
-          }
-        />
-        <SortMenu
-          label="Archetype"
-          sortKey="archetype"
-          sort={sort}
-          hovered={hoveredSortKey === "archetype"}
-          sortUndo={sortUndo}
-          values={columnValues("archetype")}
-          actions={actions}
-          filter={
-            <ColumnFilterMenu
-              label="Archetype"
-              allLabel="All archetypes"
-              options={archetypeOptions}
-              value={facets.archetypes}
-              onChange={(v) => onFacetChange("archetypes", v)}
-              hovered={hoveredSortKey === "archetype"}
-              searchable
-              pinnable
-              pinned={pinnedArchetypes}
-              onTogglePin={onTogglePinnedArchetype}
-            />
-          }
-        />
-        <SortMenu
-          label="Tertiary"
-          sortKey="tertiary"
-          sort={sort}
-          hovered={hoveredSortKey === "tertiary"}
-          sortUndo={sortUndo}
-          values={columnValues("tertiary")}
-          actions={actions}
-          filter={
-            <ColumnFilterMenu
-              label="Tertiary"
-              allLabel="Any tertiary"
-              options={STAT_FILTER_OPTIONS}
-              value={facets.tertiaries}
-              onChange={(v) => onFacetChange("tertiaries", v)}
-              hovered={hoveredSortKey === "tertiary"}
-            />
-          }
-        />
-        <SortMenu
-          label="Tuned"
-          sortKey="tuned"
-          sort={sort}
-          hovered={hoveredSortKey === "tuned"}
-          sortUndo={sortUndo}
-          values={columnValues("tuned")}
-          actions={actions}
-          filter={
-            <ColumnFilterMenu
-              label="Tuning"
-              allLabel="Any tuning"
-              options={TUNING_FILTER_OPTIONS}
-              value={facets.tunings}
-              onChange={(v) => onFacetChange("tunings", v)}
-              hovered={hoveredSortKey === "tuned"}
-            />
-          }
-        />
-        <SortMenu
-          label="Set bonus"
-          sortKey="set"
-          sort={sort}
-          hovered={hoveredSortKey === "set"}
-          sortUndo={sortUndo}
-          values={columnValues("set")}
-          actions={actions}
-          filter={
-            <ColumnFilterMenu
-              label="Set"
-              allLabel="All sets"
-              options={setOptions}
-              value={facets.setHashes}
-              onChange={(v) => onFacetChange("setHashes", v)}
-              hovered={hoveredSortKey === "set"}
-              searchable
-              pinnable
-              pinned={pinnedSets}
-              onTogglePin={togglePinnedSet}
-            />
-          }
-        />
-        {!BUILD_USAGE_PAUSED && (
-          <SortMenu
-            label="Searches"
-            title="Searches: optimizer searches whose shown builds used this piece, out of those it could join"
-            sortKey="builds"
-            sort={sort}
-            hovered={hoveredSortKey === "builds"}
-            sortUndo={sortUndo}
-            actions={actions}
-          />
-        )}
-        {STAT_DISPLAY_ORDER.map((key) => (
+        {HEADER_COLUMNS.map(({ key, facet, stat, title }, i) => (
           <SortMenu
             key={key}
-            label={STAT_LABELS[key]}
-            icon={statIcons[key]}
-            title={STAT_LABELS[key]}
-            align="right"
-            sortKey={`stat-${key}`}
+            sortKey={key}
+            icon={stat && statIcons[stat]}
+            title={title}
+            facet={facet}
+            filters={filters}
             sort={sort}
-            hovered={hoveredSortKey === `stat-${key}`}
+            hovered={hoveredCol === i}
             sortUndo={sortUndo}
+            values={columnValues(key)}
             actions={actions}
           />
         ))}
@@ -636,6 +528,18 @@ export function ArmorTable() {
     [],
   );
 
+  // One filter state for the toolbar and the column headers.
+  const facetSpecs = useFacetSpecs({
+    setOptions,
+    archetypeOptions,
+    pinnedArchetypes,
+    onTogglePinnedArchetype: togglePinnedArchetype,
+  });
+  const filters = useMemo<FacetFilterState>(
+    () => ({ specs: facetSpecs, facets, onFacetChange: setFacet }),
+    [facetSpecs, facets, setFacet],
+  );
+
   const [tableEl, setTableEl] = useState<HTMLTableElement | null>(null);
 
   // Virtualized rows: the scroller is the bounded-height container below.
@@ -660,7 +564,7 @@ export function ArmorTable() {
 
   return (
     // @container/armor: the column headers tighten when the table is too narrow for
-    // every header button (see column-filter-menu.tsx).
+    // every header button (the armor-narrow and armor-cramped variants, globals.css).
     <div className="@container/armor flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-none normal:rounded-[20px] border border-foreground/12">
       {/* Toolbar + column headers share one tinted header band. The toolbar
           sits outside the scroller so it survives horizontal scroll; thead
@@ -670,13 +574,7 @@ export function ArmorTable() {
             search={search}
             onSearchChange={setSearch}
             searchRef={searchRef}
-            facets={facets}
-            onFacetChange={setFacet}
-            setOptions={setOptions}
-            archetypeOptions={archetypeOptions}
-            statOptions={STAT_FILTER_OPTIONS}
-            pinnedArchetypes={pinnedArchetypes}
-            onTogglePinnedArchetype={togglePinnedArchetype}
+            filters={filters}
             filteredCount={visible.length}
             duplicateGroups={duplicates?.groupCount}
             cleanupGroups={cleanup?.groupCount}
@@ -701,12 +599,7 @@ export function ArmorTable() {
               statIcons={statIcons}
               columnValues={columnValues}
               actions={sortActions}
-              facets={facets}
-              onFacetChange={setFacet}
-              setOptions={setOptions}
-              archetypeOptions={archetypeOptions}
-              pinnedArchetypes={pinnedArchetypes}
-              onTogglePinnedArchetype={togglePinnedArchetype}
+              filters={filters}
             />
             <tbody>
               {paddingTop > 0 && (

@@ -1,12 +1,13 @@
 import { test, expect } from "vitest";
 import {
   activeSortMode,
+  applyCustomOrder,
   applySortAction,
   clearSortLevel,
   compareRows,
   isStatSortKey,
   moveOrderItem,
-  moveSortLevel,
+  promoteSortLevel,
   preferredAsc,
   reorderCustomLevel,
   soloSortLevel,
@@ -108,15 +109,14 @@ test("activeSortMode reads kind from the level itself", () => {
 });
 
 test("applySortAction replaces, nests, or updates in place atomically", () => {
-  expect(applySortAction([], "name", "asc", false)).toEqual({
+  expect(applySortAction([], "name", { mode: "asc" })).toEqual({
     sort: [{ key: "name", kind: "dir", asc: true }],
   });
   expect(
     applySortAction(
       [{ key: "name", kind: "dir", asc: true }],
       "archetype",
-      "desc",
-      false,
+      { mode: "desc" },
     ),
   ).toEqual({
     sort: [{ key: "archetype", kind: "dir", asc: false }],
@@ -126,7 +126,7 @@ test("applySortAction replaces, nests, or updates in place atomically", () => {
     applySortAction(
       [{ key: "name", kind: "dir", asc: true }],
       "archetype",
-      "asc",
+      { mode: "asc" },
       true,
     ),
   ).toEqual({
@@ -142,9 +142,8 @@ test("applySortAction replaces, nests, or updates in place atomically", () => {
         { key: "archetype", kind: "dir", asc: true },
       ],
       "archetype",
-      "custom",
+      { mode: "custom", order: ["Powerhouse", "Gunner"] },
       true,
-      ["Powerhouse", "Gunner"],
     ),
   ).toEqual({
     sort: [
@@ -184,9 +183,24 @@ test("reorderCustomLevel updates only that custom level", () => {
     { key: "archetype" as const, kind: "custom" as const, order: ["a", "b", "c"] },
     { key: "name" as const, kind: "dir" as const, asc: true },
   ];
-  expect(reorderCustomLevel(sort, "archetype", 0, 2)).toEqual([
+  expect(reorderCustomLevel(sort, "archetype", ["a", "b", "c"], 0, 2)).toEqual([
     { key: "archetype", kind: "custom", order: ["b", "c", "a"] },
     { key: "name", kind: "dir", asc: true },
+  ]);
+});
+
+test("reorderCustomLevel moves the value shown at that place, not the saved order's", () => {
+  // "Gone" is no longer owned and "D" is new: the menu shows A, B, C, D.
+  const sort = [
+    { key: "set" as const, kind: "custom" as const, order: ["A", "Gone", "B", "C"] },
+  ];
+  const shown = applyCustomOrder(["A", "B", "C", "D"], sort[0].order);
+  expect(shown).toEqual(["A", "B", "C", "D"]);
+  expect(reorderCustomLevel(sort, "set", shown, 2, 0)).toEqual([
+    { key: "set", kind: "custom", order: ["C", "A", "B", "D"] },
+  ]);
+  expect(reorderCustomLevel(sort, "set", shown, 3, 0)).toEqual([
+    { key: "set", kind: "custom", order: ["D", "A", "B", "C"] },
   ]);
 });
 
@@ -245,17 +259,13 @@ const chain = [
   { key: "stat-health" as const, kind: "dir" as const, asc: false },
 ];
 
-test("moveSortLevel changes a level's priority and keeps every level", () => {
-  expect(moveSortLevel(chain, 2, 0).map((l) => l.key)).toEqual([
-    "stat-health",
-    "class",
-    "archetype",
-  ]);
-  expect(moveSortLevel(chain, 0, 1).map((l) => l.key)).toEqual([
-    "archetype",
-    "class",
-    "stat-health",
-  ]);
+test("promoteSortLevel moves a level first and snapshots the chain for undo", () => {
+  expect(promoteSortLevel(chain, "stat-health")).toEqual({
+    sort: [chain[2], chain[0], chain[1]],
+    discardedChain: chain,
+  });
+  expect(promoteSortLevel(chain, "class")).toEqual({ sort: chain });
+  expect(promoteSortLevel(chain, "name")).toEqual({ sort: chain });
 });
 
 test("soloSortLevel keeps one level and snapshots the chain for undo", () => {

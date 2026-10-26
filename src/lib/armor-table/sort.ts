@@ -6,12 +6,10 @@
 // matching the convention in filters.ts / search.ts.
 import {
   CLASS_NAMES,
-  STAT_DISPLAY_ORDER,
   STAT_LABELS,
   STAT_ORDER,
 } from "../armory/stats";
 import type { PieceUsageCounts } from "../build-usage/buckets";
-import { BUILD_USAGE_PAUSED } from "../build-usage/paused";
 import {
   isCustomOrderColumn,
   sortLevelAsc,
@@ -31,18 +29,6 @@ const collator = new Intl.Collator();
 const STAT_SORT_INDEX = new Map<SortKey, number>(
   STAT_ORDER.map((key, i) => [`stat-${key}` as const, i]),
 );
-
-/** The sort key under each header cell, in the table's column order. */
-export const HEADER_SORT_KEYS: readonly SortKey[] = [
-  "name",
-  "class",
-  "archetype",
-  "tertiary",
-  "tuned",
-  "set",
-  ...(BUILD_USAGE_PAUSED ? [] : ["builds" as const]),
-  ...STAT_DISPLAY_ORDER.map((key) => `stat-${key}` as const),
-];
 
 const COLUMN_LABELS: Record<ColumnKey, string> = {
   name: "Name",
@@ -83,6 +69,11 @@ export function preferredAsc(key: SortKey): boolean {
 
 /** Sort-menu tab ids: alphabetical/numeric direction, or custom value order. */
 export type SortMode = "asc" | "desc" | "custom";
+
+/** A mode with what it needs: a custom order carries its value list. */
+export type SortPick =
+  | { mode: "asc" | "desc" }
+  | { mode: "custom"; order: string[] };
 
 /** The modes a column offers, preferred direction first. */
 export function sortModesFor(key: SortKey): SortMode[] {
@@ -130,16 +121,12 @@ export function activeSortMode(
   return level.asc ? "asc" : "desc";
 }
 
-function buildLevel(
-  key: SortKey,
-  mode: SortMode,
-  order: string[] | undefined,
-): SortLevel | null {
-  if (mode === "custom") {
+function buildLevel(key: SortKey, pick: SortPick): SortLevel | null {
+  if (pick.mode === "custom") {
     if (!isCustomOrderColumn(key)) return null;
-    return { key, kind: "custom", order: order ?? [] };
+    return { key, kind: "custom", order: pick.order };
   }
-  return { key, kind: "dir", asc: mode === "asc" };
+  return { key, kind: "dir", asc: pick.mode === "asc" };
 }
 
 /**
@@ -149,11 +136,10 @@ function buildLevel(
 export function applySortAction(
   sort: SortState,
   key: SortKey,
-  mode: SortMode,
-  nest: boolean,
-  order?: string[],
+  pick: SortPick,
+  nest = false,
 ): SortActionResult {
-  const level = buildLevel(key, mode, order);
+  const level = buildLevel(key, pick);
   if (!level) return { sort };
 
   const index = sortIndexOf(sort, key);
@@ -183,13 +169,17 @@ export function clearSortLevel(
   };
 }
 
-/** Change a level's priority: move it from one place in the chain to another. */
-export function moveSortLevel(
+/** Move `key`'s level to the front of the chain (undoable). */
+export function promoteSortLevel(
   sort: SortState,
-  from: number,
-  to: number,
-): SortState {
-  return moveOrderItem(sort, from, to);
+  key: SortKey,
+): SortActionResult {
+  const index = sortIndexOf(sort, key);
+  if (index <= 0) return { sort };
+  return {
+    sort: [sort[index], ...sort.slice(0, index), ...sort.slice(index + 1)],
+    discardedChain: sort,
+  };
 }
 
 /** Keep only `key`'s level, dropping the rest of the chain (undoable). */
@@ -202,10 +192,16 @@ export function soloSortLevel(
   return { sort: [level], discardedChain: sort };
 }
 
-/** Reorder values inside a custom level (no-op if that level isn't custom). */
+/**
+ * Move a value inside a custom level (no-op if that level isn't custom). `values` is
+ * the list as shown (applyCustomOrder): the saved order can hold values no piece has
+ * any more and miss new ones, so the move is made on what was shown, which becomes
+ * the order.
+ */
 export function reorderCustomLevel(
   sort: SortState,
   key: CustomOrderColumn,
+  values: readonly string[],
   from: number,
   to: number,
 ): SortState {
@@ -214,16 +210,16 @@ export function reorderCustomLevel(
   const level = sort[index];
   if (level.kind !== "custom") return sort;
   const next = [...sort];
-  next[index] = { ...level, order: moveOrderItem(level.order, from, to) };
+  next[index] = { ...level, order: moveOrderItem(values, from, to) };
   return next;
 }
 
 /** Move `from` to `to` in a custom-order list (used by drag-and-drop / up-down). */
-export function moveOrderItem<T>(
-  order: readonly T[],
+export function moveOrderItem(
+  order: readonly string[],
   from: number,
   to: number,
-): T[] {
+): string[] {
   if (
     from === to ||
     from < 0 ||
@@ -294,7 +290,7 @@ export function sortValue(
  */
 export function applyCustomOrder(
   values: readonly string[],
-  order: readonly string[] | undefined,
+  order: string[] | undefined,
 ): string[] {
   return [...values].sort((a, b) =>
     order ? compareWithCustomOrder(a, b, order) : collator.compare(a, b),
@@ -305,11 +301,7 @@ export function applyCustomOrder(
  * Compare two values under a custom order list: listed values by list index,
  * listed before unlisted, unlisted alphabetically among themselves.
  */
-function compareWithCustomOrder(
-  a: string,
-  b: string,
-  order: readonly string[],
-): number {
+function compareWithCustomOrder(a: string, b: string, order: string[]): number {
   const ia = order.indexOf(a);
   const ib = order.indexOf(b);
   if (ia !== -1 && ib !== -1) return ia - ib;
@@ -329,9 +321,9 @@ function compareOneLevel(
   if (va === undefined && vb === undefined) return 0;
   if (va === undefined) return 1;
   if (vb === undefined) return -1;
-  const cmp =
-    level.kind === "custom"
-      ? compareWithCustomOrder(String(va), String(vb), level.order)
+  const order = level.kind === "custom" ? level.order : undefined;
+  const cmp = order
+    ? compareWithCustomOrder(String(va), String(vb), order)
     : typeof va === "number" && typeof vb === "number"
       ? va - vb
       : collator.compare(String(va), String(vb));

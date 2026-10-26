@@ -4,17 +4,12 @@ import { TooltipLabel } from "@/components/ui/tooltip";
 import { useState } from "react";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { UnfoldMoreIcon } from "@hugeicons/core-free-icons";
-import type { FilterOption } from "@/lib/armor-table/pinned";
-import type {
-  ArmorVersion,
-  FacetFilters,
-  TuningFilter,
-} from "@/lib/armor-table/filters";
+import type { FacetFilters } from "@/lib/armor-table/filters";
 import {
-  STAT_DISPLAY_ORDER,
-  STAT_LABELS,
-  STAT_ORDER,
-} from "@/lib/armory/stats";
+  FACET_KEYS,
+  type FacetKey,
+  type FacetValue,
+} from "@/lib/armor-table/facets";
 import { cn } from "@/lib/utils";
 import {
   fieldControlInnerTriggerClasses,
@@ -37,59 +32,30 @@ import {
   FilterMultiselectPanel,
   selectionSummaryText,
 } from "@/components/armor-table/filter-multiselect";
-import { togglePinnedSet, usePinnedSets } from "@/lib/settings/pinned-sets";
-
-export const STAT_FILTER_OPTIONS: FilterOption<number>[] =
-  STAT_DISPLAY_ORDER.map((key) => ({
-    value: STAT_ORDER.indexOf(key),
-    label: STAT_LABELS[key],
-  }));
-
-export const TUNING_FILTER_OPTIONS: FilterOption<TuningFilter>[] = [
-  ...STAT_FILTER_OPTIONS,
-  { value: "none", label: "Not tunable" },
-];
-
-const ALL_FACET_KEYS = [
-  "classes",
-  "armorVersions",
-  "setHashes",
-  "archetypes",
-  "tunings",
-  "tertiaries",
-] as const satisfies readonly (keyof FacetFilters)[];
+import type {
+  FacetFilterState,
+  FacetSpec,
+} from "@/components/armor-table/facet-filter-menu";
 
 function countFacetSelections(
   facets: FacetFilters,
-  keys: readonly (keyof FacetFilters)[] = ALL_FACET_KEYS,
+  keys: readonly FacetKey[],
 ): number {
   return keys.reduce((sum, key) => sum + facets[key].length, 0);
 }
 
-function CascadeFacetSubmenu<V extends string | number>({
-  label,
-  allLabel,
-  options,
-  value,
-  onChange,
-  searchable = false,
-  pinnable = false,
-  pinned = [],
-  onTogglePin,
+function CascadeFacetSubmenu<K extends FacetKey>({
+  facet,
+  filters,
   toggleOnClick = false,
 }: {
-  label: string;
-  allLabel: string;
-  options: FilterOption<V>[];
-  value: V[];
-  onChange: (value: V[]) => void;
-  searchable?: boolean;
-  pinnable?: boolean;
-  pinned?: V[];
-  onTogglePin?: (value: V) => void;
+  facet: K;
+  filters: FacetFilterState;
   toggleOnClick?: boolean;
 }) {
   const [query, setQuery] = useState("");
+  const { label, ...spec } = filters.specs[facet] as FacetSpec<FacetValue<K>>;
+  const value = filters.facets[facet] as FacetValue<K>[];
   const active = value.length > 0;
 
   return (
@@ -102,26 +68,21 @@ function CascadeFacetSubmenu<V extends string | number>({
         <span className="min-w-0 flex-1 truncate">{label}</span>
         {active ? (
           <span className="text-muted-foreground max-w-24 truncate text-xs">
-            {selectionSummaryText(value, options)}
+            {selectionSummaryText(value, spec.options)}
           </span>
         ) : null}
       </DropdownMenuSubTrigger>
       <DropdownMenuSubContent
         side="inline-end"
         align="start"
-        className={searchable ? "w-64" : "w-max"}
+        className={spec.searchable ? "w-64" : "w-max"}
       >
-        <FilterMultiselectPanel
-          allLabel={allLabel}
-          options={options}
+        <FilterMultiselectPanel<FacetValue<K>>
+          {...spec}
           value={value}
-          onChange={onChange}
+          onChange={(v) => filters.onFacetChange(facet, v as FacetFilters[K])}
           query={query}
           onQueryChange={setQuery}
-          searchable={searchable}
-          pinnable={pinnable}
-          pinned={pinned}
-          onTogglePin={onTogglePin}
         />
       </DropdownMenuSubContent>
     </DropdownMenuSub>
@@ -133,47 +94,23 @@ function CascadeFacetSubmenu<V extends string | number>({
  * with flyout submenus for each facet category.
  */
 export function FilterCascadeMenu({
-  facets,
-  onFacetChange,
-  setOptions,
-  archetypeOptions,
-  statOptions,
-  pinnedArchetypes,
-  onTogglePinnedArchetype,
+  filters,
   filtersActive,
   onClearFilters,
-  classOptions,
-  armorVersionOptions,
-  includedFacets = ALL_FACET_KEYS,
+  includedFacets = FACET_KEYS,
   triggerLabel = "Filters",
   toggleSubmenusOnClick = false,
 }: {
-  facets: FacetFilters;
-  onFacetChange: <K extends keyof FacetFilters>(
-    key: K,
-    value: FacetFilters[K],
-  ) => void;
-  setOptions: FilterOption<number>[];
-  archetypeOptions: FilterOption<string>[];
-  statOptions: FilterOption<number>[];
-  pinnedArchetypes: string[];
-  onTogglePinnedArchetype: (name: string) => void;
+  filters: FacetFilterState;
   filtersActive: boolean;
   onClearFilters: () => void;
-  classOptions: FilterOption<number>[];
-  armorVersionOptions: FilterOption<ArmorVersion>[];
-  includedFacets?: readonly (keyof FacetFilters)[];
+  includedFacets?: readonly FacetKey[];
   triggerLabel?: string;
   toggleSubmenusOnClick?: boolean;
 }) {
-  const pinnedSets = usePinnedSets();
-  const totalSelected = countFacetSelections(facets, includedFacets);
+  const totalSelected = countFacetSelections(filters.facets, includedFacets);
   const active = totalSelected > 0;
-  const showClearAll = includedFacets.length === ALL_FACET_KEYS.length;
-
-  const includes = (key: keyof FacetFilters) => includedFacets.includes(key);
-
-  const tuningOptions = TUNING_FILTER_OPTIONS;
+  const showClearAll = includedFacets.length === FACET_KEYS.length;
 
   return (
     <DropdownMenu>
@@ -225,74 +162,14 @@ export function FilterCascadeMenu({
         </TooltipLabel>
       </div>
       <DropdownMenuContent side="bottom" align="start" className="w-56 p-1">
-        {includes("classes") && (
+        {FACET_KEYS.filter((key) => includedFacets.includes(key)).map((key) => (
           <CascadeFacetSubmenu
-            label="Class"
-            allLabel="All classes"
-            options={classOptions}
-            value={facets.classes}
-            onChange={(v) => onFacetChange("classes", v)}
+            key={key}
+            facet={key}
+            filters={filters}
             toggleOnClick={toggleSubmenusOnClick}
           />
-        )}
-        {includes("armorVersions") && (
-          <CascadeFacetSubmenu
-            label="Armor"
-            allLabel="All armor"
-            options={armorVersionOptions}
-            value={facets.armorVersions}
-            onChange={(v) => onFacetChange("armorVersions", v)}
-            toggleOnClick={toggleSubmenusOnClick}
-          />
-        )}
-        {includes("setHashes") && (
-          <CascadeFacetSubmenu
-            label="Set"
-            allLabel="All sets"
-            options={setOptions}
-            value={facets.setHashes}
-            onChange={(v) => onFacetChange("setHashes", v)}
-            searchable
-            pinnable
-            pinned={pinnedSets}
-            onTogglePin={togglePinnedSet}
-            toggleOnClick={toggleSubmenusOnClick}
-          />
-        )}
-        {includes("archetypes") && (
-          <CascadeFacetSubmenu
-            label="Archetype"
-            allLabel="All archetypes"
-            options={archetypeOptions}
-            value={facets.archetypes}
-            onChange={(v) => onFacetChange("archetypes", v)}
-            searchable
-            pinnable
-            pinned={pinnedArchetypes}
-            onTogglePin={onTogglePinnedArchetype}
-            toggleOnClick={toggleSubmenusOnClick}
-          />
-        )}
-        {includes("tunings") && (
-          <CascadeFacetSubmenu<TuningFilter>
-            label="Tuning"
-            allLabel="Any tuning"
-            options={tuningOptions}
-            value={facets.tunings}
-            onChange={(v) => onFacetChange("tunings", v)}
-            toggleOnClick={toggleSubmenusOnClick}
-          />
-        )}
-        {includes("tertiaries") && (
-          <CascadeFacetSubmenu
-            label="Tertiary"
-            allLabel="Any tertiary"
-            options={statOptions}
-            value={facets.tertiaries}
-            onChange={(v) => onFacetChange("tertiaries", v)}
-            toggleOnClick={toggleSubmenusOnClick}
-          />
-        )}
+        ))}
         {showClearAll && filtersActive && (
           <>
             <DropdownMenuSeparator />

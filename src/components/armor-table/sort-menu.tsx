@@ -24,13 +24,14 @@ import {
 import { BUNGIE_IMAGE_BASE } from "@/lib/bungie/constants";
 import {
   sortLevelAsc,
-  type CustomOrderColumn,
   type SortKey,
   type SortState,
 } from "@/lib/armor-table/filters";
+import type { FacetKey } from "@/lib/armor-table/facets";
 import {
   activeSortMode,
   applyCustomOrder,
+  isStatSortKey,
   preferredAsc,
   sortIndexOf,
   sortKeyLabel,
@@ -40,6 +41,10 @@ import {
 } from "@/lib/armor-table/sort";
 import { CustomOrderList } from "@/components/armor-table/custom-order-list";
 import type { SortActions } from "@/components/armor-table/use-armor-table-sort";
+import {
+  FacetFilterMenu,
+  type FacetFilterState,
+} from "@/components/armor-table/facet-filter-menu";
 
 /**
  * A faint foreground tint over the pane, so the toolbar and column headers pick
@@ -49,7 +54,7 @@ import type { SortActions } from "@/components/armor-table/use-armor-table-sort"
 export const TABLE_HEADER_BG = "bg-foreground/8";
 
 const TABLE_HEAD_CELL =
-  "border-b border-foreground/15 py-2.5 pr-2 @max-[81.5rem]/armor:pr-1 text-sm font-normal whitespace-nowrap first:pl-3 " +
+  "border-b border-foreground/15 py-2.5 pr-2 armor-narrow:pr-1 text-sm font-normal whitespace-nowrap first:pl-3 " +
   // Phones pin the name column (see armor-table-row.tsx): the header cell over it
   // needs the band's wash on a solid fill.
   "max-md:first:sticky max-md:first:left-0 max-md:first:z-[1] max-md:first:shadow-[1px_0_0_var(--border)] max-md:first:[background:linear-gradient(color-mix(in_oklab,var(--foreground)_8%,transparent),color-mix(in_oklab,var(--foreground)_8%,transparent)),var(--glass-opaque)]";
@@ -84,7 +89,7 @@ function ordinal(n: number): string {
  * picks. A column in the chain edits its level in place: direction or custom
  * order, moving it first, keeping only it, or removing it.
  */
-export function SortLevelMenuItems({
+function SortLevelMenuItems({
   sortKey,
   sort,
   values,
@@ -105,11 +110,10 @@ export function SortLevelMenuItems({
   const order = level?.kind === "custom" ? level.order : undefined;
 
   const pick = (mode: SortMode, nest: boolean) =>
-    actions.applyMode(
+    actions.apply(
       sortKey,
-      mode,
-      nest,
-      mode === "custom" ? (order ?? values ?? []) : undefined,
+      mode === "custom" ? { mode, order: order ?? values ?? [] } : { mode },
+      { nest },
     );
 
   const undo = sortUndo && (
@@ -186,18 +190,20 @@ export function SortLevelMenuItems({
           </DropdownMenuRadioItem>
         ))}
       </DropdownMenuRadioGroup>
-      {order && (
+      {level.kind === "custom" && (
         <>
           <CustomOrderList
             values={values ?? []}
             onMove={(from, to) =>
-              actions.reorderCustom(sortKey as CustomOrderColumn, from, to)
+              actions.reorderCustom(level.key, values ?? [], from, to)
             }
           />
           <DropdownMenuItem
             closeOnClick={false}
             disabled={isReset}
-            onClick={() => actions.applyMode(sortKey, "custom", false, resetOrder)}
+            onClick={() =>
+              actions.apply(sortKey, { mode: "custom", order: resetOrder })
+            }
           >
             Reset to A→Z
           </DropdownMenuItem>
@@ -205,7 +211,7 @@ export function SortLevelMenuItems({
       )}
       <DropdownMenuSeparator />
       {index > 0 && (
-        <DropdownMenuItem onClick={() => actions.moveLevel(index, 0)}>
+        <DropdownMenuItem onClick={() => actions.promoteLevel(sortKey)}>
           Sort by {label} first
         </DropdownMenuItem>
       )}
@@ -225,42 +231,42 @@ export function SortLevelMenuItems({
 /**
  * Sortable column header: owns the `<th>` chrome and the column's sort menu
  * (see SortLevelMenuItems). A sorting column shows its arrow; with more than one
- * sort, a small number beside it gives the column's place in the chain. Columns
- * with a toolbar filter put its button (`filter`) after the sort button.
+ * sort, a small number beside it gives the column's place in the chain. A column
+ * with a toolbar filter (`facet`) puts that filter's button after the sort button.
+ * Stat columns show their icon, centered.
  */
 export const SortMenu = memo(function SortMenu({
-  label,
-  icon,
-  align = "left",
-  title,
   sortKey,
+  icon,
+  title,
+  facet,
+  filters,
   sort,
   values,
   hovered,
   sortUndo,
   actions,
-  filter,
 }: {
-  label: string;
-  icon?: string;
-  align?: "left" | "right";
-  title?: string;
   sortKey: SortKey;
+  icon?: string;
+  /** A longer name for the tooltip than the header label. */
+  title?: string;
+  facet?: FacetKey;
+  filters: FacetFilterState;
   sort: SortState;
   /** Distinct values in effective ascending order (custom-order columns only). */
   values?: string[];
   hovered: boolean;
   sortUndo: SortState | null;
   actions: SortActions;
-  /** The column's filter button (ColumnFilterMenu), after the sort button. */
-  filter?: ReactNode;
 }) {
+  const label = sortKeyLabel(sortKey);
+  const align = isStatSortKey(sortKey) ? "right" : "left";
   const accessibleLabel = title ?? label;
   const levelIndex = sortIndexOf(sort, sortKey);
   const active = levelIndex !== -1;
-  const level = active ? sort[levelIndex] : undefined;
-  const asc = level ? sortLevelAsc(level) : preferredAsc(sortKey);
-  const arrow = level?.kind === "custom" ? ListOrderedIcon : asc ? ArrowUp02Icon : ArrowDown02Icon;
+  const arrow =
+    MODE_ICONS[activeSortMode(sort, sortKey) ?? (preferredAsc(sortKey) ? "asc" : "desc")];
   const numbered = active && sort.length > 1;
   const primary = sort[0];
   const isPrimary = primary?.key === sortKey;
@@ -298,7 +304,7 @@ export const SortMenu = memo(function SortMenu({
             aria-label={sortTitle}
             className={cn(
               "group relative -my-0.5 flex min-w-0 cursor-pointer items-center",
-              align === "right" ? "w-full justify-center" : "gap-1 @max-[81.5rem]/armor:gap-0.5",
+              align === "right" ? "w-full justify-center" : "gap-1 armor-narrow:gap-0.5",
             )}
           >
             {iconNode ?? <span className="min-w-0 truncate">{label}</span>}
@@ -317,7 +323,7 @@ export const SortMenu = memo(function SortMenu({
                     )
                   : numbered
                     ? "gap-px pr-1 pl-0.5"
-                    : "w-6 @max-[71.5rem]/armor:w-5",
+                    : "w-6 armor-cramped:w-5",
               )}
             >
               <HugeiconsIcon
@@ -357,7 +363,9 @@ export const SortMenu = memo(function SortMenu({
           />
         </DropdownMenuContent>
       </DropdownMenu>
-      {filter}
+      {facet && (
+        <FacetFilterMenu facet={facet} filters={filters} variant="icon" hovered={hovered} />
+      )}
       </div>
     </th>
   );

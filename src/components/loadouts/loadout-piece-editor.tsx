@@ -142,7 +142,7 @@ const ModCell = memo(function ModCell({
               : blocked
                 ? // Flagged mods stay at full strength so the badge reads.
                   cn("cursor-not-allowed border-foreground/20", !problem && "opacity-40")
-                : "d2-hover-ring hover:border-foreground/70 hover:bg-foreground/6 focus-visible:bg-foreground/6 cursor-pointer border-foreground/25",
+                : "hover:border-foreground/70 hover:bg-foreground/6 focus-visible:bg-foreground/6 cursor-pointer border-foreground/25",
           )}
         >
           <ItemIcon icon={option.icon} size={48} className="rounded-none" />

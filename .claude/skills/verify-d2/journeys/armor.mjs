@@ -97,9 +97,9 @@ export default async function ({ page, app, stub, step, shot, expect, log }) {
     const headerFilter = { role: "button", name: /^Filter Class/ };
     expect(await page.exists(headerFilter), "the filter button shows without hovering");
     const iconOpacity = (label) => page.evalJs(`getComputedStyle([...document.querySelectorAll("thead button")].find((e) => e.getAttribute("aria-label") === ${JSON.stringify(label)}).querySelector("svg")).opacity`);
-    const restOpacity = Number(await iconOpacity("Filter Class"));
+    const restOpacity = Number(await iconOpacity("Filter Class: All classes"));
     await page.hover(headerFilter);
-    await page.waitFor(async () => Number(await iconOpacity("Filter Class")) === 1);
+    await page.waitFor(async () => Number(await iconOpacity("Filter Class: All classes")) === 1);
     expect(restOpacity < 1, `the filter icon brightens on hover (${restOpacity} → 1)`);
     await page.hover(sortClass);
     const box = await page.evalJs(`(() => { const b = [...document.querySelectorAll("thead button")].find((e) => e.getAttribute("aria-label") === "Sort by Class"); const r = b.querySelector("span[aria-hidden]").getBoundingClientRect(); return [r.width, r.height]; })()`);
@@ -115,12 +115,12 @@ export default async function ({ page, app, stub, step, shot, expect, log }) {
     const classes = await page.evalJs(`[...new Set([...document.querySelectorAll("table tbody tr")].filter((r) => r.cells.length > 6).map((r) => r.cells[1].innerText.trim()))]`);
     expect(classes.length === 1 && classes[0] === "Titan", `only Titan rows (${classes.join(", ")})`);
     await page.hover({ role: "searchbox", name: "Search armor by name" });
-    expect(await page.exists({ role: "button", name: "Filter Class: Titan" }), "the header filter names the filter in effect");
+    expect(await page.exists({ role: "button", name: /^Filter Class: Titan/ }), "the header filter names the filter in effect");
     await shot("column-filtered");
     // And back the other way: clearing the toolbar filter clears the header one.
     await page.click({ role: "button", name: "Clear class filter" });
     await page.waitFor(async () => (await pieces()) === total);
-    expect(!(await page.exists({ role: "button", name: "Filter Class: Titan" })), "the header filter clears with the toolbar one");
+    expect(!(await page.exists({ role: "button", name: /^Filter Class: Titan/ })), "the header filter clears with the toolbar one");
   });
 
   await step("arm-dupes: Duplicates lists only the duplicate pair", async () => {

@@ -128,7 +128,7 @@ function Tile({
             ? "border-foreground bg-foreground/10 d2-tile-selected cursor-pointer"
             : blocked
               ? "cursor-not-allowed border-foreground/20 opacity-40"
-              : "d2-hover-ring hover:border-foreground/70 hover:bg-foreground/6 cursor-pointer border-foreground/25",
+              : "hover:border-foreground/70 hover:bg-foreground/6 cursor-pointer border-foreground/25",
         )}
       >
         {children}

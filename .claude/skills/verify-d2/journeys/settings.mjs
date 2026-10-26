@@ -31,10 +31,11 @@ export default async function ({ page, app, stub, step, shot, expect, log }) {
     expect(href, `favicon is ${href}`);
   });
 
-  await step("set-usage: the usage history section stays hidden while usage is paused", async () => {
-    // BUILD_USAGE_PAUSED (src/lib/build-usage/paused.ts) hides the section.
-    expect(!(await page.exists({ role: "button", name: "Clear history" })), "no Clear history button");
-    expect(!(await page.exists({ role: "switch", name: "Record searches on this device" })), "no Record searches switch");
+  await step("set-usage: Clear history deletes the account's usage", async () => {
+    // No confirmation step: one click clears it.
+    await page.click({ role: "button", name: "Clear history" });
+    await app.toast(/Armor usage history cleared/);
+    expect(stub.last("DELETE", "/api/build-usage")?.status === 204, "DELETE /api/build-usage was sent");
   });
 
   await step("set-sync: a sidebar link is pushed to /api/settings/links", async () => {
