@@ -93,6 +93,7 @@ import {
   useActivitySetDialogs,
 } from "@/components/loadouts/activity-set-strip";
 import { ConfirmDialog } from "@/components/loadouts/confirm-dialog";
+import { InGameDeleteDialog } from "@/components/loadouts/ingame-delete-dialog";
 import { InGameImportDialog } from "@/components/loadouts/ingame-import-dialog";
 import { type ModsSection } from "@/lib/loadouts/mod-placement";
 import { commitLoadout, modsSectionForPieces } from "@/lib/loadouts/commit";
@@ -124,7 +125,8 @@ type DialogState =
   | { kind: "delete"; loadout: SavedLoadout }
   | { kind: "delete-many"; ids: string[] }
   | { kind: "delete-all" }
-  | { kind: "import-ingame" };
+  | { kind: "import-ingame" }
+  | { kind: "delete-ingame" };
 
 const SUBCLASS_OPTIONS = SUBCLASSES.map((sc) => ({ value: sc, label: sc }));
 
@@ -706,6 +708,12 @@ export function LoadoutsList({
               >
                 Import in-game loadout
               </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => setDialog({ kind: "delete-ingame" })}
+                disabled={provisional}
+              >
+                Delete in-game loadout
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
           <DropdownMenu>
@@ -932,6 +940,14 @@ export function LoadoutsList({
           weaponMap={weaponMap}
           manifest={manifest}
           onImport={(datas) => void importInGame(datas)}
+        />
+      )}
+      {dialog.kind === "delete-ingame" && (
+        <InGameDeleteDialog
+          open
+          onOpenChange={(open) => !open && setDialog({ kind: "none" })}
+          characters={armory.characters}
+          manifest={manifest}
         />
       )}
       <LoadoutEditorDrawer

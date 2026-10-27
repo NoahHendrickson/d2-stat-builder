@@ -5,6 +5,7 @@ import { handleSessionExpired } from "@/lib/auth/sign-out";
 import type {
   InGameLoadoutsResponse,
   SlotIdentifiers,
+  SlotRequest,
   SnapshotRequest,
 } from "@/lib/bungie/ingame-loadouts";
 import { applySavedLoadout, type ApplyOutcome } from "./apply-client";
@@ -40,28 +41,39 @@ export function fullyApplied({
   return !cancelled && equip.every((r) => r.ok) && plugs.every((r) => r.ok);
 }
 
-export type SnapshotResult = { ok: true } | { ok: false; error: string; reauth?: boolean };
+export type SlotActionResult = { ok: true } | { ok: false; error: string; reauth?: boolean };
 
-/** Save what `characterId` is wearing into an in-game slot. Never throws. */
-export async function snapshotInGame(
-  characterId: string,
-  choice: InGameSlotChoice,
-): Promise<SnapshotResult> {
+/** One action on the in-game loadouts route. Never throws. */
+async function slotAction(method: "POST" | "DELETE", body: SlotRequest): Promise<SlotActionResult> {
   try {
     const res = await fetch("/api/bungie/ingame-loadouts", {
-      method: "POST",
+      method,
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ characterId, ...choice } satisfies SnapshotRequest),
+      body: JSON.stringify(body),
     });
     if (res.ok) return { ok: true };
     const data = (await res.json().catch(() => null)) as
       | { error?: string; reauth?: boolean }
       | null;
-    return { ok: false, error: data?.error ?? "Bungie request failed", reauth: data?.reauth };
+    // Every 401 here means the server session is gone ("Not signed in" after a failed
+    // token refresh, or Bungie rejecting the token).
+    return {
+      ok: false,
+      error: data?.error ?? "Bungie request failed",
+      reauth: data?.reauth || res.status === 401,
+    };
   } catch {
     return { ok: false, error: "Check your connection and try again" };
   }
 }
+
+/** Save what `characterId` is wearing into an in-game slot. Never throws. */
+export const snapshotInGame = (characterId: string, choice: InGameSlotChoice) =>
+  slotAction("POST", { characterId, ...choice } satisfies SnapshotRequest);
+
+/** Empty an in-game slot — gear and labels both. Never throws. */
+export const clearInGameSlot = (characterId: string, loadoutIndex: number) =>
+  slotAction("DELETE", { characterId, loadoutIndex });
 
 /**
  * Save a saved loadout into an in-game slot. Bungie can only snapshot what a character

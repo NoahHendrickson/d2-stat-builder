@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import {
+  clearLoadout,
   getDestinyManifest,
   getProfile,
   snapshotLoadout,
@@ -13,6 +14,7 @@ import { createBungieHttp } from "@/lib/bungie/http";
 import { bungieErrorResponse } from "@/lib/bungie/equip-route";
 import {
   isBungieId,
+  parseSlotRequest,
   parseSnapshotRequest,
   toSlots,
   type InGameLoadoutIdentifiers,
@@ -156,6 +158,38 @@ export async function POST(request: Request) {
 
   try {
     await snapshotLoadout(createBungieHttp(token), {
+      ...body,
+      membershipType: user.destinyMembershipType,
+    });
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    return bungieErrorResponse(err);
+  }
+}
+
+/**
+ * Empty one in-game loadout slot: Bungie drops its gear and resets its name, icon and
+ * colour. The game has no undo. The client clears several slots one request at a time.
+ */
+export async function DELETE(request: Request) {
+  const refused = rejectCrossSite(request);
+  if (refused) return refused;
+  const user = await readUser();
+  const token = await getValidAccessToken();
+  if (!user?.destinyMembershipId || user.destinyMembershipType == null || !token) {
+    return NextResponse.json({ error: "Not signed in" }, { status: 401 });
+  }
+
+  let body: ReturnType<typeof parseSlotRequest> = null;
+  try {
+    body = parseSlotRequest(await request.json());
+  } catch {
+    body = null;
+  }
+  if (!body) return NextResponse.json({ error: "Invalid request" }, { status: 400 });
+
+  try {
+    await clearLoadout(createBungieHttp(token), {
       ...body,
       membershipType: user.destinyMembershipType,
     });

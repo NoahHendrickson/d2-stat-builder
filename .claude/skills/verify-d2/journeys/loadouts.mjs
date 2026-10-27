@@ -1,5 +1,6 @@
-// Saved loadouts (/loadouts): search, edit, equip (apply stream), save in-game, delete one,
-// delete all. Two Hunter loadouts are seeded from the fixture's equipped armor. See features/loadouts.md.
+// Saved loadouts (/loadouts): search, edit, equip (apply stream), save in-game, delete in-game,
+// delete one, delete all. Two Hunter loadouts are seeded from the fixture's equipped armor, and
+// in-game slots 2 and 3 hold that armor too. See features/loadouts.md.
 export const meta = {
   fixture: "full",
   seed: (profile) => {
@@ -10,7 +11,15 @@ export const meta = {
       id, createdAt: t, updatedAt: t, version: 1,
       loadout: { id: `dim-${id.slice(0, 8)}`, name, classType: 1, equipped: armor.map((i) => ({ hash: i.itemHash, id: i.itemInstanceId })), unequipped: [], parameters: { mods: [], assumeArmorMasterwork: 3 } },
     });
-    return { loadouts: [row("11111111-1111-4111-8111-111111111111", "Raid build", 1760000000000), row("22222222-2222-4222-8222-222222222222", "Dungeon build", 1760000001000)] };
+    const slot = (index, nameHash) => ({
+      index, nameHash, iconHash: 202, colorHash: 302, empty: false,
+      items: armor.map((i) => ({ itemInstanceId: i.itemInstanceId, itemHash: i.itemHash })),
+    });
+    const empty = (index) => ({ index, nameHash: 101, iconHash: 201, colorHash: 301, items: [], empty: true });
+    return {
+      loadouts: [row("11111111-1111-4111-8111-111111111111", "Raid build", 1760000000000), row("22222222-2222-4222-8222-222222222222", "Dungeon build", 1760000001000)],
+      ingameSlots: Array.from({ length: 10 }, (_, i) => (i === 1 ? slot(1, 102) : i === 2 ? slot(2, 103) : empty(i))),
+    };
   },
 };
 
@@ -85,6 +94,31 @@ export default async function ({ page, app, stub, step, shot, expect, log }) {
     expect(applies.length === 2, `it equipped first (apply-loadout requests so far: ${applies.length})`);
     const snap = stub.last("POST", "/api/bungie/ingame-loadouts");
     expect(snap?.body?.loadoutIndex === 0, `POST /api/bungie/ingame-loadouts targeted index 0 (${JSON.stringify(snap?.body)})`);
+  });
+
+  await step("lo-ingame-delete: Delete in-game loadout empties the picked slot", async () => {
+    await page.click({ role: "button", name: "New" });
+    await page.click({ role: "menuitem", name: "Delete in-game loadout" });
+    const dialog = { role: "dialog", name: "Delete in-game loadouts" };
+    await page.waitFor(dialog);
+    await page.waitFor({ role: "checkbox", name: /^Dungeon Slot 2$/ });
+    expect(await page.exists({ role: "checkbox", name: /^Crucible Slot 3$/ }), "both filled slots are listed");
+    expect(!(await page.exists({ role: "checkbox", name: / Slot 1$/ })), "empty slots aren't listed");
+    await page.click({ role: "checkbox", name: /^Dungeon Slot 2$/ }, { within: dialog });
+    await shot("ingame-delete-dialog", { within: dialog });
+    await page.click({ role: "button", name: "Delete loadout" }, { within: dialog });
+    await app.toast(/Deleted Dungeon/);
+    await page.waitFor(dialog, { gone: true });
+    const del = stub.last("DELETE", "/api/bungie/ingame-loadouts");
+    expect(del?.status === 200 && del.body?.loadoutIndex === 1, `DELETE /api/bungie/ingame-loadouts targeted index 1 (${JSON.stringify(del?.body)})`);
+    expect(stub.store.ingameSlots[1].empty && !stub.store.ingameSlots[2].empty, "slot 2 is empty, slot 3 untouched");
+    // Reopening shows only the slot that's left.
+    await page.click({ role: "button", name: "New" });
+    await page.click({ role: "menuitem", name: "Delete in-game loadout" });
+    await page.waitFor({ role: "checkbox", name: /^Crucible Slot 3$/ });
+    expect(!(await page.exists({ role: "checkbox", name: / Slot 2$/ })), "the deleted slot is gone on reopen");
+    await page.press("Escape");
+    await page.waitFor(dialog, { gone: true });
   });
 
   await step("lo-delete: Delete asks first, then removes one card", async () => {
