@@ -17,7 +17,7 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
-    date: "2026-10-26",
+    date: "2026-10-27",
     changes: [
       "Armor table: sort by one column then another from the column headers, and filter Class, Archetype, Tertiary, Tuned and Set bonus right from their headers.",
     ],
