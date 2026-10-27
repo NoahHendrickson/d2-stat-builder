@@ -42,6 +42,6 @@ export async function PUT(request: Request, { params }: Ctx) {
   try {
     return NextResponse.json(await store.put(user.membershipId, key, value));
   } catch (err) {
-    return storageError(err);
+    return storageError(err, "Settings");
   }
 }

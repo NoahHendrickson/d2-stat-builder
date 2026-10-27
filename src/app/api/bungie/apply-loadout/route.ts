@@ -15,7 +15,7 @@ import { FRAGMENT_SOCKET_COUNT } from "@/lib/armory/equipped-subclass";
 import { MAX_MODS } from "@/lib/loadouts/types";
 import { ABILITY_SOCKET_COUNT, ASPECT_SOCKET_COUNT } from "@/lib/dim/subclasses";
 import { rejectCrossSite } from "@/lib/http/same-origin";
-import { getApplyCancelStore, isApplyId } from "@/lib/loadouts/apply-cancel-store";
+import { isApplyCancelled, isApplyId } from "@/lib/loadouts/apply-cancel-store";
 
 /** 7 perk inserts, plus an empty plug for each perk that moves to another socket. */
 const ARTIFACT_PLUGS = 14;
@@ -127,9 +127,8 @@ export async function POST(request: Request) {
   const encoder = new TextEncoder();
 
   // The cancel flag lives in the database (another instance takes the cancel request),
-  // so it's read at most once a second: a cancel lands within a step or two, and a
-  // 40-plug apply costs a few dozen tiny reads, not one per Bungie call.
-  const cancelStore = getApplyCancelStore();
+  // so it's read at most once a second: a cancel lands within a step or two. The reads
+  // go through the shared cache (isApplyCancelled), so the database sees one per apply.
   const cancelOwner = user.membershipId;
   let cancelled = false;
   let lastCancelCheck = 0;
@@ -139,7 +138,7 @@ export async function POST(request: Request) {
         const now = Date.now();
         if (now - lastCancelCheck < 1000) return false;
         lastCancelCheck = now;
-        cancelled = await cancelStore.isCancelled(cancelOwner, applyId).catch(() => false);
+        cancelled = await isApplyCancelled(cancelOwner, applyId).catch(() => false);
         return cancelled;
       }
     : undefined;

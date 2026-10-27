@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { LoggedStorageError, logStorageError } from "../read-cache";
 
 /**
  * Shared responses for the Neon-backed routes (route files may only export handlers).
@@ -16,7 +17,7 @@ export function notConfigured(what = "Loadout") {
 }
 
 export function storageError(err: unknown, what = "Loadout") {
-  console.error(`${what} storage error:`, err instanceof Error ? err.message : err);
+  if (!(err instanceof LoggedStorageError)) logStorageError(err, what);
   return NextResponse.json({ error: `${what} storage failed — try again` }, { status: 502 });
 }
 

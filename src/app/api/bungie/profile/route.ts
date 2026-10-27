@@ -1,3 +1,4 @@
+import { cookies } from "next/headers";
 import { after, NextResponse } from "next/server";
 import {
   getProfile,
@@ -22,7 +23,7 @@ import {
   parseHeldProfile,
   type Minted,
 } from "@/lib/armory/profile-mint";
-import { getServerContributionStore } from "@/lib/weapons/contribution-store";
+import { getServerContributionStore, SAVE_EVERY_HOURS } from "@/lib/weapons/contribution-store";
 
 // 100 Profiles (currentSeasonHash) · 102 Vault · 103 ProfileCurrencies · 200 Characters · 201 CharacterInventories
 // 202 CharacterProgressions (seasonal artifact unlocks, for saved loadouts)
@@ -33,6 +34,13 @@ import { getServerContributionStore } from "@/lib/weapons/contribution-store";
 // re-added here to test whether the server-to-server call handles the larger payload.
 // Changing this list or slimProfile changes what a client holds for the same Bungie
 // snapshot: bump PROFILE_SHAPE_VERSION (profile-mint.ts) so held copies stop getting 304s.
+/**
+ * Set once this browser's weapons are saved for perk popularity, holding the Destiny
+ * membership id, for SAVE_EVERY_HOURS. The store's own memory of who it saved is per
+ * function instance, so without this every new instance a poll lands on wrote again.
+ */
+const CONTRIBUTED_COOKIE = "d2c-contributed";
+
 const COMPONENTS = [100, 102, 103, 200, 201, 202, 205, 300, 304, 305, 310] as DestinyComponentType[];
 
 /**
@@ -127,11 +135,25 @@ async function loadProfile(held: Minted | undefined): Promise<Response> {
     // Their weapons count towards perk popularity (contribution-store.ts), saved
     // after the response so the page never waits on the write.
     const { destinyMembershipId, destinyMembershipType } = user;
+    const jar = await cookies();
     const save =
-      destinyMembershipId && destinyMembershipType != null
+      destinyMembershipId &&
+      destinyMembershipType != null &&
+      jar.get(CONTRIBUTED_COOKIE)?.value !== destinyMembershipId
         ? getServerContributionStore()?.prepare(destinyMembershipId, destinyMembershipType, res.Response)
         : undefined;
-    if (save) after(() => save().catch((err: unknown) => console.warn("Couldn't save weapons for perk popularity:", err)));
+    if (save && destinyMembershipId) {
+      // Set before the write lands, so a failed save waits for the cookie to lapse:
+      // popularity can miss a player for half a day, the database can't take a retry per poll.
+      jar.set(CONTRIBUTED_COOKIE, destinyMembershipId, {
+        httpOnly: true,
+        secure: true,
+        sameSite: "lax",
+        path: "/api/bungie/profile",
+        maxAge: SAVE_EVERY_HOURS * 3600,
+      });
+      after(() => save().catch((err: unknown) => console.warn("Couldn't save weapons for perk popularity:", err)));
+    }
     return NextResponse.json(slimProfile(res.Response));
   } catch (err) {
     // The Bungie client throws for platform errors too — `ErrorCode ≠ 1` in the body,

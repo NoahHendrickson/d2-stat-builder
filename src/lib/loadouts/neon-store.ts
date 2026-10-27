@@ -5,7 +5,9 @@
 // schema is created lazily on first use (`CREATE TABLE IF NOT EXISTS`) — no migration
 // tooling for a single table on a hobby deploy. Add a real migration step if the
 // schema ever changes shape.
+import { cacheLife, cacheTag } from "next/cache";
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
+import { ACCOUNT_READ_LIFE, expiring, fromCache, loggedRead } from "../read-cache";
 import { LoadoutLimitError, MAX_LOADOUTS_PER_ACCOUNT, type LoadoutStore } from "./store";
 import { parseSavedLoadoutData, type SavedLoadout, type SavedLoadoutData } from "./types";
 
@@ -131,6 +133,49 @@ export class NeonLoadoutStore implements LoadoutStore {
   }
 }
 
+let neonSingleton: NeonLoadoutStore | undefined;
+
+/** The Neon store under the cache. A cached function can't close over an instance, so it's module-level. */
+function neonStore(): NeonLoadoutStore {
+  if (!neonSingleton) {
+    const url = process.env.DATABASE_URL;
+    if (!url) throw new Error("DATABASE_URL isn't set");
+    neonSingleton = new NeonLoadoutStore(url);
+  }
+  return neonSingleton;
+}
+
+const accountTag = (membershipId: string) => `loadouts:${membershipId}`;
+
+async function cachedList(membershipId: string) {
+  "use cache: remote";
+  cacheTag(accountTag(membershipId));
+  cacheLife(ACCOUNT_READ_LIFE);
+  return loggedRead("Loadout", () => neonStore().list(membershipId));
+}
+
+/** Neon behind Vercel's shared cache (see read-cache.ts): `list` is cached per account, and every write expires it. */
+class CachedLoadoutStore implements LoadoutStore {
+  list(membershipId: string) {
+    return fromCache(cachedList(membershipId));
+  }
+  get(membershipId: string, id: string) {
+    return neonStore().get(membershipId, id);
+  }
+  create(membershipId: string, data: SavedLoadoutData, id?: string) {
+    return expiring(accountTag(membershipId), () => neonStore().create(membershipId, data, id));
+  }
+  update(membershipId: string, id: string, data: SavedLoadoutData) {
+    return expiring(accountTag(membershipId), () => neonStore().update(membershipId, id, data));
+  }
+  delete(membershipId: string, id: string) {
+    return expiring(accountTag(membershipId), () => neonStore().delete(membershipId, id));
+  }
+  deleteMany(membershipId: string, ids: readonly string[] | "all") {
+    return expiring(accountTag(membershipId), () => neonStore().deleteMany(membershipId, ids));
+  }
+}
+
 let singleton: LoadoutStore | null | undefined;
 
 /**
@@ -139,7 +184,6 @@ let singleton: LoadoutStore | null | undefined;
  */
 export function getServerLoadoutStore(): LoadoutStore | null {
   if (singleton !== undefined) return singleton;
-  const url = process.env.DATABASE_URL;
-  singleton = url ? new NeonLoadoutStore(url) : null;
+  singleton = process.env.DATABASE_URL ? new CachedLoadoutStore() : null;
   return singleton;
 }

@@ -12,6 +12,6 @@ export async function GET() {
   try {
     return NextResponse.json({ settings: await store.list(user.membershipId) });
   } catch (err) {
-    return storageError(err);
+    return storageError(err, "Settings");
   }
 }
