@@ -3,6 +3,7 @@
 // so the Cancel button can't just close the stream: it writes a flag here, and the
 // apply checks for it between Bungie calls. Neon when `DATABASE_URL` is set (same lazy
 // schema as the settings store), else process memory — enough for a single dev server.
+import { cacheLife, cacheTag, revalidateTag } from "next/cache";
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
 
 export interface ApplyCancelStore {
@@ -75,6 +76,30 @@ export function getApplyCancelStore(): ApplyCancelStore {
     singleton = url ? new NeonApplyCancelStore(url) : new MemoryApplyCancelStore();
   }
   return singleton;
+}
+
+const cancelTag = (membershipId: string, applyId: string) => `apply-cancel:${membershipId}:${applyId}`;
+
+/**
+ * Whether the apply was cancelled, read through Vercel's shared cache: the apply asks
+ * once a second, and each of those reaching Neon kept the database awake for the whole
+ * apply. Only the first ask and the one after a cancel (which expires the entry, see
+ * `flagApplyCancelled`) read the store.
+ */
+export async function isApplyCancelled(membershipId: string, applyId: string): Promise<boolean> {
+  "use cache: remote";
+  cacheTag(cancelTag(membershipId, applyId));
+  cacheLife({ revalidate: 60, expire: 300 });
+  return getApplyCancelStore().isCancelled(membershipId, applyId);
+}
+
+/** Cancel an apply: write the flag, then expire the cached "not cancelled". */
+export async function flagApplyCancelled(membershipId: string, applyId: string) {
+  try {
+    await getApplyCancelStore().cancel(membershipId, applyId);
+  } finally {
+    revalidateTag(cancelTag(membershipId, applyId), { expire: 0 });
+  }
 }
 
 /** A client-made apply id: a UUID, or anything else short and plain. */
