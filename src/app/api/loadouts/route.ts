@@ -5,7 +5,6 @@ import { parseSavedLoadoutData } from "@/lib/loadouts/types";
 import { isLoadoutId, notConfigured, storageError } from "@/lib/loadouts/api-responses";
 import { rejectCrossSite } from "@/lib/http/same-origin";
 import { LoadoutLimitError, MAX_LOADOUTS_PER_ACCOUNT } from "@/lib/loadouts/store";
-import { cachedLoadouts, expireLoadouts } from "@/lib/account-read-cache";
 
 /**
  * Saved loadouts, owned by the signed (tamper-evident) session cookie's Bungie.net
@@ -18,7 +17,7 @@ export async function GET() {
   const store = getServerLoadoutStore();
   if (!store) return notConfigured();
   try {
-    return NextResponse.json({ loadouts: await cachedLoadouts(user.membershipId) });
+    return NextResponse.json({ loadouts: await store.list(user.membershipId) });
   } catch (err) {
     return storageError(err);
   }
@@ -46,8 +45,6 @@ export async function POST(request: Request) {
       );
     }
     return storageError(err);
-  } finally {
-    expireLoadouts(user.membershipId);
   }
 }
 
@@ -84,7 +81,5 @@ export async function DELETE(request: Request) {
     return NextResponse.json({ deleted: await store.deleteMany(user.membershipId, target) });
   } catch (err) {
     return storageError(err);
-  } finally {
-    expireLoadouts(user.membershipId);
   }
 }

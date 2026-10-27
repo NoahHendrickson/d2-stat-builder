@@ -1,7 +1,9 @@
 // Account-synced settings in Neon. Server-only. One row per (account, key) so two
 // computers editing different settings never overwrite each other. Same lazy-schema
 // approach as the loadouts store (see src/lib/loadouts/neon-store.ts).
+import { cacheLife, cacheTag } from "next/cache";
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
+import { ACCOUNT_READ_LIFE, expiring, fromCache, loggedRead } from "../read-cache";
 import {
   isSettingKey,
   parseSettingValue,
@@ -77,12 +79,44 @@ export class NeonSettingsStore {
   }
 }
 
-let singleton: NeonSettingsStore | null | undefined;
+export type SettingsStore = Pick<NeonSettingsStore, "list" | "put">;
+
+let neonSingleton: NeonSettingsStore | undefined;
+
+/** The Neon store under the cache. A cached function can't close over an instance, so it's module-level. */
+function neonStore(): NeonSettingsStore {
+  if (!neonSingleton) {
+    const url = process.env.DATABASE_URL;
+    if (!url) throw new Error("DATABASE_URL isn't set");
+    neonSingleton = new NeonSettingsStore(url);
+  }
+  return neonSingleton;
+}
+
+const accountTag = (membershipId: string) => `settings:${membershipId}`;
+
+async function cachedList(membershipId: string) {
+  "use cache: remote";
+  cacheTag(accountTag(membershipId));
+  cacheLife(ACCOUNT_READ_LIFE);
+  return loggedRead("Settings", () => neonStore().list(membershipId));
+}
+
+/** Neon behind Vercel's shared cache (see read-cache.ts): `list` is cached per account, and every write expires it. */
+class CachedSettingsStore implements SettingsStore {
+  list(membershipId: string) {
+    return fromCache(cachedList(membershipId));
+  }
+  put<K extends SettingKey>(membershipId: string, key: K, value: SettingValues[K]) {
+    return expiring(accountTag(membershipId), () => neonStore().put(membershipId, key, value));
+  }
+}
+
+let singleton: SettingsStore | null | undefined;
 
 /** The server's settings store, or null when `DATABASE_URL` isn't set. */
-export function getServerSettingsStore(): NeonSettingsStore | null {
+export function getServerSettingsStore(): SettingsStore | null {
   if (singleton !== undefined) return singleton;
-  const url = process.env.DATABASE_URL;
-  singleton = url ? new NeonSettingsStore(url) : null;
+  singleton = process.env.DATABASE_URL ? new CachedSettingsStore() : null;
   return singleton;
 }

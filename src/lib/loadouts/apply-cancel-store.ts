@@ -3,8 +3,9 @@
 // so the Cancel button can't just close the stream: it writes a flag here, and the
 // apply checks for it between Bungie calls. Neon when `DATABASE_URL` is set (same lazy
 // schema as the settings store), else process memory — enough for a single dev server.
-import { cacheLife, cacheTag, revalidateTag } from "next/cache";
+import { cacheLife, cacheTag } from "next/cache";
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
+import { expiring } from "../read-cache";
 
 export interface ApplyCancelStore {
   cancel(membershipId: string, applyId: string): Promise<void>;
@@ -94,12 +95,8 @@ export async function isApplyCancelled(membershipId: string, applyId: string): P
 }
 
 /** Cancel an apply: write the flag, then expire the cached "not cancelled". */
-export async function flagApplyCancelled(membershipId: string, applyId: string) {
-  try {
-    await getApplyCancelStore().cancel(membershipId, applyId);
-  } finally {
-    revalidateTag(cancelTag(membershipId, applyId), { expire: 0 });
-  }
+export function flagApplyCancelled(membershipId: string, applyId: string) {
+  return expiring(cancelTag(membershipId, applyId), () => getApplyCancelStore().cancel(membershipId, applyId));
 }
 
 /** A client-made apply id: a UUID, or anything else short and plain. */
