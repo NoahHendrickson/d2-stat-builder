@@ -197,8 +197,9 @@ export const AppSidebar = memo(function AppSidebar({
 });
 
 /** Shared row look for nav items and links: square, 36px (the nav list draws the active highlight). */
-const rowClass =
-  "group/row d2-hover-ring relative flex h-9 items-center gap-3 rounded-none normal:rounded-[8px] text-sm outline-none transition-[color,background-color,outline-offset] focus-visible:ring-1 focus-visible:ring-outline-strong";
+const rowBaseClass =
+  "group/row relative flex h-9 items-center gap-3 rounded-none normal:rounded-[8px] text-sm outline-none transition-[color,background-color,outline-offset] focus-visible:ring-1 focus-visible:ring-outline-strong";
+const rowClass = `${rowBaseClass} d2-hover-ring`;
 
 function NavItem({
   href,
@@ -427,7 +428,8 @@ function LinkRow({
       rel="noopener noreferrer"
       aria-label={collapsed ? `${link.name} (opens in a new tab)` : undefined}
       className={cn(
-        rowClass,
+        // Expanded, the ring hangs off the row wrapper, so it stays put over the ⋯ button.
+        collapsed ? rowClass : rowBaseClass,
         "text-muted-foreground hover:bg-foreground/5 hover:text-foreground",
         collapsed ? "w-9 justify-center" : "min-w-0 flex-1 px-2.5 pr-9",
       )}
@@ -448,7 +450,7 @@ function LinkRow({
   }
 
   return (
-    <div className="group/link relative flex">
+    <div className="group/link d2-hover-ring relative flex transition-[outline-offset]">
       {anchor}
       <DropdownMenu>
         <DropdownMenuTrigger

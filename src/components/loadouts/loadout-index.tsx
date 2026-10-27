@@ -32,9 +32,10 @@ export const LoadoutIndex = memo(function LoadoutIndex({
     const scroller = scrollRef.current;
     const el = activeRef.current;
     if (!scroller || !el) return;
-    // Scrolled into view with the scroller's inset (p-1) kept, so the ring stays whole.
-    const top = el.offsetTop - 4;
-    const bottom = el.offsetTop + el.offsetHeight + 4;
+    // Scrolled into view with the scroller's inset kept, so the ring stays whole.
+    const inset = parseFloat(getComputedStyle(scroller).paddingTop) || 0;
+    const top = el.offsetTop - inset;
+    const bottom = el.offsetTop + el.offsetHeight + inset;
     if (top < scroller.scrollTop) scroller.scrollTop = top;
     else if (bottom > scroller.scrollTop + scroller.clientHeight) {
       scroller.scrollTop = bottom - scroller.clientHeight;
@@ -44,8 +45,9 @@ export const LoadoutIndex = memo(function LoadoutIndex({
   return (
     <nav aria-label="Loadouts by name" className={cn("flex min-h-0 flex-col", className)}>
       {/* Inset by the hover ring's reach (1px standing 2px off) so the scroller doesn't
-          clip it. */}
-      <div ref={scrollRef} className="d2-scroll relative min-h-0 flex-1 overflow-y-auto overscroll-contain p-1">
+          clip it. The top, bottom and left insets are given back, so the names still line
+          up with the cards; the right one stays, off the cards column. */}
+      <div ref={scrollRef} className="d2-scroll relative min-h-0 flex-1 overflow-y-auto overscroll-contain -my-1 -ml-1 p-1">
         <ul className="flex flex-col">
           {loadouts.map((saved, index) => {
             const active = saved.id === activeId;

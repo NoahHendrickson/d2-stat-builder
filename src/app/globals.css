@@ -545,9 +545,12 @@ input[type="number"] {
    touch taps do not leave it behind. */
 @utility d2-hover-ring {
   /* The whole outline lives in the hover rule: buttons carry outline-none at
-     rest, and the hover rule's higher specificity is what lets the ring win. */
+     rest, and the hover rule's higher specificity is what lets the ring win.
+     Disabled controls never ring (some keep :hover, using cursor-not-allowed
+     rather than pointer-events-none). Selected states stay with the call site:
+     checked checkboxes and pressed toggles ring, picked tiles don't. */
   @media (hover: hover) and (pointer: fine) {
-    &:hover {
+    &:hover:not(:disabled, [aria-disabled="true"]) {
       outline: 1px solid color-mix(in srgb, var(--foreground) 55%, transparent);
       outline-offset: 2px;
     }

@@ -359,7 +359,7 @@ export const WeaponDetails = memo(function WeaponDetails({
                 picked[slot.key] !== undefined && !selected && "opacity-40 hover:opacity-100",
               )
             : cn(
-                "rounded-full border border-foreground/12 transition-colors focus-visible:d2-tile-selected",
+                "rounded-full border border-foreground/12 transition-[color,background-color,border-color,outline-offset] focus-visible:d2-tile-selected",
                 selected ? "bg-[#305f8e]" : "d2-hover-ring bg-foreground/4 hover:bg-foreground/10",
               ),
           !perk.currentlyCanRoll && "opacity-40",
@@ -487,7 +487,8 @@ export const WeaponDetails = memo(function WeaponDetails({
           <DetailCard className="min-w-0 max-w-full">
             {perkSlots.length > 0 && (
               <DetailSection title="Perks">
-                <div className="flex max-w-full gap-2.5 overflow-x-auto pb-1 max-md:gap-1.5">
+                {/* Inset (p-1, given back by -m-1) so the scroller doesn't clip the hover ring. */}
+                <div className="-m-1 flex max-w-[calc(100%+0.5rem)] gap-2.5 overflow-x-auto p-1 pb-2 max-md:gap-1.5">
                   {perkSlots.map((slot) => (
                     <section
                       key={slot.key}

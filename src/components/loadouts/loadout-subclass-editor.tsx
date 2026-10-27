@@ -120,7 +120,7 @@ function PlugOptionButton({
             } as CSSProperties
           }
           className={cn(
-            "relative flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-none border transition-[opacity,border-color,background-color,box-shadow] outline-none focus-visible:d2-tile-selected",
+            "relative flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-none border transition-[opacity,border-color,background-color,box-shadow,outline-offset] outline-none focus-visible:d2-tile-selected",
             recolor && "isolate",
             flush ? "p-0" : "p-1",
             tint && "bg-[hsl(var(--icon-tint)_72%)] dark:bg-[hsl(var(--icon-tint)_26%)]",
@@ -133,7 +133,7 @@ function PlugOptionButton({
                   : "cursor-pointer border-foreground/25 hover:border-foreground/70",
             checked && !tint && "bg-foreground/10",
             !checked && !disabled && !tint && "hover:bg-foreground/6 focus-visible:bg-foreground/6",
-            !checked && !disabled && "d2-hover-ring",
+            !checked && "d2-hover-ring",
           )}
         >
           {option.icon ? (
@@ -205,7 +205,7 @@ function PlugOptionButton({
 
 /** Option layout: wrapping icon cells when compact, two wide buttons per row otherwise. */
 const OPTIONS_GRID = "grid gap-1.5 sm:grid-cols-2";
-const OPTIONS_CELLS = "flex flex-wrap gap-0.5";
+const OPTIONS_CELLS = "flex flex-wrap gap-1";
 
 /** One optional, single-choice socket: Super, class ability, jump, melee, grenade. */
 function AbilityGroup({

@@ -136,13 +136,14 @@ const ModCell = memo(function ModCell({
           aria-disabled={!chosen && blocked}
           onClick={() => onPick(option)}
           className={cn(
-            "relative flex size-14 shrink-0 items-center justify-center rounded-none border p-1 transition-[opacity,border-color,background-color,box-shadow] outline-none focus-visible:d2-tile-selected",
+            "relative flex size-14 shrink-0 items-center justify-center rounded-none border p-1 transition-[opacity,border-color,background-color,box-shadow,outline-offset] outline-none focus-visible:d2-tile-selected",
+            !chosen && "d2-hover-ring",
             chosen
               ? "border-foreground bg-foreground/10 cursor-pointer d2-tile-selected"
               : blocked
                 ? // Flagged mods stay at full strength so the badge reads.
                   cn("cursor-not-allowed border-foreground/20", !problem && "opacity-40")
-                : "d2-hover-ring hover:border-foreground/70 hover:bg-foreground/6 focus-visible:bg-foreground/6 cursor-pointer border-foreground/25",
+                : "hover:border-foreground/70 hover:bg-foreground/6 focus-visible:bg-foreground/6 cursor-pointer border-foreground/25",
           )}
         >
           <ItemIcon icon={option.icon} size={48} className="rounded-none" />
@@ -253,9 +254,9 @@ function KindGrid({
     // column of cells, not the panel edge. The row keeps its height with nothing to clear.
     <section
       aria-label={`${heading} on ${piece.name}`}
-      className="grid grid-cols-[repeat(auto-fill,3.5rem)] gap-0.5 text-xs"
+      className="grid grid-cols-[repeat(auto-fill,3.5rem)] gap-1 text-xs"
     >
-      <div className="col-span-full mb-0.5 flex h-4 justify-end">
+      <div className="col-span-full flex h-4 justify-end">
         {used > 0 && (
           <button
             type="button"
@@ -375,8 +376,9 @@ export const PiecePanel = memo(function PiecePanel({
           )}
         </div>
       </div>
-      {/* Mods scroll inside the column, not the drawer. */}
-      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto overscroll-contain">
+      {/* Mods scroll inside the column, not the drawer. Inset (p-1, given back by -m-1)
+          so the scroller doesn't clip the hover ring. */}
+      <div className="-m-1 flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto overscroll-contain p-1">
         {groups.length === 0 ? (
           <p className="text-muted-foreground text-xs">No mod sockets.</p>
         ) : (

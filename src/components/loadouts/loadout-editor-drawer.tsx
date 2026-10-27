@@ -153,12 +153,12 @@ function StatModChip({
         onClick={onSlot}
         className={cn(
           "relative flex size-9 shrink-0 items-center justify-center border border-foreground/30",
-          "outline-none focus-visible:d2-tile-selected",
+          "d2-hover-ring outline-none transition-[border-color,background-color,outline-offset] focus-visible:d2-tile-selected",
           slotted
             ? "disabled:cursor-default"
             : blocked
               ? "disabled:cursor-not-allowed"
-              : "d2-hover-ring hover:border-foreground hover:bg-foreground/8",
+              : "hover:border-foreground hover:bg-foreground/8",
         )}
       >
         <ItemIcon icon={option?.icon} size={32} className="rounded-none" />
@@ -483,7 +483,7 @@ function EditorForm({
             <div
               role="group"
               aria-label="Stat mods"
-              className="flex flex-wrap items-center gap-0.5"
+              className="flex flex-wrap items-center gap-1"
             >
               {desiredStatMods.map((hash, i) => (
                 <StatModChip
@@ -562,8 +562,9 @@ function EditorForm({
                     <span className="d2-label text-[10px]">Subclass</span>
                   </div>
                 </div>
-                {/* The column scrolls its options; the drawer body stays put. */}
-                <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+                {/* The column scrolls its options; the drawer body stays put. Inset (p-1, given
+                    back by -m-1) so the scroller doesn't clip the hover ring. */}
+                <div className="-m-1 min-h-0 flex-1 overflow-y-auto overscroll-contain p-1">
                   <LoadoutSubclassEditor
                     section={subclass}
                     value={subclassItem}

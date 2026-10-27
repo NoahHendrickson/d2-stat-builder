@@ -123,12 +123,13 @@ function Tile({
           if (!blocked) onClick();
         }}
         className={cn(
-          "relative flex size-12 shrink-0 items-center justify-center rounded-none border p-1 outline-none transition-[opacity,border-color,background-color,box-shadow] focus-visible:d2-tile-selected",
+          "relative flex size-12 shrink-0 items-center justify-center rounded-none border p-1 outline-none transition-[opacity,border-color,background-color,box-shadow,outline-offset] focus-visible:d2-tile-selected",
+          !chosen && "d2-hover-ring",
           chosen
             ? "border-foreground bg-foreground/10 d2-tile-selected cursor-pointer"
             : blocked
               ? "cursor-not-allowed border-foreground/20 opacity-40"
-              : "d2-hover-ring hover:border-foreground/70 hover:bg-foreground/6 cursor-pointer border-foreground/25",
+              : "hover:border-foreground/70 hover:bg-foreground/6 cursor-pointer border-foreground/25",
         )}
       >
         {children}
@@ -267,8 +268,9 @@ export function LoadoutArtifactEditor({
             })}
           </div>
 
+          {/* Inset (p-1, given back by -m-1) so the scroller doesn't clip the hover ring. */}
           {value && (
-            <div className="flex gap-3 overflow-x-auto">
+            <div className="-m-1 flex gap-3 overflow-x-auto p-1">
               {columns.map((column, c) => (
                 <div key={c} role="group" aria-label={`Column ${c + 1}`} className="flex flex-col gap-1">
                   {column.map((hash) => {
