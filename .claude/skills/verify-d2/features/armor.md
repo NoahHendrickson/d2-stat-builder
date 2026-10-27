@@ -15,8 +15,8 @@ The Armor table lists every armor piece the user owns, with its stats, tuning an
 
 - Click the `Armor table` link in the sidebar, or load `/armor`.
 - Toolbar: `searchbox "Search armor by name"` (the `F` key focuses it), `Class`/`Armor`/`Set` menus, `More filters`, and `button "Duplicates"` + `What duplicates must share`.
-- Column headers: `button "Sort by <column>"`, and on Class, Archetype, Tertiary, Tuned and Set bonus a `button "Filter <label>: <all label>"` named like the toolbar menu (`Filter Class: All classes`, `Filter Class: Titan — 1 selected` while in effect). Both icons always show: dim at rest, full on hover.
 - Row actions are `Move`, `Equip` and `Junk`, shown when the row is hovered. Below `md` widths they move into a `<piece> actions` menu.
+- Column headers: `button "Sort by <column>"`, and on Class, Archetype, Tertiary, Tuned and Set bonus a `button "Filter <label>: <all label>"` named like the toolbar menu (`Filter Class: All classes`, `Filter Class: Titan — 1 selected` while in effect). Both icons always show: dim at rest, full on hover.
 
 ## Driving it with verify-d2
 
