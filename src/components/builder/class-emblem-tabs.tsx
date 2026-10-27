@@ -98,7 +98,7 @@ function EmblemTab({
           </span>
           <span className="flex items-baseline gap-1 text-[10px] leading-none text-white/70">
             <span aria-hidden>{"//"}</span>
-            <PowerValue value={character.light} size="xs" className="drop-shadow" />
+            <PowerValue value={character.light} size="xs" tone="gold" className="drop-shadow" />
           </span>
         </div>
       </span>
