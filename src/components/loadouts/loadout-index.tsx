@@ -32,8 +32,10 @@ export const LoadoutIndex = memo(function LoadoutIndex({
     const scroller = scrollRef.current;
     const el = activeRef.current;
     if (!scroller || !el) return;
-    const top = el.offsetTop;
-    const bottom = top + el.offsetHeight;
+    // Scrolled into view with the scroller's inset kept, so the ring stays whole.
+    const inset = parseFloat(getComputedStyle(scroller).paddingTop) || 0;
+    const top = el.offsetTop - inset;
+    const bottom = el.offsetTop + el.offsetHeight + inset;
     if (top < scroller.scrollTop) scroller.scrollTop = top;
     else if (bottom > scroller.scrollTop + scroller.clientHeight) {
       scroller.scrollTop = bottom - scroller.clientHeight;
@@ -42,7 +44,10 @@ export const LoadoutIndex = memo(function LoadoutIndex({
 
   return (
     <nav aria-label="Loadouts by name" className={cn("flex min-h-0 flex-col", className)}>
-      <div ref={scrollRef} className="d2-scroll relative min-h-0 flex-1 overflow-y-auto overscroll-contain">
+      {/* Inset by the hover ring's reach (1px standing 2px off) so the scroller doesn't
+          clip it. The top, bottom and left insets are given back, so the names still line
+          up with the cards; the right one stays, off the cards column. */}
+      <div ref={scrollRef} className="d2-scroll relative min-h-0 flex-1 overflow-y-auto overscroll-contain -my-1 -ml-1 p-1">
         <ul className="flex flex-col">
           {loadouts.map((saved, index) => {
             const active = saved.id === activeId;
@@ -54,7 +59,7 @@ export const LoadoutIndex = memo(function LoadoutIndex({
                   aria-current={active ? "true" : undefined}
                   onClick={() => onJump(index)}
                   className={cn(
-                    "normal:rounded-[8px] focus-visible:ring-outline-strong flex h-8 w-full items-center px-2.5 text-left text-sm outline-none transition-colors focus-visible:ring-1",
+                    "normal:rounded-[8px] focus-visible:ring-outline-strong d2-hover-ring flex h-8 w-full items-center px-2.5 text-left text-sm outline-none transition-[color,background-color,outline-offset] focus-visible:ring-1",
                     active
                       ? "bg-foreground/8 normal:bg-foreground/6 text-foreground"
                       : "text-muted-foreground hover:bg-foreground/5 hover:text-foreground",

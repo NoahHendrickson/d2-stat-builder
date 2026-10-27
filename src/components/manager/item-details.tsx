@@ -447,7 +447,8 @@ export function WeaponRollPanel({
       {roll.frame && <FrameRow plug={roll.frame} />}
       {(roll.columns.length > 0 || roll.mods.length > 0) && (
         <div className={cn(SECTION, "gap-4")}>
-          <div className="flex gap-2 overflow-x-auto" aria-label="Perks">
+          {/* Inset (p-1, given back by -m-1) so the scroller doesn't clip the hover ring. */}
+          <div className="-m-1 flex gap-2 overflow-x-auto p-1" aria-label="Perks">
             {roll.columns.map((column) =>
               column.origin && column.options.length <= 1 ? (
                 <div key={column.socketIndex} className="flex flex-col gap-1.5">
@@ -819,12 +820,12 @@ function PerkColumnView({
                   onPointerLeave={() => onHover(null)}
                   className={cn(
                     PERK_CELL,
-                    "border-foreground/12 rounded-full border outline-none focus-visible:d2-tile-selected",
+                    "border-foreground/12 rounded-full border outline-none transition-[background-color,outline-offset] focus-visible:d2-tile-selected",
                     isSelected
                       ? "bg-[#305f8e]"
                       : isCurrent
                         ? "bg-[#305f8e]/35"
-                        : "bg-foreground/4 hover:bg-foreground/10",
+                        : "d2-hover-ring bg-foreground/4 hover:bg-foreground/10",
                   )}
                 />
               }

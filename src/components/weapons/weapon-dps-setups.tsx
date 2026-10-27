@@ -100,8 +100,9 @@ export function DpsSetups({
                 // fill (the frame always there, clear, so choosing doesn't
                 // shift it).
                 choosable &&
-                  "-mx-2 border border-transparent p-2 outline-none focus-visible:d2-tile-selected normal:rounded-md",
+                  "-mx-2 border border-transparent p-2 outline-none transition-[background-color,outline-offset] focus-visible:d2-tile-selected normal:rounded-md",
                 option && "cursor-pointer hover:bg-foreground/3",
+                option && chosen !== i && "d2-hover-ring",
                 option &&
                   chosen === i &&
                   "border-foreground/16 bg-foreground/5 hover:bg-foreground/5",
