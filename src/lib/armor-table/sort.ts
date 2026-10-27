@@ -30,6 +30,23 @@ const STAT_SORT_INDEX = new Map<SortKey, number>(
   STAT_ORDER.map((key, i) => [`stat-${key}` as const, i]),
 );
 
+const COLUMN_LABELS: Record<ColumnKey, string> = {
+  name: "Name",
+  class: "Class",
+  archetype: "Archetype",
+  tertiary: "Tertiary",
+  tuned: "Tuned",
+  set: "Set bonus",
+  builds: "Searches",
+};
+
+/** The column's header label ("Mobility", not "stat-mobility"). */
+export function sortKeyLabel(key: SortKey): string {
+  return isStatSortKey(key)
+    ? STAT_LABELS[key.slice(5) as keyof typeof STAT_LABELS]
+    : COLUMN_LABELS[key as ColumnKey];
+}
+
 /** Number columns default to descending (high rolls first); text columns to ascending. */
 export const DESC_FIRST: ReadonlySet<SortKey> = new Set<SortKey>([
   ...STAT_ORDER.map((key) => `stat-${key}` as const),
@@ -52,6 +69,24 @@ export function preferredAsc(key: SortKey): boolean {
 
 /** Sort-menu tab ids: alphabetical/numeric direction, or custom value order. */
 export type SortMode = "asc" | "desc" | "custom";
+
+/** A mode with what it needs: a custom order carries its value list. */
+export type SortPick =
+  | { mode: "asc" | "desc" }
+  | { mode: "custom"; order: string[] };
+
+/** The modes a column offers, preferred direction first. */
+export function sortModesFor(key: SortKey): SortMode[] {
+  const dirs: SortMode[] = preferredAsc(key) ? ["asc", "desc"] : ["desc", "asc"];
+  return isCustomOrderColumn(key) ? [...dirs, "custom"] : dirs;
+}
+
+/** How a mode reads for this column: "A→Z", "High→Low", "Custom order". */
+export function sortModeLabel(key: SortKey, mode: SortMode): string {
+  if (mode === "custom") return "Custom order";
+  if (isNumericSortKey(key)) return mode === "desc" ? "High→Low" : "Low→High";
+  return mode === "asc" ? "A→Z" : "Z→A";
+}
 
 /** Result of applying a sort action — one atomic chain write (+ optional undo). */
 export interface SortActionResult {
@@ -86,16 +121,12 @@ export function activeSortMode(
   return level.asc ? "asc" : "desc";
 }
 
-function buildLevel(
-  key: SortKey,
-  mode: SortMode,
-  order: string[] | undefined,
-): SortLevel | null {
-  if (mode === "custom") {
+function buildLevel(key: SortKey, pick: SortPick): SortLevel | null {
+  if (pick.mode === "custom") {
     if (!isCustomOrderColumn(key)) return null;
-    return { key, kind: "custom", order: order ?? [] };
+    return { key, kind: "custom", order: pick.order };
   }
-  return { key, kind: "dir", asc: mode === "asc" };
+  return { key, kind: "dir", asc: pick.mode === "asc" };
 }
 
 /**
@@ -105,11 +136,10 @@ function buildLevel(
 export function applySortAction(
   sort: SortState,
   key: SortKey,
-  mode: SortMode,
-  nest: boolean,
-  order?: string[],
+  pick: SortPick,
+  nest = false,
 ): SortActionResult {
-  const level = buildLevel(key, mode, order);
+  const level = buildLevel(key, pick);
   if (!level) return { sort };
 
   const index = sortIndexOf(sort, key);
@@ -139,10 +169,39 @@ export function clearSortLevel(
   };
 }
 
-/** Reorder values inside a custom level (no-op if that level isn't custom). */
+/** Move `key`'s level to the front of the chain (undoable). */
+export function promoteSortLevel(
+  sort: SortState,
+  key: SortKey,
+): SortActionResult {
+  const index = sortIndexOf(sort, key);
+  if (index <= 0) return { sort };
+  return {
+    sort: [sort[index], ...sort.slice(0, index), ...sort.slice(index + 1)],
+    discardedChain: sort,
+  };
+}
+
+/** Keep only `key`'s level, dropping the rest of the chain (undoable). */
+export function soloSortLevel(
+  sort: SortState,
+  key: SortKey,
+): SortActionResult {
+  const level = sortLevelFor(sort, key);
+  if (!level || sort.length === 1) return { sort };
+  return { sort: [level], discardedChain: sort };
+}
+
+/**
+ * Move a value inside a custom level (no-op if that level isn't custom). `values` is
+ * the list as shown (applyCustomOrder): the saved order can hold values no piece has
+ * any more and miss new ones, so the move is made on what was shown, which becomes
+ * the order.
+ */
 export function reorderCustomLevel(
   sort: SortState,
   key: CustomOrderColumn,
+  values: readonly string[],
   from: number,
   to: number,
 ): SortState {
@@ -151,7 +210,7 @@ export function reorderCustomLevel(
   const level = sort[index];
   if (level.kind !== "custom") return sort;
   const next = [...sort];
-  next[index] = { ...level, order: moveOrderItem(level.order, from, to) };
+  next[index] = { ...level, order: moveOrderItem(values, from, to) };
   return next;
 }
 

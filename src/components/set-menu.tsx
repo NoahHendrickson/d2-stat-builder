@@ -1,12 +1,19 @@
 "use client";
 
 // The one armor-set dropdown: every set menu in the app (optimizer roll grid, armor
-// table filters, loadout filters) is this, so they search the same way and share the
-// account's pinned sets (synced setting `pinnedSets`).
+// table filters, loadout filters) is this, or takes its list from useSetMenuList, so
+// they search the same way and share the account's pinned sets (synced setting
+// `pinnedSets`).
 import { useCallback } from "react";
 import { FilterMultiselect } from "@/components/armor-table/filter-multiselect";
 import type { FilterOption } from "@/lib/armor-table/pinned";
 import { togglePinnedSet, usePinnedSets } from "@/lib/settings/pinned-sets";
+
+/** A set list's FilterMultiselect props: searchable, with the account's pins. */
+export function useSetMenuList() {
+  const pinned = usePinnedSets();
+  return { searchable: true, pinnable: true, pinned, onTogglePin: togglePinnedSet };
+}
 
 /** Set menu props shared by both kinds: options carry the set name and a count. */
 type SetMenuBase = {
@@ -28,7 +35,7 @@ export function SetFilterMenu({
   onChange: (value: number[]) => void;
   allLabel?: string;
 }) {
-  const pinned = usePinnedSets();
+  const list = useSetMenuList();
   return (
     <FilterMultiselect
       label={label}
@@ -36,10 +43,7 @@ export function SetFilterMenu({
       options={options}
       value={value}
       onChange={onChange}
-      searchable
-      pinnable
-      pinned={pinned}
-      onTogglePin={togglePinnedSet}
+      {...list}
       className={className}
     />
   );
@@ -64,7 +68,7 @@ export function SetPickerMenu({
   /** The trigger's text with nothing picked (defaults to `noneLabel`). */
   placeholder?: string;
 }) {
-  const pinned = usePinnedSets();
+  const list = useSetMenuList();
   const onPick = useCallback((v: number[]) => onChange(v[0] ?? null), [onChange]);
   return (
     <FilterMultiselect
@@ -76,10 +80,7 @@ export function SetPickerMenu({
       options={options}
       value={value === null ? [] : [value]}
       onChange={onPick}
-      searchable
-      pinnable
-      pinned={pinned}
-      onTogglePin={togglePinnedSet}
+      {...list}
       className={className}
     />
   );

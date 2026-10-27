@@ -3,7 +3,13 @@
 import { TooltipLabel } from "@/components/ui/tooltip";
 import { useRef, useState } from "react";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { Cancel01Icon, Pin02Icon, Search01Icon, UnfoldMoreIcon } from "@hugeicons/core-free-icons";
+import {
+  Cancel01Icon,
+  FilterMailIcon,
+  Pin02Icon,
+  Search01Icon,
+  UnfoldMoreIcon,
+} from "@hugeicons/core-free-icons";
 import { partitionByPin, type FilterOption } from "@/lib/armor-table/pinned";
 import { tokenizeSearchQuery } from "@/lib/armor-table/search";
 import {
@@ -225,7 +231,8 @@ export function FilterMultiselectPanel<V extends string | number>({
 
 /**
  * Checkbox-multiselect filter dropdown. Uses the same DropdownMenu chrome and
- * checkbox items as the sidebar loadout filters.
+ * checkbox items as the sidebar loadout filters. The `icon` variant is a column
+ * header's filter button: the same menu behind a bare filter icon.
  */
 export function FilterMultiselect<V extends string | number>({
   label,
@@ -241,6 +248,8 @@ export function FilterMultiselect<V extends string | number>({
   pinned = [],
   onTogglePin,
   maxVisible,
+  variant = "field",
+  hovered = false,
   className,
 }: {
   label: string;
@@ -259,9 +268,13 @@ export function FilterMultiselect<V extends string | number>({
   onTogglePin?: (value: V) => void;
   /** See {@link FilterMultiselectPanel}. */
   maxVisible?: number;
+  variant?: "field" | "icon";
+  /** Icon variant: the pointer is somewhere in this column. */
+  hovered?: boolean;
   className?: string;
 }) {
   const [query, setQuery] = useState("");
+  const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const active = value.length > 0;
   const labels = selectedLabels(value, options);
@@ -276,17 +289,78 @@ export function FilterMultiselect<V extends string | number>({
       : `${label}: ${summaryText} — ${value.length} selected`
     : `${label}: ${allLabel}`;
 
+  const onOpenChange = (next: boolean) => {
+    setOpen(next);
+    if (!next) setQuery("");
+  };
+  const panel = (
+    <FilterMultiselectPanel
+      allLabel={allLabel}
+      single={single}
+      noneLabel={noneLabel}
+      options={options}
+      value={value}
+      onChange={onChange}
+      query={query}
+      onQueryChange={setQuery}
+      searchable={searchable}
+      pinnable={pinnable}
+      pinned={pinned}
+      onTogglePin={onTogglePin}
+      maxVisible={maxVisible}
+    />
+  );
+
+  if (variant === "icon") {
+    const iconLabel = `Filter ${triggerLabel}`;
+    return (
+      <DropdownMenu modal={false} onOpenChange={onOpenChange}>
+        <TooltipLabel label={iconLabel}>
+          <DropdownMenuTrigger
+            aria-label={iconLabel}
+            className={cn(
+              "group/filter -my-0.5 flex size-6 shrink-0 cursor-pointer items-center justify-center rounded-none normal:rounded-[4px] outline-none transition-[background-color,outline-offset]",
+              // The outlined buttons' hover: a fill plus the ring standing off the button.
+              "d2-hover-ring hover:bg-foreground/6 data-popup-open:bg-foreground/6 focus-visible:ring-1 focus-visible:ring-outline-strong",
+              // A table too narrow for every header button keeps this one out of the
+              // way until needed. Collapsed, not display:none, so Tab still reaches it; the
+              // negative margin takes back the header's gap so the label keeps the room.
+              !(hovered || active || open) &&
+                "armor-narrow:-ml-0.5 armor-narrow:w-0 armor-narrow:overflow-hidden armor-narrow:opacity-0 armor-narrow:focus-visible:ml-0 armor-narrow:focus-visible:w-6 armor-narrow:focus-visible:opacity-100",
+              className,
+            )}
+          >
+            <HugeiconsIcon
+              icon={FilterMailIcon}
+              strokeWidth={2}
+              className={cn(
+                "size-4 shrink-0 transition-opacity",
+                // Like the column's sort arrow: dim, brighter in the column, full on hover.
+                active
+                  ? "text-foreground"
+                  : cn(
+                      hovered ? "opacity-60" : "opacity-40",
+                      "group-hover/filter:text-foreground group-hover/filter:opacity-100 group-data-popup-open/filter:text-foreground group-data-popup-open/filter:opacity-100 group-focus-visible/filter:opacity-100",
+                    ),
+              )}
+              aria-hidden
+            />
+          </DropdownMenuTrigger>
+        </TooltipLabel>
+        <DropdownMenuContent align="start" className={searchable ? "w-64" : "w-52"}>
+          {panel}
+        </DropdownMenuContent>
+      </DropdownMenu>
+    );
+  }
+
   return (
     <div
       // Sized to its label, not stretched: a crowded row still shrinks it to truncate.
-      className={cn("relative w-max min-w-0 max-w-full overflow-visible", className)}
+      // Hovers like the outlined buttons: the ring standing off the control.
+      className={cn("d2-hover-ring relative w-max min-w-0 max-w-full overflow-visible transition-[outline-offset]", className)}
     >
-      <DropdownMenu
-        modal={false}
-        onOpenChange={(next) => {
-          if (!next) setQuery("");
-        }}
-      >
+      <DropdownMenu modal={false} onOpenChange={onOpenChange}>
         <div
           className={cn(
             fieldFilterControlShellClasses,
@@ -352,21 +426,7 @@ export function FilterMultiselect<V extends string | number>({
           align="start"
           className={searchable ? "w-64" : undefined}
         >
-          <FilterMultiselectPanel
-            allLabel={allLabel}
-            single={single}
-            noneLabel={noneLabel}
-            options={options}
-            value={value}
-            onChange={onChange}
-            query={query}
-            onQueryChange={setQuery}
-            searchable={searchable}
-            pinnable={pinnable}
-            pinned={pinned}
-            onTogglePin={onTogglePin}
-            maxVisible={maxVisible}
-          />
+          {panel}
         </DropdownMenuContent>
       </DropdownMenu>
     </div>

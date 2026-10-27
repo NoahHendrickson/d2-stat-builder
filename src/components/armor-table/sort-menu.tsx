@@ -1,14 +1,17 @@
 "use client";
 
 import { TooltipLabel } from "@/components/ui/tooltip";
-import { memo, useState, type ReactNode } from "react";
+import { memo, type ReactNode } from "react";
 import Image from "next/image";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { ArrowDown02Icon, ArrowUp02Icon } from "@hugeicons/core-free-icons";
+import {
+  ArrowDown02Icon,
+  ArrowUp02Icon,
+  ListOrderedIcon,
+} from "@hugeicons/core-free-icons";
 import { cn } from "@/lib/utils";
 import {
   DropdownMenu,
-  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuGroup,
   DropdownMenuItem,
@@ -20,19 +23,28 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { BUNGIE_IMAGE_BASE } from "@/lib/bungie/constants";
 import {
-  isCustomOrderColumn,
   sortLevelAsc,
-  type CustomOrderColumn,
   type SortKey,
   type SortState,
 } from "@/lib/armor-table/filters";
+import type { FacetKey } from "@/lib/armor-table/facets";
 import {
   activeSortMode,
-  isNumericSortKey,
+  applyCustomOrder,
+  isStatSortKey,
   preferredAsc,
+  sortIndexOf,
+  sortKeyLabel,
+  sortModeLabel,
+  sortModesFor,
   type SortMode,
 } from "@/lib/armor-table/sort";
 import { CustomOrderList } from "@/components/armor-table/custom-order-list";
+import type { SortActions } from "@/components/armor-table/use-armor-table-sort";
+import {
+  FacetFilterMenu,
+  type FacetFilterState,
+} from "@/components/armor-table/facet-filter-menu";
 
 /**
  * A faint foreground tint over the pane, so the toolbar and column headers pick
@@ -42,83 +54,226 @@ import { CustomOrderList } from "@/components/armor-table/custom-order-list";
 export const TABLE_HEADER_BG = "bg-foreground/8";
 
 const TABLE_HEAD_CELL =
-  "border-b border-foreground/15 py-2.5 pr-3 text-sm font-normal whitespace-nowrap first:pl-3 " +
+  "border-b border-foreground/15 py-2.5 pr-2 armor-narrow:pr-1 text-sm font-normal whitespace-nowrap first:pl-3 " +
   // Phones pin the name column (see armor-table-row.tsx): the header cell over it
   // needs the band's wash on a solid fill.
   "max-md:first:sticky max-md:first:left-0 max-md:first:z-[1] max-md:first:shadow-[1px_0_0_var(--border)] max-md:first:[background:linear-gradient(color-mix(in_oklab,var(--foreground)_8%,transparent),color-mix(in_oklab,var(--foreground)_8%,transparent)),var(--glass-opaque)]";
 
+const MODE_ICONS: Record<SortMode, typeof ArrowUp02Icon> = {
+  asc: ArrowUp02Icon,
+  desc: ArrowDown02Icon,
+  custom: ListOrderedIcon,
+};
+
+function ModeIcon({ mode }: { mode: SortMode }) {
+  return (
+    <HugeiconsIcon
+      icon={MODE_ICONS[mode]}
+      strokeWidth={2}
+      className="text-muted-foreground size-3.5"
+      aria-hidden
+    />
+  );
+}
+
+/** "1st", "2nd", "3rd", "4th"… for a chain position. */
+function ordinal(n: number): string {
+  const tens = n % 100;
+  if (tens >= 11 && tens <= 13) return `${n}th`;
+  return `${n}${["th", "st", "nd", "rd"][n % 10] ?? "th"}`;
+}
+
 /**
- * Sortable column header: owns the `<th>` chrome and a dropdown for
- * A→Z / Z→A (or High→Low / Low→High), optional Custom value order, nest, and
- * clear/undo. Sort state is a single nest chain of dir|custom levels.
+ * The body of one column's sort menu in its header. A column outside the chain
+ * offers "Sort by" (replace) and "Then by" (add after the current sorts) as plain
+ * picks. A column in the chain edits its level in place: direction or custom
+ * order, moving it first, keeping only it, or removing it.
+ */
+function SortLevelMenuItems({
+  sortKey,
+  sort,
+  values,
+  sortUndo,
+  actions,
+}: {
+  sortKey: SortKey;
+  sort: SortState;
+  /** Distinct values in effective ascending order (custom-order columns only). */
+  values?: string[];
+  sortUndo: SortState | null;
+  actions: SortActions;
+}) {
+  const label = sortKeyLabel(sortKey);
+  const index = sortIndexOf(sort, sortKey);
+  const level = index === -1 ? undefined : sort[index];
+  const modes = sortModesFor(sortKey);
+  const order = level?.kind === "custom" ? level.order : undefined;
+
+  const pick = (mode: SortMode, nest: boolean) =>
+    actions.apply(
+      sortKey,
+      mode === "custom" ? { mode, order: order ?? values ?? [] } : { mode },
+      { nest },
+    );
+
+  const undo = sortUndo && (
+    <>
+      <DropdownMenuSeparator />
+      <DropdownMenuItem onClick={actions.undoSort}>
+        Undo last sort change
+      </DropdownMenuItem>
+    </>
+  );
+
+  if (!level) {
+    // Custom keeps the menu open: it turns into this column's level, order list and all.
+    const items = (nest: boolean) =>
+      modes.map((mode) => (
+        <DropdownMenuItem
+          key={mode}
+          closeOnClick={mode !== "custom"}
+          onClick={() => pick(mode, nest)}
+        >
+          <ModeIcon mode={mode} />
+          {sortModeLabel(sortKey, mode)}
+        </DropdownMenuItem>
+      ));
+    return (
+      <>
+        <DropdownMenuGroup>
+          <DropdownMenuLabel>Sort by {label}</DropdownMenuLabel>
+          {items(false)}
+        </DropdownMenuGroup>
+        {sort.length > 0 && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuGroup>
+              <DropdownMenuLabel className="flex justify-between gap-3">
+                <span>Then by {label}</span>
+                <span className="font-normal">{ordinal(sort.length + 1)} sort</span>
+              </DropdownMenuLabel>
+              {items(true)}
+            </DropdownMenuGroup>
+          </>
+        )}
+        {undo}
+      </>
+    );
+  }
+
+  // Reset puts the values back A→Z.
+  const resetOrder = values ? applyCustomOrder(values, undefined) : [];
+  const isReset =
+    values !== undefined && values.every((v, i) => v === resetOrder[i]);
+
+  return (
+    <>
+      <DropdownMenuGroup>
+        <DropdownMenuLabel className="flex justify-between gap-3">
+          <span>Sort by {label}</span>
+          {sort.length > 1 && (
+            <span className="font-normal">
+              {ordinal(index + 1)} of {sort.length}
+            </span>
+          )}
+        </DropdownMenuLabel>
+      </DropdownMenuGroup>
+      <DropdownMenuRadioGroup
+        value={activeSortMode(sort, sortKey) ?? ""}
+        onValueChange={(v) => {
+          if (v === "asc" || v === "desc" || v === "custom") pick(v, false);
+        }}
+      >
+        {modes.map((mode) => (
+          <DropdownMenuRadioItem key={mode} value={mode} closeOnClick={false}>
+            {sortModeLabel(sortKey, mode)}
+          </DropdownMenuRadioItem>
+        ))}
+      </DropdownMenuRadioGroup>
+      {level.kind === "custom" && (
+        <>
+          <CustomOrderList
+            values={values ?? []}
+            onMove={(from, to) =>
+              actions.reorderCustom(level.key, values ?? [], from, to)
+            }
+          />
+          <DropdownMenuItem
+            closeOnClick={false}
+            disabled={isReset}
+            onClick={() =>
+              actions.apply(sortKey, { mode: "custom", order: resetOrder })
+            }
+          >
+            Reset to A→Z
+          </DropdownMenuItem>
+        </>
+      )}
+      <DropdownMenuSeparator />
+      {index > 0 && (
+        <DropdownMenuItem onClick={() => actions.promoteLevel(sortKey)}>
+          Sort by {label} first
+        </DropdownMenuItem>
+      )}
+      {sort.length > 1 && (
+        <DropdownMenuItem onClick={() => actions.soloLevel(sortKey)}>
+          Sort only by {label}
+        </DropdownMenuItem>
+      )}
+      <DropdownMenuItem onClick={() => actions.clearLevel(sortKey)}>
+        Remove from sort
+      </DropdownMenuItem>
+      {undo}
+    </>
+  );
+}
+
+/**
+ * Sortable column header: owns the `<th>` chrome and the column's sort menu
+ * (see SortLevelMenuItems). A sorting column shows its arrow; with more than one
+ * sort, a small number beside it gives the column's place in the chain. A column
+ * with a toolbar filter (`facet`) puts that filter's button after the sort button.
+ * Stat columns show their icon, centered.
  */
 export const SortMenu = memo(function SortMenu({
-  label,
-  icon,
-  align = "left",
-  title,
   sortKey,
+  icon,
+  title,
+  facet,
+  filters,
   sort,
   values,
   hovered,
   sortUndo,
-  onApplyMode,
-  onClearLevel,
-  onReorderCustom,
-  onUndoSort,
+  actions,
 }: {
-  label: string;
-  icon?: string;
-  align?: "left" | "right";
-  title?: string;
   sortKey: SortKey;
+  icon?: string;
+  /** A longer name for the tooltip than the header label. */
+  title?: string;
+  facet?: FacetKey;
+  filters: FacetFilterState;
   sort: SortState;
   /** Distinct values in effective ascending order (custom-order columns only). */
   values?: string[];
   hovered: boolean;
   sortUndo: SortState | null;
-  onApplyMode: (
-    key: SortKey,
-    mode: SortMode,
-    nest: boolean,
-    order?: string[],
-  ) => void;
-  onClearLevel: (key: SortKey) => void;
-  onReorderCustom: (key: CustomOrderColumn, from: number, to: number) => void;
-  onUndoSort: () => void;
+  actions: SortActions;
 }) {
-  // Default off so picking a new column replaces the chain; nest is opt-in.
-  const [nest, setNest] = useState(false);
+  const label = sortKeyLabel(sortKey);
+  const align = isStatSortKey(sortKey) ? "right" : "left";
   const accessibleLabel = title ?? label;
-  const levelIndex = sort.findIndex((l) => l.key === sortKey);
+  const levelIndex = sortIndexOf(sort, sortKey);
   const active = levelIndex !== -1;
-  const level = active ? sort[levelIndex] : undefined;
-  const canNest = !active && sort.length > 0;
-  const customized = level?.kind === "custom";
-  const mode = activeSortMode(sort, sortKey);
-  const asc = active ? sortLevelAsc(level!) : preferredAsc(sortKey);
-  const arrow = asc ? ArrowUp02Icon : ArrowDown02Icon;
-  const numeric = isNumericSortKey(sortKey);
-  const canCustom = isCustomOrderColumn(sortKey);
+  const arrow =
+    MODE_ICONS[activeSortMode(sort, sortKey) ?? (preferredAsc(sortKey) ? "asc" : "desc")];
+  const numbered = active && sort.length > 1;
   const primary = sort[0];
   const isPrimary = primary?.key === sortKey;
 
-  const sortTitle =
-    active && sort.length > 1
-      ? `Sort by ${accessibleLabel} (${levelIndex + 1} of ${sort.length})`
-      : `Sort by ${accessibleLabel}`;
-
-  const applyMode = (next: SortMode) => {
-    if (next === "custom" && !canCustom) return;
-    const nesting = nest && canNest;
-    const order =
-      next === "custom"
-        ? customized && level?.kind === "custom"
-          ? level.order
-          : (values ?? [])
-        : undefined;
-    onApplyMode(sortKey, next, nesting, order);
-  };
+  const sortTitle = numbered
+    ? `Sort by ${accessibleLabel} (${ordinal(levelIndex + 1)} of ${sort.length})`
+    : `Sort by ${accessibleLabel}`;
 
   const iconNode: ReactNode = icon ? (
     <Image
@@ -142,128 +297,76 @@ export const SortMenu = memo(function SortMenu({
           : "none"
       }
     >
-      <DropdownMenu
-        modal={false}
-        onOpenChange={(open) => {
-          if (open) setNest(false);
-        }}
-      >
+      <div className={cn("flex min-w-0 items-center gap-0.5", align === "right" && "justify-center")}>
+      <DropdownMenu modal={false}>
         <TooltipLabel label={sortTitle}>
           <DropdownMenuTrigger
             aria-label={sortTitle}
             className={cn(
-              "group relative -my-0.5 inline-flex cursor-pointer items-center",
-              align === "right" ? "w-full justify-center" : "pr-[18px]",
+              "group relative -my-0.5 flex min-w-0 cursor-pointer items-center",
+              align === "right" ? "w-full justify-center" : "gap-1 armor-narrow:gap-0.5",
             )}
           >
-            {iconNode ?? label}
+            {iconNode ?? <span className="min-w-0 truncate">{label}</span>}
             <span
               aria-hidden
               className={cn(
-                "absolute flex size-4 items-center justify-center rounded-none normal:rounded-[4px] transition-colors",
-                "hover:bg-accent group-data-popup-open:bg-accent",
+                "flex h-6 shrink-0 items-center justify-center rounded-none normal:rounded-[4px]",
+                // The outlined buttons' hover: a fill plus the ring standing off the button.
+                "d2-hover-ring transition-[background-color,outline-offset] hover:bg-foreground/6 group-data-popup-open:bg-foreground/6",
+                // Stat headers center the icon alone; the button hangs off its right,
+                // a size smaller so it stays inside the narrow column.
                 align === "right"
-                  ? "top-1/2 left-[calc(50%+0.5rem+2px)] -translate-y-1/2"
-                  : "top-1/2 right-0 -translate-y-1/2",
+                  ? cn(
+                      "absolute top-1/2 left-[calc(50%+0.5rem-2px)] -translate-y-1/2",
+                      numbered ? "gap-px pr-0.5 pl-px" : "w-5",
+                    )
+                  : numbered
+                    ? "gap-px pr-1 pl-0.5"
+                    : "w-6 armor-cramped:w-5",
               )}
             >
               <HugeiconsIcon
                 icon={arrow}
                 strokeWidth={2}
                 className={cn(
-                  "size-3 transition-opacity",
+                  "transition-opacity",
+                  align === "right" ? "size-3.5" : "size-4",
+                  // Always shown: dim at rest, a little brighter in a hovered column,
+                  // full on the button itself.
                   active
                     ? "text-foreground opacity-100"
-                    : hovered
-                      ? "opacity-40"
-                      : "opacity-0 group-hover:opacity-40 group-data-popup-open:opacity-100",
+                    : cn(
+                        hovered ? "opacity-60" : "opacity-40",
+                        "group-hover:text-foreground group-hover:opacity-100 group-data-popup-open:text-foreground group-data-popup-open:opacity-100",
+                      ),
                 )}
               />
+              {numbered && (
+                <span className="text-foreground text-[11px] leading-none font-medium tabular-nums">
+                  {levelIndex + 1}
+                </span>
+              )}
             </span>
           </DropdownMenuTrigger>
         </TooltipLabel>
         <DropdownMenuContent
           align={align === "right" ? "end" : "start"}
-          className="w-56"
+          className="w-60"
         >
-          <DropdownMenuGroup>
-            <DropdownMenuLabel>
-              Sort by {accessibleLabel}
-              {active && sort.length > 1
-                ? ` (${levelIndex + 1} of ${sort.length})`
-                : ""}
-            </DropdownMenuLabel>
-          </DropdownMenuGroup>
-          {canNest && (
-            <DropdownMenuCheckboxItem
-              closeOnClick={false}
-              checked={nest}
-              onCheckedChange={(checked) => setNest(checked === true)}
-            >
-              Nest this sort
-            </DropdownMenuCheckboxItem>
-          )}
-          <DropdownMenuRadioGroup
-            value={mode ?? ""}
-            onValueChange={(v) => {
-              if (v === "asc" || v === "desc" || v === "custom") applyMode(v);
-            }}
-          >
-            {numeric ? (
-              <>
-                <DropdownMenuRadioItem value="desc" closeOnClick={false}>
-                  High→Low
-                </DropdownMenuRadioItem>
-                <DropdownMenuRadioItem value="asc" closeOnClick={false}>
-                  Low→High
-                </DropdownMenuRadioItem>
-              </>
-            ) : (
-              <>
-                <DropdownMenuRadioItem value="asc" closeOnClick={false}>
-                  A→Z
-                </DropdownMenuRadioItem>
-                <DropdownMenuRadioItem value="desc" closeOnClick={false}>
-                  Z→A
-                </DropdownMenuRadioItem>
-              </>
-            )}
-            {canCustom && (
-              <DropdownMenuRadioItem value="custom" closeOnClick={false}>
-                Custom
-              </DropdownMenuRadioItem>
-            )}
-          </DropdownMenuRadioGroup>
-          {canCustom && mode === "custom" && (
-            <>
-              <CustomOrderList
-                values={values ?? []}
-                onMove={(from, to) =>
-                  onReorderCustom(sortKey as CustomOrderColumn, from, to)
-                }
-              />
-              <DropdownMenuItem
-                closeOnClick={false}
-                disabled={!customized}
-                onClick={() => onApplyMode(sortKey, "asc", nest && canNest)}
-              >
-                Reset order
-              </DropdownMenuItem>
-            </>
-          )}
-          {(sortUndo || active) && <DropdownMenuSeparator />}
-          {sortUndo && (
-            <DropdownMenuItem onClick={onUndoSort}>
-              Undo previous sort
-            </DropdownMenuItem>
-          )}
-          {active && (
-            <DropdownMenuItem onClick={() => onClearLevel(sortKey)}>
-              Clear sort
-            </DropdownMenuItem>
-          )}
+          <SortLevelMenuItems
+            sortKey={sortKey}
+            sort={sort}
+            values={values}
+            sortUndo={sortUndo}
+            actions={actions}
+          />
         </DropdownMenuContent>
       </DropdownMenu>
+      {facet && (
+        <FacetFilterMenu facet={facet} filters={filters} variant="icon" hovered={hovered} />
+      )}
+      </div>
     </th>
   );
 });

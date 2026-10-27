@@ -8,10 +8,7 @@ import {
   Copy01Icon,
   Search01Icon,
 } from "@hugeicons/core-free-icons";
-import type { FilterOption } from "@/lib/armor-table/pinned";
-import type { ArmorVersion, FacetFilters } from "@/lib/armor-table/filters";
 import { duplicateMatchSummary, type DuplicateMatch } from "@/lib/armor-table/duplicates";
-import { CLASS_NAMES } from "@/lib/armory/stats";
 import { cn } from "@/lib/utils";
 import { useTouchFirst } from "@/lib/use-min-width";
 import { Button } from "@/components/ui/button";
@@ -24,24 +21,13 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input, SearchClearButton } from "@/components/ui/input";
+import { FilterCascadeMenu } from "@/components/armor-table/filter-cascade-menu";
 import {
-  FilterCascadeMenu,
-  TUNING_FILTER_OPTIONS,
-} from "@/components/armor-table/filter-cascade-menu";
-import { FilterMultiselect } from "@/components/armor-table/filter-multiselect";
+  FacetFilterMenu,
+  type FacetFilterState,
+} from "@/components/armor-table/facet-filter-menu";
 import { CleanupButton, type CleanupButtonProps } from "@/components/armor-table/cleanup-button";
 import { BUILD_USAGE_PAUSED } from "@/lib/build-usage/paused";
-import { SetFilterMenu } from "@/components/set-menu";
-
-const CLASS_OPTIONS: FilterOption<number>[] = [0, 1, 2].map((c) => ({
-  value: c,
-  label: CLASS_NAMES[c],
-}));
-
-const ARMOR_VERSION_OPTIONS: FilterOption<ArmorVersion>[] = [
-  { value: "3.0", label: "Armor 3.0" },
-  { value: "2.0", label: "Armor 2.0" },
-];
 
 const OVERFLOW_FACETS = ["archetypes", "tunings", "tertiaries"] as const;
 
@@ -121,20 +107,14 @@ function DuplicatesButton({
 }
 
 /**
- * The table's filter bar: result count, search, and the six multiselect
- * filters. Sits above the sticky column headers.
+ * The table's filter bar: result count, search, the six multiselect filters,
+ * and the Cleanup and Duplicates buttons. Sits above the sticky column headers.
  */
 export const ArmorTableToolbar = memo(function ArmorTableToolbar({
   search,
   onSearchChange,
   searchRef,
-  facets,
-  onFacetChange,
-  setOptions,
-  archetypeOptions,
-  statOptions,
-  pinnedArchetypes,
-  onTogglePinnedArchetype,
+  filters,
   filteredCount,
   duplicateGroups,
   onToggleDuplicates,
@@ -148,16 +128,7 @@ export const ArmorTableToolbar = memo(function ArmorTableToolbar({
   search: string;
   onSearchChange: (search: string) => void;
   searchRef: RefObject<HTMLInputElement | null>;
-  facets: FacetFilters;
-  onFacetChange: <K extends keyof FacetFilters>(
-    key: K,
-    value: FacetFilters[K],
-  ) => void;
-  setOptions: FilterOption<number>[];
-  archetypeOptions: FilterOption<string>[];
-  statOptions: FilterOption<number>[];
-  pinnedArchetypes: string[];
-  onTogglePinnedArchetype: (name: string) => void;
+  filters: FacetFilterState;
   filteredCount: number;
   /** Set while the table shows only duplicates: how many groups it found. */
   duplicateGroups?: number;
@@ -176,19 +147,7 @@ export const ArmorTableToolbar = memo(function ArmorTableToolbar({
   // Touch screens likely have no F key to press. The table mounts after the armory
   // loads, never while hydrating, so this reads the real device on its first render.
   const keyboard = !useTouchFirst();
-  const cascadeMenuProps = {
-    facets,
-    onFacetChange,
-    setOptions,
-    archetypeOptions,
-    statOptions,
-    pinnedArchetypes,
-    onTogglePinnedArchetype,
-    filtersActive,
-    onClearFilters,
-    classOptions: CLASS_OPTIONS,
-    armorVersionOptions: ARMOR_VERSION_OPTIONS,
-  };
+  const cascadeMenuProps = { filters, filtersActive, onClearFilters };
 
   return (
     // Phones: search and Filters on the first line, the count and views after.
@@ -232,52 +191,14 @@ export const ArmorTableToolbar = memo(function ArmorTableToolbar({
           )}
         </div>
         <div className="hidden min-w-0 items-center gap-2 @[58rem]/toolbar:flex">
-          <FilterMultiselect
-            label="Class"
-            allLabel="All classes"
-            value={facets.classes}
-            onChange={(v) => onFacetChange("classes", v)}
-            options={CLASS_OPTIONS}
-          />
-          <FilterMultiselect
-            label="Armor"
-            allLabel="All armor"
-            value={facets.armorVersions}
-            onChange={(v) => onFacetChange("armorVersions", v)}
-            options={ARMOR_VERSION_OPTIONS}
-          />
-          <SetFilterMenu
-            value={facets.setHashes}
-            onChange={(v) => onFacetChange("setHashes", v)}
-            options={setOptions}
-          />
+          <FacetFilterMenu facet="classes" filters={filters} />
+          <FacetFilterMenu facet="armorVersions" filters={filters} />
+          <FacetFilterMenu facet="setHashes" filters={filters} />
         </div>
         <div className="hidden min-w-0 items-center gap-2 @[82.5rem]/toolbar:flex">
-          <FilterMultiselect
-            label="Archetype"
-            allLabel="All archetypes"
-            value={facets.archetypes}
-            onChange={(v) => onFacetChange("archetypes", v)}
-            options={archetypeOptions}
-            searchable
-            pinnable
-            pinned={pinnedArchetypes}
-            onTogglePin={onTogglePinnedArchetype}
-          />
-          <FilterMultiselect
-            label="Tuning"
-            allLabel="Any tuning"
-            value={facets.tunings}
-            onChange={(v) => onFacetChange("tunings", v)}
-            options={TUNING_FILTER_OPTIONS}
-          />
-          <FilterMultiselect
-            label="Tertiary"
-            allLabel="Any tertiary"
-            value={facets.tertiaries}
-            onChange={(v) => onFacetChange("tertiaries", v)}
-            options={statOptions}
-          />
+          <FacetFilterMenu facet="archetypes" filters={filters} />
+          <FacetFilterMenu facet="tunings" filters={filters} />
+          <FacetFilterMenu facet="tertiaries" filters={filters} />
         </div>
         <div className="hidden shrink-0 @[58rem]/toolbar:block @[82.5rem]/toolbar:hidden">
           <FilterCascadeMenu

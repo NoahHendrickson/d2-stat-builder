@@ -7,6 +7,22 @@
 @custom-variant fine-pointer (@media (hover: hover) and (pointer: fine));
 /* The Normal app theme (data-app-theme="normal" on <html>, see app-theme.ts). */
 @custom-variant normal ([data-app-theme="normal"] &);
+/*
+ * The armor table's column headers on a narrow table (@container/armor in
+ * armor-table.tsx). Under 81.5rem the columns drop below ~127px, where "Archetype"
+ * would truncate beside both header buttons: the filter buttons wait until needed.
+ * Under 71.5rem the sort buttons shrink too.
+ */
+@custom-variant armor-narrow {
+  @container armor (width < 81.5rem) {
+    @slot;
+  }
+}
+@custom-variant armor-cramped {
+  @container armor (width < 71.5rem) {
+    @slot;
+  }
+}
 
 /*
  * Destiny 2 flavour, softened (Figma "D2-stat-builder" 69:862).

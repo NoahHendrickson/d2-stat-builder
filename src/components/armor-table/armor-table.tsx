@@ -38,21 +38,19 @@ import type { ArmoryCharacter } from "@/lib/armory/fetch";
 import {
   STAT_DISPLAY_ORDER,
   STAT_HASHES,
-  STAT_LABELS,
   STAT_ORDER,
   tertiaryStatIndex,
   type StatIconMap,
+  type StatKey,
 } from "@/lib/armory/stats";
 import {
   emptyFacets,
   hasActiveFilters,
   pieceMatchesFilters,
-  type CustomOrderColumn,
   type FacetFilters,
   type SortKey,
   type SortState,
 } from "@/lib/armor-table/filters";
-import type { SortMode } from "@/lib/armor-table/sort";
 import {
   normalizeSearchText,
   searchMatcher,
@@ -70,6 +68,7 @@ import {
   saveTableState,
 } from "@/lib/armor-table/filter-storage";
 import { togglePinned, type FilterOption } from "@/lib/armor-table/pinned";
+import type { FacetKey } from "@/lib/armor-table/facets";
 import { adoptPinnedSets } from "@/lib/settings/pinned-sets";
 import {
   PINS_SCHEMA_VERSION,
@@ -78,7 +77,10 @@ import {
 } from "@/lib/armor-table/pin-storage";
 import { cn } from "@/lib/utils";
 import { ArmorTableToolbar } from "@/components/armor-table/armor-table-toolbar";
-import { STAT_FILTER_OPTIONS } from "@/components/armor-table/filter-cascade-menu";
+import {
+  useFacetSpecs,
+  type FacetFilterState,
+} from "@/components/armor-table/facet-filter-menu";
 import {
   ArmorRow,
   COLUMN_COUNT,
@@ -89,7 +91,10 @@ import {
   SortMenu,
   TABLE_HEADER_BG,
 } from "@/components/armor-table/sort-menu";
-import { useArmorTableSort } from "@/components/armor-table/use-armor-table-sort";
+import {
+  useArmorTableSort,
+  type SortActions,
+} from "@/components/armor-table/use-armor-table-sort";
 
 /** Each base row's last usage-layered row, reused while its counts are unchanged. */
 const rowWithUsage = new WeakMap<Row, Row>();
@@ -98,16 +103,32 @@ const NO_ANNOTATIONS: Annotations = {};
 /** Approximate single-row height; the virtualizer remeasures real rows on mount. */
 const ESTIMATED_ROW_HEIGHT_PX = 48;
 
-/** Header-cell order → sort key. */
-const COLUMN_SORT_KEYS: readonly (SortKey | undefined)[] = [
-  "name",
-  "class",
-  "archetype",
-  "tertiary",
-  "tuned",
-  "set",
-  ...(BUILD_USAGE_PAUSED ? [] : ["builds" as const]),
-  ...STAT_DISPLAY_ORDER.map((key) => `stat-${key}` as const),
+/**
+ * The header's columns in table order (TABLE_COLGROUP and ArmorRow's cells follow
+ * it). A `facet` puts that toolbar filter's button in the column's header.
+ */
+const HEADER_COLUMNS: readonly {
+  key: SortKey;
+  facet?: FacetKey;
+  stat?: StatKey;
+  title?: string;
+}[] = [
+  { key: "name" },
+  { key: "class", facet: "classes" },
+  { key: "archetype", facet: "archetypes" },
+  { key: "tertiary", facet: "tertiaries" },
+  { key: "tuned", facet: "tunings" },
+  { key: "set", facet: "setHashes" },
+  ...(BUILD_USAGE_PAUSED
+    ? []
+    : [
+        {
+          key: "builds" as const,
+          title:
+            "Searches: optimizer searches whose shown builds used this piece, out of those it could join",
+        },
+      ]),
+  ...STAT_DISPLAY_ORDER.map((stat) => ({ key: `stat-${stat}` as const, stat })),
 ];
 
 const HeaderRow = memo(function HeaderRow({
@@ -116,25 +137,17 @@ const HeaderRow = memo(function HeaderRow({
   sortUndo,
   statIcons,
   columnValues,
-  applyMode,
-  clearLevel,
-  reorderCustom,
-  undoSort,
+  actions,
+  filters,
 }: {
   tableEl: HTMLTableElement | null;
   sort: SortState;
   sortUndo: SortState | null;
   statIcons: StatIconMap;
   columnValues: (key: SortKey) => string[] | undefined;
-  applyMode: (
-    key: SortKey,
-    mode: SortMode,
-    nest: boolean,
-    order?: string[],
-  ) => void;
-  clearLevel: (key: SortKey) => void;
-  reorderCustom: (key: CustomOrderColumn, from: number, to: number) => void;
-  undoSort: () => void;
+  actions: SortActions;
+  /** The toolbar's filters: each filterable column's header button edits the same state. */
+  filters: FacetFilterState;
 }) {
   const [hoveredCol, setHoveredCol] = useState<number | null>(null);
   useEffect(() => {
@@ -153,113 +166,23 @@ const HeaderRow = memo(function HeaderRow({
       tableEl.removeEventListener("pointerleave", onLeave);
     };
   }, [tableEl]);
-  const hoveredSortKey =
-    hoveredCol !== null ? COLUMN_SORT_KEYS[hoveredCol] : undefined;
 
   return (
     <thead className={cn("sticky top-0 z-10 backdrop-blur-[20px]", TABLE_HEADER_BG)}>
       <tr className="text-muted-foreground text-left">
-        <SortMenu
-          label="Name"
-          sortKey="name"
-          sort={sort}
-          hovered={hoveredSortKey === "name"}
-          sortUndo={sortUndo}
-          values={columnValues("name")}
-          onApplyMode={applyMode}
-          onClearLevel={clearLevel}
-          onReorderCustom={reorderCustom}
-          onUndoSort={undoSort}
-        />
-        <SortMenu
-          label="Class"
-          sortKey="class"
-          sort={sort}
-          hovered={hoveredSortKey === "class"}
-          sortUndo={sortUndo}
-          values={columnValues("class")}
-          onApplyMode={applyMode}
-          onClearLevel={clearLevel}
-          onReorderCustom={reorderCustom}
-          onUndoSort={undoSort}
-        />
-        <SortMenu
-          label="Archetype"
-          sortKey="archetype"
-          sort={sort}
-          hovered={hoveredSortKey === "archetype"}
-          sortUndo={sortUndo}
-          values={columnValues("archetype")}
-          onApplyMode={applyMode}
-          onClearLevel={clearLevel}
-          onReorderCustom={reorderCustom}
-          onUndoSort={undoSort}
-        />
-        <SortMenu
-          label="Tertiary"
-          sortKey="tertiary"
-          sort={sort}
-          hovered={hoveredSortKey === "tertiary"}
-          sortUndo={sortUndo}
-          values={columnValues("tertiary")}
-          onApplyMode={applyMode}
-          onClearLevel={clearLevel}
-          onReorderCustom={reorderCustom}
-          onUndoSort={undoSort}
-        />
-        <SortMenu
-          label="Tuned"
-          sortKey="tuned"
-          sort={sort}
-          hovered={hoveredSortKey === "tuned"}
-          sortUndo={sortUndo}
-          values={columnValues("tuned")}
-          onApplyMode={applyMode}
-          onClearLevel={clearLevel}
-          onReorderCustom={reorderCustom}
-          onUndoSort={undoSort}
-        />
-        <SortMenu
-          label="Set bonus"
-          sortKey="set"
-          sort={sort}
-          hovered={hoveredSortKey === "set"}
-          sortUndo={sortUndo}
-          values={columnValues("set")}
-          onApplyMode={applyMode}
-          onClearLevel={clearLevel}
-          onReorderCustom={reorderCustom}
-          onUndoSort={undoSort}
-        />
-        {!BUILD_USAGE_PAUSED && (
-          <SortMenu
-            label="Searches"
-            title="Searches: optimizer searches whose shown builds used this piece, out of those it could join"
-            sortKey="builds"
-            sort={sort}
-            hovered={hoveredSortKey === "builds"}
-            sortUndo={sortUndo}
-            onApplyMode={applyMode}
-            onClearLevel={clearLevel}
-            onReorderCustom={reorderCustom}
-            onUndoSort={undoSort}
-          />
-        )}
-        {STAT_DISPLAY_ORDER.map((key) => (
+        {HEADER_COLUMNS.map(({ key, facet, stat, title }, i) => (
           <SortMenu
             key={key}
-            label={STAT_LABELS[key]}
-            icon={statIcons[key]}
-            title={STAT_LABELS[key]}
-            align="right"
-            sortKey={`stat-${key}`}
+            sortKey={key}
+            icon={stat && statIcons[stat]}
+            title={title}
+            facet={facet}
+            filters={filters}
             sort={sort}
-            hovered={hoveredSortKey === `stat-${key}`}
+            hovered={hoveredCol === i}
             sortUndo={sortUndo}
-            onApplyMode={applyMode}
-            onClearLevel={clearLevel}
-            onReorderCustom={reorderCustom}
-            onUndoSort={undoSort}
+            values={columnValues(key)}
+            actions={actions}
           />
         ))}
       </tr>
@@ -349,16 +272,8 @@ export function ArmorTable() {
     [baseRows, usage, inLoadouts],
   );
 
-  const {
-    sort,
-    sortUndo,
-    applyMode,
-    clearLevel,
-    reorderCustom,
-    undoSort,
-    sortRows,
-    columnValues,
-  } = useArmorTableSort(rows);
+  const { sort, sortUndo, actions: sortActions, sortRows, columnValues } =
+    useArmorTableSort(rows);
 
   // Persist filters + sort together (debounced). A change made right before the view is
   // hidden (tab switch) or unmounted would otherwise be dropped with its timer, so the
@@ -613,6 +528,18 @@ export function ArmorTable() {
     [],
   );
 
+  // One filter state for the toolbar and the column headers.
+  const facetSpecs = useFacetSpecs({
+    setOptions,
+    archetypeOptions,
+    pinnedArchetypes,
+    onTogglePinnedArchetype: togglePinnedArchetype,
+  });
+  const filters = useMemo<FacetFilterState>(
+    () => ({ specs: facetSpecs, facets, onFacetChange: setFacet }),
+    [facetSpecs, facets, setFacet],
+  );
+
   const [tableEl, setTableEl] = useState<HTMLTableElement | null>(null);
 
   // Virtualized rows: the scroller is the bounded-height container below.
@@ -636,7 +563,9 @@ export function ArmorTable() {
   const refresh = useCallback(() => void refetch(), [refetch]);
 
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-none normal:rounded-[20px] border border-foreground/12">
+    // @container/armor: the column headers tighten when the table is too narrow for
+    // every header button (the armor-narrow and armor-cramped variants, globals.css).
+    <div className="@container/armor flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-none normal:rounded-[20px] border border-foreground/12">
       {/* Toolbar + column headers share one tinted header band. The toolbar
           sits outside the scroller so it survives horizontal scroll; thead
           stays sticky inside it. */}
@@ -645,13 +574,7 @@ export function ArmorTable() {
             search={search}
             onSearchChange={setSearch}
             searchRef={searchRef}
-            facets={facets}
-            onFacetChange={setFacet}
-            setOptions={setOptions}
-            archetypeOptions={archetypeOptions}
-            statOptions={STAT_FILTER_OPTIONS}
-            pinnedArchetypes={pinnedArchetypes}
-            onTogglePinnedArchetype={togglePinnedArchetype}
+            filters={filters}
             filteredCount={visible.length}
             duplicateGroups={duplicates?.groupCount}
             cleanupGroups={cleanup?.groupCount}
@@ -675,10 +598,8 @@ export function ArmorTable() {
               sortUndo={sortUndo}
               statIcons={statIcons}
               columnValues={columnValues}
-              applyMode={applyMode}
-              clearLevel={clearLevel}
-              reorderCustom={reorderCustom}
-              undoSort={undoSort}
+              actions={sortActions}
+              filters={filters}
             />
             <tbody>
               {paddingTop > 0 && (

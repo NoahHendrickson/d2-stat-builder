@@ -105,6 +105,7 @@ export function pieceMatchesFilters(
 
 // --- sorting ---
 
+/** Sort keys that aren't stats. */
 export type ColumnKey =
   | "name"
   | "class"

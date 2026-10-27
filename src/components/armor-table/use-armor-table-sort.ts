@@ -14,13 +14,35 @@ import {
   applySortAction,
   clearSortLevel,
   compareRows,
+  promoteSortLevel,
   reorderCustomLevel,
+  soloSortLevel,
   sortValue,
   type SortActionResult,
-  type SortMode,
+  type SortPick,
   type SortableRow,
 } from "@/lib/armor-table/sort";
 import { loadTableState } from "@/lib/armor-table/filter-storage";
+
+/** Everything the column menus can do to the chain. */
+export interface SortActions {
+  /**
+   * Sort by `key`, replacing the chain, or with `nest` after the current sorts. A
+   * column already in the chain changes in place.
+   */
+  apply: (key: SortKey, pick: SortPick, options?: { nest?: boolean }) => void;
+  clearLevel: (key: SortKey) => void;
+  soloLevel: (key: SortKey) => void;
+  promoteLevel: (key: SortKey) => void;
+  /** Move a value in a custom order; `values` is the list as shown. */
+  reorderCustom: (
+    key: CustomOrderColumn,
+    values: readonly string[],
+    from: number,
+    to: number,
+  ) => void;
+  undoSort: () => void;
+}
 
 /**
  * Owns armor-table sort chain, undo stack, and distinct custom-order values.
@@ -42,9 +64,9 @@ export function useArmorTableSort(rows: SortableRow[]) {
     setSort(result.sort);
   }, []);
 
-  const applyMode = useCallback(
-    (key: SortKey, mode: SortMode, nest: boolean, order?: string[]) => {
-      applyResult(applySortAction(sort, key, mode, nest, order));
+  const apply = useCallback(
+    (key: SortKey, pick: SortPick, options?: { nest?: boolean }) => {
+      applyResult(applySortAction(sort, key, pick, options?.nest));
     },
     [applyResult, sort],
   );
@@ -56,9 +78,23 @@ export function useArmorTableSort(rows: SortableRow[]) {
     [applyResult, sort],
   );
 
+  const soloLevel = useCallback(
+    (key: SortKey) => {
+      applyResult(soloSortLevel(sort, key));
+    },
+    [applyResult, sort],
+  );
+
+  const promoteLevel = useCallback(
+    (key: SortKey) => {
+      applyResult(promoteSortLevel(sort, key));
+    },
+    [applyResult, sort],
+  );
+
   const reorderCustom = useCallback(
-    (key: CustomOrderColumn, from: number, to: number) => {
-      setSort((prev) => reorderCustomLevel(prev, key, from, to));
+    (key: CustomOrderColumn, values: readonly string[], from: number, to: number) => {
+      setSort((prev) => reorderCustomLevel(prev, key, values, from, to));
       setSortUndo(null);
     },
     [],
@@ -109,14 +145,17 @@ export function useArmorTableSort(rows: SortableRow[]) {
     [orderedColumnValues],
   );
 
-  return {
-    sort,
-    sortUndo,
-    applyMode,
-    clearLevel,
-    reorderCustom,
-    undoSort,
-    sortRows,
-    columnValues,
-  };
+  const actions = useMemo<SortActions>(
+    () => ({
+      apply,
+      clearLevel,
+      soloLevel,
+      promoteLevel,
+      reorderCustom,
+      undoSort,
+    }),
+    [apply, clearLevel, soloLevel, promoteLevel, reorderCustom, undoSort],
+  );
+
+  return { sort, sortUndo, actions, sortRows, columnValues };
 }
