@@ -4,6 +4,7 @@ import { isSettingKey, parseSettingValue } from "@/lib/settings/keys";
 import { getServerSettingsStore } from "@/lib/settings/neon-store";
 import { notConfigured, storageError } from "@/lib/loadouts/api-responses";
 import { rejectCrossSite } from "@/lib/http/same-origin";
+import { expireSettings } from "@/lib/account-read-cache";
 
 /** Settings are small lists; anything bigger is not something this app wrote. */
 const MAX_BODY_LENGTH = 64 * 1024;
@@ -43,5 +44,7 @@ export async function PUT(request: Request, { params }: Ctx) {
     return NextResponse.json(await store.put(user.membershipId, key, value));
   } catch (err) {
     return storageError(err);
+  } finally {
+    expireSettings(user.membershipId);
   }
 }

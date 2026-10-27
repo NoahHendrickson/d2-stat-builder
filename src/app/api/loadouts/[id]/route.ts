@@ -4,6 +4,7 @@ import { getServerLoadoutStore } from "@/lib/loadouts/neon-store";
 import { parseSavedLoadoutData } from "@/lib/loadouts/types";
 import { isLoadoutId, notConfigured, storageError } from "@/lib/loadouts/api-responses";
 import { rejectCrossSite } from "@/lib/http/same-origin";
+import { expireLoadouts } from "@/lib/account-read-cache";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -26,6 +27,8 @@ export async function PUT(request: Request, { params }: Ctx) {
     return NextResponse.json({ loadout });
   } catch (err) {
     return storageError(err);
+  } finally {
+    expireLoadouts(user.membershipId);
   }
 }
 
@@ -46,5 +49,7 @@ export async function DELETE(request: Request, { params }: Ctx) {
     return NextResponse.json({ ok: true });
   } catch (err) {
     return storageError(err);
+  } finally {
+    expireLoadouts(user.membershipId);
   }
 }
