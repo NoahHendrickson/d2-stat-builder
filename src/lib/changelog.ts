@@ -1,11 +1,6 @@
 /**
- * The sidebar's Changelog highlights meaningful product updates, newest first.
- * Follow the Changelog rules in AGENTS.md: include new capabilities, substantial
- * workflow improvements, and significant functional fixes. Routine UI polish
- * (icons, colors, glows, spacing) does not qualify just because users can see it.
- * Not every task or release day needs an entry. Keep each line short and plain:
- * the user benefit and where to find it, without implementation details or
- * comparisons to other apps.
+ * The sidebar's Changelog, newest first. What qualifies for an entry, and how to
+ * word it, is in "Changelog rules" in AGENTS.md.
  */
 export interface ChangelogEntry {
   /** Release day, YYYY-MM-DD. "Seen" tracks it with the line count: a newer top date, or a new line under it, is news. */
@@ -69,8 +64,7 @@ export const CHANGELOG: readonly ChangelogEntry[] = [
     changes: [
       "Legacy raid sets: build with Armor 2.0 raid armor, under Set bonuses.",
       "This changelog.",
-      "Items: in-game style nameplates, and a pinned vault header with your currencies.",
-      "Frosted glass dropdowns.",
+      "Items: a pinned vault header with your currencies.",
       "Weapon search: fixed clicks on weapons while suggestions are open.",
       "Loadout tooltips show what mods, aspects, fragments and artifact perks do.",
     ],
@@ -97,7 +91,6 @@ export const CHANGELOG: readonly ChangelogEntry[] = [
       "Import an in-game loadout as a saved loadout from the + on Loadouts.",
       "The Armor table shows how often the optimizer's searches use each piece, with a Cleanup view.",
       "Weapon stats include the tiered masterwork bonus.",
-      "Weapon search has a new look, styled like the D2 roster.",
       "Set bonuses can hide sets you own fewer than 4 pieces of.",
     ],
   },
@@ -146,7 +139,6 @@ export const CHANGELOG: readonly ChangelogEntry[] = [
   {
     date: "2026-09-19",
     changes: [
-      "A new Destiny 2 look.",
       "Build cards show what finishing the masterworks would cost.",
       "Tags on saved loadouts.",
       "Options to include legacy (Armor 2.0) and Tier 1–4 armor in builds.",
@@ -188,7 +180,6 @@ export const CHANGELOG: readonly ChangelogEntry[] = [
   {
     date: "2026-07-03",
     changes: [
-      "A loading screen with floating exotics while your armor loads.",
       "Long searches keep refining in the background and offer better builds when they find them.",
     ],
   },

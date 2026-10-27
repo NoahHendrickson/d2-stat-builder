@@ -10,13 +10,9 @@ This block is written and re-added by `next dev` — verify at `node_modules/nex
 
 ## Changelog rules
 
-The sidebar changelog in `src/lib/changelog.ts` highlights meaningful product updates. A change being visible to users is not enough to warrant an entry.
+`src/lib/changelog.ts` lists meaningful product updates, not everything users can see. The whole changelog follows these rules, so remove an old line that breaks them rather than copying it.
 
-- Include new features or capabilities, substantial improvements to an existing workflow, and significant fixes to functionality, correctness, reliability, or performance.
-- Skip routine UI polish: icon or arrow changes, colors, glows, spacing, alignment, typography, animations, minor layout adjustments, and wording tweaks. For example, a bigger enhanced-perk arrow and green-to-red popularity glows do not belong in the changelog.
-- A UI change qualifies when it enables a meaningful task or materially improves usability or accessibility. A cosmetic refresh alone does not.
-- Skip refactors, dependency updates, internal tooling, maintenance, and implementation details unless they deliver a qualifying user benefit.
-- Before adding an entry, identify the new capability, substantial improvement, or significant problem resolved. If the only benefit is that something looks different or more polished, omit it. When in doubt, leave it out unless the user explicitly requests an entry.
-- Do not add a changelog entry for every task, commit, or day. Days with no qualifying changes need no entry. Older entries are not precedent for including minor changes.
-- Write one short, plain sentence about the user benefit and where to find it. Combine related changes into one entry per feature rather than listing each implementation adjustment. Describe features on their own terms, without comparisons to other apps.
-- Add qualifying changes under their release date (`YYYY-MM-DD`), with one dated group per day, newest first. Never leave an empty group.
+- **Add a line for** a new capability, a substantial workflow improvement, or a significant fix to correctness, reliability or performance. UI changes count only when they enable a task or materially improve usability or accessibility.
+- **Skip** cosmetic polish (a bigger perk arrow, a new glow colour, spacing, typography, animation, a restyle, wording), refactors, dependencies and internal tooling. When in doubt, leave it out unless the user asks for an entry.
+- **Wording:** one short, plain sentence about the benefit and where to find it. Use one line per feature, not one per adjustment, and don't compare features to other apps.
+- **Placement:** group lines under their release date (`YYYY-MM-DD`), newest first. Not every day needs a group. `changelog.test.ts` rejects empty ones.
