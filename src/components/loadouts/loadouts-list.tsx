@@ -708,10 +708,14 @@ export function LoadoutsList({
               >
                 Import in-game loadout
               </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              {/* Not while an activity set saves: it would race the clears for the same slots. */}
               <DropdownMenuItem
+                variant="destructive"
                 onClick={() => setDialog({ kind: "delete-ingame" })}
-                disabled={provisional}
+                disabled={provisional || setRun !== null}
               >
+                <HugeiconsIcon icon={Delete02Icon} aria-hidden />
                 Delete in-game loadout
               </DropdownMenuItem>
             </DropdownMenuContent>

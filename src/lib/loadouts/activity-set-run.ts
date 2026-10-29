@@ -10,7 +10,13 @@ import type { Manifest } from "@/lib/manifest/load";
 import { defaultIdentifiers, type InGameLoadoutsResponse } from "@/lib/bungie/ingame-loadouts";
 import type { ActivitySet } from "./activity-sets";
 import { applySavedLoadout } from "./apply-client";
-import { fetchInGameLoadouts, fullyApplied, snapshotInGame, waitBeforeSnapshot } from "./ingame-save";
+import {
+  fetchInGameLoadouts,
+  fullyApplied,
+  InGameLoadoutsError,
+  snapshotInGame,
+  waitBetweenLoadoutActions,
+} from "./ingame-save";
 import { resolveLoadout } from "./resolve";
 import type { SavedLoadout } from "./types";
 
@@ -125,6 +131,7 @@ export async function runActivitySet({
       inGame = await fetchInGameLoadouts(set.characterId);
     } catch (err) {
       toast.error(`Couldn't run ${set.name}`, err instanceof Error ? err.message : undefined);
+      if (err instanceof InGameLoadoutsError && err.reauth) void handleSessionExpired(queryClient);
       return;
     }
 
@@ -176,7 +183,7 @@ export async function runActivitySet({
       } else if (!fullyApplied(outcome)) {
         skip(`${saved.loadout.name} didn't fully apply`);
       } else {
-        await waitBeforeSnapshot();
+        await waitBetweenLoadoutActions();
         const snapshot = await snapshotInGame(set.characterId, {
           loadoutIndex: assignment.index,
           ...identifiers,

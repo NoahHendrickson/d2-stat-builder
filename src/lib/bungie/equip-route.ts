@@ -58,19 +58,24 @@ export function parseSpares(v: unknown): SpareItems | null {
  * the move/equip scope (pre-scope sign-in) or the session is dead — clear it and tell
  * the client to re-authenticate; anything else is a 502 with Bungie's message.
  */
-export async function bungieErrorResponse(err: unknown): Promise<NextResponse> {
+export async function bungieErrorResponse(
+  err: unknown,
+  reauthMessage = "Bungie needs new permissions — sign in again to allow equipping",
+): Promise<NextResponse> {
   if (err instanceof BungieHttpError && err.status === 401) {
     await clearSession();
-    return NextResponse.json(
-      {
-        error: "Bungie needs new permissions — sign in again to allow equipping",
-        reauth: true,
-      },
-      { status: 401 },
-    );
+    return NextResponse.json({ error: reauthMessage, reauth: true }, { status: 401 });
   }
   return NextResponse.json(
     { error: err instanceof Error ? err.message : "Bungie request failed" },
     { status: 502 },
   );
+}
+
+/**
+ * No session to act with: never signed in, or getValidAccessToken just cleared it after
+ * a failed refresh. Carries `reauth` so the client forgets its local player data too.
+ */
+export function notSignedIn(): NextResponse {
+  return NextResponse.json({ error: "Not signed in", reauth: true }, { status: 401 });
 }

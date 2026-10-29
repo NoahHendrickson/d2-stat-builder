@@ -107,6 +107,12 @@ export default async function ({ page, app, stub, step, shot, expect, log }) {
     await page.click({ role: "checkbox", name: /^Dungeon Slot 2$/ }, { within: dialog });
     await shot("ingame-delete-dialog", { within: dialog });
     await page.click({ role: "button", name: "Delete loadout" }, { within: dialog });
+    // A second step names what goes; nothing is sent until it's confirmed.
+    await page.waitForText(/Delete 1 in-game loadout from your Hunter\? This can't be undone/i, { within: dialog });
+    expect(!stub.last("DELETE", "/api/bungie/ingame-loadouts"), "no DELETE before confirming");
+    expect(await page.attr({ role: "checkbox", name: /^Crucible Slot 3$/ }, "data-disabled") !== null, "picks are locked while confirming");
+    await shot("ingame-delete-confirm", { within: dialog });
+    await page.click({ role: "button", name: "Delete 1 in-game loadout" }, { within: dialog });
     await app.toast(/Deleted Dungeon/);
     await page.waitFor(dialog, { gone: true });
     const del = stub.last("DELETE", "/api/bungie/ingame-loadouts");

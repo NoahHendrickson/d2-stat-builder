@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import Image from "next/image";
-import { useQuery } from "@tanstack/react-query";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Loading03Icon } from "@hugeicons/core-free-icons";
 import { BUNGIE_IMAGE_BASE } from "@/lib/bungie/constants";
@@ -15,7 +14,8 @@ import {
   type InGameLoadoutSlot,
   type SlotIdentifiers,
 } from "@/lib/bungie/ingame-loadouts";
-import { fetchInGameLoadouts, type InGameSlotChoice } from "@/lib/loadouts/ingame-save";
+import type { InGameSlotChoice } from "@/lib/loadouts/ingame-save";
+import { useInGameLoadouts } from "@/lib/loadouts/use-ingame-loadouts";
 import { slotItemOrder } from "@/lib/loadouts/ingame-import";
 import { ArmorThumb, type ArmorThumbSize } from "@/components/armor-thumb";
 import { TooltipLabel } from "@/components/ui/tooltip";
@@ -208,15 +208,7 @@ export function InGameSaveDialog({
   manifest: Manifest;
   onConfirm: (choice: InGameSlotChoice) => void;
 }) {
-  // Always refetched: slots change in-game, and the pick decides what gets overwritten.
-  const { data, error, isFetching, refetch } = useQuery({
-    queryKey: ["ingame-loadouts", character.id],
-    queryFn: () => fetchInGameLoadouts(character.id),
-    enabled: open,
-    staleTime: 0,
-    gcTime: 0,
-    retry: false,
-  });
+  const { data, error, isFetching, refetch } = useInGameLoadouts(character.id, open);
   const [slotIndex, setSlotIndex] = useState<number>();
   // The user's own picks; anything not picked follows the selected slot's defaults.
   const [picks, setPicks] = useState<Partial<SlotIdentifiers>>({});

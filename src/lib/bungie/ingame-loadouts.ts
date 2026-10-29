@@ -146,8 +146,8 @@ export function parseSlotRequest(body: unknown): SlotRequest | null {
 /** Validate a client-supplied snapshot request; null if malformed. */
 export function parseSnapshotRequest(body: unknown): SnapshotRequest | null {
   const slot = parseSlotRequest(body);
-  const b = body as Partial<SnapshotRequest>;
   if (!slot) return null;
+  const b = body as Partial<SnapshotRequest>;
   if (!isUint32(b.nameHash) || !isUint32(b.iconHash) || !isUint32(b.colorHash)) return null;
   return { ...slot, nameHash: b.nameHash, iconHash: b.iconHash, colorHash: b.colorHash };
 }

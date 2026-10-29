@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Cancel01Icon, Loading03Icon } from "@hugeicons/core-free-icons";
 import type { ArmoryCharacter } from "@/lib/armory/fetch";
@@ -10,7 +9,7 @@ import { characterForClass, mostRecentCharacter } from "@/lib/armory/character-f
 import { CLASS_NAMES } from "@/lib/armory/stats";
 import type { Manifest } from "@/lib/manifest/load";
 import type { InGameLoadoutIdentifiers, InGameLoadoutSlot } from "@/lib/bungie/ingame-loadouts";
-import { fetchInGameLoadouts } from "@/lib/loadouts/ingame-save";
+import { useInGameLoadouts } from "@/lib/loadouts/use-ingame-loadouts";
 import {
   MAX_ACTIVITY_SET_NAME_LENGTH,
   loadoutClassType,
@@ -226,13 +225,7 @@ export function ActivitySetEditor({
       ? characters.find((c) => c.id === initial.characterId)
       : undefined) ?? characterForClass(characters, classType);
 
-  const { data, error, isFetching, refetch } = useQuery({
-    queryKey: ["ingame-loadouts", character?.id],
-    queryFn: () => fetchInGameLoadouts(character!.id),
-    enabled: open && !!character,
-    staleTime: 60_000,
-    retry: false,
-  });
+  const { data, error, isFetching, refetch } = useInGameLoadouts(character?.id, open);
 
   const options = useMemo(
     () =>
