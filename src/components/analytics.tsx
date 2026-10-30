@@ -7,8 +7,11 @@ import { Analytics as VercelAnalytics, type BeforeSendEvent } from "@vercel/anal
  * `?import=` for older links. Page views still count; the payload just never reaches
  * Vercel's analytics.
  */
-function dropSharePayload(event: BeforeSendEvent): BeforeSendEvent {
+function beforeSend(event: BeforeSendEvent): BeforeSendEvent | null {
   const url = new URL(event.url);
+  // The component showcase framed on the portfolio: those are portfolio visitors, not
+  // D2 Conflux ones, so they stay out of the visit counts.
+  if (url.pathname === "/components/embed") return null;
   if (!url.searchParams.has("import") && !url.hash) return event;
   url.searchParams.delete("import");
   url.hash = "";
@@ -16,5 +19,5 @@ function dropSharePayload(event: BeforeSendEvent): BeforeSendEvent {
 }
 
 export function Analytics() {
-  return <VercelAnalytics beforeSend={dropSharePayload} />;
+  return <VercelAnalytics beforeSend={beforeSend} />;
 }

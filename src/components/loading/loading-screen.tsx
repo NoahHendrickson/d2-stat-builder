@@ -60,9 +60,15 @@ function useEasedProgress(target: number, done: boolean): number {
 
 /**
  * Views that don't wait for the player's gear: the weapon catalog loads on its
- * own, and Settings only reads this device's preferences.
+ * own, Settings only reads this device's preferences, and /components is a
+ * standalone showcase.
  */
-const UNGATED_PATHS: ReadonlySet<string> = new Set(["/weapons", "/settings"]);
+const UNGATED_PATHS: ReadonlySet<string> = new Set([
+  "/weapons",
+  "/settings",
+  "/components",
+  "/components/embed",
+]);
 
 /** The overlay's fade-out once everything is ready; it unmounts when the fade ends. */
 const FADE_MS = 200;

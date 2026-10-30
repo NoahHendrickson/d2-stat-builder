@@ -1044,3 +1044,20 @@ input[type="number"] {
   border-color: transparent;
   border-image-source: none;
 }
+
+/* /components/embed, framed at full height on the portfolio (embed-bridge.ts): the
+   frame is taller than the screen, so fixed overlays follow the slice of it that's on
+   screen (--embed-top / --embed-height, posted by the portfolio) instead of the whole
+   frame. Percentages on a fixed box are of the frame, hence `100% - …` for bottoms. */
+[data-embed] [data-slot="dialog-content"] {
+  top: calc(var(--embed-top, 0px) + var(--embed-height, 100vh) / 2);
+}
+[data-embed] [data-slot="toast-viewport"] {
+  bottom: calc(100% - var(--embed-top, 0px) - var(--embed-height, 100vh) + 1rem);
+}
+[data-embed] [data-slot="drawer-popup"]:is([data-swipe-direction="left"], [data-swipe-direction="right"], [data-swipe-direction="up"]) {
+  top: var(--embed-top, 0px);
+}
+[data-embed] [data-slot="drawer-popup"]:is([data-swipe-direction="left"], [data-swipe-direction="right"], [data-swipe-direction="down"]) {
+  bottom: calc(100% - var(--embed-top, 0px) - var(--embed-height, 100vh));
+}

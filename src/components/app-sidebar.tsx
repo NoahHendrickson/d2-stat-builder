@@ -63,6 +63,7 @@ export const NAV_ITEMS: readonly {
 /** Title for the header strip: the nav label of the current route. */
 export function pageTitle(pathname: string): string {
   if (pathname === "/settings") return "Settings";
+  if (pathname === "/components") return "Components";
   return NAV_ITEMS.find((n) => n.href === pathname)?.label ?? "";
 }
 

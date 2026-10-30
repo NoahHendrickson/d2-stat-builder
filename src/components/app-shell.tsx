@@ -36,6 +36,10 @@ const SIDEBAR_EXPANDED_PX = 240;
 /** Icon rail: 36px rows plus 10px gutters. */
 const SIDEBAR_RAIL_PX = 56;
 const SIDEBAR_COLLAPSED_KEY = "stat-builder:sidebar-collapsed";
+/** Views anyone can open signed out: the component showcase needs no account. */
+const PUBLIC_PATHS: ReadonlySet<string> = new Set(["/components"]);
+/** The showcase framed on another site: just the page, no sidebar or header. */
+const EMBED_PATH = "/components/embed";
 
 let sidebarCollapsedValue: boolean | null = null;
 const sidebarCollapsedListeners = new Set<() => void>();
@@ -86,6 +90,9 @@ export function useDesktopLayout(): boolean {
  * failed. While the check is still out (and in the prerender), the page renders but stays
  * invisible and the sidebar pane stays empty, so a signed-out visit never flashes either;
  * the loader covers that moment on the gear views.
+ * PUBLIC_PATHS (the /components showcase) skip the gate: signed out, they render
+ * without the sidebar pane. EMBED_PATH (the same showcase, framed on the portfolio)
+ * renders bare.
  * The sidebar collapses to an icon rail on desktop; on narrow viewports it becomes
  * a left drawer behind a top bar. The armor / game-data / account cluster lives at
  * the sidebar's foot, so on desktop the page starts at the top of the main column.
@@ -117,6 +124,8 @@ export function AppShell({ children }: { children: ReactNode }) {
   }, [desktop, router]);
   const pathname = usePathname();
   const title = pageTitle(pathname);
+  const publicView = PUBLIC_PATHS.has(pathname);
+  const signedOut = checked && !authed;
   const [drawerOpen, setDrawerOpen] = useState(false);
   // Stable handlers: AppSidebar is memoized.
   const toggleSidebar = useCallback(
@@ -152,7 +161,11 @@ export function AppShell({ children }: { children: ReactNode }) {
     };
   }, [desktop, authed, sidebarWidth]);
 
-  if (checked && !authed) {
+  if (pathname === EMBED_PATH) {
+    return <>{children}</>;
+  }
+
+  if (signedOut && !publicView) {
     return (
       <main className="bg-shell-main flex h-full w-full items-center justify-center overflow-y-auto px-6 py-6">
         <div className="w-full max-w-md">
@@ -169,7 +182,8 @@ export function AppShell({ children }: { children: ReactNode }) {
           // bg-shell-* (glass, no backdrop-filter): this pane and the main one cover the
           // viewport over the pre-blurred backdrop, so a backdrop blur adds
           // nothing visible — and Firefox re-blurs it on every repaint.
-          "bg-shell-sidebar relative hidden h-full min-w-0 shrink-0 overflow-hidden border-r border-foreground/8 lg:block",
+          "bg-shell-sidebar relative hidden h-full min-w-0 shrink-0 overflow-hidden border-r border-foreground/8",
+          !signedOut && "lg:block",
           slideEnabled &&
             "transition-[width] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none",
         )}
@@ -204,7 +218,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         {desktop && <h1 className="sr-only">{title}</h1>}
         {/* No fade on a view change: a kept view is ready the moment it's shown, and a
             fade from nothing held it back ~170ms on every tab swap. */}
-        <div className={cn("min-h-0 flex-1 overflow-y-auto", !authed && "invisible")}>
+        <div className={cn("min-h-0 flex-1 overflow-y-auto", !authed && !publicView && "invisible")}>
           {desktop && authed && (
             <div className="px-6 pt-6 empty:hidden">
               <ArmoryDiagnosticsGate />

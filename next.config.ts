@@ -13,7 +13,7 @@ const isDev = process.env.NODE_ENV === "development";
  * the bundle loads. Tightening script-src to a nonce would silently block it — the
  * app still works, just slower — so move that script to a nonced one first.
  */
-const csp = [
+const cspDirectives = [
   "default-src 'self'",
   // Dev also loads Figma's html-to-design capture script (Send to Figma).
   `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval' https://mcp.figma.com" : ""}`,
@@ -31,8 +31,25 @@ const csp = [
   "form-action 'self'",
   // The What's new video.
   "frame-src https://www.youtube-nocookie.com",
-  "frame-ancestors 'none'",
+];
+const csp = [...cspDirectives, "frame-ancestors 'none'"].join("; ");
+
+/**
+ * /components/embed is the component showcase, framed on the portfolio's D2 Conflux
+ * page (noahjh.com/work/stat-builder). It holds no account data or actions, so the
+ * portfolio may frame it; every other route still refuses to be framed. Dev also
+ * allows a local portfolio server.
+ */
+const EMBED_PATH = "/components/embed";
+const embedCsp = [
+  ...cspDirectives,
+  `frame-ancestors https://noahjh.com https://*.noahjh.com${isDev ? " http://localhost:*" : ""}`,
 ].join("; ");
+const securityHeaders = [
+  { key: "X-Content-Type-Options", value: "nosniff" },
+  { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+  { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
+];
 
 const nextConfig: NextConfig = {
   // Cache Components makes the router keep recently visited routes mounted (React
@@ -61,15 +78,19 @@ const nextConfig: NextConfig = {
   },
   async headers() {
     return [
+      // Everything but the embed: X-Frame-Options can only deny or allow same-origin,
+      // so the embed has to be kept out of this rule rather than overridden after it.
       {
-        source: "/:path*",
+        source: "/:path((?!components/embed$).*)",
         headers: [
           { key: "Content-Security-Policy", value: csp },
-          { key: "X-Content-Type-Options", value: "nosniff" },
-          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
           { key: "X-Frame-Options", value: "DENY" },
-          { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
+          ...securityHeaders,
         ],
+      },
+      {
+        source: EMBED_PATH,
+        headers: [{ key: "Content-Security-Policy", value: embedCsp }, ...securityHeaders],
       },
       // API answers depend on the session cookies: keep them out of shared caches.
       // The favicon proxy is public and cacheable; the apply stream sets its own.
