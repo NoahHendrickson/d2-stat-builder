@@ -49,10 +49,12 @@ function EmblemTab({
   value,
   character,
   active,
+  disabled = false,
 }: {
   value: string;
   character: ArmoryCharacter;
   active: boolean;
+  disabled?: boolean;
 }) {
   const [imgFailed, setImgFailed] = useState(false);
   const name = CLASS_NAMES[character.classType];
@@ -65,7 +67,12 @@ function EmblemTab({
     <TabsPrimitive.Tab
       value={value}
       aria-label={`${name}, Power ${character.light}`}
-      className={cn(tabBase, active ? tabSelected : tabInactive)}
+      disabled={disabled}
+      className={cn(
+        tabBase,
+        active ? tabSelected : tabInactive,
+        disabled && !active && "cursor-not-allowed opacity-40 hover:border-foreground/15 hover:opacity-40 hover:saturate-[0.85]",
+      )}
     >
       <span className="relative block h-14 overflow-hidden">
         {showImage ? (
@@ -146,11 +153,14 @@ export const CharacterEmblemTabs = memo(function CharacterEmblemTabs({
   characters,
   value,
   onChange,
+  disabled = false,
 }: {
   characters: ArmoryCharacter[];
   /** Selected character id. */
   value: string;
   onChange: (characterId: string) => void;
+  /** Lock the choice (while something runs against the selected character). */
+  disabled?: boolean;
 }) {
   const tabs = characters.filter((c) => CLASS_NAMES[c.classType] !== undefined);
   return (
@@ -166,6 +176,7 @@ export const CharacterEmblemTabs = memo(function CharacterEmblemTabs({
             value={character.id}
             character={character}
             active={character.id === value}
+            disabled={disabled}
           />
         ))}
       </TabsPrimitive.List>

@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import {
+  clearLoadout,
   getDestinyManifest,
   getProfile,
   snapshotLoadout,
@@ -10,13 +11,15 @@ import {
 } from "bungie-api-ts/destiny2";
 import { BUNGIE_IMAGE_BASE } from "@/lib/bungie/constants";
 import { createBungieHttp } from "@/lib/bungie/http";
-import { bungieErrorResponse } from "@/lib/bungie/equip-route";
+import { bungieErrorResponse, notSignedIn } from "@/lib/bungie/equip-route";
 import {
   isBungieId,
+  parseSlotRequest,
   parseSnapshotRequest,
   toSlots,
   type InGameLoadoutIdentifiers,
   type InGameLoadoutsResponse,
+  type SlotRequest,
 } from "@/lib/bungie/ingame-loadouts";
 import { getValidAccessToken, readUser } from "@/lib/bungie/session";
 import { rejectCrossSite } from "@/lib/http/same-origin";
@@ -24,6 +27,9 @@ import { rejectCrossSite } from "@/lib/http/same-origin";
 // 206 CharacterLoadouts, plus the item lists that turn a slot's instance ids into item
 // hashes for the preview: 102 Vault · 201 CharacterInventories · 205 CharacterEquipment.
 const COMPONENTS = [206, 102, 201, 205] as DestinyComponentType[];
+
+/** What a Bungie 401 tells the user here: it's not about equipping. */
+const REAUTH_MESSAGE = "Bungie needs you to sign in again";
 
 /**
  * The name / icon / colour lists are three tiny manifest tables (~9 KB together) that
@@ -79,7 +85,7 @@ export async function GET(request: Request) {
   const user = await readUser();
   const token = await getValidAccessToken();
   if (!user?.destinyMembershipId || user.destinyMembershipType == null || !token) {
-    return NextResponse.json({ error: "Not signed in" }, { status: 401 });
+    return notSignedIn();
   }
 
   const characterId = new URL(request.url).searchParams.get("characterId");
@@ -128,7 +134,43 @@ export async function GET(request: Request) {
       identifiers,
     } satisfies InGameLoadoutsResponse);
   } catch (err) {
-    return bungieErrorResponse(err);
+    return bungieErrorResponse(err, REAUTH_MESSAGE);
+  }
+}
+
+/**
+ * One write to a character's in-game slot: same-origin and signed in, a body `parse`
+ * accepts, then `act` with the player's own membership type.
+ */
+async function slotAction<T extends SlotRequest>(
+  request: Request,
+  parse: (body: unknown) => T | null,
+  act: (
+    http: ReturnType<typeof createBungieHttp>,
+    body: T & Pick<Parameters<typeof clearLoadout>[1], "membershipType">,
+  ) => Promise<unknown>,
+): Promise<NextResponse> {
+  const refused = rejectCrossSite(request);
+  if (refused) return refused;
+  const user = await readUser();
+  const token = await getValidAccessToken();
+  if (!user?.destinyMembershipId || user.destinyMembershipType == null || !token) {
+    return notSignedIn();
+  }
+
+  let body: T | null = null;
+  try {
+    body = parse(await request.json());
+  } catch {
+    body = null;
+  }
+  if (!body) return NextResponse.json({ error: "Invalid request" }, { status: 400 });
+
+  try {
+    await act(createBungieHttp(token), { ...body, membershipType: user.destinyMembershipType });
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    return bungieErrorResponse(err, REAUTH_MESSAGE);
   }
 }
 
@@ -137,30 +179,14 @@ export async function GET(request: Request) {
  * slots, replacing whatever the slot held. Bungie offers no way to write a slot's
  * contents directly, so the caller equips the loadout first (see ingame-save.ts).
  */
-export async function POST(request: Request) {
-  const refused = rejectCrossSite(request);
-  if (refused) return refused;
-  const user = await readUser();
-  const token = await getValidAccessToken();
-  if (!user?.destinyMembershipId || user.destinyMembershipType == null || !token) {
-    return NextResponse.json({ error: "Not signed in" }, { status: 401 });
-  }
+export function POST(request: Request) {
+  return slotAction(request, parseSnapshotRequest, snapshotLoadout);
+}
 
-  let body: ReturnType<typeof parseSnapshotRequest> = null;
-  try {
-    body = parseSnapshotRequest(await request.json());
-  } catch {
-    body = null;
-  }
-  if (!body) return NextResponse.json({ error: "Invalid request" }, { status: 400 });
-
-  try {
-    await snapshotLoadout(createBungieHttp(token), {
-      ...body,
-      membershipType: user.destinyMembershipType,
-    });
-    return NextResponse.json({ ok: true });
-  } catch (err) {
-    return bungieErrorResponse(err);
-  }
+/**
+ * Empty one in-game loadout slot: Bungie drops its gear and resets its name, icon and
+ * colour. The game has no undo. The client clears several slots one request at a time.
+ */
+export function DELETE(request: Request) {
+  return slotAction(request, parseSlotRequest, clearLoadout);
 }

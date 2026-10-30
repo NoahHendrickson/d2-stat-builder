@@ -32,6 +32,7 @@ export function createStub({ profile, seed = {} }) {
     usage: new Map(Object.entries(seed.usage ?? {}).map(([key, pieces]) => [key, new Map(pieces)])),
     ingameSlots: seed.ingameSlots ?? Array.from({ length: 10 }, (_, index) => ({ index, nameHash: 101, iconHash: 201, colorHash: 301, items: [], empty: true })),
   };
+  const characterIds = new Set(Object.keys(JSON.parse(profile).characters?.data ?? {}));
   /** Every /api request: { t, method, path, body, status }. */
   const requests = [];
   /** Requests no handler recognised. */
@@ -123,6 +124,16 @@ export function createStub({ profile, seed = {} }) {
     ["POST", /^\/api\/bungie\/apply-loadout\/cancel$/, () => json(200, { ok: true })],
     ["GET", /^\/api\/bungie\/ingame-loadouts$/, () => json(200, { slots: store.ingameSlots, identifiers: IDENTIFIERS })],
     ["POST", /^\/api\/bungie\/ingame-loadouts$/, (b) => (Number.isInteger(b?.loadoutIndex) ? json(200, { ok: true }) : bad())],
+    ["DELETE", /^\/api\/bungie\/ingame-loadouts$/, (b) => {
+      // Like the route's parseSlotRequest, but the fixture's character ids aren't numeric
+      // ("c1"), so the id must be one of its characters instead.
+      if (!characterIds.has(b?.characterId) || !Number.isInteger(b?.loadoutIndex) || b.loadoutIndex < 0 || b.loadoutIndex > 31) return bad();
+      const slot = store.ingameSlots[b.loadoutIndex];
+      if (!slot) return bad();
+      // Bungie empties the slot and resets its labels.
+      store.ingameSlots[b.loadoutIndex] = { index: slot.index, nameHash: 101, iconHash: 201, colorHash: 301, items: [], empty: true };
+      return json(200, { ok: true });
+    }],
 
     ["POST", /^\/api\/bug-reports$/, () => json(201, { id: crypto.randomUUID() })],
   ];

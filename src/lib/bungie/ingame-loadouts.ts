@@ -49,10 +49,13 @@ export interface SlotIdentifiers {
   colorHash: number;
 }
 
-export interface SnapshotRequest extends SlotIdentifiers {
+/** Which slot on which character an action targets. */
+export interface SlotRequest {
   characterId: string;
   loadoutIndex: number;
 }
+
+export interface SnapshotRequest extends SlotIdentifiers, SlotRequest {}
 
 /** Generous: the game has 10 slots per character today (DestinyLoadoutConstantsDefinition). */
 const MAX_LOADOUT_INDEX = 31;
@@ -127,9 +130,9 @@ export function isBungieId(v: unknown): v is string {
   return typeof v === "string" && /^\d{1,20}$/.test(v);
 }
 
-/** Validate a client-supplied snapshot request; null if malformed. */
-export function parseSnapshotRequest(body: unknown): SnapshotRequest | null {
-  const b = body as Partial<SnapshotRequest> | null;
+/** Validate a client-supplied slot (the clear request); null if malformed. */
+export function parseSlotRequest(body: unknown): SlotRequest | null {
+  const b = body as Partial<SlotRequest> | null;
   if (!b || typeof b !== "object" || !isBungieId(b.characterId)) return null;
   if (
     !Number.isInteger(b.loadoutIndex) ||
@@ -137,12 +140,14 @@ export function parseSnapshotRequest(body: unknown): SnapshotRequest | null {
     (b.loadoutIndex as number) > MAX_LOADOUT_INDEX
   )
     return null;
+  return { characterId: b.characterId, loadoutIndex: b.loadoutIndex as number };
+}
+
+/** Validate a client-supplied snapshot request; null if malformed. */
+export function parseSnapshotRequest(body: unknown): SnapshotRequest | null {
+  const slot = parseSlotRequest(body);
+  if (!slot) return null;
+  const b = body as Partial<SnapshotRequest>;
   if (!isUint32(b.nameHash) || !isUint32(b.iconHash) || !isUint32(b.colorHash)) return null;
-  return {
-    characterId: b.characterId,
-    loadoutIndex: b.loadoutIndex as number,
-    nameHash: b.nameHash,
-    iconHash: b.iconHash,
-    colorHash: b.colorHash,
-  };
+  return { ...slot, nameHash: b.nameHash, iconHash: b.iconHash, colorHash: b.colorHash };
 }

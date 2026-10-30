@@ -16,6 +16,7 @@ import {
   ArrowUpDownIcon,
   CheckListIcon,
   Delete02Icon,
+  FileImportIcon,
   MoreVerticalIcon,
   Search01Icon,
 } from "@hugeicons/core-free-icons";
@@ -93,6 +94,7 @@ import {
   useActivitySetDialogs,
 } from "@/components/loadouts/activity-set-strip";
 import { ConfirmDialog } from "@/components/loadouts/confirm-dialog";
+import { InGameDeleteDialog } from "@/components/loadouts/ingame-delete-dialog";
 import { InGameImportDialog } from "@/components/loadouts/ingame-import-dialog";
 import { type ModsSection } from "@/lib/loadouts/mod-placement";
 import { commitLoadout, modsSectionForPieces } from "@/lib/loadouts/commit";
@@ -124,7 +126,8 @@ type DialogState =
   | { kind: "delete"; loadout: SavedLoadout }
   | { kind: "delete-many"; ids: string[] }
   | { kind: "delete-all" }
-  | { kind: "import-ingame" };
+  | { kind: "import-ingame" }
+  | { kind: "delete-ingame" };
 
 const SUBCLASS_OPTIONS = SUBCLASSES.map((sc) => ({ value: sc, label: sc }));
 
@@ -688,27 +691,6 @@ export function LoadoutsList({
             </DropdownMenuContent>
           </DropdownMenu>
           <DropdownMenu>
-            <TooltipLabel label="New">
-              <DropdownMenuTrigger
-                render={<Button variant="default" size="icon" />}
-                aria-label="New"
-              >
-                <HugeiconsIcon icon={Add01Icon} aria-hidden />
-              </DropdownMenuTrigger>
-            </TooltipLabel>
-            <DropdownMenuContent align="end" className="w-48">
-              <DropdownMenuItem onClick={setDialogs.openNew}>
-                New activity set
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => setDialog({ kind: "import-ingame" })}
-                disabled={provisional}
-              >
-                Import in-game loadout
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-          <DropdownMenu>
             <TooltipLabel label="More">
               <DropdownMenuTrigger
                 render={<Button variant="default" size="icon" />}
@@ -717,13 +699,33 @@ export function LoadoutsList({
                 <HugeiconsIcon icon={MoreVerticalIcon} strokeWidth={2} aria-hidden />
               </DropdownMenuTrigger>
             </TooltipLabel>
-            <DropdownMenuContent align="end" className="w-52">
+            <DropdownMenuContent align="end" className="w-max min-w-52">
+              <DropdownMenuItem onClick={setDialogs.openNew}>
+                <HugeiconsIcon icon={Add01Icon} aria-hidden />
+                New activity set
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => setDialog({ kind: "import-ingame" })}
+                disabled={provisional}
+              >
+                <HugeiconsIcon icon={FileImportIcon} aria-hidden />
+                Import in-game loadout
+              </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={() => setSelecting(true)}
                 disabled={selecting || all.length === 0}
               >
                 <HugeiconsIcon icon={CheckListIcon} aria-hidden />
                 Select loadouts
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              {/* Not while an activity set saves: it would race the clears for the same slots. */}
+              <DropdownMenuItem
+                onClick={() => setDialog({ kind: "delete-ingame" })}
+                disabled={provisional || setRun !== null}
+              >
+                <HugeiconsIcon icon={Delete02Icon} aria-hidden />
+                Delete in-game loadout
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
@@ -932,6 +934,14 @@ export function LoadoutsList({
           weaponMap={weaponMap}
           manifest={manifest}
           onImport={(datas) => void importInGame(datas)}
+        />
+      )}
+      {dialog.kind === "delete-ingame" && (
+        <InGameDeleteDialog
+          open
+          onOpenChange={(open) => !open && setDialog({ kind: "none" })}
+          characters={armory.characters}
+          manifest={manifest}
         />
       )}
       <LoadoutEditorDrawer

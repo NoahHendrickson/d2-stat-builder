@@ -2,6 +2,7 @@ import { describe, expect, test } from "vitest";
 import type { DestinyLoadoutComponent } from "bungie-api-ts/destiny2";
 import {
   defaultIdentifiers,
+  parseSlotRequest,
   parseSnapshotRequest,
   toSlots,
   UNSET_PLUG_HASH,
@@ -103,5 +104,21 @@ describe("parseSnapshotRequest", () => {
     expect(parseSnapshotRequest({ ...body, loadoutIndex: 400 })).toBeNull();
     expect(parseSnapshotRequest({ ...body, nameHash: undefined })).toBeNull();
     expect(parseSnapshotRequest({ ...body, colorHash: 4294967296 })).toBeNull();
+  });
+});
+
+describe("parseSlotRequest", () => {
+  const body = { characterId: "2305843009", loadoutIndex: 0 };
+
+  test("accepts a well-formed request and drops unknown fields", () => {
+    expect(parseSlotRequest({ ...body, nameHash: 1 })).toEqual(body);
+  });
+
+  test("rejects bad ids and slots", () => {
+    expect(parseSlotRequest(null)).toBeNull();
+    expect(parseSlotRequest({ ...body, characterId: "abc" })).toBeNull();
+    expect(parseSlotRequest({ ...body, loadoutIndex: -1 })).toBeNull();
+    expect(parseSlotRequest({ ...body, loadoutIndex: "2" })).toBeNull();
+    expect(parseSlotRequest({ ...body, loadoutIndex: 400 })).toBeNull();
   });
 });
