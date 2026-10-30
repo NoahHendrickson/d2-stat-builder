@@ -16,6 +16,7 @@ import {
   ArrowUpDownIcon,
   CheckListIcon,
   Delete02Icon,
+  FileImportIcon,
   MoreVerticalIcon,
   Search01Icon,
 } from "@hugeicons/core-free-icons";
@@ -690,37 +691,6 @@ export function LoadoutsList({
             </DropdownMenuContent>
           </DropdownMenu>
           <DropdownMenu>
-            <TooltipLabel label="New">
-              <DropdownMenuTrigger
-                render={<Button variant="default" size="icon" />}
-                aria-label="New"
-              >
-                <HugeiconsIcon icon={Add01Icon} aria-hidden />
-              </DropdownMenuTrigger>
-            </TooltipLabel>
-            <DropdownMenuContent align="end" className="w-48">
-              <DropdownMenuItem onClick={setDialogs.openNew}>
-                New activity set
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onClick={() => setDialog({ kind: "import-ingame" })}
-                disabled={provisional}
-              >
-                Import in-game loadout
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              {/* Not while an activity set saves: it would race the clears for the same slots. */}
-              <DropdownMenuItem
-                variant="destructive"
-                onClick={() => setDialog({ kind: "delete-ingame" })}
-                disabled={provisional || setRun !== null}
-              >
-                <HugeiconsIcon icon={Delete02Icon} aria-hidden />
-                Delete in-game loadout
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-          <DropdownMenu>
             <TooltipLabel label="More">
               <DropdownMenuTrigger
                 render={<Button variant="default" size="icon" />}
@@ -729,13 +699,33 @@ export function LoadoutsList({
                 <HugeiconsIcon icon={MoreVerticalIcon} strokeWidth={2} aria-hidden />
               </DropdownMenuTrigger>
             </TooltipLabel>
-            <DropdownMenuContent align="end" className="w-52">
+            <DropdownMenuContent align="end" className="w-max min-w-52">
+              <DropdownMenuItem onClick={setDialogs.openNew}>
+                <HugeiconsIcon icon={Add01Icon} aria-hidden />
+                New activity set
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={() => setDialog({ kind: "import-ingame" })}
+                disabled={provisional}
+              >
+                <HugeiconsIcon icon={FileImportIcon} aria-hidden />
+                Import in-game loadout
+              </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={() => setSelecting(true)}
                 disabled={selecting || all.length === 0}
               >
                 <HugeiconsIcon icon={CheckListIcon} aria-hidden />
                 Select loadouts
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              {/* Not while an activity set saves: it would race the clears for the same slots. */}
+              <DropdownMenuItem
+                onClick={() => setDialog({ kind: "delete-ingame" })}
+                disabled={provisional || setRun !== null}
+              >
+                <HugeiconsIcon icon={Delete02Icon} aria-hidden />
+                Delete in-game loadout
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem

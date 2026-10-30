@@ -97,7 +97,7 @@ export default async function ({ page, app, stub, step, shot, expect, log }) {
   });
 
   await step("lo-ingame-delete: Delete in-game loadout empties the picked slot", async () => {
-    await page.click({ role: "button", name: "New" });
+    await page.click({ role: "button", name: "More loadout actions" });
     await page.click({ role: "menuitem", name: "Delete in-game loadout" });
     const dialog = { role: "dialog", name: "Delete in-game loadouts" };
     await page.waitFor(dialog);
@@ -119,7 +119,7 @@ export default async function ({ page, app, stub, step, shot, expect, log }) {
     expect(del?.status === 200 && del.body?.loadoutIndex === 1, `DELETE /api/bungie/ingame-loadouts targeted index 1 (${JSON.stringify(del?.body)})`);
     expect(stub.store.ingameSlots[1].empty && !stub.store.ingameSlots[2].empty, "slot 2 is empty, slot 3 untouched");
     // Reopening shows only the slot that's left.
-    await page.click({ role: "button", name: "New" });
+    await page.click({ role: "button", name: "More loadout actions" });
     await page.click({ role: "menuitem", name: "Delete in-game loadout" });
     await page.waitFor({ role: "checkbox", name: /^Crucible Slot 3$/ });
     expect(!(await page.exists({ role: "checkbox", name: / Slot 2$/ })), "the deleted slot is gone on reopen");
