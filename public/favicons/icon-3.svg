@@ -1,7 +1,6 @@
 <svg shape-rendering="crispEdges" width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
 <g id="Frame 428" filter="url(#filter0_i_202_1596)">
 <rect width="24" height="24" fill="#C7A40C"/>
-<rect x="0.5" y="0.5" width="23" height="23" stroke="url(#paint0_linear_202_1596)"/>
 <g id="Group 305">
 <rect id="Rectangle 22689" x="12" y="22" width="1" height="1" fill="#FF6660"/>
 <rect id="Rectangle 22690" x="12" y="23" width="1" height="1" fill="#FF6660"/>
@@ -389,6 +388,7 @@
 <rect id="Rectangle 23074" width="1" height="1" transform="matrix(1 0 0 -1 19 19)" fill="#A29D9E"/>
 <rect id="Rectangle 23066" x="12" y="21" width="1" height="1" fill="#FF6660"/>
 </g>
+<rect x="0.5" y="0.5" width="23" height="23" stroke="url(#paint0_linear_202_1596)"/>
 </g>
 <defs>
 <filter id="filter0_i_202_1596" x="0" y="0" width="24" height="24" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
