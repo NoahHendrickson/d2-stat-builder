@@ -86,12 +86,17 @@ const HEADER_PLACEMENTS: Record<
 
 /** Height the class sigil draws at beside a group of armor. */
 const CLASS_MARKER_PX = 32;
+/**
+ * The sigils differ in width, so every class group (any-class too) keeps the widest's
+ * column, its sigil centred in it: their tiles all start at the same x.
+ */
+const CLASS_MARKER_WIDTH = Math.max(...[0, 1, 2].map((c) => classGlyphWidth(c, CLASS_MARKER_PX)));
 
 /** Width of a group's marker (see GroupMarker), or 0 when its grouping draws none. */
 function markerWidth(groupBy: GroupKey, { items }: ItemGroup, tiles: TileMetrics): number {
   const item = items[0];
   if (!item) return 0;
-  if (groupBy === "class") return classGlyphWidth(item.classType, CLASS_MARKER_PX);
+  if (groupBy === "class") return CLASS_MARKER_WIDTH;
   // Only weapons have an ammo type; a type without a silhouette keeps its column.
   return groupBy === "type" && item.ammoType !== undefined ? tiles.tile : 0;
 }
@@ -425,7 +430,7 @@ const VaultLineRow = memo(function VaultLineRow({ line, tiles }: { line: VaultTi
           {cell.markerWidth > 0 && (
             // Centred on the tile's icon, above its footer bar.
             <span
-              className="flex shrink-0 items-center"
+              className="flex shrink-0 items-center justify-center"
               style={{ width: cell.markerWidth, height: tiles.tile, marginRight: MARKER_GAP_PX }}
             >
               {cell.marker && <GroupMarker groupBy={line.groupBy} item={cell.marker} />}
@@ -563,8 +568,8 @@ function VaultCurrencies({ inventory: { currencies } }: { inventory: ManagerInve
 
 /**
  * What a vault group is, as a picture in the column beside its tiles: the weapon type's
- * silhouette or the class sigil. Other groupings, armor types, and any-class items have
- * no column (see markerWidth).
+ * silhouette or the class sigil. Other groupings and armor types have no column, and
+ * any-class items an empty one (see markerWidth).
  */
 function GroupMarker({ groupBy, item }: { groupBy: GroupKey; item: InventoryItem }) {
   if (groupBy === "class") {
