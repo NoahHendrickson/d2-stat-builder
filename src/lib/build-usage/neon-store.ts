@@ -6,6 +6,7 @@
 // the oldest queries beyond the cap go on every record, and their pieces cascade with
 // them. The schema is created lazily, like loadouts.
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
+import { fromDatabaseUrl, lazySchema } from "../db/neon";
 import type { BuildUsageSummary, PieceUsageCounts } from "./buckets";
 import type { PieceUsage } from "./summarize";
 
@@ -14,40 +15,31 @@ export const MAX_QUERIES_PER_ACCOUNT = 500;
 
 export class NeonBuildUsageStore {
   private readonly sql: NeonQueryFunction<false, false>;
-  private schemaReady: Promise<void> | null = null;
 
   constructor(databaseUrl: string) {
     this.sql = neon(databaseUrl);
   }
 
-  private ensureSchema(): Promise<void> {
-    if (!this.schemaReady) {
-      this.schemaReady = (async () => {
-        // The first, unreleased layout (one wide row per query × piece); it only ever
-        // held test data.
-        await this.sql`DROP TABLE IF EXISTS armor_build_usage`;
-        await this.sql`
-          CREATE TABLE IF NOT EXISTS armor_usage_queries (
-            id bigserial PRIMARY KEY,
-            membership_id text NOT NULL,
-            query_key text NOT NULL,
-            seen_at timestamptz NOT NULL DEFAULT now(),
-            UNIQUE (membership_id, query_key)
-          )`;
-        await this.sql`
-          CREATE TABLE IF NOT EXISTS armor_usage_pieces (
-            query_id bigint NOT NULL REFERENCES armor_usage_queries (id) ON DELETE CASCADE,
-            instance_id bigint NOT NULL,
-            used boolean NOT NULL,
-            PRIMARY KEY (query_id, instance_id)
-          )`;
-      })().catch((err) => {
-        this.schemaReady = null; // let the next call retry
-        throw err;
-      });
-    }
-    return this.schemaReady;
-  }
+  private readonly ensureSchema = lazySchema(async () => {
+    // The first, unreleased layout (one wide row per query × piece); it only ever
+    // held test data.
+    await this.sql`DROP TABLE IF EXISTS armor_build_usage`;
+    await this.sql`
+      CREATE TABLE IF NOT EXISTS armor_usage_queries (
+        id bigserial PRIMARY KEY,
+        membership_id text NOT NULL,
+        query_key text NOT NULL,
+        seen_at timestamptz NOT NULL DEFAULT now(),
+        UNIQUE (membership_id, query_key)
+      )`;
+    await this.sql`
+      CREATE TABLE IF NOT EXISTS armor_usage_pieces (
+        query_id bigint NOT NULL REFERENCES armor_usage_queries (id) ON DELETE CASCADE,
+        instance_id bigint NOT NULL,
+        used boolean NOT NULL,
+        PRIMARY KEY (query_id, instance_id)
+      )`;
+  });
 
   async summary(membershipId: string): Promise<BuildUsageSummary> {
     await this.ensureSchema();
@@ -107,12 +99,5 @@ export class NeonBuildUsageStore {
   }
 }
 
-let singleton: NeonBuildUsageStore | null | undefined;
-
 /** The server's usage store, or null when `DATABASE_URL` isn't set. */
-export function getServerBuildUsageStore(): NeonBuildUsageStore | null {
-  if (singleton !== undefined) return singleton;
-  const url = process.env.DATABASE_URL;
-  singleton = url ? new NeonBuildUsageStore(url) : null;
-  return singleton;
-}
+export const getServerBuildUsageStore = fromDatabaseUrl((url) => new NeonBuildUsageStore(url));

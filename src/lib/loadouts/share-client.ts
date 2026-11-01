@@ -2,20 +2,41 @@
 import { buildShareUrl, isShareCode, shortShareUrl } from "./share";
 import { parseSavedLoadoutData, type SavedLoadoutData } from "./types";
 
+/** Why a short link didn't open: it isn't stored, its loadout doesn't parse, or the server or network failed. */
+export type ShareFetchFailure = "missing" | "unreadable" | "unavailable";
+
+const FAILURE_MESSAGES: Record<ShareFetchFailure, string> = {
+  missing: "That share link doesn't exist",
+  unreadable: "That share link can't be read",
+  unavailable: "Couldn't open the share link",
+};
+
 export class ShareFetchError extends Error {
-  constructor(public readonly status: number) {
-    super(status === 404 ? "That share link doesn't exist" : "Couldn't open the share link");
+  readonly retryable: boolean;
+  constructor(
+    readonly kind: ShareFetchFailure,
+    { retryable = false }: { retryable?: boolean } = {},
+  ) {
+    super(FAILURE_MESSAGES[kind]);
     this.name = "ShareFetchError";
+    this.retryable = retryable;
   }
 }
 
-/** The loadout behind a short code. Throws ShareFetchError. */
+/** The loadout behind a short code. Every failure is a ShareFetchError. */
 export async function fetchShare(code: string): Promise<SavedLoadoutData> {
-  const res = await fetch(`/api/loadout-shares/${encodeURIComponent(code)}`);
-  if (!res.ok) throw new ShareFetchError(res.status);
+  let res: Response;
+  try {
+    res = await fetch(`/api/loadout-shares/${encodeURIComponent(code)}`);
+  } catch {
+    throw new ShareFetchError("unavailable", { retryable: true }); // offline, or blocked
+  }
+  if (res.status === 404 || res.status === 400) throw new ShareFetchError("missing");
+  // 503 means storage isn't configured, which retrying won't fix.
+  if (!res.ok) throw new ShareFetchError("unavailable", { retryable: res.status >= 500 && res.status !== 503 });
   const body = (await res.json().catch(() => null)) as { loadout?: unknown } | null;
   const data = parseSavedLoadoutData(body?.loadout);
-  if (!data) throw new ShareFetchError(422);
+  if (!data) throw new ShareFetchError("unreadable");
   return data;
 }
 

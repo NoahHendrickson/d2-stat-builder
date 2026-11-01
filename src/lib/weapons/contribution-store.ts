@@ -9,6 +9,7 @@
 // saved since its last one. The schema is created lazily, like loadouts.
 import { gzipSync } from "node:zlib";
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
+import { fromDatabaseUrl, lazySchema } from "../db/neon";
 import type { DestinyProfileResponse } from "bungie-api-ts/destiny2";
 import { contributionFromProfile, encodeContribution } from "./popularity-contribution";
 
@@ -21,7 +22,6 @@ const REMEMBERED = 50_000;
 
 export class NeonContributionStore {
   private readonly sql: NeonQueryFunction<false, false>;
-  private schemaReady: Promise<void> | null = null;
   /** When this instance last saved (or is saving) each membership, so polls skip the work and the write. */
   private readonly savedAt = new Map<string, number>();
   /** When this instance last deleted rows past KEEP_DAYS. */
@@ -31,27 +31,19 @@ export class NeonContributionStore {
     this.sql = neon(databaseUrl);
   }
 
-  private ensureSchema(): Promise<void> {
-    if (!this.schemaReady) {
-      this.schemaReady = (async () => {
-        await this.sql`
-          CREATE TABLE IF NOT EXISTS popularity_contributions (
-            membership_id bigint PRIMARY KEY,
-            membership_type smallint NOT NULL,
-            last_played timestamptz,
-            saved_at timestamptz NOT NULL DEFAULT now(),
-            weapons bytea NOT NULL
-          )`;
-        await this.sql`
-          CREATE INDEX IF NOT EXISTS popularity_contributions_saved_at
-          ON popularity_contributions (saved_at)`;
-      })().catch((err) => {
-        this.schemaReady = null; // let the next call retry
-        throw err;
-      });
-    }
-    return this.schemaReady;
-  }
+  private readonly ensureSchema = lazySchema(async () => {
+    await this.sql`
+      CREATE TABLE IF NOT EXISTS popularity_contributions (
+        membership_id bigint PRIMARY KEY,
+        membership_type smallint NOT NULL,
+        last_played timestamptz,
+        saved_at timestamptz NOT NULL DEFAULT now(),
+        weapons bytea NOT NULL
+      )`;
+    await this.sql`
+      CREATE INDEX IF NOT EXISTS popularity_contributions_saved_at
+      ON popularity_contributions (saved_at)`;
+  });
 
   /**
    * The save of the player's weapons from a profile just loaded, to run once
@@ -95,12 +87,5 @@ export class NeonContributionStore {
   }
 }
 
-let singleton: NeonContributionStore | null | undefined;
-
 /** The server's contribution store, or null when `DATABASE_URL` isn't set. */
-export function getServerContributionStore(): NeonContributionStore | null {
-  if (singleton !== undefined) return singleton;
-  const url = process.env.DATABASE_URL;
-  singleton = url ? new NeonContributionStore(url) : null;
-  return singleton;
-}
+export const getServerContributionStore = fromDatabaseUrl((url) => new NeonContributionStore(url));

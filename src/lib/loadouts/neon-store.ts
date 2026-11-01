@@ -7,6 +7,7 @@
 // schema ever changes shape.
 import { cacheLife, cacheTag } from "next/cache";
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
+import { fromDatabaseUrl, lazySchema } from "../db/neon";
 import { ACCOUNT_READ_LIFE, expiring, fromCache, loggedRead } from "../read-cache";
 import { LoadoutLimitError, MAX_LOADOUTS_PER_ACCOUNT, type LoadoutStore } from "./store";
 import { parseSavedLoadoutData, type SavedLoadout, type SavedLoadoutData } from "./types";
@@ -28,33 +29,24 @@ function rowToLoadout(row: Row): SavedLoadout | null {
 
 export class NeonLoadoutStore implements LoadoutStore {
   private readonly sql: NeonQueryFunction<false, false>;
-  private schemaReady: Promise<void> | null = null;
 
   constructor(databaseUrl: string) {
     this.sql = neon(databaseUrl);
   }
 
-  private ensureSchema(): Promise<void> {
-    if (!this.schemaReady) {
-      this.schemaReady = (async () => {
-        await this.sql`
-          CREATE TABLE IF NOT EXISTS loadouts (
-            id uuid PRIMARY KEY,
-            membership_id text NOT NULL,
-            data jsonb NOT NULL,
-            created_at timestamptz NOT NULL DEFAULT now(),
-            updated_at timestamptz NOT NULL DEFAULT now()
-          )`;
-        await this.sql`
-          CREATE INDEX IF NOT EXISTS loadouts_owner_idx
-            ON loadouts (membership_id, updated_at DESC)`;
-      })().catch((err) => {
-        this.schemaReady = null; // let the next call retry
-        throw err;
-      });
-    }
-    return this.schemaReady;
-  }
+  private readonly ensureSchema = lazySchema(async () => {
+    await this.sql`
+      CREATE TABLE IF NOT EXISTS loadouts (
+        id uuid PRIMARY KEY,
+        membership_id text NOT NULL,
+        data jsonb NOT NULL,
+        created_at timestamptz NOT NULL DEFAULT now(),
+        updated_at timestamptz NOT NULL DEFAULT now()
+      )`;
+    await this.sql`
+      CREATE INDEX IF NOT EXISTS loadouts_owner_idx
+        ON loadouts (membership_id, updated_at DESC)`;
+  });
 
   async list(membershipId: string): Promise<SavedLoadout[]> {
     await this.ensureSchema();
@@ -176,14 +168,8 @@ class CachedLoadoutStore implements LoadoutStore {
   }
 }
 
-let singleton: LoadoutStore | null | undefined;
-
 /**
  * The server's loadout store, or null when `DATABASE_URL` isn't set (routes answer 503
  * so the UI can explain that storage isn't configured instead of failing opaquely).
  */
-export function getServerLoadoutStore(): LoadoutStore | null {
-  if (singleton !== undefined) return singleton;
-  singleton = process.env.DATABASE_URL ? new CachedLoadoutStore() : null;
-  return singleton;
-}
+export const getServerLoadoutStore: () => LoadoutStore | null = fromDatabaseUrl(() => new CachedLoadoutStore());

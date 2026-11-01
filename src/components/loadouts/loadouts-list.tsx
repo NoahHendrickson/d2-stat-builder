@@ -4,13 +4,11 @@ import { TooltipLabel } from "@/components/ui/tooltip";
 import {
   useCallback,
   useDeferredValue,
-  useEffect,
   useMemo,
   useState,
-  useSyncExternalStore,
 } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
   Add01Icon,
@@ -35,7 +33,7 @@ import {
   loadSelections,
   replaceSelections,
 } from "@/lib/builder/selection-storage";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   LOADOUTS_QUERY_KEY,
   useLoadoutMutations,
@@ -50,14 +48,8 @@ import {
   sortSavedLoadouts,
   type LoadoutListSortKey,
 } from "@/lib/loadouts/list";
-import {
-  parseShareParam,
-  SHARE_CODE_PARAM,
-  SHARE_PARAM,
-  shareCodeFromHash,
-  shareParamFromHash,
-} from "@/lib/loadouts/share";
-import { copyShareLink, fetchShare, type ShareFetchError } from "@/lib/loadouts/share-client";
+import { copyShareLink } from "@/lib/loadouts/share-client";
+import { useSharedImport } from "@/lib/loadouts/use-shared-import";
 import { countMajorStatMods, isMajorStatMod } from "@/lib/dim/mod-hashes";
 import { selectionsForLoadout } from "@/lib/loadouts/load-in-builder";
 import { loadoutSubclass, withLoadoutSubclass } from "@/lib/loadouts/subclass";
@@ -111,19 +103,6 @@ import {
   type LoadoutDetailsValues,
 } from "@/components/loadouts/loadout-editor-drawer";
 
-// Survives the list remounting (leaving the page and coming back) so a dismissed
-// share-link import stays dismissed.
-let dismissedImportParam: string | null = null;
-
-// Share links carry the loadout in the URL fragment, which useSearchParams doesn't see.
-function subscribeHash(onChange: () => void) {
-  window.addEventListener("hashchange", onChange);
-  return () => window.removeEventListener("hashchange", onChange);
-}
-const readHashImport = () => shareParamFromHash(window.location.hash);
-const readHashCode = () => shareCodeFromHash(window.location.hash);
-const noHashImport = () => null;
-
 type DialogState =
   | { kind: "none" }
   | { kind: "edit"; loadout: SavedLoadout; mods?: ModsSection }
@@ -161,8 +140,6 @@ export function LoadoutsList({
   refreshArmory: () => Promise<RefreshResult>;
 }) {
   const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const loadouts = useLoadouts();
   const { create, update, remove, removeMany, setTag } = useLoadoutMutations();
@@ -207,46 +184,11 @@ export function LoadoutsList({
     setPicked(new Set());
   };
 
-  // A share link lands here with #s=<code> (older ones carry the loadout itself in
-  // #import=<json> or ?import=); offer to save a copy.
-  const hashCode = useSyncExternalStore(subscribeHash, readHashCode, noHashImport);
-  const hashImport = useSyncExternalStore(subscribeHash, readHashImport, noHashImport);
-  const shared = useQuery<SavedLoadoutData, ShareFetchError>({
-    queryKey: ["loadout-share", hashCode],
-    enabled: hashCode !== null,
-    queryFn: () => fetchShare(hashCode!),
-    staleTime: Infinity,
-    retry: (count, err) => err.status >= 500 && err.status !== 503 && count < 2,
-  });
-  const importParam = hashCode
-    ? `${SHARE_CODE_PARAM}=${hashCode}`
-    : (hashImport ?? searchParams.get(SHARE_PARAM));
-  const inlineImport = useMemo(
-    () => (hashCode ? null : parseShareParam(importParam)),
-    [hashCode, importParam],
-  );
-  const importData = hashCode ? (shared.data ?? null) : inlineImport;
-  // A short link that doesn't resolve: say so once and drop it from the URL.
-  useEffect(() => {
-    if (!shared.error || dismissedImportParam === importParam) return;
-    dismissedImportParam = importParam;
-    toast.error(shared.error.message);
-    router.replace(pathname);
-  }, [shared.error, importParam, router, pathname]);
-  const [importDismissed, setImportDismissed] = useState<string | null>(
-    () => dismissedImportParam,
-  );
-  const importOpen =
-    importData !== null &&
-    importDismissed !== importParam &&
-    dialog.kind === "none" &&
-    !setDialogs.open;
-
-  const clearImportParam = () => {
-    dismissedImportParam = importParam;
-    setImportDismissed(importParam);
-    router.replace(pathname);
-  };
+  // A share link lands here (#s=<code>, or an older #import=<json> / ?import=<json>);
+  // offer to save a copy.
+  const sharedImport = useSharedImport();
+  const importData = sharedImport.data;
+  const importOpen = importData !== null && dialog.kind === "none" && !setDialogs.open;
 
   const pieceMap = useMemo(
     () => new Map(armory.pieces.map((p) => [p.instanceId, p])),
@@ -499,7 +441,7 @@ export function LoadoutsList({
     const pending = toast.loading("Importing loadout");
     create.mutate(withLoadoutSubclass(data, subclass, manifest), {
       onSuccess: () => {
-        clearImportParam();
+        sharedImport.dismiss();
         pending.success("Loadout imported");
       },
       onError: mutationError(pending),
@@ -972,8 +914,8 @@ export function LoadoutsList({
       )}
       <LoadoutEditorDrawer
         open={importOpen}
-        onOpenChange={(open) => !open && clearImportParam()}
-        formKey={importParam ?? undefined}
+        onOpenChange={(open) => !open && sharedImport.dismiss()}
+        formKey={sharedImport.key ?? undefined}
         title="Import shared loadout"
         description="Save a copy of this loadout to your account. Items you don't own will show as missing."
         submitLabel="Import"

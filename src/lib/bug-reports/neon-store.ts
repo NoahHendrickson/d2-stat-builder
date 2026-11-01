@@ -5,6 +5,7 @@
 // behind a lock every insert takes, so parallel requests can't all read the same count
 // and slip past. The schema is created lazily, like loadouts.
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
+import { fromDatabaseUrl, lazySchema } from "../db/neon";
 import type { BugReportContext } from "./bug-report";
 
 /** Reports one account can make in an hour. */
@@ -32,42 +33,33 @@ export interface NewBugReport {
 
 export class NeonBugReportStore {
   private readonly sql: NeonQueryFunction<false, false>;
-  private schemaReady: Promise<void> | null = null;
 
   constructor(databaseUrl: string) {
     this.sql = neon(databaseUrl);
   }
 
-  private ensureSchema(): Promise<void> {
-    if (!this.schemaReady) {
-      this.schemaReady = (async () => {
-        await this.sql`
-          CREATE TABLE IF NOT EXISTS bug_reports (
-            id bigserial PRIMARY KEY,
-            created_at timestamptz NOT NULL DEFAULT now(),
-            title text NOT NULL,
-            description text NOT NULL,
-            path text NOT NULL,
-            viewport text NOT NULL,
-            theme text NOT NULL,
-            user_agent text NOT NULL,
-            host text NOT NULL,
-            build text NOT NULL,
-            membership_id text NOT NULL,
-            display_name text
-          )`;
-        await this.sql`
-          CREATE INDEX IF NOT EXISTS bug_reports_account_created
-          ON bug_reports (membership_id, created_at)`;
-        await this.sql`
-          CREATE INDEX IF NOT EXISTS bug_reports_created ON bug_reports (created_at)`;
-      })().catch((err) => {
-        this.schemaReady = null; // let the next call retry
-        throw err;
-      });
-    }
-    return this.schemaReady;
-  }
+  private readonly ensureSchema = lazySchema(async () => {
+    await this.sql`
+      CREATE TABLE IF NOT EXISTS bug_reports (
+        id bigserial PRIMARY KEY,
+        created_at timestamptz NOT NULL DEFAULT now(),
+        title text NOT NULL,
+        description text NOT NULL,
+        path text NOT NULL,
+        viewport text NOT NULL,
+        theme text NOT NULL,
+        user_agent text NOT NULL,
+        host text NOT NULL,
+        build text NOT NULL,
+        membership_id text NOT NULL,
+        display_name text
+      )`;
+    await this.sql`
+      CREATE INDEX IF NOT EXISTS bug_reports_account_created
+      ON bug_reports (membership_id, created_at)`;
+    await this.sql`
+      CREATE INDEX IF NOT EXISTS bug_reports_created ON bug_reports (created_at)`;
+  });
 
   /** Save a report. Its id, or null when the account or the day is over its cap. */
   async add(r: NewBugReport): Promise<string | null> {
@@ -102,12 +94,5 @@ export class NeonBugReportStore {
   }
 }
 
-let singleton: NeonBugReportStore | null | undefined;
-
 /** The server's bug report store, or null when `DATABASE_URL` isn't set. */
-export function getServerBugReportStore(): NeonBugReportStore | null {
-  if (singleton !== undefined) return singleton;
-  const url = process.env.DATABASE_URL;
-  singleton = url ? new NeonBugReportStore(url) : null;
-  return singleton;
-}
+export const getServerBugReportStore = fromDatabaseUrl((url) => new NeonBugReportStore(url));

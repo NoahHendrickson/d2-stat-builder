@@ -44,22 +44,28 @@ export function buildShareUrl(origin: string, saved: SavedLoadoutData): string {
   return url.toString();
 }
 
-/** The raw `import` value in a URL fragment (`#import=…`), or null. */
-export function shareParamFromHash(hash: string): string | null {
-  return new URLSearchParams(hash.replace(/^#/, "")).get(SHARE_PARAM);
-}
+/** A share link found in a URL. `key` tells one link from another (to dismiss it once). */
+export type ShareSource =
+  | { kind: "code"; key: string; code: string }
+  | { kind: "inline"; key: string; data: SavedLoadoutData };
 
-/** A well-formed short code in a URL fragment (`#s=…`), or null. */
-export function shareCodeFromHash(hash: string): string | null {
-  const code = new URLSearchParams(hash.replace(/^#/, "")).get(SHARE_CODE_PARAM);
-  return isShareCode(code) ? code : null;
-}
-
-/** The loadout carried by a share link's `import` param, or null if absent/invalid. */
-export function parseShareParam(value: string | null): SavedLoadoutData | null {
-  if (!value) return null;
+/**
+ * The share link in a URL, or null when there is none or it doesn't parse. A short
+ * `#s=<code>` wins, then the self-contained `#import=<json>`, then the oldest
+ * `?import=<json>`.
+ */
+export function shareSourceFrom(
+  hash: string,
+  search: Pick<URLSearchParams, "get">,
+): ShareSource | null {
+  const fragment = new URLSearchParams(hash.replace(/^#/, ""));
+  const code = fragment.get(SHARE_CODE_PARAM);
+  if (isShareCode(code)) return { kind: "code", key: `${SHARE_CODE_PARAM}=${code}`, code };
+  const json = fragment.get(SHARE_PARAM) ?? search.get(SHARE_PARAM);
+  if (!json) return null;
   try {
-    return parseSavedLoadoutData(JSON.parse(value));
+    const data = parseSavedLoadoutData(JSON.parse(json));
+    return data && { kind: "inline", key: `${SHARE_PARAM}=${json}`, data };
   } catch {
     return null;
   }
