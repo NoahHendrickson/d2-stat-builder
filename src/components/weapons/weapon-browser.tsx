@@ -49,6 +49,7 @@ import {
   withoutFilter,
 } from "@/lib/weapons/filter-suggestions";
 import { resolveFrame } from "@/lib/weapons/pick-slots";
+import { parseWeaponQuery } from "@/lib/weapons/query-language";
 import { SORTS, readSearchState } from "@/lib/weapons/search-state";
 import type { WeaponSummary } from "@/lib/weapons/types";
 import { weaponTypeIcon } from "@/lib/weapons/weapon-type-icon-paths";
@@ -126,6 +127,10 @@ export function WeaponBrowser() {
   const results = useMemo(
     () => data?.search(deferred.query, deferred.filters, deferred.sort) ?? [],
     [data, deferred],
+  );
+  const unknownFilters = useMemo(
+    () => parseWeaponQuery(deferred.query).unknown,
+    [deferred.query],
   );
   // A weapon always stays open: the last one picked (even after a search
   // filters it out), else the top result.
@@ -268,10 +273,25 @@ export function WeaponBrowser() {
           >
             {!query.isPending && results.length === 0 && (
               <div className="py-12 text-center">
-                <p>No weapons match this search.</p>
-                <p className="mt-2 text-sm text-muted-foreground">
-                  Try removing a filter or searching for a different perk.
-                </p>
+                {unknownFilters.length > 0 ? (
+                  <>
+                    <p>
+                      <code>{unknownFilters[0]}</code> isn&apos;t a search
+                      filter.
+                    </p>
+                    <p className="mt-2 text-sm text-muted-foreground">
+                      Try is:arc, is:heavy, is:handcannon, not:exotic, or
+                      perk:&quot;kill clip&quot;.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p>No weapons match this search.</p>
+                    <p className="mt-2 text-sm text-muted-foreground">
+                      Try removing a filter or searching for a different perk.
+                    </p>
+                  </>
+                )}
               </div>
             )}
             <div

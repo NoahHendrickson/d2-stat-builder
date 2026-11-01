@@ -15,6 +15,8 @@ export const CHANGELOG: readonly ChangelogEntry[] = [
     date: "2026-11-01",
     changes: [
       "Loadouts: applying a big loadout no longer stops partway and leaves the last few mods unslotted.",
+      "Weapon search: is: and not: filters like is:arc, is:heavy and not:exotic now match exactly.",
+      "Weapon search: a word like arc or smg typed alone lists those weapons first, then name matches.",
     ],
   },
   {

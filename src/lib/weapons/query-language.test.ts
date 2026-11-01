@@ -7,20 +7,21 @@ import { filterWeapons, type WeaponFilters } from "./search";
 
 describe("parseWeaponQuery", () => {
   test("plain text passes through with no filters", () => {
-    expect(parseWeaponQuery("fatebringer")).toEqual({ filters: {}, text: "fatebringer" });
+    expect(parseWeaponQuery("fatebringer")).toEqual({ filters: {}, text: "fatebringer", unknown: [] });
   });
 
   test("facet keywords map onto OR-within arrays", () => {
     const { filters, text } = parseWeaponQuery('element:solar type:"hand cannon" ammo:special');
     expect(filters.element).toEqual(["solar"]);
     expect(filters.ammo).toEqual(["special"]);
-    expect(filters.type).toEqual(["hand cannon"]);
+    expect(filters.type).toEqual(["Hand Cannon"]);
     expect(text).toBe("");
   });
 
   test("type alias expansion (hc → hand cannon)", () => {
-    const { filters } = parseWeaponQuery("type:hc");
-    expect(filters.type).toEqual(["hand cannon"]);
+    expect(parseWeaponQuery("type:hc").filters.type).toEqual(["Hand Cannon"]);
+    expect(parseWeaponQuery("type:handcannon").filters.type).toEqual(["Hand Cannon"]);
+    expect(parseWeaponQuery("type:bow").filters.type).toEqual(["Combat Bow"]);
   });
 
   test("quoted multi-word values stay intact", () => {
@@ -39,7 +40,22 @@ describe("parseWeaponQuery", () => {
     expect(parseWeaponQuery("is:adept").filters.adept).toBe(true);
     expect(parseWeaponQuery("not:adept").filters.adept).toBe(false);
     expect(parseWeaponQuery("is:craftable").filters.craftable).toEqual(["Yes"]);
-    expect(parseWeaponQuery("is:exotic").filters.rarity).toEqual(["exotic"]);
+    expect(parseWeaponQuery("is:exotic").filters.rarity).toEqual(["Exotic"]);
+  });
+
+  test("is: words select elements, ammo, slots, champions, and weapon types", () => {
+    expect(parseWeaponQuery("is:arc").filters).toEqual({ element: ["Arc"] });
+    expect(parseWeaponQuery("is:arc").text).toBe("");
+    expect(parseWeaponQuery("is:heavy").filters).toEqual({ ammo: ["Heavy"] });
+    expect(parseWeaponQuery("is:kineticslot").filters).toEqual({ slot: ["Kinetic"] });
+    expect(parseWeaponQuery("is:antibarrier").filters).toEqual({ champion: ["Barrier"] });
+    expect(parseWeaponQuery("is:lfr").filters).toEqual({ type: ["Linear Fusion Rifle"] });
+  });
+
+  test("not: words exclude", () => {
+    expect(parseWeaponQuery("not:arc not:exotic").filters).toEqual({
+      exclude: { element: ["Arc"], rarity: ["Exotic"] },
+    });
   });
 
   test("craftable:yes/no normalizes", () => {
@@ -59,10 +75,17 @@ describe("parseWeaponQuery", () => {
     expect(filters.element).toEqual(["solar", "arc"]);
   });
 
-  test("unknown keys fall through to free text", () => {
-    const { filters, text } = parseWeaponQuery("foo:bar baz");
-    expect(filters).toEqual({});
-    expect(text).toBe("foo:bar baz");
+  test("unknown filters are reported, never searched as text", () => {
+    expect(parseWeaponQuery("foo:bar is:arcc not:heavygrenadelauncher baz")).toEqual({
+      filters: {},
+      text: "baz",
+      unknown: ["foo:bar", "is:arcc", "not:heavygrenadelauncher"],
+    });
+  });
+
+  test("a bare known key is ignored while typing; an unknown one stays text", () => {
+    expect(parseWeaponQuery("is: perk:")).toEqual({ filters: {}, text: "", unknown: [] });
+    expect(parseWeaponQuery("Property: Undecidable").text).toBe("Property: Undecidable");
   });
 
   test("parsed element filter drives filterWeapons against the sample catalog", () => {
@@ -96,6 +119,7 @@ describe("planWeaponTextSearch", () => {
     expect(planWeaponTextSearch("fatebringer")).toEqual({
       filters: {},
       searchText: "fatebringer",
+      unknown: [],
     });
   });
 
@@ -112,8 +136,10 @@ describe("planWeaponTextSearch", () => {
     expect(plan.filters.element).toEqual(["arc"]);
   });
 
-  test("sub-threshold text with no keywords falls back to the raw input", () => {
-    expect(planWeaponTextSearch("a").searchText).toBe("a");
+  test("filter tokens never reach the search text", () => {
+    expect(planWeaponTextSearch("is:arc").searchText).toBe("");
+    expect(planWeaponTextSearch("is:arcc").searchText).toBe("");
+    expect(planWeaponTextSearch("is:arcc").unknown).toEqual(["is:arcc"]);
   });
 });
 

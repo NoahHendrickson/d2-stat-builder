@@ -1,6 +1,10 @@
 import { normalizeWeaponIndex } from "./intern-weapons";
 import { expandWeaponQueryAliases } from "./aliases";
-import { mergeWeaponFilters, planWeaponTextSearch } from "./query-language";
+import {
+  bareWordFilters,
+  mergeWeaponFilters,
+  planWeaponTextSearch,
+} from "./query-language";
 import { buildWeaponNameIndex } from "./weapon-name-index";
 import { canonicalActivitySource, sourceLabels } from "./weapon-provenance";
 import { createWeaponSearcher } from "./weapon-searcher";
@@ -14,6 +18,7 @@ import {
   collectFacets,
   filterWeapons,
   rankWeaponResults,
+  sortWeapons,
   weaponsMatchingTextQuery,
   type WeaponFilters,
   type WeaponSort,
@@ -67,7 +72,11 @@ export function createWeaponCatalog(raw: WeaponIndex) {
 
   function search(query: string, filters: WeaponFilters, sort: WeaponSort) {
     const plan = planWeaponTextSearch(query);
+    // An unknown filter (`is:arcc`) means nothing, so it matches nothing.
+    if (plan.unknown.length > 0) return [];
     const text = expandWeaponQueryAliases(plan.searchText).toLowerCase();
+    // A word like "arc" or "smg" typed alone: its weapons, then the text matches.
+    const keyword = bareWordFilters(text);
     let matches = textCache.get(text);
     if (!matches) {
       // Never cap candidates before applying facets: rare matching rolls must survive.
@@ -78,6 +87,11 @@ export function createWeaponCatalog(raw: WeaponIndex) {
         weapons.length,
         names,
       );
+      if (keyword) {
+        const hits = filterWeapons(weapons, keyword, index.perks);
+        const seen = new Set(hits.map((w) => w.hash));
+        matches = [...hits, ...matches.filter((w) => !seen.has(w.hash))];
+      }
       if (textCache.size >= 16)
         textCache.delete(textCache.keys().next().value!);
       textCache.set(text, matches);
@@ -92,7 +106,18 @@ export function createWeaponCatalog(raw: WeaponIndex) {
       const primary = representative.get(weapon.hash) ?? weapon;
       unique.set(primary.hash, primary);
     }
-    return rankWeaponResults([...unique.values()], text, sort, names);
+    const ranked = rankWeaponResults([...unique.values()], text, sort, names);
+    if (!keyword) return ranked;
+    const kept = new Set(
+      filterWeapons(ranked, keyword, index.perks).map((w) => w.hash),
+    );
+    return [
+      ...sortWeapons(
+        ranked.filter((w) => kept.has(w.hash)),
+        sort,
+      ),
+      ...ranked.filter((w) => !kept.has(w.hash)),
+    ];
   }
 
   /** Version label for a result row whose name has more than one current perk pool. */

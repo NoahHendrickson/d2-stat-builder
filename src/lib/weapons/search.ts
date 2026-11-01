@@ -36,7 +36,12 @@ export function sortWeapons(weapons: WeaponSummary[], order: WeaponSort): Weapon
   return sorted;
 }
 
+/** Facets a `not:` word can rule out. */
+export type ExcludableFacet = "element" | "type" | "ammo" | "rarity" | "slot" | "champion";
+
 export interface WeaponFilters {
+  /** Values that drop a weapon (`not:exotic`); a weapon matching any is out. */
+  exclude?: Partial<Record<ExcludableFacet, string[]>>;
   /** OR within each facet; AND across facets. */
   element?: string[];
   type?: string[];
@@ -249,8 +254,21 @@ export function filterWeapons(
     else if (v === "no") craftableNo = true;
   }
   const needsOwned = requiredPerks.length > 0 || customPerkGroups.length > 0;
+  const excluded = filters.exclude;
+  const elementOut = loweredSet(excluded?.element);
+  const typeOut = loweredSet(excluded?.type);
+  const ammoOut = loweredSet(excluded?.ammo);
+  const rarityOut = loweredSet(excluded?.rarity);
+  const slotOut = loweredSet(excluded?.slot);
+  const championOut = loweredSet(excluded?.champion);
   return weapons.filter((w) => {
     if (!isCatalogWeapon(w)) return false;
+    if (excluded) {
+      if (elementOut.has(lower(w.element)) || typeOut.has(lower(w.type))) return false;
+      if (ammoOut.has(lower(w.ammo)) || rarityOut.has(lower(w.rarity))) return false;
+      if (slotOut.has(lower(w.slot))) return false;
+      if (w.champions?.some((c) => championOut.has(lower(c)))) return false;
+    }
     if (!facetMatches(w.name, nameWanted)) return false;
     if (!facetMatches(w.element, elementWanted)) return false;
     if (!facetMatches(w.type, typeWanted)) return false;
