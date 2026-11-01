@@ -30,6 +30,13 @@ const ARTIFACT_PLUGS = 14;
  * Pro plan's Fluid limit, and the time is spent waiting on Bungie, so it costs little.
  */
 export const maxDuration = 300;
+/**
+ * No plug insert starts later than this into the request. One insert can still take
+ * ~16 s (three ~2 s attempts with two 5 s throttle waits), so this leaves room for it to
+ * finish and for `done` to report the rest as not attempted, instead of the stream being
+ * killed with no word on which plugs never went out.
+ */
+const PLUG_DEADLINE_MS = (maxDuration - 30) * 1000;
 
 /**
  * 5 armor + 1 subclass + 3 weapons + 1 legendary weapon swapped in to free the exotic
@@ -105,6 +112,7 @@ function streamError(err: unknown): Extract<ApplyStreamEvent, { type: "error" }>
  * transfer / equip / plug as it happens. Auth and validation failures stay JSON.
  */
 export async function POST(request: Request) {
+  const startedAt = Date.now();
   const refused = rejectCrossSite(request);
   if (refused) return refused;
   const user = await readUser();
@@ -203,6 +211,7 @@ export async function POST(request: Request) {
           characterId,
           plugs: runnable,
           shouldStop,
+          deadline: startedAt + PLUG_DEADLINE_MS,
           onProgress: (event) => {
             if (event.phase === "start") send({ type: "plug-start", plug: event.plug });
             else send({ type: "plug", result: event.result });

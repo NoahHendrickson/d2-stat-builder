@@ -15,7 +15,7 @@ vi.mock("bungie-api-ts/destiny2", () => ({
   insertSocketPlugFree: (...args: unknown[]) => insertSocketPlugFree(...args),
 }));
 
-const { ApplyCancelledError, PLUG_SPACING_MS, insertPlugs, stageAndEquip } = await import("./equip-server");
+const { ApplyCancelledError, PLUG_REST_MS, PLUG_SPACING_MS, insertPlugs, stageAndEquip } = await import("./equip-server");
 
 const http = (() => Promise.resolve({})) as unknown as HttpClient;
 const TARGET = "char-A";
@@ -372,27 +372,47 @@ describe("cancel checkpoints", () => {
 });
 
 describe("insertPlugs spacing", () => {
-  const plugs = [1, 2, 3].map((i) => ({ itemInstanceId: "helm", socketIndex: i, plugItemHash: i }));
-  /** Fake-clock time each insert went out, relative to the first. */
-  async function startTimes(answerMs: number) {
+  const plugsOf = (n: number) =>
+    Array.from({ length: n }, (_, i) => ({ itemInstanceId: "helm", socketIndex: i, plugItemHash: i }));
+  /** Each insert attempt answers per `answers` (ms, or a throw after 100 ms), then 100 ms ok. */
+  async function run(n: number, answers: (number | Error)[] = [], deadline?: number) {
     const starts: number[] = [];
+    const t0 = Date.now();
     insertSocketPlugFree.mockImplementation(() => {
-      starts.push(Date.now());
-      return new Promise((resolve) => setTimeout(() => resolve({}), answerMs));
+      starts.push(Date.now() - t0);
+      const answer = answers.shift() ?? 100;
+      return new Promise((resolve, reject) =>
+        answer instanceof Error ? setTimeout(() => reject(answer), 100) : setTimeout(() => resolve({}), answer),
+      );
     });
-    const p = insertPlugs({ http, membershipType: 3, characterId: TARGET, plugs });
+    const p = insertPlugs({ http, membershipType: 3, characterId: TARGET, plugs: plugsOf(n), deadline });
     await vi.runAllTimersAsync();
-    const results = await p;
-    expect(results.every((r) => r.ok)).toBe(true);
-    return starts.map((t) => t - starts[0]);
+    return { starts, results: await p };
   }
 
   test("fast answers still wait the spacing between inserts", async () => {
-    expect(await startTimes(100)).toEqual([0, PLUG_SPACING_MS, 2 * PLUG_SPACING_MS]);
+    const { starts } = await run(3);
+    expect(starts).toEqual([0, PLUG_SPACING_MS, 2 * PLUG_SPACING_MS]);
   });
 
-  test("a slow answer counts toward the spacing instead of adding to it", async () => {
-    expect(await startTimes(2000)).toEqual([0, 2000, 4000]);
+  test("a slow answer counts toward the spacing, with a short rest after it", async () => {
+    const { starts } = await run(3, [2000, 2000, 2000]);
+    expect(starts).toEqual([0, 2000 + PLUG_REST_MS, 2 * (2000 + PLUG_REST_MS)]);
+  });
+
+  test("spacing restarts from a throttle retry", async () => {
+    const throttled = new BungieHttpError(200, "raw", 1672);
+    const { starts, results } = await run(2, [throttled]);
+    // 100 ms throttle answer + 1 s backoff → retry at 1100, answered at 1200.
+    expect(starts).toEqual([0, 1100, 1100 + PLUG_SPACING_MS]);
+    expect(results.every((r) => r.ok)).toBe(true);
+  });
+
+  test("past the deadline the rest are reported, not attempted", async () => {
+    const { starts, results } = await run(4, [], Date.now() + 1000);
+    expect(starts).toEqual([0, PLUG_SPACING_MS]);
+    expect(results.map((r) => r.ok)).toEqual([true, true, false, false]);
+    expect(results[2].message).toMatch(/ran out of time/);
   });
 });
 
