@@ -22,12 +22,15 @@ export const STUB_USER = { membershipId: "verify-user", destinyMembershipId: "46
 
 /**
  * `profile` is the GetProfile body (a JSON string). `seed` fills the store:
- * `{ loadouts: SavedLoadout[], settings: { [key]: { value, updatedAt } }, usage: { [queryKey]: [instanceId, 0|1][] }, ingameSlots }`.
+ * `{ loadouts: SavedLoadout[], shares: { [code]: SavedLoadoutData }, settings: { [key]: { value, updatedAt } }, usage: { [queryKey]: [instanceId, 0|1][] }, ingameSlots }`.
  */
 export function createStub({ profile, seed = {} }) {
   const store = {
     loadouts: new Map((seed.loadouts ?? []).map((l) => [l.id, l])),
     settings: { ...seed.settings },
+    // Share snapshots by code. Set `sharesDown` to make creating one fail (503).
+    shares: new Map(Object.entries(seed.shares ?? {})),
+    sharesDown: false,
     // Like the real table: one record per query key, replaced when the query runs again.
     usage: new Map(Object.entries(seed.usage ?? {}).map(([key, pieces]) => [key, new Map(pieces)])),
     ingameSlots: seed.ingameSlots ?? Array.from({ length: 10 }, (_, index) => ({ index, nameHash: 101, iconHash: 201, colorHash: 301, items: [], empty: true })),
@@ -74,6 +77,18 @@ export function createStub({ profile, seed = {} }) {
       return json(200, { loadout: row });
     }],
     ["DELETE", /^\/api\/loadouts\/([^/]+)$/, (_, [id]) => (store.loadouts.delete(id) ? json(200, { ok: true }) : json(404, { error: "Not found" }))],
+    ["POST", /^\/api\/loadout-shares$/, (b) => {
+      if (store.sharesDown) return json(503, { error: "Share storage isn't configured", configured: false });
+      if (!b?.loadout) return bad();
+      const data = { version: b.version, loadout: b.loadout, ...(b.optimizer ? { optimizer: b.optimizer } : {}), ...(b.builder ? { builder: b.builder } : {}) };
+      const json_ = JSON.stringify(data);
+      const found = [...store.shares].find(([, d]) => JSON.stringify(d) === json_);
+      const code = found?.[0] ?? `Share${String(store.shares.size).padStart(5, "0")}`;
+      store.shares.set(code, data);
+      return json(200, { code });
+    }],
+    ["GET", /^\/api\/loadout-shares\/([^/]+)$/, (_, [code]) =>
+      store.shares.has(code) ? json(200, { loadout: store.shares.get(code) }) : json(404, { error: "Share not found" })],
     ["DELETE", /^\/api\/loadouts$/, (b) => {
       if (b?.all !== true && !Array.isArray(b?.ids)) return bad();
       const ids = b.all === true ? [...store.loadouts.keys()] : b.ids.filter((id) => typeof id === "string" && UUID.test(id) && store.loadouts.has(id));

@@ -1,5 +1,15 @@
 import { test, expect } from "vitest";
-import { buildShareUrl, parseShareParam, SHARE_PARAM, shareParamFromHash } from "./share";
+import {
+  buildShareUrl,
+  isShareCode,
+  parseShareParam,
+  SHARE_PARAM,
+  shareableData,
+  shareCodeFromHash,
+  shareParamFromHash,
+  shortShareUrl,
+} from "./share";
+import { shareCodeFor } from "./share-code";
 import type { SavedLoadout } from "./types";
 
 const saved: SavedLoadout = {
@@ -41,4 +51,27 @@ test("rejects garbage", () => {
   expect(parseShareParam(null)).toBeNull();
   expect(parseShareParam("{not json")).toBeNull();
   expect(parseShareParam(JSON.stringify({ version: 1 }))).toBeNull();
+});
+
+test("short links carry a 10-character code in the fragment", () => {
+  const url = new URL(shortShareUrl("https://example.com", "Ab3xY9qZ0k"));
+  expect(url.toString()).toBe("https://example.com/loadouts#s=Ab3xY9qZ0k");
+  expect(shareCodeFromHash(url.hash)).toBe("Ab3xY9qZ0k");
+  expect(shareCodeFromHash("#s=short")).toBeNull();
+  expect(shareCodeFromHash("#s=Ab3xY9qZ0k%2F")).toBeNull();
+  expect(shareCodeFromHash("#import=x")).toBeNull();
+});
+
+test("share codes are stable per loadout and differ between loadouts", () => {
+  const json = JSON.stringify(shareableData(saved));
+  const code = shareCodeFor(json);
+  expect(isShareCode(code)).toBe(true);
+  expect(shareCodeFor(json)).toBe(code);
+  const renamed = { ...saved, loadout: { ...saved.loadout, name: "Other" } };
+  expect(shareCodeFor(JSON.stringify(shareableData(renamed)))).not.toBe(code);
+});
+
+test("shares drop the owner's mod placement", () => {
+  const data = shareableData({ ...saved, modPlacement: { "1": { 0: 5 } } });
+  expect("modPlacement" in data).toBe(false);
 });

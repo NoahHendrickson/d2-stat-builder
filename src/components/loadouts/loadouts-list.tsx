@@ -4,6 +4,7 @@ import { TooltipLabel } from "@/components/ui/tooltip";
 import {
   useCallback,
   useDeferredValue,
+  useEffect,
   useMemo,
   useState,
   useSyncExternalStore,
@@ -34,7 +35,7 @@ import {
   loadSelections,
   replaceSelections,
 } from "@/lib/builder/selection-storage";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   LOADOUTS_QUERY_KEY,
   useLoadoutMutations,
@@ -50,11 +51,13 @@ import {
   type LoadoutListSortKey,
 } from "@/lib/loadouts/list";
 import {
-  buildShareUrl,
   parseShareParam,
+  SHARE_CODE_PARAM,
   SHARE_PARAM,
+  shareCodeFromHash,
   shareParamFromHash,
 } from "@/lib/loadouts/share";
+import { copyShareLink, fetchShare, type ShareFetchError } from "@/lib/loadouts/share-client";
 import { countMajorStatMods, isMajorStatMod } from "@/lib/dim/mod-hashes";
 import { selectionsForLoadout } from "@/lib/loadouts/load-in-builder";
 import { loadoutSubclass, withLoadoutSubclass } from "@/lib/loadouts/subclass";
@@ -118,6 +121,7 @@ function subscribeHash(onChange: () => void) {
   return () => window.removeEventListener("hashchange", onChange);
 }
 const readHashImport = () => shareParamFromHash(window.location.hash);
+const readHashCode = () => shareCodeFromHash(window.location.hash);
 const noHashImport = () => null;
 
 type DialogState =
@@ -203,11 +207,32 @@ export function LoadoutsList({
     setPicked(new Set());
   };
 
-  // A share link lands here with #import=<json> (older ones with ?import=); offer to
-  // save a copy.
+  // A share link lands here with #s=<code> (older ones carry the loadout itself in
+  // #import=<json> or ?import=); offer to save a copy.
+  const hashCode = useSyncExternalStore(subscribeHash, readHashCode, noHashImport);
   const hashImport = useSyncExternalStore(subscribeHash, readHashImport, noHashImport);
-  const importParam = hashImport ?? searchParams.get(SHARE_PARAM);
-  const importData = useMemo(() => parseShareParam(importParam), [importParam]);
+  const shared = useQuery<SavedLoadoutData, ShareFetchError>({
+    queryKey: ["loadout-share", hashCode],
+    enabled: hashCode !== null,
+    queryFn: () => fetchShare(hashCode!),
+    staleTime: Infinity,
+    retry: (count, err) => err.status >= 500 && err.status !== 503 && count < 2,
+  });
+  const importParam = hashCode
+    ? `${SHARE_CODE_PARAM}=${hashCode}`
+    : (hashImport ?? searchParams.get(SHARE_PARAM));
+  const inlineImport = useMemo(
+    () => (hashCode ? null : parseShareParam(importParam)),
+    [hashCode, importParam],
+  );
+  const importData = hashCode ? (shared.data ?? null) : inlineImport;
+  // A short link that doesn't resolve: say so once and drop it from the URL.
+  useEffect(() => {
+    if (!shared.error || dismissedImportParam === importParam) return;
+    dismissedImportParam = importParam;
+    toast.error(shared.error.message);
+    router.replace(pathname);
+  }, [shared.error, importParam, router, pathname]);
   const [importDismissed, setImportDismissed] = useState<string | null>(
     () => dismissedImportParam,
   );
@@ -482,12 +507,13 @@ export function LoadoutsList({
   };
 
   const shareLoadout = useCallback((saved: SavedLoadout) => {
-    const url = buildShareUrl(window.location.origin, saved);
-    navigator.clipboard.writeText(url).then(
-      () =>
+    copyShareLink(window.location.origin, saved).then(
+      (short) =>
         toast.success(
           "Share link copied",
-          "Anyone with the link can import a copy",
+          short
+            ? "Anyone with the link can import a copy"
+            : "Short links aren't available right now, so this one is long",
         ),
       () => toast.error("Couldn't copy to clipboard"),
     );
