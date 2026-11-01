@@ -27,6 +27,7 @@ export default async function ({ page, app, stub, step, shot, expect, log }) {
     expect(post?.status === 200 && post.body?.loadout?.name === "Raid build", "POST /api/loadout-shares carried Raid build");
     copied = await clip();
     log(`copied: ${copied} (${copied.length} chars)`);
+    expect(post.body.modPlacement === undefined && post.body.id === undefined, "POST carried only the shareable fields");
     expect(copied === `${origin}/loadouts#s=Share00000`, "clipboard holds the short link");
     expect(/Anyone with the link/i.test(await page.text()), "toast says anyone can import");
   });
@@ -49,7 +50,7 @@ export default async function ({ page, app, stub, step, shot, expect, log }) {
 
   await step("lo-share: an unknown code says so", async () => {
     await page.goto("about:blank");
-    await app.open("/loadouts#s=Nope000000");
+    await app.open("/loadouts#s=Nope000000.");
     await app.toast(/doesn't exist/);
     await page.waitForText(/3 Loadouts/i);
     expect(!(await page.exists(drawer)), "no drawer opens");
@@ -67,7 +68,22 @@ export default async function ({ page, app, stub, step, shot, expect, log }) {
     const long = await clip();
     log(`long link: ${long.length} chars`);
     expect(/\/loadouts#import=/.test(long), "clipboard holds the #import= link");
+    expect(stub.last("POST", "/api/loadout-shares")?.body?.id === undefined, "POST left out the row id");
     copied = long;
+  });
+
+  await step("lo-share: a link that fails for now stays, and opens on reload", async () => {
+    await page.goto("about:blank");
+    await app.open("/loadouts#s=Share00000");
+    await app.toast(/Couldn't open the share link/);
+    expect((await page.evalJs("location.hash")) === "#s=Share00000", "the code stays in the URL");
+    stub.store.sharesDown = false;
+    await page.goto("about:blank");
+    await app.open("/loadouts#s=Share00000");
+    await page.waitFor(drawer, { timeout: 30000 });
+    await page.click({ role: "button", name: "Cancel" }, { within: drawer });
+    await page.waitFor(drawer, { gone: true });
+    expect(!(await page.evalJs("location.hash")), "Cancel takes the link out of the URL");
   });
 
   await step("lo-share: old #import= links still open", async () => {

@@ -24,7 +24,9 @@ const noHash = () => "";
  * The share link the loadouts page was opened with, to offer saving a copy. `key`
  * names the link; `data` is its loadout, null until a short link's loadout arrives and
  * after `dismiss()`, which also takes the link out of the URL. A short link that
- * doesn't open says why in a toast and is dismissed.
+ * doesn't open says why in a toast. One that can never open (unknown or unreadable) is
+ * dismissed; one that failed for now (offline, server error) stays in the URL, so
+ * reloading tries again.
  */
 export function useSharedImport() {
   const router = useRouter();
@@ -57,7 +59,7 @@ export function useSharedImport() {
   useEffect(() => {
     if (!shared.error || key === dismissedKey) return;
     toast.error(shared.error.message);
-    forget();
+    if (shared.error.kind !== "unavailable") forget();
   }, [shared.error, key, forget]);
 
   const data =

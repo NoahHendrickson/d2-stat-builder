@@ -59,8 +59,10 @@ test("short links carry a 10-character code in the fragment", () => {
   const url = new URL(shortShareUrl("https://example.com", "Ab3xY9qZ0k"));
   expect(url.toString()).toBe("https://example.com/loadouts#s=Ab3xY9qZ0k");
   expect(shareSourceFrom(url.hash, none)).toEqual({ kind: "code", key: "s=Ab3xY9qZ0k", code: "Ab3xY9qZ0k" });
-  expect(shareSourceFrom("#s=short", none)).toBeNull();
-  expect(shareSourceFrom("#s=Ab3xY9qZ0k%2F", none)).toBeNull();
+  // Trailing punctuation from chat is dropped; a cut-off code is still looked up.
+  expect(shareSourceFrom("#s=Ab3xY9qZ0k.", none)).toEqual({ kind: "code", key: "s=Ab3xY9qZ0k", code: "Ab3xY9qZ0k" });
+  expect(shareSourceFrom("#s=Ab3xY9qZ0k%2F", none)).toEqual({ kind: "code", key: "s=Ab3xY9qZ0k", code: "Ab3xY9qZ0k" });
+  expect(shareSourceFrom("#s=Ab3x", none)).toEqual({ kind: "code", key: "s=Ab3x", code: "Ab3x" });
 });
 
 test("a short code wins over an inline loadout, and the fragment over the query", () => {

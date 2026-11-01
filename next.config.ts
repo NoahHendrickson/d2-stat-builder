@@ -93,9 +93,10 @@ const nextConfig: NextConfig = {
         headers: [{ key: "Content-Security-Policy", value: embedCsp }, ...securityHeaders],
       },
       // API answers depend on the session cookies: keep them out of shared caches.
-      // The favicon proxy is public and cacheable; the apply stream sets its own.
+      // The favicon proxy and shared loadouts are public and cacheable; the apply
+      // stream sets its own.
       {
-        source: "/api/:path((?!favicon|bungie/apply-loadout).*)",
+        source: "/api/:path((?!favicon|bungie/apply-loadout|loadout-shares/).*)",
         headers: [{ key: "Cache-Control", value: "private, no-store" }],
       },
       // The weapon catalog snapshot changes only when it is regenerated and

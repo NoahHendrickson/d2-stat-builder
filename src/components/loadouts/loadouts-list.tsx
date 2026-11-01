@@ -450,12 +450,12 @@ export function LoadoutsList({
 
   const shareLoadout = useCallback((saved: SavedLoadout) => {
     copyShareLink(window.location.origin, saved).then(
-      (short) =>
+      (longBecause) =>
         toast.success(
           "Share link copied",
-          short
-            ? "Anyone with the link can import a copy"
-            : "Short links aren't available right now, so this one is long",
+          longBecause
+            ? `${longBecause}, so this one is long`
+            : "Anyone with the link can import a copy",
         ),
       () => toast.error("Couldn't copy to clipboard"),
     );

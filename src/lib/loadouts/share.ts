@@ -17,6 +17,7 @@ export const SHARE_CODE_PARAM = "s";
 /** Short codes: 10 base62 characters (~59 bits), so they can't be guessed. */
 export const SHARE_CODE_LENGTH = 10;
 const SHARE_CODE = new RegExp(`^[0-9A-Za-z]{${SHARE_CODE_LENGTH}}$`);
+const SHARE_CODE_PREFIX = new RegExp(`^[0-9A-Za-z]{${SHARE_CODE_LENGTH}}`);
 export const isShareCode = (v: unknown): v is string => typeof v === "string" && SHARE_CODE.test(v);
 
 /**
@@ -50,8 +51,8 @@ export type ShareSource =
   | { kind: "inline"; key: string; data: SavedLoadoutData };
 
 /**
- * The share link in a URL, or null when there is none or it doesn't parse. A short
- * `#s=<code>` wins, then the self-contained `#import=<json>`, then the oldest
+ * The share link in a URL, or null when there is none or an inline one doesn't parse.
+ * A short `#s=<code>` wins, then the self-contained `#import=<json>`, then the oldest
  * `?import=<json>`.
  */
 export function shareSourceFrom(
@@ -59,8 +60,14 @@ export function shareSourceFrom(
   search: Pick<URLSearchParams, "get">,
 ): ShareSource | null {
   const fragment = new URLSearchParams(hash.replace(/^#/, ""));
-  const code = fragment.get(SHARE_CODE_PARAM);
-  if (isShareCode(code)) return { kind: "code", key: `${SHARE_CODE_PARAM}=${code}`, code };
+  const raw = fragment.get(SHARE_CODE_PARAM);
+  if (raw !== null) {
+    // Chat apps and sentences tack punctuation onto links, so read the code's length
+    // and drop the rest. A code cut short is still looked up, so the reader hears that
+    // the link doesn't work instead of nothing happening.
+    const code = SHARE_CODE_PREFIX.exec(raw)?.[0] ?? raw;
+    return { kind: "code", key: `${SHARE_CODE_PARAM}=${code}`, code };
+  }
   const json = fragment.get(SHARE_PARAM) ?? search.get(SHARE_PARAM);
   if (!json) return null;
   try {

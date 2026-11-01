@@ -28,7 +28,7 @@ export function createStub({ profile, seed = {} }) {
   const store = {
     loadouts: new Map((seed.loadouts ?? []).map((l) => [l.id, l])),
     settings: { ...seed.settings },
-    // Share snapshots by code. Set `sharesDown` to make creating one fail (503).
+    // Share snapshots by code. Set `sharesDown` to make creating or reading one fail (503).
     shares: new Map(Object.entries(seed.shares ?? {})),
     sharesDown: false,
     // Like the real table: one record per query key, replaced when the query runs again.
@@ -88,7 +88,8 @@ export function createStub({ profile, seed = {} }) {
       return json(200, { code });
     }],
     ["GET", /^\/api\/loadout-shares\/([^/]+)$/, (_, [code]) =>
-      store.shares.has(code) ? json(200, { loadout: store.shares.get(code) }) : json(404, { error: "Share not found" })],
+      store.sharesDown ? json(503, { error: "Share storage isn't configured", configured: false })
+        : store.shares.has(code) ? json(200, { loadout: store.shares.get(code) }) : json(404, { error: "Share not found" })],
     ["DELETE", /^\/api\/loadouts$/, (b) => {
       if (b?.all !== true && !Array.isArray(b?.ids)) return bad();
       const ids = b.all === true ? [...store.loadouts.keys()] : b.ids.filter((id) => typeof id === "string" && UUID.test(id) && store.loadouts.has(id));

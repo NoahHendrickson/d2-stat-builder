@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { readUser } from "@/lib/bungie/session";
-import { getShareStore, MAX_SHARES_PER_ACCOUNT, ShareLimitError } from "@/lib/loadouts/share-store";
+import { getShareStore, MAX_SHARES_PER_DAY, ShareLimitError } from "@/lib/loadouts/share-store";
 import { parseSavedLoadoutData } from "@/lib/loadouts/types";
 import { notConfigured, storageError } from "@/lib/loadouts/api-responses";
 import { rejectCrossSite } from "@/lib/http/same-origin";
@@ -22,7 +22,7 @@ export async function POST(request: Request) {
   } catch (err) {
     if (err instanceof ShareLimitError) {
       return NextResponse.json(
-        { error: `You can create up to ${MAX_SHARES_PER_ACCOUNT} share links` },
+        { error: `You can create up to ${MAX_SHARES_PER_DAY} share links a day` },
         { status: 409 },
       );
     }
