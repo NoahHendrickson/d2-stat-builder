@@ -31,8 +31,12 @@ import {
 
 /** Bungie asks for ≥100ms between item actions; stay comfortably above it. */
 export const ACTION_SPACING_MS = 150;
-/** …and ≥500ms between socket-plug actions. */
-const PLUG_SPACING_MS = 600;
+/**
+ * …and ≥500ms between socket-plug actions, counted from one insert's start to the
+ * next's. Bungie answers inserts slowly (often ~2 s) when it's busy, so waiting the
+ * spacing again after each answer only adds time.
+ */
+export const PLUG_SPACING_MS = 600;
 
 const SUCCESS = 1;
 
@@ -444,7 +448,8 @@ export async function stageAndEquip({
 }
 
 /**
- * Insert plugs one at a time (Bungie: ≥0.5s apart; character must be in orbit, a
+ * Insert plugs one at a time, each starting ≥PLUG_SPACING_MS after the last one started
+ * (Bungie: ≥0.5s apart; character must be in orbit, a
  * social space, or offline). "Free" inserts cover armor mods, tuning, artifice, and
  * subclass fragments without Advanced Write Actions. A 401 is re-thrown; other errors
  * become per-plug results. After an in-activity error (1671) the remaining plugs are
@@ -468,18 +473,25 @@ export async function insertPlugs({
 }): Promise<PlugResult[]> {
   const results: PlugResult[] = [];
   let inActivity = false;
+  /** When the last insert went out; the next one waits for the spacing from here. */
+  let lastStart: number | undefined;
   const emitResult = (result: PlugResult) => {
     results.push(result);
     onProgress?.({ phase: "result", result });
   };
   for (let i = 0; i < plugs.length; i++) {
     const plug = plugs[i];
+    if (!inActivity && lastStart !== undefined) {
+      const wait = lastStart + PLUG_SPACING_MS - Date.now();
+      if (wait > 0) await sleep(wait);
+    }
     if (!inActivity) await checkpoint(shouldStop);
     onProgress?.({ phase: "start", plug });
     if (inActivity) {
       emitResult({ ...plug, ok: false, message: PLUG_MESSAGES[1671] });
       continue;
     }
+    lastStart = Date.now();
     try {
       await withThrottleRetry(() =>
         insertSocketPlugFree(http, {
@@ -511,7 +523,6 @@ export async function insertPlugs({
             (err instanceof Error ? err.message : "Mod insert failed")),
       });
     }
-    if (i < plugs.length - 1) await sleep(PLUG_SPACING_MS);
   }
   return results;
 }

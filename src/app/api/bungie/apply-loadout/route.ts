@@ -23,12 +23,13 @@ const ARTIFACT_PLUGS = 14;
 /**
  * A full apply is long: up to 11 items × (2 vault hops + up to 3 spares vaulted, each
  * followed by a retry) transfers at 150 ms spacing, plus a character-inventory read
- * when the live fallback runs (repeated only after a failed read), then every plug at
- * 600 ms spacing —
- * 30 s+ of deliberate pacing before Bungie's own latency. The default serverless limit (10 s) would cut the stream
- * mid-flight and leave the character half-applied.
+ * when the live fallback runs, then every plug one at a time. Bungie often takes ~2 s
+ * to answer each plug insert, so a big loadout (armor mods, subclass, artifact) runs
+ * well past a minute. At 60 s Vercel killed the stream mid-way and the last mods were
+ * never sent (10 of 49 production applies on 2026-10-31/11-01). 300 s is within the
+ * Pro plan's Fluid limit, and the time is spent waiting on Bungie, so it costs little.
  */
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 /**
  * 5 armor + 1 subclass + 3 weapons + 1 legendary weapon swapped in to free the exotic

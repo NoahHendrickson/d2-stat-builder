@@ -6,15 +6,16 @@ const transferItem = vi.fn();
 const equipItems = vi.fn();
 const getCharacter = vi.fn();
 const pullFromPostmaster = vi.fn();
+const insertSocketPlugFree = vi.fn();
 vi.mock("bungie-api-ts/destiny2", () => ({
   transferItem: (...args: unknown[]) => transferItem(...args),
   pullFromPostmaster: (...args: unknown[]) => pullFromPostmaster(...args),
   equipItems: (...args: unknown[]) => equipItems(...args),
   getCharacter: (...args: unknown[]) => getCharacter(...args),
-  insertSocketPlugFree: vi.fn(),
+  insertSocketPlugFree: (...args: unknown[]) => insertSocketPlugFree(...args),
 }));
 
-const { ApplyCancelledError, insertPlugs, stageAndEquip } = await import("./equip-server");
+const { ApplyCancelledError, PLUG_SPACING_MS, insertPlugs, stageAndEquip } = await import("./equip-server");
 
 const http = (() => Promise.resolve({})) as unknown as HttpClient;
 const TARGET = "char-A";
@@ -34,6 +35,8 @@ beforeEach(() => {
   equipItems.mockReset();
   getCharacter.mockReset();
   pullFromPostmaster.mockReset();
+  insertSocketPlugFree.mockReset();
+  insertSocketPlugFree.mockResolvedValue({});
   pullFromPostmaster.mockResolvedValue({});
   getCharacter.mockResolvedValue({ Response: { inventory: { data: { items: [] } } } });
   equipItems.mockImplementation((_http: unknown, body: { itemIds: string[] }) =>
@@ -365,6 +368,31 @@ describe("cancel checkpoints", () => {
     await vi.runAllTimersAsync();
     expect(await p).toBeInstanceOf(ApplyCancelledError);
     expect(done).toEqual([1, 2]);
+  });
+});
+
+describe("insertPlugs spacing", () => {
+  const plugs = [1, 2, 3].map((i) => ({ itemInstanceId: "helm", socketIndex: i, plugItemHash: i }));
+  /** Fake-clock time each insert went out, relative to the first. */
+  async function startTimes(answerMs: number) {
+    const starts: number[] = [];
+    insertSocketPlugFree.mockImplementation(() => {
+      starts.push(Date.now());
+      return new Promise((resolve) => setTimeout(() => resolve({}), answerMs));
+    });
+    const p = insertPlugs({ http, membershipType: 3, characterId: TARGET, plugs });
+    await vi.runAllTimersAsync();
+    const results = await p;
+    expect(results.every((r) => r.ok)).toBe(true);
+    return starts.map((t) => t - starts[0]);
+  }
+
+  test("fast answers still wait the spacing between inserts", async () => {
+    expect(await startTimes(100)).toEqual([0, PLUG_SPACING_MS, 2 * PLUG_SPACING_MS]);
+  });
+
+  test("a slow answer counts toward the spacing instead of adding to it", async () => {
+    expect(await startTimes(2000)).toEqual([0, 2000, 4000]);
   });
 });
 
