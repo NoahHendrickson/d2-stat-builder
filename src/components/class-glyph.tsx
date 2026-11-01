@@ -25,9 +25,14 @@ const GLYPHS: Record<number, { viewBox: string; width: number; d: string }> = {
   },
 };
 
-/** How wide the sigil draws at `height` px (they differ per class); 0 for no sigil. */
-export function classGlyphWidth(classType: number, height: number): number {
-  return ((GLYPHS[classType]?.width ?? 0) * height) / 16;
+/** Whether `classType` has a sigil (any-class, 3, has none). */
+export function hasClassGlyph(classType: number): boolean {
+  return Object.hasOwn(GLYPHS, classType);
+}
+
+/** How wide the widest sigil draws at `height` px: a column that fits any class's. */
+export function classGlyphMaxWidth(height: number): number {
+  return (Math.max(...Object.values(GLYPHS).map((g) => g.width)) * height) / 16;
 }
 
 export function ClassGlyph({

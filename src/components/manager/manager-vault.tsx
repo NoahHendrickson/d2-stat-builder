@@ -2,7 +2,7 @@
 
 import { memo, useLayoutEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
-import { ClassGlyph, classGlyphWidth } from "@/components/class-glyph";
+import { ClassGlyph, classGlyphMaxWidth, hasClassGlyph } from "@/components/class-glyph";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   ASCENDANT_SHARD_HASH,
@@ -86,12 +86,17 @@ const HEADER_PLACEMENTS: Record<
 
 /** Height the class sigil draws at beside a group of armor. */
 const CLASS_MARKER_PX = 32;
+/**
+ * The sigils differ in width, so every class group with one keeps the widest's column,
+ * its sigil centred in it: groups that start a line all start their tiles at the same x.
+ */
+const CLASS_MARKER_WIDTH = classGlyphMaxWidth(CLASS_MARKER_PX);
 
 /** Width of a group's marker (see GroupMarker), or 0 when its grouping draws none. */
 function markerWidth(groupBy: GroupKey, { items }: ItemGroup, tiles: TileMetrics): number {
   const item = items[0];
   if (!item) return 0;
-  if (groupBy === "class") return classGlyphWidth(item.classType, CLASS_MARKER_PX);
+  if (groupBy === "class") return hasClassGlyph(item.classType) ? CLASS_MARKER_WIDTH : 0;
   // Only weapons have an ammo type; a type without a silhouette keeps its column.
   return groupBy === "type" && item.ammoType !== undefined ? tiles.tile : 0;
 }
@@ -425,7 +430,7 @@ const VaultLineRow = memo(function VaultLineRow({ line, tiles }: { line: VaultTi
           {cell.markerWidth > 0 && (
             // Centred on the tile's icon, above its footer bar.
             <span
-              className="flex shrink-0 items-center"
+              className="flex shrink-0 items-center justify-center"
               style={{ width: cell.markerWidth, height: tiles.tile, marginRight: MARKER_GAP_PX }}
             >
               {cell.marker && <GroupMarker groupBy={line.groupBy} item={cell.marker} />}
@@ -568,7 +573,11 @@ function VaultCurrencies({ inventory: { currencies } }: { inventory: ManagerInve
  */
 function GroupMarker({ groupBy, item }: { groupBy: GroupKey; item: InventoryItem }) {
   if (groupBy === "class") {
-    return <ClassGlyph classType={item.classType} className="text-muted-foreground h-8 w-auto" />;
+    return <ClassGlyph
+        classType={item.classType}
+        className="text-muted-foreground w-auto"
+        style={{ height: CLASS_MARKER_PX }}
+      />;
   }
   const icon = groupBy === "type" ? weaponTypeIcon(item.typeName, item.ammoType) : undefined;
   if (!icon) return null;
