@@ -145,4 +145,8 @@ test("reports mistakes instead of matching nothing", () => {
   expect(parseSearch("power:lots")?.ok).toBe(false);
   expect(parseSearch("(is:weapon")?.ok).toBe(false);
   expect(parseSearch("stat:total")?.ok).toBe(false);
+  // Inherited object keys aren't words.
+  expect(parseSearch("is:constructor")).toEqual({ ok: false, error: "Unknown filter is:constructor" });
+  expect(parseSearch("champion:constructor")?.ok).toBe(false);
+  expect(parseSearch("ammo:__proto__")?.ok).toBe(false);
 });

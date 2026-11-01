@@ -16,6 +16,22 @@ import { BUCKETS } from "./buckets";
 import type { InventoryItem, ManagerInventory } from "./build";
 import type { Place } from "./moves";
 import { WEAPON_CATEGORIES, WEAPON_TYPE_ALIASES } from "./weapon-types";
+import {
+  AMMO_WORDS,
+  CHAMPION_SYNONYMS,
+  CHAMPION_WORDS,
+  ELEMENT_SIDES,
+  ELEMENT_WORDS,
+  GRENADE_LAUNCHER_AMMO_WORDS,
+  RARITY_WORDS,
+  WEAPON_SLOT_ALIASES,
+  WEAPON_SLOT_WORDS,
+  lookupWord,
+  type Ammo,
+  type Champion,
+  type Rarity,
+  type WeaponSlot,
+} from "@/lib/search-vocabulary";
 
 export interface SearchContext {
   annotations: Annotations;
@@ -35,30 +51,43 @@ export type ParsedSearch =
 
 const ITEM_TYPE_ARMOR = 2;
 const ITEM_TYPE_WEAPON = 3;
-const TIER_NAMES: Record<string, number> = { exotic: 6, legendary: 5, rare: 4, uncommon: 3, common: 2 };
+/** Each shared word (search-vocabulary.ts) as the manifest number it stands for. */
+const numbered = <K extends string, V extends string>(
+  words: Readonly<Record<K, V>>,
+  ids: Readonly<Record<V, number>>,
+): Record<string, number> =>
+  Object.fromEntries(Object.entries<V>(words).map(([word, name]) => [word, ids[name]]));
+
+const TIER_NAMES = numbered<string, Rarity>(RARITY_WORDS, {
+  Exotic: 6,
+  Legendary: 5,
+  Rare: 4,
+  Uncommon: 3,
+  Common: 2,
+});
 const TIER_COLORS: Record<string, number> = { yellow: 6, purple: 5, blue: 4, green: 3, white: 2 };
 const CLASS_NAMES: Record<string, number> = { titan: 0, hunter: 1, warlock: 2 };
-const AMMO_NAMES: Record<string, number> = { primary: 1, special: 2, heavy: 3 };
-const BREAKER_NAMES: Record<string, number> = {
-  barrier: 1,
-  antibarrier: 1,
-  shieldpiercing: 1,
-  overload: 2,
-  disruption: 2,
-  unstoppable: 3,
-  stagger: 3,
+const AMMO_IDS: Record<Ammo, number> = { Primary: 1, Special: 2, Heavy: 3 };
+const AMMO_NAMES = numbered<string, Ammo>(AMMO_WORDS, AMMO_IDS);
+const BREAKER_NAMES = numbered<string, Champion>(CHAMPION_WORDS, {
+  Barrier: 1,
+  Overload: 2,
+  Unstoppable: 3,
+});
+const ELEMENTS: ReadonlySet<string> = new Set(ELEMENT_WORDS);
+/** is:light / is:dark: the element's side for Prismatic. */
+const ELEMENT_SIDE_SETS: Record<string, ReadonlySet<string>> = {
+  light: new Set(ELEMENT_SIDES.light),
+  dark: new Set(ELEMENT_SIDES.dark),
 };
-const ELEMENTS = new Set(["kinetic", "arc", "solar", "void", "stasis", "strand", "prismatic"]);
-/** DIM's is:light / is:dark: the element's side for Prismatic. */
-const ELEMENT_SIDES: Record<string, ReadonlySet<string>> = {
-  light: new Set(["arc", "solar", "void"]),
-  dark: new Set(["stasis", "strand"]),
+const WEAPON_SLOT_BUCKETS: Record<WeaponSlot, number> = {
+  Kinetic: BUCKETS.kinetic,
+  Energy: BUCKETS.energy,
+  Power: BUCKETS.power,
 };
 const WEAPON_TYPES = new Set(WEAPON_CATEGORIES.map(([name]) => name));
 const SLOT_NAMES: Record<string, number> = {
-  kineticslot: BUCKETS.kinetic,
-  energyslot: BUCKETS.energy,
-  powerslot: BUCKETS.power,
+  ...numbered<string, WeaponSlot>(WEAPON_SLOT_WORDS, WEAPON_SLOT_BUCKETS),
   helmet: BUCKETS.helmet,
   gauntlets: BUCKETS.arms,
   arms: BUCKETS.arms,
@@ -73,7 +102,7 @@ const SLOT_NAMES: Record<string, number> = {
   ships: BUCKETS.ships,
 };
 /** DIM's slot names that read as something else on their own ("power"), so only after is:. */
-const SLOT_ALIASES: Record<string, number> = { energy: BUCKETS.energy, power: BUCKETS.power };
+const SLOT_ALIASES = numbered<string, WeaponSlot>(WEAPON_SLOT_ALIASES, WEAPON_SLOT_BUCKETS);
 
 /** Strip case, spaces, and punctuation so "Hand Cannon" and "handcannon" meet. */
 export const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9#]+/g, "");
@@ -103,13 +132,10 @@ export const IS_KEYWORDS: readonly string[] = [
   ...Object.keys(CLASS_NAMES),
   ...Object.keys(AMMO_NAMES),
   ...ELEMENTS,
-  ...Object.keys(ELEMENT_SIDES),
-  "barrier",
-  "overload",
-  "unstoppable",
+  ...Object.keys(ELEMENT_SIDE_SETS),
+  ...Object.keys(CHAMPION_WORDS).filter((word) => !CHAMPION_SYNONYMS.has(word)),
   ...WEAPON_TYPES,
-  "heavygrenadelauncher",
-  "specialgrenadelauncher",
+  ...Object.keys(GRENADE_LAUNCHER_AMMO_WORDS),
   ...Object.keys(WEAPON_TYPE_ALIASES),
   ...Object.keys(SLOT_NAMES),
   ...Object.keys(SLOT_ALIASES),
@@ -127,9 +153,7 @@ const BARE_KEYWORDS: ReadonlySet<string> = new Set([
   ...Object.keys(CLASS_NAMES),
   ...Object.keys(AMMO_NAMES),
   ...ELEMENTS,
-  "barrier",
-  "overload",
-  "unstoppable",
+  ...Object.keys(CHAMPION_WORDS).filter((word) => !CHAMPION_SYNONYMS.has(word)),
   ...WEAPON_TYPES,
   ...Object.keys(WEAPON_TYPE_ALIASES),
   ...Object.keys(SLOT_NAMES),
@@ -180,16 +204,26 @@ const notesOf = (item: InventoryItem, ctx: SearchContext): string =>
   (item.instanceId ? ctx.annotations[item.instanceId]?.notes : undefined)?.toLowerCase() ?? "";
 
 function isKeyword(word: string): Predicate | undefined {
-  if (word in TIER_NAMES) return (i) => i.tierType === TIER_NAMES[word];
-  if (word in TIER_COLORS) return (i) => i.tierType === TIER_COLORS[word];
-  if (word in CLASS_NAMES) return (i) => i.classType === CLASS_NAMES[word];
-  if (word in AMMO_NAMES) return (i) => i.ammoType === AMMO_NAMES[word];
-  if (word in BREAKER_NAMES) return (i) => i.breakerType === BREAKER_NAMES[word];
-  if (word in SLOT_NAMES) return (i) => i.bucketHash === SLOT_NAMES[word];
-  if (word in SLOT_ALIASES) return (i) => i.bucketHash === SLOT_ALIASES[word];
+  // Own keys only: `is:constructor` is unknown, not Object's constructor.
+  const numberFor = (table: Record<string, number>) => lookupWord(table, word);
+  const tier = numberFor(TIER_NAMES) ?? numberFor(TIER_COLORS);
+  if (tier !== undefined) return (i) => i.tierType === tier;
+  const classType = numberFor(CLASS_NAMES);
+  if (classType !== undefined) return (i) => i.classType === classType;
+  const ammo = numberFor(AMMO_NAMES);
+  if (ammo !== undefined) return (i) => i.ammoType === ammo;
+  const breaker = numberFor(BREAKER_NAMES);
+  if (breaker !== undefined) return (i) => i.breakerType === breaker;
+  const bucket = numberFor(SLOT_NAMES) ?? numberFor(SLOT_ALIASES);
+  if (bucket !== undefined) return (i) => i.bucketHash === bucket;
   if (ELEMENTS.has(word)) return (i) => i.element === word;
-  if (word in ELEMENT_SIDES) return (i) => i.element !== undefined && ELEMENT_SIDES[word]!.has(i.element);
-  const weaponType = WEAPON_TYPE_ALIASES[word] ?? word;
+  const side = lookupWord(ELEMENT_SIDE_SETS, word);
+  if (side) return (i) => i.element !== undefined && side.has(i.element);
+  const launcherAmmo = lookupWord(GRENADE_LAUNCHER_AMMO_WORDS, word);
+  if (launcherAmmo) {
+    return (i) => i.weaponType === "grenadelauncher" && i.ammoType === AMMO_IDS[launcherAmmo];
+  }
+  const weaponType = lookupWord(WEAPON_TYPE_ALIASES, word) ?? word;
   if (WEAPON_TYPES.has(weaponType)) return (i) => i.weaponType === weaponType;
   if ((ITEM_TAGS as readonly string[]).includes(word)) return (i, _, ctx) => tagOf(i, ctx) === word;
   switch (word) {
@@ -210,10 +244,6 @@ function isKeyword(word: string): Predicate | undefined {
       return (i) => i.deepsight;
     case "adept":
       return (i) => i.itemType === ITEM_TYPE_WEAPON && ADEPT_NAME.test(i.name);
-    case "heavygrenadelauncher":
-      return (i) => i.weaponType === "grenadelauncher" && i.ammoType === AMMO_NAMES.heavy;
-    case "specialgrenadelauncher":
-      return (i) => i.weaponType === "grenadelauncher" && i.ammoType === AMMO_NAMES.special;
     case "transferable":
     case "movable":
       return (i) => (i.transferStatus & TRANSFER_NOT_TRANSFERRABLE) === 0;
@@ -300,17 +330,17 @@ function filterTerm(key: string, raw: string): { predicate: Predicate; usesPerks
       return { predicate: (i) => i.element === value };
     case "breaker":
     case "champion": {
-      const b = BREAKER_NAMES[value];
+      const b = lookupWord(BREAKER_NAMES, value);
       if (!b) throw new SearchError(`Unknown champion ${raw} (barrier, overload, unstoppable)`);
       return { predicate: (i) => i.breakerType === b };
     }
     case "class": {
-      const c = CLASS_NAMES[value];
+      const c = lookupWord(CLASS_NAMES, value);
       if (c === undefined) throw new SearchError(`Unknown class ${raw}`);
       return { predicate: (i) => i.classType === c };
     }
     case "ammo": {
-      const a = AMMO_NAMES[value];
+      const a = lookupWord(AMMO_NAMES, value);
       if (!a) throw new SearchError(`Unknown ammo ${raw} (primary, special, heavy)`);
       return { predicate: (i) => i.ammoType === a };
     }

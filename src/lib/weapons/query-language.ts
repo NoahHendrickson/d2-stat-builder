@@ -1,16 +1,38 @@
-import { expandWeaponQueryAliases } from "./aliases";
+import { WEAPON_NAME_ALIASES } from "./aliases";
+import {
+  AMMO_WORDS,
+  CHAMPION_SYNONYMS,
+  CHAMPION_WORDS,
+  ELEMENT_SIDES,
+  GRENADE_LAUNCHER_AMMO_WORDS,
+  RARITY_WORDS,
+  WEAPON_SLOT_ALIASES,
+  WEAPON_SLOT_WORDS,
+} from "@/lib/search-vocabulary";
 import type { ExcludableFacet, WeaponFilters } from "./search";
+
+/** A filter token that selects nothing, and why: shown in place of results. */
+export interface UnknownFilter {
+  token: string;
+  /** Follows the token: "isn't a search filter", "isn't a weapon type", … */
+  reason: string;
+}
 
 /** Result of parsing a raw search box string into structured filters + leftover free text. */
 export interface ParsedWeaponQuery {
   filters: WeaponFilters;
-  /** Non-keyword terms, rejoined — feed this to name/fuzzy search. */
+  /** Non-keyword terms, rejoined and trimmed: feed this to name/fuzzy search. */
   text: string;
   /**
-   * Filter tokens the parser doesn't know (`is:arcc`, `elemnt:solar`). They match
-   * nothing rather than falling through to fuzzy text, which would match junk.
+   * When `text` is one descriptive word ("arc", "heavy", "smg", "hand cannon"), the
+   * weapons it describes. They lead the results, with name and typo matches after them.
    */
-  unknown: string[];
+  keyword?: WeaponFilters;
+  /**
+   * Filter tokens that mean nothing (`is:arcc`, `elemnt:solar`, `type:blaster`). They
+   * match nothing rather than falling through to fuzzy text, which would match junk.
+   */
+  unknown: UnknownFilter[];
 }
 
 /** `WeaponFilters` fields that are OR-within string arrays — the single source of truth for merging. */
@@ -33,154 +55,133 @@ export const ARRAY_FACET_KEYS = [
   "craftable",
   "name",
 ] as const satisfies readonly (keyof WeaponFilters)[];
+type ArrayFacetKey = (typeof ARRAY_FACET_KEYS)[number];
 
-/** `key:` tokens that map straight onto an OR-within facet array. */
-const FACET_KEYS: Readonly<
-  Record<
-    string,
-    "element" | "type" | "ammo" | "slot" | "rarity" | "frame" | "source" | "season" | "gear" | "champion"
-  >
-> = {
-  element: "element",
-  damage: "element",
-  type: "type",
-  weapon: "type",
-  ammo: "ammo",
-  slot: "slot",
-  rarity: "rarity",
-  tier: "rarity",
-  frame: "frame",
-  archetype: "frame",
-  source: "source",
-  activity: "source",
-  season: "season",
-  gear: "gear",
-  barrel: "gear",
-  mag: "gear",
-  magazine: "gear",
-  champion: "champion",
-};
-
-/** Keys handled outside {@link FACET_KEYS}. */
-const OTHER_KEYS: ReadonlySet<string> = new Set([
-  "is",
-  "not",
-  "perk",
-  "trait",
-  "trait1",
-  "trait2",
-  "origin",
-  "origintrait",
-  "name",
-  "craftable",
+/** `key:` tokens that add their value to a facet. `is:`, `not:` and `craftable:` are parsed apart. */
+const FACET_KEYS: ReadonlyMap<string, Exclude<ArrayFacetKey, "craftable">> = new Map([
+  ["element", "element"],
+  ["damage", "element"],
+  ["type", "type"],
+  ["weapon", "type"],
+  ["ammo", "ammo"],
+  ["slot", "slot"],
+  ["rarity", "rarity"],
+  ["tier", "rarity"],
+  ["frame", "frame"],
+  ["archetype", "frame"],
+  ["source", "source"],
+  ["activity", "source"],
+  ["season", "season"],
+  ["gear", "gear"],
+  ["barrel", "gear"],
+  ["mag", "gear"],
+  ["magazine", "gear"],
+  ["champion", "champion"],
+  ["perk", "perks"],
+  ["trait", "trait"],
+  ["trait1", "trait1"],
+  ["trait2", "trait2"],
+  ["origin", "originTrait"],
+  ["origintrait", "originTrait"],
+  ["name", "name"],
 ]);
+
+/** How the unknown-value message names each closed facet ("isn't a weapon type"). */
+const VALUE_NAMES: Record<ExcludableFacet, string> = {
+  element: "an element",
+  type: "a weapon type",
+  ammo: "an ammo type",
+  rarity: "a rarity",
+  slot: "a weapon slot",
+  champion: "a champion",
+};
+const isClosedFacet = (facet: ArrayFacetKey): facet is ExcludableFacet => facet in VALUE_NAMES;
+
+const NOT_A_FILTER = "isn't a search filter";
 
 /** Lower-case, no spaces or punctuation: "Hand Cannon", "hand-cannon" and "handcannon" meet. */
 const squash = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "");
 
-const ELEMENTS = ["Kinetic", "Arc", "Solar", "Void", "Stasis", "Strand"];
-const RARITIES = ["Common", "Uncommon", "Rare", "Legendary", "Exotic"];
-const AMMO = ["Primary", "Special", "Heavy"];
-/** The catalog's `type` values (manifest `itemTypeDisplayName`). */
-const WEAPON_TYPES = [
-  "Auto Rifle",
-  "Combat Bow",
-  "Fusion Rifle",
-  "Glaive",
-  "Grenade Launcher",
-  "Hand Cannon",
-  "Linear Fusion Rifle",
-  "Machine Gun",
-  "Pulse Rifle",
-  "Rocket Launcher",
-  "Scout Rifle",
-  "Shotgun",
-  "Sidearm",
-  "Sniper Rifle",
-  "Submachine Gun",
-  "Sword",
-  "Trace Rifle",
-];
-/** Short names the item manager's search takes that the shared aliases don't cover. */
-const TYPE_NAMES: Readonly<Record<string, string>> = {
-  ...Object.fromEntries(WEAPON_TYPES.map((t) => [squash(t), t])),
-  bow: "Combat Bow",
-  submachine: "Submachine Gun",
-};
-const SLOTS: Readonly<Record<string, string>> = {
-  kineticslot: "Kinetic",
-  energyslot: "Energy",
-  energy: "Energy",
-  powerslot: "Power",
-  power: "Power",
-};
-const CHAMPIONS: Readonly<Record<string, string>> = {
-  barrier: "Barrier",
-  antibarrier: "Barrier",
-  shieldpiercing: "Barrier",
-  overload: "Overload",
-  disruption: "Overload",
-  unstoppable: "Unstoppable",
-  stagger: "Unstoppable",
-};
-
-/** A weapon type from its name or a shorthand ("hc", "lfr", "handcannon"), or undefined. */
-function weaponTypeOf(raw: string): string | undefined {
-  return TYPE_NAMES[squash(expandWeaponQueryAliases(raw))];
-}
-
 type FacetValues = Partial<Record<ExcludableFacet, string[]>>;
 
-/**
- * What an `is:` word selects, the same vocabulary as the item manager's search:
- * elements (`is:arc`, `is:light`), rarity, ammo, slot (`is:kineticslot`),
- * champion, and weapon type (`is:handcannon`, `is:hc`).
- */
-function isWord(raw: string): FacetValues | undefined {
-  const word = squash(raw);
-  const element = ELEMENTS.find((e) => squash(e) === word);
-  if (element) return { element: [element] };
-  if (word === "light") return { element: ["Arc", "Solar", "Void"] };
-  if (word === "dark") return { element: ["Stasis", "Strand"] };
-  const rarity = RARITIES.find((r) => squash(r) === word);
-  if (rarity) return { rarity: [rarity] };
-  const ammo = AMMO.find((a) => squash(a) === word);
-  if (ammo) return { ammo: [ammo] };
-  if (SLOTS[word]) return { slot: [SLOTS[word]] };
-  if (CHAMPIONS[word]) return { champion: [CHAMPIONS[word]] };
-  if (word === "heavygrenadelauncher") return { type: ["Grenade Launcher"], ammo: ["Heavy"] };
-  if (word === "specialgrenadelauncher") return { type: ["Grenade Launcher"], ammo: ["Special"] };
-  const type = weaponTypeOf(raw);
-  if (type) return { type: [type] };
-  return undefined;
+/** What an `is:` word selects, and whether typed alone it also lists those weapons first. */
+interface IsWord {
+  facets: FacetValues;
+  bare: boolean;
 }
 
 /**
- * `is:` words that read as something else alone ("light", "power", "stagger"), so
- * typed bare they stay text. The rest match as the Items search's bare keywords do.
+ * The words a weapon search understands, from the catalog's own weapon types and
+ * elements (a type Bungie adds works without a code change) plus the shared vocabulary
+ * in search-vocabulary.ts. Build once per catalog.
  */
-const NOT_BARE: ReadonlySet<string> = new Set([
-  "light",
-  "dark",
-  "energy",
-  "power",
-  "antibarrier",
-  "shieldpiercing",
-  "disruption",
-  "stagger",
-  "heavygrenadelauncher",
-  "specialgrenadelauncher",
-]);
+export interface WeaponQueryVocabulary {
+  /** Squashed `is:`/`not:` word → what it selects. */
+  isWords: ReadonlyMap<string, IsWord>;
+  /** Per closed facet, squashed `key:` value → the catalog value it names. */
+  values: Readonly<Record<ExcludableFacet, ReadonlyMap<string, string>>>;
+}
 
-/**
- * The filter a search's whole free text stands for when it's one descriptive word
- * ("arc", "heavy", "smg", "hand cannon"): those weapons lead the results, with
- * name and typo matches after them.
- */
-export function bareWordFilters(text: string): WeaponFilters | undefined {
-  const word = squash(text);
-  if (!word || NOT_BARE.has(word)) return undefined;
-  return isWord(text);
+/** Type shorthands not in WEAPON_NAME_ALIASES, as squashed type names. */
+const TYPE_SHORTHANDS: Readonly<Record<string, string>> = {
+  bow: "combatbow",
+  submachine: "submachinegun",
+};
+
+export function weaponQueryVocabulary({
+  types,
+  elements,
+}: {
+  types: readonly string[];
+  elements: readonly string[];
+}): WeaponQueryVocabulary {
+  const named = (names: Iterable<string>) => new Map([...names].map((n) => [squash(n), n] as const));
+  const words = (table: Readonly<Record<string, string>>) => new Map(Object.entries(table));
+
+  const elementValues = named(elements);
+  const typeValues = named(types);
+  for (const [short, full] of [...Object.entries(WEAPON_NAME_ALIASES), ...Object.entries(TYPE_SHORTHANDS)]) {
+    const type = typeValues.get(squash(full));
+    if (type && !typeValues.has(squash(short))) typeValues.set(squash(short), type);
+  }
+  // Grenade launchers by ammo: a type value that also checks ammo (see FACET_VALUES).
+  for (const [word, ammo] of Object.entries(GRENADE_LAUNCHER_AMMO_WORDS)) {
+    const launcher = typeValues.get("grenadelauncher");
+    if (launcher) typeValues.set(word, `${ammo} ${launcher}`);
+  }
+  const slotValues = words({ ...WEAPON_SLOT_WORDS, ...WEAPON_SLOT_ALIASES });
+  for (const slot of Object.values(WEAPON_SLOT_WORDS)) slotValues.set(squash(slot), slot);
+
+  const values: WeaponQueryVocabulary["values"] = {
+    element: elementValues,
+    type: typeValues,
+    ammo: words(AMMO_WORDS),
+    rarity: words(RARITY_WORDS),
+    slot: slotValues,
+    champion: words(CHAMPION_WORDS),
+  };
+
+  // Every `is:` word, and whether it also works alone. Words that read as something
+  // else on their own ("light", "power", "stagger") or name two facets stay text.
+  const isWords = new Map<string, IsWord>();
+  const add = (word: string, facets: FacetValues, bare: boolean) => {
+    if (!isWords.has(word)) isWords.set(word, { facets, bare });
+  };
+  for (const [word, element] of elementValues) add(word, { element: [element] }, true);
+  for (const [side, sideElements] of Object.entries(ELEMENT_SIDES)) {
+    const present = sideElements.flatMap((e) => elementValues.get(e) ?? []);
+    if (present.length) add(side, { element: present }, false);
+  }
+  for (const [word, rarity] of Object.entries(RARITY_WORDS)) add(word, { rarity: [rarity] }, true);
+  for (const [word, ammo] of Object.entries(AMMO_WORDS)) add(word, { ammo: [ammo] }, true);
+  for (const [word, slot] of Object.entries(WEAPON_SLOT_WORDS)) add(word, { slot: [slot] }, true);
+  for (const [word, slot] of Object.entries(WEAPON_SLOT_ALIASES)) add(word, { slot: [slot] }, false);
+  for (const [word, champion] of Object.entries(CHAMPION_WORDS)) {
+    add(word, { champion: [champion] }, !CHAMPION_SYNONYMS.has(word));
+  }
+  for (const [word, type] of typeValues) add(word, { type: [type] }, !Object.hasOwn(GRENADE_LAUNCHER_AMMO_WORDS, word));
+
+  return { isWords, values };
 }
 
 /**
@@ -227,23 +228,22 @@ function craftableValue(raw: string): string | null {
 
 /**
  * Parse a raw search string into structured {@link WeaponFilters} plus residual
- * free text. Supports `key:value` filters (`perk:`, `trait:`, `trait1:`, `trait2:`,
- * `origin:`, `element:`, `type:`, `ammo:`, `slot:`, `rarity:`, `frame:`,
- * `source:`, `season:`, `gear:`/`barrel:`/`mag:`, `champion:`, `name:`, `craftable:`)
+ * free text. Supports `key:value` filters (see {@link FACET_KEYS}, plus `craftable:`)
  * and `is:`/`not:` words (`is:arc`, `is:heavy`, `is:handcannon`, `not:exotic`,
- * `is:adept`, `is:craftable`, … see {@link isWord}). Repeated words of one kind OR
- * together (`is:arc is:solar`); `not:` excludes. Community shorthands (`hc`, `smg`)
- * are alias-expanded for `type:` values. A filter token the parser doesn't know
- * lands in `unknown`; a bare `key:` still being typed is ignored; other tokens are `text`.
+ * `is:adept`, `is:craftable`, … see {@link weaponQueryVocabulary}). Repeated words of
+ * one kind OR together (`is:arc is:solar`); `not:` excludes. Element, type, ammo,
+ * rarity, slot and champion values must name one (`type:hc` works, `type:blaster`
+ * doesn't). A filter that means nothing lands in `unknown`; a bare `key:` still being
+ * typed is ignored; other tokens, including a quoted perk name with a colon in it
+ * ("Property: Undecidable"), are `text`.
  */
-export function parseWeaponQuery(input: string): ParsedWeaponQuery {
+export function parseWeaponQuery(input: string, vocabulary: WeaponQueryVocabulary): ParsedWeaponQuery {
   const filters: WeaponFilters = {};
   const freeText: string[] = [];
-  const unknown: string[] = [];
+  const unknown: UnknownFilter[] = [];
 
-  const addFacet = (key: (typeof ARRAY_FACET_KEYS)[number], value: string) => {
-    const list = (filters[key] ??= []);
-    pushUnique(list, value);
+  const addFacet = (key: ArrayFacetKey, value: string) => {
+    pushUnique((filters[key] ??= []), value);
   };
   const addExcluded = (key: ExcludableFacet, value: string) => {
     const exclude = (filters.exclude ??= {});
@@ -252,110 +252,68 @@ export function parseWeaponQuery(input: string): ParsedWeaponQuery {
 
   for (const token of tokenize(input)) {
     const colon = token.indexOf(":");
-    if (colon <= 0) {
+    const key = colon > 0 ? token.slice(0, colon).toLowerCase() : "";
+    const rawValue = token.slice(colon + 1);
+    // Keys never have spaces, and values never start with one: that's a perk name.
+    if (!key || /\s/.test(key) || /^\s/.test(rawValue)) {
       freeText.push(token);
       continue;
     }
 
-    const key = token.slice(0, colon).toLowerCase();
-    const rawValue = token.slice(colon + 1);
-    const known = key in FACET_KEYS || OTHER_KEYS.has(key);
-
-    if (!rawValue) {
-      // `is:` mid-typing narrows nothing yet; "Property:" from a pasted perk name is text.
-      if (!known) freeText.push(token);
+    const facet = FACET_KEYS.get(key);
+    if (!facet && key !== "is" && key !== "not" && key !== "craftable") {
+      // "Property:" on its own is the start of a pasted perk name, not a filter.
+      if (rawValue) unknown.push({ token, reason: NOT_A_FILTER });
+      else freeText.push(token);
       continue;
     }
-    if (!known) {
-      unknown.push(token);
-      continue;
-    }
+    // `is:` mid-typing narrows nothing yet.
+    if (!rawValue) continue;
 
-    if (key === "is" || key === "not") {
-      const flag = squash(rawValue);
-      const on = key === "is";
-      if (flag === "adept") {
-        filters.adept = on;
+    if (facet) {
+      if (!isClosedFacet(facet)) {
+        addFacet(facet, rawValue);
         continue;
       }
-      if (flag === "craftable" || flag === "craftble") {
-        addFacet("craftable", on ? "Yes" : "No");
-        continue;
-      }
-      const values = isWord(rawValue);
-      const facets = values ? (Object.keys(values) as ExcludableFacet[]) : [];
-      // not:heavygrenadelauncher would need NOT (A AND B), which per-facet exclusion can't say.
-      if (!values || (!on && facets.length > 1)) {
-        unknown.push(token);
-        continue;
-      }
-      for (const facet of facets) {
-        for (const value of values[facet]!) {
-          if (on) addFacet(facet, value);
-          else addExcluded(facet, value);
-        }
-      }
+      const value = vocabulary.values[facet].get(squash(rawValue));
+      if (value) addFacet(facet, value);
+      else unknown.push({ token, reason: `isn't ${VALUE_NAMES[facet]}` });
       continue;
     }
 
-    if (key === "perk") {
-      addFacet("perks", rawValue);
-      continue;
-    }
-    if (key === "trait") {
-      addFacet("trait", rawValue);
-      continue;
-    }
-    if (key === "trait1") {
-      addFacet("trait1", rawValue);
-      continue;
-    }
-    if (key === "trait2") {
-      addFacet("trait2", rawValue);
-      continue;
-    }
-    if (key === "origin" || key === "origintrait") {
-      addFacet("originTrait", rawValue);
-      continue;
-    }
-    if (key === "name") {
-      addFacet("name", rawValue);
-      continue;
-    }
     if (key === "craftable") {
       const value = craftableValue(rawValue);
       if (value) addFacet("craftable", value);
-      else unknown.push(token);
+      else unknown.push({ token, reason: "takes yes or no" });
       continue;
     }
 
-    const facet = FACET_KEYS[key]!;
-    if (facet === "type") addFacet(facet, weaponTypeOf(rawValue) ?? rawValue);
-    else if (facet === "champion") addFacet(facet, CHAMPIONS[squash(rawValue)] ?? rawValue);
-    else if (facet === "slot") addFacet(facet, SLOTS[squash(rawValue)] ?? rawValue);
-    else addFacet(facet, rawValue);
+    const flag = squash(rawValue);
+    const on = key === "is";
+    if (flag === "adept") {
+      filters.adept = on;
+      continue;
+    }
+    if (flag === "craftable" || flag === "craftble") {
+      addFacet("craftable", on ? "Yes" : "No");
+      continue;
+    }
+    const word = vocabulary.isWords.get(flag);
+    if (!word) {
+      unknown.push({ token, reason: NOT_A_FILTER });
+      continue;
+    }
+    for (const [kind, kindValues] of Object.entries(word.facets) as [ExcludableFacet, string[]][]) {
+      for (const value of kindValues) {
+        if (on) addFacet(kind, value);
+        else addExcluded(kind, value);
+      }
+    }
   }
 
-  return { filters, text: freeText.join(" "), unknown };
-}
-
-/** How to execute a free-form query: keyword filters plus the text to fuzzy-search. */
-export interface WeaponTextSearchPlan {
-  filters: WeaponFilters;
-  /**
-   * The free text to run name/fuzzy search on. Under `MIN_WEAPON_TEXT_QUERY_LENGTH`
-   * it searches nothing: the caller filters the full catalog and lets `filters` narrow it.
-   * Filter tokens never come back here, so `is:arc` can't fuzzy-match "Whisper".
-   */
-  searchText: string;
-  /** Filter tokens the parser doesn't know; the caller should show no results. */
-  unknown: string[];
-}
-
-/** Parse `input` once into the filters, the free text to search, and any unknown filters. */
-export function planWeaponTextSearch(input: string): WeaponTextSearchPlan {
-  const { filters, text, unknown } = parseWeaponQuery(input);
-  return { filters, searchText: text.trim(), unknown };
+  const text = freeText.join(" ").trim();
+  const bare = vocabulary.isWords.get(squash(text));
+  return { filters, text, unknown, ...(bare?.bare ? { keyword: bare.facets } : {}) };
 }
 
 function mergeFacetArray(a: string[] | undefined, b: string[] | undefined): string[] | undefined {

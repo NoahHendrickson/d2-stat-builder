@@ -26,7 +26,7 @@ describe("weapon browser integration", () => {
     ]) {
       const result = (catalog: ReturnType<typeof createWeaponCatalog>) =>
         catalog
-          .search(query, {}, "name")
+          .search(query, {}, "name").results
           .map(({ hash, columns, perks }) => ({ hash, columns, perks }));
       expect(result(restored)).toEqual(result(original));
     }
@@ -37,15 +37,15 @@ describe("weapon browser integration", () => {
 
   it("combines free text, query syntax, and explicit facets without poisoning cached text", () => {
     const catalog = createWeaponCatalog(index);
-    const all = catalog.search("fatebringer", {}, "name");
+    const all = catalog.search("fatebringer", {}, "name").results;
     expect(all.length).toBeGreaterThan(0);
     expect(
-      catalog.search("fatebringer", { element: ["Solar"] }, "name"),
+      catalog.search("fatebringer", { element: ["Solar"] }, "name").results,
     ).toEqual([]);
-    expect(catalog.search("fatebringer", {}, "name")).toEqual(all);
+    expect(catalog.search("fatebringer", {}, "name").results).toEqual(all);
     expect(
       catalog
-        .search("type:hc", {}, "name")
+        .search("type:hc", {}, "name").results
         .every((w) => w.type === "Hand Cannon"),
     ).toBe(true);
   });
@@ -55,14 +55,14 @@ describe("weapon browser integration", () => {
     expect(catalog.facets.source!.length).toBeGreaterThan(0);
     for (const { value } of catalog.facets.source!) {
       expect(
-        catalog.search("", { source: [value] }, "name").length,
+        catalog.search("", { source: [value] }, "name").results.length,
       ).toBeGreaterThan(0);
     }
   });
 
   it("labels same-name results only when the name has several current perk pools", () => {
     const catalog = createWeaponCatalog(index);
-    for (const weapon of catalog.search("", {}, "name")) {
+    for (const weapon of catalog.search("", {}, "name").results) {
       expect(catalog.poolLabel(weapon.hash)).toBeUndefined();
     }
 
@@ -86,7 +86,7 @@ describe("weapon browser integration", () => {
     const twoPools = createWeaponCatalog(
       internWeaponCatalog([...sampleWeapons, reprise], "test").index,
     );
-    const rows = twoPools.search("fatebringer", {}, "name");
+    const rows = twoPools.search("fatebringer", {}, "name").results;
     expect(rows.map((w) => twoPools.poolLabel(w.hash)).sort()).toEqual([
       "Pantheon",
       "Vault of Glass",
@@ -96,9 +96,9 @@ describe("weapon browser integration", () => {
   it("matches element and rarity words typed as free text", () => {
     const catalog = createWeaponCatalog(index);
     expect(
-      catalog.search("solar fusion", {}, "name").map((w) => w.name),
+      catalog.search("solar fusion", {}, "name").results.map((w) => w.name),
     ).toEqual(["Sunlit Fusion"]);
-    const legendary = catalog.search("legendary", {}, "name");
+    const legendary = catalog.search("legendary", {}, "name").results;
     expect(legendary.length).toBeGreaterThan(0);
     expect(legendary.every((w) => w.rarity === "Legendary")).toBe(true);
   });

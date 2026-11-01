@@ -18,7 +18,7 @@ const catalog = createWeaponCatalog(
 
 const hashes = (query: string, filters: WeaponFilters = {}) =>
   catalog
-    .search(query, filters, "name")
+    .search(query, filters, "name").results
     .map((w) => w.hash)
     .sort((a, b) => a - b);
 const everything = hashes("");
@@ -66,10 +66,10 @@ describe("weapon search filter words", () => {
   });
 
   it("is:arc keeps no Strand or Kinetic bow (Vengeful Whisper, Whispering Slab)", () => {
-    const names = new Set(catalog.search("is:arc", {}, "name").map((w) => w.name));
+    const names = new Set(catalog.search("is:arc", {}, "name").results.map((w) => w.name));
     expect(names.has("Vengeful Whisper")).toBe(false);
     expect(names.has("Whispering Slab")).toBe(false);
-    expect(catalog.search("is:arc", {}, "name").every((w) => w.element === "Arc")).toBe(true);
+    expect(catalog.search("is:arc", {}, "name").results.every((w) => w.element === "Arc")).toBe(true);
   });
 
   it("weapon-type shorthands and squashed names match the type", () => {
@@ -89,10 +89,35 @@ describe("weapon search filter words", () => {
     expect(hashes("is:dark")).toEqual(hashes("", { element: ["Stasis", "Strand"] }));
   });
 
-  it("is:heavygrenadelauncher is a heavy grenade launcher", () => {
-    expect(hashes("is:heavygrenadelauncher")).toEqual(
-      hashes("", { type: ["Grenade Launcher"], ammo: ["Heavy"] }),
+  it("grenade launchers by ammo combine and negate like any other type", () => {
+    const heavyGls = hashes("", { type: ["Grenade Launcher"], ammo: ["Heavy"] });
+    const specialGls = hashes("", { type: ["Grenade Launcher"], ammo: ["Special"] });
+    expect(heavyGls.length).toBeGreaterThan(0);
+    expect(hashes("is:heavygrenadelauncher")).toEqual(heavyGls);
+    expect(hashes("not:heavygrenadelauncher")).toEqual(without(heavyGls));
+    const shotguns = hashes("", { type: ["Shotgun"] });
+    expect(hashes("is:shotgun is:heavygrenadelauncher")).toEqual(
+      [...shotguns, ...heavyGls].sort((a, b) => a - b),
     );
+    // Primary-ammo launchers (Fighting Lion) stay: only Special ones are ruled out.
+    expect(specialGls.length).toBeGreaterThan(0);
+    const special = new Set(specialGls);
+    expect(hashes("is:grenadelauncher not:specialgrenadelauncher")).toEqual(
+      hashes("", { type: ["Grenade Launcher"] }).filter((h) => !special.has(h)),
+    );
+  });
+
+  it("odd inputs never throw", () => {
+    for (const q of ["is:constructor", "not:constructor", "is:__proto__", "constructor:x", "type:__proto__"]) {
+      expect(() => catalog.search(q, {}, "name"), q).not.toThrow();
+      expect(catalog.search(q, {}, "name").unknown.map((u) => u.token), q).toEqual([q]);
+    }
+  });
+
+  it("a quoted perk name with a colon searches as text", () => {
+    const result = catalog.search('"Property: Undecidable"', {}, "name");
+    expect(result.unknown).toEqual([]);
+    expect(result.results.length).toBeGreaterThan(0);
   });
 
   it("filter words combine: across kinds AND, within a kind OR, not: excludes", () => {
@@ -113,8 +138,8 @@ describe("weapon search filter words", () => {
     for (const q of [
       "is:arcc",
       "is:crafted",
-      "not:heavygrenadelauncher",
       "elemnt:arc",
+      "type:blaster",
       "craftable:maybe",
       "fatebringer is:nope",
     ]) {
@@ -130,8 +155,8 @@ describe("weapon search filter words", () => {
 
 describe("a filter word typed alone", () => {
   const leads = (query: string, filters: WeaponFilters, sort: "name" | "season-desc" = "name") => {
-    const results = catalog.search(query, {}, sort);
-    const group = catalog.search("", filters, sort);
+    const results = catalog.search(query, {}, sort).results;
+    const group = catalog.search("", filters, sort).results;
     expect(results.slice(0, group.length).map((w) => w.hash), query).toEqual(
       group.map((w) => w.hash),
     );
@@ -163,14 +188,14 @@ describe("a filter word typed alone", () => {
   });
 
   it("chips still narrow it", () => {
-    const results = catalog.search("arc", { type: ["Hand Cannon"] }, "name");
+    const results = catalog.search("arc", { type: ["Hand Cannon"] }, "name").results;
     expect(results.length).toBeGreaterThan(0);
     expect(results.every((w) => w.type === "Hand Cannon")).toBe(true);
     expect(results[0]!.element).toBe("Arc");
   });
 
   it("words that mean something else alone stay text", () => {
-    const light = catalog.search("light", {}, "name");
+    const light = catalog.search("light", {}, "name").results;
     expect(light.length).toBeLessThan(hashes("is:light").length);
   });
 });

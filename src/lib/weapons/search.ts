@@ -36,8 +36,23 @@ export function sortWeapons(weapons: WeaponSummary[], order: WeaponSort): Weapon
   return sorted;
 }
 
-/** Facets a `not:` word can rule out. */
-export type ExcludableFacet = "element" | "type" | "ammo" | "rarity" | "slot" | "champion";
+/**
+ * What a weapon is, facet by facet: chips and `is:` words keep a weapon when any of its
+ * values is wanted, `not:` words drop it when any is excluded.
+ */
+const FACET_VALUES = {
+  element: (w) => [w.element],
+  // "Heavy Grenade Launcher" names a type with its ammo (is:heavygrenadelauncher).
+  type: (w) => [w.type, `${w.ammo} ${w.type}`],
+  ammo: (w) => [w.ammo],
+  rarity: (w) => [w.rarity],
+  slot: (w) => [w.slot],
+  champion: (w) => w.champions ?? [],
+} as const satisfies Record<string, (w: WeaponSummary) => readonly string[]>;
+
+/** Facets an `is:` word selects and a `not:` word can rule out. */
+export type ExcludableFacet = keyof typeof FACET_VALUES;
+export const EXCLUDABLE_FACETS = Object.keys(FACET_VALUES) as ExcludableFacet[];
 
 export interface WeaponFilters {
   /** Values that drop a weapon (`not:exotic`); a weapon matching any is out. */
@@ -228,11 +243,19 @@ export function filterWeapons(
     .filter((group) => group.length > 0);
   // Lowercase the (tiny) filter value lists once, not per weapon×facet.
   const nameWanted = loweredSet(filters.name);
-  const elementWanted = loweredSet(filters.element);
-  const typeWanted = loweredSet(filters.type);
-  const ammoWanted = loweredSet(filters.ammo);
-  const rarityWanted = loweredSet(filters.rarity);
-  const slotWanted = loweredSet(filters.slot);
+  // One check per facet in use: one of its values wanted (if any are), none excluded.
+  const facetChecks = EXCLUDABLE_FACETS.flatMap((facet) => {
+    const wanted = loweredSet(filters[facet]);
+    const out = loweredSet(filters.exclude?.[facet]);
+    if (!wanted.size && !out.size) return [];
+    const valuesOf = FACET_VALUES[facet];
+    return [
+      (w: WeaponSummary) => {
+        const values = valuesOf(w).map(lower);
+        return (!wanted.size || values.some((v) => wanted.has(v))) && !values.some((v) => out.has(v));
+      },
+    ];
+  });
   const frameWanted = loweredSet(filters.frame);
   const seasonWanted = new Set((filters.season ?? []).map((s) => lower(s.trim())));
   const sourceActive = (filters.source?.length ?? 0) > 0;
@@ -242,7 +265,6 @@ export function filterWeapons(
   const traitWanted = loweredSet(filters.trait);
   const originWanted = loweredSet(filters.originTrait);
   const gearWanted = loweredSet(filters.gear);
-  const championWanted = loweredSet(filters.champion);
   const damageIndices =
     filters.trait1DamagePerks || filters.trait2DamagePerks ? damagePerkIndexSet(perks) : null;
   const craftableActive = (filters.craftable?.length ?? 0) > 0;
@@ -254,31 +276,11 @@ export function filterWeapons(
     else if (v === "no") craftableNo = true;
   }
   const needsOwned = requiredPerks.length > 0 || customPerkGroups.length > 0;
-  const excluded = filters.exclude;
-  const elementOut = loweredSet(excluded?.element);
-  const typeOut = loweredSet(excluded?.type);
-  const ammoOut = loweredSet(excluded?.ammo);
-  const rarityOut = loweredSet(excluded?.rarity);
-  const slotOut = loweredSet(excluded?.slot);
-  const championOut = loweredSet(excluded?.champion);
   return weapons.filter((w) => {
     if (!isCatalogWeapon(w)) return false;
-    if (excluded) {
-      if (elementOut.has(lower(w.element)) || typeOut.has(lower(w.type))) return false;
-      if (ammoOut.has(lower(w.ammo)) || rarityOut.has(lower(w.rarity))) return false;
-      if (slotOut.has(lower(w.slot))) return false;
-      if (w.champions?.some((c) => championOut.has(lower(c)))) return false;
-    }
     if (!facetMatches(w.name, nameWanted)) return false;
-    if (!facetMatches(w.element, elementWanted)) return false;
-    if (!facetMatches(w.type, typeWanted)) return false;
-    if (!facetMatches(w.ammo, ammoWanted)) return false;
-    if (!facetMatches(w.rarity, rarityWanted)) return false;
-    if (!facetMatches(w.slot, slotWanted)) return false;
+    if (!facetChecks.every((matches) => matches(w))) return false;
     if (frameWanted.size && !frameWanted.has(lower(w.frame ?? ""))) return false;
-    if (championWanted.size && !w.champions?.some((c) => championWanted.has(lower(c)))) {
-      return false;
-    }
     if (sourceActive && !matchesWeaponSourceLowered(w.source, sourceWanted, w.sources)) {
       return false;
     }
@@ -472,7 +474,15 @@ export function rankWeaponResults(
   query: string,
   sort: WeaponSort,
   index?: WeaponNameIndex,
+  /** Hashes listed first, in `sort` order, ahead of the ranked rest (a bare keyword's weapons). */
+  lead?: ReadonlySet<number>,
 ): WeaponSummary[] {
+  if (lead?.size) {
+    const first: WeaponSummary[] = [];
+    const rest: WeaponSummary[] = [];
+    for (const weapon of weapons) (lead.has(weapon.hash) ? first : rest).push(weapon);
+    return [...sortWeapons(first, sort), ...rankWeaponResults(rest, query, sort, index)];
+  }
   const q = query.trim();
   if (q.length < MIN_WEAPON_TEXT_QUERY_LENGTH) {
     return sortWeapons(weapons, sort);

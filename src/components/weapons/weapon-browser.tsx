@@ -49,8 +49,8 @@ import {
   withoutFilter,
 } from "@/lib/weapons/filter-suggestions";
 import { resolveFrame } from "@/lib/weapons/pick-slots";
-import { parseWeaponQuery } from "@/lib/weapons/query-language";
 import { SORTS, readSearchState } from "@/lib/weapons/search-state";
+import type { WeaponSearchResult } from "@/lib/weapons/catalog";
 import type { WeaponSummary } from "@/lib/weapons/types";
 import { weaponTypeIcon } from "@/lib/weapons/weapon-type-icon-paths";
 import { useMinWidth } from "@/lib/use-min-width";
@@ -59,6 +59,8 @@ import { cn } from "@/lib/utils";
 const SORT_ITEMS: Record<string, string> = Object.fromEntries(SORTS);
 /** Tailwind `lg`: from here the details sit beside the list instead of in a dialog. */
 const SPLIT_MIN_PX = 1024;
+
+const NO_RESULTS: WeaponSearchResult = { results: [], unknown: [] };
 /** A result row's nameplate height, and the gap left between plates. */
 const ROW_PX = 40;
 const ROW_GAP_PX = 4;
@@ -124,13 +126,11 @@ export function WeaponBrowser() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const detailsRef = useRef<HTMLElement>(null);
   const data = query.data;
-  const results = useMemo(
-    () => data?.search(deferred.query, deferred.filters, deferred.sort) ?? [],
+  const { results, unknown: unknownFilters } = useMemo(
+    () =>
+      data?.search(deferred.query, deferred.filters, deferred.sort) ??
+      NO_RESULTS,
     [data, deferred],
-  );
-  const unknownFilters = useMemo(
-    () => parseWeaponQuery(deferred.query).unknown,
-    [deferred.query],
   );
   // A weapon always stays open: the last one picked (even after a search
   // filters it out), else the top result.
@@ -276,8 +276,8 @@ export function WeaponBrowser() {
                 {unknownFilters.length > 0 ? (
                   <>
                     <p>
-                      <code>{unknownFilters[0]}</code> isn&apos;t a search
-                      filter.
+                      <code>{unknownFilters[0]!.token}</code>{" "}
+                      {unknownFilters[0]!.reason}.
                     </p>
                     <p className="mt-2 text-sm text-muted-foreground">
                       Try is:arc, is:heavy, is:handcannon, not:exotic, or
