@@ -2,7 +2,7 @@
 
 import { memo, useLayoutEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
-import { ClassGlyph, classGlyphWidth } from "@/components/class-glyph";
+import { ClassGlyph, classGlyphMaxWidth, hasClassGlyph } from "@/components/class-glyph";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   ASCENDANT_SHARD_HASH,
@@ -87,16 +87,16 @@ const HEADER_PLACEMENTS: Record<
 /** Height the class sigil draws at beside a group of armor. */
 const CLASS_MARKER_PX = 32;
 /**
- * The sigils differ in width, so every class group (any-class too) keeps the widest's
- * column, its sigil centred in it: their tiles all start at the same x.
+ * The sigils differ in width, so every class group with one keeps the widest's column,
+ * its sigil centred in it: groups that start a line all start their tiles at the same x.
  */
-const CLASS_MARKER_WIDTH = Math.max(...[0, 1, 2].map((c) => classGlyphWidth(c, CLASS_MARKER_PX)));
+const CLASS_MARKER_WIDTH = classGlyphMaxWidth(CLASS_MARKER_PX);
 
 /** Width of a group's marker (see GroupMarker), or 0 when its grouping draws none. */
 function markerWidth(groupBy: GroupKey, { items }: ItemGroup, tiles: TileMetrics): number {
   const item = items[0];
   if (!item) return 0;
-  if (groupBy === "class") return CLASS_MARKER_WIDTH;
+  if (groupBy === "class") return hasClassGlyph(item.classType) ? CLASS_MARKER_WIDTH : 0;
   // Only weapons have an ammo type; a type without a silhouette keeps its column.
   return groupBy === "type" && item.ammoType !== undefined ? tiles.tile : 0;
 }
@@ -568,12 +568,16 @@ function VaultCurrencies({ inventory: { currencies } }: { inventory: ManagerInve
 
 /**
  * What a vault group is, as a picture in the column beside its tiles: the weapon type's
- * silhouette or the class sigil. Other groupings and armor types have no column, and
- * any-class items an empty one (see markerWidth).
+ * silhouette or the class sigil. Other groupings, armor types, and any-class items have
+ * no column (see markerWidth).
  */
 function GroupMarker({ groupBy, item }: { groupBy: GroupKey; item: InventoryItem }) {
   if (groupBy === "class") {
-    return <ClassGlyph classType={item.classType} className="text-muted-foreground h-8 w-auto" />;
+    return <ClassGlyph
+        classType={item.classType}
+        className="text-muted-foreground w-auto"
+        style={{ height: CLASS_MARKER_PX }}
+      />;
   }
   const icon = groupBy === "type" ? weaponTypeIcon(item.typeName, item.ammoType) : undefined;
   if (!icon) return null;
