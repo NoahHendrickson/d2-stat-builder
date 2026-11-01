@@ -5,6 +5,7 @@
 // schema as the settings store), else process memory — enough for a single dev server.
 import { cacheLife, cacheTag } from "next/cache";
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
+import { lazySchema } from "../db/neon";
 import { expiring } from "../read-cache";
 
 export interface ApplyCancelStore {
@@ -14,29 +15,20 @@ export interface ApplyCancelStore {
 
 class NeonApplyCancelStore implements ApplyCancelStore {
   private readonly sql: NeonQueryFunction<false, false>;
-  private schemaReady: Promise<void> | null = null;
 
   constructor(databaseUrl: string) {
     this.sql = neon(databaseUrl);
   }
 
-  private ensureSchema(): Promise<void> {
-    if (!this.schemaReady) {
-      this.schemaReady = (async () => {
-        await this.sql`
-          CREATE TABLE IF NOT EXISTS apply_cancellations (
-            membership_id text NOT NULL,
-            apply_id text NOT NULL,
-            created_at timestamptz NOT NULL DEFAULT now(),
-            PRIMARY KEY (membership_id, apply_id)
-          )`;
-      })().catch((err) => {
-        this.schemaReady = null; // let the next call retry
-        throw err;
-      });
-    }
-    return this.schemaReady;
-  }
+  private readonly ensureSchema = lazySchema(async () => {
+    await this.sql`
+      CREATE TABLE IF NOT EXISTS apply_cancellations (
+        membership_id text NOT NULL,
+        apply_id text NOT NULL,
+        created_at timestamptz NOT NULL DEFAULT now(),
+        PRIMARY KEY (membership_id, apply_id)
+      )`;
+  });
 
   async cancel(membershipId: string, applyId: string) {
     await this.ensureSchema();

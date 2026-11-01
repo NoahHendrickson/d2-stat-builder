@@ -6,10 +6,9 @@ import {
   useDeferredValue,
   useMemo,
   useState,
-  useSyncExternalStore,
 } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
   Add01Icon,
@@ -49,12 +48,8 @@ import {
   sortSavedLoadouts,
   type LoadoutListSortKey,
 } from "@/lib/loadouts/list";
-import {
-  buildShareUrl,
-  parseShareParam,
-  SHARE_PARAM,
-  shareParamFromHash,
-} from "@/lib/loadouts/share";
+import { copyShareLink } from "@/lib/loadouts/share-client";
+import { useSharedImport } from "@/lib/loadouts/use-shared-import";
 import { countMajorStatMods, isMajorStatMod } from "@/lib/dim/mod-hashes";
 import { selectionsForLoadout } from "@/lib/loadouts/load-in-builder";
 import { loadoutSubclass, withLoadoutSubclass } from "@/lib/loadouts/subclass";
@@ -108,18 +103,6 @@ import {
   type LoadoutDetailsValues,
 } from "@/components/loadouts/loadout-editor-drawer";
 
-// Survives the list remounting (leaving the page and coming back) so a dismissed
-// share-link import stays dismissed.
-let dismissedImportParam: string | null = null;
-
-// Share links carry the loadout in the URL fragment, which useSearchParams doesn't see.
-function subscribeHash(onChange: () => void) {
-  window.addEventListener("hashchange", onChange);
-  return () => window.removeEventListener("hashchange", onChange);
-}
-const readHashImport = () => shareParamFromHash(window.location.hash);
-const noHashImport = () => null;
-
 type DialogState =
   | { kind: "none" }
   | { kind: "edit"; loadout: SavedLoadout; mods?: ModsSection }
@@ -157,8 +140,6 @@ export function LoadoutsList({
   refreshArmory: () => Promise<RefreshResult>;
 }) {
   const router = useRouter();
-  const pathname = usePathname();
-  const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const loadouts = useLoadouts();
   const { create, update, remove, removeMany, setTag } = useLoadoutMutations();
@@ -203,25 +184,11 @@ export function LoadoutsList({
     setPicked(new Set());
   };
 
-  // A share link lands here with #import=<json> (older ones with ?import=); offer to
-  // save a copy.
-  const hashImport = useSyncExternalStore(subscribeHash, readHashImport, noHashImport);
-  const importParam = hashImport ?? searchParams.get(SHARE_PARAM);
-  const importData = useMemo(() => parseShareParam(importParam), [importParam]);
-  const [importDismissed, setImportDismissed] = useState<string | null>(
-    () => dismissedImportParam,
-  );
-  const importOpen =
-    importData !== null &&
-    importDismissed !== importParam &&
-    dialog.kind === "none" &&
-    !setDialogs.open;
-
-  const clearImportParam = () => {
-    dismissedImportParam = importParam;
-    setImportDismissed(importParam);
-    router.replace(pathname);
-  };
+  // A share link lands here (#s=<code>, or an older #import=<json> / ?import=<json>);
+  // offer to save a copy.
+  const sharedImport = useSharedImport();
+  const importData = sharedImport.data;
+  const importOpen = importData !== null && dialog.kind === "none" && !setDialogs.open;
 
   const pieceMap = useMemo(
     () => new Map(armory.pieces.map((p) => [p.instanceId, p])),
@@ -474,7 +441,7 @@ export function LoadoutsList({
     const pending = toast.loading("Importing loadout");
     create.mutate(withLoadoutSubclass(data, subclass, manifest), {
       onSuccess: () => {
-        clearImportParam();
+        sharedImport.dismiss();
         pending.success("Loadout imported");
       },
       onError: mutationError(pending),
@@ -482,12 +449,13 @@ export function LoadoutsList({
   };
 
   const shareLoadout = useCallback((saved: SavedLoadout) => {
-    const url = buildShareUrl(window.location.origin, saved);
-    navigator.clipboard.writeText(url).then(
-      () =>
+    copyShareLink(window.location.origin, saved).then(
+      (longBecause) =>
         toast.success(
           "Share link copied",
-          "Anyone with the link can import a copy",
+          longBecause
+            ? `${longBecause}, so this one is long`
+            : "Anyone with the link can import a copy",
         ),
       () => toast.error("Couldn't copy to clipboard"),
     );
@@ -946,8 +914,8 @@ export function LoadoutsList({
       )}
       <LoadoutEditorDrawer
         open={importOpen}
-        onOpenChange={(open) => !open && clearImportParam()}
-        formKey={importParam ?? undefined}
+        onOpenChange={(open) => !open && sharedImport.dismiss()}
+        formKey={sharedImport.key ?? undefined}
         title="Import shared loadout"
         description="Save a copy of this loadout to your account. Items you don't own will show as missing."
         submitLabel="Import"

@@ -3,6 +3,7 @@
 // approach as the loadouts store (see src/lib/loadouts/neon-store.ts).
 import { cacheLife, cacheTag } from "next/cache";
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
+import { fromDatabaseUrl, lazySchema } from "../db/neon";
 import { ACCOUNT_READ_LIFE, expiring, fromCache, loggedRead } from "../read-cache";
 import {
   isSettingKey,
@@ -23,30 +24,21 @@ const toMs = (v: string | Date) => (v instanceof Date ? v.getTime() : Date.parse
 
 export class NeonSettingsStore {
   private readonly sql: NeonQueryFunction<false, false>;
-  private schemaReady: Promise<void> | null = null;
 
   constructor(databaseUrl: string) {
     this.sql = neon(databaseUrl);
   }
 
-  private ensureSchema(): Promise<void> {
-    if (!this.schemaReady) {
-      this.schemaReady = (async () => {
-        await this.sql`
-          CREATE TABLE IF NOT EXISTS user_settings (
-            membership_id text NOT NULL,
-            key text NOT NULL,
-            value jsonb NOT NULL,
-            updated_at timestamptz NOT NULL DEFAULT now(),
-            PRIMARY KEY (membership_id, key)
-          )`;
-      })().catch((err) => {
-        this.schemaReady = null; // let the next call retry
-        throw err;
-      });
-    }
-    return this.schemaReady;
-  }
+  private readonly ensureSchema = lazySchema(async () => {
+    await this.sql`
+      CREATE TABLE IF NOT EXISTS user_settings (
+        membership_id text NOT NULL,
+        key text NOT NULL,
+        value jsonb NOT NULL,
+        updated_at timestamptz NOT NULL DEFAULT now(),
+        PRIMARY KEY (membership_id, key)
+      )`;
+  });
 
   async list(membershipId: string): Promise<StoredSettings> {
     await this.ensureSchema();
@@ -112,11 +104,5 @@ class CachedSettingsStore implements SettingsStore {
   }
 }
 
-let singleton: SettingsStore | null | undefined;
-
 /** The server's settings store, or null when `DATABASE_URL` isn't set. */
-export function getServerSettingsStore(): SettingsStore | null {
-  if (singleton !== undefined) return singleton;
-  singleton = process.env.DATABASE_URL ? new CachedSettingsStore() : null;
-  return singleton;
-}
+export const getServerSettingsStore: () => SettingsStore | null = fromDatabaseUrl(() => new CachedSettingsStore());
