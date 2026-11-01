@@ -31,8 +31,14 @@ import {
 
 /** Bungie asks for ≥100ms between item actions; stay comfortably above it. */
 export const ACTION_SPACING_MS = 150;
-/** …and ≥500ms between socket-plug actions. */
-const PLUG_SPACING_MS = 600;
+/**
+ * …and ≥500ms between socket-plug actions, counted from one attempt's start to the
+ * next's (a throttle retry restarts it). Bungie answers inserts slowly (often ~2 s) when
+ * it's busy, so waiting the full spacing again after each answer only adds time…
+ */
+export const PLUG_SPACING_MS = 600;
+/** …but leave this much after each answer, so a slow one isn't followed back to back. */
+export const PLUG_REST_MS = 100;
 
 const SUCCESS = 1;
 
@@ -97,6 +103,8 @@ const PLUG_MESSAGES: Record<number, string> = {
   1678: "Socket is locked — unlock it in-game first (e.g. a fragment slot)", // DestinySocketActionNotAllowed
   1680: "You don't own that mod (or it isn't unlocked this season)", // DestinyPlugItemNotAvailable
 };
+/** A plug left over when `insertPlugs` hits its deadline. */
+const OUT_OF_TIME_MESSAGE = "Not attempted — the apply ran out of time. Apply again to finish";
 /** DestinySocketAlreadyHasPlug — the plug is already there, which is what we wanted. */
 const SOCKET_ALREADY_HAS_PLUG = 1679;
 
@@ -444,11 +452,11 @@ export async function stageAndEquip({
 }
 
 /**
- * Insert plugs one at a time (Bungie: ≥0.5s apart; character must be in orbit, a
- * social space, or offline). "Free" inserts cover armor mods, tuning, artifice, and
- * subclass fragments without Advanced Write Actions. A 401 is re-thrown; other errors
- * become per-plug results. After an in-activity error (1671) the remaining plugs are
- * reported with the same message instead of being attempted.
+ * Insert plugs one at a time, spaced per PLUG_SPACING_MS / PLUG_REST_MS (the character
+ * must be in orbit, a social space, or offline). "Free" inserts cover armor mods, tuning,
+ * artifice, and subclass fragments without Advanced Write Actions. A 401 is re-thrown;
+ * other errors become per-plug results. After an in-activity error (1671), or once
+ * `deadline` passes, the remaining plugs are reported failed instead of attempted.
  */
 export async function insertPlugs({
   http,
@@ -457,6 +465,7 @@ export async function insertPlugs({
   plugs,
   onProgress,
   shouldStop,
+  deadline,
 }: {
   http: HttpClient;
   membershipType: BungieMembershipType;
@@ -465,24 +474,39 @@ export async function insertPlugs({
   onProgress?: (event: PlugProgressEvent) => void;
   /** Checked before each insert. */
   shouldStop?: StopCheck;
+  /**
+   * Epoch ms after which no new insert starts, so the caller can still report every
+   * plug before its own time limit instead of being cut off mid-list.
+   */
+  deadline?: number;
 }): Promise<PlugResult[]> {
   const results: PlugResult[] = [];
-  let inActivity = false;
+  /** Set once the rest can't run (in an activity, out of time): their failure message. */
+  let skipMessage: string | undefined;
+  /** When the last attempt (including a throttle retry) went out, and when it answered. */
+  let lastStart = -Infinity;
+  let lastEnd = -Infinity;
   const emitResult = (result: PlugResult) => {
     results.push(result);
     onProgress?.({ phase: "result", result });
   };
-  for (let i = 0; i < plugs.length; i++) {
-    const plug = plugs[i];
-    if (!inActivity) await checkpoint(shouldStop);
-    onProgress?.({ phase: "start", plug });
-    if (inActivity) {
-      emitResult({ ...plug, ok: false, message: PLUG_MESSAGES[1671] });
+  for (const plug of plugs) {
+    if (!skipMessage) {
+      const wait = Math.max(lastStart + PLUG_SPACING_MS, lastEnd + PLUG_REST_MS) - Date.now();
+      if (wait > 0) await sleep(wait);
+      if (deadline !== undefined && Date.now() >= deadline) skipMessage = OUT_OF_TIME_MESSAGE;
+    }
+    if (skipMessage) {
+      onProgress?.({ phase: "start", plug });
+      emitResult({ ...plug, ok: false, message: skipMessage });
       continue;
     }
+    await checkpoint(shouldStop);
+    onProgress?.({ phase: "start", plug });
     try {
-      await withThrottleRetry(() =>
-        insertSocketPlugFree(http, {
+      await withThrottleRetry(() => {
+        lastStart = Date.now();
+        return insertSocketPlugFree(http, {
           plug: {
             socketIndex: plug.socketIndex,
             socketArrayType: 0, // DestinySocketArrayType.Default
@@ -491,8 +515,8 @@ export async function insertPlugs({
           itemId: plug.itemInstanceId,
           characterId,
           membershipType,
-        }),
-      );
+        });
+      });
       emitResult({ ...plug, ok: true });
     } catch (err) {
       if (err instanceof BungieHttpError && err.status === 401) throw err;
@@ -501,7 +525,7 @@ export async function insertPlugs({
         emitResult({ ...plug, ok: true });
         continue;
       }
-      if (code === 1671) inActivity = true;
+      if (code === 1671) skipMessage = PLUG_MESSAGES[1671];
       emitResult({
         ...plug,
         ok: false,
@@ -510,8 +534,9 @@ export async function insertPlugs({
           : ((code !== undefined ? PLUG_MESSAGES[code] : undefined) ??
             (err instanceof Error ? err.message : "Mod insert failed")),
       });
+    } finally {
+      lastEnd = Date.now();
     }
-    if (i < plugs.length - 1) await sleep(PLUG_SPACING_MS);
   }
   return results;
 }

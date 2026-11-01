@@ -12,6 +12,12 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    date: "2026-11-01",
+    changes: [
+      "Loadouts: applying a big loadout no longer stops partway and leaves the last few mods unslotted.",
+    ],
+  },
+  {
     date: "2026-10-27",
     changes: [
       "Armor table: sort by one column then another from the column headers, and filter Class, Archetype, Tertiary, Tuned and Set bonus right from their headers.",
