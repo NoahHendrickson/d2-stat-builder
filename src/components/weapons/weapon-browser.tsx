@@ -50,6 +50,7 @@ import {
 } from "@/lib/weapons/filter-suggestions";
 import { resolveFrame } from "@/lib/weapons/pick-slots";
 import { SORTS, readSearchState } from "@/lib/weapons/search-state";
+import type { WeaponSearchResult } from "@/lib/weapons/catalog";
 import type { WeaponSummary } from "@/lib/weapons/types";
 import { weaponTypeIcon } from "@/lib/weapons/weapon-type-icon-paths";
 import { useMinWidth } from "@/lib/use-min-width";
@@ -58,6 +59,8 @@ import { cn } from "@/lib/utils";
 const SORT_ITEMS: Record<string, string> = Object.fromEntries(SORTS);
 /** Tailwind `lg`: from here the details sit beside the list instead of in a dialog. */
 const SPLIT_MIN_PX = 1024;
+
+const NO_RESULTS: WeaponSearchResult = { results: [], unknown: [] };
 /** A result row's nameplate height, and the gap left between plates. */
 const ROW_PX = 40;
 const ROW_GAP_PX = 4;
@@ -123,8 +126,10 @@ export function WeaponBrowser() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const detailsRef = useRef<HTMLElement>(null);
   const data = query.data;
-  const results = useMemo(
-    () => data?.search(deferred.query, deferred.filters, deferred.sort) ?? [],
+  const { results, unknown: unknownFilters } = useMemo(
+    () =>
+      data?.search(deferred.query, deferred.filters, deferred.sort) ??
+      NO_RESULTS,
     [data, deferred],
   );
   // A weapon always stays open: the last one picked (even after a search
@@ -268,10 +273,25 @@ export function WeaponBrowser() {
           >
             {!query.isPending && results.length === 0 && (
               <div className="py-12 text-center">
-                <p>No weapons match this search.</p>
-                <p className="mt-2 text-sm text-muted-foreground">
-                  Try removing a filter or searching for a different perk.
-                </p>
+                {unknownFilters.length > 0 ? (
+                  <>
+                    <p>
+                      <code>{unknownFilters[0]!.token}</code>{" "}
+                      {unknownFilters[0]!.reason}.
+                    </p>
+                    <p className="mt-2 text-sm text-muted-foreground">
+                      Try is:arc, is:heavy, is:handcannon, not:exotic, or
+                      perk:&quot;kill clip&quot;.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p>No weapons match this search.</p>
+                    <p className="mt-2 text-sm text-muted-foreground">
+                      Try removing a filter or searching for a different perk.
+                    </p>
+                  </>
+                )}
               </div>
             )}
             <div

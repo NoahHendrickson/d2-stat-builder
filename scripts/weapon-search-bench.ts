@@ -13,7 +13,8 @@ import {
 } from "../src/lib/weapons/search";
 import {
   mergeWeaponFilters,
-  planWeaponTextSearch,
+  parseWeaponQuery,
+  weaponQueryVocabulary,
 } from "../src/lib/weapons/query-language";
 
 const raw = expandWeaponIndex(
@@ -22,6 +23,10 @@ const raw = expandWeaponIndex(
 const catalog = createWeaponCatalog(raw);
 const names = buildWeaponNameIndex(raw.weapons);
 const searcher = createWeaponSearcher(raw.weapons);
+const vocabulary = weaponQueryVocabulary({
+  types: catalog.facets.type!.map((f) => f.value),
+  elements: catalog.facets.element!.map((f) => f.value),
+});
 const cases: [string, WeaponFilters][] = [
   ["", {}],
   ["", { element: ["Solar"] }],
@@ -37,11 +42,11 @@ const cases: [string, WeaponFilters][] = [
   ["is:craftable", { customPerkGroups: [["Firefly", "Incandescent"]] }],
 ];
 function original(query: string, filters: WeaponFilters) {
-  const plan = planWeaponTextSearch(query);
+  const plan = parseWeaponQuery(query, vocabulary);
   const candidates = weaponsMatchingTextQuery(
     raw.weapons,
     searcher,
-    plan.searchText,
+    plan.text,
     raw.weapons.length,
     names,
   );
@@ -51,7 +56,7 @@ function original(query: string, filters: WeaponFilters) {
     raw.perks,
   );
   return collapseWeaponVersions(
-    rankWeaponResults(filtered, plan.searchText, "season-desc", names),
+    rankWeaponResults(filtered, plan.text, "season-desc", names),
     names.byName,
   );
 }
@@ -59,7 +64,7 @@ for (const [query, filters] of cases) {
   assert.deepEqual(
     catalog
       .search(query, filters, "season-desc")
-      .map((w) => w.hash)
+      .results.map((w) => w.hash)
       .sort(),
     original(query, filters)
       .map((w) => w.hash)

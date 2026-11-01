@@ -2,25 +2,34 @@ import { describe, expect, test } from "vitest";
 
 import { sampleWeapons } from "./fixtures/sample-weapons";
 import { internWeaponCatalog } from "./intern-weapons";
-import { mergeWeaponFilters, parseWeaponQuery, planWeaponTextSearch } from "./query-language";
+import { mergeWeaponFilters, parseWeaponQuery as parse, weaponQueryVocabulary } from "./query-language";
 import { filterWeapons, type WeaponFilters } from "./search";
+
+const vocabulary = weaponQueryVocabulary({
+  types: ["Auto Rifle", "Combat Bow", "Grenade Launcher", "Hand Cannon", "Linear Fusion Rifle", "Shotgun"],
+  elements: ["Kinetic", "Arc", "Solar", "Void", "Stasis", "Strand"],
+});
+const parseWeaponQuery = (input: string) => parse(input, vocabulary);
+const notAFilter = (token: string) => ({ token, reason: "isn't a search filter" });
 
 describe("parseWeaponQuery", () => {
   test("plain text passes through with no filters", () => {
-    expect(parseWeaponQuery("fatebringer")).toEqual({ filters: {}, text: "fatebringer" });
+    expect(parseWeaponQuery("fatebringer")).toEqual({ filters: {}, text: "fatebringer", unknown: [] });
+    expect(parseWeaponQuery("  fate   bringer ").text).toBe("fate bringer");
   });
 
-  test("facet keywords map onto OR-within arrays", () => {
+  test("facet keywords map onto OR-within arrays, by their catalog names", () => {
     const { filters, text } = parseWeaponQuery('element:solar type:"hand cannon" ammo:special');
-    expect(filters.element).toEqual(["solar"]);
-    expect(filters.ammo).toEqual(["special"]);
-    expect(filters.type).toEqual(["hand cannon"]);
+    expect(filters.element).toEqual(["Solar"]);
+    expect(filters.ammo).toEqual(["Special"]);
+    expect(filters.type).toEqual(["Hand Cannon"]);
     expect(text).toBe("");
   });
 
   test("type alias expansion (hc → hand cannon)", () => {
-    const { filters } = parseWeaponQuery("type:hc");
-    expect(filters.type).toEqual(["hand cannon"]);
+    expect(parseWeaponQuery("type:hc").filters.type).toEqual(["Hand Cannon"]);
+    expect(parseWeaponQuery("type:handcannon").filters.type).toEqual(["Hand Cannon"]);
+    expect(parseWeaponQuery("type:bow").filters.type).toEqual(["Combat Bow"]);
   });
 
   test("quoted multi-word values stay intact", () => {
@@ -30,16 +39,44 @@ describe("parseWeaponQuery", () => {
   });
 
   test("trait keyword maps to the generic trait filter", () => {
-    const { filters } = parseWeaponQuery('trait:"destabilizing rounds" trait2:frenzy');
+    const { filters } = parseWeaponQuery('trait:"destabilizing rounds" trait2:frenzy origin:veist name:x');
     expect(filters.trait).toEqual(["destabilizing rounds"]);
     expect(filters.trait2).toEqual(["frenzy"]);
+    expect(filters.originTrait).toEqual(["veist"]);
+    expect(filters.name).toEqual(["x"]);
   });
 
   test("is: flags set adept, craftable, and rarity", () => {
     expect(parseWeaponQuery("is:adept").filters.adept).toBe(true);
     expect(parseWeaponQuery("not:adept").filters.adept).toBe(false);
     expect(parseWeaponQuery("is:craftable").filters.craftable).toEqual(["Yes"]);
-    expect(parseWeaponQuery("is:exotic").filters.rarity).toEqual(["exotic"]);
+    expect(parseWeaponQuery("is:exotic").filters.rarity).toEqual(["Exotic"]);
+  });
+
+  test("is: words select elements, ammo, slots, champions, and weapon types", () => {
+    expect(parseWeaponQuery("is:arc").filters).toEqual({ element: ["Arc"] });
+    expect(parseWeaponQuery("is:arc").text).toBe("");
+    expect(parseWeaponQuery("is:heavy").filters).toEqual({ ammo: ["Heavy"] });
+    expect(parseWeaponQuery("is:kineticslot").filters).toEqual({ slot: ["Kinetic"] });
+    expect(parseWeaponQuery("is:antibarrier").filters).toEqual({ champion: ["Barrier"] });
+    expect(parseWeaponQuery("is:lfr").filters).toEqual({ type: ["Linear Fusion Rifle"] });
+    expect(parseWeaponQuery("is:light").filters).toEqual({ element: ["Arc", "Solar", "Void"] });
+  });
+
+  test("not: words exclude", () => {
+    expect(parseWeaponQuery("not:arc not:exotic").filters).toEqual({
+      exclude: { element: ["Arc"], rarity: ["Exotic"] },
+    });
+  });
+
+  test("grenade launchers by ammo are one type value, so they OR with other types and negate", () => {
+    expect(parseWeaponQuery("is:shotgun is:heavygrenadelauncher").filters).toEqual({
+      type: ["Shotgun", "Heavy Grenade Launcher"],
+    });
+    expect(parseWeaponQuery("not:specialgrenadelauncher").filters).toEqual({
+      exclude: { type: ["Special Grenade Launcher"] },
+    });
+    expect(parseWeaponQuery('type:"heavy grenade launcher"').filters.type).toEqual(["Heavy Grenade Launcher"]);
   });
 
   test("craftable:yes/no normalizes", () => {
@@ -56,13 +93,50 @@ describe("parseWeaponQuery", () => {
 
   test("repeated facet keys accumulate (OR within)", () => {
     const { filters } = parseWeaponQuery("element:solar element:arc");
-    expect(filters.element).toEqual(["solar", "arc"]);
+    expect(filters.element).toEqual(["Solar", "Arc"]);
   });
 
-  test("unknown keys fall through to free text", () => {
-    const { filters, text } = parseWeaponQuery("foo:bar baz");
-    expect(filters).toEqual({});
-    expect(text).toBe("foo:bar baz");
+  test("unknown filters are reported with why, never searched as text", () => {
+    expect(parseWeaponQuery("foo:bar is:arcc type:blaster craftable:maybe baz")).toEqual({
+      filters: {},
+      text: "baz",
+      unknown: [
+        notAFilter("foo:bar"),
+        notAFilter("is:arcc"),
+        { token: "type:blaster", reason: "isn't a weapon type" },
+        { token: "craftable:maybe", reason: "takes yes or no" },
+      ],
+    });
+  });
+
+  test("inherited object keys are unknown, not lookups", () => {
+    for (const token of ["is:constructor", "not:__proto__", "is:tostring", "constructor:x", "slot:constructor"]) {
+      expect(() => parseWeaponQuery(token), token).not.toThrow();
+      const parsed = parseWeaponQuery(token);
+      expect(parsed.filters, token).toEqual({});
+      expect(parsed.unknown.map((u) => u.token), token).toEqual([token]);
+    }
+  });
+
+  test("a bare known key is ignored while typing; an unknown one stays text", () => {
+    expect(parseWeaponQuery("is: perk:")).toEqual({ filters: {}, text: "", unknown: [] });
+    expect(parseWeaponQuery("Property: Undecidable").text).toBe("Property: Undecidable");
+  });
+
+  test("a quoted perk name with a colon in it is text", () => {
+    for (const name of ["Property: Undecidable", "SUBROUTINE: ~RECURSION", "Marksman Optics: Low"]) {
+      expect(parseWeaponQuery(`"${name}"`), name).toEqual({ filters: {}, text: name, unknown: [] });
+    }
+  });
+
+  test("one descriptive word alone is a keyword; words that read as something else aren't", () => {
+    expect(parseWeaponQuery("arc").keyword).toEqual({ element: ["Arc"] });
+    expect(parseWeaponQuery("hc").keyword).toEqual({ type: ["Hand Cannon"] });
+    expect(parseWeaponQuery("hand cannon").keyword).toEqual({ type: ["Hand Cannon"] });
+    expect(parseWeaponQuery("is:solar arc").keyword).toEqual({ element: ["Arc"] });
+    for (const text of ["light", "power", "stagger", "heavygrenadelauncher", "arc warden", "fatebringer"]) {
+      expect(parseWeaponQuery(text).keyword, text).toBeUndefined();
+    }
   });
 
   test("parsed element filter drives filterWeapons against the sample catalog", () => {
@@ -88,32 +162,6 @@ describe("parseWeaponQuery", () => {
     expect(filterWeapons(index.weapons, filters, index.perks).map((w) => w.name)).toEqual([
       "Stormcharge",
     ]);
-  });
-});
-
-describe("planWeaponTextSearch", () => {
-  test("free text becomes the search text", () => {
-    expect(planWeaponTextSearch("fatebringer")).toEqual({
-      filters: {},
-      searchText: "fatebringer",
-    });
-  });
-
-  test("text + keyword splits into searchText and filters", () => {
-    const plan = planWeaponTextSearch("fate element:solar");
-    expect(plan.searchText).toBe("fate");
-    expect(plan.filters.element).toEqual(["solar"]);
-  });
-
-  test("keyword-only query yields empty searchText (filter the full catalog)", () => {
-    const plan = planWeaponTextSearch("is:adept element:arc");
-    expect(plan.searchText).toBe("");
-    expect(plan.filters.adept).toBe(true);
-    expect(plan.filters.element).toEqual(["arc"]);
-  });
-
-  test("sub-threshold text with no keywords falls back to the raw input", () => {
-    expect(planWeaponTextSearch("a").searchText).toBe("a");
   });
 });
 

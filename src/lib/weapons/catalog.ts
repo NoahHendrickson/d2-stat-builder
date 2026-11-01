@@ -1,6 +1,11 @@
 import { normalizeWeaponIndex } from "./intern-weapons";
 import { expandWeaponQueryAliases } from "./aliases";
-import { mergeWeaponFilters, planWeaponTextSearch } from "./query-language";
+import {
+  mergeWeaponFilters,
+  parseWeaponQuery,
+  weaponQueryVocabulary,
+  type UnknownFilter,
+} from "./query-language";
 import { buildWeaponNameIndex } from "./weapon-name-index";
 import { canonicalActivitySource, sourceLabels } from "./weapon-provenance";
 import { createWeaponSearcher } from "./weapon-searcher";
@@ -22,6 +27,12 @@ import type { WeaponIndex, WeaponSummary } from "./types";
 
 const collator = new Intl.Collator();
 
+export interface WeaponSearchResult {
+  results: WeaponSummary[];
+  /** Filter tokens that mean nothing; when there are any, `results` is empty. */
+  unknown: UnknownFilter[];
+}
+
 /** Built once per downloaded catalog, independent of React renders. */
 export function createWeaponCatalog(raw: WeaponIndex) {
   const index = normalizeWeaponIndex(raw);
@@ -41,8 +52,13 @@ export function createWeaponCatalog(raw: WeaponIndex) {
       if (pools.length > 1) poolLabels.set(pool.weapon.hash, pool.label);
     }
   }
-  const textCache = new Map<string, WeaponSummary[]>();
+  /** Text matches per search text, and the bare keyword's weapons when the text is one. */
+  const textCache = new Map<string, { matches: WeaponSummary[]; lead?: Set<number> }>();
   const facets = collectFacets(weapons);
+  const vocabulary = weaponQueryVocabulary({
+    types: facets.type!.map((f) => f.value),
+    elements: facets.element!.map((f) => f.value),
+  });
   // Offer the same canonical activity labels the source filter matches against,
   // so every option in the list yields results.
   const sources = new Set<string>();
@@ -65,26 +81,41 @@ export function createWeaponCatalog(raw: WeaponIndex) {
     .sort(collator.compare)
     .map((value) => ({ value, count: 0 }));
 
-  function search(query: string, filters: WeaponFilters, sort: WeaponSort) {
-    const plan = planWeaponTextSearch(query);
-    const text = expandWeaponQueryAliases(plan.searchText).toLowerCase();
-    let matches = textCache.get(text);
-    if (!matches) {
+  function search(
+    query: string,
+    filters: WeaponFilters,
+    sort: WeaponSort,
+  ): WeaponSearchResult {
+    const parsed = parseWeaponQuery(query, vocabulary);
+    // An unknown filter (`is:arcc`) means nothing, so it matches nothing.
+    if (parsed.unknown.length > 0) return { results: [], unknown: parsed.unknown };
+    const text = expandWeaponQueryAliases(parsed.text).toLowerCase();
+    let cached = textCache.get(text);
+    if (!cached) {
       // Never cap candidates before applying facets: rare matching rolls must survive.
-      matches = weaponsMatchingTextQuery(
+      let matches = weaponsMatchingTextQuery(
         weapons,
         searcher,
         text,
         weapons.length,
         names,
       );
+      // A word like "arc" or "smg" typed alone: its weapons, then the text matches.
+      let lead: Set<number> | undefined;
+      if (parsed.keyword) {
+        const hits = filterWeapons(weapons, parsed.keyword, index.perks);
+        const keywordHashes = new Set(hits.map((w) => w.hash));
+        matches = [...hits, ...matches.filter((w) => !keywordHashes.has(w.hash))];
+        lead = keywordHashes;
+      }
+      cached = { matches, lead };
       if (textCache.size >= 16)
         textCache.delete(textCache.keys().next().value!);
-      textCache.set(text, matches);
+      textCache.set(text, cached);
     }
     const filtered = filterWeapons(
-      matches,
-      mergeWeaponFilters(filters, plan.filters),
+      cached.matches,
+      mergeWeaponFilters(filters, parsed.filters),
       index.perks,
     );
     const unique = new Map<number, WeaponSummary>();
@@ -92,7 +123,14 @@ export function createWeaponCatalog(raw: WeaponIndex) {
       const primary = representative.get(weapon.hash) ?? weapon;
       unique.set(primary.hash, primary);
     }
-    return rankWeaponResults([...unique.values()], text, sort, names);
+    const results = rankWeaponResults(
+      [...unique.values()],
+      text,
+      sort,
+      names,
+      cached.lead,
+    );
+    return { results, unknown: [] };
   }
 
   /** Version label for a result row whose name has more than one current perk pool. */
