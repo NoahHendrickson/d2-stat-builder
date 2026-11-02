@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
+import { errorText } from "@/lib/error-text";
 import { discordConfig, sendMessage } from "@/lib/feedback/discord";
-import { verifyGithubSignature } from "@/lib/feedback/github";
-import { DISCORD_REPLIES, parseMarkers } from "@/lib/feedback/issue-format";
+import { addLabel, githubConfig, issueLabels, verifyGithubSignature } from "@/lib/feedback/github";
+import { DISCORD_REPLIES, FEEDBACK_LABELS, parseMarkers } from "@/lib/feedback/issue-format";
 
 interface IssuesEvent {
   action?: string;
@@ -10,8 +11,9 @@ interface IssuesEvent {
 
 /**
  * The feedback repo's webhook (Issues events). When an issue that came from Discord is
- * closed as completed, the bot says so in the original post or under the original
- * message. Closed as not planned or as a duplicate says nothing.
+ * closed as completed, the bot says so under the original message, once: the issue then
+ * gets `discord-notified`, read fresh from GitHub, so a re-close or a replayed delivery
+ * stays quiet. Closing as not planned or as a duplicate says nothing.
  */
 export async function POST(request: Request) {
   const secret = process.env.FEEDBACK_GITHUB_WEBHOOK_SECRET;
@@ -26,14 +28,25 @@ export async function POST(request: Request) {
   if (event.action !== "closed" || event.issue?.state_reason !== "completed") {
     return NextResponse.json({ ignored: true });
   }
-  const { discordChannel, discordMessage } = parseMarkers(event.issue.body);
+  const source = parseMarkers(event.issue.body).discord;
   const dc = discordConfig();
-  if (!discordChannel || !dc) return NextResponse.json({ ignored: true });
+  const gh = githubConfig();
+  if (!source || !dc || !gh) return NextResponse.json({ ignored: true });
+  const issue = event.issue.number;
   try {
-    await sendMessage(dc, discordChannel, DISCORD_REPLIES.fixed, discordMessage);
+    if ((await issueLabels(gh, issue)).includes(FEEDBACK_LABELS.notified)) {
+      return NextResponse.json({ ignored: "already told" });
+    }
+    await addLabel(gh, issue, FEEDBACK_LABELS.notified);
+  } catch (err) {
+    console.error(`Fixed reply for #${issue}: label check failed:`, errorText(err));
+    return NextResponse.json({ error: "GitHub failed" }, { status: 502 });
+  }
+  try {
+    await sendMessage(dc, source.channelId, DISCORD_REPLIES.fixed, source.messageId);
   } catch (err) {
     // A deleted post or message: nothing to tell anyone. Answer 200 so GitHub doesn't retry.
-    console.error(`Fixed reply for #${event.issue.number} failed:`, err instanceof Error ? err.message : err);
+    console.error(`Fixed reply for #${issue} failed:`, errorText(err));
     return NextResponse.json({ replied: false });
   }
   return NextResponse.json({ replied: true });

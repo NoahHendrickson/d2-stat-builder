@@ -14,10 +14,12 @@ Every bug report and suggestion lands as an issue in the **private** repo
   `src/app/api/feedback/discord-sync`), or a message a moderator sent with **Send to
   tracker** (`src/app/api/feedback/discord-interactions`).
 
-When an issue that came from Discord is closed as **completed**, the bot replies in
-Discord that it's fixed (`src/app/api/feedback/github-webhook`). So close an issue as
-completed only once the fix is merged to main, which deploys to d2conflux.com. Closing it
-as not planned or as a duplicate says nothing in Discord.
+When an issue that came from Discord is closed as **completed**, the bot replies once in
+Discord that it's fixed (`src/app/api/feedback/github-webhook`), and the issue gets
+`discord-notified`. GitHub's plain **Close issue** button counts as completed, so close
+an issue that way only once the fix is merged to main, which deploys to d2conflux.com.
+Close a won't-fix as **not planned** and a repeat as **duplicate**. Those say nothing in
+Discord.
 
 The hidden `<!-- d2c:... -->` lines at the top of a body link the issue back to its
 source. Never edit or remove them.

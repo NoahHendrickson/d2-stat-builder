@@ -1,34 +1,42 @@
 import { describe, expect, it, vi } from "vitest";
-import { syncDiscordFeedback, type SyncDeps } from "./discord-sync";
+import { sendToTracker, syncDiscordFeedback, type SyncDeps } from "./discord-sync";
 import type { DiscordMessage, DiscordThread } from "./discord";
-import { parseMarkers } from "./issue-format";
+import { parseMarkers, type FeedbackIssue } from "./issue-format";
 
-/** A snowflake for `ms` after Discord's epoch-relative time. */
+/** A snowflake for a time in ms. */
 const at = (ms: number) => String((BigInt(ms) - BigInt(1420070400000)) << BigInt(22));
 const NOW = Date.UTC(2026, 10, 2);
 const DAY = 24 * 60 * 60 * 1000;
 
+const starterOf = (t: DiscordThread, bot = false): DiscordMessage => ({
+  id: t.id,
+  channel_id: t.id,
+  content: `body of ${t.name}`,
+  author: { id: "u", username: bot ? "hook" : "player", bot },
+  attachments: [],
+});
+
+const post = (name: string, ageMs: number, extra: Partial<DiscordThread> = {}): DiscordThread => ({
+  id: at(NOW - ageMs),
+  parent_id: "forum",
+  name,
+  ...extra,
+});
+
 function deps(threads: DiscordThread[], over: Partial<SyncDeps> = {}) {
-  const filed: { title: string; body: string; labels: string[] }[] = [];
-  const replies: string[] = [];
+  const filed: FeedbackIssue[] = [];
+  const replies: [string, string][] = [];
   const d: SyncDeps = {
+    guildId: "g",
     threads: async () => threads,
-    forum: async (id) => ({ id, name: "feedback", available_tags: [{ id: "t1", name: "Bug" }] }),
-    starter: async (t): Promise<DiscordMessage> => ({
-      id: t.id,
-      channel_id: t.id,
-      content: `body of ${t.name}`,
-      author: { id: "u", username: "player" },
-      attachments: [],
-    }),
-    filedChannelIds: async () => new Set(),
+    forumTags: async () => new Map([["forum", new Map([["t1", "Bug"]])]]),
+    starter: async (t) => starterOf(t),
+    filedMessageIds: async () => new Set(filed.map((i) => parseMarkers(i.body).discord!.messageId)),
     file: async (issue) => {
       filed.push(issue);
-      return { number: filed.length, html_url: "" };
+      return { number: filed.length, html_url: `https://github.com/x/y/issues/${filed.length}` };
     },
-    reply: async (channelId) => void replies.push(channelId),
-    guildId: "g",
-    feedbackChannelIds: ["forum"],
+    reply: async (channelId, _content, replyTo) => void replies.push([channelId, replyTo]),
     now: NOW,
     ...over,
   };
@@ -36,60 +44,95 @@ function deps(threads: DiscordThread[], over: Partial<SyncDeps> = {}) {
 }
 
 describe("syncDiscordFeedback", () => {
-  it("files new posts in the feedback forums only, oldest first, and thanks them", async () => {
-    const newer = { id: at(NOW - DAY), parent_id: "forum", name: "newer", applied_tags: ["t1"] };
-    const older = { id: at(NOW - 2 * DAY), parent_id: "forum", name: "older" };
-    const elsewhere = { id: at(NOW - DAY), parent_id: "general", name: "elsewhere" };
-    const stale = { id: at(NOW - 30 * DAY), parent_id: "forum", name: "stale" };
-    const { d, filed, replies } = deps([newer, older, elsewhere, stale]);
+  it("files new posts oldest first, tags them, and thanks under the starter", async () => {
+    const newer = post("newer", DAY, { applied_tags: ["t1"] });
+    const older = post("older", 2 * DAY);
+    const stale = post("stale", 30 * DAY);
+    const { d, filed, replies } = deps([newer, older, stale]);
     const result = await syncDiscordFeedback(d);
     expect(filed.map((i) => i.title)).toEqual(["older", "newer"]);
     expect(filed[1].labels).toContain("type:bug");
-    expect(parseMarkers(filed[0].body)).toEqual({ discordChannel: older.id });
-    expect(replies).toEqual([older.id, newer.id]);
-    expect(result).toEqual({ filed: [1, 2], skipped: 0, pending: 0 });
+    expect(parseMarkers(filed[0].body)).toEqual({ discord: { channelId: older.id, messageId: older.id } });
+    expect(replies).toEqual([[older.id, older.id], [newer.id, newer.id]]);
+    expect(result).toEqual({ filed: [1, 2], skipped: 0, failed: 0, pending: 0 });
   });
 
-  it("skips posts already filed and posts a bot opened", async () => {
-    const done = { id: at(NOW - DAY), parent_id: "forum", name: "done" };
-    const bot = { id: at(NOW - DAY + 1), parent_id: "forum", name: "bot" };
-    const { d, filed } = deps([done, bot], {
-      filedChannelIds: async () => new Set([done.id]),
-      starter: async (t) => ({
-        id: t.id,
-        channel_id: t.id,
-        content: "",
-        author: { id: "b", username: "hook", bot: true },
-        attachments: [],
-      }),
-    });
-    expect(await syncDiscordFeedback(d)).toEqual({ filed: [], skipped: 1, pending: 0 });
+  it("skips posts already filed, and doesn't read tags when nothing is new", async () => {
+    const done = post("done", DAY);
+    const forumTags = vi.fn(async () => new Map());
+    const { d, filed } = deps([done], { filedMessageIds: async () => new Set([done.id]), forumTags });
+    expect(await syncDiscordFeedback(d)).toEqual({ filed: [], skipped: 0, failed: 0, pending: 0 });
     expect(filed).toEqual([]);
+    expect(forumTags).not.toHaveBeenCalled();
+  });
+
+  it("doesn't let skipped bot posts use up the run", async () => {
+    const bots = Array.from({ length: 6 }, (_, i) => post(`bot${i}`, 3 * DAY - i));
+    const human = post("human", DAY);
+    const botIds = new Set(bots.map((b) => b.id));
+    const { d, filed } = deps([...bots, human], { starter: async (t) => starterOf(t, botIds.has(t.id)) });
+    expect(await syncDiscordFeedback(d)).toMatchObject({ filed: [1], skipped: 6, pending: 0 });
+    expect(filed.map((i) => i.title)).toEqual(["human"]);
+  });
+
+  it("logs a failing post and carries on with the rest", async () => {
+    const bad = post("bad", 2 * DAY);
+    const good = post("good", DAY);
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    const { d, filed } = deps([bad, good], {
+      starter: async (t) => (t.id === bad.id ? Promise.reject(new Error("403")) : starterOf(t)),
+    });
+    expect(await syncDiscordFeedback(d)).toMatchObject({ filed: [1], failed: 1 });
+    expect(filed.map((i) => i.title)).toEqual(["good"]);
+    errors.mockRestore();
   });
 
   it("files a few per run and leaves the rest for the next", async () => {
-    const threads = Array.from({ length: 8 }, (_, i) => ({
-      id: at(NOW - DAY + i),
-      parent_id: "forum",
-      name: `p${i}`,
-    }));
+    const threads = Array.from({ length: 8 }, (_, i) => post(`p${i}`, DAY - i));
     const { d } = deps(threads);
     expect(await syncDiscordFeedback(d)).toMatchObject({ pending: 3 });
   });
 
   it("still files when the thank-you fails", async () => {
-    const t = { id: at(NOW - DAY), parent_id: "forum", name: "x" };
     const errors = vi.spyOn(console, "error").mockImplementation(() => {});
-    const { d, filed } = deps([t], { reply: async () => Promise.reject(new Error("403")) });
+    const { d, filed } = deps([post("x", DAY)], { reply: async () => Promise.reject(new Error("403")) });
     await syncDiscordFeedback(d);
     expect(filed).toHaveLength(1);
     errors.mockRestore();
   });
+});
 
-  it("doesn't read issues when there are no candidates", async () => {
-    const filedChannelIds = vi.fn(async () => new Set<string>());
-    const { d } = deps([], { filedChannelIds });
+describe("sendToTracker", () => {
+  it("files a message once and thanks under it", async () => {
+    const message: DiscordMessage = {
+      id: "500",
+      channel_id: "40",
+      content: "the vault is empty",
+      author: { id: "u", username: "player" },
+      attachments: [],
+    };
+    const { d, filed, replies } = deps([]);
+    const tracker = { ...d, repoName: "feedback" };
+    expect(await sendToTracker(tracker, message, "general")).toBe(
+      "Filed as feedback#1: https://github.com/x/y/issues/1",
+    );
+    expect(replies).toEqual([["40", "500"]]);
+    expect(await sendToTracker(tracker, message, "general")).toBe("That message is already in the tracker.");
+    expect(filed).toHaveLength(1);
+  });
+
+  it("shares dedupe with the sync: a forum starter is filed once, whichever goes first", async () => {
+    const thread = post("starter", DAY);
+    const { d, filed } = deps([thread]);
+    await sendToTracker({ ...d, repoName: "feedback" }, starterOf(thread));
     await syncDiscordFeedback(d);
-    expect(filedChannelIds).not.toHaveBeenCalled();
+    expect(filed).toHaveLength(1);
+
+    const second = deps([thread]);
+    await syncDiscordFeedback(second.d);
+    expect(await sendToTracker({ ...second.d, repoName: "feedback" }, starterOf(thread))).toBe(
+      "That message is already in the tracker.",
+    );
+    expect(second.filed).toHaveLength(1);
   });
 });

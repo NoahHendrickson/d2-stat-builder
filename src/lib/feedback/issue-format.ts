@@ -3,11 +3,21 @@
 // shared by the routes and their tests.
 //
 // Every issue body starts with hidden markers (`<!-- d2c:key=value -->`) that name where
-// it came from: the web report id, or the Discord thread / message. The sync uses them
-// to skip what's already filed, and the issue-closed webhook uses them to reply in
-// Discord. Reporter text is neutralised so it can't forge a marker or ping anyone.
+// it came from: the web report id, or the Discord channel and message. The sync and
+// "Send to tracker" use them to skip what's already filed, and the issue-closed webhook
+// uses them to reply in Discord. Reporter text is neutralised so it can't forge a
+// marker or ping anyone.
+//
+// Every Discord source is a message: a forum post is its starter message, whose id is
+// the thread's id. So one message id identifies an issue's source on both paths.
 
 import type { NewBugReport } from "@/lib/bug-reports/neon-store";
+import {
+  displayName,
+  messageUrl,
+  type DiscordMessage,
+  type DiscordThread,
+} from "./discord";
 
 export const FEEDBACK_LABELS = {
   web: "source:web",
@@ -16,6 +26,8 @@ export const FEEDBACK_LABELS = {
   feature: "type:feature",
   question: "type:question",
   triage: "needs-triage",
+  /** The bot already told Discord the issue is fixed. */
+  notified: "discord-notified",
 } as const;
 
 /** GitHub's limit is 256; shorter reads better in lists. */
@@ -29,20 +41,18 @@ export interface FeedbackIssue {
   labels: string[];
 }
 
+/** A Discord message: the reply goes in `channelId` (a forum post's thread), under `messageId`. */
+export interface DiscordSource {
+  channelId: string;
+  messageId: string;
+}
+
 export interface FeedbackMarkers {
   webReport?: string;
-  /** The Discord channel the reply goes to: a forum post's thread, or the message's channel. */
-  discordChannel?: string;
-  /** The message to reply to; absent for a forum post (the reply goes in the thread). */
-  discordMessage?: string;
+  discord?: DiscordSource;
 }
 
 const MARKER_LINE = /^<!-- d2c:([a-z-]+)=(\d+) -->$/;
-const MARKER_KEYS: Record<string, keyof FeedbackMarkers> = {
-  "web-report": "webReport",
-  "discord-channel": "discordChannel",
-  "discord-message": "discordMessage",
-};
 
 const marker = (key: string, value: string) => `<!-- d2c:${key}=${value} -->`;
 
@@ -51,13 +61,18 @@ const marker = (key: string, value: string) => `<!-- d2c:${key}=${value} -->`;
  * line, so nothing further down (reporter text included) can pass for one.
  */
 export function parseMarkers(body: string | null | undefined): FeedbackMarkers {
-  const out: FeedbackMarkers = {};
+  const found = new Map<string, string>();
   for (const line of (body ?? "").split("\n")) {
     const m = MARKER_LINE.exec(line.trim());
     if (!m) break;
-    const field = MARKER_KEYS[m[1]];
-    if (field && out[field] === undefined) out[field] = m[2];
+    if (!found.has(m[1])) found.set(m[1], m[2]);
   }
+  const out: FeedbackMarkers = {};
+  const webReport = found.get("web-report");
+  if (webReport) out.webReport = webReport;
+  const channelId = found.get("discord-channel");
+  const messageId = found.get("discord-message");
+  if (channelId && messageId) out.discord = { channelId, messageId };
   return out;
 }
 
@@ -121,24 +136,6 @@ export function webReportIssue(id: string, r: NewBugReport): FeedbackIssue {
   };
 }
 
-export interface DiscordFeedback {
-  /** Forum post name, or empty for a plain message. */
-  threadName: string;
-  content: string;
-  authorName: string;
-  /** Where the reply goes when the issue is closed. */
-  replyChannelId: string;
-  /** Set when replying to a specific message instead of posting in a thread. */
-  replyMessageId?: string;
-  /** Link to the post or message. */
-  url: string;
-  /** Forum tag names, used to guess the type. */
-  tags: string[];
-  attachments: { filename: string; url: string }[];
-  /** Where it came from, e.g. "#feedback forum" or "Sent to tracker from #general". */
-  where: string;
-}
-
 /** A type label from a forum's tag names, when one fits. */
 export function typeLabelFromTags(tags: string[]): string | null {
   const names = tags.join(" ").toLowerCase();
@@ -148,37 +145,59 @@ export function typeLabelFromTags(tags: string[]): string | null {
   return null;
 }
 
-export function discordIssue(f: DiscordFeedback): FeedbackIssue {
-  const typeLabel = typeLabelFromTags(f.tags);
-  const markers = [marker("discord-channel", f.replyChannelId)];
-  if (f.replyMessageId) markers.push(marker("discord-message", f.replyMessageId));
-  const attachments = f.attachments.length
-    ? [
-        "",
-        "### Attachments",
-        // Discord's attachment URLs expire after about a day; open them early.
-        ...f.attachments.map((a) => `- [${neutral(oneLine(a.filename)).replace(/[[\]]/g, "")}](${a.url})`),
-      ]
-    : [];
+function discordBody(guildId: string, message: DiscordMessage, heading: string[], source: [string, string][]) {
+  const attachments = message.attachments ?? [];
+  return [
+    marker("discord-channel", message.channel_id),
+    marker("discord-message", message.id),
+    UNTRUSTED_NOTE,
+    "",
+    ...heading,
+    quoteReporterText(message.content),
+    ...(attachments.length
+      ? [
+          "",
+          "### Attachments",
+          // Discord's attachment URLs expire after about a day; open them early.
+          ...attachments.map((a) => `- [${neutral(oneLine(a.filename)).replace(/[[\]]/g, "")}](${a.url})`),
+        ]
+      : []),
+    "",
+    "### Source",
+    table([
+      ["From", displayName(message.author)],
+      ...source,
+      ["Link", messageUrl(guildId, message.channel_id, message.id)],
+    ]),
+  ].join("\n");
+}
+
+/** A new forum post: its thread, starter message (the thread's id) and tag names. */
+export function forumPostIssue(
+  guildId: string,
+  thread: DiscordThread,
+  starter: DiscordMessage,
+  tagNames: string[],
+): FeedbackIssue {
+  const typeLabel = typeLabelFromTags(tagNames);
   return {
-    title: issueTitle(f.threadName || f.content, `Discord message from ${f.authorName}`),
+    title: issueTitle(thread.name, `Discord post from ${displayName(starter.author)}`),
     labels: [FEEDBACK_LABELS.discord, ...(typeLabel ? [typeLabel] : []), FEEDBACK_LABELS.triage],
-    body: [
-      ...markers,
-      UNTRUSTED_NOTE,
-      "",
-      ...(f.threadName ? [`**${neutral(oneLine(f.threadName))}**`, ""] : []),
-      quoteReporterText(f.content),
-      ...attachments,
-      "",
-      "### Source",
-      table([
-        ["From", f.authorName],
-        ["Where", f.where],
-        ["Tags", f.tags.join(", ")],
-        ["Link", f.url],
-      ]),
-    ].join("\n"),
+    body: discordBody(guildId, starter, [`**${neutral(oneLine(thread.name))}**`, ""], [
+      ["Where", "Discord forum post"],
+      ["Tags", tagNames.join(", ")],
+    ]),
+  };
+}
+
+/** A message a moderator sent with "Send to tracker". */
+export function messageIssue(guildId: string, message: DiscordMessage, channelName?: string): FeedbackIssue {
+  return {
+    title: issueTitle(message.content, `Discord message from ${displayName(message.author)}`),
+    labels: [FEEDBACK_LABELS.discord, FEEDBACK_LABELS.triage],
+    body: discordBody(guildId, message, [], [
+      ["Where", channelName ? `Sent to tracker from #${channelName}` : "Sent to tracker"],
+    ]),
   };
 }
 

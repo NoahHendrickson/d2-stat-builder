@@ -31,8 +31,16 @@ export function discordConfig(): DiscordConfig | null {
   return { botToken, guildId, feedbackChannelIds };
 }
 
-/** The message context-menu command (registered by scripts/register-discord-commands.ts). */
-export const SEND_TO_TRACKER = "Send to tracker";
+/**
+ * The message context-menu command, as registered by scripts/register-discord-commands.ts.
+ * Only members who can Manage Messages see it (server settings can widen that).
+ */
+export const TRACKER_COMMAND = {
+  name: "Send to tracker",
+  /** MESSAGE: right-click a message → Apps. */
+  type: 3,
+  default_member_permissions: String(1 << 13),
+} as const;
 
 export const snowflakeTime = (id: string) => Number((BigInt(id) >> BigInt(22)) + DISCORD_EPOCH);
 
@@ -45,12 +53,13 @@ export class DiscordError extends Error {
   }
 }
 
-async function discord<T>(token: string, path: string, init?: RequestInit): Promise<T> {
+/** One Discord request. `token` null sends none (interaction webhooks carry their own). */
+async function discord<T>(token: string | null, path: string, init?: RequestInit): Promise<T> {
   for (let attempt = 0; ; attempt++) {
     const res = await fetch(`${API}${path}`, {
       ...init,
       headers: {
-        Authorization: `Bot ${token}`,
+        ...(token ? { Authorization: `Bot ${token}` } : {}),
         "Content-Type": "application/json",
         "User-Agent": "DiscordBot (https://d2conflux.com, 1)",
       },
@@ -104,9 +113,23 @@ export const displayName = (u: DiscordUser) => u.global_name || u.username;
 export const messageUrl = (guildId: string, channelId: string, messageId?: string) =>
   `https://discord.com/channels/${guildId}/${channelId}${messageId ? `/${messageId}` : ""}`;
 
-export async function activeThreads(c: DiscordConfig): Promise<DiscordThread[]> {
-  const res = await discord<{ threads: DiscordThread[] }>(c.botToken, `/guilds/${c.guildId}/threads/active`);
-  return res.threads;
+/**
+ * Posts in the feedback forums: every active one, plus the newest archived ones, so a
+ * post that archived before a sync ran isn't missed.
+ */
+export async function feedbackThreads(c: DiscordConfig): Promise<DiscordThread[]> {
+  const [active, ...archived] = await Promise.all([
+    discord<{ threads: DiscordThread[] }>(c.botToken, `/guilds/${c.guildId}/threads/active`),
+    ...c.feedbackChannelIds.map((id) =>
+      discord<{ threads: DiscordThread[] }>(c.botToken, `/channels/${id}/threads/archived/public?limit=50`),
+    ),
+  ]);
+  const forums = new Set(c.feedbackChannelIds);
+  const byId = new Map<string, DiscordThread>();
+  for (const t of [active, ...archived].flatMap((r) => r.threads)) {
+    if (t.parent_id && forums.has(t.parent_id)) byId.set(t.id, t);
+  }
+  return [...byId.values()];
 }
 
 export const getChannel = <T>(c: DiscordConfig, id: string) => discord<T>(c.botToken, `/channels/${id}`);
@@ -128,14 +151,11 @@ export function sendMessage(c: DiscordConfig, channelId: string, content: string
 }
 
 /** Replace the "thinking…" placeholder of a deferred interaction reply. */
-export async function editInteractionReply(appId: string, interactionToken: string, content: string) {
-  const res = await fetch(`${API}/webhooks/${appId}/${interactionToken}/messages/@original`, {
+export function editInteractionReply(appId: string, interactionToken: string, content: string) {
+  return discord<unknown>(null, `/webhooks/${appId}/${interactionToken}/messages/@original`, {
     method: "PATCH",
-    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ content, allowed_mentions: { parse: [] } }),
-    signal: AbortSignal.timeout(10_000),
   });
-  if (!res.ok) throw new Error(`Discord interaction edit answered ${res.status}`);
 }
 
 /** DER prefix that turns a raw 32-byte Ed25519 key into SPKI. */

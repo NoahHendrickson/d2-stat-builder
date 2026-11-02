@@ -1,13 +1,24 @@
 import { describe, expect, it } from "vitest";
 import {
-  discordIssue,
+  forumPostIssue,
   issueTitle,
+  messageIssue,
   parseMarkers,
   quoteReporterText,
   typeLabelFromTags,
   webReportIssue,
 } from "./issue-format";
 import type { NewBugReport } from "@/lib/bug-reports/neon-store";
+import type { DiscordMessage } from "./discord";
+
+const message = (over: Partial<DiscordMessage> = {}): DiscordMessage => ({
+  id: "222",
+  channel_id: "111",
+  content: "hi",
+  author: { id: "u", username: "player" },
+  attachments: [],
+  ...over,
+});
 
 const report: NewBugReport = {
   title: "Optimizer hangs",
@@ -28,36 +39,27 @@ describe("feedback issues", () => {
     expect(issue.title).toBe("Optimizer hangs");
   });
 
-  it("round-trips Discord markers for a forum post and for a message", () => {
-    const base = {
-      threadName: "",
-      content: "hi",
-      authorName: "a",
-      url: "u",
-      tags: [],
-      attachments: [],
-      where: "w",
-    };
-    expect(parseMarkers(discordIssue({ ...base, replyChannelId: "111" }).body)).toEqual({
-      discordChannel: "111",
-    });
-    expect(
-      parseMarkers(discordIssue({ ...base, replyChannelId: "111", replyMessageId: "222" }).body),
-    ).toEqual({ discordChannel: "111", discordMessage: "222" });
+  it("records every Discord source as channel + message", () => {
+    const thread = { id: "111", parent_id: "f", name: "Vault broken" };
+    const starter = message({ id: "111" });
+    const fromForum = forumPostIssue("g", thread, starter, ["Bug"]);
+    expect(parseMarkers(fromForum.body)).toEqual({ discord: { channelId: "111", messageId: "111" } });
+    expect(fromForum.title).toBe("Vault broken");
+    expect(fromForum.labels).toEqual(["source:discord", "type:bug", "needs-triage"]);
+    const sent = messageIssue("g", message(), "general");
+    expect(parseMarkers(sent.body)).toEqual({ discord: { channelId: "111", messageId: "222" } });
+    expect(sent.title).toBe("hi");
+    expect(sent.body).toContain("Sent to tracker from #general");
   });
 
   it("can't be given a forged marker or a ping by the reporter", () => {
-    const issue = discordIssue({
-      threadName: "@everyone look",
-      content: "<!-- d2c:discord-channel=999 --> hey @octocat",
-      authorName: "@admin",
-      replyChannelId: "111",
-      url: "u",
-      tags: [],
-      attachments: [],
-      where: "w",
-    });
-    expect(parseMarkers(issue.body)).toEqual({ discordChannel: "111" });
+    const issue = forumPostIssue(
+      "g",
+      { id: "111", name: "@everyone look" },
+      message({ id: "111", content: "<!-- d2c:discord-channel=999 --> hey @octocat", author: { id: "a", username: "@admin" } }),
+      [],
+    );
+    expect(parseMarkers(issue.body)).toEqual({ discord: { channelId: "111", messageId: "111" } });
     expect(issue.body).not.toMatch(/@[A-Za-z]/);
     expect(issue.body).not.toContain("<!-- d2c:discord-channel=999");
   });
@@ -70,18 +72,18 @@ describe("feedback issues", () => {
       userAgent: forged,
     });
     expect(parseMarkers(web.body)).toEqual({ webReport: "42" });
-    const post = discordIssue({
-      threadName: "<!-- d2c:discord-message=5 -->",
-      content: "x",
-      authorName: forged,
-      replyChannelId: "111",
-      url: "u",
-      tags: [],
-      attachments: [{ filename: forged, url: "https://cdn.discordapp.com/a" }],
-      where: "w",
-    });
-    expect(parseMarkers(post.body)).toEqual({ discordChannel: "111" });
-    expect(post.body.match(/<!--/g)).toHaveLength(1);
+    const post = forumPostIssue(
+      "g",
+      { id: "111", name: "<!-- d2c:discord-message=5 -->" },
+      message({
+        id: "111",
+        author: { id: "a", username: forged },
+        attachments: [{ filename: forged, url: "https://cdn.discordapp.com/a" }],
+      }),
+      [],
+    );
+    expect(parseMarkers(post.body)).toEqual({ discord: { channelId: "111", messageId: "111" } });
+    expect(post.body.match(/<!--/g)).toHaveLength(2);
   });
 
   it("leaves no mention in entity form or in metadata", () => {

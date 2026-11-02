@@ -1,26 +1,28 @@
 import { connection, NextResponse } from "next/server";
-import { timingSafeEqual } from "node:crypto";
+import { errorText } from "@/lib/error-text";
+import { safeEqual } from "@/lib/http/safe-equal";
 import { discordConfig } from "@/lib/feedback/discord";
 import { githubConfig } from "@/lib/feedback/github";
 import { liveSyncDeps, syncDiscordFeedback } from "@/lib/feedback/discord-sync";
 
-/** Vercel cron sends `Authorization: Bearer $CRON_SECRET`. */
-function fromCron(request: Request) {
-  const secret = process.env.CRON_SECRET;
-  if (!secret) return false;
-  const given = Buffer.from(request.headers.get("authorization") ?? "");
-  const expected = Buffer.from(`Bearer ${secret}`);
-  return given.length === expected.length && timingSafeEqual(given, expected);
-}
+/**
+ * Only the deployment built from main files anything. The canary project deploys the
+ * same cron from `canary`, and two syncs racing would file every post twice.
+ */
+const isMainDeployment = () => !process.env.VERCEL || process.env.VERCEL_GIT_COMMIT_REF === "main";
 
 /**
  * File new Discord feedback-forum posts as issues in the feedback repo. Called by the
- * cron in vercel.json; does nothing until the bot and GitHub token are configured (so
- * the canary project's copy of the cron is a no-op). Never touches Neon.
+ * cron in vercel.json (`Authorization: Bearer $CRON_SECRET`); does nothing until the bot
+ * and GitHub token are configured. Never touches Neon.
  */
 export async function GET(request: Request) {
   await connection();
-  if (!fromCron(request)) return NextResponse.json({ error: "Not allowed" }, { status: 401 });
+  const secret = process.env.CRON_SECRET;
+  if (!secret || !safeEqual(request.headers.get("authorization") ?? "", `Bearer ${secret}`)) {
+    return NextResponse.json({ error: "Not allowed" }, { status: 401 });
+  }
+  if (!isMainDeployment()) return NextResponse.json({ skipped: "not the main deployment" });
   const dc = discordConfig();
   const gh = githubConfig();
   if (!dc || !gh || !dc.feedbackChannelIds.length) {
@@ -31,7 +33,7 @@ export async function GET(request: Request) {
     if (result.filed.length) console.log(`Feedback sync filed issues ${result.filed.join(", ")}`);
     return NextResponse.json(result);
   } catch (err) {
-    console.error("Feedback sync failed:", err instanceof Error ? err.message : err);
+    console.error("Feedback sync failed:", errorText(err));
     return NextResponse.json({ error: "Sync failed" }, { status: 502 });
   }
 }

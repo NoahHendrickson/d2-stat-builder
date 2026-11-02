@@ -1,21 +1,17 @@
 import { after, NextResponse } from "next/server";
+import { errorText } from "@/lib/error-text";
 import {
   discordConfig,
-  displayName,
   editInteractionReply,
-  messageUrl,
-  sendMessage,
-  SEND_TO_TRACKER,
+  TRACKER_COMMAND,
   verifyDiscordSignature,
   type DiscordMessage,
 } from "@/lib/feedback/discord";
-import { filedDiscordMessageIds } from "@/lib/feedback/discord-sync";
-import { createIssue, githubConfig } from "@/lib/feedback/github";
-import { DISCORD_REPLIES, discordIssue } from "@/lib/feedback/issue-format";
+import { liveFileDeps, sendToTracker } from "@/lib/feedback/discord-sync";
+import { githubConfig } from "@/lib/feedback/github";
 
 const PING = 1;
 const APPLICATION_COMMAND = 2;
-const MESSAGE_COMMAND = 3;
 const PONG = 1;
 const CHANNEL_MESSAGE = 4;
 const DEFERRED_CHANNEL_MESSAGE = 5;
@@ -24,7 +20,6 @@ const EPHEMERAL = 64;
 interface Interaction {
   type: number;
   guild_id?: string;
-  channel_id?: string;
   token: string;
   channel?: { name?: string };
   data?: {
@@ -40,8 +35,7 @@ const privately = (content: string) =>
 
 /**
  * Discord's interactions endpoint. Handles "Send to tracker" (right-click a message →
- * Apps): files that message as an issue and tells only the person who clicked. The
- * command is limited to members who can manage messages when it's registered.
+ * Apps): files that message as an issue and tells only the person who clicked.
  */
 export async function POST(request: Request) {
   const publicKey = process.env.DISCORD_PUBLIC_KEY;
@@ -60,8 +54,8 @@ export async function POST(request: Request) {
   if (interaction.type === PING) return NextResponse.json({ type: PONG });
   if (
     interaction.type !== APPLICATION_COMMAND ||
-    interaction.data?.type !== MESSAGE_COMMAND ||
-    interaction.data.name !== SEND_TO_TRACKER
+    interaction.data?.type !== TRACKER_COMMAND.type ||
+    interaction.data.name !== TRACKER_COMMAND.name
   ) {
     return privately("I don't know that command.");
   }
@@ -76,36 +70,17 @@ export async function POST(request: Request) {
 
   // Filing takes longer than Discord's 3 seconds allow, so answer "thinking…" and finish after.
   after(async () => {
-    const say = (content: string) =>
-      editInteractionReply(appId, interaction.token, content).catch((err) =>
-        console.error("Send to tracker: reply failed:", err instanceof Error ? err.message : err),
-      );
-    try {
-      if ((await filedDiscordMessageIds(gh)).has(message.id)) {
-        await say("That message is already in the tracker.");
-        return;
-      }
-      const channelName = interaction.channel?.name;
-      const issue = await createIssue(
-        gh,
-        discordIssue({
-          threadName: "",
-          content: message.content,
-          authorName: displayName(message.author),
-          replyChannelId: message.channel_id,
-          replyMessageId: message.id,
-          url: messageUrl(dc.guildId, message.channel_id, message.id),
-          tags: [],
-          attachments: message.attachments ?? [],
-          where: channelName ? `Sent to tracker from #${channelName}` : "Sent to tracker",
-        }),
-      );
-      await sendMessage(dc, message.channel_id, DISCORD_REPLIES.tracked, message.id).catch(() => {});
-      await say(`Filed as ${gh.repo.split("/")[1]}#${issue.number}: ${issue.html_url}`);
-    } catch (err) {
-      console.error("Send to tracker failed:", err instanceof Error ? err.message : err);
-      await say("Couldn't file that. Try again in a minute.");
-    }
+    const text = await sendToTracker(
+      { ...liveFileDeps(dc, gh), repoName: gh.repoName },
+      message,
+      interaction.channel?.name,
+    ).catch((err) => {
+      console.error("Send to tracker failed:", errorText(err));
+      return "Couldn't file that. Try again in a minute.";
+    });
+    await editInteractionReply(appId, interaction.token, text).catch((err) =>
+      console.error("Send to tracker: reply failed:", errorText(err)),
+    );
   });
   return NextResponse.json({ type: DEFERRED_CHANNEL_MESSAGE, data: { flags: EPHEMERAL } });
 }
