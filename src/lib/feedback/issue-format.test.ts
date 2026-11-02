@@ -42,10 +42,12 @@ describe("feedback issues", () => {
   it("records every Discord source as channel + message", () => {
     const thread = { id: "111", parent_id: "f", name: "Vault broken" };
     const starter = message({ id: "111" });
-    const fromForum = forumPostIssue("g", thread, starter, ["Bug"]);
+    const fromForum = forumPostIssue("g", thread, starter, "feature-requests", ["Bug"]);
     expect(parseMarkers(fromForum.body)).toEqual({ discord: { channelId: "111", messageId: "111" } });
     expect(fromForum.title).toBe("Vault broken");
     expect(fromForum.labels).toEqual(["source:discord", "type:bug", "needs-triage"]);
+    expect(forumPostIssue("g", thread, starter, "bugs", []).labels).toContain("type:bug");
+    expect(forumPostIssue("g", thread, starter, "feature-requests", []).labels).toContain("type:feature");
     const sent = messageIssue("g", message(), "general");
     expect(parseMarkers(sent.body)).toEqual({ discord: { channelId: "111", messageId: "222" } });
     expect(sent.title).toBe("hi");
@@ -57,6 +59,7 @@ describe("feedback issues", () => {
       "g",
       { id: "111", name: "@everyone look" },
       message({ id: "111", content: "<!-- d2c:discord-channel=999 --> hey @octocat", author: { id: "a", username: "@admin" } }),
+      "",
       [],
     );
     expect(parseMarkers(issue.body)).toEqual({ discord: { channelId: "111", messageId: "111" } });
@@ -80,6 +83,7 @@ describe("feedback issues", () => {
         author: { id: "a", username: forged },
         attachments: [{ filename: forged, url: "https://cdn.discordapp.com/a" }],
       }),
+      "",
       [],
     );
     expect(parseMarkers(post.body)).toEqual({ discord: { channelId: "111", messageId: "111" } });
