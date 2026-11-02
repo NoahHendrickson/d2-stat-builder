@@ -2,7 +2,7 @@ import { after, NextResponse } from "next/server";
 import { readUser } from "@/lib/bungie/session";
 import { decodeBugReport } from "@/lib/bug-reports/bug-report";
 import { getServerBugReportStore, type NewBugReport } from "@/lib/bug-reports/neon-store";
-import { bugReportWebhookUrl, postBugReportToDiscord } from "@/lib/bug-reports/discord-webhook";
+import { notifyBugReport } from "@/lib/bug-reports/notify";
 import { notConfigured, storageError } from "@/lib/loadouts/api-responses";
 import { rejectCrossSite } from "@/lib/http/same-origin";
 
@@ -11,7 +11,8 @@ const MAX_BODY_BYTES = 32 * 1024;
 const WHAT = "Bug report";
 
 /**
- * Save a signed-in account's bug report, then post it to Discord when a webhook is set.
+ * Save a signed-in account's bug report, then file it as an issue in the feedback repo and
+ * post it to Discord, when each is configured.
  * Body: `{ title, description, context }` (see `decodeBugReport`).
  */
 export async function POST(request: Request) {
@@ -61,14 +62,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const webhook = bugReportWebhookUrl();
-  if (webhook) {
-    // Saved already; Discord is only the notification, so it doesn't hold up the answer.
-    after(() =>
-      postBugReportToDiscord(webhook, id, report).catch((err) =>
-        console.error("Bug report webhook failed:", err instanceof Error ? err.message : err),
-      ),
-    );
-  }
+  // Saved already; filing the issue and the Discord post don't hold up the answer.
+  after(() => notifyBugReport(id, report));
   return NextResponse.json({ id }, { status: 201 });
 }
