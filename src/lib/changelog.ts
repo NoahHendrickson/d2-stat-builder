@@ -14,7 +14,7 @@ export const CHANGELOG: readonly ChangelogEntry[] = [
   {
     date: "2026-11-02",
     changes: [
-      "Sidebar: Send feedback replaces Report a bug, so you can suggest ideas as well as report bugs.",
+      "Sidebar: Send feedback lets you suggest an idea as well as report a bug.",
     ],
   },
   {
@@ -102,7 +102,6 @@ export const CHANGELOG: readonly ChangelogEntry[] = [
     date: "2026-10-12",
     changes: [
       "Every page works on phones.",
-      "Report a bug, in the sidebar.",
       "Exotic class items show both Spirit perks, and the optimizer flags pairs you don't own.",
       "Postmaster items, including tiered Distorted Engrams, all have names.",
     ],

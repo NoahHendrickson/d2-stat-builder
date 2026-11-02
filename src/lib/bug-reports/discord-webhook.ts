@@ -4,9 +4,14 @@
 // report opens its own post (named by its title) that can be tagged and closed; a text
 // channel refuses `thread_name` (code 220003), so that refusal is retried as a plain
 // message.
+import type { FeedbackKind } from "./bug-report";
 import type { NewBugReport } from "./neon-store";
 
-const EMBED_COLOR = { bug: 0xe2524b, idea: 0xf2c94c } as const;
+/** How each kind posts: its webhook name, thread-name prefix and embed colour. */
+const KIND_POST: Record<FeedbackKind, { username: string; threadPrefix: string; color: number }> = {
+  bug: { username: "Bug report", threadPrefix: "", color: 0xe2524b },
+  idea: { username: "Idea", threadPrefix: "Idea: ", color: 0xf2c94c },
+};
 /** Discord's limit on a forum post's name. */
 const MAX_THREAD_NAME = 100;
 /** "Webhooks can only create threads in forum channels". */
@@ -26,14 +31,14 @@ export async function postBugReportToDiscord(
     inline,
   });
   const message = {
-    username: r.kind === "idea" ? "Idea" : "Bug report",
+    username: KIND_POST[r.kind].username,
     // Nothing a reporter types can ping @everyone, a role, or a user.
     allowed_mentions: { parse: [] },
     embeds: [
       {
         title: r.title,
         description: r.description,
-        color: EMBED_COLOR[r.kind],
+        color: KIND_POST[r.kind].color,
         fields: [
           field("Page", r.context.path ? `${r.host}${r.context.path}` : r.host),
           field("Account", r.displayName ?? r.membershipId),
@@ -42,7 +47,7 @@ export async function postBugReportToDiscord(
           field("Browser", r.userAgent.slice(0, 1000), false),
           ...(issueUrl ? [field("Issue", issueUrl, false)] : []),
         ],
-        footer: { text: `${r.kind === "idea" ? "Idea" : "Report"} #${id}` },
+        footer: { text: `${KIND_POST[r.kind].username} #${id}` },
         timestamp: new Date().toISOString(),
       },
     ],
@@ -67,7 +72,7 @@ export async function postBugReportToDiscord(
   let refused = await refusal(
     await post({
       ...message,
-      thread_name: `${r.kind === "idea" ? "Idea: " : ""}${r.title}`.slice(0, MAX_THREAD_NAME),
+      thread_name: `${KIND_POST[r.kind].threadPrefix}${r.title}`.slice(0, MAX_THREAD_NAME),
     }),
   );
   if (refused?.code === NOT_A_FORUM) refused = await refusal(await post(message));

@@ -45,6 +45,7 @@ describe("feedback issues", () => {
     expect(issue.labels).toEqual(["source:web", "type:feature", "needs-triage"]);
     expect(issue.title).toBe("Idea #43");
     expect(issue.body).toContain("### Idea");
+    expect(webReportIssue("44", { ...report, title: "" }).body).toContain("### Bug report");
   });
 
   it("records every Discord source as channel + message", () => {

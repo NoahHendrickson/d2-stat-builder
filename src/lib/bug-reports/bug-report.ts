@@ -16,8 +16,12 @@ export interface BugReportContext {
   theme: string;
 }
 
-/** A bug report, or an idea for something new. */
-export type FeedbackKind = "bug" | "idea";
+/** What the feedback is: a bug report, or an idea for something new. */
+export const FEEDBACK_KINDS = ["bug", "idea"] as const;
+export type FeedbackKind = (typeof FEEDBACK_KINDS)[number];
+
+export const isFeedbackKind = (value: unknown): value is FeedbackKind =>
+  (FEEDBACK_KINDS as readonly unknown[]).includes(value);
 
 export interface BugReportInput {
   kind: FeedbackKind;
@@ -51,7 +55,7 @@ export function decodeBugReport(body: unknown): BugReportInput | null {
   const path = text(c.path, MAX_PATH_LENGTH);
   return {
     // Older clients send no kind; everything they sent was a bug report.
-    kind: b.kind === "idea" ? "idea" : "bug",
+    kind: isFeedbackKind(b.kind) ? b.kind : "bug",
     title,
     description,
     context: {

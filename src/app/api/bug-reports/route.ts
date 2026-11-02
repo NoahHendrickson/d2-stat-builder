@@ -8,7 +8,7 @@ import { rejectCrossSite } from "@/lib/http/same-origin";
 
 /** A 4000-character description, with room for JSON escaping and the context. */
 const MAX_BODY_BYTES = 32 * 1024;
-const WHAT = "Bug report";
+const WHAT = "Feedback";
 
 /**
  * Save a signed-in account's feedback (a bug or an idea), then file it as an issue in the
@@ -25,7 +25,7 @@ export async function POST(request: Request) {
 
   // Refuse an oversized body from its header before buffering it; the byte check after
   // covers a request that didn't declare its length.
-  const tooLarge = () => NextResponse.json({ error: "Report too long" }, { status: 413 });
+  const tooLarge = () => NextResponse.json({ error: "That's too long" }, { status: 413 });
   if (Number(request.headers.get("content-length") ?? 0) > MAX_BODY_BYTES) return tooLarge();
   const bytes = await request.arrayBuffer().catch(() => new ArrayBuffer(0));
   if (bytes.byteLength > MAX_BODY_BYTES) return tooLarge();
@@ -58,7 +58,7 @@ export async function POST(request: Request) {
   }
   if (!id) {
     return NextResponse.json(
-      { error: "Too many reports right now — try again in a bit" },
+      { error: "Too much feedback right now — try again in a bit" },
       { status: 429 },
     );
   }

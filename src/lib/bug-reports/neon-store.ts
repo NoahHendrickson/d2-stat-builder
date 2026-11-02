@@ -1,4 +1,4 @@
-// Neon store for "Report a bug". Server-only.
+// Neon store for "Send feedback" (bug reports and ideas). Server-only.
 //
 // One row per report, from a signed-in account. Inserts are capped per account (an hour
 // and a day) and across everyone (a day). The caps are checked in the insert itself,
@@ -44,6 +44,7 @@ export class NeonBugReportStore {
       CREATE TABLE IF NOT EXISTS bug_reports (
         id bigserial PRIMARY KEY,
         created_at timestamptz NOT NULL DEFAULT now(),
+        kind text NOT NULL DEFAULT 'bug',
         title text NOT NULL,
         description text NOT NULL,
         path text NOT NULL,
@@ -55,8 +56,17 @@ export class NeonBugReportStore {
         membership_id text NOT NULL,
         display_name text
       )`;
-    await this.sql`
-      ALTER TABLE bug_reports ADD COLUMN IF NOT EXISTS kind text NOT NULL DEFAULT 'bug'`;
+    // Tables made before ideas existed lack `kind`. Check first: ALTER TABLE takes an
+    // exclusive lock (and needs ownership) even when the column is already there.
+    const [{ missing }] = (await this.sql`
+      SELECT NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'bug_reports' AND column_name = 'kind'
+      ) AS missing`) as { missing: boolean }[];
+    if (missing) {
+      await this.sql`
+        ALTER TABLE bug_reports ADD COLUMN IF NOT EXISTS kind text NOT NULL DEFAULT 'bug'`;
+    }
     await this.sql`
       CREATE INDEX IF NOT EXISTS bug_reports_account_created
       ON bug_reports (membership_id, created_at)`;

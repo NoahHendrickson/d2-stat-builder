@@ -1,6 +1,7 @@
 "use client";
 
 import { useId, useState, useSyncExternalStore, type FormEvent } from "react";
+import type { IconSvgElement } from "@hugeicons/react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -16,6 +17,8 @@ import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  FEEDBACK_KINDS,
+  isFeedbackKind,
   MAX_DESCRIPTION_LENGTH,
   MAX_TITLE_LENGTH,
   readBugReportContext,
@@ -51,16 +54,24 @@ const EMPTY: Draft = { kind: "bug", title: "", description: "" };
 /** What the form says for each kind. */
 const KIND_COPY: Record<
   FeedbackKind,
-  { label: string; titlePlaceholder: string; body: string; bodyPlaceholder: string }
+  {
+    label: string;
+    icon: IconSvgElement;
+    titlePlaceholder: string;
+    body: string;
+    bodyPlaceholder: string;
+  }
 > = {
   bug: {
     label: "Bug",
+    icon: Bug01Icon,
     titlePlaceholder: "Equip skips my helmet",
     body: "What happened?",
     bodyPlaceholder: "What you did, what you expected, and what happened instead.",
   },
   idea: {
     label: "Idea",
+    icon: IdeaIcon,
     titlePlaceholder: "Collapse the other characters on Items",
     body: "What's your idea?",
     bodyPlaceholder: "What you'd like to do, and how it would help.",
@@ -115,7 +126,11 @@ export function BugReportDialog() {
         {open && (
           <BugReportForm
             draft={draft}
-            onDraftChange={setDraft}
+            onDraftChange={(next) => {
+              // An error from sending one kind doesn't apply once you switch.
+              if (next.kind !== draft.kind) setError(null);
+              setDraft(next);
+            }}
             sending={sending}
             error={error}
             onCancel={() => setOpen(false)}
@@ -163,21 +178,26 @@ function BugReportForm({
         </DialogDescription>
       </DialogHeader>
 
+      {/* The Tabs well, announced as the form choice it is: a radio group, no panels. */}
       <Tabs
         value={draft.kind}
         onValueChange={(kind) => {
-          if (!sending) onDraftChange({ ...draft, kind: kind as FeedbackKind });
+          if (isFeedbackKind(kind)) onDraftChange({ ...draft, kind });
         }}
       >
-        <TabsList aria-label="Kind of feedback">
-          <TabsTrigger value="bug">
-            <HugeiconsIcon icon={Bug01Icon} aria-hidden />
-            {KIND_COPY.bug.label}
-          </TabsTrigger>
-          <TabsTrigger value="idea">
-            <HugeiconsIcon icon={IdeaIcon} aria-hidden />
-            {KIND_COPY.idea.label}
-          </TabsTrigger>
+        <TabsList role="radiogroup" aria-label="Kind of feedback">
+          {FEEDBACK_KINDS.map((kind) => (
+            <TabsTrigger
+              key={kind}
+              value={kind}
+              role="radio"
+              aria-checked={draft.kind === kind}
+              disabled={sending}
+            >
+              <HugeiconsIcon icon={KIND_COPY[kind].icon} aria-hidden />
+              {KIND_COPY[kind].label}
+            </TabsTrigger>
+          ))}
         </TabsList>
       </Tabs>
 
