@@ -1,6 +1,7 @@
 "use client";
 
 import { useId, useState, useSyncExternalStore, type FormEvent } from "react";
+import type { IconSvgElement } from "@hugeicons/react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -10,12 +11,18 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Bug01Icon, IdeaIcon } from "@hugeicons/core-free-icons";
+import { HugeiconsIcon } from "@hugeicons/react";
 import { Input } from "@/components/ui/input";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  FEEDBACK_KINDS,
+  isFeedbackKind,
   MAX_DESCRIPTION_LENGTH,
   MAX_TITLE_LENGTH,
   readBugReportContext,
+  type FeedbackKind,
 } from "@/lib/bug-reports/bug-report";
 import { toast } from "@/lib/toast";
 
@@ -31,7 +38,7 @@ function setOpen(open: boolean) {
   for (const listener of listeners) listener();
 }
 
-/** Open the "Report a bug" dialog. */
+/** Open the "Send feedback" dialog. */
 export const openBugReport = () => setOpen(true);
 
 function subscribe(listener: () => void) {
@@ -41,12 +48,39 @@ function subscribe(listener: () => void) {
   };
 }
 
-type Draft = { title: string; description: string };
-const EMPTY: Draft = { title: "", description: "" };
+type Draft = { kind: FeedbackKind; title: string; description: string };
+const EMPTY: Draft = { kind: "bug", title: "", description: "" };
+
+/** What the form says for each kind. */
+const KIND_COPY: Record<
+  FeedbackKind,
+  {
+    label: string;
+    icon: IconSvgElement;
+    titlePlaceholder: string;
+    body: string;
+    bodyPlaceholder: string;
+  }
+> = {
+  bug: {
+    label: "Bug",
+    icon: Bug01Icon,
+    titlePlaceholder: "Equip skips my helmet",
+    body: "What happened?",
+    bodyPlaceholder: "What you did, what you expected, and what happened instead.",
+  },
+  idea: {
+    label: "Idea",
+    icon: IdeaIcon,
+    titlePlaceholder: "Collapse the other characters on Items",
+    body: "What's your idea?",
+    bodyPlaceholder: "What you'd like to do, and how it would help.",
+  },
+};
 
 /**
- * "Report a bug": a title and what happened. The page, window size and browser go
- * along with it. The draft and a send in flight outlive closing the dialog: the draft
+ * "Send feedback": a bug or an idea, with a title and the details. The page, window
+ * size and browser go along with it. The draft and a send in flight outlive closing the dialog: the draft
  * clears once the report is sent, and a failure that lands while it's closed is a toast.
  */
 export function BugReportDialog() {
@@ -67,20 +101,20 @@ export function BugReportDialog() {
       });
       if (!res.ok) {
         const body = (await res.json().catch(() => null)) as { error?: string } | null;
-        throw new Error(body?.error ?? "Couldn't send the report — try again");
+        throw new Error(body?.error ?? "Couldn't send it — try again");
       }
       setDraft(EMPTY);
       setOpen(false);
-      toast.success("Thanks, your report was sent", "We'll take a look.");
+      toast.success("Thanks, your feedback was sent", "We'll take a look.");
     } catch (err) {
       const message =
         err instanceof TypeError
           ? "Couldn't reach the server — check your connection"
           : err instanceof Error
             ? err.message
-            : "Couldn't send the report — try again";
+            : "Couldn't send it — try again";
       if (isOpen) setError(message);
-      else toast.error("Your bug report wasn't sent", message);
+      else toast.error("Your feedback wasn't sent", message);
     } finally {
       setSending(false);
     }
@@ -92,7 +126,11 @@ export function BugReportDialog() {
         {open && (
           <BugReportForm
             draft={draft}
-            onDraftChange={setDraft}
+            onDraftChange={(next) => {
+              // An error from sending one kind doesn't apply once you switch.
+              if (next.kind !== draft.kind) setError(null);
+              setDraft(next);
+            }}
             sending={sending}
             error={error}
             onCancel={() => setOpen(false)}
@@ -123,6 +161,7 @@ function BugReportForm({
   const descriptionId = useId();
   const errorId = useId();
   const ready = draft.title.trim().length > 0 && draft.description.trim().length > 0;
+  const copy = KIND_COPY[draft.kind];
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
@@ -132,11 +171,35 @@ function BugReportForm({
   return (
     <form onSubmit={submit} className="grid gap-4">
       <DialogHeader>
-        <DialogTitle>Report a bug</DialogTitle>
+        <DialogTitle>Send feedback</DialogTitle>
         <DialogDescription>
-          Tell us what went wrong. The page you&rsquo;re on and your browser are sent with it.
+          Report a bug or suggest an idea. The page you&rsquo;re on and your browser are sent with
+          it.
         </DialogDescription>
       </DialogHeader>
+
+      {/* The Tabs well, announced as the form choice it is: a radio group, no panels. */}
+      <Tabs
+        value={draft.kind}
+        onValueChange={(kind) => {
+          if (isFeedbackKind(kind)) onDraftChange({ ...draft, kind });
+        }}
+      >
+        <TabsList role="radiogroup" aria-label="Kind of feedback">
+          {FEEDBACK_KINDS.map((kind) => (
+            <TabsTrigger
+              key={kind}
+              value={kind}
+              role="radio"
+              aria-checked={draft.kind === kind}
+              disabled={sending}
+            >
+              <HugeiconsIcon icon={KIND_COPY[kind].icon} aria-hidden />
+              {KIND_COPY[kind].label}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+      </Tabs>
 
       <div className="grid gap-1.5">
         <label htmlFor={titleId} className="text-sm font-medium">
@@ -148,7 +211,7 @@ function BugReportForm({
           onChange={(e) => onDraftChange({ ...draft, title: e.target.value })}
           readOnly={sending}
           maxLength={MAX_TITLE_LENGTH}
-          placeholder="Equip skips my helmet"
+          placeholder={copy.titlePlaceholder}
           autoComplete="off"
           autoFocus
         />
@@ -156,7 +219,7 @@ function BugReportForm({
 
       <div className="grid gap-1.5">
         <label htmlFor={descriptionId} className="text-sm font-medium">
-          What happened?
+          {copy.body}
         </label>
         <Textarea
           id={descriptionId}
@@ -164,7 +227,7 @@ function BugReportForm({
           onChange={(e) => onDraftChange({ ...draft, description: e.target.value })}
           readOnly={sending}
           maxLength={MAX_DESCRIPTION_LENGTH}
-          placeholder="What you did, what you expected, and what happened instead."
+          placeholder={copy.bodyPlaceholder}
           className="max-h-[40vh] min-h-28"
           aria-describedby={error ? errorId : undefined}
         />
@@ -181,7 +244,7 @@ function BugReportForm({
           Cancel
         </Button>
         <Button type="submit" disabled={!ready || sending}>
-          {sending ? "Sending…" : "Send report"}
+          {sending ? "Sending…" : "Send"}
         </Button>
       </DialogFooter>
     </form>

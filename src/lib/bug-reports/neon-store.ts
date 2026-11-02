@@ -1,4 +1,4 @@
-// Neon store for "Report a bug". Server-only.
+// Neon store for "Send feedback" (bug reports and ideas). Server-only.
 //
 // One row per report, from a signed-in account. Inserts are capped per account (an hour
 // and a day) and across everyone (a day). The caps are checked in the insert itself,
@@ -6,7 +6,7 @@
 // and slip past. The schema is created lazily, like loadouts.
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
 import { fromDatabaseUrl, lazySchema } from "../db/neon";
-import type { BugReportContext } from "./bug-report";
+import type { BugReportContext, FeedbackKind } from "./bug-report";
 
 /** Reports one account can make in an hour. */
 export const MAX_REPORTS_PER_ACCOUNT_HOUR = 5;
@@ -19,6 +19,7 @@ export const MAX_REPORTS_PER_ACCOUNT_DAY = 10;
 export const MAX_REPORTS_PER_DAY = 1000;
 
 export interface NewBugReport {
+  kind: FeedbackKind;
   title: string;
   description: string;
   context: BugReportContext;
@@ -43,6 +44,7 @@ export class NeonBugReportStore {
       CREATE TABLE IF NOT EXISTS bug_reports (
         id bigserial PRIMARY KEY,
         created_at timestamptz NOT NULL DEFAULT now(),
+        kind text NOT NULL DEFAULT 'bug',
         title text NOT NULL,
         description text NOT NULL,
         path text NOT NULL,
@@ -54,6 +56,17 @@ export class NeonBugReportStore {
         membership_id text NOT NULL,
         display_name text
       )`;
+    // Tables made before ideas existed lack `kind`. Check first: ALTER TABLE takes an
+    // exclusive lock (and needs ownership) even when the column is already there.
+    const [{ missing }] = (await this.sql`
+      SELECT NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_name = 'bug_reports' AND column_name = 'kind'
+      ) AS missing`) as { missing: boolean }[];
+    if (missing) {
+      await this.sql`
+        ALTER TABLE bug_reports ADD COLUMN IF NOT EXISTS kind text NOT NULL DEFAULT 'bug'`;
+    }
     await this.sql`
       CREATE INDEX IF NOT EXISTS bug_reports_account_created
       ON bug_reports (membership_id, created_at)`;
@@ -70,9 +83,9 @@ export class NeonBugReportStore {
       [
         this.sql`SELECT pg_advisory_xact_lock(hashtext('bug_reports'))`,
         this.sql`
-          INSERT INTO bug_reports (title, description, path, viewport, theme, user_agent, host,
+          INSERT INTO bug_reports (kind, title, description, path, viewport, theme, user_agent, host,
             build, membership_id, display_name)
-          SELECT ${r.title}, ${r.description}, ${r.context.path}, ${r.context.viewport},
+          SELECT ${r.kind}, ${r.title}, ${r.description}, ${r.context.path}, ${r.context.viewport},
             ${r.context.theme}, ${r.userAgent}, ${r.host}, ${r.build}, ${r.membershipId},
             ${r.displayName}
           WHERE (

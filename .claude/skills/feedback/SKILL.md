@@ -8,7 +8,7 @@ description: Triage D2 Conflux player feedback in the private NoahHendrickson/d2
 Every bug report and suggestion lands as an issue in the **private** repo
 `NoahHendrickson/d2-conflux-feedback`:
 
-- `source:web`: the site's "Report a bug" form (`src/app/api/bug-reports/route.ts`). The
+- `source:web`: the site's "Send feedback" form (a bug or an idea) (`src/app/api/bug-reports/route.ts`). The
   body has the page, build SHA, window, theme and browser.
 - `source:discord`: a new post in the Discord feedback forum (filed by the cron at
   `src/app/api/feedback/discord-sync`), or a message a moderator sent with **Send to

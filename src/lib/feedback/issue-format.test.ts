@@ -21,6 +21,7 @@ const message = (over: Partial<DiscordMessage> = {}): DiscordMessage => ({
 });
 
 const report: NewBugReport = {
+  kind: "bug",
   title: "Optimizer hangs",
   description: "It spins forever\n\n@noah please fix",
   context: { path: "/", viewport: "1440×900 @2x", theme: "scene" },
@@ -37,6 +38,14 @@ describe("feedback issues", () => {
     expect(parseMarkers(issue.body)).toEqual({ webReport: "42" });
     expect(issue.labels).toEqual(["source:web", "type:bug", "needs-triage"]);
     expect(issue.title).toBe("Optimizer hangs");
+  });
+
+  it("files a web idea as a feature", () => {
+    const issue = webReportIssue("43", { ...report, kind: "idea", title: "" });
+    expect(issue.labels).toEqual(["source:web", "type:feature", "needs-triage"]);
+    expect(issue.title).toBe("Idea #43");
+    expect(issue.body).toContain("### Idea");
+    expect(webReportIssue("44", { ...report, title: "" }).body).toContain("### Bug report");
   });
 
   it("records every Discord source as channel + message", () => {

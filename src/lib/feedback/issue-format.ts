@@ -11,6 +11,7 @@
 // Every Discord source is a message: a forum post is its starter message, whose id is
 // the thread's id. So one message id identifies an issue's source on both paths.
 
+import type { FeedbackKind } from "@/lib/bug-reports/bug-report";
 import type { NewBugReport } from "@/lib/bug-reports/neon-store";
 import {
   displayName,
@@ -110,17 +111,24 @@ const table = (rows: [string, string][]) =>
     "\n",
   );
 
-/** A "Report a bug" submission, saved in Neon as report `id`. */
+/** How each kind of web feedback is filed: its type label and name. */
+const KIND_ISSUE: Record<FeedbackKind, { label: string; name: string }> = {
+  bug: { label: FEEDBACK_LABELS.bug, name: "Bug report" },
+  idea: { label: FEEDBACK_LABELS.feature, name: "Idea" },
+};
+
+/** A "Send feedback" submission (a bug or an idea), saved in Neon as report `id`. */
 export function webReportIssue(id: string, r: NewBugReport): FeedbackIssue {
   const page = r.context.path ? `${r.host}${r.context.path}` : r.host;
+  const kind = KIND_ISSUE[r.kind];
   return {
-    title: issueTitle(r.title, `Bug report #${id}`),
-    labels: [FEEDBACK_LABELS.web, FEEDBACK_LABELS.bug, FEEDBACK_LABELS.triage],
+    title: issueTitle(r.title, `${kind.name} #${id}`),
+    labels: [FEEDBACK_LABELS.web, kind.label, FEEDBACK_LABELS.triage],
     body: [
       marker("web-report", id),
       UNTRUSTED_NOTE,
       "",
-      "### Report",
+      `### ${kind.name}`,
       quoteReporterText(r.description),
       "",
       "### Context",

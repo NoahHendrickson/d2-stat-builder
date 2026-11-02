@@ -42,6 +42,7 @@ Each feature file starts with an H1 title and one paragraph describing the behav
 - [Weapon search](./weapons.md): name search, filter chips, details pane, perk picks. Journey: `weapons`.
 - [Armor table](./armor.md): name search, Searches (usage) column, Junk, Duplicates. Journey: `armor`.
 - [Settings and sync](./settings.md): theme, site icon, clearing usage history, synced sidebar links. Journey: `settings`.
+- [Send feedback](./feedback.md): the sidebar form, Bug / Idea, sending. Journey: `feedback`.
 
 ## Not yet mapped
 
@@ -50,7 +51,6 @@ These features have no recipe yet:
 - Activity sets
 - Import in-game loadout
 - Share links (`#import=`)
-- Report a bug
 - Cleanup view on /armor
 - Exotic and set-bonus pickers
 - Phone layouts (below 768 px)
