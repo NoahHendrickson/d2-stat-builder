@@ -172,19 +172,24 @@ function discordBody(guildId: string, message: DiscordMessage, heading: string[]
   ].join("\n");
 }
 
-/** A new forum post: its thread, starter message (the thread's id) and tag names. */
+/**
+ * A new forum post: its thread, starter message (the thread's id), the forum's name and
+ * the post's tag names. The type comes from the tags, else from the forum's name
+ * (#bugs, #feature-requests).
+ */
 export function forumPostIssue(
   guildId: string,
   thread: DiscordThread,
   starter: DiscordMessage,
+  forumName: string,
   tagNames: string[],
 ): FeedbackIssue {
-  const typeLabel = typeLabelFromTags(tagNames);
+  const typeLabel = typeLabelFromTags(tagNames) ?? typeLabelFromTags([forumName]);
   return {
     title: issueTitle(thread.name, `Discord post from ${displayName(starter.author)}`),
     labels: [FEEDBACK_LABELS.discord, ...(typeLabel ? [typeLabel] : []), FEEDBACK_LABELS.triage],
     body: discordBody(guildId, starter, [`**${neutral(oneLine(thread.name))}**`, ""], [
-      ["Where", "Discord forum post"],
+      ["Where", forumName ? `#${forumName} forum post` : "Discord forum post"],
       ["Tags", tagNames.join(", ")],
     ]),
   };

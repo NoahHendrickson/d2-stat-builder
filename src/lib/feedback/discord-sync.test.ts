@@ -29,7 +29,7 @@ function deps(threads: DiscordThread[], over: Partial<SyncDeps> = {}) {
   const d: SyncDeps = {
     guildId: "g",
     threads: async () => threads,
-    forumTags: async () => new Map([["forum", new Map([["t1", "Bug"]])]]),
+    forums: async () => new Map([["forum", { name: "feature-requests", tags: new Map([["t1", "Bug"]]) }]]),
     starter: async (t) => starterOf(t),
     filedMessageIds: async () => new Set(filed.map((i) => parseMarkers(i.body).discord!.messageId)),
     file: async (issue) => {
@@ -52,6 +52,9 @@ describe("syncDiscordFeedback", () => {
     const result = await syncDiscordFeedback(d);
     expect(filed.map((i) => i.title)).toEqual(["older", "newer"]);
     expect(filed[1].labels).toContain("type:bug");
+    // Untagged: the forum's name decides.
+    expect(filed[0].labels).toContain("type:feature");
+    expect(filed[0].body).toContain("#feature-requests forum post");
     expect(parseMarkers(filed[0].body)).toEqual({ discord: { channelId: older.id, messageId: older.id } });
     expect(replies).toEqual([[older.id, older.id], [newer.id, newer.id]]);
     expect(result).toEqual({ filed: [1, 2], skipped: 0, failed: 0, pending: 0 });
@@ -59,11 +62,11 @@ describe("syncDiscordFeedback", () => {
 
   it("skips posts already filed, and doesn't read tags when nothing is new", async () => {
     const done = post("done", DAY);
-    const forumTags = vi.fn(async () => new Map());
-    const { d, filed } = deps([done], { filedMessageIds: async () => new Set([done.id]), forumTags });
+    const forums = vi.fn(async () => new Map());
+    const { d, filed } = deps([done], { filedMessageIds: async () => new Set([done.id]), forums });
     expect(await syncDiscordFeedback(d)).toEqual({ filed: [], skipped: 0, failed: 0, pending: 0 });
     expect(filed).toEqual([]);
-    expect(forumTags).not.toHaveBeenCalled();
+    expect(forums).not.toHaveBeenCalled();
   });
 
   it("doesn't let skipped bot posts use up the run", async () => {

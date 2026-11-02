@@ -46,8 +46,8 @@ export interface FileDeps {
 
 export interface SyncDeps extends FileDeps {
   threads: () => Promise<DiscordThread[]>;
-  /** Tag id → name for each feedback forum. */
-  forumTags: () => Promise<Map<string, Map<string, string>>>;
+  /** Each feedback forum's name and tag id → name. */
+  forums: () => Promise<Map<string, { name: string; tags: Map<string, string> }>>;
   /** A post's starter message, or null when it was deleted. */
   starter: (thread: DiscordThread) => Promise<DiscordMessage | null>;
   now: number;
@@ -80,7 +80,7 @@ export async function syncDiscordFeedback(d: SyncDeps): Promise<SyncResult> {
   const filed = await d.filedMessageIds();
   const fresh = candidates.filter((t) => !filed.has(t.id));
   if (!fresh.length) return result;
-  const tags = await d.forumTags();
+  const forums = await d.forums();
 
   let examined = 0;
   for (const thread of fresh) {
@@ -94,9 +94,13 @@ export async function syncDiscordFeedback(d: SyncDeps): Promise<SyncResult> {
         result.skipped++;
         continue;
       }
-      const forum = thread.parent_id ? tags.get(thread.parent_id) : undefined;
-      const tagNames = (thread.applied_tags ?? []).flatMap((id) => forum?.get(id) ?? []);
-      const issue = await fileAndThank(d, forumPostIssue(d.guildId, thread, starter, tagNames), starter);
+      const forum = thread.parent_id ? forums.get(thread.parent_id) : undefined;
+      const tagNames = (thread.applied_tags ?? []).flatMap((id) => forum?.tags.get(id) ?? []);
+      const issue = await fileAndThank(
+        d,
+        forumPostIssue(d.guildId, thread, starter, forum?.name ?? "", tagNames),
+        starter,
+      );
       result.filed.push(issue.number);
     } catch (err) {
       // One bad post (no access, a refused issue) mustn't hold up the rest on every run.
@@ -141,12 +145,15 @@ export function liveSyncDeps(dc: DiscordConfig, gh: GithubConfig): SyncDeps {
   return {
     ...liveFileDeps(dc, gh),
     threads: () => feedbackThreads(dc),
-    forumTags: async () => {
+    forums: async () => {
       const forums = await Promise.all(
         dc.feedbackChannelIds.map((id) => getChannel<DiscordForum>(dc, id)),
       );
       return new Map(
-        forums.map((f) => [f.id, new Map((f.available_tags ?? []).map((t) => [t.id, t.name]))]),
+        forums.map((f) => [
+          f.id,
+          { name: f.name, tags: new Map((f.available_tags ?? []).map((t) => [t.id, t.name])) },
+        ]),
       );
     },
     starter: (t) =>
