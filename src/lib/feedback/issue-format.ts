@@ -110,17 +110,18 @@ const table = (rows: [string, string][]) =>
     "\n",
   );
 
-/** A "Report a bug" submission, saved in Neon as report `id`. */
+/** A "Send feedback" submission (a bug or an idea), saved in Neon as report `id`. */
 export function webReportIssue(id: string, r: NewBugReport): FeedbackIssue {
   const page = r.context.path ? `${r.host}${r.context.path}` : r.host;
+  const idea = r.kind === "idea";
   return {
-    title: issueTitle(r.title, `Bug report #${id}`),
-    labels: [FEEDBACK_LABELS.web, FEEDBACK_LABELS.bug, FEEDBACK_LABELS.triage],
+    title: issueTitle(r.title, idea ? `Idea #${id}` : `Bug report #${id}`),
+    labels: [FEEDBACK_LABELS.web, idea ? FEEDBACK_LABELS.feature : FEEDBACK_LABELS.bug, FEEDBACK_LABELS.triage],
     body: [
       marker("web-report", id),
       UNTRUSTED_NOTE,
       "",
-      "### Report",
+      idea ? "### Idea" : "### Report",
       quoteReporterText(r.description),
       "",
       "### Context",

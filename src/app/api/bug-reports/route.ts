@@ -11,9 +11,9 @@ const MAX_BODY_BYTES = 32 * 1024;
 const WHAT = "Bug report";
 
 /**
- * Save a signed-in account's bug report, then file it as an issue in the feedback repo and
- * post it to Discord, when each is configured.
- * Body: `{ title, description, context }` (see `decodeBugReport`).
+ * Save a signed-in account's feedback (a bug or an idea), then file it as an issue in the
+ * feedback repo and post it to Discord, when each is configured.
+ * Body: `{ kind, title, description, context }` (see `decodeBugReport`).
  */
 export async function POST(request: Request) {
   const refused = rejectCrossSite(request);
@@ -39,6 +39,7 @@ export async function POST(request: Request) {
   if (!input) return NextResponse.json({ error: "Add a title and a description" }, { status: 400 });
 
   const report: NewBugReport = {
+    kind: input.kind,
     title: input.title,
     description: input.description,
     context: input.context,

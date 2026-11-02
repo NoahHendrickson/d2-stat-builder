@@ -7,7 +7,7 @@ import { usePathname } from "next/navigation";
 import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
 import {
   Add01Icon,
-  Bug01Icon,
+  ChatFeedbackIcon,
   Delete02Icon,
   DiscordIcon,
   GarageIcon,
@@ -310,7 +310,7 @@ function DiscordLink({ collapsed }: { collapsed: boolean }) {
   return collapsed ? <TooltipLabel label="Join the Discord">{anchor}</TooltipLabel> : anchor;
 }
 
-/** Opens the "Report a bug" form (AppShell owns it); on mobile, closes the menu first. */
+/** Opens the "Send feedback" form (AppShell owns it); on mobile, closes the menu first. */
 function BugReportButton({
   collapsed,
   onNavigate,
@@ -325,18 +325,23 @@ function BugReportButton({
         onNavigate?.();
         openBugReport();
       }}
-      aria-label={collapsed ? "Report a bug" : undefined}
+      aria-label={collapsed ? "Send feedback" : undefined}
       className={cn(
         rowClass,
         "text-muted-foreground hover:bg-foreground/5 hover:text-foreground",
         collapsed ? "w-9 justify-center" : "px-2.5",
       )}
     >
-      <HugeiconsIcon icon={Bug01Icon} strokeWidth={1.5} className="size-5 shrink-0" aria-hidden />
-      {!collapsed && <span className="min-w-0 flex-1 truncate text-left">Report a bug</span>}
+      <HugeiconsIcon
+        icon={ChatFeedbackIcon}
+        strokeWidth={1.5}
+        className="size-5 shrink-0"
+        aria-hidden
+      />
+      {!collapsed && <span className="min-w-0 flex-1 truncate text-left">Send feedback</span>}
     </button>
   );
-  return collapsed ? <TooltipLabel label="Report a bug">{button}</TooltipLabel> : button;
+  return collapsed ? <TooltipLabel label="Send feedback">{button}</TooltipLabel> : button;
 }
 
 type LinkDialogState = { kind: "closed" } | { kind: "add" } | { kind: "edit"; link: SavedLink };

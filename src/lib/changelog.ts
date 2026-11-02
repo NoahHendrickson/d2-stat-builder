@@ -12,6 +12,12 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    date: "2026-11-02",
+    changes: [
+      "Sidebar: Send feedback replaces Report a bug, so you can suggest ideas as well as report bugs.",
+    ],
+  },
+  {
     date: "2026-11-01",
     changes: [
       "Loadouts: applying a big loadout no longer stops partway and leaves the last few mods unslotted.",

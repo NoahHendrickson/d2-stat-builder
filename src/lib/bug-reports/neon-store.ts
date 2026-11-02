@@ -6,7 +6,7 @@
 // and slip past. The schema is created lazily, like loadouts.
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
 import { fromDatabaseUrl, lazySchema } from "../db/neon";
-import type { BugReportContext } from "./bug-report";
+import type { BugReportContext, FeedbackKind } from "./bug-report";
 
 /** Reports one account can make in an hour. */
 export const MAX_REPORTS_PER_ACCOUNT_HOUR = 5;
@@ -19,6 +19,7 @@ export const MAX_REPORTS_PER_ACCOUNT_DAY = 10;
 export const MAX_REPORTS_PER_DAY = 1000;
 
 export interface NewBugReport {
+  kind: FeedbackKind;
   title: string;
   description: string;
   context: BugReportContext;
@@ -55,6 +56,8 @@ export class NeonBugReportStore {
         display_name text
       )`;
     await this.sql`
+      ALTER TABLE bug_reports ADD COLUMN IF NOT EXISTS kind text NOT NULL DEFAULT 'bug'`;
+    await this.sql`
       CREATE INDEX IF NOT EXISTS bug_reports_account_created
       ON bug_reports (membership_id, created_at)`;
     await this.sql`
@@ -70,9 +73,9 @@ export class NeonBugReportStore {
       [
         this.sql`SELECT pg_advisory_xact_lock(hashtext('bug_reports'))`,
         this.sql`
-          INSERT INTO bug_reports (title, description, path, viewport, theme, user_agent, host,
+          INSERT INTO bug_reports (kind, title, description, path, viewport, theme, user_agent, host,
             build, membership_id, display_name)
-          SELECT ${r.title}, ${r.description}, ${r.context.path}, ${r.context.viewport},
+          SELECT ${r.kind}, ${r.title}, ${r.description}, ${r.context.path}, ${r.context.viewport},
             ${r.context.theme}, ${r.userAgent}, ${r.host}, ${r.build}, ${r.membershipId},
             ${r.displayName}
           WHERE (

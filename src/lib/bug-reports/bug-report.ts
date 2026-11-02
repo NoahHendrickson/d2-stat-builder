@@ -1,4 +1,4 @@
-// What the "Report a bug" form sends, and the server's check of it. Shared by the
+// What the "Send feedback" form sends, and the server's check of it. Shared by the
 // dialog (for its length limits) and /api/bug-reports.
 
 export const MAX_TITLE_LENGTH = 120;
@@ -16,7 +16,11 @@ export interface BugReportContext {
   theme: string;
 }
 
+/** A bug report, or an idea for something new. */
+export type FeedbackKind = "bug" | "idea";
+
 export interface BugReportInput {
+  kind: FeedbackKind;
   title: string;
   description: string;
   context: BugReportContext;
@@ -46,6 +50,8 @@ export function decodeBugReport(body: unknown): BugReportInput | null {
   const c = (b.context && typeof b.context === "object" ? b.context : {}) as Record<string, unknown>;
   const path = text(c.path, MAX_PATH_LENGTH);
   return {
+    // Older clients send no kind; everything they sent was a bug report.
+    kind: b.kind === "idea" ? "idea" : "bug",
     title,
     description,
     context: {

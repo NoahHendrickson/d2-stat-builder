@@ -7,7 +7,13 @@ describe("decodeBugReport", () => {
   it("trims the text and keeps the context", () => {
     expect(
       decodeBugReport({ title: "  Equip   skips\nhelmet ", description: " It skips it. ", context }),
-    ).toEqual({ title: "Equip skips helmet", description: "It skips it.", context });
+    ).toEqual({ kind: "bug", title: "Equip skips helmet", description: "It skips it.", context });
+  });
+
+  it("keeps an idea, and reads anything else (or nothing) as a bug", () => {
+    expect(decodeBugReport({ kind: "idea", title: "x", description: "y" })?.kind).toBe("idea");
+    expect(decodeBugReport({ kind: "rant", title: "x", description: "y" })?.kind).toBe("bug");
+    expect(decodeBugReport({ title: "x", description: "y" })?.kind).toBe("bug");
   });
 
   it("needs a title and a description", () => {

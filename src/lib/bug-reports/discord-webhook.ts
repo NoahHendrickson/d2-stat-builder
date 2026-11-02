@@ -6,7 +6,7 @@
 // message.
 import type { NewBugReport } from "./neon-store";
 
-const EMBED_COLOR = 0xe2524b;
+const EMBED_COLOR = { bug: 0xe2524b, idea: 0xf2c94c } as const;
 /** Discord's limit on a forum post's name. */
 const MAX_THREAD_NAME = 100;
 /** "Webhooks can only create threads in forum channels". */
@@ -26,14 +26,14 @@ export async function postBugReportToDiscord(
     inline,
   });
   const message = {
-    username: "Bug report",
+    username: r.kind === "idea" ? "Idea" : "Bug report",
     // Nothing a reporter types can ping @everyone, a role, or a user.
     allowed_mentions: { parse: [] },
     embeds: [
       {
         title: r.title,
         description: r.description,
-        color: EMBED_COLOR,
+        color: EMBED_COLOR[r.kind],
         fields: [
           field("Page", r.context.path ? `${r.host}${r.context.path}` : r.host),
           field("Account", r.displayName ?? r.membershipId),
@@ -42,7 +42,7 @@ export async function postBugReportToDiscord(
           field("Browser", r.userAgent.slice(0, 1000), false),
           ...(issueUrl ? [field("Issue", issueUrl, false)] : []),
         ],
-        footer: { text: `Report #${id}` },
+        footer: { text: `${r.kind === "idea" ? "Idea" : "Report"} #${id}` },
         timestamp: new Date().toISOString(),
       },
     ],
@@ -65,7 +65,10 @@ export async function postBugReportToDiscord(
   };
 
   let refused = await refusal(
-    await post({ ...message, thread_name: r.title.slice(0, MAX_THREAD_NAME) }),
+    await post({
+      ...message,
+      thread_name: `${r.kind === "idea" ? "Idea: " : ""}${r.title}`.slice(0, MAX_THREAD_NAME),
+    }),
   );
   if (refused?.code === NOT_A_FORUM) refused = await refusal(await post(message));
   if (refused) throw new Error(`Discord webhook answered ${refused.detail}`);
