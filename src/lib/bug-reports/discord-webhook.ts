@@ -14,7 +14,12 @@ const NOT_A_FORUM = 220003;
 
 export const bugReportWebhookUrl = () => process.env.BUG_REPORT_WEBHOOK_URL || null;
 
-export async function postBugReportToDiscord(webhookUrl: string, id: string, r: NewBugReport) {
+export async function postBugReportToDiscord(
+  webhookUrl: string,
+  id: string,
+  r: NewBugReport,
+  issueUrl?: string,
+) {
   const field = (name: string, value: string, inline = true) => ({
     name,
     value: value || "—",
@@ -35,6 +40,7 @@ export async function postBugReportToDiscord(webhookUrl: string, id: string, r: 
           field("Build", r.build),
           field("Window", [r.context.viewport, r.context.theme].filter(Boolean).join(", ")),
           field("Browser", r.userAgent.slice(0, 1000), false),
+          ...(issueUrl ? [field("Issue", issueUrl, false)] : []),
         ],
         footer: { text: `Report #${id}` },
         timestamp: new Date().toISOString(),
