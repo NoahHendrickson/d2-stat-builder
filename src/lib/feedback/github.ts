@@ -46,19 +46,29 @@ export function createIssue(c: GithubConfig, issue: FeedbackIssue): Promise<Crea
   return github<CreatedIssue>(c, "/issues", { method: "POST", body: JSON.stringify(issue) });
 }
 
+/** Pages read at most, so a runaway label can't stall a run. */
+const MAX_PAGES = 10;
+
 /**
- * The newest issues (open and closed) with `label`. The list endpoint, unlike search,
- * sees an issue the moment it's created, so a sync right after a filing can't repeat it.
+ * Issues (open and closed) with `label`, updated since `since`, so every issue created
+ * since then too. The list endpoint, unlike search, sees an issue the moment it's
+ * created, so a sync right after a filing can't repeat it.
  */
-export function recentIssueBodies(c: GithubConfig, label: string, count = 100) {
-  const q = new URLSearchParams({
-    labels: label,
-    state: "all",
-    sort: "created",
-    direction: "desc",
-    per_page: String(Math.min(count, 100)),
-  });
-  return github<{ number: number; body: string | null }[]>(c, `/issues?${q}`);
+export async function recentIssueBodies(c: GithubConfig, label: string, since: Date) {
+  const out: { number: number; body: string | null }[] = [];
+  for (let page = 1; page <= MAX_PAGES; page++) {
+    const q = new URLSearchParams({
+      labels: label,
+      state: "all",
+      since: since.toISOString(),
+      per_page: "100",
+      page: String(page),
+    });
+    const issues = await github<{ number: number; body: string | null }[]>(c, `/issues?${q}`);
+    out.push(...issues);
+    if (issues.length < 100) break;
+  }
+  return out;
 }
 
 /** Checks GitHub's `X-Hub-Signature-256` header against the raw body. */

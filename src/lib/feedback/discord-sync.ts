@@ -104,9 +104,12 @@ export async function syncDiscordFeedback(d: SyncDeps): Promise<SyncResult> {
   return result;
 }
 
-/** The ids of Discord channels (forum threads) that already have an issue. */
-export async function filedDiscordChannelIds(gh: GithubConfig): Promise<Set<string>> {
-  const issues = await recentIssueBodies(gh, FEEDBACK_LABELS.discord);
+/**
+ * The ids of Discord channels (forum threads) that already have an issue. Reads every
+ * issue from the window the sync considers: a post's issue is never older than the post.
+ */
+export async function filedDiscordChannelIds(gh: GithubConfig, now: number): Promise<Set<string>> {
+  const issues = await recentIssueBodies(gh, FEEDBACK_LABELS.discord, new Date(now - MAX_POST_AGE_MS));
   const ids = new Set<string>();
   for (const issue of issues) {
     const m = parseMarkers(issue.body);
@@ -117,11 +120,12 @@ export async function filedDiscordChannelIds(gh: GithubConfig): Promise<Set<stri
 
 /** The ids of Discord messages already sent to the tracker by hand. */
 export async function filedDiscordMessageIds(gh: GithubConfig): Promise<Set<string>> {
-  const issues = await recentIssueBodies(gh, FEEDBACK_LABELS.discord);
+  const issues = await recentIssueBodies(gh, FEEDBACK_LABELS.discord, new Date(Date.now() - MAX_POST_AGE_MS));
   return new Set(issues.map((i) => parseMarkers(i.body).discordMessage).filter((id): id is string => !!id));
 }
 
 export function liveSyncDeps(dc: DiscordConfig, gh: GithubConfig): SyncDeps {
+  const now = Date.now();
   return {
     threads: () => activeThreads(dc),
     forum: (id) => getChannel<DiscordForum>(dc, id),
@@ -130,11 +134,11 @@ export function liveSyncDeps(dc: DiscordConfig, gh: GithubConfig): SyncDeps {
         if (err instanceof DiscordError && err.status === 404) return null;
         throw err;
       }),
-    filedChannelIds: () => filedDiscordChannelIds(gh),
+    filedChannelIds: () => filedDiscordChannelIds(gh, now),
     file: (issue) => createIssue(gh, issue),
     reply: (channelId, content) => sendMessage(dc, channelId, content),
     guildId: dc.guildId,
     feedbackChannelIds: dc.feedbackChannelIds,
-    now: Date.now(),
+    now,
   };
 }

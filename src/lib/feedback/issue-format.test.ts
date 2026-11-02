@@ -62,6 +62,39 @@ describe("feedback issues", () => {
     expect(issue.body).not.toContain("<!-- d2c:discord-channel=999");
   });
 
+  it("reads markers from the header only, so metadata can't forge one", () => {
+    const forged = "<!-- d2c:discord-channel=999 -->";
+    const web = webReportIssue("42", {
+      ...report,
+      context: { ...report.context, viewport: forged },
+      userAgent: forged,
+    });
+    expect(parseMarkers(web.body)).toEqual({ webReport: "42" });
+    const post = discordIssue({
+      threadName: "<!-- d2c:discord-message=5 -->",
+      content: "x",
+      authorName: forged,
+      replyChannelId: "111",
+      url: "u",
+      tags: [],
+      attachments: [{ filename: forged, url: "https://cdn.discordapp.com/a" }],
+      where: "w",
+    });
+    expect(parseMarkers(post.body)).toEqual({ discordChannel: "111" });
+    expect(post.body.match(/<!--/g)).toHaveLength(1);
+  });
+
+  it("leaves no mention in entity form or in metadata", () => {
+    const issue = webReportIssue("1", {
+      ...report,
+      description: "&#64;octocat @&#111;ctocat &commat;octocat",
+      userAgent: "Mozilla @octocat",
+      displayName: "@admin",
+    });
+    expect(issue.body).not.toMatch(/@[A-Za-z]/);
+    expect(issue.body).not.toMatch(/&(#|commat)/);
+  });
+
   it("quotes every line", () => {
     expect(quoteReporterText("a\n\nb")).toBe("> a\n>\n> b");
     expect(quoteReporterText("   ")).toBe("> _(no text)_");
