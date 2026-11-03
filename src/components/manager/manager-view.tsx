@@ -11,7 +11,7 @@ import { planSmartMove, type MoveStep, type SmartPlan } from "@/lib/inventory/sm
 import { toast, type PendingToast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 import { loadViewSettings, useViewSettings } from "@/lib/inventory/view-settings";
-import { vaultForClass } from "@/lib/inventory/vault-for-class";
+import { currentCharacterOnly, vaultForClass } from "@/lib/inventory/vault-for-class";
 import { CharacterColumnsMenu } from "./items-settings";
 import {
   MOVABLE_BUCKETS,
@@ -106,13 +106,18 @@ export function ManagerView({
     width: layoutWidth,
     tiles: layout.tiles,
   });
-  // Current character: what's on screen, and so what search counts and acts on, is the
-  // vault's armor cut to the class of the one character shown (the last played).
-  const currentClass =
-    plan?.kind === "columns" && plan.characters === "current" ? inventory.characters[0]?.classType : undefined;
+  // Current character: the one character shown (the last played), and the vault's armor
+  // cut to its class. Search counts and acts on just that, with the other characters'
+  // gear left out too (they stay as places to move matches to).
+  const current =
+    plan?.kind === "columns" && plan.characters === "current" ? inventory.characters[0] : undefined;
   const shownInventory = useMemo(
-    () => (currentClass === undefined ? inventory : vaultForClass(inventory, currentClass)),
-    [inventory, currentClass],
+    () => (current ? vaultForClass(inventory, current.classType) : inventory),
+    [inventory, current],
+  );
+  const searchedInventory = useMemo(
+    () => (current ? currentCharacterOnly(inventory, current.id) : inventory),
+    [inventory, current],
   );
   const [vaultOpen, setVaultOpen] = useState(false);
   /** The weapon (by name) whose copies are open in Compare. */
@@ -188,7 +193,7 @@ export function ManagerView({
             offset, hence -top-6); filled once there's something under it. */}
         <div className="sticky -top-6 z-30 -mx-4 -mt-6 transition-colors group-data-scrolled/manager:d2-sticky-fill lg:-mx-6">
           <ManagerSearch
-            inventory={shownInventory}
+            inventory={searchedInventory}
             // Phones lay out the same either way, so the layout setting stays off them. Its
             // intro only opens over the character rows it introduces.
             layoutMenu={plan && plan.kind !== "phone" ? { intro: plan.kind === "rows" } : undefined}
