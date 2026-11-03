@@ -3,9 +3,9 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CLASS_NAMES } from "@/lib/armory/stats";
-import { SLOT_ROWS, slotRowsOf, type BucketRow } from "@/lib/inventory/buckets";
-import { VAULT_TAB_LABELS, useViewSettings } from "@/lib/inventory/view-settings";
-import { vaultForClass } from "@/lib/inventory/vault-for-class";
+import { SLOT_ROWS, slotRowsForVaultTab, type BucketRow } from "@/lib/inventory/buckets";
+import type { ItemsPagePlan } from "@/lib/inventory/items-page-plan";
+import { useViewSettings } from "@/lib/inventory/view-settings";
 import type { InventoryItem, ManagerCharacter, ManagerInventory } from "@/lib/inventory/build";
 import { CHARACTER_SLOTS } from "@/lib/inventory/moves";
 import { cn } from "@/lib/utils";
@@ -26,28 +26,24 @@ import { AlignedVault } from "./manager-vault";
 const VAULT_TAB = "vault";
 
 /**
- * Every character side by side, or (when `compact`) one at a time under a tab strip,
- * starting on the one played last. The others stay mounted, just hidden, so a drag that
- * started on one still ends when a tab switches away from it. When `aligned`, the vault
+ * Every character side by side (`all`); one at a time under a tab strip, starting on the
+ * one played last (`tabs`); or just the one played last, with no tabs (`current`). Hidden
+ * characters stay mounted, so a drag that started on one still ends when a tab switches
+ * away from it. When `aligned`, the vault
  * is one more column on the same rows, so each of its slots starts level with that slot
  * on the characters, and a row is as tall as the taller of the two.
  */
 export function InventoryGrid({
   inventory,
-  compact,
+  characters: shownCharacters,
   aligned,
   vault,
   vaultAction,
-  currentOnly = false,
 }: {
+  /** Current character: its vault armor already cut to that class (vaultForClass). */
   inventory: ManagerInventory;
-  compact: boolean;
+  characters: Extract<ItemsPagePlan, { kind: "columns" }>["characters"];
   aligned: boolean;
-  /**
-   * Compact: show just the character played last, with no tabs to switch, its column
-   * where it sits among all three (the Characters dropdown on Current character).
-   */
-  currentOnly?: boolean;
   /** Aligned: a control beside the vault's tabs. */
   vaultAction?: ReactNode;
   /**
@@ -58,7 +54,9 @@ export function InventoryGrid({
 }) {
   const { characters } = inventory;
   const [picked, setPicked] = useState<string | null>(null);
-  const shown = (!currentOnly && characters.find((c) => c.id === picked)) || characters[0];
+  const compact = shownCharacters !== "all";
+  const currentOnly = shownCharacters === "current";
+  const shown = (shownCharacters === "tabs" && characters.find((c) => c.id === picked)) || characters[0];
   const columns = {
     gridTemplateColumns: `${compact ? "max-content" : `repeat(${characters.length}, max-content)`}${aligned ? " minmax(0, 1fr)" : ""}`,
   };
@@ -69,17 +67,12 @@ export function InventoryGrid({
   // Current character, on the vault's Weapons or Armor tab: just those slots, so
   // they and the vault's tiles both start at the top.
   const { vaultTab } = useViewSettings();
-  const rows = currentOnly && vaultTab !== "all" ? slotRowsOf(VAULT_TAB_LABELS[vaultTab]) : SLOT_ROWS;
+  const rows = currentOnly ? slotRowsForVaultTab(vaultTab) : SLOT_ROWS;
   // The Armor tab beside every slot: the vault's armor runs from the top, past the weapon
   // slots (a drop anywhere on a character sends it there), not down level with the armor.
-  const flowVault = aligned && vaultTab === "armor" && rows === SLOT_ROWS;
-  // Current character: the vault's armor is just what that character can wear.
-  const vaultInventory = useMemo(
-    () => (currentOnly && shown ? vaultForClass(inventory, shown.classType) : inventory),
-    [currentOnly, shown, inventory],
-  );
+  const flowVault = aligned && vaultTab === "armor" && !currentOnly;
   const rowCount = 2 + rows.length;
-  const firstRow = aligned && compact && !currentOnly ? 2 : 1;
+  const firstRow = aligned && shownCharacters === "tabs" ? 2 : 1;
   const { manifest, statIcons, compare, postmasterCapacity } = useCharacterSetup(inventory);
   const pinnedPlate = usePinnedPlateClass();
   const phone = usePhoneLayout();
@@ -90,7 +83,7 @@ export function InventoryGrid({
   // unmounts never gets its dragend.
   const [vaultMounted, setVaultMounted] = useState(false);
   if (vaultOpen && !vaultMounted) setVaultMounted(true);
-  const tabs = compact && !currentOnly && shown && (
+  const tabs = shownCharacters === "tabs" && shown && (
     <Tabs
       value={vaultOpen ? VAULT_TAB : shown.id}
       onValueChange={(id) => {
@@ -162,7 +155,12 @@ export function InventoryGrid({
               className={cn(pinnedPlate, !phone && "px-1")}
             />
             {/* Phones keep the plain cell: the card's frame would push a full line of tiles off screen. */}
-            <PostmasterCell items={c.postmaster} capacity={postmasterCapacity} card={!phone} />
+            <PostmasterCell
+              items={c.postmaster}
+              capacity={postmasterCapacity}
+              card={!phone}
+              owner={CLASS_NAMES[c.classType] ?? "Guardian"}
+            />
             {/* Weapons, armor, general: no headings, just a wider gap before each group. */}
             {rows.map(({ row, groupStart }) => (
               <CharacterCell
@@ -177,7 +175,7 @@ export function InventoryGrid({
         ))}
         {aligned && (
           <AlignedVault
-            inventory={vaultInventory}
+            inventory={inventory}
             headerRows={firstRow}
             rowSpan={firstRow + rowCount}
             rows={rows}

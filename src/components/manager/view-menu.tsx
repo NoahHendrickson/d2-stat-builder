@@ -32,6 +32,7 @@ import {
   type GroupKey,
   type SortKey,
 } from "@/lib/inventory/view-settings";
+import { moveItem } from "@/lib/move-item";
 import { cn } from "@/lib/utils";
 import { TOOLBAR_ICON_BUTTON } from "./toolbar-icon";
 
@@ -52,16 +53,10 @@ export function useItemComparator(): (a: InventoryItem, b: InventoryItem) => num
   return useMemo(() => itemComparator(sort, annotations), [sort, annotations]);
 }
 
-/** `list` with the entry at `from` moved to `to`. */
-function moved<T>(list: readonly T[], from: number, to: number): T[] {
-  const out = [...list];
-  const [entry] = out.splice(from, 1);
-  out.splice(to, 0, entry!);
-  return out;
-}
-
 /** A drag in progress: the row picked up, the slot it would drop into, and how far it has moved. */
 interface SortDrag {
+  /** The key picked up: if the saved sort changes mid-drag (Reset, another tab), the drop is dropped. */
+  key: SortKey;
   from: number;
   to: number;
   /** Pointer travel since the press, held inside the list. */
@@ -112,10 +107,12 @@ function SortList({ sort, onChange }: { sort: readonly SortKey[]; onChange: (sor
       }}
       onPointerUp={() => {
         if (!drag) return;
-        if (drag.to !== drag.from) onChange(moved(sort, drag.from, drag.to));
+        if (drag.to !== drag.from && sort[drag.from] === drag.key) onChange(moveItem(sort, drag.from, drag.to));
         endDrag();
       }}
       onPointerCancel={endDrag}
+      // Capture can end without a pointerup (the popover closing, focus moving): end the drag too.
+      onLostPointerCapture={endDrag}
     >
       {sort.map((key, i) => {
         const lifted = drag?.from === i;
@@ -145,7 +142,7 @@ function SortList({ sort, onChange }: { sort: readonly SortKey[]; onChange: (sor
               const [first, second] = list.children;
               const pitch = first && second ? second.getBoundingClientRect().top - first.getBoundingClientRect().top : 38;
               list.setPointerCapture(e.pointerId);
-              setDrag({ from: i, to: i, dy: 0, startY: e.clientY, pitch });
+              setDrag({ key, from: i, to: i, dy: 0, startY: e.clientY, pitch });
             }}
           >
             <button
@@ -157,7 +154,7 @@ function SortList({ sort, onChange }: { sort: readonly SortKey[]; onChange: (sor
                 const to = e.key === "ArrowUp" ? i - 1 : e.key === "ArrowDown" ? i + 1 : -1;
                 if (to < 0 || to >= sort.length) return;
                 e.preventDefault();
-                onChange(moved(sort, i, to));
+                onChange(moveItem(sort, i, to));
                 refocus(key);
               }}
             >
@@ -182,16 +179,16 @@ function SortList({ sort, onChange }: { sort: readonly SortKey[]; onChange: (sor
 }
 
 /** One kind's grouping: every option shown, the picked one filled. */
-function GroupPicker({
+function GroupPicker<K extends GroupKey>({
   label,
   keys,
   value,
   onChange,
 }: {
   label: string;
-  keys: readonly GroupKey[];
-  value: GroupKey;
-  onChange: (key: GroupKey) => void;
+  keys: readonly K[];
+  value: K;
+  onChange: (key: K) => void;
 }) {
   return (
     <div className="flex flex-col gap-1.5">

@@ -1,3 +1,5 @@
+import type { VaultTab } from "./view-settings";
+
 /** Inventory bucket hashes the manager lays out (DestinyInventoryBucketDefinition). */
 export const BUCKETS = {
   kinetic: 1498876634,
@@ -20,6 +22,9 @@ export const BUCKETS = {
   /** The vault ("General"): every vault item reports this live bucket. */
   vault: 138197802,
 } as const;
+
+/** DestinyClass.Unknown: gear any class can use. */
+export const ANY_CLASS = 3;
 
 export interface BucketRow {
   hash: number;
@@ -54,10 +59,13 @@ export const GENERAL_ROWS: BucketRow[] = [
   { hash: BUCKETS.ships, label: "Ship" },
 ];
 
+const WEAPONS_GROUP: BucketGroup = { label: "Weapons", rows: WEAPON_ROWS };
+const ARMOR_GROUP: BucketGroup = { label: "Armor", rows: ARMOR_ROWS };
+
 /** Every movable character bucket: weapons, armor, then the rest of the gear. */
 export const CHARACTER_GROUPS: BucketGroup[] = [
-  { label: "Weapons", rows: WEAPON_ROWS },
-  { label: "Armor", rows: ARMOR_ROWS },
+  WEAPONS_GROUP,
+  ARMOR_GROUP,
   { label: "General", rows: GENERAL_ROWS },
 ];
 
@@ -72,10 +80,23 @@ export const SLOT_ROWS: SlotRow[] = CHARACTER_GROUPS.flatMap((group) =>
   group.rows.map((row, i) => ({ row, groupStart: i === 0 })),
 );
 
-/** The slot rows of one group ("Weapons", "Armor" or "General"), in SLOT_ROWS's order. */
-export function slotRowsOf(groupLabel: string): SlotRow[] {
-  const group = CHARACTER_GROUPS.find((g) => g.label === groupLabel);
-  return group ? SLOT_ROWS.filter(({ row }) => group.rows.includes(row)) : SLOT_ROWS;
+/** The character groups a vault tab shows: every one on All, else just its own. */
+export function groupsForVaultTab(tab: VaultTab): BucketGroup[] {
+  switch (tab) {
+    case "all":
+      return CHARACTER_GROUPS;
+    case "weapons":
+      return [WEAPONS_GROUP];
+    case "armor":
+      return [ARMOR_GROUP];
+  }
+}
+
+/** The slot rows a vault tab's groups cover, in SLOT_ROWS's order. */
+export function slotRowsForVaultTab(tab: VaultTab): SlotRow[] {
+  if (tab === "all") return SLOT_ROWS;
+  const rows = new Set(groupsForVaultTab(tab).flatMap((g) => g.rows));
+  return SLOT_ROWS.filter(({ row }) => rows.has(row));
 }
 
 /** Vault sections follow the character rows; anything else lands in "Other". */

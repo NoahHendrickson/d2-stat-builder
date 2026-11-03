@@ -1,8 +1,5 @@
-import { ARMOR_ROWS } from "./buckets";
+import { ANY_CLASS, ARMOR_ROWS } from "./buckets";
 import type { InventoryItem, ManagerInventory } from "./build";
-
-/** classType for armor any class can wear. */
-const ANY_CLASS = 3;
 
 /**
  * `inventory` with the vault's armor cut to what a `classType` character can wear (its

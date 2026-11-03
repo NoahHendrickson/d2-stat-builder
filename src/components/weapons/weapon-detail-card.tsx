@@ -102,17 +102,21 @@ function SectionFrame({
  */
 export function DetailSection({
   title,
+  heading = title,
   action,
   description,
   children,
 }: {
+  /** The section's accessible name. */
   title: string;
+  /** What the header shows (an element of its own, say a heading), when not just `title`. */
+  heading?: ReactNode;
   action?: ReactNode;
   description?: ReactNode;
   children?: ReactNode;
 }) {
   return (
-    <SectionFrame title={title} open heading={title} action={action} description={description}>
+    <SectionFrame title={title} open heading={heading} action={action} description={description}>
       {children}
     </SectionFrame>
   );

@@ -319,10 +319,13 @@ export function PostmasterCell({
   items,
   capacity,
   card = false,
+  owner,
 }: {
   items: InventoryItem[];
   capacity: number;
   card?: boolean;
+  /** Card: whose postmaster it is ("Hunter"), so each column's region has its own name. */
+  owner?: string;
 }) {
   // The game warns once the postmaster is close to overflowing (and losing items).
   const nearlyFull = items.length >= capacity - 3;
@@ -356,7 +359,11 @@ export function PostmasterCell({
       // the slot tiles in their drop zones (p-1), so its edges line up with theirs.
       <div className="self-start px-1 pt-3">
         <DetailCard>
-          <DetailSection title="Postmaster" action={count}>
+          <DetailSection
+            title={owner ? `${owner} postmaster` : "Postmaster"}
+            heading={<h3>Postmaster</h3>}
+            action={count}
+          >
             {grid}
           </DetailSection>
         </DetailCard>

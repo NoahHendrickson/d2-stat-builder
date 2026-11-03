@@ -46,10 +46,11 @@ const vaultBesideMinWidth = (m: TileMetrics) => 5 * m.tile + 4 * m.gap;
  */
 const COLUMN_PLATE_MIN_PX = 230;
 /**
- * Legacy columns: the postmaster card round its four tiles across, a 12px pad and 1px
- * border each side, inset like the slot tiles in their drop zones.
+ * Legacy columns: the postmaster card round its four tiles across, each side: Card
+ * size="sm"'s 12px padding (px-3) and 1px border, then ZONE_PAD_PX, inset like the slot
+ * tiles in their drop zones. Keep in step with PostmasterCell's card in character-plate.tsx.
  */
-export const POSTMASTER_CARD_CHROME_PX = 2 * (12 + 1 + ZONE_PAD_PX);
+const POSTMASTER_CARD_CHROME_PX = 2 * (12 + 1 + ZONE_PAD_PX);
 /**
  * Legacy columns: a character column, its nameplate, its slot rows (the equipped tile then
  * three more), or its postmaster card, whichever is widest.
@@ -95,32 +96,34 @@ const columnsAlignedMinWidth = (m: TileMetrics) =>
  * What the Items page draws:
  * - `rows`: a row per character (CharacterRows), the vault in its own pane beside them or
  *   below them.
- * - `columns`: character columns (InventoryGrid), every one side by side or (compact) one
- *   at a time under tabs, the vault one more column level with their slots (aligned) or
- *   below them. The legacy layout, and the new one's fallback when a row doesn't fit.
+ * - `columns`: character columns (InventoryGrid), the vault one more column level with
+ *   their slots (aligned) or below them. `characters`: every one side by side (`all`),
+ *   just the current one with no tabs (`current`, picked when all would fit), or one at a
+ *   time under tabs (`tabs`, when all don't fit). The legacy layout, and the new one's
+ *   fallback when a row doesn't fit.
  * - `phone`: one character at a time under tabs, the vault behind a tab of its own.
  */
 export type ItemsPagePlan =
   | { kind: "rows"; vault: "beside" | "below" }
-  | { kind: "columns"; compact: boolean; vault: "aligned" | "below" }
+  | { kind: "columns"; characters: "all" | "current" | "tabs"; vault: "aligned" | "below" }
   | { kind: "phone" };
 
 /**
  * The page's layout for the picked `layout` at `width` (the layout box's, in px), with
- * `tiles` (desktop tiles at the picked size). Legacy columns show one character at a time
- * when `characterColumns` asks for it, however wide the page. Null until a wider screen has
- * been measured: nothing should mount on a guess.
+ * `tiles` (desktop tiles at the picked size). `characterColumns` applies only where legacy
+ * columns have room for every character. Null until a wider screen has been measured:
+ * nothing should mount on a guess.
  */
 export function itemsPagePlan({
   phone,
   layout,
-  characterColumns = "all",
+  characterColumns,
   width,
   tiles,
 }: {
   phone: boolean;
   layout: ItemsLayout;
-  characterColumns?: CharacterColumns;
+  characterColumns: CharacterColumns;
   width: number;
   tiles: TileMetrics;
 }): ItemsPagePlan | null {
@@ -129,7 +132,7 @@ export function itemsPagePlan({
   if (layout === "legacy") {
     return {
       kind: "columns",
-      compact: characterColumns === "one" || width < columnsAllCharactersMinWidth(tiles),
+      characters: width < columnsAllCharactersMinWidth(tiles) ? "tabs" : characterColumns,
       vault: width >= columnsAlignedMinWidth(tiles) ? "aligned" : "below",
     };
   }
@@ -138,5 +141,5 @@ export function itemsPagePlan({
     return { kind: "rows", vault: "beside" };
   }
   if (row <= width) return { kind: "rows", vault: "below" };
-  return { kind: "columns", compact: true, vault: "below" };
+  return { kind: "columns", characters: "tabs", vault: "below" };
 }

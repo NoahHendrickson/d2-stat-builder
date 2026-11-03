@@ -11,7 +11,7 @@ import {
   GLIMMER_HASH,
 } from "@/lib/armory/masterwork";
 import { BUNGIE_IMAGE_BASE } from "@/lib/bungie/constants";
-import { ACCOUNT_ROWS, SLOT_ROWS, VAULT_GROUPS, type SlotRow } from "@/lib/inventory/buckets";
+import { ACCOUNT_ROWS, SLOT_ROWS, groupsForVaultTab, type SlotRow } from "@/lib/inventory/buckets";
 import {
   ASCENDANT_ALLOY_HASH,
   BRIGHT_DUST_HASH,
@@ -134,8 +134,7 @@ function vaultSections(
   const groupFor = (label: string): GroupKey =>
     label === "Weapons" ? weaponGroup : label === "Armor" ? armorGroup : "none";
   // The Weapons and Armor tabs show just that section; All shows every one.
-  const shown =
-    vaultTab === "all" ? VAULT_GROUPS : VAULT_GROUPS.filter((g) => g.label === VAULT_TAB_LABELS[vaultTab]);
+  const shown = groupsForVaultTab(vaultTab);
   const gear: VaultSection[] = shown.map((group) => ({
     heading: group.label,
     buckets: group.rows.map((row) =>
@@ -302,11 +301,13 @@ function VaultHeader({
 function VaultTabs({ inventory, action }: { inventory: ManagerInventory; action?: ReactNode }) {
   const view = useViewSettings();
   const { vault } = inventory;
+  // All has no count of its own.
   const count = (tab: VaultTab) =>
-    VAULT_GROUPS.find((g) => g.label === VAULT_TAB_LABELS[tab])?.rows.reduce(
-      (n, row) => n + (vault[row.hash]?.length ?? 0),
-      0,
-    );
+    tab === "all"
+      ? undefined
+      : groupsForVaultTab(tab)
+          .flatMap((g) => g.rows)
+          .reduce((n, row) => n + (vault[row.hash]?.length ?? 0), 0);
   return (
     // The same well as the optimizer's Builds / Theoretical Builds switch, `action` beside it.
     <div className="flex flex-wrap items-center gap-3">

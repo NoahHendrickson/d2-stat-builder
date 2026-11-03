@@ -1,13 +1,11 @@
 // The highest gear power a character could equip from everything on the account (DIM's
 // "max power"): the best item in each of the eight slots, with the game's limit of one
 // exotic weapon and one exotic armor piece.
-import { BUCKETS } from "./buckets";
+import { ANY_CLASS, BUCKETS } from "./buckets";
 
 const WEAPON_SLOTS = [BUCKETS.kinetic, BUCKETS.energy, BUCKETS.power];
 const ARMOR_SLOTS = [BUCKETS.helmet, BUCKETS.arms, BUCKETS.chest, BUCKETS.legs, BUCKETS.classItem];
 const TIER_EXOTIC = 6;
-/** DestinyClass.Unknown: usable by every class. */
-const ANY_CLASS = 3;
 
 export interface PowerItem {
   bucketHash: number;

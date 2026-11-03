@@ -38,7 +38,7 @@ test("parseViewSettings drops unknown keys and falls back to defaults", () => {
         armorGroup: "rarity",
         vaultTab: "armor",
         layout: "legacy",
-        characterColumns: "one",
+        characterColumns: "current",
         tileSize: "small",
       }),
     ),
@@ -48,7 +48,7 @@ test("parseViewSettings drops unknown keys and falls back to defaults", () => {
     armorGroup: "rarity",
     vaultTab: "armor",
     layout: "legacy",
-    characterColumns: "one",
+    characterColumns: "current",
     tileSize: "small",
   });
   // The old single setting carries over to armor; weapons take their default.
@@ -69,7 +69,7 @@ test("resetSortAndGrouping resets only the sort and grouping", () => {
     armorGroup: "rarity" as const,
     vaultTab: "armor" as const,
     layout: "legacy" as const,
-    characterColumns: "one" as const,
+    characterColumns: "current" as const,
     tileSize: "medium" as const,
   };
   expect(resetSortAndGrouping(view)).toEqual({
@@ -78,7 +78,7 @@ test("resetSortAndGrouping resets only the sort and grouping", () => {
     armorGroup: DEFAULT_VIEW.armorGroup,
     vaultTab: "armor",
     layout: "legacy",
-    characterColumns: "one",
+    characterColumns: "current",
     tileSize: "medium",
   });
 });
