@@ -29,6 +29,9 @@ import { statIconsFromManifest } from "@/lib/manifest/stat-icons";
 import { useManifest } from "@/lib/manifest/use-manifest";
 import { cn } from "@/lib/utils";
 import { useStoreValue } from "@/lib/value-store";
+import { SetBonusChip } from "@/components/loadouts/loadout-row-details";
+import { DetailCard, DetailSection } from "@/components/weapons/weapon-detail-card";
+import { ChampionStuns, useEquippedSetBonuses } from "./character-readout";
 import { ItemTile } from "./item-tile";
 import { farmingStore } from "./farming";
 import { usePhoneLayout, useTileMetrics } from "./manager-context";
@@ -70,18 +73,22 @@ function emblemColorCss(character: ManagerCharacter): string | undefined {
 
 /**
  * A character column's emblem nameplate, laid out like the game's character select: class
- * and race beside the emblem's icon, Power at the top right, and its armor stats below.
- * Opens the character's menu (farming mode).
+ * and race beside the emblem's icon, Power at the top right, its armor stats below, and
+ * under them the champions its weapons stun and its active set bonuses. The emblem opens
+ * the character's menu (farming mode).
  */
 export function CharacterNameplate({
   character,
   statIcons,
+  manifest,
   className,
 }: {
   character: ManagerCharacter;
   statIcons: StatIconMap;
+  manifest: Manifest | undefined;
   className?: string;
 }) {
+  const bonuses = useEquippedSetBonuses(character.equipped, manifest);
   const [imgFailed, setImgFailed] = useState(false);
   const farming = useStoreValue(farmingStore) === character.id;
   const name = CLASS_NAMES[character.classType] ?? "Guardian";
@@ -142,6 +149,10 @@ export function CharacterNameplate({
         <FarmingMenu characterId={character.id} farming={farming} />
       </DropdownMenu>
       <CharacterStats stats={character.stats} icons={statIcons} />
+      <div role="group" aria-label="Champions and set bonuses" className="flex items-center justify-between gap-2 pt-2">
+        <ChampionStuns equipped={character.equipped} manifest={manifest} />
+        <SetBonusChip bonuses={bonuses} small className="gap-1" />
+      </div>
     </div>
   );
 }
@@ -298,36 +309,74 @@ function CharacterStats({
   );
 }
 
-export function PostmasterCell({ items, capacity }: { items: InventoryItem[]; capacity: number }) {
+/**
+ * A character's postmaster: its count, warning once it's close to overflowing, and its
+ * items four across (phones: a full line, like the slots under it). As a `card` (the
+ * legacy columns), it's framed like the weapon details' cards, the count at the header's
+ * right and the tiles under its rule.
+ */
+export function PostmasterCell({
+  items,
+  capacity,
+  card = false,
+  owner,
+}: {
+  items: InventoryItem[];
+  capacity: number;
+  card?: boolean;
+  /** Card: whose postmaster it is ("Hunter"), so each column's region has its own name. */
+  owner?: string;
+}) {
   // The game warns once the postmaster is close to overflowing (and losing items).
   const nearlyFull = items.length >= capacity - 3;
   const phone = usePhoneLayout();
   const tiles = useTileMetrics();
+  const count = (
+    <span className={cn("text-xs tabular-nums", nearlyFull ? "text-destructive" : "text-muted-foreground")}>
+      {items.length === 0 ? "Empty" : `${items.length} / ${capacity}`}
+    </span>
+  );
+  const grid =
+    items.length > 0 ? (
+      // The slot rows' tile size; four across keeps the grid inside the column width they
+      // set (POSTMASTER_CARD_CHROME_PX widens a legacy column for the card's frame).
+      <div
+        className="grid"
+        style={{
+          gridTemplateColumns: `repeat(${phone ? tiles.cols : 4}, ${tiles.tile}px)`,
+          gap: tiles.gap,
+        }}
+      >
+        {items.map((item) => (
+          <ItemTile key={item.key} item={item} />
+        ))}
+      </div>
+    ) : undefined;
+
+  if (card) {
+    return (
+      // Its own height, not the row's: an empty postmaster is just its header. Inset like
+      // the slot tiles in their drop zones (p-1), so its edges line up with theirs.
+      <div className="self-start px-1 pt-3">
+        <DetailCard>
+          <DetailSection
+            title={owner ? `${owner} postmaster` : "Postmaster"}
+            heading={<h3>Postmaster</h3>}
+            action={count}
+          >
+            {grid}
+          </DetailSection>
+        </DetailCard>
+      </div>
+    );
+  }
   return (
     <div className="flex flex-col gap-2 pt-2">
       <div className="flex items-baseline justify-between gap-2 text-xs">
         <h3 className="d2-label">Postmaster</h3>
-        <span
-          className={cn("tabular-nums", nearlyFull ? "text-destructive" : "text-muted-foreground")}
-        >
-          {items.length === 0 ? "Empty" : `${items.length} / ${capacity}`}
-        </span>
+        {count}
       </div>
-      {items.length > 0 && (
-        // The slot rows' tile size; four across keeps the grid inside the column width they
-        // set. Phones: a full line of tiles, like the slots under it.
-        <div
-          className="grid"
-          style={{
-            gridTemplateColumns: `repeat(${phone ? tiles.cols : 4}, ${tiles.tile}px)`,
-            gap: tiles.gap,
-          }}
-        >
-          {items.map((item) => (
-            <ItemTile key={item.key} item={item} />
-          ))}
-        </div>
-      )}
+      {grid}
     </div>
   );
 }

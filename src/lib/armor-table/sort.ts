@@ -4,6 +4,7 @@
 //
 // Runtime imports are relative (not `@/`) — the vitest runner has no `@/` alias,
 // matching the convention in filters.ts / search.ts.
+import { moveItem } from "@/lib/move-item";
 import {
   CLASS_NAMES,
   STAT_LABELS,
@@ -220,19 +221,7 @@ export function moveOrderItem(
   from: number,
   to: number,
 ): string[] {
-  if (
-    from === to ||
-    from < 0 ||
-    to < 0 ||
-    from >= order.length ||
-    to >= order.length
-  ) {
-    return [...order];
-  }
-  const next = [...order];
-  const [item] = next.splice(from, 1);
-  next.splice(to, 0, item);
-  return next;
+  return moveItem(order, from, to);
 }
 
 /** Display label for a STAT_ORDER index. */

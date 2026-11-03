@@ -6,6 +6,7 @@
 import { useSyncExternalStore } from "react";
 import { CLASS_NAMES } from "@/lib/armory/stats";
 import { createValueStore } from "@/lib/value-store";
+import { ANY_CLASS } from "./buckets";
 import type { Annotations, ItemTag } from "./annotations";
 import type { InventoryItem } from "./build";
 
@@ -26,19 +27,29 @@ export const SORT_LABELS: Record<SortKey, string> = {
   rarity: "Rarity",
   power: "Power",
   name: "Name",
-  type: "Weapon or armor type",
+  type: "Type",
   tag: "Tag",
-  masterwork: "Masterworked first",
+  masterwork: "Masterworked",
   tier: "Gear tier",
   element: "Element",
   ammo: "Ammo",
 };
 
-export const GROUP_KEYS = ["none", "class", "type", "rarity", "element", "ammo", "tier"] as const;
-export type GroupKey = (typeof GROUP_KEYS)[number];
+type GroupKeys = ["none", "class", "type", "rarity", "element", "ammo", "tier"];
+export type GroupKey = GroupKeys[number];
+
+/** The groupings that split a vault weapon row usefully: weapons are for any class. */
+export const WEAPON_GROUP_KEYS = ["none", "type", "element", "ammo", "rarity", "tier"] as const satisfies readonly GroupKey[];
+export type WeaponGroupKey = (typeof WEAPON_GROUP_KEYS)[number];
+/**
+ * The groupings that split a vault armor row usefully. Armor has no ammo or element, and
+ * a row's pieces all share a type (it's one slot).
+ */
+export const ARMOR_GROUP_KEYS = ["none", "class", "rarity", "tier"] as const satisfies readonly GroupKey[];
+export type ArmorGroupKey = (typeof ARMOR_GROUP_KEYS)[number];
 
 export const GROUP_LABELS: Record<GroupKey, string> = {
-  none: "No grouping",
+  none: "None",
   class: "Class",
   type: "Type",
   rarity: "Rarity",
@@ -60,6 +71,14 @@ export const VAULT_TAB_LABELS: Record<VaultTab, string> = { all: "All", weapons:
 export const ITEMS_LAYOUTS = ["rows", "legacy"] as const;
 export type ItemsLayout = (typeof ITEMS_LAYOUTS)[number];
 
+/**
+ * Legacy columns, when there's room for every character side by side: all of them, or
+ * just the current (last-played) character, with no tabs, giving the vault the rest of
+ * the width. Narrower, legacy shows one character at a time under tabs either way.
+ */
+export const CHARACTER_COLUMNS = ["current", "all"] as const;
+export type CharacterColumns = (typeof CHARACTER_COLUMNS)[number];
+
 /** How big the Items page draws its tiles on wider screens (phones size them to fit). */
 export const TILE_SIZES = ["large", "medium", "small"] as const;
 export type TileSize = (typeof TILE_SIZES)[number];
@@ -68,11 +87,12 @@ export interface ViewSettings {
   /** Sort keys in priority order; name always breaks the last tie. */
   sort: SortKey[];
   /** How each vault weapon row splits into groups. */
-  weaponGroup: GroupKey;
+  weaponGroup: WeaponGroupKey;
   /** How each vault armor row splits into groups. */
-  armorGroup: GroupKey;
+  armorGroup: ArmorGroupKey;
   vaultTab: VaultTab;
   layout: ItemsLayout;
+  characterColumns: CharacterColumns;
   tileSize: TileSize;
 }
 
@@ -82,12 +102,13 @@ export const DEFAULT_VIEW: ViewSettings = {
   armorGroup: "class",
   vaultTab: "all",
   layout: "rows",
+  characterColumns: "all",
   tileSize: "large",
 };
 
 /**
  * `view` with its sort and grouping back to the defaults. Page preferences (the vault tab,
- * the layout, the tile size) are left alone: listing what resets means a preference added
+ * the layout, how many columns, the tile size) are left alone: listing what resets means a preference added
  * later can't get reset along with them by accident.
  */
 export function resetSortAndGrouping(view: ViewSettings): ViewSettings {
@@ -123,10 +144,11 @@ export function parseViewSettings(raw: string | null): ViewSettings {
       : DEFAULT_VIEW.sort;
     return {
       sort,
-      weaponGroup: oneOf(GROUP_KEYS, v.weaponGroup, DEFAULT_VIEW.weaponGroup),
-      armorGroup: oneOf(GROUP_KEYS, v.armorGroup, oneOf(GROUP_KEYS, v.vaultGroup, DEFAULT_VIEW.armorGroup)),
+      weaponGroup: oneOf(WEAPON_GROUP_KEYS, v.weaponGroup, DEFAULT_VIEW.weaponGroup),
+      armorGroup: oneOf(ARMOR_GROUP_KEYS, v.armorGroup, oneOf(ARMOR_GROUP_KEYS, v.vaultGroup, DEFAULT_VIEW.armorGroup)),
       vaultTab: oneOf(VAULT_TABS, v.vaultTab, DEFAULT_VIEW.vaultTab),
       layout: oneOf(ITEMS_LAYOUTS, v.layout, DEFAULT_VIEW.layout),
+      characterColumns: oneOf(CHARACTER_COLUMNS, v.characterColumns, DEFAULT_VIEW.characterColumns),
       tileSize: oneOf(TILE_SIZES, v.tileSize, DEFAULT_VIEW.tileSize),
     };
   } catch {
@@ -215,7 +237,7 @@ export interface ItemGroup {
 function groupOf(key: GroupKey, item: InventoryItem): { id: string; label: string; rank: number } {
   switch (key) {
     case "class":
-      return item.classType === 3
+      return item.classType === ANY_CLASS
         ? { id: "any", label: "Any class", rank: 3 }
         : { id: String(item.classType), label: CLASS_NAMES[item.classType] ?? "Unknown", rank: item.classType };
     case "type":

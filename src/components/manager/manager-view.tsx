@@ -11,6 +11,8 @@ import { planSmartMove, type MoveStep, type SmartPlan } from "@/lib/inventory/sm
 import { toast, type PendingToast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 import { loadViewSettings, useViewSettings } from "@/lib/inventory/view-settings";
+import { currentCharacterOnly, vaultForClass } from "@/lib/inventory/vault-for-class";
+import { CharacterColumnsMenu } from "./items-settings";
 import {
   MOVABLE_BUCKETS,
   locate,
@@ -97,7 +99,26 @@ export function ManagerView({
   );
   // Touch can't drag a tile, so its details offer the moves as buttons.
   const touch = useTouchFirst();
-  const plan = itemsPagePlan({ phone, layout: view.layout, width: layoutWidth, tiles: layout.tiles });
+  const plan = itemsPagePlan({
+    phone,
+    layout: view.layout,
+    characterColumns: view.characterColumns,
+    width: layoutWidth,
+    tiles: layout.tiles,
+  });
+  // Current character: the one character shown (the last played), and the vault's armor
+  // cut to its class. Search counts and acts on just that, with the other characters'
+  // gear left out too (they stay as places to move matches to).
+  const current =
+    plan?.kind === "columns" && plan.characters === "current" ? inventory.characters[0] : undefined;
+  const shownInventory = useMemo(
+    () => (current ? vaultForClass(inventory, current.classType) : inventory),
+    [inventory, current],
+  );
+  const searchedInventory = useMemo(
+    () => (current ? currentCharacterOnly(inventory, current.id) : inventory),
+    [inventory, current],
+  );
   const [vaultOpen, setVaultOpen] = useState(false);
   /** The weapon (by name) whose copies are open in Compare. */
   const [comparing, setComparing] = useState<string | null>(null);
@@ -172,7 +193,7 @@ export function ManagerView({
             offset, hence -top-6); filled once there's something under it. */}
         <div className="sticky -top-6 z-30 -mx-4 -mt-6 transition-colors group-data-scrolled/manager:d2-sticky-fill lg:-mx-6">
           <ManagerSearch
-            inventory={inventory}
+            inventory={searchedInventory}
             // Phones lay out the same either way, so the layout setting stays off them. Its
             // intro only opens over the character rows it introduces.
             layoutMenu={plan && plan.kind !== "phone" ? { intro: plan.kind === "rows" } : undefined}
@@ -190,7 +211,7 @@ export function ManagerView({
             {plan && (
               <PlannedLayout
                 plan={plan}
-                inventory={inventory}
+                inventory={shownInventory}
                 vaultTab={{ open: vaultOpen, onOpenChange: setVaultOpen }}
               />
             )}
@@ -237,7 +258,13 @@ function PlannedLayout({
     case "columns":
       return (
         <>
-          <InventoryGrid inventory={inventory} compact={plan.compact} aligned={plan.vault === "aligned"} />
+          <InventoryGrid
+            inventory={inventory}
+            characters={plan.characters}
+            aligned={plan.vault === "aligned"}
+            // Only with room for every character: narrower, the tabs are the way to the others.
+            vaultAction={plan.characters !== "tabs" ? <CharacterColumnsMenu /> : undefined}
+          />
           {plan.vault === "below" && <VaultPane inventory={inventory} placement="below-columns" />}
         </>
       );
@@ -245,7 +272,7 @@ function PlannedLayout({
       return (
         <InventoryGrid
           inventory={inventory}
-          compact
+          characters="tabs"
           aligned={false}
           vault={{ ...vaultTab, pane: <VaultPane inventory={inventory} placement="tab" /> }}
         />

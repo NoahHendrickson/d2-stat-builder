@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { Layout3ColumnIcon, Layout3RowIcon, Settings01Icon } from "@hugeicons/core-free-icons";
+import { ArrowDown01Icon, Layout3ColumnIcon, Layout3RowIcon, Settings01Icon } from "@hugeicons/core-free-icons";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -16,15 +16,18 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { TooltipLabel } from "@/components/ui/tooltip";
 import {
+  CHARACTER_COLUMNS,
   ITEMS_LAYOUTS,
   TILE_SIZES,
   setViewSettings,
   useViewSettings,
+  type CharacterColumns,
   type ItemsLayout,
   type TileSize,
 } from "@/lib/inventory/view-settings";
 import { seenFlag } from "@/lib/seen-flag";
 import { cn } from "@/lib/utils";
+import { TOOLBAR_ICON_BUTTON } from "./toolbar-icon";
 
 const intro = seenFlag("stat-builder:items-layout-intro-seen");
 
@@ -43,9 +46,15 @@ const LAYOUTS: Record<ItemsLayout, { label: string; detail: string; icon: typeof
 
 const TILE_SIZE_LABELS: Record<TileSize, string> = { large: "Large", medium: "Medium", small: "Small" };
 
-/** Square, like the rest of the page. The picked option: a light fill and a border. */
+/**
+ * Square, like the rest of the page. The picked option: a light fill and a border. Hover
+ * rings the option like the page's other controls (d2-hover-ring); its group spaces the
+ * options apart (OPTION_GROUP), so a ring never runs into the next option's border.
+ */
 const PICKED_ITEM =
-  "rounded-none data-checked:border-foreground/20 data-checked:bg-foreground/8 data-checked:focus:border-foreground/25 data-checked:focus:bg-foreground/10";
+  "rounded-none d2-hover-ring transition-[background-color,border-color,outline-offset] data-checked:border-foreground/20 data-checked:bg-foreground/8 data-checked:focus:border-foreground/25 data-checked:focus:bg-foreground/10";
+/** A radio group of PICKED_ITEMs: room between them for the hover ring (1px, 2px off). */
+const OPTION_GROUP = "flex flex-col gap-1.5";
 
 /**
  * The Items page's settings menu, by the sort menu: which layout it uses, and how big its
@@ -74,7 +83,7 @@ export function ItemsSettings({ intro: introAllowed }: { intro: boolean }) {
       modal={!introOpen}
     >
       <TooltipLabel label="Items settings">
-        <DropdownMenuTrigger render={<Button variant="ghost" size="icon" aria-label="Items settings" />}>
+        <DropdownMenuTrigger aria-label="Items settings" className={TOOLBAR_ICON_BUTTON}>
           <HugeiconsIcon icon={Settings01Icon} aria-hidden />
         </DropdownMenuTrigger>
       </TooltipLabel>
@@ -94,6 +103,7 @@ export function ItemsSettings({ intro: introAllowed }: { intro: boolean }) {
         <DropdownMenuGroup>
           <DropdownMenuLabel>Layout</DropdownMenuLabel>
           <DropdownMenuRadioGroup
+            className={OPTION_GROUP}
             value={view.layout}
             onValueChange={(layout) => setViewSettings({ ...view, layout: layout as ItemsLayout })}
           >
@@ -118,6 +128,7 @@ export function ItemsSettings({ intro: introAllowed }: { intro: boolean }) {
           <DropdownMenuLabel>Item size</DropdownMenuLabel>
           {/* Stays open: the tiles resize behind it, so sizes can be tried in turn. */}
           <DropdownMenuRadioGroup
+            className={OPTION_GROUP}
             value={view.tileSize}
             onValueChange={(tileSize) => setViewSettings({ ...view, tileSize: tileSize as TileSize })}
           >
@@ -128,6 +139,52 @@ export function ItemsSettings({ intro: introAllowed }: { intro: boolean }) {
             ))}
           </DropdownMenuRadioGroup>
         </DropdownMenuGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
+}
+
+const CHARACTER_COLUMN_LABELS: Record<CharacterColumns, string> = {
+  current: "Current character",
+  all: "All characters",
+};
+
+/**
+ * Legacy columns, beside the vault's tabs: just the character played last, in its place,
+ * giving the vault the room (and its armor cut to that class); or every character side by
+ * side. The same menu as the Items settings, so it highlights only what's under the
+ * pointer and marks the pick the same way.
+ */
+export function CharacterColumnsMenu() {
+  const view = useViewSettings();
+  return (
+    <DropdownMenu>
+      {/* As tall as the tabs' well beside it, whatever the theme draws round that, and the
+          same light fill. */}
+      <DropdownMenuTrigger
+        render={
+          <Button
+            variant="outline"
+            aria-label={`Characters shown: ${CHARACTER_COLUMN_LABELS[view.characterColumns]}`}
+            className="h-auto self-stretch bg-primary/6 py-0 pr-2 pl-2.5 font-normal"
+          />
+        }
+      >
+        {CHARACTER_COLUMN_LABELS[view.characterColumns]}
+        <HugeiconsIcon icon={ArrowDown01Icon} className="size-4 text-muted-foreground" aria-hidden />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="w-48">
+        <DropdownMenuRadioGroup
+          className={OPTION_GROUP}
+          value={view.characterColumns}
+          onValueChange={(v) => setViewSettings({ ...view, characterColumns: v as CharacterColumns })}
+        >
+          {CHARACTER_COLUMNS.map((v) => (
+            <DropdownMenuRadioItem key={v} value={v} closeOnClick className={PICKED_ITEM}>
+              {CHARACTER_COLUMN_LABELS[v]}
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
       </DropdownMenuContent>
     </DropdownMenu>
   );

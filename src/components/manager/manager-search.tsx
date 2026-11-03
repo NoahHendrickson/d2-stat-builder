@@ -10,7 +10,6 @@ import {
   SquareLock02Icon,
   SquareUnlock02Icon,
 } from "@hugeicons/core-free-icons";
-import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -49,6 +48,7 @@ import { searchMatches } from "./search-store";
 import { TAG_ICONS } from "./tag-icons";
 import { ViewMenu } from "./view-menu";
 import { ItemsSettings } from "./items-settings";
+import { TOOLBAR_ICON_BUTTON } from "./toolbar-icon";
 
 /**
  * Text that combines terms with grouping or `or`: a picked filter stays inline there,
@@ -425,9 +425,9 @@ function SearchHelp() {
       <TooltipLabel label="Search help">
         <PopoverTrigger
           aria-label="Search help"
-          className="text-muted-foreground hover:text-foreground data-[popup-open]:text-foreground flex size-8 shrink-0 cursor-pointer items-center justify-center rounded-none normal:rounded-[10px] outline-none focus-visible:ring-1 focus-visible:ring-outline-strong"
+          className={TOOLBAR_ICON_BUTTON}
         >
-          <HugeiconsIcon icon={HelpCircleIcon} className="size-4" aria-hidden />
+          <HugeiconsIcon icon={HelpCircleIcon} aria-hidden />
         </PopoverTrigger>
       </TooltipLabel>
       <PopoverContent align="end" className="w-[28rem] gap-2 p-3 text-xs">
@@ -472,7 +472,7 @@ function BulkActions({ inventory, matches }: { inventory: ManagerInventory; matc
   return (
     <DropdownMenu>
       <TooltipLabel label={`Act on ${count}`}>
-        <DropdownMenuTrigger render={<Button variant="ghost" size="icon" />} aria-label={`Act on ${count}`}>
+        <DropdownMenuTrigger aria-label={`Act on ${count}`} className={TOOLBAR_ICON_BUTTON}>
           <HugeiconsIcon icon={MoreHorizontalIcon} aria-hidden />
         </DropdownMenuTrigger>
       </TooltipLabel>

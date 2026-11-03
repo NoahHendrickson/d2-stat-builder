@@ -36,6 +36,7 @@ import {
   type PerkPick,
   type PerkPriority,
 } from "@/lib/inventory/perk-finder";
+import { moveItem } from "@/lib/move-item";
 import { cn } from "@/lib/utils";
 import { TAG_ICONS } from "./tag-icons";
 
@@ -459,10 +460,7 @@ function RankedList({
   const { orderPicks } = splitPicks(picks, true);
   const move = (from: number, to: number) => {
     if (to < 0 || to >= picks.length) return;
-    const next = [...picks];
-    const [pick] = next.splice(from, 1);
-    next.splice(to, 0, pick!);
-    onChange(next);
+    onChange(moveItem(picks, from, to));
   };
   const slotFromPointer = (e: DragEvent, index: number) => {
     const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();

@@ -47,6 +47,43 @@ export default async function ({ page, app, stub, step, shot, expect, log }) {
     await page.waitFor({ role: "region", name: "Characters" });
   });
 
+  await step("mgr-sort: drag a sort key to reorder it; groupings fit the kind", async () => {
+    const order = async () =>
+      JSON.parse(await page.evalJs(`JSON.stringify([...document.querySelectorAll("[data-sort-grip]")].map((b) => b.dataset.sortGrip))`));
+    const middle = async (key) => {
+      const r = JSON.parse(await page.evalJs(`JSON.stringify(document.querySelector('[data-sort-grip="${key}"]').closest("li").getBoundingClientRect())`));
+      return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+    };
+    const mouse = (type, x, y, extra = {}) =>
+      page.s("Input.dispatchMouseEvent", { type, x, y, button: "left", pointerType: "mouse", ...extra });
+    await page.click({ role: "button", name: "Sort and group" });
+    await page.waitFor({ role: "button", name: "Reset to defaults" });
+    expect((await order()).join() === "rarity,power,name", "the default sort is rarity, power, name");
+    // Drag Name's box (by its label, not the grip) up onto Rarity's.
+    const from = await middle("name");
+    const to = await middle("rarity");
+    await mouse("mouseMoved", from.x, from.y, { button: "none" });
+    await mouse("mousePressed", from.x, from.y, { clickCount: 1, buttons: 1 });
+    for (let i = 1; i <= 8; i++) await mouse("mouseMoved", from.x, from.y + ((to.y - from.y) * i) / 8, { buttons: 1 });
+    await shot("sort-dragging");
+    await mouse("mouseReleased", from.x, to.y, { clickCount: 1 });
+    await page.waitFor(async () => (await order())[0] === "name");
+    expect((await order()).join() === "name,rarity,power", "Name dragged to the top");
+    // The pressed box's grip has focus, so the arrow keys carry on.
+    await page.click({ role: "button", name: /^Reorder Power/ });
+    await page.press("ArrowUp");
+    await page.waitFor(async () => (await order()).join() === "name,power,rarity");
+    const armorGroup = { role: "radiogroup", name: "Group vault armor by" };
+    const armor = await Promise.all((await page.findAll({ role: "radio" }, { within: armorGroup })).map((o) => page.name(o)));
+    expect(armor.join() === "None,Class,Rarity,Gear tier", `armor groupings: ${armor.join(", ")}`);
+    await page.click({ role: "radio", name: "Rarity" }, { within: armorGroup });
+    expect((await page.attr({ role: "radio", name: "Rarity" }, "aria-checked", { within: armorGroup })) === "true", "picking Rarity checks it");
+    await shot("sort-menu");
+    await page.click({ role: "button", name: "Reset to defaults" });
+    await page.waitFor(async () => (await order()).join() === "rarity,power,name");
+    await page.press("Escape");
+  });
+
   await step("mgr-search: a keyword search narrows the items", async () => {
     await page.fill({ role: "combobox", name: "Search items" }, "is:handcannon");
     const count = await page.waitFor(async () => {

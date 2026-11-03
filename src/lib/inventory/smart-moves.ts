@@ -16,7 +16,7 @@ import {
   type Landing,
   type Place,
 } from "./moves";
-import { BUCKETS } from "./buckets";
+import { ANY_CLASS, BUCKETS } from "./buckets";
 
 export interface MoveStep {
   item: InventoryItem;
@@ -37,7 +37,6 @@ export interface SmartContext {
 }
 
 const TIER_EXOTIC = 6;
-const ANY_CLASS = 3;
 /** TransferStatuses.NotTransferrable */
 const NOT_TRANSFERRABLE = 2;
 const WEAPON_BUCKETS = new Set<number>([BUCKETS.kinetic, BUCKETS.energy, BUCKETS.power]);

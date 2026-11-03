@@ -1,5 +1,5 @@
 import { DESKTOP_TILE_METRICS, type TileMetrics } from "./vault-layout";
-import type { ItemsLayout } from "./view-settings";
+import type { CharacterColumns, ItemsLayout } from "./view-settings";
 
 /** Character rows: the postmaster column, four postmaster tiles across. */
 export const rowInfoWidth = (m: TileMetrics) => 4 * m.tile + 3 * m.gap;
@@ -45,9 +45,22 @@ const vaultBesideMinWidth = (m: TileMetrics) => 5 * m.tile + 4 * m.gap;
  * A wider plate only costs the vault (it takes what's left), never clips anything.
  */
 const COLUMN_PLATE_MIN_PX = 230;
-/** Legacy columns: a character column, its nameplate or its slot rows (the equipped tile then three more). */
+/**
+ * Legacy columns: the postmaster card round its four tiles across, each side: Card
+ * size="sm"'s 12px padding (px-3) and 1px border, then ZONE_PAD_PX, inset like the slot
+ * tiles in their drop zones. Keep in step with PostmasterCell's card in character-plate.tsx.
+ */
+const POSTMASTER_CARD_CHROME_PX = 2 * (12 + 1 + ZONE_PAD_PX);
+/**
+ * Legacy columns: a character column, its nameplate, its slot rows (the equipped tile then
+ * three more), or its postmaster card, whichever is widest.
+ */
 const columnWidth = (m: TileMetrics) =>
-  Math.max(COLUMN_PLATE_MIN_PX, zoneWidth(1, m) + m.gap + zoneWidth(ROW_INVENTORY_COLUMNS, m));
+  Math.max(
+    COLUMN_PLATE_MIN_PX,
+    zoneWidth(1, m) + m.gap + zoneWidth(ROW_INVENTORY_COLUMNS, m),
+    4 * m.tile + 3 * m.gap + POSTMASTER_CARD_CHROME_PX,
+  );
 /** Legacy columns: the padding between columns side by side (px-4 each side). */
 const COLUMNS_GAP_PX = 2 * 16;
 /** Legacy columns: after the one column shown under tabs, before the aligned vault (pr-3). */
@@ -61,9 +74,9 @@ const vaultRoom = (largePx: number, m: TileMetrics) =>
   Math.round(
     (largePx * (m.tile + m.gap)) / (DESKTOP_TILE_METRICS.tile + DESKTOP_TILE_METRICS.gap),
   );
-/** Beside all three columns: about ten Large tiles across (1580px wide at Large). */
+/** Beside all three columns: about ten Large tiles across (1634px wide at Large). */
 const ALL_CHARACTERS_VAULT_ROOM_LARGE_PX = 676;
-/** Aligned beside one column: about seven Large tiles across (760px wide at Large). */
+/** Aligned beside one column: about seven Large tiles across (778px wide at Large). */
 const ALIGNED_VAULT_ROOM_LARGE_PX = 468;
 
 /**
@@ -83,29 +96,34 @@ const columnsAlignedMinWidth = (m: TileMetrics) =>
  * What the Items page draws:
  * - `rows`: a row per character (CharacterRows), the vault in its own pane beside them or
  *   below them.
- * - `columns`: character columns (InventoryGrid), every one side by side or (compact) one
- *   at a time under tabs, the vault one more column level with their slots (aligned) or
- *   below them. The legacy layout, and the new one's fallback when a row doesn't fit.
+ * - `columns`: character columns (InventoryGrid), the vault one more column level with
+ *   their slots (aligned) or below them. `characters`: every one side by side (`all`),
+ *   just the current one with no tabs (`current`, picked when all would fit), or one at a
+ *   time under tabs (`tabs`, when all don't fit). The legacy layout, and the new one's
+ *   fallback when a row doesn't fit.
  * - `phone`: one character at a time under tabs, the vault behind a tab of its own.
  */
 export type ItemsPagePlan =
   | { kind: "rows"; vault: "beside" | "below" }
-  | { kind: "columns"; compact: boolean; vault: "aligned" | "below" }
+  | { kind: "columns"; characters: "all" | "current" | "tabs"; vault: "aligned" | "below" }
   | { kind: "phone" };
 
 /**
  * The page's layout for the picked `layout` at `width` (the layout box's, in px), with
- * `tiles` (desktop tiles at the picked size). Null until a wider screen has been measured:
+ * `tiles` (desktop tiles at the picked size). `characterColumns` applies only where legacy
+ * columns have room for every character. Null until a wider screen has been measured:
  * nothing should mount on a guess.
  */
 export function itemsPagePlan({
   phone,
   layout,
+  characterColumns,
   width,
   tiles,
 }: {
   phone: boolean;
   layout: ItemsLayout;
+  characterColumns: CharacterColumns;
   width: number;
   tiles: TileMetrics;
 }): ItemsPagePlan | null {
@@ -114,7 +132,7 @@ export function itemsPagePlan({
   if (layout === "legacy") {
     return {
       kind: "columns",
-      compact: width < columnsAllCharactersMinWidth(tiles),
+      characters: width < columnsAllCharactersMinWidth(tiles) ? "tabs" : characterColumns,
       vault: width >= columnsAlignedMinWidth(tiles) ? "aligned" : "below",
     };
   }
@@ -123,5 +141,5 @@ export function itemsPagePlan({
     return { kind: "rows", vault: "beside" };
   }
   if (row <= width) return { kind: "rows", vault: "below" };
-  return { kind: "columns", compact: true, vault: "below" };
+  return { kind: "columns", characters: "tabs", vault: "below" };
 }

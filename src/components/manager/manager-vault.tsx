@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { memo, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Image from "next/image";
 import { ClassGlyph, classGlyphMaxWidth, hasClassGlyph } from "@/components/class-glyph";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -11,7 +11,7 @@ import {
   GLIMMER_HASH,
 } from "@/lib/armory/masterwork";
 import { BUNGIE_IMAGE_BASE } from "@/lib/bungie/constants";
-import { ACCOUNT_ROWS, SLOT_ROWS, VAULT_GROUPS } from "@/lib/inventory/buckets";
+import { ACCOUNT_ROWS, SLOT_ROWS, groupsForVaultTab, type SlotRow } from "@/lib/inventory/buckets";
 import {
   ASCENDANT_ALLOY_HASH,
   BRIGHT_DUST_HASH,
@@ -134,8 +134,7 @@ function vaultSections(
   const groupFor = (label: string): GroupKey =>
     label === "Weapons" ? weaponGroup : label === "Armor" ? armorGroup : "none";
   // The Weapons and Armor tabs show just that section; All shows every one.
-  const shown =
-    vaultTab === "all" ? VAULT_GROUPS : VAULT_GROUPS.filter((g) => g.label === VAULT_TAB_LABELS[vaultTab]);
+  const shown = groupsForVaultTab(vaultTab);
   const gear: VaultSection[] = shown.map((group) => ({
     heading: group.label,
     buckets: group.rows.map((row) =>
@@ -181,11 +180,23 @@ export function AlignedVault({
   inventory,
   headerRows,
   rowSpan,
+  rows = SLOT_ROWS,
+  flow = false,
+  action,
 }: {
   inventory: ManagerInventory;
   /** Rows above the postmasters' row: the vault's header takes the first. */
   headerRows: number;
   rowSpan: number;
+  /** The characters' slot rows, each with the vault's tiles for that slot level with it. */
+  rows?: readonly SlotRow[];
+  /**
+   * Run the vault's tiles from the first slot row on down, not each slot level with its
+   * row (the grid's last row must be flexible, to take what they need past the slots).
+   */
+  flow?: boolean;
+  /** A control beside the vault's tabs. */
+  action?: ReactNode;
 }) {
   const { gear, extra } = useVaultSections(inventory);
   // Each slot's bucket on its own, without a heading: the row it's on names it.
@@ -193,6 +204,7 @@ export function AlignedVault({
     () => new Map(gear.flatMap((section) => section.buckets).map((b) => [b.key, [{ buckets: [b] }]])),
     [gear],
   );
+  const flowing = useMemo(() => gear.map((section) => ({ buckets: section.buckets })), [gear]);
 
   return (
     <DropZone
@@ -202,22 +214,30 @@ export function AlignedVault({
       style={{ gridColumn: "-2", gridRow: `1 / span ${rowSpan}` }}
     >
       {headerRows === 1 ? (
-        <VaultHeader inventory={inventory} placement="aligned" />
+        <VaultHeader inventory={inventory} placement="aligned" action={action} />
       ) : (
         <>
-          <VaultHeader inventory={inventory} placement="aligned-compact" />
+          <VaultHeader inventory={inventory} placement="aligned-compact" action={action} />
           {/* Down to the postmasters' row: nothing of the vault's own. */}
           <div style={{ gridRow: `span ${headerRows}` }} />
         </>
       )}
-      {SLOT_ROWS.map(({ row, groupStart }) => (
-        <div key={row.hash} className={cn("min-w-0 pb-2", groupStart && "pt-5")}>
-          <VaultLines sections={bySlot.get(String(row.hash)) ?? NO_SECTIONS} pad={SLOT_PAD_PX} />
+      {flow ? (
+        <div className="min-w-0 pt-5 pb-4" style={{ gridRow: `span ${rows.length + 1}` }}>
+          <VaultLines sections={flowing} pad={SLOT_PAD_PX} />
         </div>
-      ))}
-      <div className="min-w-0 pb-4">
-        <VaultLines sections={extra} />
-      </div>
+      ) : (
+        <>
+          {rows.map(({ row, groupStart }) => (
+            <div key={row.hash} className={cn("min-w-0 pb-2", groupStart && "pt-5")}>
+              <VaultLines sections={bySlot.get(String(row.hash)) ?? NO_SECTIONS} pad={SLOT_PAD_PX} />
+            </div>
+          ))}
+          <div className="min-w-0 pb-4">
+            <VaultLines sections={extra} />
+          </div>
+        </>
+      )}
     </DropZone>
   );
 }
@@ -248,13 +268,18 @@ export function VaultPane({
   );
 }
 
-/** The vault's nameplate with the currencies beside it, then its tabs, pinned per `placement`. */
+/**
+ * The vault's nameplate with the currencies beside it, then its tabs (and `action`
+ * beside them), pinned per `placement`.
+ */
 function VaultHeader({
   inventory,
   placement,
+  action,
 }: {
   inventory: ManagerInventory;
   placement: keyof typeof HEADER_PLACEMENTS;
+  action?: ReactNode;
 }) {
   const { className, plate } = HEADER_PLACEMENTS[placement];
   return (
@@ -264,7 +289,7 @@ function VaultHeader({
         <VaultTitle inventory={inventory} height={plate} />
         <VaultCurrencies inventory={inventory} />
       </div>
-      <VaultTabs inventory={inventory} />
+      <VaultTabs inventory={inventory} action={action} />
     </div>
   );
 }
@@ -273,22 +298,25 @@ function VaultHeader({
  * Which of the vault's sections to show: everything, or just weapons or armor (each with
  * how many the vault holds).
  */
-function VaultTabs({ inventory }: { inventory: ManagerInventory }) {
+function VaultTabs({ inventory, action }: { inventory: ManagerInventory; action?: ReactNode }) {
   const view = useViewSettings();
   const { vault } = inventory;
+  // All has no count of its own.
   const count = (tab: VaultTab) =>
-    VAULT_GROUPS.find((g) => g.label === VAULT_TAB_LABELS[tab])?.rows.reduce(
-      (n, row) => n + (vault[row.hash]?.length ?? 0),
-      0,
-    );
+    tab === "all"
+      ? undefined
+      : groupsForVaultTab(tab)
+          .flatMap((g) => g.rows)
+          .reduce((n, row) => n + (vault[row.hash]?.length ?? 0), 0);
   return (
-    <div className="border-b border-foreground/12">
+    // The same well as the optimizer's Builds / Theoretical Builds switch, `action` beside it.
+    <div className="flex flex-wrap items-center gap-3">
       <Tabs
         value={view.vaultTab}
         onValueChange={(tab) => setViewSettings({ ...view, vaultTab: tab as VaultTab })}
         className="flex-none"
       >
-        <TabsList variant="line" aria-label="Vault sections" className="border-b-0">
+        <TabsList aria-label="Vault sections">
           {VAULT_TABS.map((tab) => {
             const n = tab === "all" ? undefined : count(tab);
             return (
@@ -302,6 +330,7 @@ function VaultTabs({ inventory }: { inventory: ManagerInventory }) {
           })}
         </TabsList>
       </Tabs>
+      {action}
     </div>
   );
 }
