@@ -10,7 +10,23 @@ import { recentlyMoved, requestMoves } from "@/lib/inventory/move-queue";
 import { planSmartMove, type MoveStep, type SmartPlan } from "@/lib/inventory/smart-moves";
 import { toast, type PendingToast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
-import { loadViewSettings, useViewSettings } from "@/lib/inventory/view-settings";
+import {
+  loadViewSettings,
+  setViewSettings,
+  useViewSettings,
+  type CharacterColumns,
+} from "@/lib/inventory/view-settings";
+import { HugeiconsIcon } from "@hugeicons/react";
+import { ArrowDown01Icon } from "@hugeicons/core-free-icons";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { OPTION_GROUP, PICKED_ITEM } from "./items-settings";
 import {
   MOVABLE_BUCKETS,
   locate,
@@ -97,7 +113,20 @@ export function ManagerView({
   );
   // Touch can't drag a tile, so its details offer the moves as buttons.
   const touch = useTouchFirst();
-  const plan = itemsPagePlan({ phone, layout: view.layout, width: layoutWidth, tiles: layout.tiles });
+  const plan = itemsPagePlan({
+    phone,
+    layout: view.layout,
+    characterColumns: view.characterColumns,
+    width: layoutWidth,
+    tiles: layout.tiles,
+  });
+  // Legacy columns: whether every character fits side by side, so there's a choice to
+  // narrow it to one (on a narrower screen it's one at a time anyway).
+  const allColumns =
+    view.layout === "legacy"
+      ? itemsPagePlan({ phone, layout: "legacy", width: layoutWidth, tiles: layout.tiles })
+      : null;
+  const allCharactersFit = allColumns?.kind === "columns" && !allColumns.compact;
   const [vaultOpen, setVaultOpen] = useState(false);
   /** The weapon (by name) whose copies are open in Compare. */
   const [comparing, setComparing] = useState<string | null>(null);
@@ -191,6 +220,8 @@ export function ManagerView({
               <PlannedLayout
                 plan={plan}
                 inventory={inventory}
+                characterToggle={allCharactersFit}
+                currentOnly={view.characterColumns === "one"}
                 vaultTab={{ open: vaultOpen, onOpenChange: setVaultOpen }}
               />
             )}
@@ -215,10 +246,16 @@ export function ManagerView({
 function PlannedLayout({
   plan,
   inventory,
+  characterToggle,
+  currentOnly,
   vaultTab,
 }: {
   plan: ItemsPagePlan;
   inventory: ManagerInventory;
+  /** Offer CharacterColumnsMenu in the vault's header. */
+  characterToggle: boolean;
+  /** The Characters dropdown is on Current character. */
+  currentOnly: boolean;
   /** Phones: whether the Vault tab is picked. */
   vaultTab: { open: boolean; onOpenChange: (open: boolean) => void };
 }) {
@@ -237,7 +274,14 @@ function PlannedLayout({
     case "columns":
       return (
         <>
-          <InventoryGrid inventory={inventory} compact={plan.compact} aligned={plan.vault === "aligned"} />
+          <InventoryGrid
+            inventory={inventory}
+            compact={plan.compact}
+            aligned={plan.vault === "aligned"}
+            vaultAction={characterToggle ? <CharacterColumnsMenu /> : undefined}
+            // Only while the toggle is offered: narrower, the tabs are the way to the others.
+            currentOnly={characterToggle && currentOnly}
+          />
           {plan.vault === "below" && <VaultPane inventory={inventory} placement="below-columns" />}
         </>
       );
@@ -251,6 +295,52 @@ function PlannedLayout({
         />
       );
   }
+}
+
+const CHARACTER_COLUMN_LABELS: Record<CharacterColumns, string> = {
+  one: "Current character",
+  all: "All characters",
+};
+
+/**
+ * Legacy columns, beside the vault's tabs: just the character played last, in its place,
+ * giving the vault the room (and its armor cut to that class); or every character side by
+ * side. The same menu as the Items settings, so it highlights only what's under the
+ * pointer and marks the pick the same way.
+ */
+function CharacterColumnsMenu() {
+  const view = useViewSettings();
+  return (
+    <DropdownMenu>
+      {/* As tall as the tabs' well beside it, whatever the theme draws round that, and the
+          same light fill. */}
+      <DropdownMenuTrigger
+        render={
+          <Button
+            variant="outline"
+            aria-label={`Characters shown: ${CHARACTER_COLUMN_LABELS[view.characterColumns]}`}
+            className="h-auto self-stretch bg-primary/6 py-0 pr-2 pl-2.5 font-normal"
+          />
+        }
+      >
+        {CHARACTER_COLUMN_LABELS[view.characterColumns]}
+        <HugeiconsIcon icon={ArrowDown01Icon} className="size-4 text-muted-foreground" aria-hidden />
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="w-48">
+        <DropdownMenuRadioGroup
+          className={OPTION_GROUP}
+          value={view.characterColumns}
+          onValueChange={(v) => setViewSettings({ ...view, characterColumns: v as CharacterColumns })}
+        >
+          {(["one", "all"] as const).map((v) => (
+            <DropdownMenuRadioItem key={v} value={v} closeOnClick className={PICKED_ITEM}>
+              {CHARACTER_COLUMN_LABELS[v]}
+            </DropdownMenuRadioItem>
+          ))}
+        </DropdownMenuRadioGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
 }
 
 /**

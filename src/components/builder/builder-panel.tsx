@@ -1154,10 +1154,12 @@ export function BuilderPanel({
           wheel-scrolling anywhere to the left of the cards still moves this
           pane. Inner max-width keeps the cards on the 39.74rem track. Mins are
           0 so the two columns share a narrow main pane instead of overflowing
-          past `lg:overflow-hidden`. */}
+          past `lg:overflow-hidden`. The pane reaches 12px past its track at the
+          top and right (negative margin, matching padding) so the clip leaves
+          room for a selected tile's glow (d2-tile-selected spreads 9px). */}
       <div
         ref={settingsScrollRef}
-        className="d2-scroll flex min-h-0 min-w-0 flex-col lg:col-start-1 lg:col-end-3 lg:overflow-y-auto lg:overscroll-contain lg:pl-6 lg:pr-2"
+        className="d2-scroll flex min-h-0 min-w-0 flex-col lg:col-start-1 lg:col-end-3 lg:-mt-3 lg:-mr-3 lg:overflow-y-auto lg:overscroll-contain lg:pt-3 lg:pl-6 lg:pr-5"
       >
         <div className="flex flex-col gap-4 lg:ml-auto lg:w-full lg:max-w-[39.74rem]">
           {ready && (

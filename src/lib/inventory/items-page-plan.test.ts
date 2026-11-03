@@ -29,18 +29,18 @@ test("character rows put the vault beside them, then below, then fall back to co
   });
 });
 
-test("legacy columns go side by side from 1580px and align the vault from 760px", () => {
-  expect(itemsPagePlan({ phone: false, layout: "legacy", width: 1580, tiles: DESKTOP_TILE_METRICS })).toEqual({
+test("legacy columns go side by side from 1634px and align the vault from 778px", () => {
+  expect(itemsPagePlan({ phone: false, layout: "legacy", width: 1634, tiles: DESKTOP_TILE_METRICS })).toEqual({
     kind: "columns",
     compact: false,
     vault: "aligned",
   });
-  expect(itemsPagePlan({ phone: false, layout: "legacy", width: 1579, tiles: DESKTOP_TILE_METRICS })).toEqual({
+  expect(itemsPagePlan({ phone: false, layout: "legacy", width: 1633, tiles: DESKTOP_TILE_METRICS })).toEqual({
     kind: "columns",
     compact: true,
     vault: "aligned",
   });
-  expect(itemsPagePlan({ phone: false, layout: "legacy", width: 759, tiles: DESKTOP_TILE_METRICS })).toEqual({
+  expect(itemsPagePlan({ phone: false, layout: "legacy", width: 777, tiles: DESKTOP_TILE_METRICS })).toEqual({
     kind: "columns",
     compact: true,
     vault: "below",
@@ -64,4 +64,19 @@ test("smaller tiles fit the character rows, and every legacy column, in less wid
   // One column under tabs leaves the aligned vault as many tiles across at every size.
   expect(itemsPagePlan({ phone: false, layout: "legacy", width: 700, tiles: small })).toMatchObject({ vault: "aligned" });
   expect(itemsPagePlan({ phone: false, layout: "legacy", width: 700, tiles: DESKTOP_TILE_METRICS })).toMatchObject({ vault: "below" });
+});
+
+test("legacy columns can show one character at a time at any width", () => {
+  for (const width of [3000, 1634, 778]) {
+    expect(
+      itemsPagePlan({ phone: false, layout: "legacy", characterColumns: "one", width, tiles: DESKTOP_TILE_METRICS }),
+    ).toEqual({ kind: "columns", compact: true, vault: "aligned" });
+  }
+  expect(
+    itemsPagePlan({ phone: false, layout: "legacy", characterColumns: "one", width: 777, tiles: DESKTOP_TILE_METRICS }),
+  ).toEqual({ kind: "columns", compact: true, vault: "below" });
+  // The rows layout doesn't read it.
+  expect(
+    itemsPagePlan({ phone: false, layout: "rows", characterColumns: "one", width: 1600, tiles: DESKTOP_TILE_METRICS }),
+  ).toEqual({ kind: "rows", vault: "beside" });
 });

@@ -1,11 +1,8 @@
 "use client";
 
 import { useMemo, type CSSProperties } from "react";
-import { cn } from "@/lib/utils";
-import Image from "next/image";
-import { TooltipLabel } from "@/components/ui/tooltip";
 import { StatGlyph } from "@/components/stat-glyph";
-import { SetBonusChip, setBonusesFor } from "@/components/loadouts/loadout-row-details";
+import { SetBonusChip } from "@/components/loadouts/loadout-row-details";
 import {
   CLASS_NAMES,
   STAT_DISPLAY_ORDER,
@@ -19,14 +16,7 @@ import {
   WEAPON_ROWS,
   type BucketRow,
 } from "@/lib/inventory/buckets";
-import { BUNGIE_IMAGE_BASE } from "@/lib/bungie/constants";
-import { equippedSetCounts } from "@/lib/inventory/armor-details";
-import {
-  BREAKER_NAMES,
-  type InventoryItem,
-  type ManagerCharacter,
-  type ManagerInventory,
-} from "@/lib/inventory/build";
+import type { InventoryItem, ManagerCharacter, ManagerInventory } from "@/lib/inventory/build";
 import { CHARACTER_SLOTS } from "@/lib/inventory/moves";
 import {
   ROW_COLUMN_GAP_PX,
@@ -43,6 +33,7 @@ import { ManifestIcon, PlugIcon } from "@/components/loadouts/loadout-icons";
 import { ClassGlyph } from "@/components/class-glyph";
 import { EmptyTile, ItemTile } from "./item-tile";
 import { CharacterStrip, PostmasterCell, useCharacterSetup } from "./character-plate";
+import { ChampionStuns, useEquippedSetBonuses } from "./character-readout";
 import { DropZone } from "./manager-drop-zone";
 import { useTileMetrics } from "./manager-context";
 import type { TileMetrics } from "@/lib/inventory/vault-layout";
@@ -176,10 +167,7 @@ function StripReadout({
   manifest: Manifest | undefined;
 }) {
   const { equipped } = character;
-  const bonuses = useMemo(
-    () => (manifest ? setBonusesFor(equippedSetCounts(equipped, manifest), manifest) : []),
-    [equipped, manifest],
-  );
+  const bonuses = useEquippedSetBonuses(equipped, manifest);
 
   return (
     <div role="group" aria-label="Stats and set bonuses" className="flex items-center gap-5">
@@ -197,77 +185,6 @@ function StripReadout({
       <ChampionStuns equipped={equipped} manifest={manifest} />
       <SetBonusChip bonuses={bonuses} small className="gap-1" />
     </div>
-  );
-}
-
-/** Teal, as the game draws a loadout's champion icons. */
-const CHAMPION_TILE = "#2f8b8f";
-
-/** Champion types by BreakerType, in the game's order: Barrier, Overload, Unstoppable. */
-const CHAMPION_TYPES = Object.keys(BREAKER_NAMES).map(Number);
-
-/**
- * A tile per champion type, in the game's order: teal with the icon when an equipped
- * weapon stuns it on its own (by its frame or an intrinsic), clear and faded when none
- * does. The seasonal artifact's champion perks aren't counted. The tooltip names the
- * weapons.
- */
-function ChampionStuns({
-  equipped,
-  manifest,
-}: {
-  equipped: ManagerCharacter["equipped"];
-  manifest: Manifest | undefined;
-}) {
-  const icons = useMemo(() => {
-    const byType = new Map<number, string>();
-    for (const breaker of Object.values(manifest?.all("DestinyBreakerTypeDefinition") ?? {})) {
-      const icon = breaker.displayProperties?.icon;
-      if (icon) byType.set(breaker.enumValue, icon);
-    }
-    return byType;
-  }, [manifest]);
-  const weapons = new Map<number, string[]>();
-  for (const row of WEAPON_ROWS) {
-    const weapon = equipped[row.hash];
-    if (!weapon?.breakerType) continue;
-    weapons.set(weapon.breakerType, [...(weapons.get(weapon.breakerType) ?? []), weapon.name]);
-  }
-
-  return (
-    <ul aria-label="Champions your weapons stun" className="flex gap-1">
-      {CHAMPION_TYPES.map((type) => {
-        const stunning = weapons.get(type);
-        const icon = icons.get(type);
-        const label = `${BREAKER_NAMES[type]}: ${stunning ? stunning.join(", ") : "no equipped weapon stuns it on its own"}`;
-        return (
-          <li key={type}>
-            <TooltipLabel label={label}>
-              <span
-                tabIndex={0}
-                aria-label={label}
-                className={cn(
-                  "flex size-6 items-center justify-center outline-none focus-visible:d2-tile-selected normal:rounded-sm",
-                  !stunning && "border border-white/20",
-                )}
-                style={stunning ? { background: CHAMPION_TILE } : undefined}
-              >
-                {icon && (
-                  <Image
-                    src={`${BUNGIE_IMAGE_BASE}${icon}`}
-                    alt=""
-                    width={16}
-                    height={16}
-                    className={cn("size-4", !stunning && "opacity-30")}
-                    unoptimized
-                  />
-                )}
-              </span>
-            </TooltipLabel>
-          </li>
-        );
-      })}
-    </ul>
   );
 }
 

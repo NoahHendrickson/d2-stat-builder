@@ -3,7 +3,9 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { CLASS_NAMES } from "@/lib/armory/stats";
-import { SLOT_ROWS, type BucketRow } from "@/lib/inventory/buckets";
+import { SLOT_ROWS, slotRowsOf, type BucketRow } from "@/lib/inventory/buckets";
+import { VAULT_TAB_LABELS, useViewSettings } from "@/lib/inventory/view-settings";
+import { vaultForClass } from "@/lib/inventory/vault-for-class";
 import type { InventoryItem, ManagerCharacter, ManagerInventory } from "@/lib/inventory/build";
 import { CHARACTER_SLOTS } from "@/lib/inventory/moves";
 import { cn } from "@/lib/utils";
@@ -35,10 +37,19 @@ export function InventoryGrid({
   compact,
   aligned,
   vault,
+  vaultAction,
+  currentOnly = false,
 }: {
   inventory: ManagerInventory;
   compact: boolean;
   aligned: boolean;
+  /**
+   * Compact: show just the character played last, with no tabs to switch, its column
+   * where it sits among all three (the Characters dropdown on Current character).
+   */
+  currentOnly?: boolean;
+  /** Aligned: a control beside the vault's tabs. */
+  vaultAction?: ReactNode;
   /**
    * Phones: the vault as one more tab after the characters, its pane in place of theirs
    * while picked. The tab strip stays pinned over both.
@@ -47,7 +58,7 @@ export function InventoryGrid({
 }) {
   const { characters } = inventory;
   const [picked, setPicked] = useState<string | null>(null);
-  const shown = characters.find((c) => c.id === picked) ?? characters[0];
+  const shown = (!currentOnly && characters.find((c) => c.id === picked)) || characters[0];
   const columns = {
     gridTemplateColumns: `${compact ? "max-content" : `repeat(${characters.length}, max-content)`}${aligned ? " minmax(0, 1fr)" : ""}`,
   };
@@ -55,10 +66,23 @@ export function InventoryGrid({
   // so rows still line up across characters (and with the vault). Aligned, the vault's
   // title and tabs sit level with the nameplates (compact, a row of character tabs comes
   // first for them to share), and the vault ends with a row for what no character holds.
-  const rowCount = 2 + SLOT_ROWS.length;
-  const firstRow = aligned && compact ? 2 : 1;
-  const { statIcons, compare, postmasterCapacity } = useCharacterSetup(inventory);
+  // Current character, on the vault's Weapons or Armor tab: just those slots, so
+  // they and the vault's tiles both start at the top.
+  const { vaultTab } = useViewSettings();
+  const rows = currentOnly && vaultTab !== "all" ? slotRowsOf(VAULT_TAB_LABELS[vaultTab]) : SLOT_ROWS;
+  // The Armor tab beside every slot: the vault's armor runs from the top, past the weapon
+  // slots (a drop anywhere on a character sends it there), not down level with the armor.
+  const flowVault = aligned && vaultTab === "armor" && rows === SLOT_ROWS;
+  // Current character: the vault's armor is just what that character can wear.
+  const vaultInventory = useMemo(
+    () => (currentOnly && shown ? vaultForClass(inventory, shown.classType) : inventory),
+    [currentOnly, shown, inventory],
+  );
+  const rowCount = 2 + rows.length;
+  const firstRow = aligned && compact && !currentOnly ? 2 : 1;
+  const { manifest, statIcons, compare, postmasterCapacity } = useCharacterSetup(inventory);
   const pinnedPlate = usePinnedPlateClass();
+  const phone = usePhoneLayout();
 
   const vaultOpen = vault?.open ?? false;
   // Once opened, the vault pane stays mounted, hidden while a character shows: dragging a
@@ -66,7 +90,7 @@ export function InventoryGrid({
   // unmounts never gets its dragend.
   const [vaultMounted, setVaultMounted] = useState(false);
   if (vaultOpen && !vaultMounted) setVaultMounted(true);
-  const tabs = compact && shown && (
+  const tabs = compact && !currentOnly && shown && (
     <Tabs
       value={vaultOpen ? VAULT_TAB : shown.id}
       onValueChange={(id) => {
@@ -105,7 +129,15 @@ export function InventoryGrid({
     <section aria-label={aligned ? "Characters and vault" : "Characters"} className="flex flex-col">
       {!aligned && tabs}
       {vault && vaultMounted && <div className={cn(!vaultOpen && "hidden")}>{vault.pane}</div>}
-      <div className={cn("grid", vaultOpen && "hidden")} style={columns}>
+      <div
+        className={cn("grid", vaultOpen && "hidden")}
+        style={{
+          ...columns,
+          // A flowing vault spans the slot rows and the vault's last row; that row is the
+          // flexible one, so it grows to fit the vault and the slot rows keep their size.
+          ...(flowVault && { gridTemplateRows: `repeat(${firstRow - 1 + rowCount}, auto) 1fr` }),
+        }}
+      >
         {aligned && tabs}
         {characters.map((c) => (
           // The whole column is one target (padding splits the gap between columns), so a
@@ -122,10 +154,17 @@ export function InventoryGrid({
             )}
             style={{ gridRow: `${firstRow} / span ${rowCount}` }}
           >
-            <CharacterNameplate character={c} statIcons={statIcons} className={pinnedPlate} />
-            <PostmasterCell items={c.postmaster} capacity={postmasterCapacity} />
+            <CharacterNameplate
+              character={c}
+              statIcons={statIcons}
+              manifest={manifest}
+              // Inset like the slot tiles in their drop zones, so the column has one edge.
+              className={cn(pinnedPlate, !phone && "px-1")}
+            />
+            {/* Phones keep the plain cell: the card's frame would push a full line of tiles off screen. */}
+            <PostmasterCell items={c.postmaster} capacity={postmasterCapacity} card={!phone} />
             {/* Weapons, armor, general: no headings, just a wider gap before each group. */}
-            {SLOT_ROWS.map(({ row, groupStart }) => (
+            {rows.map(({ row, groupStart }) => (
               <CharacterCell
                 key={row.hash}
                 character={c}
@@ -136,7 +175,16 @@ export function InventoryGrid({
             ))}
           </DropZone>
         ))}
-        {aligned && <AlignedVault inventory={inventory} headerRows={firstRow} rowSpan={firstRow + rowCount} />}
+        {aligned && (
+          <AlignedVault
+            inventory={vaultInventory}
+            headerRows={firstRow}
+            rowSpan={firstRow + rowCount}
+            rows={rows}
+            flow={flowVault}
+            action={vaultAction}
+          />
+        )}
       </div>
     </section>
   );
@@ -209,7 +257,9 @@ function CharacterCell({
   return (
     // Tiles keep to the top: an aligned row grows with the vault's slot beside it.
     <div
-      className={cn("flex items-start", groupStart && "pt-5")}
+      // Wider screens: the 3×3 grid keeps to the column's right edge, level with the
+      // postmaster card's when that widens the column past the slot.
+      className={cn("flex items-start", !phone && "justify-between", groupStart && "pt-5")}
       style={{ columnGap: phone ? tiles.gap * 2 : tiles.gap, paddingBottom: tiles.gap }}
       aria-label={row.label}
     >

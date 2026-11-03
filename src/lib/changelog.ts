@@ -12,6 +12,12 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    date: "2026-11-03",
+    changes: [
+      "Items: Legacy columns show each character's champions and set bonuses, and can show just your current character from a dropdown by the vault tabs.",
+    ],
+  },
+  {
     date: "2026-11-02",
     changes: [
       "Sidebar: Send feedback lets you suggest an idea as well as report a bug.",

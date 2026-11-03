@@ -72,6 +72,12 @@ export const SLOT_ROWS: SlotRow[] = CHARACTER_GROUPS.flatMap((group) =>
   group.rows.map((row, i) => ({ row, groupStart: i === 0 })),
 );
 
+/** The slot rows of one group ("Weapons", "Armor" or "General"), in SLOT_ROWS's order. */
+export function slotRowsOf(groupLabel: string): SlotRow[] {
+  const group = CHARACTER_GROUPS.find((g) => g.label === groupLabel);
+  return group ? SLOT_ROWS.filter(({ row }) => group.rows.includes(row)) : SLOT_ROWS;
+}
+
 /** Vault sections follow the character rows; anything else lands in "Other". */
 export const VAULT_GROUPS: BucketGroup[] = CHARACTER_GROUPS;
 

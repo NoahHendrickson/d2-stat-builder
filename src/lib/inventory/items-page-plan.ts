@@ -1,5 +1,5 @@
 import { DESKTOP_TILE_METRICS, type TileMetrics } from "./vault-layout";
-import type { ItemsLayout } from "./view-settings";
+import type { CharacterColumns, ItemsLayout } from "./view-settings";
 
 /** Character rows: the postmaster column, four postmaster tiles across. */
 export const rowInfoWidth = (m: TileMetrics) => 4 * m.tile + 3 * m.gap;
@@ -45,9 +45,21 @@ const vaultBesideMinWidth = (m: TileMetrics) => 5 * m.tile + 4 * m.gap;
  * A wider plate only costs the vault (it takes what's left), never clips anything.
  */
 const COLUMN_PLATE_MIN_PX = 230;
-/** Legacy columns: a character column, its nameplate or its slot rows (the equipped tile then three more). */
+/**
+ * Legacy columns: the postmaster card round its four tiles across, a 12px pad and 1px
+ * border each side, inset like the slot tiles in their drop zones.
+ */
+export const POSTMASTER_CARD_CHROME_PX = 2 * (12 + 1 + ZONE_PAD_PX);
+/**
+ * Legacy columns: a character column, its nameplate, its slot rows (the equipped tile then
+ * three more), or its postmaster card, whichever is widest.
+ */
 const columnWidth = (m: TileMetrics) =>
-  Math.max(COLUMN_PLATE_MIN_PX, zoneWidth(1, m) + m.gap + zoneWidth(ROW_INVENTORY_COLUMNS, m));
+  Math.max(
+    COLUMN_PLATE_MIN_PX,
+    zoneWidth(1, m) + m.gap + zoneWidth(ROW_INVENTORY_COLUMNS, m),
+    4 * m.tile + 3 * m.gap + POSTMASTER_CARD_CHROME_PX,
+  );
 /** Legacy columns: the padding between columns side by side (px-4 each side). */
 const COLUMNS_GAP_PX = 2 * 16;
 /** Legacy columns: after the one column shown under tabs, before the aligned vault (pr-3). */
@@ -61,9 +73,9 @@ const vaultRoom = (largePx: number, m: TileMetrics) =>
   Math.round(
     (largePx * (m.tile + m.gap)) / (DESKTOP_TILE_METRICS.tile + DESKTOP_TILE_METRICS.gap),
   );
-/** Beside all three columns: about ten Large tiles across (1580px wide at Large). */
+/** Beside all three columns: about ten Large tiles across (1634px wide at Large). */
 const ALL_CHARACTERS_VAULT_ROOM_LARGE_PX = 676;
-/** Aligned beside one column: about seven Large tiles across (760px wide at Large). */
+/** Aligned beside one column: about seven Large tiles across (778px wide at Large). */
 const ALIGNED_VAULT_ROOM_LARGE_PX = 468;
 
 /**
@@ -95,17 +107,20 @@ export type ItemsPagePlan =
 
 /**
  * The page's layout for the picked `layout` at `width` (the layout box's, in px), with
- * `tiles` (desktop tiles at the picked size). Null until a wider screen has been measured:
- * nothing should mount on a guess.
+ * `tiles` (desktop tiles at the picked size). Legacy columns show one character at a time
+ * when `characterColumns` asks for it, however wide the page. Null until a wider screen has
+ * been measured: nothing should mount on a guess.
  */
 export function itemsPagePlan({
   phone,
   layout,
+  characterColumns = "all",
   width,
   tiles,
 }: {
   phone: boolean;
   layout: ItemsLayout;
+  characterColumns?: CharacterColumns;
   width: number;
   tiles: TileMetrics;
 }): ItemsPagePlan | null {
@@ -114,7 +129,7 @@ export function itemsPagePlan({
   if (layout === "legacy") {
     return {
       kind: "columns",
-      compact: width < columnsAllCharactersMinWidth(tiles),
+      compact: characterColumns === "one" || width < columnsAllCharactersMinWidth(tiles),
       vault: width >= columnsAlignedMinWidth(tiles) ? "aligned" : "below",
     };
   }
