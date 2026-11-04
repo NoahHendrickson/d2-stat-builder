@@ -67,7 +67,7 @@ export function ManagerView({
   const layoutRef = useRef<HTMLDivElement>(null);
   const [layoutWidth, setLayoutWidth] = useState(0);
   // The saved layout, read before the first layout decision (the measure below) so a
-  // legacy user never mounts the default layout first.
+  // character-rows user never mounts the default layout first.
   useLayoutEffect(loadViewSettings, []);
   useLayoutEffect(() => {
     const el = layoutRef.current;
@@ -194,9 +194,8 @@ export function ManagerView({
         <div className="sticky -top-6 z-30 -mx-4 -mt-6 transition-colors group-data-scrolled/manager:d2-sticky-fill lg:-mx-6">
           <ManagerSearch
             inventory={searchedInventory}
-            // Phones lay out the same either way, so the layout setting stays off them. Its
-            // intro only opens over the character rows it introduces.
-            layoutMenu={plan && plan.kind !== "phone" ? { intro: plan.kind === "rows" } : undefined}
+            // Phones lay out the same either way, so the layout setting stays off them.
+            layoutMenu={plan != null && plan.kind !== "phone"}
           />
         </div>
         <FarmingBanner inventory={inventory} />

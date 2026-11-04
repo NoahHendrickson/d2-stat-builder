@@ -86,8 +86,8 @@ export function ManagerSearch({
   layoutMenu,
 }: {
   inventory: ManagerInventory;
-  /** The layout setting's menu, when the page offers it; `intro`: it may open by itself. */
-  layoutMenu?: { intro: boolean };
+  /** Whether the page offers the layout setting's menu. */
+  layoutMenu?: boolean;
 }) {
   /** What's typed in the field (the chips aren't part of it). */
   const [query, setQuery] = useState("");
@@ -390,7 +390,7 @@ export function ManagerSearch({
       {matches && matches.size > 0 && <BulkActions inventory={inventory} matches={matches} />}
       <SearchHelp />
       <ViewMenu />
-      {layoutMenu && <ItemsSettings intro={layoutMenu.intro} />}
+      {layoutMenu && <ItemsSettings />}
       <SearchResultsDrawer
         inventory={inventory}
         query={deferred}

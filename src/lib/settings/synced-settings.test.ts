@@ -8,23 +8,7 @@ import {
   setSetting,
   setSyncAccount,
 } from "./synced-settings";
-
-/** Minimal in-memory Storage so the node test env can exercise load/save I/O. */
-class MemStorage {
-  private m = new Map<string, string>();
-  getItem(k: string) {
-    return this.m.has(k) ? this.m.get(k)! : null;
-  }
-  setItem(k: string, v: string) {
-    this.m.set(k, v);
-  }
-  removeItem(k: string) {
-    this.m.delete(k);
-  }
-  clear() {
-    this.m.clear();
-  }
-}
+import { memoryStorage } from "@/lib/test/memory-storage";
 
 const link = (id: string, url: string) => ({ id, name: id, url });
 
@@ -45,7 +29,7 @@ function stubServer() {
 }
 
 beforeEach(() => {
-  vi.stubGlobal("localStorage", new MemStorage());
+  vi.stubGlobal("localStorage", memoryStorage());
   resetSyncedSettingsForTests();
 });
 

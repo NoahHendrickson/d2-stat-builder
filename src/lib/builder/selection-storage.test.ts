@@ -18,33 +18,10 @@ import {
   loadSelections,
   saveSelections,
 } from "./selection-storage";
-
-/** Minimal in-memory Storage so the node test env can exercise load/save I/O. */
-class MemStorage {
-  private m = new Map<string, string>();
-  getItem(k: string) {
-    return this.m.has(k) ? this.m.get(k)! : null;
-  }
-  setItem(k: string, v: string) {
-    this.m.set(k, v);
-  }
-  removeItem(k: string) {
-    this.m.delete(k);
-  }
-  clear() {
-    this.m.clear();
-  }
-  key(i: number) {
-    return [...this.m.keys()][i] ?? null;
-  }
-  get length() {
-    return this.m.size;
-  }
-}
+import { memoryStorage } from "@/lib/test/memory-storage";
 
 beforeEach(() => {
-  (globalThis as { localStorage?: Storage }).localStorage =
-    new MemStorage() as unknown as Storage;
+  (globalThis as { localStorage?: Storage }).localStorage = memoryStorage();
 });
 
 function emptyFragSel(): Record<Subclass, Set<number>> {
