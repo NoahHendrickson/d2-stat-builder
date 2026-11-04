@@ -393,7 +393,7 @@ export function WeaponSearchBox({
           id={`${id}-list`}
           role="listbox"
           aria-label="Filter suggestions"
-          className="d2-reveal d2-scroll mx-[7px] mt-3 max-h-[min(26rem,45dvh)] overflow-y-auto border-b border-foreground/8 pb-2 text-sm md:mx-[15px]"
+          className="d2-reveal d2-scroll mx-[7px] mt-3 max-h-[min(26rem,45dvh)] overflow-y-auto border-b border-foreground/8 pb-2 text-sm [scrollbar-gutter:auto]! md:mx-[15px]"
           // Keep focus in the input while clicking rows.
           onMouseDown={(event) => event.preventDefault()}
         >
