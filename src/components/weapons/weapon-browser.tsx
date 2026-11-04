@@ -266,7 +266,7 @@ export function WeaponBrowser() {
             className={cn(
               // Out into the page padding by the row's border, so the
               // thumbnails line up with the heading and the search bar's icon.
-              "-mx-px min-h-40 flex-1 overflow-y-auto",
+              "d2-scroll -mx-px min-h-40 flex-1 overflow-y-auto",
               state !== deferred && "opacity-60",
             )}
             aria-busy={query.isPending || state !== deferred}
@@ -407,7 +407,7 @@ export function WeaponBrowser() {
       <aside
         ref={detailsRef}
         aria-label="Weapon details"
-        className="hidden min-w-0 flex-1 overflow-y-auto border-l border-foreground/8 pl-6 lg:block"
+        className="d2-scroll hidden min-w-0 flex-1 overflow-y-auto border-l border-foreground/8 pl-6 lg:block"
       >
         {/* Below the split the dialog shows the details instead; this pane is hidden,
             so don't build a second copy of them (perks, stats, Clarity) behind it. */}
@@ -428,7 +428,7 @@ export function WeaponBrowser() {
         open={!split && dialogOpen && picked != null}
         onOpenChange={setDialogOpen}
       >
-        <DialogContent className="max-h-[85dvh] overflow-y-auto sm:max-w-3xl">
+        <DialogContent className="d2-scroll max-h-[85dvh] overflow-y-auto sm:max-w-3xl">
           {picked && data && (
             <WeaponDetails
               key={picked.hash}
