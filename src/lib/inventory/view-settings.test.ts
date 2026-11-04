@@ -1,5 +1,6 @@
 import { expect, test } from "vitest";
 import { BUCKETS } from "./buckets";
+import { ITEMS_LAYOUT_INTRO_KEY, VIEW_SETTINGS_KEY, settleItemsLayout } from "./items-layout-default";
 import type { InventoryItem } from "./build";
 import {
   DEFAULT_VIEW,
@@ -51,15 +52,64 @@ test("parseViewSettings drops unknown keys and falls back to defaults", () => {
     characterColumns: "current",
     tileSize: "small",
   });
+  // Saved views without a layout predate the legacy default: they keep character rows.
+  const savedDefaults = { ...DEFAULT_VIEW, layout: "rows" };
   // The old single setting carries over to armor; weapons take their default.
-  expect(parseViewSettings(JSON.stringify({ vaultGroup: "tier" }))).toEqual({ ...DEFAULT_VIEW, armorGroup: "tier" });
+  expect(parseViewSettings(JSON.stringify({ vaultGroup: "tier" }))).toEqual({ ...savedDefaults, armorGroup: "tier" });
   expect(
     parseViewSettings(JSON.stringify({ weaponGroup: "nope", vaultGroup: "nope", vaultTab: "nope", layout: "nope", characterColumns: 3, tileSize: 50 })),
-  ).toEqual(DEFAULT_VIEW);
-  expect(parseViewSettings("{")).toEqual(DEFAULT_VIEW);
+  ).toEqual(savedDefaults);
+  expect(parseViewSettings("{")).toEqual(savedDefaults);
   // Groupings that don't apply to the kind (weapons by class, armor by ammo) fall back.
-  expect(parseViewSettings(JSON.stringify({ weaponGroup: "class", armorGroup: "ammo" }))).toEqual(DEFAULT_VIEW);
-  expect(parseViewSettings(JSON.stringify({ armorGroup: "type" }))).toEqual(DEFAULT_VIEW);
+  expect(parseViewSettings(JSON.stringify({ weaponGroup: "class", armorGroup: "ammo" }))).toEqual(savedDefaults);
+  expect(parseViewSettings(JSON.stringify({ armorGroup: "type" }))).toEqual(savedDefaults);
+  // Nothing saved: the defaults, legacy columns.
+  expect(parseViewSettings(null)).toEqual(DEFAULT_VIEW);
+  expect(DEFAULT_VIEW.layout).toBe("legacy");
+});
+
+/** A Storage over a Map, enough for settleItemsLayout. */
+function memoryStorage(entries: Record<string, string> = {}): Storage {
+  const map = new Map(Object.entries(entries));
+  return {
+    get length() {
+      return map.size;
+    },
+    key: (i) => [...map.keys()][i] ?? null,
+    getItem: (k) => map.get(k) ?? null,
+    setItem: (k, v) => void map.set(k, String(v)),
+    removeItem: (k) => void map.delete(k),
+    clear: () => map.clear(),
+  };
+}
+
+test("settleItemsLayout: a new browser gets legacy columns, a returning one keeps character rows", () => {
+  const fresh = memoryStorage();
+  settleItemsLayout(fresh);
+  expect(parseViewSettings(fresh.getItem(VIEW_SETTINGS_KEY))).toEqual(DEFAULT_VIEW);
+  // The note on character rows is for people moved off the old layout.
+  expect(fresh.getItem(ITEMS_LAYOUT_INTRO_KEY)).toBe("1");
+  // Decided once: keys saved later don't make it a returning browser.
+  fresh.setItem("stat-builder:selections", "{}");
+  settleItemsLayout(fresh);
+  expect(parseViewSettings(fresh.getItem(VIEW_SETTINGS_KEY)).layout).toBe("legacy");
+
+  const returning = memoryStorage({ "stat-builder:changelog-seen": "x" });
+  settleItemsLayout(returning);
+  expect(parseViewSettings(returning.getItem(VIEW_SETTINGS_KEY))).toEqual({ ...DEFAULT_VIEW, layout: "rows" });
+  expect(returning.getItem(ITEMS_LAYOUT_INTRO_KEY)).toBeNull();
+
+  // Saved settings, either layout, are left alone.
+  for (const layout of ["rows", "legacy"]) {
+    const saved = JSON.stringify({ layout, tileSize: "small" });
+    const storage = memoryStorage({ [VIEW_SETTINGS_KEY]: saved });
+    settleItemsLayout(storage);
+    expect(storage.getItem(VIEW_SETTINGS_KEY)).toBe(saved);
+  }
+  // Other sites' keys on the same origin don't count.
+  const other = memoryStorage({ "something-else": "1" });
+  settleItemsLayout(other);
+  expect(parseViewSettings(other.getItem(VIEW_SETTINGS_KEY)).layout).toBe("legacy");
 });
 
 test("resetSortAndGrouping resets only the sort and grouping", () => {

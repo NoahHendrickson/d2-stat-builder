@@ -25,6 +25,7 @@ import { AnnotationsSync } from "@/components/annotations-sync";
 import { SiteIconSync } from "@/components/site-icon-sync";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useSession } from "@/lib/auth/use-session";
+import { settleItemsLayout } from "@/lib/inventory/items-layout-default";
 import { useLoadouts } from "@/lib/loadouts/use-loadouts";
 import { useMinWidth } from "@/lib/use-min-width";
 import { cn } from "@/lib/utils";
@@ -40,6 +41,16 @@ const SIDEBAR_COLLAPSED_KEY = "stat-builder:sidebar-collapsed";
 const PUBLIC_PATHS: ReadonlySet<string> = new Set(["/components"]);
 /** The showcase framed on another site: just the page, no sidebar or header. */
 const EMBED_PATH = "/components/embed";
+
+// As the app loads, before anything saves to storage: whether this browser is new decides
+// the Items page's default layout.
+if (typeof window !== "undefined") {
+  try {
+    settleItemsLayout(localStorage);
+  } catch {
+    // Blocked storage: the defaults show.
+  }
+}
 
 let sidebarCollapsedValue: boolean | null = null;
 const sidebarCollapsedListeners = new Set<() => void>();

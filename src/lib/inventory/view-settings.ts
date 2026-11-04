@@ -7,6 +7,7 @@ import { useSyncExternalStore } from "react";
 import { CLASS_NAMES } from "@/lib/armory/stats";
 import { createValueStore } from "@/lib/value-store";
 import { ANY_CLASS } from "./buckets";
+import { LAYOUT_BEFORE_LEGACY_DEFAULT, VIEW_SETTINGS_KEY } from "./items-layout-default";
 import type { Annotations, ItemTag } from "./annotations";
 import type { InventoryItem } from "./build";
 
@@ -101,7 +102,7 @@ export const DEFAULT_VIEW: ViewSettings = {
   weaponGroup: "type",
   armorGroup: "class",
   vaultTab: "all",
-  layout: "rows",
+  layout: "legacy",
   characterColumns: "all",
   tileSize: "large",
 };
@@ -116,7 +117,7 @@ export function resetSortAndGrouping(view: ViewSettings): ViewSettings {
   return { ...view, sort, weaponGroup, armorGroup };
 }
 
-const STORAGE_KEY = "stat-builder:manager-view:v1";
+const STORAGE_KEY = VIEW_SETTINGS_KEY;
 const TAG_ORDER: Record<ItemTag | "none", number> = {
   favorite: 0,
   keep: 1,
@@ -134,6 +135,10 @@ function oneOf<T>(list: readonly T[], value: unknown, fallback: T): T {
   return (list as readonly unknown[]).includes(value) ? (value as T) : fallback;
 }
 
+/**
+ * The saved settings, or the defaults with none saved. A saved view without a layout
+ * predates legacy columns being the default, so it keeps character rows.
+ */
 export function parseViewSettings(raw: string | null): ViewSettings {
   if (!raw) return DEFAULT_VIEW;
   try {
@@ -147,12 +152,12 @@ export function parseViewSettings(raw: string | null): ViewSettings {
       weaponGroup: oneOf(WEAPON_GROUP_KEYS, v.weaponGroup, DEFAULT_VIEW.weaponGroup),
       armorGroup: oneOf(ARMOR_GROUP_KEYS, v.armorGroup, oneOf(ARMOR_GROUP_KEYS, v.vaultGroup, DEFAULT_VIEW.armorGroup)),
       vaultTab: oneOf(VAULT_TABS, v.vaultTab, DEFAULT_VIEW.vaultTab),
-      layout: oneOf(ITEMS_LAYOUTS, v.layout, DEFAULT_VIEW.layout),
+      layout: oneOf(ITEMS_LAYOUTS, v.layout, LAYOUT_BEFORE_LEGACY_DEFAULT),
       characterColumns: oneOf(CHARACTER_COLUMNS, v.characterColumns, DEFAULT_VIEW.characterColumns),
       tileSize: oneOf(TILE_SIZES, v.tileSize, DEFAULT_VIEW.tileSize),
     };
   } catch {
-    return DEFAULT_VIEW;
+    return { ...DEFAULT_VIEW, layout: LAYOUT_BEFORE_LEGACY_DEFAULT };
   }
 }
 

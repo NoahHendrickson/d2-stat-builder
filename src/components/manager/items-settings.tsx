@@ -25,11 +25,12 @@ import {
   type ItemsLayout,
   type TileSize,
 } from "@/lib/inventory/view-settings";
+import { ITEMS_LAYOUT_INTRO_KEY } from "@/lib/inventory/items-layout-default";
 import { seenFlag } from "@/lib/seen-flag";
 import { cn } from "@/lib/utils";
 import { TOOLBAR_ICON_BUTTON } from "./toolbar-icon";
 
-const intro = seenFlag("stat-builder:items-layout-intro-seen");
+const intro = seenFlag(ITEMS_LAYOUT_INTRO_KEY);
 
 const LAYOUTS: Record<ItemsLayout, { label: string; detail: string; icon: typeof Layout3RowIcon }> = {
   rows: {
