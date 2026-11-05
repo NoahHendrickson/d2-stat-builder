@@ -2,9 +2,10 @@
 
 // How the manager orders items within a slot (a chain of sort keys, like DIM's sort
 // settings) and how it groups each vault row. Kept in localStorage; bad data reads as
-// the defaults.
+// SAVED_VIEW_FALLBACK.
 import { useSyncExternalStore } from "react";
 import { CLASS_NAMES } from "@/lib/armory/stats";
+import { browserPredates } from "@/lib/browser-since";
 import { createValueStore } from "@/lib/value-store";
 import { ANY_CLASS } from "./buckets";
 import type { Annotations, ItemTag } from "./annotations";
@@ -96,15 +97,26 @@ export interface ViewSettings {
   tileSize: TileSize;
 }
 
+/** What a new browser gets, with nothing saved. */
 export const DEFAULT_VIEW: ViewSettings = {
   sort: ["rarity", "power", "name"],
   weaponGroup: "type",
   armorGroup: "class",
   vaultTab: "all",
-  layout: "rows",
+  layout: "legacy",
   characterColumns: "all",
   tileSize: "large",
 };
+
+/** The day legacy columns became the default layout (before, it was character rows). */
+const LEGACY_DEFAULT_SINCE = "2026-11-04";
+
+/**
+ * What a saved view's missing or unreadable fields read as, and the view of a browser
+ * that used the app before legacy columns became the default but never saved one. All of
+ * them predate the switch, so they keep character rows.
+ */
+export const SAVED_VIEW_FALLBACK: ViewSettings = { ...DEFAULT_VIEW, layout: "rows" };
 
 /**
  * `view` with its sort and grouping back to the defaults. Page preferences (the vault tab,
@@ -134,25 +146,29 @@ function oneOf<T>(list: readonly T[], value: unknown, fallback: T): T {
   return (list as readonly unknown[]).includes(value) ? (value as T) : fallback;
 }
 
-export function parseViewSettings(raw: string | null): ViewSettings {
-  if (!raw) return DEFAULT_VIEW;
+/**
+ * The saved settings. With none saved, the defaults for a browser new since legacy columns
+ * became the default (`newBrowser`), otherwise SAVED_VIEW_FALLBACK.
+ */
+export function parseViewSettings(raw: string | null, newBrowser: boolean): ViewSettings {
+  if (!raw) return newBrowser ? DEFAULT_VIEW : SAVED_VIEW_FALLBACK;
   try {
     // vaultGroup: the one setting for every row, before weapons and armor split.
     const v = JSON.parse(raw) as Partial<Record<keyof ViewSettings | "vaultGroup", unknown>>;
     const sort = Array.isArray(v.sort)
       ? [...new Set(v.sort.filter((k): k is SortKey => (SORT_KEYS as readonly unknown[]).includes(k)))]
-      : DEFAULT_VIEW.sort;
+      : SAVED_VIEW_FALLBACK.sort;
     return {
       sort,
-      weaponGroup: oneOf(WEAPON_GROUP_KEYS, v.weaponGroup, DEFAULT_VIEW.weaponGroup),
-      armorGroup: oneOf(ARMOR_GROUP_KEYS, v.armorGroup, oneOf(ARMOR_GROUP_KEYS, v.vaultGroup, DEFAULT_VIEW.armorGroup)),
-      vaultTab: oneOf(VAULT_TABS, v.vaultTab, DEFAULT_VIEW.vaultTab),
-      layout: oneOf(ITEMS_LAYOUTS, v.layout, DEFAULT_VIEW.layout),
-      characterColumns: oneOf(CHARACTER_COLUMNS, v.characterColumns, DEFAULT_VIEW.characterColumns),
-      tileSize: oneOf(TILE_SIZES, v.tileSize, DEFAULT_VIEW.tileSize),
+      weaponGroup: oneOf(WEAPON_GROUP_KEYS, v.weaponGroup, SAVED_VIEW_FALLBACK.weaponGroup),
+      armorGroup: oneOf(ARMOR_GROUP_KEYS, v.armorGroup, oneOf(ARMOR_GROUP_KEYS, v.vaultGroup, SAVED_VIEW_FALLBACK.armorGroup)),
+      vaultTab: oneOf(VAULT_TABS, v.vaultTab, SAVED_VIEW_FALLBACK.vaultTab),
+      layout: oneOf(ITEMS_LAYOUTS, v.layout, SAVED_VIEW_FALLBACK.layout),
+      characterColumns: oneOf(CHARACTER_COLUMNS, v.characterColumns, SAVED_VIEW_FALLBACK.characterColumns),
+      tileSize: oneOf(TILE_SIZES, v.tileSize, SAVED_VIEW_FALLBACK.tileSize),
     };
   } catch {
-    return DEFAULT_VIEW;
+    return SAVED_VIEW_FALLBACK;
   }
 }
 
@@ -160,11 +176,15 @@ export const viewSettings = createValueStore<ViewSettings>(DEFAULT_VIEW);
 
 /** Read the saved settings (call once the page is in the browser). */
 export function loadViewSettings() {
+  let raw: string | null;
   try {
-    viewSettings.set(parseViewSettings(localStorage.getItem(STORAGE_KEY)));
+    raw = localStorage.getItem(STORAGE_KEY);
   } catch {
-    // Keep the defaults.
+    // Blocked storage: no telling whether this browser is new, so it keeps what it had.
+    viewSettings.set(SAVED_VIEW_FALLBACK);
+    return;
   }
+  viewSettings.set(parseViewSettings(raw, !browserPredates(LEGACY_DEFAULT_SINCE)));
 }
 
 export function setViewSettings(next: ViewSettings) {

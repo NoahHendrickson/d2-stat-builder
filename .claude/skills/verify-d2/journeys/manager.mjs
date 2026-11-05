@@ -8,39 +8,43 @@ export default async function ({ page, app, stub, step, shot, expect, log }) {
   // Item names go into toast patterns verbatim.
   const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-  await step("open the inventory", async () => {
+  const rows = { role: "menuitemradio", name: /^Character rows/ };
+  const legacy = { role: "menuitemradio", name: /^Legacy columns/ };
+
+  await step("open the inventory: a new browser starts on legacy columns", async () => {
     await app.open("/manager");
-    expect(await page.exists({ role: "region", name: /^Characters/ }), "characters and vault region is shown");
+    // A fresh profile is a new browser: legacy columns, and no menu opening by itself.
+    await page.waitFor({ role: "region", name: "Characters and vault" });
+    expect(!(await page.exists(legacy)), "the settings menu stays closed");
+    // About 1310 px here: under legacy's 1580 px for every column, so one character at a
+    // time under tabs, the vault aligned beside it.
+    expect(await page.exists({ role: "tablist", name: "Characters" }), "legacy shows character tabs");
+    await shot("layout-legacy");
+    await page.click({ role: "button", name: "Items settings" });
+    expect((await page.attr(legacy, "aria-checked")) === "true", "new visitors start on legacy columns");
+    await page.click(rows);
+    await page.waitFor(rows, { gone: true });
+    await page.waitFor({ role: "region", name: "Characters" });
     const plates = await page.findAll({ role: "button", name: /^(Hunter|Titan|Warlock) options$/ });
     expect(plates.length === 3, `one row per fixture character (${plates.length})`);
     expect((await page.count(VAULT_TILE)) > 0, "vault tiles are mounted");
     await shot("inventory");
   });
 
-  await step("mgr-layout: the first visit points at the layout setting, which switches to legacy", async () => {
-    // The intro opens the settings menu by itself on a first visit (fresh storage).
-    const rows = { role: "menuitemradio", name: /^Character rows/ };
-    const legacy = { role: "menuitemradio", name: /^Legacy columns/ };
-    await page.waitFor(legacy);
-    expect((await page.attr(rows, "aria-checked")) === "true", "new visitors start on character rows");
-    await shot("layout-intro");
-    // Picking a layout closes the menu (and counts the intro as seen).
-    await page.click(legacy);
-    await page.waitFor(legacy, { gone: true });
-    await page.waitFor({ role: "region", name: "Characters and vault" });
-    // About 1310 px here: under legacy's 1580 px for every column, so one character at a
-    // time under tabs, the vault aligned beside it.
-    expect(await page.exists({ role: "tablist", name: "Characters" }), "legacy shows character tabs");
-    await shot("layout-legacy");
+  await step("mgr-layout: the picked layout sticks, and Reset to defaults leaves it", async () => {
+    // Character rows, picked above, survive a reload.
+    await app.open("/manager");
+    await page.waitFor({ role: "region", name: "Characters" });
+    expect(!(await page.exists({ role: "region", name: "Characters and vault" })), "still character rows after a reload");
     // Resetting sort and grouping leaves the layout alone.
     await page.click({ role: "button", name: "Sort and group" });
     await page.click({ role: "button", name: "Reset to defaults" });
     await page.press("Escape");
-    expect(await page.exists({ role: "region", name: "Characters and vault" }), "Reset to defaults keeps legacy columns");
-    // Seen once, it stays closed; the gear brings the setting back.
-    await app.open("/manager");
+    expect(await page.exists({ role: "region", name: "Characters" }), "Reset to defaults keeps character rows");
+    // And back to legacy, then rows again for the steps below.
+    await page.click({ role: "button", name: "Items settings" });
+    await page.click(legacy);
     await page.waitFor({ role: "region", name: "Characters and vault" });
-    expect(!(await page.exists(legacy)), "the intro doesn't open again");
     await page.click({ role: "button", name: "Items settings" });
     await page.click(rows);
     await page.waitFor(rows, { gone: true });

@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { ArrowDown01Icon, Layout3ColumnIcon, Layout3RowIcon, Settings01Icon } from "@hugeicons/core-free-icons";
 import { Button } from "@/components/ui/button";
@@ -25,11 +24,8 @@ import {
   type ItemsLayout,
   type TileSize,
 } from "@/lib/inventory/view-settings";
-import { seenFlag } from "@/lib/seen-flag";
 import { cn } from "@/lib/utils";
 import { TOOLBAR_ICON_BUTTON } from "./toolbar-icon";
-
-const intro = seenFlag("stat-builder:items-layout-intro-seen");
 
 const LAYOUTS: Record<ItemsLayout, { label: string; detail: string; icon: typeof Layout3RowIcon }> = {
   rows: {
@@ -58,48 +54,19 @@ const OPTION_GROUP = "flex flex-col gap-1.5";
 
 /**
  * The Items page's settings menu, by the sort menu: which layout it uses, and how big its
- * item tiles are. The first time
- * the character rows show (`intro`), it opens by itself with a word on them, so anyone
- * who'd rather have the old layout finds the switch; closing it (any way) counts as seen.
- * Only mounted on the client once the inventory is in, so reading storage up front is safe.
+ * item tiles are.
  */
-export function ItemsSettings({ intro: introAllowed }: { intro: boolean }) {
+export function ItemsSettings() {
   const view = useViewSettings();
-  const [introSeen, setIntroSeen] = useState(() => intro.seen());
-  const [open, setOpen] = useState(false);
-  // Shown while the page draws the rows it describes; a narrower window holds it back.
-  const introOpen = introAllowed && !introSeen;
 
   return (
-    <DropdownMenu
-      open={open || introOpen}
-      onOpenChange={(next) => {
-        setOpen(next);
-        if (next || !introOpen) return;
-        intro.markSeen();
-        setIntroSeen(true);
-      }}
-      // Opened by itself, it doesn't lock the page.
-      modal={!introOpen}
-    >
+    <DropdownMenu>
       <TooltipLabel label="Items settings">
         <DropdownMenuTrigger aria-label="Items settings" className={TOOLBAR_ICON_BUTTON}>
           <HugeiconsIcon icon={Settings01Icon} aria-hidden />
         </DropdownMenuTrigger>
       </TooltipLabel>
       <DropdownMenuContent align="end" className="w-72">
-        {introOpen && (
-          <>
-            <div className="flex flex-col gap-1 px-1.5 pt-1 pb-1.5 text-sm">
-              <p className="font-medium">New: character rows</p>
-              <p className="text-muted-foreground text-xs">
-                Items now looks like the in-game character screen. Prefer the old layout?
-                Switch back here any time.
-              </p>
-            </div>
-            <DropdownMenuSeparator />
-          </>
-        )}
         <DropdownMenuGroup>
           <DropdownMenuLabel>Layout</DropdownMenuLabel>
           <DropdownMenuRadioGroup

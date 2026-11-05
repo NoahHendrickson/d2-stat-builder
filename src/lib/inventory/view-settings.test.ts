@@ -7,6 +7,7 @@ import {
   itemComparator,
   parseViewSettings,
   resetSortAndGrouping,
+  SAVED_VIEW_FALLBACK,
 } from "./view-settings";
 
 const item = (name: string, extra: Partial<InventoryItem> = {}): InventoryItem => ({
@@ -41,6 +42,7 @@ test("parseViewSettings drops unknown keys and falls back to defaults", () => {
         characterColumns: "current",
         tileSize: "small",
       }),
+      true,
     ),
   ).toEqual({
     sort: ["power", "tag"],
@@ -51,15 +53,26 @@ test("parseViewSettings drops unknown keys and falls back to defaults", () => {
     characterColumns: "current",
     tileSize: "small",
   });
+  // Missing or unreadable fields read as a saved view's fallback (character rows).
   // The old single setting carries over to armor; weapons take their default.
-  expect(parseViewSettings(JSON.stringify({ vaultGroup: "tier" }))).toEqual({ ...DEFAULT_VIEW, armorGroup: "tier" });
+  expect(parseViewSettings(JSON.stringify({ vaultGroup: "tier" }), true)).toEqual({ ...SAVED_VIEW_FALLBACK, armorGroup: "tier" });
   expect(
-    parseViewSettings(JSON.stringify({ weaponGroup: "nope", vaultGroup: "nope", vaultTab: "nope", layout: "nope", characterColumns: 3, tileSize: 50 })),
-  ).toEqual(DEFAULT_VIEW);
-  expect(parseViewSettings("{")).toEqual(DEFAULT_VIEW);
+    parseViewSettings(
+      JSON.stringify({ weaponGroup: "nope", vaultGroup: "nope", vaultTab: "nope", layout: "nope", characterColumns: 3, tileSize: 50 }),
+      true,
+    ),
+  ).toEqual(SAVED_VIEW_FALLBACK);
+  expect(parseViewSettings("{", true)).toEqual(SAVED_VIEW_FALLBACK);
   // Groupings that don't apply to the kind (weapons by class, armor by ammo) fall back.
-  expect(parseViewSettings(JSON.stringify({ weaponGroup: "class", armorGroup: "ammo" }))).toEqual(DEFAULT_VIEW);
-  expect(parseViewSettings(JSON.stringify({ armorGroup: "type" }))).toEqual(DEFAULT_VIEW);
+  expect(parseViewSettings(JSON.stringify({ weaponGroup: "class", armorGroup: "ammo" }), true)).toEqual(SAVED_VIEW_FALLBACK);
+  expect(parseViewSettings(JSON.stringify({ armorGroup: "type" }), true)).toEqual(SAVED_VIEW_FALLBACK);
+});
+
+test("with nothing saved, only a new browser gets legacy columns", () => {
+  expect(DEFAULT_VIEW.layout).toBe("legacy");
+  expect(SAVED_VIEW_FALLBACK).toEqual({ ...DEFAULT_VIEW, layout: "rows" });
+  expect(parseViewSettings(null, true)).toEqual(DEFAULT_VIEW);
+  expect(parseViewSettings(null, false)).toEqual(SAVED_VIEW_FALLBACK);
 });
 
 test("resetSortAndGrouping resets only the sort and grouping", () => {
