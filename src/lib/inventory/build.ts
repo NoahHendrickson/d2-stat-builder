@@ -32,6 +32,11 @@ export interface InventoryItem {
   itemHash: number;
   name: string;
   icon?: string;
+  /**
+   * The applied ornament's art, when the item wears one. Exotic weapons already show it as
+   * `icon`; the Items setting "Show ornaments" swaps it in for everything else.
+   */
+  ornamentIcon?: string;
   watermark?: string;
   /** e.g. "Hand Cannon", "Helmet", "Consumable". */
   typeName: string;
@@ -282,13 +287,13 @@ function buildItem(
         breakerHash(item, profile, manifest, instance?.breakerTypeHash, def?.breakerTypeHash),
       )
     : undefined;
-  // An exotic weapon wears its applied ornament's art, as in the game.
   const ornamentIcon =
-    isWeapon && def?.inventory?.tierType === TIER_TYPE_EXOTIC
-      ? manifest.def("DestinyInventoryItemDefinition", item.overrideStyleItemHash)?.displayProperties
-          ?.icon
-      : undefined;
-  const icon = ornamentIcon || def?.displayProperties?.icon;
+    manifest.def("DestinyInventoryItemDefinition", item.overrideStyleItemHash)?.displayProperties?.icon ||
+    undefined;
+  // An exotic weapon always wears its applied ornament's art, as in the game.
+  const icon =
+    (isWeapon && def?.inventory?.tierType === TIER_TYPE_EXOTIC && ornamentIcon) ||
+    def?.displayProperties?.icon;
   const ammoType = isWeapon ? def?.equippingBlock?.ammoType : undefined;
   const weaponType = isWeapon ? weaponTypeOf(def?.itemCategoryHashes) : undefined;
   const armorArchetype =
@@ -302,6 +307,7 @@ function buildItem(
     itemHash: item.itemHash,
     name: def?.displayProperties?.name || "Unknown item",
     ...(icon ? { icon } : {}),
+    ...(ornamentIcon ? { ornamentIcon } : {}),
     ...(watermark ? { watermark } : {}),
     typeName: def?.itemTypeDisplayName ?? "",
     itemType: def?.itemType ?? 0,

@@ -95,6 +95,8 @@ export interface ViewSettings {
   layout: ItemsLayout;
   characterColumns: CharacterColumns;
   tileSize: TileSize;
+  /** Every ornamented item shows its ornament's art, not just exotic weapons. */
+  showOrnaments: boolean;
 }
 
 /** What a new browser gets, with nothing saved. */
@@ -106,6 +108,7 @@ export const DEFAULT_VIEW: ViewSettings = {
   layout: "legacy",
   characterColumns: "all",
   tileSize: "large",
+  showOrnaments: false,
 };
 
 /** The day legacy columns became the default layout (before, it was character rows). */
@@ -166,6 +169,7 @@ export function parseViewSettings(raw: string | null, newBrowser: boolean): View
       layout: oneOf(ITEMS_LAYOUTS, v.layout, SAVED_VIEW_FALLBACK.layout),
       characterColumns: oneOf(CHARACTER_COLUMNS, v.characterColumns, SAVED_VIEW_FALLBACK.characterColumns),
       tileSize: oneOf(TILE_SIZES, v.tileSize, SAVED_VIEW_FALLBACK.tileSize),
+      showOrnaments: typeof v.showOrnaments === "boolean" ? v.showOrnaments : SAVED_VIEW_FALLBACK.showOrnaments,
     };
   } catch {
     return SAVED_VIEW_FALLBACK;
@@ -194,6 +198,15 @@ export function setViewSettings(next: ViewSettings) {
   } catch {
     // Blocked storage: the setting holds for this session.
   }
+}
+
+/** Just the "Show ornaments" setting, so a tile re-renders only when that changes. */
+export function useShowOrnaments(): boolean {
+  return useSyncExternalStore(
+    viewSettings.subscribe,
+    () => viewSettings.get().showOrnaments,
+    () => DEFAULT_VIEW.showOrnaments,
+  );
 }
 
 export function useViewSettings(): ViewSettings {

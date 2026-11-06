@@ -15,6 +15,7 @@ export const CHANGELOG: readonly ChangelogEntry[] = [
     date: "2026-11-06",
     changes: [
       "Loadouts: after Optimize, Update loadout puts a better build's armor into that loadout instead of saving a new one.",
+      "Items: turn on Show ornaments in the Items settings to see each item's applied ornament.",
     ],
   },
   {

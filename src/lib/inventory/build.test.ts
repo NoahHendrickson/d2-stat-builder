@@ -221,7 +221,7 @@ test("derives once per profile and manifest pair", () => {
   expect(first).toEqual(buildInventory(profile, manifest));
 });
 
-test("an exotic weapon shows its applied ornament's icon; a legendary keeps its own", () => {
+test("an exotic weapon shows its applied ornament's icon; a legendary keeps its own and carries the ornament's", () => {
   const withOrnament = {
     def: (table: string, hash: number | null | undefined) =>
       table === "DestinyInventoryItemDefinition" && hash === 70
@@ -249,4 +249,7 @@ test("an exotic weapon shows its applied ornament's icon; a legendary keeps its 
   expect(byId.ace.icon).toBe("/ornament.png");
   expect(byId.bare.icon).toBe("/ace.png");
   expect(byId.fate.icon).toBeUndefined();
+  expect(byId.ace.ornamentIcon).toBe("/ornament.png");
+  expect(byId.fate.ornamentIcon).toBe("/ornament.png");
+  expect(byId.bare.ornamentIcon).toBeUndefined();
 });

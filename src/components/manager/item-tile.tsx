@@ -13,6 +13,7 @@ import { BUNGIE_IMAGE_BASE } from "@/lib/bungie/constants";
 import { BREAKER_NAMES, type InventoryItem } from "@/lib/inventory/build";
 import { TAG_LABELS, useAnnotation } from "@/lib/inventory/annotations";
 import { useMovePending } from "@/lib/inventory/move-queue";
+import { useShowOrnaments } from "@/lib/inventory/view-settings";
 import { cn } from "@/lib/utils";
 import { useManagerActions, usePhoneLayout, useTileMetrics } from "./manager-context";
 import { useSearchState } from "./search-store";
@@ -45,6 +46,7 @@ export const ItemTile = memo(function ItemTile({ item }: { item: InventoryItem }
   const roomyFooter = phone || width >= ROOMY_FOOTER_PX;
   const championInFooter = phone || width >= CHAMPION_FOOTER_PX;
   const pending = useMovePending(item.key);
+  const icon = (useShowOrnaments() && item.ornamentIcon) || item.icon;
   const tag = useAnnotation(item.instanceId)?.tag;
   const search = useSearchState(item.key);
   const label = [
@@ -102,7 +104,7 @@ export const ItemTile = memo(function ItemTile({ item }: { item: InventoryItem }
       onDragEnd={() => actions?.dragEnd()}
     >
       <ArmorThumb
-        icon={item.icon}
+        icon={icon}
         watermark={item.watermark}
         size={60}
         className="bg-item-backing size-(--tile-inner)"

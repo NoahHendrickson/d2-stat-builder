@@ -5,6 +5,7 @@ import { ArrowDown01Icon, Layout3ColumnIcon, Layout3RowIcon, Settings01Icon } fr
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
+  DropdownMenuCheckboxItem,
   DropdownMenuContent,
   DropdownMenuGroup,
   DropdownMenuLabel,
@@ -53,8 +54,8 @@ const PICKED_ITEM =
 const OPTION_GROUP = "flex flex-col gap-1.5";
 
 /**
- * The Items page's settings menu, by the sort menu: which layout it uses, and how big its
- * item tiles are.
+ * The Items page's settings menu, by the sort menu: which layout it uses, how big its
+ * item tiles are, and whether they show ornaments.
  */
 export function ItemsSettings() {
   const view = useViewSettings();
@@ -106,6 +107,20 @@ export function ItemsSettings() {
             ))}
           </DropdownMenuRadioGroup>
         </DropdownMenuGroup>
+        <DropdownMenuSeparator />
+        {/* Stays open too: the tiles swap their art behind it. */}
+        <DropdownMenuCheckboxItem
+          indicator="start"
+          closeOnClick={false}
+          checked={view.showOrnaments}
+          onCheckedChange={(checked) => setViewSettings({ ...view, showOrnaments: checked === true })}
+          className="h-auto items-start py-1.5 [&>[data-slot=dropdown-menu-checkbox-item-indicator]]:top-2"
+        >
+          <span className="flex flex-col">
+            Show ornaments
+            <span className="text-muted-foreground text-xs">Exotic weapons always show theirs</span>
+          </span>
+        </DropdownMenuCheckboxItem>
       </DropdownMenuContent>
     </DropdownMenu>
   );
