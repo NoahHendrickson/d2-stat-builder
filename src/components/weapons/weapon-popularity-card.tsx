@@ -19,18 +19,27 @@ const COMBOS_SHOWN = 5;
 /** Below this many copies the shares swing on a handful of players. */
 const SMALL_SAMPLE = 30;
 
-/** A perk cell's glow: a low rounded dome in its share bar's colour (`--grade`), rising from the bottom. */
-const GRADE_GLOW =
-  "bg-[radial-gradient(ellipse_70%_40%_at_50%_112%,color-mix(in_oklch,var(--grade)_28%,transparent),transparent)]";
+/** Each share marker's glow, a soft halo in its `--grade`: the dot's tighter, so it stays close to the dot. */
+const MARKER_GLOW = {
+  bar: "shadow-[0_0_8px_color-mix(in_oklch,var(--grade)_70%,transparent)]",
+  dot: "shadow-[0_0_4px_color-mix(in_oklch,var(--grade)_60%,transparent)]",
+};
 
 /**
- * A share bar's colour within its column: green for the most run perk, red for
- * the least, and the ones between graded by share. Mixed in OKLCH, so the
- * middle runs through orange and yellow rather than a muddy brown.
+ * Grades shares against their peers (a column's perks, or all of a weapon's
+ * combos): green for the most run, red for the least, and the ones between
+ * graded by share. Mixed in OKLCH, so the middle runs through orange and
+ * yellow rather than a muddy brown. All equal → all green, with no glow.
  */
-function gradeColor(share: number, low: number, high: number) {
-  const t = high > low ? (share - low) / (high - low) : 1;
-  return `color-mix(in oklch, var(--emphatic-bright) ${Math.round(t * 100)}%, var(--destructive))`;
+function gradeShares(shares: readonly number[]) {
+  const high = Math.max(...shares);
+  const low = Math.min(...shares);
+  const glow = high > low;
+  return {
+    glow,
+    color: (share: number) =>
+      `color-mix(in oklch, var(--emphatic-bright) ${glow ? Math.round(((share - low) / (high - low)) * 100) : 100}%, var(--destructive))`,
+  };
 }
 
 /** A column's name (for its label and tooltips): the game's left and right perk for the traits. */
@@ -68,6 +77,8 @@ export function WeaponPopularityCard({
   className?: string;
 }) {
   const combos = view.combos.slice(0, COMBOS_SHOWN);
+  // Graded against every combo, not just those shown, so the last shown isn't always red.
+  const comboGrades = gradeShares(view.combos.map((c) => c.share));
   const isPicked = (roll: Roll) => Object.entries(roll).every(([key, perk]) => picked[Number(key)] === perk);
   return (
     <DetailCard className={className}>
@@ -86,6 +97,9 @@ export function WeaponPopularityCard({
                   key={`${combo.left},${combo.right}`}
                   label={`${left?.name} + ${right?.name}`}
                   share={combo.share}
+                  grade={comboGrades.color(combo.share)}
+                  marker="dot"
+                  glow={comboGrades.glow}
                   selected={isPicked({ [combo.leftColumn]: combo.left, [combo.rightColumn]: combo.right })}
                   onClick={() => onPick({ [combo.leftColumn]: combo.left, [combo.rightColumn]: combo.right })}
                 >
@@ -118,8 +132,7 @@ export function WeaponPopularityCard({
           style={{ gridTemplateColumns: `repeat(${view.columns.length}, minmax(3.25rem, 1fr))` }}
         >
           {view.columns.map(({ column, perks: shares }) => {
-            const high = Math.max(...shares.map((p) => p.share));
-            const low = Math.min(...shares.map((p) => p.share));
+            const grades = gradeShares(shares.map((p) => p.share));
             return (
               <section
                 key={column}
@@ -131,8 +144,9 @@ export function WeaponPopularityCard({
                     key={perkIndex}
                     label={`${columnLabel(weapon, column)}: ${perks[perkIndex]?.name ?? ""}`}
                     share={share}
-                    bar={gradeColor(share, low, high)}
-                    glow={high > low}
+                    grade={grades.color(share)}
+                    marker="bar"
+                    glow={grades.glow}
                     selected={isPicked({ [column]: perkIndex })}
                     onClick={() => onPick({ [column]: perkIndex })}
                   >
@@ -198,31 +212,35 @@ function PerkIcon({ perk }: { perk: PerkRef | undefined }) {
 }
 
 /**
- * One perk or combo in the card: its icon(s), the share under them, and for a
- * perk a bar as wide as the share, in `bar`'s colour, all inside a light
- * hairline. With `glow`, an unpicked perk's cell also glows faintly in that colour
- * from the bottom, so the column reads green to red at a glance. Picked ones take
- * the grid's picked blue; the name is in the tooltip.
+ * One perk or combo in the card: its icon(s) and the share under them, all
+ * inside a light hairline. The share is marked in `grade`: a
+ * bar as wide as the share under it (perks), or a dot before it (combos). With
+ * `glow`, an unpicked cell's marker also glows faintly, so the best reads green
+ * at a glance. Picked ones take the grid's picked blue; the name is in the tooltip.
  */
 function ShareCell({
   label,
   share,
-  bar,
-  glow = false,
+  grade,
+  marker,
+  glow,
   selected,
   onClick,
   children,
 }: {
   label: string;
   share: number;
-  /** The share bar's colour; no bar without one. */
-  bar?: string;
-  /** Glow in `bar`'s colour; off for a column whose perks all share one value. */
-  glow?: boolean;
+  /** The share's colour. */
+  grade: string;
+  /** How the share is marked in `grade`: a bar under it, or a dot before it. */
+  marker: keyof typeof MARKER_GLOW;
+  /** Glow in `grade`; off when every share among its peers is the same. */
+  glow: boolean;
   selected: boolean;
   onClick: () => void;
   children: ReactNode;
 }) {
+  const markerGlow = glow && !selected && MARKER_GLOW[marker];
   return (
     <Tooltip>
       <TooltipTrigger
@@ -236,18 +254,26 @@ function ShareCell({
             className={cn(
               "d2-hover-ring flex w-full min-w-13 flex-col items-center gap-1 border border-foreground/15 px-1.5 pt-1.5 pb-1 outline-none focus-visible:d2-tile-selected",
               selected ? "bg-[#305f8e] text-white" : "bg-foreground/4 hover:bg-foreground/8",
-              bar && glow && !selected && GRADE_GLOW,
             )}
-            style={bar ? ({ "--grade": bar } as CSSProperties) : undefined}
+            style={{ "--grade": grade } as CSSProperties}
           />
         }
       >
         {children}
-        <span className="text-[11px] leading-none tabular-nums">{percent(share)}</span>
-        {bar && (
+        {/* The dot hangs off the left of the number, so the number stays centred under the icons. */}
+        <span className="relative text-[11px] leading-none tabular-nums">
+          {marker === "dot" && (
+            <span
+              aria-hidden
+              className={cn("absolute top-1/2 right-full mr-1 size-1.5 -translate-y-1/2 rounded-full bg-(--grade)", markerGlow)}
+            />
+          )}
+          {percent(share)}
+        </span>
+        {marker === "bar" && (
           <span aria-hidden className="block h-1 w-full bg-foreground/15">
             <span
-              className="block h-full bg-(--grade)"
+              className={cn("block h-full bg-(--grade)", markerGlow)}
               style={{ width: `${Math.max(share * 100, 2)}%` }}
             />
           </span>
