@@ -26,6 +26,7 @@ import {
 } from "@/lib/builder/sort-loadouts";
 import type { StatModHashes } from "@/lib/dim/mod-hashes";
 import type { Manifest } from "@/lib/manifest/load";
+import type { SavedLoadout } from "@/lib/loadouts/types";
 import type {
   OptimizerLoadout,
   OptimizerOutput,
@@ -184,8 +185,10 @@ export interface BuildsColumnContentProps {
   onEquipped: () => void;
   /** Open the Dream build modal on a build. */
   onDream?: (loadout: OptimizerLoadout) => void;
-  /** The class the builder is on (the linked loadout may be for another). */
-  classType: number | null;
+  /** The saved loadout Optimize linked, for the strip above the builds. */
+  linkedLoadout?: SavedLoadout;
+  /** `linkedLoadout` when the builds can update it (same class), for the cards. */
+  updateTarget?: SavedLoadout;
 }
 
 /** The tabs, then the open tab's builds (each with its own header extras and sort). */
@@ -326,7 +329,8 @@ function ActualBuildsBody({
   insertablePlugs,
   onEquipped,
   onDream,
-  classType,
+  linkedLoadout,
+  updateTarget,
   sort,
   onSortChange,
 }: BodyProps<LoadoutSortState>) {
@@ -342,7 +346,13 @@ function ActualBuildsBody({
           )
         }
       />
-      <LinkedLoadoutBanner classType={classType} manifest={manifest} />
+      {linkedLoadout && (
+        <LinkedLoadoutBanner
+          linked={linkedLoadout}
+          canUpdate={updateTarget !== undefined}
+          manifest={manifest}
+        />
+      )}
       {showLoading &&
         (result ? (
           <BuildsProgressBar progress={displayedProgress} />
@@ -369,6 +379,7 @@ function ActualBuildsBody({
           insertablePlugs={insertablePlugs}
           onEquipped={onEquipped}
           onDream={onDream}
+          updateTarget={updateTarget}
           sort={sort}
         />
       ) : !showLoading ? (

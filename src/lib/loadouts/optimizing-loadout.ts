@@ -1,112 +1,70 @@
 "use client";
 
 import { useEffect, useSyncExternalStore } from "react";
-import type { QueryClient } from "@tanstack/react-query";
-import { LOADOUTS_QUERY_KEY, useLoadouts } from "./use-loadouts";
+import { useLoadouts } from "./use-loadouts";
 import type { SavedLoadout } from "./types";
 
-// The saved loadout the optimizer was opened from ("Optimize" on /loadouts). While set,
-// build cards of its class offer "Update loadout" instead of only saving a new one.
-// Kept in localStorage beside the builder's selections, which it describes, so a reload
-// keeps it. Only the id, name and class are stored: build cards read just these while
-// rendering (one store read each, no query), and take the full row from the loadouts
-// cache when clicked.
+// The saved loadout the optimizer is linked to ("Optimize" on /loadouts). While linked,
+// builds of its class offer "Update loadout" for it. Only the id is stored, in
+// localStorage beside the builder's selections (which it describes), so a reload keeps
+// it. It is per browser on purpose: the link is "what I'm optimizing here, now". The
+// row itself is read once, by the optimizer page (useOptimizingLoadout), and passed
+// down, so its name and class are always the live ones.
 const KEY = "stat-builder:optimizing-loadout";
 
-export interface OptimizingLoadout {
-  id: string;
-  name: string;
-  /** The loadout's class; 3 = any class. */
-  classType: number;
-}
-
 const listeners = new Set<() => void>();
-let cachedRaw: string | null = null;
-let cachedValue: OptimizingLoadout | null = null;
+const notify = () => {
+  for (const l of listeners) l();
+};
+// One window listener for every subscriber: another tab linked or unlinked.
+const onStorage = (e: StorageEvent) => {
+  if (e.key === KEY) notify();
+};
 
-function parse(raw: string | null): OptimizingLoadout | null {
-  if (!raw) return null;
+function read(): string | null {
   try {
-    const v = JSON.parse(raw) as Partial<OptimizingLoadout>;
-    return typeof v.id === "string" && typeof v.name === "string" && Number.isInteger(v.classType)
-      ? { id: v.id, name: v.name, classType: v.classType! }
-      : null;
+    return localStorage.getItem(KEY);
   } catch {
     return null;
   }
 }
 
-function read(): OptimizingLoadout | null {
-  let raw: string | null = null;
-  try {
-    raw = localStorage.getItem(KEY);
-  } catch {
-    // Storage blocked: nothing remembered.
-  }
-  // Same string, same object — useSyncExternalStore needs a stable snapshot.
-  if (raw !== cachedRaw) {
-    cachedRaw = raw;
-    cachedValue = parse(raw);
-  }
-  return cachedValue;
-}
-
-/** Remember (or, with null, forget) the loadout the optimizer is working on. */
+/** Link (or, with null, unlink) the loadout the optimizer is working on. */
 export function setOptimizingLoadout(saved: SavedLoadout | null): void {
   try {
-    if (saved) {
-      const value: OptimizingLoadout = {
-        id: saved.id,
-        name: saved.loadout.name,
-        classType: saved.loadout.classType,
-      };
-      localStorage.setItem(KEY, JSON.stringify(value));
-    } else {
-      localStorage.removeItem(KEY);
-    }
+    if (saved) localStorage.setItem(KEY, saved.id);
+    else localStorage.removeItem(KEY);
   } catch {
     // Best-effort, like the selections themselves.
   }
-  for (const l of listeners) l();
+  notify();
 }
 
 function subscribe(listener: () => void) {
+  if (listeners.size === 0) window.addEventListener("storage", onStorage);
   listeners.add(listener);
-  const onStorage = (e: StorageEvent) => {
-    if (e.key === KEY) listener();
-  };
-  window.addEventListener("storage", onStorage);
   return () => {
     listeners.delete(listener);
-    window.removeEventListener("storage", onStorage);
+    if (listeners.size === 0) window.removeEventListener("storage", onStorage);
   };
 }
 
-/** The remembered loadout (id, name, class) — cheap: no query. */
-export function useOptimizingLoadoutRef(): OptimizingLoadout | null {
-  return useSyncExternalStore(subscribe, read, () => null);
-}
-
-/** The remembered loadout's current row from the loadouts cache, if it still exists. */
-export function cachedOptimizingLoadout(
-  queryClient: QueryClient,
-  ref: OptimizingLoadout | null,
-): SavedLoadout | undefined {
-  if (!ref) return undefined;
-  return queryClient
-    .getQueryData<SavedLoadout[]>(LOADOUTS_QUERY_KEY)
-    ?.find((l) => l.id === ref.id);
+/** True when builds of `classType` can update `saved` (any-class loadouts take every class). */
+export function linksToClass(saved: SavedLoadout, classType: number | null): boolean {
+  const own = saved.loadout.classType;
+  return own === 3 || own === classType;
 }
 
 /**
- * The remembered loadout's live row (for its current name), for the one banner that
- * shows it. Forgets a loadout the loaded list no longer has (deleted, other account).
+ * The linked loadout's live row, or undefined: none linked, the list isn't loaded (signed
+ * out, still loading, or failed), or the loaded list no longer has it — then the link
+ * is dropped. Until it resolves, builds simply offer Save as loadout.
  */
 export function useOptimizingLoadout(): SavedLoadout | undefined {
-  const ref = useOptimizingLoadoutRef();
+  const id = useSyncExternalStore(subscribe, read, () => null);
   const { data } = useLoadouts();
-  const saved = ref && data ? data.find((l) => l.id === ref.id) : undefined;
-  const gone = ref !== null && data !== undefined && saved === undefined;
+  const saved = id && data ? data.find((l) => l.id === id) : undefined;
+  const gone = id !== null && data !== undefined && saved === undefined;
   useEffect(() => {
     if (gone) setOptimizingLoadout(null);
   }, [gone]);

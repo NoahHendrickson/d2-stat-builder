@@ -1,9 +1,7 @@
-import { isArtifactHash } from "../armory/artifact-items";
 import type { ArmorPiece } from "../armory/normalize";
-import { weaponSlotOfHash } from "../armory/weapons";
 import type { DimLoadoutItem } from "../dim/loadout-link";
 import type { Manifest } from "../manifest/load";
-import { planLoadoutPlugs } from "./apply-plan";
+import { planLoadoutPlugs, planWithPriority } from "./apply-plan";
 import { withEditorTotals, type EditorTotals } from "./editor-stats";
 import {
   modsFromEditor,
@@ -14,23 +12,28 @@ import { getModCatalog } from "./mod-options";
 import { planPiecesFromArmor } from "./plan-pieces";
 import { plugInfoFromManifest } from "./plug-info";
 import { withLoadoutSubclass } from "./subclass";
-import { withLoadoutWeapons } from "./weapons";
+import { isLoadoutArtifactRef, isLoadoutWeaponRef, withLoadoutWeapons } from "./weapons";
 import type { ModPlacement, SavedLoadoutData } from "./types";
 
-/** Plan the live pieces into a picker section (Save and Edit both start here). */
+/**
+ * Plan the live pieces into a picker section (Save and Edit both start here).
+ * `priorityMods` (a subset of `modHashes`) are seated first; see `planWithPriority`.
+ */
 export function modsSectionForPieces(
   pieces: ArmorPiece[],
   modHashes: number[],
   manifest: Manifest,
   insertablePlugs?: ReadonlySet<number>,
   placements?: ModPlacement,
+  priorityMods?: number[],
 ): ModsSection {
-  const plan = planLoadoutPlugs({
+  const input = {
     pieces: planPiecesFromArmor(pieces, manifest),
     modHashes,
     plugInfo: plugInfoFromManifest(manifest),
     ...(placements ? { placements } : {}),
-  });
+  };
+  const plan = priorityMods ? planWithPriority(input, priorityMods) : planLoadoutPlugs(input);
   return modsSectionFromPlan(pieces, getModCatalog(manifest), plan, insertablePlugs);
 }
 
@@ -61,7 +64,7 @@ export function commitLoadout(
       loadout: withLoadoutWeapons(
         next.loadout,
         values.weapons,
-        (ref) => weaponSlotOfHash(manifest, ref.hash) !== undefined,
+        (ref) => isLoadoutWeaponRef(manifest, ref),
       ),
     };
   }
@@ -72,7 +75,7 @@ export function commitLoadout(
       loadout: withLoadoutWeapons(
         next.loadout,
         values.artifact ? [values.artifact] : [],
-        (ref) => isArtifactHash(manifest, ref.hash),
+        (ref) => isLoadoutArtifactRef(manifest, ref),
       ),
     };
   }

@@ -130,6 +130,18 @@ const GROUP_LABEL: Record<SubclassPlugGroup["kind"], string> = {
   super: "Super", ability: "Ability", aspect: "Aspect", fragment: "Fragment",
 };
 
+/**
+ * Plan `input.modHashes` with the `first` mods placed before the rest, as if the user had
+ * picked their sockets; the others share the energy left over. Update loadout passes the
+ * build's own mods, so the stat mods that reach its targets win over the saved
+ * loadout's other mods (which auto-placement would otherwise seat first: fewer
+ * candidate sockets).
+ */
+export function planWithPriority(input: PlanInput, first: number[]): ApplyPlan {
+  const own = planLoadoutPlugs({ ...input, modHashes: first });
+  return planLoadoutPlugs({ ...input, placements: { ...own.assigned, ...input.placements } });
+}
+
 export function planLoadoutPlugs(input: PlanInput): ApplyPlan {
   const { plugInfo } = input;
   const plugs: PlugAction[] = [];

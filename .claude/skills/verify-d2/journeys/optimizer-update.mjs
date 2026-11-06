@@ -105,4 +105,35 @@ export default async function ({ page, app, stub, step, shot, expect, log }) {
     await page.waitFor({ role: "button", name: "Save as loadout", nth: 0 });
     expect((await page.count({ role: "button", name: "Update loadout" })) === 0, "no card offers Update loadout");
   });
+
+  await step("opt-update: Save as new makes a separate loadout with its own DIM id", async () => {
+    await app.nav("/loadouts");
+    await page.click({ role: "button", name: "Actions for Raid build" });
+    await page.click({ role: "menuitem", name: "Optimize" });
+    await page.waitFor(LINKED, { timeout: 60000 });
+    await settled();
+    await page.hover({ ...CARD, nth: 0 });
+    await page.click({ role: "button", name: "Update loadout", nth: 0 });
+    const drawer = { role: "dialog", name: "Update loadout" };
+    await page.waitFor(drawer);
+    await page.fill({ role: "textbox", name: "Loadout name" }, "Raid build copy", { within: drawer });
+    await page.click({ role: "button", name: "Save as new" }, { within: drawer });
+    await page.waitFor(drawer, { gone: true });
+    log(`  toast: ${await app.toast(/Loadout saved/)}`);
+    const post = stub.last("POST", "/api/loadouts");
+    expect(post?.status === 201, "POST /api/loadouts answered 201");
+    expect(post.body.loadout.name === "Raid build copy", "the copy has the new name");
+    expect(post.body.loadout.id !== "dim-11111111", `the copy has its own DIM id (${post.body.loadout.id})`);
+    expect(post.body.loadout.equipped.some((r) => r.id === weaponId), "the form's weapon is on the copy");
+  });
+
+  await step("opt-update: switching class ends the link", async () => {
+    await page.click({ role: "tab", name: /^Warlock, Power/ });
+    await page.waitFor(LINKED, { gone: true });
+    await page.click({ role: "tab", name: /^Hunter, Power/ });
+    await settled();
+    await page.hover({ ...CARD, nth: 0 });
+    await page.waitFor({ role: "button", name: "Save as loadout", nth: 0 });
+    expect(!(await page.exists(LINKED)), "back on Hunter, the loadout is no longer linked");
+  });
 }

@@ -359,6 +359,7 @@ const BuildRow = memo(function BuildRow({
   insertablePlugs,
   onEquipped,
   onDream,
+  updateTarget,
 }: {
   loadout: OptimizerLoadout;
   pieceMap: Map<string, ArmorPiece>;
@@ -669,6 +670,7 @@ const BuildRow = memo(function BuildRow({
           onEquipped={onEquipped}
           pieceMap={pieceMap}
           onDream={onDream}
+          updateTarget={updateTarget}
           favorites={favorites}
         />
       </div>
@@ -882,6 +884,7 @@ export function BuildResults({
   insertablePlugs,
   onEquipped,
   onDream,
+  updateTarget,
   sort,
 }: {
   result: OptimizerOutput;
@@ -978,6 +981,7 @@ export function BuildResults({
             insertablePlugs={insertablePlugs}
             onEquipped={onEquipped}
             onDream={onDream}
+            updateTarget={updateTarget}
           />
         ))}
       </div>

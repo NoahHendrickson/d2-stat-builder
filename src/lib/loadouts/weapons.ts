@@ -3,8 +3,35 @@
 // subclass carrier — the dim-api shape — so Open in DIM and share links carry them too.
 //
 // Runtime imports are relative so the module runs under vitest.
-import type { LoadoutWeapon } from "../armory/weapons";
+import { weaponSlotOfHash, type LoadoutWeapon } from "../armory/weapons";
+import { isArtifactHash } from "../armory/artifact-items";
 import type { DimLoadout, DimLoadoutItem } from "../dim/loadout-link";
+import type { Manifest } from "../manifest/load";
+
+type DefLookup = Pick<Manifest, "def">;
+
+/** True for a weapon ref (its definition sits in a weapon bucket). */
+export function isLoadoutWeaponRef(manifest: DefLookup, ref: DimLoadoutItem): boolean {
+  return weaponSlotOfHash(manifest, ref.hash) !== undefined;
+}
+
+/** True for the artifact ref (it rides in `equipped` too). */
+export function isLoadoutArtifactRef(manifest: DefLookup, ref: DimLoadoutItem): boolean {
+  return isArtifactHash(manifest, ref.hash);
+}
+
+/** The loadout's weapon refs, as saved. */
+export function loadoutWeaponRefs(manifest: DefLookup, loadout: DimLoadout): DimLoadoutItem[] {
+  return loadout.equipped.filter((ref) => isLoadoutWeaponRef(manifest, ref));
+}
+
+/** The loadout's artifact ref, if it has one. */
+export function loadoutArtifactRef(
+  manifest: DefLookup,
+  loadout: DimLoadout,
+): DimLoadoutItem | undefined {
+  return loadout.equipped.find((ref) => isLoadoutArtifactRef(manifest, ref));
+}
 
 /** Replace the loadout's weapon refs with `weapons` (an empty list makes it armor-only). */
 export function withLoadoutWeapons(

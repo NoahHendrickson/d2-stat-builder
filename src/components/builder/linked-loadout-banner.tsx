@@ -9,10 +9,8 @@ import { CLASS_NAMES } from "@/lib/armory/stats";
 import type { ArmorPiece } from "@/lib/armory/normalize";
 import type { Manifest } from "@/lib/manifest/load";
 import { resolveLoadout } from "@/lib/loadouts/resolve";
-import {
-  setOptimizingLoadout,
-  useOptimizingLoadout,
-} from "@/lib/loadouts/optimizing-loadout";
+import { setOptimizingLoadout } from "@/lib/loadouts/optimizing-loadout";
+import type { SavedLoadout } from "@/lib/loadouts/types";
 
 const NO_PIECES: ReadonlyMap<string, ArmorPiece> = new Map();
 
@@ -22,21 +20,21 @@ const NO_PIECES: ReadonlyMap<string, ArmorPiece> = new Map();
  * until Unlink.
  */
 export function LinkedLoadoutBanner({
-  classType,
+  linked: saved,
+  canUpdate,
   manifest,
 }: {
-  classType: number | null;
+  linked: SavedLoadout;
+  /** Builds of the current class can update it (the parent's `linksToClass`). */
+  canUpdate: boolean;
   manifest?: Manifest;
 }) {
-  const saved = useOptimizingLoadout();
   // Only the subclass is read, so no armory is needed.
   const subclass = useMemo(
-    () => (saved && manifest ? resolveLoadout(saved.loadout, NO_PIECES, manifest).subclass : undefined),
+    () => (manifest ? resolveLoadout(saved.loadout, NO_PIECES, manifest).subclass : undefined),
     [saved, manifest],
   );
-  if (!saved) return null;
   const loadoutClass = saved.loadout.classType;
-  const otherClass = loadoutClass < 3 && classType !== null && classType !== loadoutClass;
   return (
     <div
       role="note"
@@ -57,7 +55,7 @@ export function LinkedLoadoutBanner({
         </span>
         <span className="truncate text-base font-medium">{saved.loadout.name}</span>
         <span className="text-muted-foreground text-xs">
-          {otherClass
+          {!canUpdate
             ? `Switch to ${CLASS_NAMES[loadoutClass] ?? "its class"} to update ${saved.loadout.name}.`
             : `Update loadout on a build saves it to ${saved.loadout.name}.`}
         </span>

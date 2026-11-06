@@ -118,7 +118,12 @@ interface EditorProps {
    * A second way to submit the same form, beside the main button (Update loadout's
    * "Save as new"). Gets the same values and the same checks as the main submit.
    */
-  secondaryAction?: { label: string; onSubmit: (values: LoadoutDetailsValues) => void };
+  secondaryAction?: {
+    label: string;
+    onSubmit: (values: LoadoutDetailsValues) => void;
+    /** Its save is the one in flight: the spinner goes here, not on the main button. */
+    busy?: boolean;
+  };
   /** Piece/subclass grids; deferred so the header can paint during the slide. */
   showGrids?: boolean;
   onSubmit: (values: LoadoutDetailsValues) => void;
@@ -529,11 +534,16 @@ function EditorForm({
               disabled={!canSubmit}
               onClick={() => submitWith(secondaryAction.onSubmit)}
             >
+              {secondaryAction.busy ? (
+                <HugeiconsIcon icon={Loading03Icon} className="animate-spin" aria-hidden />
+              ) : null}
               {secondaryAction.label}
             </Button>
           )}
           <Button type="submit" variant="emphatic" disabled={!canSubmit}>
-            {busy ? <HugeiconsIcon icon={Loading03Icon} className="animate-spin" aria-hidden /> : null}
+            {busy && !secondaryAction?.busy ? (
+              <HugeiconsIcon icon={Loading03Icon} className="animate-spin" aria-hidden />
+            ) : null}
             {submitLabel}
           </Button>
         </div>

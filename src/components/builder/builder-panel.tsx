@@ -68,6 +68,11 @@ import { ExoticPicker } from "@/components/builder/exotic-picker";
 import { ExoticClassPerkPicker } from "@/components/builder/exotic-class-perk-picker";
 import { FragmentPicker } from "@/components/builder/fragment-picker";
 import { ClassEmblemTabs } from "@/components/builder/class-emblem-tabs";
+import {
+  linksToClass,
+  setOptimizingLoadout,
+  useOptimizingLoadout,
+} from "@/lib/loadouts/optimizing-loadout";
 import { SettingRow } from "@/components/builder/setting-row";
 import { PowerRangeControls } from "@/components/builder/power-range-controls";
 import { useBuilderSearchInputs } from "@/components/builder/use-builder-search-inputs";
@@ -161,6 +166,9 @@ export function BuilderPanel({
   // Nothing rendered before `ready` depends on these, so the SSR/hydration output
   // (where storage is unavailable) can't mismatch.
   const [initialSaved] = useState(loadSelections);
+
+  // The saved loadout Optimize linked (resolved once here, passed to the builds).
+  const linkedLoadout = useOptimizingLoadout();
 
   const [classType, setClassType] = useState<number | null>(
     initialSaved?.classType ?? null,
@@ -934,18 +942,21 @@ export function BuilderPanel({
   );
   // Section Reset buttons: always clickable. A section already at its default keeps
   // its state object, so the click is a no-op (no re-render, no new search).
-  const resetTargets = useCallback(
-    () => updateTab("targets", (prev) => (prev.some((v) => v > 0) ? DEFAULT_TAB.targets : prev)),
-    [updateTab],
-  );
+  // Resetting the targets starts over, so it also ends a linked loadout.
+  const resetTargets = useCallback(() => {
+    setOptimizingLoadout(null);
+    updateTab("targets", (prev) => (prev.some((v) => v > 0) ? DEFAULT_TAB.targets : prev));
+  }, [updateTab]);
 
   // Sets and exotics are per class, so a class switch clears them on both tabs.
   const onClassChange = useCallback(
     (next: number) => {
+      // Builds of another class can't update the linked loadout: end the link.
+      if (linkedLoadout && !linksToClass(linkedLoadout, next)) setOptimizingLoadout(null);
       setClassType(next);
       setTabs((t) => updateTabs(t, "both", clearClassBound));
     },
-    [setTabs],
+    [setTabs, linkedLoadout],
   );
 
   const onExoticSelect = useCallback(
@@ -1117,7 +1128,9 @@ export function BuilderPanel({
       insertablePlugs: armory?.insertablePlugs,
       onEquipped,
       onDream: openDream,
-      classType,
+      linkedLoadout,
+      updateTarget:
+        linkedLoadout && linksToClass(linkedLoadout, classType) ? linkedLoadout : undefined,
     }),
     [
       buildsMode,
@@ -1147,6 +1160,7 @@ export function BuilderPanel({
       onEquipped,
       openDream,
       classType,
+      linkedLoadout,
     ],
   );
 
