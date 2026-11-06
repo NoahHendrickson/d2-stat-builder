@@ -1,5 +1,5 @@
 import { test, expect, describe } from "vitest";
-import { planLoadoutPlugs as plan, type PlanInput, type PlanPiece, type PlanSocket, type PlugInfo } from "./apply-plan";
+import { planLoadoutPlugs as plan, planWithPriority, type PlanInput, type PlanPiece, type PlanSocket, type PlugInfo } from "./apply-plan";
 import { clearsLeftover } from "./energy";
 
 // Every plan below is also replayed against live energy the way Bungie applies it —
@@ -486,4 +486,25 @@ test("an unknown mod hash is reported and kept as unplaced", () => {
 test("a fully placed loadout has nothing unplaced", () => {
   const plan = planLoadoutPlugs({ pieces: [piece({ instanceId: "p" })], modHashes: [101], plugInfo });
   expect(plan.unplaced).toEqual([]);
+});
+
+describe("planWithPriority", () => {
+  // One piece with room for 6: a major (3) and the helmet mod (4) don't both fit.
+  const input = (): PlanInput => ({
+    pieces: [piece({ instanceId: "p", sockets: [general(), helmetSlot()], energy: { capacity: 6, used: 0 } })],
+    modHashes: [101, 601],
+    plugInfo,
+  });
+
+  test("without priority, the pickier, costlier slot mod takes the energy", () => {
+    const result = planLoadoutPlugs(input());
+    expect(result.assigned).toEqual({ p: { 2: 601 } });
+    expect(result.unplaced.map((u) => u.hash)).toEqual([101]);
+  });
+
+  test("the priority mods are seated first and the rest share what's left", () => {
+    const result = planWithPriority(input(), [101]);
+    expect(result.assigned).toEqual({ p: { 1: 101 } });
+    expect(result.unplaced.map((u) => u.hash)).toEqual([601]);
+  });
 });

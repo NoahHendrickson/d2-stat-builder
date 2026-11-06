@@ -52,9 +52,9 @@ import { copyShareLink } from "@/lib/loadouts/share-client";
 import { useSharedImport } from "@/lib/loadouts/use-shared-import";
 import { countMajorStatMods, isMajorStatMod } from "@/lib/dim/mod-hashes";
 import { selectionsForLoadout } from "@/lib/loadouts/load-in-builder";
+import { setOptimizingLoadout } from "@/lib/loadouts/optimizing-loadout";
 import { loadoutSubclass, withLoadoutSubclass } from "@/lib/loadouts/subclass";
-import { weaponSlotOfHash } from "@/lib/armory/weapons";
-import { isArtifactHash } from "@/lib/armory/artifact-items";
+import { loadoutArtifactRef, loadoutWeaponRefs } from "@/lib/loadouts/weapons";
 import { lastPlayedCharacter } from "@/lib/bungie/equip-client";
 import {
   LOADOUT_SCHEMA_VERSION,
@@ -478,7 +478,8 @@ export function LoadoutsList({
 
   /**
    * "Optimize": push the loadout's stat targets, exotic, set bonuses, fragments,
-   * and major-mod count into the optimizer and show it.
+   * and major-mod count into the optimizer and show it. The optimizer remembers the
+   * loadout so a build can update it in place.
    */
   const optimizeLoadout = useCallback(
     (saved: SavedLoadout) => {
@@ -496,6 +497,7 @@ export function LoadoutsList({
           ),
         }),
       );
+      setOptimizingLoadout(saved);
       router.push("/");
     },
     [manifest, pieceMap, router],
@@ -510,9 +512,7 @@ export function LoadoutsList({
     return {
       manifest,
       owned: armory.weapons,
-      initial: dialog.loadout.loadout.equipped.filter(
-        (ref) => weaponSlotOfHash(manifest, ref.hash) !== undefined,
-      ),
+      initial: loadoutWeaponRefs(manifest, dialog.loadout.loadout),
     };
   }, [dialog, armory.weapons, manifest]);
   const editorArtifact = useMemo(() => {
@@ -529,7 +529,7 @@ export function LoadoutsList({
     return {
       manifest,
       owned,
-      initial: loadout.equipped.find((ref) => isArtifactHash(manifest, ref.hash)),
+      initial: loadoutArtifactRef(manifest, loadout),
     };
   }, [dialog, armory.characters, pieceMap, manifest]);
   const editorSubclass = useMemo(() => {

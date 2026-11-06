@@ -11,6 +11,8 @@ import {
   StrandAbilityRecolor,
 } from "@/components/loadouts/strand-ability-recolor";
 import type { Manifest } from "@/lib/manifest/load";
+import type { ResolvedSubclass } from "@/lib/loadouts/resolve";
+import { superSocketIndex } from "@/lib/loadouts/subclass";
 import { BUNGIE_IMAGE_BASE } from "@/lib/bungie/constants";
 import { cn } from "@/lib/utils";
 
@@ -221,5 +223,51 @@ export function ManifestIcon({
         tabIndex={showTooltip ? 0 : undefined}
       />
     </TooltipLabel>
+  );
+}
+
+/**
+ * A loadout's Super as it shows on its card: the picked Super, else the subclass's
+ * default one, else the subclass icon. Names for the label and the card's text.
+ */
+export function loadoutSuper(manifest: Manifest, subclass: ResolvedSubclass) {
+  const subclassDef = manifest.def("DestinyInventoryItemDefinition", subclass.itemHash);
+  const subclassName =
+    subclassDef?.displayProperties?.name ?? subclass.subclass ?? "Subclass";
+  const superStart = superSocketIndex(manifest, subclass.itemHash);
+  const initialSuperHash =
+    superStart !== undefined
+      ? subclassDef?.sockets?.socketEntries[superStart]?.singleInitialItemHash
+      : undefined;
+  const superDef = manifest.def(
+    "DestinyInventoryItemDefinition",
+    subclass.superHash ?? (initialSuperHash || undefined),
+  );
+  return { subclassDef, subclassName, superDef, superName: superDef?.displayProperties?.name };
+}
+
+/** The Super diamond (or subclass icon) for a loadout's subclass. */
+export function SuperIcon({
+  manifest,
+  subclass,
+  size,
+  showTooltip,
+}: {
+  manifest: Manifest;
+  subclass: ResolvedSubclass;
+  size: 40 | 48;
+  showTooltip?: boolean;
+}) {
+  const { subclassDef, subclassName, superDef, superName } = loadoutSuper(manifest, subclass);
+  return (
+    <ManifestIcon
+      icon={superDef?.displayProperties?.icon ?? subclassDef?.displayProperties?.icon}
+      label={superName ? `${superName}, ${subclassName}` : subclassName}
+      size={size}
+      className="rounded-none"
+      showTooltip={showTooltip}
+      diamond={superDef?.displayProperties?.icon !== undefined}
+      element={subclassFromPlug(superDef) ?? subclass.subclass}
+    />
   );
 }

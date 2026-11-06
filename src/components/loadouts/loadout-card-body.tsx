@@ -3,7 +3,6 @@
 import type { CSSProperties, ReactNode } from "react";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Mail01Icon } from "@hugeicons/core-free-icons";
-import { subclassFromPlug } from "@/lib/armory/fragments";
 import { isFullyMasterworked } from "@/lib/armory/masterwork";
 import { armorPipTier } from "@/lib/armory/normalize";
 import { SLOT_LABELS } from "@/lib/armory/stats";
@@ -18,7 +17,6 @@ import type {
   ResolvedSubclass,
   ResolvedWeaponItem,
 } from "@/lib/loadouts/resolve";
-import { superSocketIndex } from "@/lib/loadouts/subclass";
 import type { SavedLoadout } from "@/lib/loadouts/types";
 import { archetypeStatIcon } from "@/lib/armory/archetypes";
 import { ArmorThumb } from "@/components/armor-thumb";
@@ -27,7 +25,12 @@ import {
   ITEM_TILE_FOOTER_PX,
   MasterworkGlow,
 } from "@/components/item-tile-parts";
-import { ManifestIcon, PlugIcon, TILE_FRAME } from "@/components/loadouts/loadout-icons";
+import {
+  PlugIcon,
+  SuperIcon,
+  TILE_FRAME,
+  loadoutSuper,
+} from "@/components/loadouts/loadout-icons";
 import { LOADOUT_SLOT_WELL_CLASS } from "@/components/loadouts/loadout-weapons-editor";
 import { TooltipLabel } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
@@ -208,19 +211,7 @@ function SubclassColumn({
       </section>
     );
   }
-  const subclassDef = manifest.def("DestinyInventoryItemDefinition", subclass.itemHash);
-  const subclassName =
-    subclassDef?.displayProperties?.name ?? subclass.subclass ?? "Subclass";
-  const superStart = superSocketIndex(manifest, subclass.itemHash);
-  const initialSuperHash =
-    superStart !== undefined
-      ? subclassDef?.sockets?.socketEntries[superStart]?.singleInitialItemHash
-      : undefined;
-  const superDef = manifest.def(
-    "DestinyInventoryItemDefinition",
-    subclass.superHash ?? (initialSuperHash || undefined),
-  );
-  const superName = superDef?.displayProperties?.name;
+  const { subclassName, superName } = loadoutSuper(manifest, subclass);
   // Pinned abilities besides the Super, in socket order (class ability, jump, melee, grenade).
   const abilities = ABILITY_KINDS.filter((kind) => kind !== "super").flatMap((kind) => {
     const hash = subclass.abilityHashes[kind];
@@ -239,14 +230,7 @@ function SubclassColumn({
   return (
     <section aria-label={`Subclass: ${subclassName}`} className={cn(COLUMN_WELL_CLASS, "gap-3")}>
       <div className="flex min-w-0 items-center gap-2.5">
-        <ManifestIcon
-          icon={superDef?.displayProperties?.icon ?? subclassDef?.displayProperties?.icon}
-          label={superName ? `${superName}, ${subclassName}` : subclassName}
-          size={48}
-          className="rounded-none"
-          diamond={superDef?.displayProperties?.icon !== undefined}
-          element={subclassFromPlug(superDef) ?? subclass.subclass}
-        />
+        <SuperIcon manifest={manifest} subclass={subclass} size={48} />
         <div className="flex min-w-0 flex-col">
           <span className="truncate text-sm font-medium">{superName ?? subclassName}</span>
           {superName && (

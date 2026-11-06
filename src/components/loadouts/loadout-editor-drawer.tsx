@@ -114,6 +114,16 @@ interface EditorProps {
   weapons?: WeaponsSection;
   artifact?: ArtifactSection;
   busy?: boolean;
+  /**
+   * A second way to submit the same form, beside the main button (Update loadout's
+   * "Save as new"). Gets the same values and the same checks as the main submit.
+   */
+  secondaryAction?: {
+    label: string;
+    onSubmit: (values: LoadoutDetailsValues) => void;
+    /** Its save is the one in flight: the spinner goes here, not on the main button. */
+    busy?: boolean;
+  };
   /** Piece/subclass grids; deferred so the header can paint during the slide. */
   showGrids?: boolean;
   onSubmit: (values: LoadoutDetailsValues) => void;
@@ -305,6 +315,7 @@ function EditorForm({
   weapons,
   artifact,
   busy = false,
+  secondaryAction,
   showGrids = true,
   onSubmit,
   onCancel,
@@ -429,11 +440,10 @@ function EditorForm({
     );
   }, [mods, placement, fragmentHashes, subclass]);
 
-  const submit = (e: FormEvent) => {
-    e.preventDefault();
+  const submitWith = (handler: (values: LoadoutDetailsValues) => void) => {
     const trimmed = identityRef.current.name.trim();
     if (!canSubmit || !nameIsValid(trimmed)) return;
-    onSubmit({
+    handler({
       name: trimmed,
       notes: identityRef.current.notes.trim(),
       ...(mods ? { placement, desiredStatMods } : {}),
@@ -442,6 +452,10 @@ function EditorForm({
       ...(artifact ? { artifact: artifactPickRef(artifact, artifactPick) } : {}),
       ...(mods && totals ? { stats: totals } : {}),
     });
+  };
+  const submit = (e: FormEvent) => {
+    e.preventDefault();
+    submitWith(onSubmit);
   };
 
   const statIcons = useMemo(
@@ -513,8 +527,23 @@ function EditorForm({
           <Button type="button" variant="outline" onClick={onCancel}>
             Cancel
           </Button>
+          {secondaryAction && (
+            <Button
+              type="button"
+              variant="outline"
+              disabled={!canSubmit}
+              onClick={() => submitWith(secondaryAction.onSubmit)}
+            >
+              {secondaryAction.busy ? (
+                <HugeiconsIcon icon={Loading03Icon} className="animate-spin" aria-hidden />
+              ) : null}
+              {secondaryAction.label}
+            </Button>
+          )}
           <Button type="submit" variant="emphatic" disabled={!canSubmit}>
-            {busy ? <HugeiconsIcon icon={Loading03Icon} className="animate-spin" aria-hidden /> : null}
+            {busy && !secondaryAction?.busy ? (
+              <HugeiconsIcon icon={Loading03Icon} className="animate-spin" aria-hidden />
+            ) : null}
             {submitLabel}
           </Button>
         </div>

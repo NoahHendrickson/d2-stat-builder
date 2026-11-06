@@ -359,6 +359,7 @@ const BuildRow = memo(function BuildRow({
   insertablePlugs,
   onEquipped,
   onDream,
+  updateTarget,
 }: {
   loadout: OptimizerLoadout;
   pieceMap: Map<string, ArmorPiece>;
@@ -669,6 +670,7 @@ const BuildRow = memo(function BuildRow({
           onEquipped={onEquipped}
           pieceMap={pieceMap}
           onDream={onDream}
+          updateTarget={updateTarget}
           favorites={favorites}
         />
       </div>
@@ -713,6 +715,37 @@ function ImprovedMaximaAlert() {
   );
 }
 
+/**
+ * The background search's status card. It stays put from "searching deeper" to the
+ * result ("Verified", "Stronger builds found"): SearchStatus renders it under one key
+ * in both phases, so only its icon and text change and the entrance plays once.
+ */
+function StatusCard({
+  running,
+  children,
+  trailing,
+}: {
+  running: boolean;
+  children: ReactNode;
+  trailing?: ReactNode;
+}) {
+  return (
+    <div
+      className="d2-reveal flex items-center gap-2.5 rounded-md border border-foreground/15 bg-lifted px-3 py-2.5"
+      aria-live="polite"
+    >
+      <HugeiconsIcon
+        icon={running ? Loading03Icon : CheckmarkCircle02Icon}
+        strokeWidth={running ? undefined : 2}
+        className={cn("size-4 shrink-0", running ? "animate-spin text-primary" : "text-muted-foreground")}
+        aria-hidden
+      />
+      <p className="text-foreground/90 min-w-0 flex-1 text-sm">{children}</p>
+      {trailing}
+    </div>
+  );
+}
+
 function RefinementPercent({ store }: { store: ValueStore<number> }) {
   const progress = useStoreValue(store);
   return <>{Math.round(progress * 100)}%</>;
@@ -743,17 +776,22 @@ function SearchStatus({
     case "running":
       // Alert-style card sized like a build row (same rounded border footprint) — the
       // background search materially changes what the sliders offer, so it earns more
-      // visual weight than a status line.
-      return (
-        <div
-          className="d2-reveal flex items-center gap-2.5 rounded-md border border-foreground/15 bg-lifted px-3 py-2.5"
-          aria-live="polite"
+      // visual weight than a status line. An array, like "done", so the keyed card is
+      // kept (not remounted) when the phase changes.
+      return [
+        <StatusCard
+          key="status"
+          running
+          trailing={
+            <Button
+              variant="link"
+              onClick={onCancel}
+              className="text-muted-foreground hover:text-foreground h-auto shrink-0 p-0 text-xs font-normal"
+            >
+              Cancel
+            </Button>
+          }
         >
-          <HugeiconsIcon icon={Loading03Icon}
-            className="size-4 shrink-0 animate-spin text-primary"
-            aria-hidden
-          />
-          <p className="text-foreground/90 min-w-0 flex-1 text-sm">
             {refinement.interim.capped ? (
               <>
                 <span className="font-medium">First pass done</span> — searching
@@ -768,71 +806,57 @@ function SearchStatus({
               </>
             )}
             <RefinementPercent store={refinementProgress} />)
-          </p>
-          <Button
-            variant="link"
-            onClick={onCancel}
-            className="text-muted-foreground hover:text-foreground h-auto shrink-0 p-0 text-xs font-normal"
-          >
-            Cancel
-          </Button>
-        </div>
-      );
+        </StatusCard>,
+      ];
     case "done": {
       const { outcome, pending, verified } = refinement;
       const lines: ReactNode[] = [];
+      // The search's result goes in the same card the search ran in (key "status").
       if (pending) {
         lines.push(
-          <p
-            key="pending"
-            className="d2-fade flex items-center gap-2 text-xs text-positive"
-            aria-live="polite"
+          <StatusCard
+            key="status"
+            running={false}
+            trailing={
+              <Button
+                variant="link"
+                onClick={onShowPending}
+                className="h-auto shrink-0 p-0 text-xs font-medium text-positive"
+              >
+                Show them
+              </Button>
+            }
           >
-            Stronger builds found
-            <Button
-              variant="link"
-              onClick={onShowPending}
-              className="h-auto p-0 text-xs font-medium text-positive"
-            >
-              Show them
-            </Button>
-          </p>,
+            <span className="font-medium">Stronger builds found</span>
+          </StatusCard>,
+        );
+      } else if (outcome === "confirmed") {
+        // Only rendered when both halves are PROVEN (walk exhausted + ceilings exact).
+        lines.push(
+          <StatusCard key="status" running={false}>
+            <span className="font-medium">Verified</span> — no better builds or higher
+            maximums exist for these targets.
+          </StatusCard>,
+        );
+      } else if (outcome === null && verified) {
+        // Build walk proven exhaustive, but some ceiling probes ran out of budget —
+        // claim only what was proven.
+        lines.push(
+          <StatusCard key="status" running={false}>
+            <span className="font-medium">Search complete</span> — no better builds exist
+            for these targets (stat maximums shown are best-effort).
+          </StatusCard>,
         );
       }
       if (outcome === "improved") {
         lines.push(<ImprovedMaximaAlert key="improved" />);
-      } else if (outcome === "confirmed" && !pending) {
-        // Only rendered when both halves are PROVEN (walk exhausted + ceilings exact).
-        lines.push(
-          <p
-            key="confirmed"
-            className="d2-fade text-muted-foreground text-xs"
-            aria-live="polite"
-          >
-            Verified — no better builds or higher maximums exist for these
-            targets.
-          </p>,
-        );
-      } else if (outcome === null && verified && !pending) {
-        // Build walk proven exhaustive, but some ceiling probes ran out of budget —
-        // claim only what was proven.
-        lines.push(
-          <p
-            key="verified-list"
-            className="d2-fade text-muted-foreground text-xs"
-            aria-live="polite"
-          >
-            Search complete — no better builds exist for these targets (stat
-            maximums shown are best-effort).
-          </p>,
-        );
       }
       // An unverified list stays flagged: the time-limit warning is never suppressed
       // by an improved-maximums note or a pending offer.
       if (!verified && cappedBanner) {
         lines.push(<Fragment key="capped">{cappedBanner}</Fragment>);
       }
-      return lines.length > 0 ? <>{lines}</> : null;
+      return lines.length > 0 ? lines : null;
     }
     default: {
       const _exhaustive: never = refinement;
@@ -860,6 +884,7 @@ export function BuildResults({
   insertablePlugs,
   onEquipped,
   onDream,
+  updateTarget,
   sort,
 }: {
   result: OptimizerOutput;
@@ -956,6 +981,7 @@ export function BuildResults({
             insertablePlugs={insertablePlugs}
             onEquipped={onEquipped}
             onDream={onDream}
+            updateTarget={updateTarget}
           />
         ))}
       </div>

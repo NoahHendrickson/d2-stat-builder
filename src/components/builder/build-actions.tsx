@@ -13,7 +13,7 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { TooltipLabel } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
-import { toast } from "@/lib/toast";
+import { toast, type PendingToast } from "@/lib/toast";
 import { FavoriteHeart } from "@/components/favorite-heart";
 import type { BuildFavorites } from "@/components/builder/build-favorites";
 import { cn } from "@/lib/utils";
@@ -30,12 +30,16 @@ import {
   type DimLoadout,
 } from "@/lib/dim/loadout-link";
 import type { LoadoutDetailsValues } from "@/components/loadouts/loadout-editor-drawer";
-import { useLoadoutMutations } from "@/lib/loadouts/use-loadouts";
+import { useLoadoutMutations, type LoadoutsApiError } from "@/lib/loadouts/use-loadouts";
 import { commitLoadout } from "@/lib/loadouts/commit";
+import { mergeBuildIntoLoadout, updateLookups } from "@/lib/loadouts/update-from-build";
+import type { SaveTarget } from "@/components/builder/save-loadout-drawer";
 import {
   LOADOUT_SCHEMA_VERSION,
   type DimSubclassInput,
   type QueryOrigin,
+  type SavedLoadout,
+  type SavedLoadoutData,
 } from "@/lib/loadouts/types";
 import type { Manifest } from "@/lib/manifest/load";
 import {
@@ -68,6 +72,8 @@ export interface BuildActionProps {
   pieceMap: ReadonlyMap<string, ArmorPiece>;
   /** Open the Dream build modal on this build (absent = no Dream build button). */
   onDream?: (loadout: OptimizerLoadout) => void;
+  /** The linked saved loadout this build can update (Optimize on /loadouts), if any. */
+  updateTarget?: SavedLoadout;
 }
 
 const SaveLoadoutDrawer = dynamic(
@@ -99,6 +105,7 @@ export function BuildActions({
   onEquipped,
   pieceMap,
   onDream,
+  updateTarget,
   favorites,
 }: {
   loadout: OptimizerLoadout;
@@ -119,8 +126,10 @@ export function BuildActions({
   const [saveContext, setSaveContext] = useState<{
     defaultName: string;
     subclassItemHash?: number;
+    /** A new loadout, or the linked one this build updates. */
+    target: SaveTarget;
   } | null>(null);
-  const { create: createLoadout } = useLoadoutMutations();
+  const { create: createLoadout, update: updateLoadout } = useLoadoutMutations();
 
   const resolved = pieces.filter((p): p is ArmorPiece => p !== undefined);
   const complete = resolved.length === loadout.pieceIds.length;
@@ -193,47 +202,81 @@ export function BuildActions({
     if (!canSave || !manifest) return;
     const { subclass } = getBuilderState();
     setSaveContext({
-      defaultName: defaultName(subclass),
+      defaultName: updateTarget?.loadout.name ?? defaultName(subclass),
       subclassItemHash: subclass?.itemHash,
+      target: updateTarget ? { kind: "update", loadout: updateTarget } : { kind: "new" },
     });
     setSaveSession((s) => s + 1);
     setSaveOpen(true);
   };
 
-  const saveLoadout = (dim: DimLoadout, values: LoadoutDetailsValues) => {
-    if (!canSave || !manifest) return;
+  /**
+   * The DIM loadout to save as `target`: this build, or — updating — this build's armor,
+   * stat mods and fragments merged into the saved loadout (see mergeBuildIntoLoadout).
+   */
+  const dimLoadoutFor = (name: string, notes: string | undefined, target: SaveTarget) => {
+    const dim = makeDimLoadout(name, notes);
+    if (target.kind === "new" || !manifest) return dim;
+    const { subclass } = getBuilderState();
+    return mergeBuildIntoLoadout(
+      target.loadout.loadout,
+      dim,
+      subclass?.itemHash !== undefined
+        ? { itemHash: subclass.itemHash, fragmentHashes: subclass.fragmentHashes }
+        : undefined,
+      updateLookups(manifest, dim.classType, (id) => pieceMap.has(id)),
+    );
+  };
+
+  /** The row to store for `dim`: this build's optimizer result and builder state. */
+  const savedData = (dim: DimLoadout): SavedLoadoutData => {
     dim.equipped = dim.equipped.map((item) =>
       item.id !== undefined && isSyntheticClassItemId(item.id)
         ? { hash: item.hash }
         : item,
     );
     const { builderSnapshot } = getBuilderState();
-    const pending = toast.loading("Saving loadout");
-    createLoadout.mutate(
-      commitLoadout(
-        {
-          version: LOADOUT_SCHEMA_VERSION,
-          loadout: dim,
-          optimizer: loadout,
-          ...(builderSnapshot ? { builder: builderSnapshot } : {}),
-        },
-        manifest,
-        values,
-      ),
-      {
-        onSuccess: () => {
-          setSaveOpen(false);
-          pending.success("Loadout saved", "Find it under the Loadouts tab");
-        },
-        onError: (err) => {
-          pending.error(
-            err.notConfigured
-              ? "Saving needs loadout storage — set DATABASE_URL (see .env.example)"
-              : err.message,
-          );
-        },
-      },
+    return {
+      version: LOADOUT_SCHEMA_VERSION,
+      loadout: dim,
+      optimizer: loadout,
+      ...(builderSnapshot ? { builder: builderSnapshot } : {}),
+    };
+  };
+
+  const saveError = (pending: PendingToast) => (err: LoadoutsApiError) =>
+    pending.error(
+      err.notConfigured
+        ? "Saving needs loadout storage — set DATABASE_URL (see .env.example)"
+        : err.message,
     );
+
+  /** Store `dim` + the form as `target`: a new loadout, or over the linked one. */
+  const persist = (dim: DimLoadout, values: LoadoutDetailsValues, target: SaveTarget) => {
+    if (!canSave || !manifest) return;
+    const data = commitLoadout(savedData(dim), manifest, values);
+    if (target.kind === "update") {
+      const pending = toast.loading("Updating loadout");
+      updateLoadout.mutate(
+        { id: target.loadout.id, data },
+        {
+          onSuccess: (saved) => {
+            setSaveOpen(false);
+            pending.success("Loadout updated", `${saved.loadout.name} has this build's armor now`);
+          },
+          onError: saveError(pending),
+        },
+      );
+      return;
+    }
+    const pending = toast.loading("Saving loadout");
+    createLoadout.mutate(data, {
+      onSuccess: () => {
+        setSaveOpen(false);
+        pending.success("Loadout saved", "Find it under the Loadouts tab");
+      },
+      onError: saveError(pending),
+    });
   };
 
   const copyItemIds = async () => {
@@ -380,14 +423,26 @@ export function BuildActions({
         </TooltipLabel>
       </RevealAction>
       <TooltipLabel
-        label={!complete ? missingTitle : undefined}
+        label={
+          !complete
+            ? missingTitle
+            : updateTarget
+              ? `Put this build in ${updateTarget.loadout.name}, or save it as a new loadout`
+              : undefined
+        }
         disabled={!canSave}
       >
         <Button variant="emphatic" onClick={openSave} disabled={!canSave}>
           {/* Room for the Dream build label, which stays open on touch screens. */}
-          <span>
-            Save<span className="pointer-coarse:@max-[26rem]/build:hidden"> as loadout</span>
-          </span>
+          {updateTarget ? (
+            <span>
+              Update<span className="pointer-coarse:@max-[26rem]/build:hidden"> loadout</span>
+            </span>
+          ) : (
+            <span>
+              Save<span className="pointer-coarse:@max-[26rem]/build:hidden"> as loadout</span>
+            </span>
+          )}
         </Button>
       </TooltipLabel>
       {saveSession > 0 && manifest && saveContext && (
@@ -404,9 +459,10 @@ export function BuildActions({
           defaultName={saveContext.defaultName}
           subclassItemHash={saveContext.subclassItemHash}
           artifacts={targetCharacter?.artifacts}
-          makeDimLoadout={makeDimLoadout}
-          busy={createLoadout.isPending}
-          onSubmit={saveLoadout}
+          target={saveContext.target}
+          makeDimLoadout={dimLoadoutFor}
+          pending={updateLoadout.isPending ? "update" : createLoadout.isPending ? "new" : null}
+          onSubmit={persist}
         />
       )}
     </div>
