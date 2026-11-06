@@ -1117,6 +1117,7 @@ export function BuilderPanel({
       insertablePlugs: armory?.insertablePlugs,
       onEquipped,
       onDream: openDream,
+      classType,
     }),
     [
       buildsMode,
@@ -1145,6 +1146,7 @@ export function BuilderPanel({
       armory?.insertablePlugs,
       onEquipped,
       openDream,
+      classType,
     ],
   );
 

@@ -13,7 +13,7 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import { TooltipLabel } from "@/components/ui/tooltip";
 import { Button } from "@/components/ui/button";
-import { toast } from "@/lib/toast";
+import { toast, type PendingToast } from "@/lib/toast";
 import { FavoriteHeart } from "@/components/favorite-heart";
 import type { BuildFavorites } from "@/components/builder/build-favorites";
 import { cn } from "@/lib/utils";
@@ -30,12 +30,19 @@ import {
   type DimLoadout,
 } from "@/lib/dim/loadout-link";
 import type { LoadoutDetailsValues } from "@/components/loadouts/loadout-editor-drawer";
-import { useLoadoutMutations } from "@/lib/loadouts/use-loadouts";
+import { useLoadoutMutations, type LoadoutsApiError } from "@/lib/loadouts/use-loadouts";
 import { commitLoadout } from "@/lib/loadouts/commit";
+import {
+  cachedOptimizingLoadout,
+  useOptimizingLoadoutRef,
+} from "@/lib/loadouts/optimizing-loadout";
+import { mergeBuildIntoLoadout, updateLookups } from "@/lib/loadouts/update-from-build";
 import {
   LOADOUT_SCHEMA_VERSION,
   type DimSubclassInput,
   type QueryOrigin,
+  type SavedLoadout,
+  type SavedLoadoutData,
 } from "@/lib/loadouts/types";
 import type { Manifest } from "@/lib/manifest/load";
 import {
@@ -119,8 +126,10 @@ export function BuildActions({
   const [saveContext, setSaveContext] = useState<{
     defaultName: string;
     subclassItemHash?: number;
+    /** The saved loadout this build would update (opened from its Optimize). */
+    updating?: SavedLoadout;
   } | null>(null);
-  const { create: createLoadout } = useLoadoutMutations();
+  const { create: createLoadout, update: updateLoadout } = useLoadoutMutations();
 
   const resolved = pieces.filter((p): p is ArmorPiece => p !== undefined);
   const complete = resolved.length === loadout.pieceIds.length;
@@ -133,6 +142,14 @@ export function BuildActions({
   );
   const buildClass = resolved[0]?.classType;
   const targetCharacter = lastPlayedCharacter(characters, buildClass);
+  // The loadout the optimizer was opened from, when this build is for its class.
+  const optimizing = useOptimizingLoadoutRef();
+  const updateTarget =
+    optimizing &&
+    buildClass !== undefined &&
+    (optimizing.classType === 3 || optimizing.classType === buildClass)
+      ? optimizing
+      : null;
 
   const missingTitle = !complete
     ? "Refresh your gear — a piece in this build is missing"
@@ -192,46 +209,88 @@ export function BuildActions({
   const openSave = () => {
     if (!canSave || !manifest) return;
     const { subclass } = getBuilderState();
+    // Read at click time: the row as it is now (renamed, re-tagged since Optimize).
+    const updating = cachedOptimizingLoadout(queryClient, updateTarget);
+    // The button said Update: never fall through to saving a new loadout (the list
+    // may still be loading after a reload).
+    if (updateTarget && !updating) {
+      toast.warning(`Couldn't load ${updateTarget.name} yet — try again in a moment`);
+      return;
+    }
     setSaveContext({
-      defaultName: defaultName(subclass),
+      defaultName: updating?.loadout.name ?? defaultName(subclass),
       subclassItemHash: subclass?.itemHash,
+      updating,
     });
     setSaveSession((s) => s + 1);
     setSaveOpen(true);
   };
 
-  const saveLoadout = (dim: DimLoadout, values: LoadoutDetailsValues) => {
-    if (!canSave || !manifest) return;
+  /**
+   * The drawer's DIM loadout: this build, or — when updating — this build's armor and
+   * stat mods merged into the saved loadout (its weapons, artifact, subclass and other
+   * mods kept).
+   */
+  const drawerDimLoadout = (updating: SavedLoadout | undefined) =>
+    updating && manifest
+      ? (name: string, notes?: string) =>
+          mergeBuildIntoLoadout(
+            updating.loadout,
+            makeDimLoadout(name, notes),
+            updateLookups(manifest, (id) => pieceMap.has(id)),
+          )
+      : makeDimLoadout;
+
+  /** The row to store for `dim`: this build's optimizer result and builder state. */
+  const savedData = (dim: DimLoadout): SavedLoadoutData => {
     dim.equipped = dim.equipped.map((item) =>
       item.id !== undefined && isSyntheticClassItemId(item.id)
         ? { hash: item.hash }
         : item,
     );
     const { builderSnapshot } = getBuilderState();
+    return {
+      version: LOADOUT_SCHEMA_VERSION,
+      loadout: dim,
+      optimizer: loadout,
+      ...(builderSnapshot ? { builder: builderSnapshot } : {}),
+    };
+  };
+
+  const saveError = (pending: PendingToast) => (err: LoadoutsApiError) =>
+    pending.error(
+      err.notConfigured
+        ? "Saving needs loadout storage — set DATABASE_URL (see .env.example)"
+        : err.message,
+    );
+
+  const replaceLoadout = (dim: DimLoadout, values: LoadoutDetailsValues) => {
+    const target = saveContext?.updating;
+    if (!canSave || !manifest || !target) return;
+    const pending = toast.loading("Updating loadout");
+    updateLoadout.mutate(
+      { id: target.id, data: commitLoadout(savedData(dim), manifest, values) },
+      {
+        onSuccess: (saved) => {
+          setSaveOpen(false);
+          pending.success("Loadout updated", `${saved.loadout.name} has this build's armor now`);
+        },
+        onError: saveError(pending),
+      },
+    );
+  };
+
+  const saveLoadout = (dim: DimLoadout, values: LoadoutDetailsValues) => {
+    if (!canSave || !manifest) return;
     const pending = toast.loading("Saving loadout");
     createLoadout.mutate(
-      commitLoadout(
-        {
-          version: LOADOUT_SCHEMA_VERSION,
-          loadout: dim,
-          optimizer: loadout,
-          ...(builderSnapshot ? { builder: builderSnapshot } : {}),
-        },
-        manifest,
-        values,
-      ),
+      commitLoadout(savedData(dim), manifest, values),
       {
         onSuccess: () => {
           setSaveOpen(false);
           pending.success("Loadout saved", "Find it under the Loadouts tab");
         },
-        onError: (err) => {
-          pending.error(
-            err.notConfigured
-              ? "Saving needs loadout storage — set DATABASE_URL (see .env.example)"
-              : err.message,
-          );
-        },
+        onError: saveError(pending),
       },
     );
   };
@@ -380,14 +439,26 @@ export function BuildActions({
         </TooltipLabel>
       </RevealAction>
       <TooltipLabel
-        label={!complete ? missingTitle : undefined}
+        label={
+          !complete
+            ? missingTitle
+            : updateTarget
+              ? `Put this build in ${updateTarget.name}, or save it as a new loadout`
+              : undefined
+        }
         disabled={!canSave}
       >
         <Button variant="emphatic" onClick={openSave} disabled={!canSave}>
           {/* Room for the Dream build label, which stays open on touch screens. */}
-          <span>
-            Save<span className="pointer-coarse:@max-[26rem]/build:hidden"> as loadout</span>
-          </span>
+          {updateTarget ? (
+            <span>
+              Update<span className="pointer-coarse:@max-[26rem]/build:hidden"> loadout</span>
+            </span>
+          ) : (
+            <span>
+              Save<span className="pointer-coarse:@max-[26rem]/build:hidden"> as loadout</span>
+            </span>
+          )}
         </Button>
       </TooltipLabel>
       {saveSession > 0 && manifest && saveContext && (
@@ -404,9 +475,17 @@ export function BuildActions({
           defaultName={saveContext.defaultName}
           subclassItemHash={saveContext.subclassItemHash}
           artifacts={targetCharacter?.artifacts}
-          makeDimLoadout={makeDimLoadout}
-          busy={createLoadout.isPending}
-          onSubmit={saveLoadout}
+          makeDimLoadout={drawerDimLoadout(saveContext.updating)}
+          busy={createLoadout.isPending || updateLoadout.isPending}
+          onSubmit={saveContext.updating ? replaceLoadout : saveLoadout}
+          updating={
+            saveContext.updating
+              ? {
+                  notes: saveContext.updating.loadout.notes ?? "",
+                  onSaveAsNew: saveLoadout,
+                }
+              : undefined
+          }
         />
       )}
     </div>

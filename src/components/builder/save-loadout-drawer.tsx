@@ -11,7 +11,9 @@ import {
 import type { SubclassSection } from "@/components/loadouts/loadout-subclass-editor";
 import type { WeaponsSection } from "@/components/loadouts/loadout-weapons-editor";
 import type { ArtifactSection } from "@/components/loadouts/loadout-artifact-editor";
-import type { DimLoadout } from "@/lib/dim/loadout-link";
+import type { DimLoadout, DimLoadoutItem } from "@/lib/dim/loadout-link";
+import { weaponSlotOfHash } from "@/lib/armory/weapons";
+import { isArtifactHash } from "@/lib/armory/artifact-items";
 import { modsSectionForPieces } from "@/lib/loadouts/commit";
 import { modsFromEditor, type ModsSection } from "@/lib/loadouts/mod-placement";
 import { loadoutSubclass } from "@/lib/loadouts/subclass";
@@ -37,9 +39,20 @@ export interface SaveLoadoutDrawerProps {
   busy: boolean;
   /** The DIM loadout with the picker's mods applied, plus the rest of the form. */
   onSubmit: (dim: DimLoadout, values: LoadoutDetailsValues) => void;
+  /**
+   * Updating a saved loadout (opened from its Optimize) instead of saving a new one:
+   * the form starts from its notes, and `makeDimLoadout` already carries its weapons,
+   * artifact and subclass. `onSubmit` updates it; "Save as new" calls `onSaveAsNew`.
+   */
+  updating?: {
+    notes: string;
+    onSaveAsNew: (dim: DimLoadout, values: LoadoutDetailsValues) => void;
+  };
 }
 
 interface Picker {
+  weapons: DimLoadoutItem[];
+  artifact?: DimLoadoutItem;
   mods: ModsSection;
   subclass?: SubclassSection;
 }
@@ -54,6 +67,8 @@ interface Picker {
  * (socket-less) exotic class item — are kept in the saved loadout, not dropped.
  *
  * Weapons and the artifact start empty, as on a loadout made in Edit: the build is armor.
+ * Updating a saved loadout (`updating`) starts from that loadout's weapons, artifact,
+ * subclass and other mods instead, which `makeDimLoadout` merged in.
  */
 export function SaveLoadoutDrawer(props: SaveLoadoutDrawerProps) {
   // Keying remounts the picker for each Save click so it is built from the inputs as
@@ -75,10 +90,14 @@ function SaveLoadoutDrawerSession({
   makeDimLoadout,
   busy,
   onSubmit,
+  updating,
 }: SaveLoadoutDrawerProps) {
   const [picker] = useState((): Picker => {
     const dim = makeDimLoadout(defaultName);
     return {
+      // An updated loadout keeps its weapons and artifact; a new build has none.
+      weapons: dim.equipped.filter((ref) => weaponSlotOfHash(manifest, ref.hash) !== undefined),
+      artifact: dim.equipped.find((ref) => isArtifactHash(manifest, ref.hash)),
       mods: modsSectionForPieces(
         pieces,
         dim.parameters.mods,
@@ -103,35 +122,46 @@ function SaveLoadoutDrawerSession({
   const ownedWeapons = useArmory().data?.weapons;
   const weapons = useMemo(
     (): WeaponsSection | undefined =>
-      ownedWeapons ? { manifest, owned: ownedWeapons, initial: [] } : undefined,
-    [manifest, ownedWeapons],
+      ownedWeapons ? { manifest, owned: ownedWeapons, initial: picker.weapons } : undefined,
+    [manifest, ownedWeapons, picker],
   );
   const artifact = useMemo(
     (): ArtifactSection | undefined =>
-      artifacts?.length ? { manifest, owned: artifacts } : undefined,
-    [manifest, artifacts],
+      artifacts?.length ? { manifest, owned: artifacts, initial: picker.artifact } : undefined,
+    [manifest, artifacts, picker],
   );
+  const finish =
+    (handler: (dim: DimLoadout, values: LoadoutDetailsValues) => void) =>
+    (values: LoadoutDetailsValues) => {
+      const dim = makeDimLoadout(values.name, values.notes || undefined);
+      if (values.placement)
+        dim.parameters.mods = modsFromEditor(picker.mods, values.placement, values.desiredStatMods);
+      handler(dim, values);
+    };
 
   return (
     <LoadoutEditorDrawer
       open={open}
       onOpenChange={onOpenChange}
       formKey={session}
-      title="Save loadout"
-      description="Save your armor and builder targets, and add weapons, an artifact, and your subclass, aspects, fragments, and mods below."
-      submitLabel="Save"
+      title={updating ? "Update loadout" : "Save loadout"}
+      description={
+        updating
+          ? "Replace this loadout's armor, stat mods, and builder targets with this build. Its weapons, artifact, subclass, and other mods stay unless you change them below."
+          : "Save your armor and builder targets, and add weapons, an artifact, and your subclass, aspects, fragments, and mods below."
+      }
+      submitLabel={updating ? "Update loadout" : "Save"}
       initialName={defaultName}
+      initialNotes={updating?.notes}
+      secondaryAction={
+        updating ? { label: "Save as new", onSubmit: finish(updating.onSaveAsNew) } : undefined
+      }
       mods={picker.mods}
       subclass={picker.subclass}
       weapons={weapons}
       artifact={artifact}
       busy={busy}
-      onSubmit={(values) => {
-        const dim = makeDimLoadout(values.name, values.notes || undefined);
-        if (values.placement)
-          dim.parameters.mods = modsFromEditor(picker.mods, values.placement, values.desiredStatMods);
-        onSubmit(dim, values);
-      }}
+      onSubmit={finish(onSubmit)}
     />
   );
 }

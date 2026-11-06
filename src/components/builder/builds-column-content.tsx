@@ -9,6 +9,7 @@ import {
   MAX_SHOWN,
   type GetBuilderState,
 } from "@/components/builder/build-results";
+import { LinkedLoadoutBanner } from "@/components/builder/linked-loadout-banner";
 import { LoadoutSortControls } from "@/components/builder/loadout-sort-controls";
 import { TheoryIntroAlert } from "@/components/builder/theory-intro-alert";
 import { TheoryResults } from "@/components/builder/theory-results";
@@ -183,6 +184,8 @@ export interface BuildsColumnContentProps {
   onEquipped: () => void;
   /** Open the Dream build modal on a build. */
   onDream?: (loadout: OptimizerLoadout) => void;
+  /** The class the builder is on (the linked loadout may be for another). */
+  classType: number | null;
 }
 
 /** The tabs, then the open tab's builds (each with its own header extras and sort). */
@@ -323,6 +326,7 @@ function ActualBuildsBody({
   insertablePlugs,
   onEquipped,
   onDream,
+  classType,
   sort,
   onSortChange,
 }: BodyProps<LoadoutSortState>) {
@@ -338,6 +342,7 @@ function ActualBuildsBody({
           )
         }
       />
+      <LinkedLoadoutBanner classType={classType} manifest={manifest} />
       {showLoading &&
         (result ? (
           <BuildsProgressBar progress={displayedProgress} />
