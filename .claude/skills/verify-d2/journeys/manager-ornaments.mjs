@@ -22,7 +22,7 @@ export default async function ({ page, app, step, shot, expect, log }) {
       await page.evalJs(`(() => {
         const srcs = [...document.querySelectorAll(${JSON.stringify(VAULT_IMG)})]
           .map((img) => img.currentSrc || img.src)
-          .filter((s) => s && !s.includes("watermark"));
+          .filter(Boolean);
         const counts = {};
         for (const s of srcs) counts[s] = (counts[s] || 0) + 1;
         const [top, n] = Object.entries(counts).sort((a, b) => b[1] - a[1])[0] || ["", 0];
@@ -41,8 +41,10 @@ export default async function ({ page, app, step, shot, expect, log }) {
 
     await page.click(toggle);
     await page.waitFor(async () => (await page.attr(toggle, "aria-checked")) === "true");
-    expect(await page.exists(toggle), "the menu stays open after toggling");
     await page.waitFor(async () => (await art()).n > off.n);
+    // A closing menu stays in the DOM through its exit animation, so give it time to go.
+    const closed = await page.waitFor(toggle, { gone: true, timeout: 1000 }).then(() => true, () => false);
+    expect(!closed, "the menu stays open after toggling");
     const on = await art();
     log(`on: ${on.n} of ${on.total} vault images share the top art`);
     expect(on.n > off.n, `more tiles wear the ornament with it on (${off.n} → ${on.n})`);

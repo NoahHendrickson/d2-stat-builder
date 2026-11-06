@@ -108,10 +108,9 @@ export function ItemsSettings() {
           </DropdownMenuRadioGroup>
         </DropdownMenuGroup>
         <DropdownMenuSeparator />
-        {/* Stays open too: the tiles swap their art behind it. */}
+        {/* A checkbox item leaves the menu open: the tiles swap their art behind it. */}
         <DropdownMenuCheckboxItem
           indicator="start"
-          closeOnClick={false}
           checked={view.showOrnaments}
           onCheckedChange={(checked) => setViewSettings({ ...view, showOrnaments: checked === true })}
           className="h-auto items-start py-1.5 [&>[data-slot=dropdown-menu-checkbox-item-indicator]]:top-2"

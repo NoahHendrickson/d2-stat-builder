@@ -123,8 +123,9 @@ export const SAVED_VIEW_FALLBACK: ViewSettings = { ...DEFAULT_VIEW, layout: "row
 
 /**
  * `view` with its sort and grouping back to the defaults. Page preferences (the vault tab,
- * the layout, how many columns, the tile size) are left alone: listing what resets means a preference added
- * later can't get reset along with them by accident.
+ * the layout, how many columns, the tile size, whether tiles show ornaments) are left
+ * alone: listing what resets means a preference added later can't get reset along with
+ * them by accident.
  */
 export function resetSortAndGrouping(view: ViewSettings): ViewSettings {
   const { sort, weaponGroup, armorGroup } = DEFAULT_VIEW;
