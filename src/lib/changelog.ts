@@ -12,6 +12,12 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    date: "2026-11-07",
+    changes: [
+      "Optimizer: if you have no Tier 5 armor for a slot, the empty Builds list says so and takes you to the setting that fixes it.",
+    ],
+  },
+  {
     date: "2026-11-06",
     changes: [
       "Loadouts: after Optimize, Update loadout puts a better build's armor into that loadout instead of saving a new one.",

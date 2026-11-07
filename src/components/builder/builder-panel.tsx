@@ -78,6 +78,7 @@ import { PowerRangeControls } from "@/components/builder/power-range-controls";
 import { useBuilderSearchInputs } from "@/components/builder/use-builder-search-inputs";
 import { BuildsSurface } from "@/components/builder/builds-surface";
 import type { BuildsColumnContentProps } from "@/components/builder/builds-column-content";
+import { usePoolGap } from "@/components/builder/use-pool-gap";
 import { SetBonusesSection } from "@/components/builder/set-bonuses-section";
 import { SetPopularityButton } from "@/components/builder/set-popularity-button";
 import {
@@ -586,6 +587,14 @@ export function BuilderPanel({
         powerConstrained,
       }),
     [pool, classItemPieces, festivalMaskHelmets, powerConstrained],
+  );
+
+  // Slots with no usable legendary: the empty Builds list explains and links the fix.
+  const { poolGap, legacyArmorRef, lowerTierArmorRef, attention } = usePoolGap(
+    slotPieces,
+    classPieces,
+    actualExoticOption?.slot ?? null,
+    poolOptions,
   );
 
   // The pool as it stands once Power matters is ON — identical while it is; with the
@@ -1131,6 +1140,7 @@ export function BuilderPanel({
       linkedLoadout,
       updateTarget:
         linkedLoadout && linksToClass(linkedLoadout, classType) ? linkedLoadout : undefined,
+      poolGap,
     }),
     [
       buildsMode,
@@ -1161,6 +1171,7 @@ export function BuilderPanel({
       openDream,
       classType,
       linkedLoadout,
+      poolGap,
     ],
   );
 
@@ -1306,6 +1317,8 @@ export function BuilderPanel({
                       description="Include Armor 2.0 exotics"
                     />
                     <SettingRow
+                      ref={legacyArmorRef}
+                      attention={attention("legacyArmor")}
                       checkbox
                       checked={useLegacyArmor}
                       onCheckedChange={setUseLegacyArmor}
@@ -1313,6 +1326,8 @@ export function BuilderPanel({
                       description="Include Armor 2.0 legendaries. Also in Underlight settings."
                     />
                     <SettingRow
+                      ref={lowerTierArmorRef}
+                      attention={attention("lowerTierArmor")}
                       checkbox
                       checked={useLowerTierArmor}
                       onCheckedChange={setUseLowerTierArmor}

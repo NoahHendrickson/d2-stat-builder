@@ -35,6 +35,7 @@ import type { TheoryPiece, TheoryRecipe } from "@/lib/optimizer/theory";
 import type { TheoryBuildState } from "@/lib/optimizer/use-theory-build";
 import { useEntrance } from "@/lib/use-entrance";
 import { cn } from "@/lib/utils";
+import { listAnd } from "@/lib/format-list";
 
 const NO_RECIPES: TheoryRecipe[] = [];
 
@@ -140,8 +141,7 @@ function TheorySummaryCard({
   const shares = summary.archetypes.map(
     (a, i) => `${Math.round(a.share * 100)}%${i === 0 ? " are" : ""} ${a.name}`,
   );
-  const shareText =
-    shares.length > 1 ? `${shares.slice(0, -1).join(", ")} and ${shares[shares.length - 1]}` : shares[0];
+  const shareText = listAnd(shares);
   const where =
     summary.builds === 1
       ? `the ${closeOnly ? "close " : ""}build below`
