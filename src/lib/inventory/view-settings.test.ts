@@ -41,6 +41,7 @@ test("parseViewSettings drops unknown keys and falls back to defaults", () => {
         layout: "legacy",
         characterColumns: "current",
         tileSize: "small",
+        showOrnaments: true,
       }),
       true,
     ),
@@ -52,13 +53,14 @@ test("parseViewSettings drops unknown keys and falls back to defaults", () => {
     layout: "legacy",
     characterColumns: "current",
     tileSize: "small",
+    showOrnaments: true,
   });
   // Missing or unreadable fields read as a saved view's fallback (character rows).
   // The old single setting carries over to armor; weapons take their default.
   expect(parseViewSettings(JSON.stringify({ vaultGroup: "tier" }), true)).toEqual({ ...SAVED_VIEW_FALLBACK, armorGroup: "tier" });
   expect(
     parseViewSettings(
-      JSON.stringify({ weaponGroup: "nope", vaultGroup: "nope", vaultTab: "nope", layout: "nope", characterColumns: 3, tileSize: 50 }),
+      JSON.stringify({ weaponGroup: "nope", vaultGroup: "nope", vaultTab: "nope", layout: "nope", characterColumns: 3, tileSize: 50, showOrnaments: "yes" }),
       true,
     ),
   ).toEqual(SAVED_VIEW_FALLBACK);
@@ -84,6 +86,7 @@ test("resetSortAndGrouping resets only the sort and grouping", () => {
     layout: "legacy" as const,
     characterColumns: "current" as const,
     tileSize: "medium" as const,
+    showOrnaments: true,
   };
   expect(resetSortAndGrouping(view)).toEqual({
     sort: DEFAULT_VIEW.sort,
@@ -93,6 +96,7 @@ test("resetSortAndGrouping resets only the sort and grouping", () => {
     layout: "legacy",
     characterColumns: "current",
     tileSize: "medium",
+    showOrnaments: true,
   });
 });
 

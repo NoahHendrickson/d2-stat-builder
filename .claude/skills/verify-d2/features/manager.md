@@ -9,6 +9,7 @@ The Items page is a DIM-style inventory: characters, postmaster, and the vault a
 - `mgr-search` makes a keyword search narrow the items and show a count.
 - `mgr-lock` makes the popover's Lock button toggle the lock and send it to Bungie.
 - `mgr-move` moves a vault item to a character from the popover's move buttons (touch).
+- `mgr-ornaments` turns on Show ornaments, so every ornamented tile wears its ornament's art (journey `manager-ornaments`).
 
 ## How to get to it (user POV)
 
@@ -29,6 +30,7 @@ Preconditions:
 - **Search (`mgr-search`).** Fill `combobox "Search items"` with `is:handcannon`. A `button /^\d+ items?$/` appears (50 on the full fixture), with fewer than the 456 weapons. Click `button "Clear search"` and the count button goes away.
 - **Lock (`mgr-lock`).** Click vault tile `nth: 0` (named like `Monte Carlo, Auto Rifle, Power 442`). Click `button /^(Lock|Unlock)$/`. Its `aria-pressed` flips, the toast `Locked <item>` appears, and `POST /api/bungie/lock` carries `locked: true`.
 - **Move (`mgr-move`).** Run `page.emulatePointer("coarse")`, which must return `true`. Click vault tile `nth: 1`, then the first `button /^(Pull|Send|Equip on)\b.*\b(Hunter|Titan|Warlock)$/` (for example `Equip on Hunter`). The toast `Equipped <item>` or `Moved <item>` appears, and `POST /api/bungie/move` has `from.kind: "vault"` and `to.kind: "character"`.
+- **Ornaments (`mgr-ornaments`, journey `manager-ornaments`).** The fixture has no ornaments, so `meta.profile` sets every vault item's `overrideStyleItemHash` to an equipped helmet's hash: its icon stands in for the ornament. Click `button "Items settings"`: `menuitemcheckbox /^Show ornaments/` is `aria-checked="false"`, and only the exotic weapons (first in each row by the default rarity sort) wear the helmet art. Click it: the menu stays open, every vault tile wears the helmet art, and `showOrnaments: true` is saved in `stat-builder:manager-view:v1` (it survives a reload). Proof: `01-menu-off`, `02-menu-on`, `03-vault-ornaments-on`.
 - **Proof.** `01-layout-legacy`, `02-inventory`, `03-sort-dragging`, `04-sort-menu`, `05-search`, `06-locked`, `07-moved`.
 
 ## Gotchas
