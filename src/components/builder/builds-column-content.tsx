@@ -8,6 +8,7 @@ import {
   BuildResults,
   MAX_SHOWN,
   type GetBuilderState,
+  type PoolGap,
 } from "@/components/builder/build-results";
 import { LinkedLoadoutBanner } from "@/components/builder/linked-loadout-banner";
 import { LoadoutSortControls } from "@/components/builder/loadout-sort-controls";
@@ -189,6 +190,8 @@ export interface BuildsColumnContentProps {
   linkedLoadout?: SavedLoadout;
   /** `linkedLoadout` when the builds can update it (same class), for the cards. */
   updateTarget?: SavedLoadout;
+  /** Slots the pool can't fill, for the empty Builds list (see PoolGap). */
+  poolGap?: PoolGap;
 }
 
 /** The tabs, then the open tab's builds (each with its own header extras and sort). */
@@ -331,6 +334,7 @@ function ActualBuildsBody({
   onDream,
   linkedLoadout,
   updateTarget,
+  poolGap,
   sort,
   onSortChange,
 }: BodyProps<LoadoutSortState>) {
@@ -381,6 +385,7 @@ function ActualBuildsBody({
           onDream={onDream}
           updateTarget={updateTarget}
           sort={sort}
+          poolGap={poolGap}
         />
       ) : !showLoading ? (
         <p className="text-muted-foreground text-sm">

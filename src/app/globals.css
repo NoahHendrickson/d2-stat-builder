@@ -859,6 +859,58 @@ input[type="number"] {
   }
 }
 
+/* A settings row a notice just pointed at (highlightSettingRows): it pulses
+   twice. Each pulse brightens the fill and border while the hover ring
+   (d2-hover-ring: 1px, 2px off) pushes outward and fades, then the row settles
+   back to its own look. highlightSettingRows adds the class once its scroll
+   has stopped, and drops it when the fill (the longest) ends.
+   Reduced motion keeps the ring where it sits and only fades it; the normal
+   theme has no hover ring, so it gets just the fill. */
+@keyframes d2-attention {
+  10%,
+  60% {
+    background-color: color-mix(in srgb, var(--foreground) 14%, transparent);
+    border-color: color-mix(in srgb, var(--foreground) 45%, transparent);
+  }
+  35% {
+    background-color: color-mix(in srgb, var(--foreground) 5%, transparent);
+    border-color: color-mix(in srgb, var(--foreground) 16%, transparent);
+  }
+}
+@keyframes d2-attention-ring {
+  from {
+    outline: 1px solid color-mix(in srgb, var(--foreground) 55%, transparent);
+    outline-offset: 2px;
+  }
+  to {
+    outline: 1px solid transparent;
+    outline-offset: 9px;
+  }
+}
+@keyframes d2-attention-ring-still {
+  from {
+    outline: 1px solid color-mix(in srgb, var(--foreground) 55%, transparent);
+    outline-offset: 2px;
+  }
+  to {
+    outline: 1px solid transparent;
+    outline-offset: 2px;
+  }
+}
+@utility d2-attention {
+  animation:
+    d2-attention 1.8s ease-in-out,
+    d2-attention-ring 800ms cubic-bezier(0.25, 0.6, 0.4, 1) 180ms 2;
+  @media (prefers-reduced-motion: reduce) {
+    animation:
+      d2-attention 1.8s ease-in-out,
+      d2-attention-ring-still 800ms ease-out 180ms 2;
+  }
+  [data-app-theme="normal"] & {
+    animation: d2-attention 1.8s ease-in-out;
+  }
+}
+
 /* A list whose items rise in, the first eight cascading 30ms apart. Items that
    mount later (a re-sort, a new result) rise on their own; past eight they
    share the last delay, so a long list never waits on its tail. */

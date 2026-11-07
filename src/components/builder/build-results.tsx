@@ -32,9 +32,12 @@ import type { Manifest } from "@/lib/manifest/load";
 import type { ArmorSetInfo } from "@/lib/armory/sets";
 import { armorGroupOf, type ArmorGroup } from "@/lib/armory/legacy-raids";
 import {
+  ARMOR_SLOTS,
+  SLOT_LABELS,
   STAT_DISPLAY_ORDER,
   STAT_LABELS,
   STAT_ORDER,
+  type ArmorSlot,
   type StatIconMap,
 } from "@/lib/armory/stats";
 import {
@@ -72,6 +75,41 @@ export type { DimSubclassInput, GetBuilderState } from "@/components/builder/bui
 
 const MAX_SHOWN = 50;
 export { MAX_SHOWN };
+
+/**
+ * Armor slots with no legendary the optimizer may use, so no build can exist (see
+ * blockedLegendarySlots). Only set when Lower tier or Legacy armor would fill one.
+ */
+export interface PoolGap {
+  slots: ArmorSlot[];
+  /** Scroll to those two Advanced settings and highlight them. */
+  onShowSettings: () => void;
+}
+
+function listSlots(slots: readonly ArmorSlot[]): string {
+  const names = slots.map((s) => SLOT_LABELS[s].toLowerCase());
+  return names.length > 1
+    ? `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`
+    : names[0];
+}
+
+/** Why the Builds list is empty when the pool can't fill a slot, and where to fix it. */
+function PoolGapNotice({ gap }: { gap: PoolGap }) {
+  return (
+    <div className="space-y-3">
+      <p className="text-muted-foreground text-sm">
+        No builds: by default only Tier 5 legendaries are used, and you{" "}
+        {gap.slots.length === ARMOR_SLOTS.length
+          ? "don't have any for this class"
+          : `have none for ${listSlots(gap.slots)}`}
+        .
+      </p>
+      <Button size="sm" onClick={gap.onShowSettings}>
+        Include lower tier or legacy armor
+      </Button>
+    </div>
+  );
+}
 
 /** A build card: lifted face with the EQUIP centre-bright stroke. */
 export const BUILD_CARD_LIFT_CLASS =
@@ -886,6 +924,7 @@ export function BuildResults({
   onDream,
   updateTarget,
   sort,
+  poolGap,
 }: {
   result: OptimizerOutput;
   refinement: RefinementState;
@@ -897,6 +936,8 @@ export function BuildResults({
   statIcons: StatIconMap;
   balancedTuningIcon?: string;
   sort: LoadoutSortState;
+  /** Set when the pool can't fill a slot: the empty list explains it and offers the fix. */
+  poolGap?: PoolGap;
 } & BuildActionProps) {
   // "Upgrade cost" sorts by a scarcity-weighted total of each build's remaining
   // masterwork materials (see materialScore). Builds with an unknown cost sort last.
@@ -955,7 +996,11 @@ export function BuildResults({
     return (
       <div className="space-y-3">
         {status}
-        <p className="text-muted-foreground text-sm">{emptyCopy}</p>
+        {poolGap && refinement.phase !== "running" ? (
+          <PoolGapNotice gap={poolGap} />
+        ) : (
+          <p className="text-muted-foreground text-sm">{emptyCopy}</p>
+        )}
       </div>
     );
   }

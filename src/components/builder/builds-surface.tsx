@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useState } from "react";
+import { memo, useMemo, useRef, useState } from "react";
 
 import {
   BuildsColumnContent,
@@ -17,7 +17,21 @@ const DESKTOP_BUILDS_MIN_PX = 1024;
 export const BuildsSurface = memo(function BuildsSurface(props: BuildsColumnContentProps) {
   const desktop = useMinWidth(DESKTOP_BUILDS_MIN_PX);
   const [sheetOpen, setSheetOpen] = useState(false);
-  const { ready, displayedProgress } = props;
+  const { ready, displayedProgress, poolGap } = props;
+  // The pool-gap button points at settings behind the sheet: close it, then scroll
+  // once it has gone (the open sheet holds the page still).
+  const afterClose = useRef<(() => void) | null>(null);
+  const sheetPoolGap = useMemo(
+    () =>
+      poolGap && {
+        ...poolGap,
+        onShowSettings: () => {
+          afterClose.current = poolGap.onShowSettings;
+          setSheetOpen(false);
+        },
+      },
+    [poolGap],
+  );
 
   if (desktop) {
     return (
@@ -40,12 +54,17 @@ export const BuildsSurface = memo(function BuildsSurface(props: BuildsColumnCont
       <Drawer
         open={sheetOpen}
         onOpenChange={setSheetOpen}
+        onOpenChangeComplete={(open) => {
+          if (open) return;
+          afterClose.current?.();
+          afterClose.current = null;
+        }}
         swipeDirection="down"
         showSwipeHandle
       >
         <DrawerContent id="builds-mobile-sheet">
           <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
-            <BuildsColumnContent {...props} />
+            <BuildsColumnContent {...props} poolGap={sheetPoolGap} />
           </div>
         </DrawerContent>
       </Drawer>

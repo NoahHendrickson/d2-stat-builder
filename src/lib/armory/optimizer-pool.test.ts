@@ -1,7 +1,9 @@
 import { test, expect } from "vitest";
 import {
+  blockedLegendarySlots,
   buildOptimizerSlots,
   inDefaultOptimizerPool,
+  poolTogglesForSlots,
 } from "./optimizer-pool";
 import type { LegacyRaidKey } from "./legacy-raids";
 import type { ArmorSlot } from "./stats";
@@ -77,4 +79,56 @@ test("buildOptimizerSlots uses the class-item override (Dreamer's pin)", () => {
     powerConstrained: false,
   });
   expect(slots[4]!.map((p) => p.id)).toEqual(["dreamers"]);
+});
+
+test("blockedLegendarySlots: two slots without a legendary block every build", () => {
+  const t5 = { isExotic: false };
+  const exotic = { isExotic: true };
+  // Arms and legs have only exotics: one exotic can't cover both.
+  const slots = [[t5], [exotic], [t5], [exotic], [t5]];
+  expect(blockedLegendarySlots(slots, null)).toEqual(["arms", "legs"]);
+  expect(blockedLegendarySlots([[t5], [t5], [t5], [t5], [t5]], null)).toEqual([]);
+});
+
+test("blockedLegendarySlots: one gap is fine only when an allowed exotic fills it", () => {
+  const t5 = { isExotic: false };
+  const exotic = { isExotic: true };
+  const slots = [[t5], [exotic], [t5], [t5], [t5]];
+  expect(blockedLegendarySlots(slots, null)).toEqual([]);
+  expect(blockedLegendarySlots(slots, "arms")).toEqual([]);
+  // The picked exotic is a helmet, so nothing can go in the arms slot.
+  expect(blockedLegendarySlots(slots, "helmet")).toEqual(["arms"]);
+  // No exotic in the gap at all.
+  expect(blockedLegendarySlots([[t5], [], [t5], [t5], [t5]], null)).toEqual(["arms"]);
+});
+
+test("poolTogglesForSlots names the toggles that would fill a gap", () => {
+  const piece = (slot: ArmorSlot, extra: object) => ({
+    slot,
+    isFestivalMask: false,
+    isExotic: false,
+    ...extra,
+  });
+  const pieces = [
+    piece("arms", { archetype: "Gunner" }), // Tier 1–4
+    piece("legs", {}), // Armor 2.0
+    piece("chest", { archetype: "Brawler" }),
+    { ...piece("arms", {}), isExotic: true },
+  ];
+  expect(poolTogglesForSlots(pieces, ["arms"], off)).toEqual({
+    lowerTierArmor: true,
+    legacyArmor: false,
+  });
+  expect(poolTogglesForSlots(pieces, ["arms", "legs"], off)).toEqual({
+    lowerTierArmor: true,
+    legacyArmor: true,
+  });
+  // A toggle that's already on, or only adds pieces elsewhere, isn't offered.
+  expect(
+    poolTogglesForSlots(pieces, ["arms", "legs"], { ...off, lowerTierArmor: true }),
+  ).toEqual({ lowerTierArmor: false, legacyArmor: true });
+  expect(poolTogglesForSlots(pieces, ["helmet"], off)).toEqual({
+    lowerTierArmor: false,
+    legacyArmor: false,
+  });
 });

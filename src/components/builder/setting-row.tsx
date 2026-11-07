@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useId, type ReactNode } from "react";
+import { memo, useId, type ReactNode, type Ref } from "react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 
@@ -23,7 +23,9 @@ export const SettingRow = memo(function SettingRow({
   checkbox = false,
   children,
   className,
+  ref,
 }: {
+  ref?: Ref<HTMLDivElement>;
   title: string;
   description?: ReactNode;
   checked?: boolean;
@@ -52,6 +54,7 @@ export const SettingRow = memo(function SettingRow({
 
   return (
     <div
+      ref={ref}
       className={cn(
         "flex items-start gap-3 border p-3",
         selected ? checkedWell : idleWell,

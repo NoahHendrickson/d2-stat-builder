@@ -41,8 +41,10 @@ import {
 } from "@/lib/armory/dreamers-bond";
 import { ownedFestivalMasks } from "@/lib/armory/festival-masks";
 import {
+  blockedLegendarySlots,
   buildOptimizerSlots,
   inDefaultOptimizerPool,
+  poolTogglesForSlots,
   type PoolOptions,
 } from "@/lib/armory/optimizer-pool";
 import {
@@ -78,6 +80,8 @@ import { PowerRangeControls } from "@/components/builder/power-range-controls";
 import { useBuilderSearchInputs } from "@/components/builder/use-builder-search-inputs";
 import { BuildsSurface } from "@/components/builder/builds-surface";
 import type { BuildsColumnContentProps } from "@/components/builder/builds-column-content";
+import type { PoolGap } from "@/components/builder/build-results";
+import { highlightSettingRows } from "@/components/builder/highlight-setting-rows";
 import { SetBonusesSection } from "@/components/builder/set-bonuses-section";
 import { SetPopularityButton } from "@/components/builder/set-popularity-button";
 import {
@@ -587,6 +591,22 @@ export function BuilderPanel({
       }),
     [pool, classItemPieces, festivalMaskHelmets, powerConstrained],
   );
+
+  // Slots no legendary in the pool can fill, so the empty Builds list can say why and
+  // offer the Advanced settings toggle that fills them (most often: no Tier 5 armor yet).
+  const actualExoticSlot = actualExoticOption?.slot ?? null;
+  const legacyArmorRow = useRef<HTMLDivElement>(null);
+  const lowerTierRow = useRef<HTMLDivElement>(null);
+  const showPoolSettings = useCallback(() => {
+    highlightSettingRows([legacyArmorRow.current, lowerTierRow.current]);
+  }, []);
+  const poolGap = useMemo((): PoolGap | undefined => {
+    const slots = blockedLegendarySlots(slotPieces, actualExoticSlot);
+    if (!slots.length) return undefined;
+    const fills = poolTogglesForSlots(classPieces, slots, poolOptions);
+    if (!fills.lowerTierArmor && !fills.legacyArmor) return undefined;
+    return { slots, onShowSettings: showPoolSettings };
+  }, [slotPieces, actualExoticSlot, classPieces, poolOptions, showPoolSettings]);
 
   // The pool as it stands once Power matters is ON — identical while it is; with the
   // toggle off, the same builder runs again with Dreamer's pinned (if checked) and the
@@ -1131,6 +1151,7 @@ export function BuilderPanel({
       linkedLoadout,
       updateTarget:
         linkedLoadout && linksToClass(linkedLoadout, classType) ? linkedLoadout : undefined,
+      poolGap,
     }),
     [
       buildsMode,
@@ -1161,6 +1182,7 @@ export function BuilderPanel({
       openDream,
       classType,
       linkedLoadout,
+      poolGap,
     ],
   );
 
@@ -1306,6 +1328,7 @@ export function BuilderPanel({
                       description="Include Armor 2.0 exotics"
                     />
                     <SettingRow
+                      ref={legacyArmorRow}
                       checkbox
                       checked={useLegacyArmor}
                       onCheckedChange={setUseLegacyArmor}
@@ -1313,6 +1336,7 @@ export function BuilderPanel({
                       description="Include Armor 2.0 legendaries. Also in Underlight settings."
                     />
                     <SettingRow
+                      ref={lowerTierRow}
                       checkbox
                       checked={useLowerTierArmor}
                       onCheckedChange={setUseLowerTierArmor}

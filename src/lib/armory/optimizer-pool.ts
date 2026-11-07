@@ -82,3 +82,48 @@ export function buildOptimizerSlots<T extends { slot: ArmorSlot }>(
     return pool.filter((p) => p.slot === slot);
   });
 }
+
+/**
+ * The slots that stop the optimizer from making any build because they have no
+ * legendary candidate. A build needs a piece in every slot and at most one exotic, so
+ * two such slots always block it. One blocks it unless an allowed exotic can fill it:
+ * there's an exotic in that slot, and `exoticSlot` (the picked exotic's slot, `null` for
+ * any) is that slot. Returns `[]` when every slot can be filled.
+ */
+export function blockedLegendarySlots(
+  slots: readonly (readonly { isExotic: boolean }[])[],
+  exoticSlot: ArmorSlot | null,
+): ArmorSlot[] {
+  const missing = ARMOR_SLOTS.filter((_, i) => !slots[i]?.some((p) => !p.isExotic));
+  if (missing.length !== 1) return missing;
+  const slot = missing[0];
+  const exoticFits =
+    (exoticSlot === null || exoticSlot === slot) &&
+    slots[ARMOR_SLOTS.indexOf(slot)].some((p) => p.isExotic);
+  return exoticFits ? [] : missing;
+}
+
+/**
+ * Which pool toggles, now off, would add a legendary to one of `slots` from the class's
+ * armor (see blockedLegendarySlots): what the empty Builds list can offer to turn on.
+ */
+export function poolTogglesForSlots(
+  classPieces: readonly (Parameters<typeof inDefaultOptimizerPool>[0] & {
+    slot: ArmorSlot;
+  })[],
+  slots: readonly ArmorSlot[],
+  opts: PoolOptions,
+): { lowerTierArmor: boolean; legacyArmor: boolean } {
+  const adds = (on: PoolOptions) =>
+    classPieces.some(
+      (p) =>
+        !p.isExotic &&
+        slots.includes(p.slot) &&
+        !inDefaultOptimizerPool(p, opts) &&
+        inDefaultOptimizerPool(p, on),
+    );
+  return {
+    lowerTierArmor: !opts.lowerTierArmor && adds({ ...opts, lowerTierArmor: true }),
+    legacyArmor: !opts.legacyArmor && adds({ ...opts, legacyArmor: true }),
+  };
+}
