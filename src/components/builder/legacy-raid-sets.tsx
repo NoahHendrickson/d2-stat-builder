@@ -18,6 +18,7 @@ import { legacyRaidSlotIcons, type SetSlotIcon } from "@/lib/armory/sets";
 import { ARMOR_SLOTS, SLOT_LABELS, type ArmorSlot } from "@/lib/armory/stats";
 import type { Manifest } from "@/lib/manifest/load";
 import { cn } from "@/lib/utils";
+import { listAnd } from "@/lib/format-list";
 
 const COUNTS = Array.from({ length: MAX_RAID_PIECES + 1 }, (_, n) => n);
 
@@ -202,10 +203,7 @@ function RaidSlots({ raid, icons }: { raid: LegacyRaidInfo; icons: SlotIcons | u
 
 /** "Deep Stone Crypt", "Deep Stone Crypt and Vow of the Disciple", "A, B and C". */
 function listRaids(keys: LegacyRaidKey[]): string {
-  const names = keys.map(legacyRaidName);
-  return names.length < 2
-    ? names.join("")
-    : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+  return listAnd(keys.map(legacyRaidName));
 }
 
 /** How many distinct armor slots these raids' owned pieces cover. */

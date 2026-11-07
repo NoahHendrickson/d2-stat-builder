@@ -14,7 +14,7 @@ export const CHANGELOG: readonly ChangelogEntry[] = [
   {
     date: "2026-11-07",
     changes: [
-      "Optimizer: if you have no Tier 5 armor for a slot, the empty Builds list says so and takes you to the lower tier and legacy armor settings.",
+      "Optimizer: if you have no Tier 5 armor for a slot, the empty Builds list says so and takes you to the setting that fixes it.",
     ],
   },
   {

@@ -8,8 +8,8 @@ import {
   BuildResults,
   MAX_SHOWN,
   type GetBuilderState,
-  type PoolGap,
 } from "@/components/builder/build-results";
+import type { PoolGap } from "@/components/builder/empty-builds";
 import { LinkedLoadoutBanner } from "@/components/builder/linked-loadout-banner";
 import { LoadoutSortControls } from "@/components/builder/loadout-sort-controls";
 import { TheoryIntroAlert } from "@/components/builder/theory-intro-alert";

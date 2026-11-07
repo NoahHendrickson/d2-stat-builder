@@ -31,21 +31,21 @@ export interface PoolOptions {
   legacyRaids: ReadonlySet<LegacyRaidKey>;
 }
 
+/** What the pool rules read from an armor piece. */
+export interface PoolPiece {
+  isFestivalMask: boolean;
+  tunedStat?: number;
+  archetype?: string;
+  isExotic: boolean;
+  legacyRaid?: LegacyRaidKey;
+}
+
 /**
  * Default optimizer pool: T5 pieces (exactly those with a tuning socket) plus whatever
  * `opts` lets in, excluding FotL masks. Masks enter the helmet slot only as optional
  * candidates while a power range is enforced (see helmetCandidates).
  */
-export function inDefaultOptimizerPool(
-  piece: {
-    isFestivalMask: boolean;
-    tunedStat?: number;
-    archetype?: string;
-    isExotic: boolean;
-    legacyRaid?: LegacyRaidKey;
-  },
-  opts: PoolOptions,
-): boolean {
+export function inDefaultOptimizerPool(piece: PoolPiece, opts: PoolOptions): boolean {
   if (piece.isFestivalMask) return false;
   if (piece.tunedStat !== undefined) return true;
   if (piece.isExotic) return opts.legacyExotics;
@@ -85,45 +85,73 @@ export function buildOptimizerSlots<T extends { slot: ArmorSlot }>(
 
 /**
  * The slots that stop the optimizer from making any build because they have no
- * legendary candidate. A build needs a piece in every slot and at most one exotic, so
- * two such slots always block it. One blocks it unless an allowed exotic can fill it:
- * there's an exotic in that slot, and `exoticSlot` (the picked exotic's slot, `null` for
- * any) is that slot. Returns `[]` when every slot can be filled.
+ * legendary candidate. `slots` is per ARMOR_SLOTS slot. A build needs a piece in every
+ * slot and at most one exotic.
+ * - A picked exotic (`exoticSlot`) fills its own slot, so every other slot needs a
+ *   legendary.
+ * - With any exotic allowed (`null`), one slot can go without a legendary when it has an
+ *   exotic to use; a second can't.
+ * Returns `[]` when every slot can be filled.
  */
 export function blockedLegendarySlots(
   slots: readonly (readonly { isExotic: boolean }[])[],
   exoticSlot: ArmorSlot | null,
 ): ArmorSlot[] {
-  const missing = ARMOR_SLOTS.filter((_, i) => !slots[i]?.some((p) => !p.isExotic));
-  if (missing.length !== 1) return missing;
-  const slot = missing[0];
-  const exoticFits =
-    (exoticSlot === null || exoticSlot === slot) &&
-    slots[ARMOR_SLOTS.indexOf(slot)].some((p) => p.isExotic);
+  const missing = ARMOR_SLOTS.filter(
+    (slot, i) => slot !== exoticSlot && !slots[i].some((p) => !p.isExotic),
+  );
+  if (exoticSlot !== null || missing.length !== 1) return missing;
+  const exoticFits = slots[ARMOR_SLOTS.indexOf(missing[0])].some((p) => p.isExotic);
   return exoticFits ? [] : missing;
 }
 
+/** The Advanced settings that let non-Tier-5 legendaries into the pool. */
+export type PoolSetting = "lowerTierArmor" | "legacyArmor";
+const POOL_SETTINGS: readonly PoolSetting[] = ["lowerTierArmor", "legacyArmor"];
+
+/** Why no build can exist, and which settings fix it (see fillablePoolGap). */
+export interface PoolGapFix {
+  /** The slots with no legendary the pool may use. */
+  slots: ArmorSlot[];
+  /** The settings to turn on: either one is enough, unless `together`. */
+  settings: PoolSetting[];
+  /** Both settings are needed at once (neither alone unblocks a build). */
+  together: boolean;
+  /** The settings already on, so the notice can say what the pool uses now. */
+  using: PoolSetting[];
+}
+
 /**
- * Which pool toggles, now off, would add a legendary to one of `slots` from the class's
- * armor (see blockedLegendarySlots): what the empty Builds list can offer to turn on.
+ * When missing legendaries rule out every build and turning on Lower tier and/or
+ * Legacy armor would bring builds back: the blocked slots and the settings that do it.
+ * Each candidate setting is checked by re-running blockedLegendarySlots with the pieces
+ * it would add, so a setting that fills one gap but leaves another is never offered.
+ * `null` when nothing is blocked, or when those settings can't unblock it.
  */
-export function poolTogglesForSlots(
-  classPieces: readonly (Parameters<typeof inDefaultOptimizerPool>[0] & {
-    slot: ArmorSlot;
-  })[],
-  slots: readonly ArmorSlot[],
+export function fillablePoolGap(
+  slots: readonly (readonly PoolPiece[])[],
+  classPieces: readonly (PoolPiece & { slot: ArmorSlot })[],
+  exoticSlot: ArmorSlot | null,
   opts: PoolOptions,
-): { lowerTierArmor: boolean; legacyArmor: boolean } {
-  const adds = (on: PoolOptions) =>
-    classPieces.some(
-      (p) =>
-        !p.isExotic &&
-        slots.includes(p.slot) &&
-        !inDefaultOptimizerPool(p, opts) &&
-        inDefaultOptimizerPool(p, on),
-    );
-  return {
-    lowerTierArmor: !opts.lowerTierArmor && adds({ ...opts, lowerTierArmor: true }),
-    legacyArmor: !opts.legacyArmor && adds({ ...opts, legacyArmor: true }),
+): PoolGapFix | null {
+  const blocked = blockedLegendarySlots(slots, exoticSlot);
+  if (!blocked.length) return null;
+  const off = POOL_SETTINGS.filter((setting) => !opts[setting]);
+  const unblocks = (turnOn: readonly PoolSetting[]) => {
+    const on = { ...opts, ...Object.fromEntries(turnOn.map((k) => [k, true])) };
+    const widened = ARMOR_SLOTS.map((slot, i) => [
+      ...slots[i],
+      ...classPieces.filter(
+        (p) => p.slot === slot && !inDefaultOptimizerPool(p, opts) && inDefaultOptimizerPool(p, on),
+      ),
+    ]);
+    return blockedLegendarySlots(widened, exoticSlot).length === 0;
   };
+  const alone = off.filter((setting) => unblocks([setting]));
+  const using = POOL_SETTINGS.filter((setting) => opts[setting]);
+  if (alone.length) return { slots: blocked, settings: alone, together: false, using };
+  if (off.length > 1 && unblocks(off)) {
+    return { slots: blocked, settings: off, together: true, using };
+  }
+  return null;
 }

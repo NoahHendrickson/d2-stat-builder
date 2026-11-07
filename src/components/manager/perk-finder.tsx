@@ -39,6 +39,7 @@ import {
 import { moveItem } from "@/lib/move-item";
 import { cn } from "@/lib/utils";
 import { TAG_ICONS } from "./tag-icons";
+import { listAnd } from "@/lib/format-list";
 
 const MODES: { value: PerkMatchMode; label: string; help: string }[] = [
   {
@@ -261,7 +262,7 @@ export function PerkFinder({
             {promotedNames.length > 0 ? (
               <p className="flex max-w-xl items-start gap-1.5 text-xs">
                 <HugeiconsIcon icon={InformationCircleIcon} className="mt-px size-3.5 shrink-0" aria-hidden />
-                {new Intl.ListFormat("en").format(promotedNames)}{" "}
+                {listAnd(promotedNames)}{" "}
                 {plural(promotedNames.length, "is", "are")} ranked above a left or right perk, so{" "}
                 {plural(promotedNames.length, "it also decides", "they also decide")} which copies you keep, not
                 just their order.
