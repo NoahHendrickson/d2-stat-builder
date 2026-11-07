@@ -1,6 +1,6 @@
 "use client";
 
-import { memo, useId, type ReactNode } from "react";
+import { memo, useId, type ReactNode, type Ref } from "react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { cn } from "@/lib/utils";
 
@@ -23,7 +23,15 @@ export const SettingRow = memo(function SettingRow({
   checkbox = false,
   children,
   className,
+  ref,
+  attention,
 }: {
+  ref?: Ref<HTMLDivElement>;
+  /**
+   * Set to pulse the row (d2-attention), e.g. when a notice points at it. Each new
+   * value replays the pulse: the overlay remounts under that key.
+   */
+  attention?: number;
   title: string;
   description?: ReactNode;
   checked?: boolean;
@@ -52,12 +60,21 @@ export const SettingRow = memo(function SettingRow({
 
   return (
     <div
+      ref={ref}
       className={cn(
-        "flex items-start gap-3 border p-3",
+        "relative isolate flex items-start gap-3 border p-3",
         selected ? checkedWell : idleWell,
         className,
       )}
     >
+      {attention !== undefined && (
+        // Behind the content, over the row's own fill and border (-inset-px).
+        <span
+          key={attention}
+          aria-hidden
+          className="d2-attention pointer-events-none absolute -inset-px -z-10"
+        />
+      )}
       {checkbox && (
         <div className="flex shrink-0 items-center py-0.5">
           <Checkbox

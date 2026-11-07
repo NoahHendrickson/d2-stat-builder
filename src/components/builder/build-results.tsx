@@ -37,6 +37,7 @@ import {
   STAT_ORDER,
   type StatIconMap,
 } from "@/lib/armory/stats";
+import { EmptyBuilds, type PoolGap } from "@/components/builder/empty-builds";
 import {
   sortLoadouts,
   type LoadoutCostFn,
@@ -886,6 +887,7 @@ export function BuildResults({
   onDream,
   updateTarget,
   sort,
+  poolGap,
 }: {
   result: OptimizerOutput;
   refinement: RefinementState;
@@ -897,6 +899,8 @@ export function BuildResults({
   statIcons: StatIconMap;
   balancedTuningIcon?: string;
   sort: LoadoutSortState;
+  /** Set when the pool can't fill a slot: the empty list explains it and offers the fix. */
+  poolGap?: PoolGap;
 } & BuildActionProps) {
   // "Upgrade cost" sorts by a scarcity-weighted total of each build's remaining
   // masterwork materials (see materialScore). Builds with an unknown cost sort last.
@@ -937,25 +941,10 @@ export function BuildResults({
     />
   );
   if (result.loadouts.length === 0) {
-    // The definitive "nothing meets those constraints" is only honest once no deeper
-    // search is running, no better list is waiting behind the CTA above, AND the walk
-    // that produced this empty list ran to exhaustion. A capped walk (time limit, or a
-    // background pass that also timed out / was cancelled) has NOT proven anything —
-    // say "none found in time", never "none exist".
-    const exhaustive =
-      !result.capped || (refinement.phase === "done" && refinement.verified);
-    const emptyCopy =
-      refinement.phase === "running"
-        ? "No builds found in the first pass yet — the deeper search is still running."
-        : refinement.phase === "done" && refinement.pending
-          ? "The first pass found none — use “Show them” above to load what the full search found."
-          : exhaustive
-            ? "No loadouts from your gear meet those constraints — even with mods. Try easing a target, a set bonus, or raising your mod budget."
-            : "No builds found within the search time limit — some may still exist. Narrow your targets (or ease one) and search again.";
     return (
       <div className="space-y-3">
         {status}
-        <p className="text-muted-foreground text-sm">{emptyCopy}</p>
+        <EmptyBuilds result={result} refinement={refinement} poolGap={poolGap} />
       </div>
     );
   }
