@@ -119,17 +119,17 @@ export function ModList({ mods, icons }: { mods: [number, number][]; icons: Stat
 }
 
 /**
- * A row's thumb: the owned item's icon, a specific item's (a roll to farm), or a frame holding
+ * A row's thumb: the owned item's icon, the exotic's (a roll to farm), or a frame holding
  * the roll's primary stat.
  */
 export function RollThumb({
   owned,
-  item,
+  exotic,
   primary,
   icons,
 }: {
   owned?: ArmorPiece;
-  item?: { icon?: string; watermark?: string; name: string };
+  exotic?: { icon?: string; watermark?: string; name: string };
   primary: number;
   icons: StatIconMap;
 }) {
@@ -145,8 +145,8 @@ export function RollThumb({
       />
     );
   }
-  if (item?.icon) {
-    return <ArmorThumb icon={item.icon} watermark={item.watermark} alt={item.name} size={32} gearTier={5} />;
+  if (exotic?.icon) {
+    return <ArmorThumb icon={exotic.icon} watermark={exotic.watermark} alt={exotic.name} size={32} gearTier={5} />;
   }
   return (
     <span className="d2-brackets flex size-8 shrink-0 items-center justify-center bg-black/25">

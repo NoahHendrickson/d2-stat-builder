@@ -26,7 +26,7 @@ describe("summarizeTheory", () => {
     expect(s.archetypes.map((a) => a.name)).toEqual(["Gunner", "Powerhouse"]);
     expect(s.archetypes[0].share).toBeCloseTo(0.6);
     expect(s.archetypes[0].tertiaries).toEqual([5]);
-    expect(s.archetypes[0].tuned).toBeNull();
+    expect(s.archetypes[0].tuned).toEqual([]);
     expect(s.builds).toBe(2);
   });
 
@@ -44,7 +44,7 @@ describe("summarizeTheory", () => {
     expect(s.archetypes.map((a) => a.name)).toEqual(["Gunner", "Powerhouse"]);
     expect(s.archetypes[0].share).toBeCloseTo(2 / 3);
     expect(s.archetypes[0].tuned).toEqual([0]);
-    expect(s.archetypes[1].tuned).toBeNull();
+    expect(s.archetypes[1].tuned).toEqual([]);
     expect(s.setHashes).toEqual([7]);
   });
 
@@ -65,57 +65,76 @@ describe("summarizeTheory", () => {
 
   describe("slots", () => {
     const owned = { owned: { instanceId: "x" } };
+    const helmet = piece("Brawler", 0, { slot: 0, ...owned });
 
-    it("names the slots left to farm once a legendary is owned, in slot order", () => {
+    it("names the slots left once a legendary is owned, in slot order", () => {
       const s = summarizeTheory([
         recipe([
-          piece("Brawler", 0, { slot: 0, ...owned }),
+          helmet,
           piece("Brawler", 0, { slot: 2, ...owned }),
           piece("Gunner", 5, { slot: 3 }),
           piece("Gunner", 5, { slot: 1 }),
           piece("Powerhouse", 5, { slot: 4 }),
         ]),
       ])!;
-      expect(s.archetypes.map((a) => [a.name, a.slots])).toEqual([
-        ["Gunner", [{ slot: 1 }, { slot: 3 }]],
-        ["Powerhouse", [{ slot: 4 }]],
-      ]);
+      expect(s.slots).toEqual([1, 3, 4]);
     });
 
-    it("counts only the builds with an owned legendary", () => {
+    it("names all four when one legendary is owned", () => {
       const s = summarizeTheory([
-        recipe([piece("Brawler", 0, { slot: 0, ...owned }), piece("Gunner", 5, { slot: 1 })]),
-        recipe([piece("Gunner", 5, { slot: 2 }), piece("Gunner", 5, { slot: 3 }), piece("Gunner", 5, { slot: 4 })]),
+        recipe([helmet, ...[1, 2, 3, 4].map((slot) => piece("Gunner", 5, { slot }))]),
       ])!;
-      expect(s.archetypes[0].slots).toEqual([{ slot: 1 }]);
+      expect(s.slots).toEqual([1, 2, 3, 4]);
     });
 
-    it("gives each slot the set most of its pieces come from", () => {
+    it("leaves out the unowned exotic's slot", () => {
       const s = summarizeTheory([
-        recipe([piece("Brawler", 0, { slot: 0, ...owned }), piece("Gunner", 5, { slot: 1, setHash: 7 })]),
-        recipe([piece("Brawler", 0, { slot: 0, ...owned }), piece("Gunner", 5, { slot: 1, setHash: 7 })]),
-        recipe([piece("Brawler", 0, { slot: 0, ...owned }), piece("Gunner", 5, { slot: 1 })]),
+        recipe([helmet, piece("Gunner", 5, { slot: 1 }), piece("Brawler", 0, { slot: 3, exotic: true })]),
       ])!;
-      expect(s.archetypes[0].slots).toEqual([{ slot: 1, setHash: 7 }]);
+      expect(s.slots).toEqual([1]);
     });
 
     it("names none with nothing owned, or only the exotic", () => {
-      const nothing = summarizeTheory([recipe([piece("Gunner", 5, { slot: 1 })])])!;
-      expect(nothing.archetypes[0].slots).toEqual([]);
+      expect(summarizeTheory([recipe([piece("Gunner", 5, { slot: 1 })])])!.slots).toEqual([]);
       const exotic = summarizeTheory([
         recipe([piece("Brawler", 0, { slot: 0, exotic: true, ...owned }), piece("Gunner", 5, { slot: 1 })]),
       ])!;
-      expect(exotic.archetypes[0].slots).toEqual([]);
+      expect(exotic.slots).toEqual([]);
     });
 
-    it("names none when the slots vary too much to matter", () => {
+    it("names none when few of the builds use an owned legendary", () => {
+      const unbound = Array.from({ length: 7 }, () => recipe([piece("Gunner", 5, { slot: 2 })]));
+      const s = summarizeTheory([recipe([helmet, piece("Gunner", 5, { slot: 1 })]), ...unbound])!;
+      expect(s.slots).toEqual([]);
+    });
+
+    it("names only the slots most of those builds farm", () => {
       const s = summarizeTheory(
-        [0, 1, 2, 3, 4].map((slot) =>
-          recipe([piece("Brawler", 0, { slot: (slot + 1) % 5, ...owned }), piece("Gunner", 5, { slot })]),
+        [2, 3, 4].map((other) =>
+          recipe([helmet, piece("Gunner", 5, { slot: 1 }), piece("Gunner", 5, { slot: other })]),
         ),
       )!;
-      expect(s.archetypes.find((a) => a.name === "Gunner")!.slots).toEqual([]);
+      expect(s.slots).toEqual([1]);
     });
+
+    it("names none when every slot qualifies", () => {
+      const s = summarizeTheory(
+        [0, 1, 2, 3, 4].map((ownedSlot) =>
+          recipe([
+            piece("Brawler", 0, { slot: ownedSlot, ...owned }),
+            ...[0, 1, 2, 3, 4]
+              .filter((slot) => slot !== ownedSlot)
+              .map((slot) => piece("Gunner", 5, { slot })),
+          ]),
+        ),
+      )!;
+      expect(s.slots).toEqual([]);
+    });
+  });
+
+  it("doesn't pick between tertiaries tied at the cap", () => {
+    const s = summarizeTheory([recipe([piece("Gunner", 1), piece("Gunner", 2), piece("Gunner", 4)])])!;
+    expect(s.archetypes[0].tertiaries).toEqual([]);
   });
 
   it("says any tertiary when an archetype's are evenly spread, and null when nothing is farmed", () => {

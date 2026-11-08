@@ -12,6 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { countBy } from "@/lib/count-by";
 import { BUNGIE_IMAGE_BASE } from "@/lib/bungie/constants";
 import { cn } from "@/lib/utils";
 import { STAT_LABELS, STAT_ORDER, type StatIconMap } from "@/lib/armory/stats";
@@ -97,16 +98,6 @@ export const ExoticClassPerkPicker = memo(function ExoticClassPerkPicker({
     </div>
   );
 });
-
-/** How many items map to each key; null keys are skipped. */
-function countBy<T>(items: T[], key: (item: T) => number | null): Map<number, number> {
-  const out = new Map<number, number>();
-  for (const item of items) {
-    const k = key(item);
-    if (k !== null) out.set(k, (out.get(k) ?? 0) + 1);
-  }
-  return out;
-}
 
 function SpiritSelect({
   ariaLabel,

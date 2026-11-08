@@ -30,7 +30,7 @@ import { useManifest } from "@/lib/manifest/use-manifest";
 import { cn } from "@/lib/utils";
 import { useStoreValue } from "@/lib/value-store";
 import { SetBonusChip } from "@/components/loadouts/loadout-row-details";
-import { DetailCard, DetailSection } from "@/components/weapons/weapon-detail-card";
+import { DetailCard, DetailSection } from "@/components/detail-card";
 import { ChampionStuns, useEquippedSetBonuses } from "./character-readout";
 import { ItemTile } from "./item-tile";
 import { farmingStore } from "./farming";

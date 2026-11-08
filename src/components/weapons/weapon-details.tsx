@@ -18,8 +18,8 @@ import {
   CollapsibleDetailSection,
   DetailCard,
   DetailSection,
-  FrameRow,
-} from "@/components/weapons/weapon-detail-card";
+} from "@/components/detail-card";
+import { FrameRow } from "@/components/weapons/weapon-detail-card";
 import { DpsSetups } from "@/components/weapons/weapon-dps-setups";
 import {
   AMMO_TYPE,
