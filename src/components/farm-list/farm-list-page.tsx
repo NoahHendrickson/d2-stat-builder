@@ -2,10 +2,10 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 import type { DestinyProfileResponse } from "bungie-api-ts/destiny2";
 import { ArmorFarmPanel } from "@/components/farm-list/armor-farm-list";
-import { FarmCard, FarmField, FarmPanel, farmDate } from "@/components/farm-list/farm-list-card";
+import { FarmCard, FarmEmpty, FarmField, FarmPanel, farmDate } from "@/components/farm-list/farm-list-card";
 import { ObtainedActions, RemoveButton } from "@/components/farm-list/farm-list-actions";
 import { Button } from "@/components/ui/button";
 import { useProfile } from "@/lib/armory/use-profile";
@@ -19,7 +19,7 @@ import { useFarmList, useFarmListMutations } from "@/lib/farm-list/use-farm-list
 import { cn } from "@/lib/utils";
 
 /** The perks, in the game's order. */
-const COLUMNS = ["barrel", "magazine", "left", "right", "origin", "masterwork"] as const;
+const COLUMNS = ["frame", "barrel", "magazine", "left", "right", "other", "origin", "masterwork"] as const;
 type ColumnKey = (typeof COLUMNS)[number];
 
 /** An extra's column; an entry saved without slots goes by the column's name. */
@@ -30,11 +30,11 @@ function extraSlot(perk: FarmPerk): FarmColumn {
   return perk.kind === "Magazine" ? "magazine" : "barrel";
 }
 
-/** What the entry asks for in a column, or undefined for any. */
-function wanted(entry: WeaponFarmEntry, column: ColumnKey): FarmPerk | undefined {
-  if (column === "left") return entry.traits[0];
-  if (column === "right") return entry.traits[1];
-  return entry.extras.find((perk) => extraSlot(perk) === column);
+/** What the entry asks for in a column, empty for any. Only "other" can hold more than one. */
+function wanted(entry: WeaponFarmEntry, column: ColumnKey): FarmPerk[] {
+  if (column === "left") return [entry.traits[0]];
+  if (column === "right") return [entry.traits[1]];
+  return entry.extras.filter((perk) => extraSlot(perk) === column);
 }
 
 /**
@@ -60,25 +60,17 @@ export function FarmListPage() {
   useEffect(() => () => setFresh(new Set()), []);
 
   const profile = useProfile().query.data;
+  const copies = useMemo(
+    () => (profile ? new Map(ownedCopies(profile).map((c) => [c.instanceId, c])) : undefined),
+    [profile],
+  );
   const manifestStatus = useManifest();
   const manifest = manifestStatus.state === "ready" ? manifestStatus.manifest : undefined;
   const weapons = entries?.filter((e): e is WeaponFarmEntry => e.kind === "weapon") ?? [];
   const armor = entries?.filter((e): e is ArmorFarmEntry => e.kind === "armor") ?? [];
-  const linkClass = "underline underline-offset-2 hover:text-foreground";
 
   return (
     <main className="flex w-full flex-col gap-4 p-6 max-md:p-4">
-      <p className="text-sm text-muted-foreground">
-        Add weapon rolls from{" "}
-        <Link href="/weapons" className={linkClass}>
-          Weapon search
-        </Link>{" "}
-        and set armor from Theoretical Builds or a Dream build in the{" "}
-        <Link href="/" className={linkClass}>
-          Stat optimizer
-        </Link>
-        . When a match drops, it shows up under Dropped.
-      </p>
       {query.isPending ? (
         <p className="text-sm text-muted-foreground">Loading your Farm list…</p>
       ) : query.isError ? (
@@ -89,13 +81,18 @@ export function FarmListPage() {
           <FarmPanel
             title="Weapons"
             entries={weapons}
-            empty="No weapons yet."
+            empty={
+              <FarmEmpty title="No weapons yet" href="/weapons" action="Open Weapon search">
+                Pick a left and a right perk on a weapon, then add the roll from the Perks header.
+              </FarmEmpty>
+            }
             renderCard={(entry) => (
               <WeaponCard
                 key={entry.id}
                 entry={entry}
                 isNew={fresh.has(entry.id)}
                 profile={profile}
+                copies={copies}
                 manifest={manifest}
               />
             )}
@@ -110,17 +107,18 @@ export function FarmListPage() {
 interface Drop {
   copy: OwnedCopy;
   /** What the copy rolled in each column, once the manifest is ready to name it. */
-  rolled?: Record<ColumnKey, string | undefined>;
+  rolled?: Partial<Record<ColumnKey, string>>;
 }
 
 /** The drop for an obtained entry; null once the copy is gone, undefined without one. */
 function dropFor(
   entry: WeaponFarmEntry,
   profile: DestinyProfileResponse | undefined,
+  copies: ReadonlyMap<string, OwnedCopy> | undefined,
   manifest: Manifest | undefined,
 ): Drop | null | undefined {
-  if (!entry.obtained || !profile) return undefined;
-  const copy = ownedCopies(profile).find((c) => c.instanceId === entry.obtained!.instanceId);
+  if (!entry.obtained || !profile || !copies) return undefined;
+  const copy = copies.get(entry.obtained.instanceId);
   if (!copy) return null;
   if (!manifest) return { copy };
   const roll = weaponRoll(profile, manifest, copy.instanceId);
@@ -147,18 +145,20 @@ function matches(profile: DestinyProfileResponse, drop: Drop, column: ColumnKey,
   return copyHasPerk(profile, drop.copy.instanceId, perk);
 }
 
-function WeaponCard({
+const WeaponCard = memo(function WeaponCard({
   entry,
   isNew,
   profile,
+  copies,
   manifest,
 }: {
   entry: WeaponFarmEntry;
   isNew: boolean;
   profile: DestinyProfileResponse | undefined;
+  copies: ReadonlyMap<string, OwnedCopy> | undefined;
   manifest: Manifest | undefined;
 }) {
-  const drop = dropFor(entry, profile, manifest);
+  const drop = dropFor(entry, profile, copies, manifest);
   const status = entry.obtained
     ? `Dropped ${farmDate.format(entry.obtained.at)}${
         drop ? `, ${placeLabel(profile, drop.copy.place)}` : drop === null ? ", since removed" : ""
@@ -186,8 +186,10 @@ function WeaponCard({
       status={status}
       actions={entry.obtained ? <ObtainedActions entry={entry} /> : <WaitingActions entry={entry} />}
     >
-      {COLUMNS.map((key) => {
-        const perk = wanted(entry, key);
+      {COLUMNS.flatMap((key): { key: ColumnKey; perk?: FarmPerk }[] => {
+        const perks = wanted(entry, key);
+        return perks.length > 0 ? perks.map((perk) => ({ key, perk })) : [{ key }];
+      }).map(({ key, perk }) => {
         // A dismantled copy can't be read, but it only counted because it had every required
         // pick. Whether it had the masterwork can't be known any more.
         const match =
@@ -201,7 +203,7 @@ function WeaponCard({
         const rolledAny = !perk && rolled && rolled !== "None" ? rolled : undefined;
         if (!perk && !rolledAny) return null;
         return (
-          <FarmField key={key} column={key}>
+          <FarmField key={perk?.name ?? key} column={key}>
             {perk && <PerkCell perk={perk} match={match} />}
             {(rolledAny ?? (match === false ? rolled : undefined)) && (
               <span className="truncate text-xs text-muted-foreground" title={rolled}>
@@ -213,7 +215,7 @@ function WeaponCard({
       })}
     </FarmCard>
   );
-}
+});
 
 /** A wanted perk: its icon and name, marked on the icon's corner once a drop can be compared. */
 function PerkCell({ perk, match }: { perk: FarmPerk; match: boolean | undefined }) {

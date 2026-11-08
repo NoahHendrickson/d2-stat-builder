@@ -182,6 +182,29 @@ describe("newlyObtained", () => {
     const p = profile([{ hash: 1, id: "10", sockets: [[301], [402]] }]);
     expect(newlyObtained(p, [waiting, done]).map((m) => [m.entry.id, m.copy.instanceId])).toEqual([["a", "10"]]);
   });
+
+  // X+Y, and X+Y with a picked barrel: different hunts that one copy can satisfy.
+  const loose = parseFarmEntry({ ...makeEntry({ 2: 3, 3: 6 })!, id: "loose", createdAt: 2 }) as WeaponFarmEntry;
+  const strict = parseFarmEntry({ ...makeEntry({ 1: 1, 2: 3, 3: 6 })!, id: "strict", createdAt: 1 }) as WeaponFarmEntry;
+  const copy = (id: string) => ({ hash: 1, id, sockets: [[201], [301], [402]] });
+
+  it("gives one copy to the oldest entry that accepts it", () => {
+    const found = newlyObtained(profile([copy("10")]), [loose, strict]);
+    expect(found.map((m) => [m.entry.id, m.copy.instanceId])).toEqual([["strict", "10"]]);
+  });
+
+  it("fills both entries when there are two copies", () => {
+    const found = newlyObtained(profile([copy("10"), copy("11")]), [loose, strict]);
+    expect(found.map((m) => [m.entry.id, m.copy.instanceId])).toEqual([
+      ["strict", "10"],
+      ["loose", "11"],
+    ]);
+  });
+
+  it("won't reuse a copy another entry already holds", () => {
+    const held = { ...strict, obtained: { instanceId: "10", at: 5, seen: true } };
+    expect(newlyObtained(profile([copy("10")]), [held, loose])).toEqual([]);
+  });
 });
 
 describe("dismantledDrops", () => {

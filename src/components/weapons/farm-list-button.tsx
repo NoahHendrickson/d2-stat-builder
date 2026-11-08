@@ -56,7 +56,8 @@ export function FarmPerksSection({
     null,
   );
   const [checking, setChecking] = useState(false);
-  const canAdd = entry !== null && membershipId !== undefined;
+  // Not before the list is in: an entry can't be told from a new roll until then.
+  const canAdd = entry !== null && membershipId !== undefined && entries !== undefined;
   const key = entry ? farmWeaponPicksKey(entry) : "";
   const ownedNow = owned?.key === key ? owned : null;
   const busy = checking || add.isPending || remove.isPending;

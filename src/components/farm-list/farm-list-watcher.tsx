@@ -10,15 +10,15 @@ import { isFarmDone, type ArmorFarmEntry, type FarmEntry, type WeaponFarmEntry }
 import { useFarmList, useFarmListMutations } from "@/lib/farm-list/use-farm-list";
 
 /**
- * Watches for Farm list drops: whenever the profile comes in (on load, back to the tab,
- * or a page's own refresh), any waiting entry with a matching copy is marked obtained and
+ * Watches for Farm list drops: whenever the profile comes in (on load, back to the tab
+ * once it's gone stale, or a page's own refresh), any waiting entry with a matching copy is marked obtained and
  * a toast says so. Only drops seen while the app is open count; a copy dismantled before
  * then is never seen. Renders nothing.
  */
 export function FarmListWatcher() {
   const entries = useFarmList().data;
   const weapons = useMemo(
-    () => entries?.filter((e): e is WeaponFarmEntry => e.kind === "weapon" && !e.obtained) ?? [],
+    () => entries?.filter((e): e is WeaponFarmEntry => e.kind === "weapon") ?? [],
     [entries],
   );
   const armor = useMemo(
@@ -30,7 +30,7 @@ export function FarmListWatcher() {
   return (
     <>
       {dropped.length > 0 && <DismantledWatch dropped={dropped} />}
-      {weapons.length > 0 && <WeaponWatch waiting={weapons} />}
+      {weapons.some((e) => !e.obtained) && <WeaponWatch entries={weapons} />}
       {armor.some((e) => !e.obtained) && <ArmorWatch entries={armor} />}
     </>
   );
@@ -76,12 +76,12 @@ function DismantledWatch({ dropped }: { dropped: FarmEntry[] }) {
   return null;
 }
 
-function WeaponWatch({ waiting }: { waiting: WeaponFarmEntry[] }) {
+function WeaponWatch({ entries }: { entries: WeaponFarmEntry[] }) {
   const profile = useProfile().query.data;
   const report = useReportDrop();
   useEffect(() => {
     if (!profile) return;
-    for (const { entry, copy } of newlyObtained(profile, waiting)) {
+    for (const { entry, copy } of newlyObtained(profile, entries)) {
       report(entry, copy.instanceId, () =>
         toast.success(
           `Farm list: ${entry.weaponName} dropped`,
@@ -89,7 +89,7 @@ function WeaponWatch({ waiting }: { waiting: WeaponFarmEntry[] }) {
         ),
       );
     }
-  }, [profile, waiting, report]);
+  }, [profile, entries, report]);
   return null;
 }
 

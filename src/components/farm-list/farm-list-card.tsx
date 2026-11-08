@@ -1,8 +1,10 @@
 "use client";
 
+import Link from "next/link";
 import { useId, useState, type ReactNode } from "react";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { ArrowDown01Icon } from "@hugeicons/core-free-icons";
+import { ArrowDown01Icon, ShoppingCart02Icon } from "@hugeicons/core-free-icons";
+import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DetailCard, DetailSection } from "@/components/detail-card";
 import { isFarmDone, type FarmEntry } from "@/lib/farm-list/types";
@@ -49,11 +51,14 @@ export function FarmPanel<E extends FarmEntry>({
       <DetailSection
         title={title}
         heading={
-          <span className="flex items-baseline gap-2">
-            {title}
-            {entries.length > 0 && (
-              <span className="text-muted-foreground text-xs font-normal tabular-nums">{entries.length}</span>
-            )}
+          // As tall as the filter, so an empty panel's header lines up with a full one's.
+          <span className="flex min-h-[38px] items-center">
+            <span className="flex items-baseline gap-2">
+              {title}
+              {entries.length > 0 && (
+                <span className="text-muted-foreground text-xs font-normal tabular-nums">{entries.length}</span>
+              )}
+            </span>
           </span>
         }
         action={
@@ -69,7 +74,7 @@ export function FarmPanel<E extends FarmEntry>({
         }
       >
         {entries.length === 0 ? (
-          <p className="text-muted-foreground text-sm">{empty}</p>
+          empty
         ) : shown ? (
           <div className="flex flex-col gap-4">
             {groups.map((g) => (
@@ -83,6 +88,34 @@ export function FarmPanel<E extends FarmEntry>({
         )}
       </DetailSection>
     </DetailCard>
+  );
+}
+
+/** A panel with nothing in it yet: what goes here, and a way to go and add some. */
+export function FarmEmpty({
+  title,
+  children,
+  href,
+  action,
+}: {
+  title: string;
+  children: ReactNode;
+  href: string;
+  action: string;
+}) {
+  return (
+    <div className="flex flex-col items-center gap-4 px-4 py-14 text-center">
+      <span className="flex size-12 items-center justify-center border border-foreground/10 bg-foreground/5 normal:rounded-[14px]">
+        <HugeiconsIcon icon={ShoppingCart02Icon} className="size-6 text-muted-foreground" aria-hidden />
+      </span>
+      <div className="flex max-w-sm flex-col gap-1.5">
+        <h3 className="text-base font-medium">{title}</h3>
+        <p className="text-sm text-muted-foreground">{children}</p>
+      </div>
+      <Button variant="outline" render={<Link href={href} />} nativeButton={false}>
+        {action}
+      </Button>
+    </div>
   );
 }
 

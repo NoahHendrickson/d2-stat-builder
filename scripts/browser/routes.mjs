@@ -5,7 +5,7 @@ export const ROUTES = [
   { path: "/", nav: "Stat optimizer", marker: '[aria-label="Health target"]' },
   { path: "/armor", nav: "Armor table", marker: "table tbody tr td" },
   { path: "/weapons", nav: "Weapon search", marker: '[aria-label="Weapons"] [role=listitem]' },
-  { path: "/farm-list", nav: "Farm list", marker: "main a[href=\"/weapons\"]" },
+  { path: "/farm-list", nav: "Farm list", marker: 'section[aria-label="Armor"]' },
   { path: "/loadouts", nav: "Loadouts", marker: '[aria-label^="Search loadouts"]' },
   { path: "/manager", nav: "Items", marker: 'section[aria-label^="Characters"] [role=button][draggable]' },
   // Reached from the account area, not the sidebar list.

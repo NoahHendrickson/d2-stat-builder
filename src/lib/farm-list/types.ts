@@ -46,7 +46,7 @@ export interface FarmPerk {
 export interface WeaponFarmData {
   kind: "weapon";
   version: number;
-  /** The version the entry was made on, for opening it in weapon search. */
+  /** The version the entry was made on. */
   weaponHash: number;
   weaponName: string;
   weaponIcon?: string;

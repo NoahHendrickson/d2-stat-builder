@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import { ArmorThumb } from "@/components/armor-thumb";
-import { FarmCard, FarmField, FarmPanel, farmDate } from "@/components/farm-list/farm-list-card";
+import { FarmCard, FarmEmpty, FarmField, FarmPanel, farmDate } from "@/components/farm-list/farm-list-card";
 import { ObtainedActions, RemoveButton } from "@/components/farm-list/farm-list-actions";
 import { StatGlyph } from "@/components/stat-glyph";
 import { isFullyMasterworked } from "@/lib/armory/masterwork";
@@ -33,7 +33,9 @@ export function ArmorFarmPanel({
   fresh: ReadonlySet<string> | null;
   manifest: Manifest | undefined;
 }) {
-  const armory = useArmory().data;
+  const query = useArmory();
+  // Live gear only: last visit's copy can be missing a real drop, which would read as removed.
+  const armory = query.isPlaceholderData ? undefined : query.data;
   const pieces = useMemo(() => new Map(armory?.pieces.map((p) => [p.instanceId, p])), [armory]);
   const icons = useMemo(() => {
     const out = {} as StatIconMap;
@@ -46,7 +48,11 @@ export function ArmorFarmPanel({
     <FarmPanel
       title="Armor"
       entries={entries}
-      empty="No armor yet."
+      empty={
+        <FarmEmpty title="No armor yet" href="/" action="Open Stat optimizer">
+          Pick a set bonus, then add the pieces you need from Theoretical Builds or a Dream build.
+        </FarmEmpty>
+      }
       renderCard={(entry) => (
         <ArmorCard
           key={entry.id}

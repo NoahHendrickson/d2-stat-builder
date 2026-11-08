@@ -1,8 +1,11 @@
 // The Farm list in Neon. Server-only. One row per entry: the picks in `data`
 // (validated by parseFarmEntryData), and the obtained state in columns of its own so a
 // match, a "not this one", and a seen mark are single-statement updates that never
-// race a whole-row write. Lazy schema, as in src/lib/loadouts/neon-store.ts.
+// race a whole-row write. Lazy schema and a cached list, as in src/lib/loadouts/neon-store.ts.
+import { cacheLife, cacheTag } from "next/cache";
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
+import { fromDatabaseUrl, lazySchema } from "../db/neon";
+import { ACCOUNT_READ_LIFE, expiring, fromCache, loggedRead } from "../read-cache";
 import {
   MAX_IGNORED_COPIES,
   MAX_FARM_ENTRIES_PER_ACCOUNT,
@@ -54,36 +57,27 @@ export class FarmListLimitError extends Error {
 
 export class NeonFarmListStore {
   private readonly sql: NeonQueryFunction<false, false>;
-  private schemaReady: Promise<void> | null = null;
 
   constructor(databaseUrl: string) {
     this.sql = neon(databaseUrl);
   }
 
-  private ensureSchema(): Promise<void> {
-    if (!this.schemaReady) {
-      this.schemaReady = (async () => {
-        await this.sql`
-          CREATE TABLE IF NOT EXISTS farm_list (
-            id uuid PRIMARY KEY,
-            membership_id text NOT NULL,
-            data jsonb NOT NULL,
-            created_at timestamptz NOT NULL DEFAULT now(),
-            obtained_instance_id text,
-            obtained_at timestamptz,
-            seen_at timestamptz
-          )`;
-        await this.sql`ALTER TABLE farm_list ADD COLUMN IF NOT EXISTS done_at timestamptz`;
-        await this.sql`
-          CREATE INDEX IF NOT EXISTS farm_list_owner_idx
-            ON farm_list (membership_id, created_at DESC)`;
-      })().catch((err) => {
-        this.schemaReady = null; // let the next call retry
-        throw err;
-      });
-    }
-    return this.schemaReady;
-  }
+  private readonly ensureSchema = lazySchema(async () => {
+    await this.sql`
+      CREATE TABLE IF NOT EXISTS farm_list (
+        id uuid PRIMARY KEY,
+        membership_id text NOT NULL,
+        data jsonb NOT NULL,
+        created_at timestamptz NOT NULL DEFAULT now(),
+        obtained_instance_id text,
+        obtained_at timestamptz,
+        seen_at timestamptz,
+        done_at timestamptz
+      )`;
+    await this.sql`
+      CREATE INDEX IF NOT EXISTS farm_list_owner_idx
+        ON farm_list (membership_id, created_at DESC)`;
+  });
 
   async list(membershipId: string): Promise<FarmEntry[]> {
     await this.ensureSchema();
@@ -169,12 +163,45 @@ export class NeonFarmListStore {
   }
 }
 
-let singleton: NeonFarmListStore | null | undefined;
+let neonSingleton: NeonFarmListStore | undefined;
+
+/** The Neon store under the cache. A cached function can't close over an instance, so it's module-level. */
+function neonStore(): NeonFarmListStore {
+  if (!neonSingleton) {
+    const url = process.env.DATABASE_URL;
+    if (!url) throw new Error("DATABASE_URL isn't set");
+    neonSingleton = new NeonFarmListStore(url);
+  }
+  return neonSingleton;
+}
+
+const accountTag = (membershipId: string) => `farm-list:${membershipId}`;
+
+async function cachedList(membershipId: string) {
+  "use cache: remote";
+  cacheTag(accountTag(membershipId));
+  cacheLife(ACCOUNT_READ_LIFE);
+  return loggedRead("Farm list", () => neonStore().list(membershipId));
+}
+
+/** Neon behind Vercel's shared cache (see read-cache.ts): `list` is cached per account, and every write expires it. */
+class CachedFarmListStore {
+  list(membershipId: string) {
+    return fromCache(cachedList(membershipId));
+  }
+  create(membershipId: string, data: FarmEntryData) {
+    return expiring(accountTag(membershipId), () => neonStore().create(membershipId, data));
+  }
+  patch(membershipId: string, id: string, patch: FarmPatch) {
+    return expiring(accountTag(membershipId), () => neonStore().patch(membershipId, id, patch));
+  }
+  markSeen(membershipId: string) {
+    return expiring(accountTag(membershipId), () => neonStore().markSeen(membershipId));
+  }
+  delete(membershipId: string, id: string) {
+    return expiring(accountTag(membershipId), () => neonStore().delete(membershipId, id));
+  }
+}
 
 /** The server's Farm list store, or null when `DATABASE_URL` isn't set. */
-export function getServerFarmListStore(): NeonFarmListStore | null {
-  if (singleton !== undefined) return singleton;
-  const url = process.env.DATABASE_URL;
-  singleton = url ? new NeonFarmListStore(url) : null;
-  return singleton;
-}
+export const getServerFarmListStore: () => CachedFarmListStore | null = fromDatabaseUrl(() => new CachedFarmListStore());

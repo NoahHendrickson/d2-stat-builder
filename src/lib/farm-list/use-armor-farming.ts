@@ -12,8 +12,8 @@ import { useFarmList, useFarmListMutations } from "./use-farm-list";
 export interface ArmorFarming {
   /** The entry already hunting this piece. */
   entryFor(data: ArmorFarmData): ArmorFarmEntry | undefined;
-  /** Copies already owned that would match, from the live armory (none if it isn't in yet). */
-  owned(data: ArmorFarmData): ArmorPiece[];
+  /** Copies already owned that would match, from the live armory; null if it isn't in yet. */
+  owned(data: ArmorFarmData): ArmorPiece[] | null;
   add(data: ArmorFarmData, ignoredInstanceIds?: string[]): Promise<unknown>;
   remove(id: string): Promise<unknown>;
 }
@@ -32,7 +32,10 @@ export function useArmorFarming(): ArmorFarming | null {
     for (const entry of entries) if (entry.kind === "armor" && !isFarmDone(entry)) byKey.set(armorFarmKey(entry), entry);
     return {
       entryFor: (data) => byKey.get(armorFarmKey(data)),
-      owned: (data) => matchingArmor(peekArmory(queryClient)?.pieces ?? [], data),
+      owned: (data) => {
+        const armory = peekArmory(queryClient);
+        return armory ? matchingArmor(armory.pieces, data) : null;
+      },
       add: (data, ignoredInstanceIds = []) => addEntry({ ...data, ignoredInstanceIds }),
       remove: (id) => removeEntry(id),
     };

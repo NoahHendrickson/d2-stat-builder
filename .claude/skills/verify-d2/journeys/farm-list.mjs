@@ -241,7 +241,7 @@ export default async function ({ page, app, stub, step, shot, expect, log }) {
   await step("entry-page: a table row per entry, obtained first, each perk column marked; Not this one sends it back", async () => {
     // app.nav looks for the plain name; with a drop unseen the link reads "Farm list (1 new)".
     await page.click({ role: "link", name: "Farm list (2 new)" }, { within: { role: "navigation", name: "Main" } });
-    await page.waitFor({ css: 'main a[href="/weapons"]' });
+    await page.waitFor({ css: 'section[aria-label="Armor"]' });
     const OBTAINED = 'section[aria-label="Weapons"] [data-group="dropped"]';
     const WAITING = 'section[aria-label="Weapons"] [data-group="waiting"]';
     const cell = (column) => ({ css: `${OBTAINED} [data-column="${column}"]` });

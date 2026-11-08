@@ -6,6 +6,7 @@ import { armorPipTier, type ArmorPiece } from "../armory/normalize";
 import { ARMOR_SLOTS, CLASS_NAMES, SLOT_LABELS, tertiaryStatIndex } from "../armory/stats";
 import type { FarmPiece } from "../optimizer/dream";
 import type { TheoryPiece } from "../optimizer/theory";
+import { assignDrops } from "./assign-drops";
 import { FARM_LIST_SCHEMA_VERSION, type ArmorFarmData, type ArmorFarmEntry } from "./types";
 
 /** The entry for a Theoretical build's row; null when it isn't a piece of a required set. */
@@ -79,25 +80,12 @@ export function matchingArmor(pieces: readonly ArmorPiece[], entry: ArmorFarmDat
   return pieces.filter((piece) => !ignored.has(piece.instanceId) && armorMatches(piece, entry));
 }
 
-/**
- * The waiting entries that now have a match, oldest first. One copy fills one entry:
- * nothing already obtained counts again, and a copy isn't handed to two entries that
- * both accept it.
- */
+/** The waiting entries that now have a match, each with its piece (see assignDrops). */
 export function newlyObtainedArmor(
   pieces: readonly ArmorPiece[],
   entries: readonly ArmorFarmEntry[],
 ): { entry: ArmorFarmEntry; piece: ArmorPiece }[] {
-  const claimed = new Set(entries.flatMap((e) => (e.obtained ? [e.obtained.instanceId] : [])));
-  const waiting = entries.filter((e) => !e.obtained).sort((a, b) => a.createdAt - b.createdAt);
-  const out: { entry: ArmorFarmEntry; piece: ArmorPiece }[] = [];
-  for (const entry of waiting) {
-    const piece = matchingArmor(pieces, entry).find((p) => !claimed.has(p.instanceId));
-    if (!piece) continue;
-    claimed.add(piece.instanceId);
-    out.push({ entry, piece });
-  }
-  return out;
+  return assignDrops(entries, (entry) => matchingArmor(pieces, entry)).map(({ entry, copy }) => ({ entry, piece: copy }));
 }
 
 /** "Gunner Helmet". */

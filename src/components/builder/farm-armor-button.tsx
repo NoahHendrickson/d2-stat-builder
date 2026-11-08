@@ -5,7 +5,7 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { ShoppingCartAdd02Icon } from "@hugeicons/core-free-icons";
 import { Button } from "@/components/ui/button";
 import type { ArmorPiece } from "@/lib/armory/normalize";
-import { armorFarmTitle, armorPlaceLabel } from "@/lib/farm-list/armor";
+import { armorFarmKey, armorFarmTitle, armorPlaceLabel } from "@/lib/farm-list/armor";
 import type { ArmorFarmData } from "@/lib/farm-list/types";
 import type { ArmorFarming } from "@/lib/farm-list/use-armor-farming";
 import { toast } from "@/lib/toast";
@@ -27,16 +27,19 @@ export function FarmArmorButton({
   compact?: boolean;
 }) {
   const [busy, setBusy] = useState(false);
-  const [owned, setOwned] = useState<ArmorPiece[] | null>(null);
+  // Copies already owned, for the piece they were found for: a Dream option can swap `data`.
+  const [found, setFound] = useState<{ key: string; pieces: ArmorPiece[] } | null>(null);
   // A compact button is a grid cell: hold its place so the row's columns stay put.
   if (!farming) return compact ? <span aria-hidden className="size-7" /> : null;
   const existing = farming.entryFor(data);
+  const key = armorFarmKey(data);
+  const owned = found?.key === key ? found.pieces : null;
 
   async function run(action: () => Promise<unknown>, failed: string) {
     setBusy(true);
     try {
       await action();
-      setOwned(null);
+      setFound(null);
     } catch (err) {
       toast.error(failed, err instanceof Error ? err.message : undefined);
     } finally {
@@ -52,7 +55,8 @@ export function FarmArmorButton({
       return;
     }
     const copies = farming!.owned(data);
-    if (copies.length > 0) setOwned(copies);
+    if (copies === null) toast.error("Couldn't check your vault", "Try again in a moment.");
+    else if (copies.length > 0) setFound({ key, pieces: copies });
     else void save([]);
   }
 

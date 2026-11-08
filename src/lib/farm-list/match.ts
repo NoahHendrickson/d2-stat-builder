@@ -2,14 +2,16 @@
 // raw profile (sockets and reusable plugs by hash), so the drop watcher never needs the
 // manifest. Pure — runtime imports stay relative so the module runs under vitest.
 import type { DestinyProfileResponse } from "bungie-api-ts/destiny2";
+import { CLASS_NAMES } from "../armory/stats";
+import { BUCKETS } from "../inventory/buckets";
 import type { PickSlot, Roll } from "../weapons/pick-slots";
 import type { PerkRef, WeaponSummary } from "../weapons/types";
 import { weaponVersionFamilyName } from "../weapons/weapon-variants";
+import { assignDrops } from "./assign-drops";
 import { FARM_LIST_SCHEMA_VERSION, isFarmDone, type FarmColumn, type FarmEntry, type FarmPerk, type WeaponFarmData, type WeaponFarmEntry } from "./types";
 
 /** `ItemState.Crafted`: a shaped copy, whose perks the player chose. */
 const CRAFTED = 8;
-const POSTMASTER_BUCKET = 215593132;
 
 /** The left and right perk columns: a weapon's first two Trait columns, by index. */
 export function traitColumns(weapon: Pick<WeaponSummary, "columns">): [number, number] | null {
@@ -181,7 +183,7 @@ export function ownedCopies(profile: DestinyProfileResponse): OwnedCopy[] {
   add(profile.profileInventory?.data?.items, () => ({ kind: "vault" }));
   for (const [characterId, inv] of Object.entries(profile.characterInventories?.data ?? {}))
     add(inv.items, (bucket) =>
-      bucket === POSTMASTER_BUCKET ? { kind: "postmaster", characterId } : { kind: "character", characterId },
+      bucket === BUCKETS.postmaster ? { kind: "postmaster", characterId } : { kind: "character", characterId },
     );
   for (const [characterId, inv] of Object.entries(profile.characterEquipment?.data ?? {}))
     add(inv.items, () => ({ kind: "character", characterId }));
@@ -231,18 +233,14 @@ export function matchingCopies(
   );
 }
 
-/** The waiting entries a profile now has a matching copy for, with the copy. */
+/** The waiting entries a profile now has a matching copy for, each with its copy (see assignDrops). */
 export function newlyObtained(
   profile: DestinyProfileResponse,
   entries: readonly WeaponFarmEntry[],
 ): { entry: WeaponFarmEntry; copy: OwnedCopy }[] {
-  const waiting = entries.filter((w) => !w.obtained);
-  if (waiting.length === 0) return [];
+  if (entries.every((w) => w.obtained)) return [];
   const copies = ownedCopies(profile);
-  return waiting.flatMap((entry) => {
-    const copy = matchingCopies(profile, entry, copies)[0];
-    return copy ? [{ entry, copy }] : [];
-  });
+  return assignDrops(entries, (entry) => matchingCopies(profile, entry, copies));
 }
 
 /**
@@ -260,8 +258,6 @@ export function dismantledDrops<E extends FarmEntry>(profile: DestinyProfileResp
     (e) => e.obtained && !isFarmDone(e) && minted > e.obtained.at && !held.has(e.obtained.instanceId),
   );
 }
-
-const CLASS_NAMES = ["Titan", "Hunter", "Warlock"];
 
 /** "in your Vault", "on your Hunter", "at the Postmaster": where a copy is, for a sentence. */
 export function placeLabel(profile: DestinyProfileResponse | undefined, place: CopyPlace): string {
