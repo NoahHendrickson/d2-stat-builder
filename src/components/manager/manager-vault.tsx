@@ -249,9 +249,12 @@ export function AlignedVault({
 export function VaultPane({
   inventory,
   placement,
+  action,
 }: {
   inventory: ManagerInventory;
   placement: VaultPlacement;
+  /** A control beside the vault's tabs. */
+  action?: ReactNode;
 }) {
   const { gear, extra } = useVaultSections(inventory);
   const sections = useMemo(() => [...gear, ...extra], [gear, extra]);
@@ -259,7 +262,7 @@ export function VaultPane({
   return (
     <DropZone to={{ kind: "vault" }} className="flex min-w-0 flex-col">
       <section aria-label="Vault" className="flex flex-col">
-        <VaultHeader inventory={inventory} placement={placement} />
+        <VaultHeader inventory={inventory} placement={placement} action={action} />
         <div className="flex flex-col pb-4">
           <VaultLines sections={sections} />
         </div>

@@ -145,7 +145,9 @@ export function InventoryGrid({
               !compact ? "px-4 first:pl-0 last:pr-0" : c !== shown && "hidden",
               compact && aligned && "pr-3",
             )}
-            style={{ gridRow: `${firstRow} / span ${rowCount}` }}
+            // Aligned, down through the vault's last row too, so however far the vault runs
+            // past the slots, the pinned nameplate (and the column, a drop target) stays in view.
+            style={{ gridRow: `${firstRow} / span ${rowCount + (aligned ? 1 : 0)}` }}
           >
             <CharacterNameplate
               character={c}

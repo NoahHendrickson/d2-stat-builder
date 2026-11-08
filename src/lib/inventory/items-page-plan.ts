@@ -97,9 +97,9 @@ const columnsAlignedMinWidth = (m: TileMetrics) =>
  * - `rows`: a row per character (CharacterRows), the vault in its own pane beside them or
  *   below them.
  * - `columns`: character columns (InventoryGrid), the vault one more column level with
- *   their slots (aligned) or below them. `characters`: every one side by side (`all`),
- *   just the current one with no tabs (`current`, picked when all would fit), or one at a
- *   time under tabs (`tabs`, when all don't fit). The legacy layout, and the new one's
+ *   their slots (aligned) or below them. `characters`: just the current one with no tabs
+ *   (`current`, when picked, at any width), every one side by side (`all`), or, when all
+ *   don't fit, one at a time under tabs (`tabs`). The legacy layout, and the new one's
  *   fallback when a row doesn't fit.
  * - `phone`: one character at a time under tabs, the vault behind a tab of its own.
  */
@@ -110,8 +110,8 @@ export type ItemsPagePlan =
 
 /**
  * The page's layout for the picked `layout` at `width` (the layout box's, in px), with
- * `tiles` (desktop tiles at the picked size). `characterColumns` applies only where legacy
- * columns have room for every character. Null until a wider screen has been measured:
+ * `tiles` (desktop tiles at the picked size). `characterColumns` applies to legacy columns
+ * only. Null until a wider screen has been measured:
  * nothing should mount on a guess.
  */
 export function itemsPagePlan({
@@ -132,7 +132,12 @@ export function itemsPagePlan({
   if (layout === "legacy") {
     return {
       kind: "columns",
-      characters: width < columnsAllCharactersMinWidth(tiles) ? "tabs" : characterColumns,
+      characters:
+        characterColumns === "current"
+          ? "current"
+          : width < columnsAllCharactersMinWidth(tiles)
+            ? "tabs"
+            : "all",
       vault: width >= columnsAlignedMinWidth(tiles) ? "aligned" : "below",
     };
   }

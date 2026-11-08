@@ -133,7 +133,7 @@ const CHARACTER_COLUMN_LABELS: Record<CharacterColumns, string> = {
 /**
  * Legacy columns, beside the vault's tabs: just the character played last, in its place,
  * giving the vault the room (and its armor cut to that class); or every character side by
- * side. The same menu as the Items settings, so it highlights only what's under the
+ * side (one at a time under tabs when they don't fit). The same menu as the Items settings, so it highlights only what's under the
  * pointer and marks the pick the same way.
  */
 export function CharacterColumnsMenu() {

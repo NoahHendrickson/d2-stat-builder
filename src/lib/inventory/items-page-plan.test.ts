@@ -71,7 +71,7 @@ test("smaller tiles fit the character rows, and every legacy column, in less wid
   expect(plan({ phone: false, layout: "legacy", width: 700, tiles: DESKTOP_TILE_METRICS })).toMatchObject({ vault: "below" });
 });
 
-test("legacy columns show just the current character only where every one would fit", () => {
+test("legacy columns show just the current character at every width once it's picked", () => {
   const current = { phone: false, layout: "legacy", characterColumns: "current" } as const;
   for (const width of [3000, 1634]) {
     expect(plan({ ...current, width, tiles: DESKTOP_TILE_METRICS })).toEqual({
@@ -80,11 +80,16 @@ test("legacy columns show just the current character only where every one would 
       vault: "aligned",
     });
   }
-  // Narrower, it's one at a time under tabs whatever was picked.
+  // Narrower than every column side by side, it still shows just that one, no tabs.
   expect(plan({ ...current, width: 1633, tiles: DESKTOP_TILE_METRICS })).toEqual({
     kind: "columns",
-    characters: "tabs",
+    characters: "current",
     vault: "aligned",
+  });
+  expect(plan({ ...current, width: 777, tiles: DESKTOP_TILE_METRICS })).toEqual({
+    kind: "columns",
+    characters: "current",
+    vault: "below",
   });
   // The rows layout doesn't read it.
   expect(plan({ phone: false, layout: "rows", characterColumns: "current", width: 1600, tiles: DESKTOP_TILE_METRICS })).toEqual({

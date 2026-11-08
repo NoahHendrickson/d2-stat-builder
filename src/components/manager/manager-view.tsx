@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { CLASS_NAMES } from "@/lib/armory/stats";
 import type { InventoryItem, ManagerInventory } from "@/lib/inventory/build";
@@ -212,6 +212,8 @@ export function ManagerView({
                 plan={plan}
                 inventory={shownInventory}
                 vaultTab={{ open: vaultOpen, onOpenChange: setVaultOpen }}
+                // Picked legacy columns only: the rows layout's columns fallback ignores it.
+                columnsMenu={view.layout === "legacy" ? <CharacterColumnsMenu /> : undefined}
               />
             )}
           </div>
@@ -236,11 +238,14 @@ function PlannedLayout({
   plan,
   inventory,
   vaultTab,
+  columnsMenu,
 }: {
   plan: ItemsPagePlan;
   inventory: ManagerInventory;
   /** Phones: whether the Vault tab is picked. */
   vaultTab: { open: boolean; onOpenChange: (open: boolean) => void };
+  /** Columns: the Characters shown menu, beside the vault's tabs. */
+  columnsMenu?: ReactNode;
 }) {
   switch (plan.kind) {
     case "rows":
@@ -261,10 +266,11 @@ function PlannedLayout({
             inventory={inventory}
             characters={plan.characters}
             aligned={plan.vault === "aligned"}
-            // Only with room for every character: narrower, the tabs are the way to the others.
-            vaultAction={plan.characters !== "tabs" ? <CharacterColumnsMenu /> : undefined}
+            vaultAction={columnsMenu}
           />
-          {plan.vault === "below" && <VaultPane inventory={inventory} placement="below-columns" />}
+          {plan.vault === "below" && (
+            <VaultPane inventory={inventory} placement="below-columns" action={columnsMenu} />
+          )}
         </>
       );
     case "phone":
