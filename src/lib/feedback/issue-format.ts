@@ -4,9 +4,8 @@
 //
 // Every issue body starts with hidden markers (`<!-- d2c:key=value -->`) that name where
 // it came from: the web report id, or the Discord channel and message. The sync and
-// "Send to tracker" use them to skip what's already filed, and the issue-closed webhook
-// uses them to reply in Discord. Reporter text is neutralised so it can't forge a
-// marker or ping anyone.
+// "Send to tracker" use them to skip what's already filed. Reporter text is neutralised
+// so it can't forge a marker or ping anyone.
 //
 // Every Discord source is a message: a forum post is its starter message, whose id is
 // the thread's id. So one message id identifies an issue's source on both paths.
@@ -27,8 +26,6 @@ export const FEEDBACK_LABELS = {
   feature: "type:feature",
   question: "type:question",
   triage: "needs-triage",
-  /** The bot already told Discord the issue is fixed. */
-  notified: "discord-notified",
 } as const;
 
 /** GitHub's limit is 256; shorter reads better in lists. */
@@ -42,7 +39,7 @@ export interface FeedbackIssue {
   labels: string[];
 }
 
-/** A Discord message: the reply goes in `channelId` (a forum post's thread), under `messageId`. */
+/** A Discord message: `messageId` in `channelId` (a forum post's thread). */
 export interface DiscordSource {
   channelId: string;
   messageId: string;
@@ -213,8 +210,3 @@ export function messageIssue(guildId: string, message: DiscordMessage, channelNa
     ]),
   };
 }
-
-/** What the bot says in Discord when an issue is fixed. */
-export const DISCORD_REPLIES = {
-  fixed: "This is fixed in the latest update on https://d2conflux.com. Thanks for reporting it!",
-} as const;

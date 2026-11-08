@@ -1,8 +1,6 @@
 import { generateKeyPairSync, sign } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { snowflakeTime, verifyDiscordSignature } from "./discord";
-import { verifyGithubSignature } from "./github";
-import { createHmac } from "node:crypto";
 
 describe("Discord signatures", () => {
   const { publicKey, privateKey } = generateKeyPairSync("ed25519");
@@ -24,16 +22,5 @@ describe("Discord signatures", () => {
   it("reads a snowflake's time", () => {
     // Discord's docs example: 175928847299117063 → 2016-04-30T11:18:25.796Z.
     expect(new Date(snowflakeTime("175928847299117063")).toISOString()).toBe("2016-04-30T11:18:25.796Z");
-  });
-});
-
-describe("GitHub signatures", () => {
-  it("accepts the right HMAC only", () => {
-    const body = '{"action":"closed"}';
-    const good = `sha256=${createHmac("sha256", "s3cret").update(body).digest("hex")}`;
-    expect(verifyGithubSignature("s3cret", body, good)).toBe(true);
-    expect(verifyGithubSignature("other", body, good)).toBe(false);
-    expect(verifyGithubSignature("s3cret", body, null)).toBe(false);
-    expect(verifyGithubSignature("s3cret", body, "sha256=00")).toBe(false);
   });
 });

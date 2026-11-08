@@ -138,18 +138,6 @@ export const getChannel = <T>(c: DiscordConfig, id: string) => discord<T>(c.botT
 export const getMessage = (c: DiscordConfig, channelId: string, messageId: string) =>
   discord<DiscordMessage>(c.botToken, `/channels/${channelId}/messages/${messageId}`);
 
-/** Post as the bot. Nothing it says pings anyone. */
-export function sendMessage(c: DiscordConfig, channelId: string, content: string, replyTo?: string) {
-  return discord<DiscordMessage>(c.botToken, `/channels/${channelId}/messages`, {
-    method: "POST",
-    body: JSON.stringify({
-      content,
-      allowed_mentions: { parse: [], replied_user: false },
-      ...(replyTo ? { message_reference: { message_id: replyTo, fail_if_not_exists: false } } : {}),
-    }),
-  });
-}
-
 /** Replace the "thinking…" placeholder of a deferred interaction reply. */
 export function editInteractionReply(appId: string, interactionToken: string, content: string) {
   return discord<unknown>(null, `/webhooks/${appId}/${interactionToken}/messages/@original`, {
