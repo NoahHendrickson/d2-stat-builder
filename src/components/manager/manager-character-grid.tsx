@@ -64,15 +64,18 @@ export function InventoryGrid({
   // so rows still line up across characters (and with the vault). Aligned, the vault's
   // title and tabs sit level with the nameplates (compact, a row of character tabs comes
   // first for them to share), and the vault ends with a row for what no character holds.
-  // Current character, on the vault's Weapons or Armor tab: just those slots, so
-  // they and the vault's tiles both start at the top.
+  // Current character, on the aligned vault's Weapons or Armor tab: just those slots, so
+  // they and the vault's tiles both start at the top. (A vault below keeps every slot, or
+  // its tabs would jump under the pointer.)
   const { vaultTab } = useViewSettings();
-  const rows = currentOnly ? slotRowsForVaultTab(vaultTab) : SLOT_ROWS;
+  const rows = currentOnly && aligned ? slotRowsForVaultTab(vaultTab) : SLOT_ROWS;
   // The Armor tab beside every slot: the vault's armor runs from the top, past the weapon
   // slots (a drop anywhere on a character sends it there), not down level with the armor.
   const flowVault = aligned && vaultTab === "armor" && !currentOnly;
   const rowCount = 2 + rows.length;
   const firstRow = aligned && shownCharacters === "tabs" ? 2 : 1;
+  /** The tabs row, if any, the characters' rows, then (aligned) the vault's last row. */
+  const gridRows = firstRow - 1 + rowCount + (aligned ? 1 : 0);
   const { manifest, statIcons, compare, postmasterCapacity } = useCharacterSetup(inventory);
   const pinnedPlate = usePinnedPlateClass();
   const phone = usePhoneLayout();
@@ -128,7 +131,7 @@ export function InventoryGrid({
           ...columns,
           // A flowing vault spans the slot rows and the vault's last row; that row is the
           // flexible one, so it grows to fit the vault and the slot rows keep their size.
-          ...(flowVault && { gridTemplateRows: `repeat(${firstRow - 1 + rowCount}, auto) 1fr` }),
+          ...(flowVault && { gridTemplateRows: `repeat(${gridRows - 1}, auto) 1fr` }),
         }}
       >
         {aligned && tabs}
@@ -145,7 +148,8 @@ export function InventoryGrid({
               !compact ? "px-4 first:pl-0 last:pr-0" : c !== shown && "hidden",
               compact && aligned && "pr-3",
             )}
-            style={{ gridRow: `${firstRow} / span ${rowCount}` }}
+            // To the grid's end, so its pinned nameplate stays in view down a long vault.
+            style={{ gridRow: `${firstRow} / ${gridRows + 1}` }}
           >
             <CharacterNameplate
               character={c}
@@ -177,7 +181,7 @@ export function InventoryGrid({
           <AlignedVault
             inventory={inventory}
             headerRows={firstRow}
-            rowSpan={firstRow + rowCount}
+            rowSpan={gridRows}
             rows={rows}
             flow={flowVault}
             action={vaultAction}

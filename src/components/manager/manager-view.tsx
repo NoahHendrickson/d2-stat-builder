@@ -254,19 +254,22 @@ function PlannedLayout({
           )}
         </>
       );
-    case "columns":
+    case "columns": {
+      const menu = plan.characterMenu ? <CharacterColumnsMenu /> : undefined;
       return (
         <>
           <InventoryGrid
             inventory={inventory}
             characters={plan.characters}
             aligned={plan.vault === "aligned"}
-            // Only with room for every character: narrower, the tabs are the way to the others.
-            vaultAction={plan.characters !== "tabs" ? <CharacterColumnsMenu /> : undefined}
+            vaultAction={menu}
           />
-          {plan.vault === "below" && <VaultPane inventory={inventory} placement="below-columns" />}
+          {plan.vault === "below" && (
+            <VaultPane inventory={inventory} placement="below-columns" action={menu} />
+          )}
         </>
       );
+    }
     case "phone":
       return (
         <InventoryGrid

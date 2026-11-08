@@ -31,6 +31,7 @@ test("character rows put the vault beside them, then below, then fall back to co
     kind: "columns",
     characters: "tabs",
     vault: "below",
+    characterMenu: false,
   });
 });
 
@@ -39,16 +40,19 @@ test("legacy columns go side by side from 1634px and align the vault from 778px"
     kind: "columns",
     characters: "all",
     vault: "aligned",
+    characterMenu: true,
   });
   expect(plan({ phone: false, layout: "legacy", width: 1633, tiles: DESKTOP_TILE_METRICS })).toEqual({
     kind: "columns",
     characters: "tabs",
     vault: "aligned",
+    characterMenu: true,
   });
   expect(plan({ phone: false, layout: "legacy", width: 777, tiles: DESKTOP_TILE_METRICS })).toEqual({
     kind: "columns",
     characters: "tabs",
     vault: "below",
+    characterMenu: true,
   });
 });
 
@@ -63,6 +67,7 @@ test("smaller tiles fit the character rows, and every legacy column, in less wid
     kind: "columns",
     characters: "tabs",
     vault: "below",
+    characterMenu: false,
   });
   expect(plan({ phone: false, layout: "legacy", width: 1500, tiles: small })).toMatchObject({ characters: "all" });
   expect(plan({ phone: false, layout: "legacy", width: 1500, tiles: DESKTOP_TILE_METRICS })).toMatchObject({ characters: "tabs" });
@@ -71,20 +76,28 @@ test("smaller tiles fit the character rows, and every legacy column, in less wid
   expect(plan({ phone: false, layout: "legacy", width: 700, tiles: DESKTOP_TILE_METRICS })).toMatchObject({ vault: "below" });
 });
 
-test("legacy columns show just the current character only where every one would fit", () => {
+test("legacy columns show just the current character at every width once it's picked", () => {
   const current = { phone: false, layout: "legacy", characterColumns: "current" } as const;
   for (const width of [3000, 1634]) {
     expect(plan({ ...current, width, tiles: DESKTOP_TILE_METRICS })).toEqual({
       kind: "columns",
       characters: "current",
       vault: "aligned",
+      characterMenu: true,
     });
   }
-  // Narrower, it's one at a time under tabs whatever was picked.
+  // Narrower than every column side by side, it still shows just that one, no tabs.
   expect(plan({ ...current, width: 1633, tiles: DESKTOP_TILE_METRICS })).toEqual({
     kind: "columns",
-    characters: "tabs",
+    characters: "current",
     vault: "aligned",
+    characterMenu: true,
+  });
+  expect(plan({ ...current, width: 777, tiles: DESKTOP_TILE_METRICS })).toEqual({
+    kind: "columns",
+    characters: "current",
+    vault: "below",
+    characterMenu: true,
   });
   // The rows layout doesn't read it.
   expect(plan({ phone: false, layout: "rows", characterColumns: "current", width: 1600, tiles: DESKTOP_TILE_METRICS })).toEqual({
