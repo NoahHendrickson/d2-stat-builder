@@ -91,7 +91,7 @@ export function ChangelogMenu({ trigger }: { trigger: ReactElement }) {
         align="end"
         sideOffset={8}
         initialFocus={list}
-        className="max-h-[min(var(--available-height),40rem)] w-96 max-w-[calc(100vw-1rem)] gap-0 p-0"
+        className="d2-frost max-h-[min(var(--available-height),40rem)] w-96 max-w-[calc(100vw-1rem)] gap-0 p-0"
       >
         <PopoverTitle className="border-foreground/10 border-b px-4 py-3 text-base">
           Changelog
