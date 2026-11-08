@@ -1,11 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { MAX_MODS } from "@/components/builder/use-builder-search-inputs";
 import type { ArmorArchetype } from "@/lib/armory/archetypes";
 import type { SpiritPerkInfo } from "@/lib/armory/exotic-class-perks";
 import type { ArmorPiece } from "@/lib/armory/normalize";
-import { classSets, type ArmorSetInfo } from "@/lib/armory/sets";
+import { classSets, setSlotIcons, type ArmorSetInfo, type SetSlotIcon } from "@/lib/armory/sets";
 import type { ArmorSlot } from "@/lib/armory/stats";
 import type { Manifest } from "@/lib/manifest/load";
 import type { CeilingsView } from "@/lib/optimizer/optimizer-store";
@@ -31,6 +31,8 @@ export interface TheoryBuilds {
   /** Every set the class can wear, owned or not (empty while the tab is closed). */
   sets: ArmorSetInfo[];
   setMap: Map<number, ArmorSetInfo>;
+  /** A set's own item art per slot, for this class. */
+  getSlotIcons: (setHash: number) => Partial<Record<ArmorSlot, SetSlotIcon>>;
   /** The theoretical maxima for the stat sliders. */
   ceilings: ValueStore<CeilingsView>;
   /** What the cards show for an exotic they'd have you farm (null = none picked). */
@@ -163,8 +165,14 @@ export function useTheoryBuilds({
   const empty =
     !targets.some((t) => t > 0) && !exoticChoice.exotic && setRequirements.length === 0;
 
+  const getSlotIcons = useCallback(
+    (setHash: number) =>
+      manifest && classType !== null ? setSlotIcons(manifest, setHash, classType) : {},
+    [manifest, classType],
+  );
+
   return useMemo(
-    () => ({ state, sets, setMap, ceilings, exoticDisplay, empty }),
-    [state, sets, setMap, ceilings, exoticDisplay, empty],
+    () => ({ state, sets, setMap, getSlotIcons, ceilings, exoticDisplay, empty }),
+    [state, sets, setMap, getSlotIcons, ceilings, exoticDisplay, empty],
   );
 }

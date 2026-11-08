@@ -1,6 +1,6 @@
 "use client";
 
-import { Fragment, memo, useMemo, type ReactNode } from "react";
+import { Fragment, memo, useMemo } from "react";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { CheckmarkCircle02Icon } from "@hugeicons/core-free-icons";
 import {
@@ -19,14 +19,16 @@ import {
   TuningName,
 } from "@/components/builder/roll-card";
 import type { TheoryExoticDisplay } from "@/components/builder/use-theory-builds";
+import { DetailCard, DetailSection } from "@/components/weapons/weapon-detail-card";
 import type { ArmorPiece } from "@/lib/armory/normalize";
-import type { ArmorSetInfo } from "@/lib/armory/sets";
+import type { ArmorSetInfo, SetSlotIcon } from "@/lib/armory/sets";
 import {
   ARMOR_SLOTS,
   SLOT_LABELS,
   STAT_DISPLAY_ORDER,
   STAT_LABELS,
   STAT_ORDER,
+  type ArmorSlot,
   type StatIconMap,
 } from "@/lib/armory/stats";
 import { sortTheoryRecipes, type TheorySortState } from "@/lib/builder/sort-theory";
@@ -35,9 +37,10 @@ import type { TheoryPiece, TheoryRecipe } from "@/lib/optimizer/theory";
 import type { TheoryBuildState } from "@/lib/optimizer/use-theory-build";
 import { useEntrance } from "@/lib/use-entrance";
 import { cn } from "@/lib/utils";
-import { listAnd } from "@/lib/format-list";
 
 const NO_RECIPES: TheoryRecipe[] = [];
+
+type TheorySlotIcons = (setHash: number) => Partial<Record<ArmorSlot, SetSlotIcon>>;
 
 /**
  * One piece (one slot): archetype, with the owned item or the exotic, the slot and the
@@ -66,7 +69,7 @@ function PieceLine({
         thumb={
           <RollThumb
             owned={owned}
-            exotic={piece.exotic && exotic ? exotic : undefined}
+            item={piece.exotic && exotic ? exotic : undefined}
             primary={piece.primary}
             icons={icons}
           />
@@ -98,91 +101,129 @@ function PieceLine({
   );
 }
 
-/** "A", "A or B", "A, B or C". */
-function orList(items: ReactNode[]): ReactNode {
-  return items.map((item, i) => (
-    <Fragment key={i}>
-      {i > 0 && (i === items.length - 1 ? " or " : ", ")}
-      {item}
-    </Fragment>
-  ));
+/** The stats in one cell of the summary card, or "Any" when none is common enough to name. */
+function StatCell({ stats, icons }: { stats: number[] | null; icons: StatIconMap }) {
+  if (!stats?.length) return <MutedCell>Any</MutedCell>;
+  return (
+    // Stacks in a narrow card, where two names side by side would crowd out the archetype.
+    <div className="flex gap-x-3 gap-y-1 @max-md:flex-col">
+      {stats.map((stat) => (
+        <StatName key={stat} stat={stat} icons={icons} />
+      ))}
+    </div>
+  );
 }
 
-/** A stat named inline in a sentence: glyph and name. */
-function InlineStat({ stat, icons }: { stat: number; icons: StatIconMap }) {
+/** A slot to farm: the set's own item when it comes from one (Bungie has no art for a slot alone). */
+function SlotPieceThumb({
+  slot,
+  setHash,
+  primary,
+  getSlotIcons,
+  icons,
+}: {
+  slot: ArmorSlot;
+  setHash?: number;
+  primary: number;
+  getSlotIcons: TheorySlotIcons;
+  icons: StatIconMap;
+}) {
+  const look = setHash !== undefined ? getSlotIcons(setHash)[slot] : undefined;
   return (
-    <span className="text-foreground inline-flex items-baseline gap-1 font-medium whitespace-nowrap">
-      <Glyph stat={stat} icons={icons} className="self-center" decorative />
-      {STAT_LABELS[STAT_ORDER[stat]]}
-    </span>
+    <RollThumb
+      item={look && { ...look, name: SLOT_LABELS[slot] }}
+      primary={primary}
+      icons={icons}
+    />
   );
 }
 
 /**
- * The gist of the list above the cards: the archetypes, tertiary and tuning most of its
- * pieces to farm have ("Farm for Gunner or Powerhouse pieces with a Melee tertiary").
- * Drawn from the exact builds, or the close ones when none make it.
+ * The gist of the list above the cards: the archetypes most of its pieces to farm are,
+ * each with its own tertiary and tuning (and slots, when owned pieces leave particular
+ * ones open), in the build cards' columns. Drawn from the exact builds, or the close ones
+ * when none make it.
  */
 function TheorySummaryCard({
   recipes,
   closeOnly,
   setMap,
+  getSlotIcons,
   icons,
 }: {
   recipes: TheoryRecipe[];
   closeOnly: boolean;
   setMap: Map<number, ArmorSetInfo>;
+  getSlotIcons: TheorySlotIcons;
   icons: StatIconMap;
 }) {
   const summary = useMemo(() => summarizeTheory(recipes), [recipes]);
   if (!summary) return null;
   const sets = summary.setHashes.flatMap((h) => setMap.get(h)?.name ?? []);
-  // "40% are Gunner, 40% Powerhouse and 20% Specialist".
-  const shares = summary.archetypes.map(
-    (a, i) => `${Math.round(a.share * 100)}%${i === 0 ? " are" : ""} ${a.name}`,
-  );
-  const shareText = listAnd(shares);
   const where =
     summary.builds === 1
       ? `the ${closeOnly ? "close " : ""}build below`
       : `the ${summary.builds} ${closeOnly ? "close " : ""}builds below`;
   return (
-    // The set-badge blue (build cards' 2pc pills), framed like the alert above it.
-    <div className="flex flex-col gap-1.5 rounded-md border border-[#41a6ff]/60 bg-[#41a6ff]/12 p-3">
-      <h3 className="d2-label text-[#1f7ad1] dark:text-[#7cc2ff]">What to farm</h3>
-      <p className="text-muted-foreground text-sm leading-relaxed">
-        {closeOnly ? "The closest builds farm for " : "Farm for "}
-        {orList(
-          summary.archetypes.map((a) => (
-            <span key={a.name} className="text-foreground font-medium">
-              {a.name}
-            </span>
-          )),
-        )}{" "}
-        pieces
-        {summary.tertiaries.length ? (
-          <>
-            {" "}with a {orList(summary.tertiaries.map((stat) => <InlineStat key={stat} stat={stat} icons={icons} />))} tertiary
-          </>
-        ) : (
-          " with any tertiary"
-        )}
-        {summary.tuned && (
-          <>
-            , tuned to {orList(summary.tuned.map((stat) => <InlineStat key={stat} stat={stat} icons={icons} />))}
-          </>
-        )}
-        {sets.length > 0 && (
-          <>
-            {" "}from <span className="text-foreground font-medium">{sets.join(" and ")}</span>
-          </>
-        )}
-        .
-      </p>
-      <p className="text-muted-foreground text-xs">
-        Of the pieces to farm in {where}, {shareText}.
-      </p>
-    </div>
+    <DetailCard>
+      <DetailSection
+        title="What to farm"
+        description={`Most common among the pieces to farm in ${where}.`}
+      >
+        <div className="@container">
+          <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-x-6 gap-y-3 max-md:gap-x-3">
+            <div className="d2-label">Armor</div>
+            <div className="d2-label">Tertiary</div>
+            <div className="d2-label">Tuned</div>
+            {summary.archetypes.map((a) => (
+              <Fragment key={a.name}>
+                <RollIdentity
+                  thumb={
+                    a.slots.length > 0 ? (
+                      <div className="flex shrink-0 gap-1 @max-md:flex-col">
+                        {a.slots.map(({ slot, setHash }) => (
+                          <SlotPieceThumb
+                            key={slot}
+                            slot={ARMOR_SLOTS[slot]}
+                            setHash={setHash}
+                            primary={a.primary}
+                            getSlotIcons={getSlotIcons}
+                            icons={icons}
+                          />
+                        ))}
+                      </div>
+                    ) : (
+                      <RollThumb primary={a.primary} icons={icons} />
+                    )
+                  }
+                  archetype={a}
+                  icons={icons}
+                >
+                  <span className="text-muted-foreground shrink-0 tabular-nums">
+                    {Math.round(a.share * 100)}%
+                  </span>
+                  {a.slots.length > 0 && (
+                    <span className="text-muted-foreground truncate">
+                      {a.slots.map(({ slot }) => SLOT_LABELS[ARMOR_SLOTS[slot]]).join(", ")}
+                    </span>
+                  )}
+                </RollIdentity>
+                <StatCell stats={a.tertiaries} icons={icons} />
+                <StatCell stats={a.tuned} icons={icons} />
+              </Fragment>
+            ))}
+            {sets.length > 0 && (
+              <div className="col-span-full flex flex-wrap items-baseline gap-x-4 gap-y-1 pt-1">
+                <span className="d2-label">{sets.length === 1 ? "Set" : "Sets"}</span>
+                {sets.map((name) => (
+                  <span key={name}>{name}</span>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      </DetailSection>
+    </DetailCard>
   );
 }
 
@@ -272,6 +313,7 @@ export function TheoryResults({
   empty,
   exotic,
   setMap,
+  getSlotIcons,
   pieceMap,
   statIcons,
   sort,
@@ -281,6 +323,7 @@ export function TheoryResults({
   empty: boolean;
   exotic: TheoryExoticDisplay | null;
   setMap: Map<number, ArmorSetInfo>;
+  getSlotIcons: TheorySlotIcons;
   pieceMap: Map<string, ArmorPiece>;
   statIcons: StatIconMap;
   sort: TheorySortState;
@@ -352,7 +395,7 @@ export function TheoryResults({
           or add major mods.
         </p>
         {bonusNote}
-        <TheorySummaryCard recipes={close} closeOnly setMap={setMap} icons={statIcons} />
+        <TheorySummaryCard recipes={close} closeOnly setMap={setMap} getSlotIcons={getSlotIcons} icons={statIcons} />
         {closeSection}
       </div>
     );
@@ -360,7 +403,7 @@ export function TheoryResults({
   return (
     <div className="space-y-3">
       {bonusNote}
-      <TheorySummaryCard recipes={recipes} closeOnly={false} setMap={setMap} icons={statIcons} />
+      <TheorySummaryCard recipes={recipes} closeOnly={false} setMap={setMap} getSlotIcons={getSlotIcons} icons={statIcons} />
       <div className={cn(BUILD_LIST_WELL_CLASS, entering && "d2-stagger")}>
         {sorted.map(row)}
       </div>

@@ -300,6 +300,7 @@ function TheoryBuildsBody({
           empty={theory.empty}
           exotic={theory.exoticDisplay}
           setMap={theory.setMap}
+          getSlotIcons={theory.getSlotIcons}
           pieceMap={pieceMap}
           statIcons={statIcons}
           sort={sort}
