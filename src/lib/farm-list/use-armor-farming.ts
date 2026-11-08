@@ -14,7 +14,7 @@ export interface ArmorFarming {
   entryFor(data: ArmorFarmData): ArmorFarmEntry | undefined;
   /** Copies already owned that would match, from the live armory; null if it isn't in yet. */
   owned(data: ArmorFarmData): ArmorPiece[] | null;
-  add(data: ArmorFarmData, ignoredInstanceIds?: string[]): Promise<unknown>;
+  add(data: ArmorFarmData): Promise<unknown>;
   remove(id: string): Promise<unknown>;
 }
 
@@ -36,7 +36,7 @@ export function useArmorFarming(): ArmorFarming | null {
         const armory = peekArmory(queryClient);
         return armory ? matchingArmor(armory.pieces, data) : null;
       },
-      add: (data, ignoredInstanceIds = []) => addEntry({ ...data, ignoredInstanceIds }),
+      add: (data) => addEntry(data),
       remove: (id) => removeEntry(id),
     };
   }, [entries, queryClient, addEntry, removeEntry]);
