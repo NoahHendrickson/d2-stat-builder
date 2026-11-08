@@ -46,9 +46,9 @@ export function FarmArmorButton({
       void run(() => farming!.remove(existing.id), "Couldn't remove it from your Farm list");
       return;
     }
-    const copies = farming!.owned(data);
-    if (copies === null) toast.error("Couldn't check your vault", "Try again in a moment.");
-    else if (copies.length > 0) toast.info("You already have this roll");
+    const owned = farming!.isOwned(data);
+    if (owned === null) toast.error("Couldn't check your vault", "Try again in a moment.");
+    else if (owned) toast.info("You already have this roll");
     else void run(() => farming!.add(data), "Couldn't add it to your Farm list");
   }
 

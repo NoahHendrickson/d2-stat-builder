@@ -3,7 +3,6 @@
 import { useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { peekArmory } from "@/lib/armory/use-armory";
-import type { ArmorPiece } from "@/lib/armory/normalize";
 import { armorFarmKey, matchingArmor } from "./armor";
 import { isFarmDone, type ArmorFarmData, type ArmorFarmEntry } from "./types";
 import { useFarmList, useFarmListMutations } from "./use-farm-list";
@@ -12,8 +11,8 @@ import { useFarmList, useFarmListMutations } from "./use-farm-list";
 export interface ArmorFarming {
   /** The entry already hunting this piece. */
   entryFor(data: ArmorFarmData): ArmorFarmEntry | undefined;
-  /** Copies already owned that would match, from the live armory; null if it isn't in yet. */
-  owned(data: ArmorFarmData): ArmorPiece[] | null;
+  /** Whether a copy that would match is already owned, from the live armory; null if it isn't in yet. */
+  isOwned(data: ArmorFarmData): boolean | null;
   add(data: ArmorFarmData): Promise<unknown>;
   remove(id: string): Promise<unknown>;
 }
@@ -28,16 +27,16 @@ export function useArmorFarming(): ArmorFarming | null {
   return useMemo(() => {
     if (!entries) return null;
     const byKey = new Map<string, ArmorFarmEntry>();
-    // A finished entry is a record: the row reads as not on the list, and can be hunted again.
+    // A finished entry is a record: the row reads as not on the list, and can be hunted again once its copy is gone.
     for (const entry of entries) if (entry.kind === "armor" && !isFarmDone(entry)) byKey.set(armorFarmKey(entry), entry);
     return {
       entryFor: (data) => byKey.get(armorFarmKey(data)),
-      owned: (data) => {
+      isOwned: (data) => {
         const armory = peekArmory(queryClient);
-        return armory ? matchingArmor(armory.pieces, data) : null;
+        return armory ? matchingArmor(armory.pieces, data).length > 0 : null;
       },
-      add: (data) => addEntry(data),
-      remove: (id) => removeEntry(id),
+      add: addEntry,
+      remove: removeEntry,
     };
   }, [entries, queryClient, addEntry, removeEntry]);
 }

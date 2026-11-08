@@ -56,7 +56,7 @@ export interface WeaponFarmData {
   traits: [FarmPerk, FarmPerk];
   /** Other picks. A drop has to have them too, except the masterwork (see requiredExtras). */
   extras: FarmPerk[];
-  /** Copies that don't count: owned when the entry was made, or turned down. */
+  /** Copies that don't count: turned down with "Not this one" (older entries: also owned when made). */
   ignoredInstanceIds: string[];
 }
 
@@ -83,7 +83,7 @@ export interface ArmorFarmData {
   /** The set bonus this piece is hunted for: every armor entry has one. */
   setHash: number;
   setName?: string;
-  /** Copies that don't count: owned when the entry was made, or turned down. */
+  /** Copies that don't count: turned down with "Not this one" (older entries: also owned when made). */
   ignoredInstanceIds: string[];
 }
 

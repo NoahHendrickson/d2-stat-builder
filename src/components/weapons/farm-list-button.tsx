@@ -17,7 +17,7 @@ import { farmWeaponFromPicks, farmWeaponPicksKey, matchingCopies, sameFarmWeapon
 import { isFarmDone } from "@/lib/farm-list/types";
 import { useFarmList, useFarmListMutations } from "@/lib/farm-list/use-farm-list";
 import { useSession } from "@/lib/auth/use-session";
-import { sessionMembershipId } from "@/lib/armory/use-profile";
+import { sessionMembershipId, useProfile } from "@/lib/armory/use-profile";
 
 /** How old a held profile may be and still answer "do you own it?". */
 const PROFILE_FRESH_MS = 30_000;
@@ -42,6 +42,7 @@ export function FarmPerksSection({
   children: ReactNode;
 }) {
   const membershipId = sessionMembershipId(useSession().data);
+  const profile = useProfile().query.data;
   const queryClient = useQueryClient();
   const entries = useFarmList().data;
   const { add, remove } = useFarmListMutations();
@@ -56,6 +57,8 @@ export function FarmPerksSection({
   // Not before the list is in: an entry can't be told from a new roll until then.
   const canAdd = entry !== null && membershipId !== undefined && entries !== undefined;
   const key = entry ? farmWeaponPicksKey(entry) : "";
+  // Rechecked against the live profile: the copy can be dismantled, and this hides the button.
+  const owned = ownedKey === key && entry !== null && profile !== undefined && matchingCopies(profile, entry).length > 0;
   const busy = checking || add.isPending || remove.isPending;
 
   function save() {
@@ -68,7 +71,7 @@ export function FarmPerksSection({
   async function check() {
     setChecking(true);
     try {
-      const profile = await queryClient.fetchQuery<DestinyProfileResponse>({
+      const fresh = await queryClient.fetchQuery<DestinyProfileResponse>({
         queryKey: profileKey(membershipId),
         staleTime: PROFILE_FRESH_MS,
         queryFn: async () => {
@@ -76,7 +79,7 @@ export function FarmPerksSection({
           return newerProfile(held, await fetchProfile(held));
         },
       });
-      if (matchingCopies(profile, entry!).length > 0) setOwnedKey(key);
+      if (matchingCopies(fresh, entry!).length > 0) setOwnedKey(key);
       else save();
     } catch {
       toast.error("Couldn't check your vault", "Try again in a moment.");
@@ -100,8 +103,10 @@ export function FarmPerksSection({
       <HugeiconsIcon icon={ShoppingCartAdd02Icon} aria-hidden />
       On your Farm list
     </Button>
-  ) : ownedKey === key ? (
-    <p className="text-right text-xs text-muted-foreground">You already have this roll.</p>
+  ) : owned ? (
+    <p role="status" className="text-right text-xs text-muted-foreground">
+      You already have this roll.
+    </p>
   ) : (
     <Button size="sm" variant="outline" disabled={busy} onClick={() => void check()}>
       <HugeiconsIcon icon={ShoppingCartAdd02Icon} aria-hidden />
