@@ -1,6 +1,6 @@
 // Farm list (/farm-list, plus the button under the perk grid on /weapons): a seeded entry
 // whose drop is in the vault turns obtained on load, a new roll is added, an owned roll
-// offers "Add anyway", craftable weapons get no button, and "Not this one" sends a drop
+// says so instead of offering to add, craftable weapons get no button, and "Not this one" sends a drop
 // back to waiting. Armor comes from Theoretical and Dream builds and drops the same way.
 // See features/farm-list.md.
 export const meta = {
@@ -207,18 +207,15 @@ export default async function ({ page, app, stub, step, shot, expect, log }) {
     await shot("added", { within: DETAILS });
   });
 
-  await step("entry-owned: an owned roll says where it is and adds anyway with the copy ignored", async () => {
+  await step("entry-owned: an owned roll says so in place of the add button", async () => {
     await unpick("Proximity Power");
     await unpick("Surrounded");
     await pick("Attrition Orbs");
     await pick("Burning Ambition");
     await page.click({ role: "button", name: "Add to Farm list" }, { within: PERKS });
-    await page.waitForText(/You already have this roll in your Vault/, { within: PERKS });
+    await page.waitForText(/You already have this roll\./, { within: PERKS });
     await shot("owned", { within: DETAILS });
-    await page.click({ role: "button", name: "Add anyway" }, { within: PERKS });
-    await page.waitFor({ role: "button", name: "On your Farm list" }, { within: PERKS });
-    const post = stub.last("POST", "/api/farm-list");
-    expect(post.body.ignoredInstanceIds.join() === OWNED_COPY, "the owned copy is ignored");
+    expect(!(await page.exists({ role: "button", name: /Add/i }, { within: PERKS })), "no way to add a roll already owned");
   });
 
   await step("entry-strict: a picked magazine the copy doesn't have is a new roll, with no owned prompt", async () => {
@@ -254,7 +251,7 @@ export default async function ({ page, app, stub, step, shot, expect, log }) {
     expect(/Balanced Guard/.test(magazine) && !(await page.exists({ role: "image", name: "Matches" }, { within: cell("magazine") })), "no magazine asked for: just what the copy rolled");
     expect(await page.exists({ role: "image", name: "Doesn't match" }, { within: cell("masterwork") }), "Impact Masterwork doesn't match");
     expect(!(await page.exists(cell("origin"))), "no origin trait asked for or rolled: no field for it");
-    expect((await page.findAll({ css: `${WAITING} [data-entry]` })).length === 4, "four waiting entries");
+    expect((await page.findAll({ css: `${WAITING} [data-entry]` })).length === 3, "three waiting entries");
     expect(stub.last("PATCH", "/api/farm-list")?.body?.seen === true, "opening the page marked drops seen");
     await page.waitFor({ role: "link", name: "Farm list" });
     const record = { css: '[data-entry="66666666-6666-4666-8666-666666666666"]' };
@@ -264,24 +261,19 @@ export default async function ({ page, app, stub, step, shot, expect, log }) {
     await page.waitFor({ css: OBTAINED }, { gone: true });
     expect(stub.last("PATCH", "/api/farm-list/11111111")?.body?.reject === true, "PATCH sent reject");
     expect(stub.store.entries.get("11111111-1111-4111-8111-111111111111").ignoredInstanceIds.join() === MATCH_COPY, "the copy is ignored now");
-    expect((await page.findAll({ css: `${WAITING} [data-entry]` })).length === 5, "five waiting entries");
+    expect((await page.findAll({ css: `${WAITING} [data-entry]` })).length === 4, "four waiting entries");
     await shot("rejected");
   });
 
   const armorPosts = () => stub.requests.filter((r) => r.method === "POST" && r.path === "/api/farm-list" && r.body?.kind === "armor");
   const ADD_ROW = { role: "button", name: /^Add .* to your Farm list$/ };
 
-  // Clicks an add button; an owned copy asks first, so accept that and report it.
+  // Clicks an add button and returns what it POSTed.
   const addArmor = async (target, within) => {
     const before = armorPosts().length;
     await page.click(target, within ? { within } : undefined);
-    const ANYWAY = { role: "button", name: "Add anyway", nth: 0 };
-    await page.waitFor(async () => armorPosts().length > before || (await page.exists(ANYWAY, within ? { within } : undefined)));
-    if (armorPosts().length > before) return { owned: false, body: armorPosts().at(-1).body };
-    await shot("armor-owned", within ? { within } : undefined);
-    await page.click(ANYWAY, within ? { within } : undefined);
     await page.waitFor(() => armorPosts().length > before);
-    return { owned: true, body: armorPosts().at(-1).body };
+    return { body: armorPosts().at(-1).body };
   };
 
   await step("armor-theory: only a piece of a required set can be added", async () => {
@@ -295,8 +287,7 @@ export default async function ({ page, app, stub, step, shot, expect, log }) {
     await page.waitFor({ ...ADD_ROW, nth: 0 }, { timeout: 60000 });
     await shot("theory-rows");
     const first = await addArmor({ ...ADD_ROW, nth: 0 });
-    log(`  owned copies asked first: ${first.owned}, ignored ${first.body.ignoredInstanceIds.length}`);
-    expect(first.owned === first.body.ignoredInstanceIds.length > 0, "owned copies are ignored, and only then");
+    expect(first.body.ignoredInstanceIds.length === 0, "nothing ignored when added");
     expect(typeof first.body.setHash === "number", "it names its set");
     expect(typeof first.body.slot === "string", "and its slot");
     const OFF = { role: "button", name: /^Remove .* from your Farm list$/ };

@@ -13,11 +13,11 @@ import { toast } from "@/lib/toast";
 import type { WeaponCatalog } from "@/lib/weapons/catalog";
 import type { PickSlot, Roll } from "@/lib/weapons/pick-slots";
 import type { WeaponSummary } from "@/lib/weapons/types";
-import { farmWeaponFromPicks, farmWeaponPicksKey, matchingCopies, placeLabel, sameFarmWeapon, type OwnedCopy } from "@/lib/farm-list/match";
+import { farmWeaponFromPicks, farmWeaponPicksKey, matchingCopies, sameFarmWeapon } from "@/lib/farm-list/match";
 import { isFarmDone } from "@/lib/farm-list/types";
 import { useFarmList, useFarmListMutations } from "@/lib/farm-list/use-farm-list";
 import { useSession } from "@/lib/auth/use-session";
-import { sessionMembershipId } from "@/lib/armory/use-profile";
+import { sessionMembershipId, useProfile } from "@/lib/armory/use-profile";
 
 /** How old a held profile may be and still answer "do you own it?". */
 const PROFILE_FRESH_MS = 30_000;
@@ -25,9 +25,8 @@ const PROFILE_FRESH_MS = 30_000;
 /**
  * The Perks section. Once a left and a right perk are picked, its header offers to add the
  * roll to the Farm list, unless a copy with everything picked is already owned, in which
- * case the section says where and offers to add it anyway (that copy then never counts as
- * the drop). Once the roll is on the list, the button takes it off again. Not shown on
- * craftable weapons.
+ * case the header says so instead. Once the roll is on the list, the button takes it off
+ * again. Not shown on craftable weapons.
  */
 export function FarmPerksSection({
   weapon,
@@ -43,6 +42,7 @@ export function FarmPerksSection({
   children: ReactNode;
 }) {
   const membershipId = sessionMembershipId(useSession().data);
+  const profile = useProfile().query.data;
   const queryClient = useQueryClient();
   const entries = useFarmList().data;
   const { add, remove } = useFarmListMutations();
@@ -51,34 +51,27 @@ export function FarmPerksSection({
     [weapon, catalog, slots, picked],
   );
   const existing = entry ? entries?.find((w) => w.kind === "weapon" && !isFarmDone(w) && sameFarmWeapon(w, entry)) : undefined;
-  // Copies already owned, for the picks they were found for.
-  const [owned, setOwned] = useState<{ key: string; profile: DestinyProfileResponse; copies: OwnedCopy[] } | null>(
-    null,
-  );
+  // The picks last found to be owned already.
+  const [ownedKey, setOwnedKey] = useState<string | null>(null);
   const [checking, setChecking] = useState(false);
   // Not before the list is in: an entry can't be told from a new roll until then.
   const canAdd = entry !== null && membershipId !== undefined && entries !== undefined;
   const key = entry ? farmWeaponPicksKey(entry) : "";
-  const ownedNow = owned?.key === key ? owned : null;
+  // Rechecked against the live profile: the copy can be dismantled, and this hides the button.
+  const owned = ownedKey === key && entry !== null && profile !== undefined && matchingCopies(profile, entry).length > 0;
   const busy = checking || add.isPending || remove.isPending;
 
-  function save(ignoredInstanceIds: string[] = []) {
-    add.mutate(
-      { ...entry!, ignoredInstanceIds },
-      {
-        onSuccess: () => {
-          setOwned(null);
-          toast.success("Added to your Farm list");
-        },
-        onError: (err) => toast.error("Couldn't add to your Farm list", err.message),
-      },
-    );
+  function save() {
+    add.mutate(entry!, {
+      onSuccess: () => toast.success("Added to your Farm list"),
+      onError: (err) => toast.error("Couldn't add to your Farm list", err.message),
+    });
   }
 
   async function check() {
     setChecking(true);
     try {
-      const profile = await queryClient.fetchQuery<DestinyProfileResponse>({
+      const fresh = await queryClient.fetchQuery<DestinyProfileResponse>({
         queryKey: profileKey(membershipId),
         staleTime: PROFILE_FRESH_MS,
         queryFn: async () => {
@@ -86,8 +79,7 @@ export function FarmPerksSection({
           return newerProfile(held, await fetchProfile(held));
         },
       });
-      const copies = matchingCopies(profile, entry!);
-      if (copies.length > 0) setOwned({ key, profile, copies });
+      if (matchingCopies(fresh, entry!).length > 0) setOwnedKey(key);
       else save();
     } catch {
       toast.error("Couldn't check your vault", "Try again in a moment.");
@@ -111,8 +103,12 @@ export function FarmPerksSection({
       <HugeiconsIcon icon={ShoppingCartAdd02Icon} aria-hidden />
       On your Farm list
     </Button>
+  ) : owned ? (
+    <p role="status" className="text-right text-xs text-muted-foreground">
+      You already have this roll.
+    </p>
   ) : (
-    <Button size="sm" variant="outline" disabled={busy || ownedNow !== null} onClick={() => void check()}>
+    <Button size="sm" variant="outline" disabled={busy} onClick={() => void check()}>
       <HugeiconsIcon icon={ShoppingCartAdd02Icon} aria-hidden />
       {checking ? "Checking your vault…" : "Add to Farm list"}
     </Button>
@@ -126,21 +122,6 @@ export function FarmPerksSection({
       action={action}
     >
       {children}
-      {ownedNow && !existing && (
-        <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2">
-          <p className="text-sm text-muted-foreground">
-            You already have this roll {placeLabel(ownedNow.profile, ownedNow.copies[0]!.place)}.
-          </p>
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={busy}
-            onClick={() => save(ownedNow.copies.map((c) => c.instanceId))}
-          >
-            Add anyway
-          </Button>
-        </div>
-      )}
     </DetailSection>
   );
 }

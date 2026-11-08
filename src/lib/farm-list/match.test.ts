@@ -34,11 +34,12 @@ const weapon = (overrides: Partial<WeaponSummary> = {}): WeaponSummary =>
     ...overrides,
   }) as WeaponSummary;
 
-const ADEPT = weapon({ hash: 2, name: "Fatebringer (Adept)" });
+const REISSUE = weapon({ hash: 2 });
+const ADEPT = weapon({ hash: 4, name: "Fatebringer (Adept)", adept: true });
 const OTHER = weapon({ hash: 3, name: "Fatebringer", columns: [{ kind: "Trait", perkIndices: [4] }] });
 
 function makeEntry(picks: Record<number, number>, w = weapon()): WeaponFarmData | null {
-  return farmWeaponFromPicks(w, PERKS, [w, ADEPT, OTHER], pickSlots(w), picks);
+  return farmWeaponFromPicks(w, PERKS, [w, REISSUE, ADEPT, OTHER], pickSlots(w), picks);
 }
 
 /** A profile with copies in the vault: hash, instance id, socket plugs, state. */
@@ -99,8 +100,12 @@ describe("farmWeaponFromPicks", () => {
     ]);
   });
 
-  it("matches same-name versions that roll both traits, adept included", () => {
+  it("matches same-name versions that roll both traits", () => {
     expect(makeEntry({ 2: 3, 3: 6 })!.weaponHashes).toEqual([1, 2]);
+  });
+
+  it("keeps adept versions separate from regular ones", () => {
+    expect(makeEntry({ 2: 3, 3: 6 }, ADEPT)!.weaponHashes).toEqual([4]);
   });
 
   it("fills a trait column with only one perk", () => {

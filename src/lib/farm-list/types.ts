@@ -9,7 +9,7 @@ export const FARM_LIST_SCHEMA_VERSION = 1;
 
 /** Most entries one account may keep. */
 export const MAX_FARM_ENTRIES_PER_ACCOUNT = 500;
-/** Same-name versions one weapon entry matches (reissues, adept). */
+/** Same-name versions one weapon entry matches (reissues; adept only with adept). */
 const MAX_WEAPON_HASHES = 32;
 /** A perk's plug hashes: base, enhanced, and any other tiers. */
 const MAX_PERK_HASHES = 8;
@@ -50,13 +50,13 @@ export interface WeaponFarmData {
   weaponHash: number;
   weaponName: string;
   weaponIcon?: string;
-  /** Every same-name version (adept included) that can roll both traits. */
+  /** Every same-name version, adept only with adept, that can roll both traits. */
   weaponHashes: number[];
   /** The left and right perks, which every entry has. */
   traits: [FarmPerk, FarmPerk];
   /** Other picks. A drop has to have them too, except the masterwork (see requiredExtras). */
   extras: FarmPerk[];
-  /** Copies that don't count: owned when the entry was made, or turned down. */
+  /** Copies that don't count: turned down with "Not this one" (older entries: also owned when made). */
   ignoredInstanceIds: string[];
 }
 
@@ -83,7 +83,7 @@ export interface ArmorFarmData {
   /** The set bonus this piece is hunted for: every armor entry has one. */
   setHash: number;
   setName?: string;
-  /** Copies that don't count: owned when the entry was made, or turned down. */
+  /** Copies that don't count: turned down with "Not this one" (older entries: also owned when made). */
   ignoredInstanceIds: string[];
 }
 
