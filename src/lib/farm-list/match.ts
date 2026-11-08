@@ -69,7 +69,8 @@ function columnSlots(weapon: Pick<WeaponSummary, "columns">, traits: readonly nu
  * The entry the current picks make, or null until both traits are picked. Other perk
  * columns and the masterwork come along as extras; mods don't (they swap freely).
  * `versions` is every weapon the catalog knows, superseded ones included: the entry
- * matches each same-name version (adept too) that can roll both traits.
+ * matches each same-name version that can roll both traits. Adept versions are their own
+ * thing: a regular weapon's entry never matches one, nor the other way round.
  */
 export function farmWeaponFromPicks(
   weapon: WeaponSummary,
@@ -108,6 +109,7 @@ export function farmWeaponFromPicks(
       .filter(
         (v) =>
           v.hash !== weapon.hash &&
+          v.adept === weapon.adept &&
           weaponVersionFamilyName(v.name) === family &&
           traits.every((t) => rolls(v, t)),
       )

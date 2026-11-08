@@ -9,7 +9,7 @@ export const FARM_LIST_SCHEMA_VERSION = 1;
 
 /** Most entries one account may keep. */
 export const MAX_FARM_ENTRIES_PER_ACCOUNT = 500;
-/** Same-name versions one weapon entry matches (reissues, adept). */
+/** Same-name versions one weapon entry matches (reissues; adept only with adept). */
 const MAX_WEAPON_HASHES = 32;
 /** A perk's plug hashes: base, enhanced, and any other tiers. */
 const MAX_PERK_HASHES = 8;
@@ -50,7 +50,7 @@ export interface WeaponFarmData {
   weaponHash: number;
   weaponName: string;
   weaponIcon?: string;
-  /** Every same-name version (adept included) that can roll both traits. */
+  /** Every same-name version, adept only with adept, that can roll both traits. */
   weaponHashes: number[];
   /** The left and right perks, which every entry has. */
   traits: [FarmPerk, FarmPerk];
