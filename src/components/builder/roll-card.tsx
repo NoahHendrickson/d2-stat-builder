@@ -207,10 +207,11 @@ export function RollCard({
           {meta && <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">{meta}</div>}
         </div>
         <div className="border-t border-foreground/8 px-4 max-md:px-3">
-          <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-x-6 gap-y-3 py-3 max-md:gap-x-3">
+          <div className="grid grid-cols-[minmax(0,1fr)_auto_auto_auto] items-center gap-x-6 gap-y-3 py-3 max-md:gap-x-3">
             <div className="d2-label">Armor</div>
             <div className="d2-label">Tertiary</div>
             <div className="d2-label">Tuned</div>
+            <div aria-hidden />
             {children}
           </div>
         </div>

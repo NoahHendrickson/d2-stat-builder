@@ -18,6 +18,7 @@ import {
   PanelLeftIcon,
   PencilEdit02Icon,
   Search01Icon,
+  ShoppingCart02Icon,
   SlidersHorizontalIcon,
 } from "@hugeicons/core-free-icons";
 import { Button } from "@/components/ui/button";
@@ -34,6 +35,7 @@ import { ChangelogMenu, useChangelogUnseen } from "@/components/changelog-menu";
 import { LinkDialog } from "@/components/links/link-dialog";
 import { LinkFavicon } from "@/components/links/link-favicon";
 import { addLink, removeLink, updateLink, useLinks } from "@/lib/links/use-links";
+import { useUnseenFarmDrops } from "@/lib/farm-list/use-farm-list";
 import { DISCORD_INVITE_URL } from "@/lib/discord";
 import { useSiteIcon } from "@/lib/site-icon";
 import type { SavedLink } from "@/lib/links/links";
@@ -56,6 +58,7 @@ export const NAV_ITEMS: readonly {
   { href: "/", label: "Stat optimizer", Icon: navIcon(SlidersHorizontalIcon) },
   { href: "/armor", label: "Armor table", Icon: navIcon(LayoutTable01Icon) },
   { href: "/weapons", label: "Weapon search", Icon: navIcon(Search01Icon) },
+  { href: "/farm-list", label: "Farm list", Icon: navIcon(ShoppingCart02Icon) },
   { href: "/loadouts", label: "Loadouts", Icon: navIcon(Layers01Icon) },
   { href: "/manager", label: "Items", Icon: navIcon(GarageIcon) },
 ];
@@ -68,7 +71,7 @@ export function pageTitle(pathname: string): string {
 }
 
 /**
- * The app's navigation column: logo, the five views, the person's own saved links
+ * The app's navigation column: logo, the six views, the person's own saved links
  * (usually Google Sheets) that open in a new tab, and at the foot their armor, game
  * data, and account. `collapsed` is the icon rail.
  */
@@ -87,6 +90,7 @@ export const AppSidebar = memo(function AppSidebar({
   const activeIndex = NAV_ITEMS.findIndex((n) => n.href === pathname);
   const toggleLabel = collapsed ? "Expand sidebar" : "Collapse sidebar";
   const siteIcon = useSiteIcon();
+  const unseenFarmDrops = useUnseenFarmDrops();
   const logo = (
     <Image
       src={siteIcon.src}
@@ -170,6 +174,7 @@ export const AppSidebar = memo(function AppSidebar({
             <NavItem
               {...item}
               active={item.href === pathname}
+              badge={item.href === "/farm-list" ? unseenFarmDrops : 0}
               collapsed={collapsed}
               onNavigate={onNavigate}
             />
@@ -207,6 +212,7 @@ function NavItem({
   label,
   Icon,
   soon,
+  badge = 0,
   active,
   collapsed,
   onNavigate,
@@ -215,16 +221,19 @@ function NavItem({
   label: string;
   Icon: ComponentType<NavIconProps>;
   soon?: boolean;
+  /** A count to call out (Farm list drops not yet seen): a dot on the rail, the number beside the label. */
+  badge?: number;
   active: boolean;
   collapsed: boolean;
   onNavigate?: () => void;
 }) {
+  const named = badge > 0 ? `${label} (${badge} new)` : label;
   const link = (
     <Link
       href={href}
       onClick={onNavigate}
       aria-current={active ? "page" : undefined}
-      aria-label={collapsed ? label : undefined}
+      aria-label={collapsed || badge > 0 ? named : undefined}
       className={cn(
         rowClass,
         collapsed ? "w-9 justify-center" : "px-2.5",
@@ -233,19 +242,29 @@ function NavItem({
           : "text-muted-foreground hover:bg-foreground/5 hover:text-foreground",
       )}
     >
-      <Icon strokeWidth={active ? 2 : 1.5} className="size-5 shrink-0" />
+      <span className="relative flex shrink-0">
+        <Icon strokeWidth={active ? 2 : 1.5} className="size-5" />
+        {collapsed && badge > 0 && (
+          <span className="bg-power absolute -top-0.5 -right-0.5 size-2 rounded-full" aria-hidden />
+        )}
+      </span>
       {!collapsed && (
         <>
           <span className="min-w-0 flex-1 truncate">{label}</span>
           {soon && (
             <span className="d2-label text-muted-foreground/80 shrink-0 text-[10px]">Soon</span>
           )}
+          {badge > 0 && (
+            <span className="bg-power text-background shrink-0 rounded-full px-1.5 text-[11px] leading-4 font-medium tabular-nums" aria-hidden>
+              {badge}
+            </span>
+          )}
         </>
       )}
     </Link>
   );
   return collapsed ? (
-    <TooltipLabel label={soon ? `${label} (soon)` : label}>{link}</TooltipLabel>
+    <TooltipLabel label={soon ? `${label} (soon)` : named}>{link}</TooltipLabel>
   ) : (
     link
   );

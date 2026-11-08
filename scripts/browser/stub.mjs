@@ -1,6 +1,6 @@
 // Answers every same-origin /api/* request inside the browser, so a run never touches
 // Bungie, Neon, or Discord. Reads come from the fixture profile and an in-memory store;
-// writes update the store (loadouts, settings, build usage) or are recorded and
+// writes update the store (loadouts, settings, build usage, Farm list) or are recorded and
 // acknowledged (Bungie moves/equips/plugs, bug reports). A route this file doesn't know
 // gets a 501 and is listed in `unstubbed`: that's drift to fix here. Shared by the benches
 // and the verify-d2 skill.
@@ -22,7 +22,7 @@ export const STUB_USER = { membershipId: "verify-user", destinyMembershipId: "46
 
 /**
  * `profile` is the GetProfile body (a JSON string). `seed` fills the store:
- * `{ loadouts: SavedLoadout[], shares: { [code]: SavedLoadoutData }, settings: { [key]: { value, updatedAt } }, usage: { [queryKey]: [instanceId, 0|1][] }, ingameSlots }`.
+ * `{ loadouts: SavedLoadout[], shares: { [code]: SavedLoadoutData }, settings: { [key]: { value, updatedAt } }, usage: { [queryKey]: [instanceId, 0|1][] }, ingameSlots, farmList: FarmEntry[] }`.
  */
 export function createStub({ profile, seed = {} }) {
   const store = {
@@ -34,6 +34,7 @@ export function createStub({ profile, seed = {} }) {
     // Like the real table: one record per query key, replaced when the query runs again.
     usage: new Map(Object.entries(seed.usage ?? {}).map(([key, pieces]) => [key, new Map(pieces)])),
     ingameSlots: seed.ingameSlots ?? Array.from({ length: 10 }, (_, index) => ({ index, nameHash: 101, iconHash: 201, colorHash: 301, items: [], empty: true })),
+    entries: new Map((seed.farmList ?? []).map((e) => [e.id, e])),
   };
   const characterIds = new Set(Object.keys(JSON.parse(profile).characters?.data ?? {}));
   /** Every /api request: { t, method, path, body, status }. */
@@ -104,6 +105,36 @@ export function createStub({ profile, seed = {} }) {
       store.settings[key] = { value: b.value, updatedAt: now() };
       return json(200, store.settings[key]);
     }],
+
+    // Mirrors the Farm list store: the first match sticks unless the copy is ignored; "not this
+    // one" ignores it and goes back to waiting.
+    ["GET", /^\/api\/farm-list$/, () => json(200, { entries: [...store.entries.values()].sort((a, b) => b.createdAt - a.createdAt) })],
+    ["POST", /^\/api\/farm-list$/, (b) => {
+      if (b?.version !== 1 || !["weapon", "armor"].includes(b.kind)) return bad();
+      if (b.kind === "weapon" && (!Array.isArray(b.traits) || b.traits.length !== 2 || !Array.isArray(b.weaponHashes))) return bad();
+      if (b.kind === "armor" && (!b.archetype || !Array.isArray(b.rolls) || b.rolls.length === 0)) return bad();
+      const row = { ...b, id: crypto.randomUUID(), createdAt: now() };
+      store.entries.set(row.id, row);
+      return json(201, { entry: row });
+    }],
+    ["PATCH", /^\/api\/farm-list$/, (b) => {
+      if (b?.seen !== true) return bad();
+      for (const e of store.entries.values()) if (e.obtained) e.obtained = { ...e.obtained, seen: true };
+      return json(200, { ok: true });
+    }],
+    ["PATCH", /^\/api\/farm-list\/([^/]+)$/, (b, [id]) => {
+      const e = store.entries.get(id);
+      if (!e) return json(404, { error: "Entry not found" });
+      if (typeof b?.obtained === "string" && /^\d{1,20}$/.test(b.obtained)) {
+        if (!e.obtained && !e.ignoredInstanceIds.includes(b.obtained)) e.obtained = { instanceId: b.obtained, at: now(), seen: false };
+      } else if (b?.reject === true) {
+        if (e.obtained) { e.ignoredInstanceIds = [...e.ignoredInstanceIds, e.obtained.instanceId]; delete e.obtained; }
+      } else if (b?.done === true) {
+        if (e.obtained && e.obtained.doneAt === undefined) e.obtained = { ...e.obtained, doneAt: now() };
+      } else return bad();
+      return json(200, { entry: e });
+    }],
+    ["DELETE", /^\/api\/farm-list\/([^/]+)$/, (_, [id]) => (store.entries.delete(id) ? json(200, { ok: true }) : json(404, { error: "Entry not found" }))],
 
     ["GET", /^\/api\/build-usage$/, () => json(200, usageSummary())],
     ["POST", /^\/api\/build-usage$/, (b) => {

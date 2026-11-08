@@ -40,6 +40,7 @@ Each feature file starts with an H1 title and one paragraph describing the behav
 - [Saved loadouts](./loadouts.md): search, edit, equip (apply stream), save in-game, delete, delete all. Journey: `loadouts`.
 - [Items (manager)](./manager.md): layout setting (rows or legacy), keyword search, item popover and lock, character rows, moves, Show ornaments. Journeys: `manager`, `manager-ornaments`.
 - [Weapon search](./weapons.md): name search, filter chips, details pane, perk picks. Journey: `weapons`.
+- [Farm list](./farm-list.md): weapon rolls from Weapon search and armor from Theoretical and Dream builds, owned-copy check, drop detection with toast and sidebar badge, Not this one. Journey: `farm-list`.
 - [Armor table](./armor.md): name search, Searches (usage) column, Junk, Duplicates. Journey: `armor`.
 - [Settings and sync](./settings.md): theme, site icon, clearing usage history, synced sidebar links. Journey: `settings`.
 - [Send feedback](./feedback.md): the sidebar form, Bug / Idea, sending. Journey: `feedback`.

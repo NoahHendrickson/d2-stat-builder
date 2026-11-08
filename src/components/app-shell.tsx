@@ -22,6 +22,7 @@ import { Drawer, DrawerClose, DrawerContent } from "@/components/ui/drawer";
 import { SettingsSync } from "@/components/settings-sync";
 import { BuildUsageRecorder } from "@/components/build-usage-recorder";
 import { AnnotationsSync } from "@/components/annotations-sync";
+import { FarmListWatcher } from "@/components/farm-list/farm-list-watcher";
 import { SiteIconSync } from "@/components/site-icon-sync";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { useSession } from "@/lib/auth/use-session";
@@ -243,6 +244,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       <SettingsSync />
       <BuildUsageRecorder />
       <AnnotationsSync />
+      <FarmListWatcher />
       {authed && <BugReportDialog />}
 
       {!desktop && authed && (

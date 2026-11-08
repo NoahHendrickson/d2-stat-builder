@@ -1379,6 +1379,7 @@ export function BuilderPanel({
           pieceMap={pieceMap}
           statIcons={statIcons}
           setNames={setNames}
+          classType={classType}
         />
       )}
 
