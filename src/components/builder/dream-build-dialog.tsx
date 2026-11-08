@@ -35,6 +35,8 @@ export interface DreamBuildDialogProps {
   statIcons: StatIconMap;
   /** Set names by hash, for replacements that must come from a required set. */
   setNames: ReadonlyMap<number, string>;
+  /** The class being built for, so a replacement can go on the Farm list. */
+  classType: number | null;
 }
 
 /**
@@ -65,6 +67,7 @@ function DreamBuildBody({
   pieceMap,
   statIcons,
   setNames,
+  classType,
 }: Omit<DreamBuildDialogProps, "open" | "onOpenChange" | "onOpenChangeComplete" | "build"> & {
   build: OptimizerLoadout;
 }) {
@@ -151,6 +154,7 @@ function DreamBuildBody({
                 statIcons={statIcons}
                 exoticIcon={exoticIcon}
                 setNames={setNames}
+                classType={classType}
               />
             ) : (
               <p className="text-muted-foreground text-sm">

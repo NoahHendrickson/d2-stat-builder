@@ -30,6 +30,7 @@ import {
   WeaponIcon,
 } from "@/components/weapons/weapon-icons";
 import { WeaponPopularityCard } from "@/components/weapons/weapon-popularity-card";
+import { FarmPerksSection } from "@/components/weapons/farm-list-button";
 import { WeaponStats } from "@/components/weapons/weapon-stats";
 import type { WeaponCatalog } from "@/lib/weapons/catalog";
 import { clarityLines } from "@/lib/weapons/clarity";
@@ -484,9 +485,9 @@ export const WeaponDetails = memo(function WeaponDetails({
           is under 16rem. Phones keep the perks first. */}
       <div className="flex flex-wrap items-start gap-4">
         {slots.length > 0 && (
-          <DetailCard className="min-w-0 max-w-full">
+          <DetailCard className="min-w-0 max-w-full pt-[7px]">
             {perkSlots.length > 0 && (
-              <DetailSection title="Perks">
+              <FarmPerksSection weapon={weapon} catalog={catalog} slots={slots} picked={picked}>
                 {/* Inset (p-1, given back by -m-1) so the scroller doesn't clip the hover ring. */}
                 <div className="-m-1 flex max-w-[calc(100%+0.5rem)] gap-2.5 overflow-x-auto p-1 pb-2 max-md:gap-1.5">
                   {perkSlots.map((slot) => (
@@ -499,7 +500,7 @@ export const WeaponDetails = memo(function WeaponDetails({
                     </section>
                   ))}
                 </div>
-              </DetailSection>
+              </FarmPerksSection>
             )}
             {/* Masterworks, then the mod socket's choices that move a stat. */}
             {extraSlots.map((slot) => (
@@ -534,9 +535,9 @@ export const WeaponDetails = memo(function WeaponDetails({
           Tap a perk to pick it, or press and hold to read it.
         </p>
         {(Object.keys(current).length > 0 || dpsSetups.length > 0) && (
-          <DetailCard className="min-w-64 flex-1 basis-64 md:order-first md:max-w-sm">
+          <DetailCard className="min-w-64 flex-1 basis-64 pt-[7px] md:order-first md:max-w-sm">
             {Object.keys(current).length > 0 && (
-              <DetailSection title="Stats">
+              <DetailSection title="Stats" heading={<span className="flex min-h-7 items-center">Stats</span>}>
                 {frame.perk && <FrameRow perk={frame.perk} insight={clarityLines(clarity, frame.perk)} />}
                 <WeaponStats base={current} stats={preview} />
               </DetailSection>

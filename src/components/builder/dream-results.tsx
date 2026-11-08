@@ -5,8 +5,11 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { ArrowRight02Icon } from "@hugeicons/core-free-icons";
 import { Button } from "@/components/ui/button";
 import { ArmorThumb } from "@/components/armor-thumb";
+import { FarmArmorButton } from "@/components/builder/farm-armor-button";
 import { StatGlyph } from "@/components/stat-glyph";
 import { armorPipTier, type ArmorPiece } from "@/lib/armory/normalize";
+import { armorFromDream } from "@/lib/farm-list/armor";
+import { useArmorFarming } from "@/lib/farm-list/use-armor-farming";
 import { isFullyMasterworked } from "@/lib/armory/masterwork";
 import {
   SLOT_LABELS,
@@ -337,6 +340,7 @@ export function DreamComparison({
   statIcons,
   exoticIcon,
   setNames,
+  classType,
 }: {
   build: OptimizerLoadout;
   state: DreamBuildState;
@@ -346,7 +350,9 @@ export function DreamComparison({
   setNames: ReadonlyMap<number, string>;
   /** Icon of the build's exotic, for its re-roll suggestions. */
   exoticIcon?: string;
+  classType: number | null;
 }) {
+  const farming = useArmorFarming();
   const { running, result } = state;
   // The picked option belongs to the result it was picked from; a new result starts at
   // its best option.
@@ -439,6 +445,14 @@ export function DreamComparison({
         {build.pieceIds.map((id, slot) => {
           const piece = pieceMap.get(id);
           const v = verdict(slot);
+          // Only a piece of a required set can go on the Farm list.
+          const farmData =
+            v.kind === "replace" && classType !== null
+              ? armorFromDream(v.farm, {
+                  classType,
+                  setName: v.farm.setHash !== undefined ? setNames.get(v.farm.setHash) : undefined,
+                })
+              : null;
           return (
             <Fragment key={slot}>
               <PieceCell
@@ -465,9 +479,12 @@ export function DreamComparison({
               )}
               {v.kind === "replace" && (
                 <div className="border-positive/40 bg-positive/8 flex flex-col gap-2 border p-2 max-md:col-span-3">
-                  <span className="text-positive text-xs font-medium tracking-wider uppercase normal:normal-case normal:tracking-normal">
-                    Replace
-                  </span>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-positive text-xs font-medium tracking-wider uppercase normal:normal-case normal:tracking-normal">
+                      Replace
+                    </span>
+                    {farmData && <FarmArmorButton farming={farming} data={farmData} />}
+                  </div>
                   <FarmLine farm={v.farm} icons={statIcons} exoticIcon={exoticIcon} />
                   {v.farm.setHash !== undefined && (
                     <span className="text-xs">

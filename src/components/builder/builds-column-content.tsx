@@ -304,6 +304,7 @@ function TheoryBuildsBody({
           pieceMap={pieceMap}
           statIcons={statIcons}
           sort={sort}
+          classType={theory.classType}
         />
       </div>
     </div>

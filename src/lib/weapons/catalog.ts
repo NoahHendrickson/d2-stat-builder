@@ -146,7 +146,9 @@ export function createWeaponCatalog(raw: WeaponIndex) {
     }));
   }
 
-  return { ...index, weapons, facets, search, poolLabel, comboPartners };
+  // `allWeapons` keeps the superseded versions browse hides: old copies still drop
+  // (and sit in vaults) under those hashes.
+  return { ...index, weapons, allWeapons: index.weapons, facets, search, poolLabel, comboPartners };
 }
 
 export type WeaponCatalog = ReturnType<typeof createWeaponCatalog>;

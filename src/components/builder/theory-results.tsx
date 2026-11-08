@@ -18,9 +18,12 @@ import {
   StatName,
   TuningName,
 } from "@/components/builder/roll-card";
+import { FarmArmorButton } from "@/components/builder/farm-armor-button";
 import { TheorySummaryCard } from "@/components/builder/theory-summary-card";
 import type { TheoryExoticDisplay } from "@/components/builder/use-theory-builds";
 import type { ArmorPiece } from "@/lib/armory/normalize";
+import { armorFromTheory } from "@/lib/farm-list/armor";
+import { useArmorFarming, type ArmorFarming } from "@/lib/farm-list/use-armor-farming";
 import type { ArmorSetInfo, SetSlotIcons } from "@/lib/armory/sets";
 import {
   ARMOR_SLOTS,
@@ -49,6 +52,8 @@ function PieceLine({
   setName,
   plain,
   icons,
+  classType,
+  farming,
 }: {
   piece: TheoryPiece;
   owned?: ArmorPiece;
@@ -57,8 +62,12 @@ function PieceLine({
   /** Just the roll: no detail line (no exotic or set picked, nothing owned seated). */
   plain: boolean;
   icons: StatIconMap;
+  classType: number | null;
+  farming: ArmorFarming | null;
 }) {
   const exoticName = piece.exotic && !piece.owned ? exotic?.name : undefined;
+  // Only a piece of a required set can go on the Farm list.
+  const farmData = piece.owned || classType === null ? null : armorFromTheory(piece, { classType, setName });
   return (
     <>
       <RollIdentity
@@ -93,6 +102,7 @@ function PieceLine({
       ) : (
         <MutedCell title="Any tuned stat works">Any</MutedCell>
       )}
+      {farmData ? <FarmArmorButton compact farming={farming} data={farmData} /> : <span aria-hidden />}
     </>
   );
 }
@@ -119,12 +129,16 @@ const TheoryRow = memo(function TheoryRow({
   setMap,
   pieceMap,
   statIcons,
+  classType,
+  farming,
 }: {
   recipe: TheoryRecipe;
   exotic: TheoryExoticDisplay | null;
   setMap: Map<number, ArmorSetInfo>;
   pieceMap: Map<string, ArmorPiece>;
   statIcons: StatIconMap;
+  classType: number | null;
+  farming: ArmorFarming | null;
 }) {
   const farm = recipe.pieces.length - recipe.owned;
   // No exotic, set or owned piece: the card is just five rolls, in no particular slots.
@@ -172,6 +186,8 @@ const TheoryRow = memo(function TheoryRow({
           setName={piece.setHash !== undefined ? setMap.get(piece.setHash)?.name : undefined}
           plain={plain}
           icons={statIcons}
+          classType={classType}
+          farming={farming}
         />
       ))}
     </RollCard>
@@ -187,6 +203,7 @@ export function TheoryResults({
   pieceMap,
   statIcons,
   sort,
+  classType,
 }: {
   state: TheoryBuildState;
   /** No target, exotic or set bonus picked yet: prompt for one instead of listing rolls. */
@@ -197,7 +214,9 @@ export function TheoryResults({
   pieceMap: Map<string, ArmorPiece>;
   statIcons: StatIconMap;
   sort: TheorySortState;
+  classType: number | null;
 }) {
+  const farming = useArmorFarming();
   const recipes = state.result?.recipes ?? NO_RECIPES;
   const close = state.result?.close ?? NO_RECIPES;
   const sorted = useMemo(() => sortTheoryRecipes(recipes, sort), [recipes, sort]);
@@ -211,6 +230,8 @@ export function TheoryResults({
       setMap={setMap}
       pieceMap={pieceMap}
       statIcons={statIcons}
+      classType={classType}
+      farming={farming}
     />
   );
   // Builds that just miss, listed under the ones that make it (or in their place).
