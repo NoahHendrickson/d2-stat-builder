@@ -41,7 +41,6 @@ function ArchetypeRow({ archetype, icons }: { archetype: TheoryArchetypeSummary;
         </span>
       </RollIdentity>
       <StatCell stats={archetype.tertiaries} icons={icons} />
-      <StatCell stats={archetype.tuned} icons={icons} />
     </>
   );
 }
@@ -72,7 +71,7 @@ function SlotPiece({ label, look }: { label: string; look?: SetSlotIcon }) {
 
 /**
  * The gist of the list above the cards: the archetypes most of its pieces to farm are,
- * each with its own tertiary and tuning, then the slots and sets the list has in common.
+ * each with its own tertiary, then the tuned stats, slots and sets the list has in common.
  * Drawn from the exact builds, or the close ones when none make it.
  */
 export function TheorySummaryCard({
@@ -107,13 +106,19 @@ export function TheorySummaryCard({
         description={`Most common among the pieces to farm in ${where}.`}
       >
         <div className="@container">
-          <div className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-x-6 gap-y-3 @max-md:gap-x-3">
+          <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-6 gap-y-3 @max-md:gap-x-3">
             <div className="d2-label">Armor</div>
             <div className="d2-label">Tertiary</div>
-            <div className="d2-label">Tuned</div>
             {summary.archetypes.map((a) => (
               <ArchetypeRow key={a.name} archetype={a} icons={icons} />
             ))}
+            {summary.tuned.length > 0 && (
+              <SummaryLine label="Tuned">
+                {summary.tuned.map((stat) => (
+                  <StatName key={stat} stat={stat} icons={icons} />
+                ))}
+              </SummaryLine>
+            )}
             {summary.slots.length > 0 && (
               <SummaryLine label={summary.slots.length === 1 ? "Slot left" : "Slots left"}>
                 {summary.slots.map((s) => (

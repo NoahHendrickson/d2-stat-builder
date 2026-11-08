@@ -1,5 +1,6 @@
 // The gist of a theoretical build list: which archetypes the pieces to farm are most
-// often, with the tertiaries and tuned stats each of them has, for the "What to farm" card.
+// often and the tertiaries each of them has, with the tuned stats and slots the list has in
+// common, for the "What to farm" card.
 //
 // Runtime imports are relative (not `@/`), matching sort-loadouts.ts.
 import { countBy } from "../count-by";
@@ -15,7 +16,7 @@ const MAX_ARCHETYPES = 3;
  */
 const TERTIARY_SHARE = 0.3;
 const MAX_TERTIARIES = 2;
-/** Tuning is worth a mention when at least this share of an archetype's farmed pieces need one. */
+/** Tuning is worth a mention when at least this share of the farmed pieces need one. */
 const TUNED_SHARE = 0.3;
 /** …and a tuned stat shows when at least this share of those pieces use it (top 2). */
 const TUNED_STAT_SHARE = 0.3;
@@ -37,13 +38,16 @@ export interface TheoryArchetypeSummary {
   share: number;
   /** Stat indices, most common first. Empty = none is common enough: any will do. */
   tertiaries: number[];
-  /** Stat indices, most common first. Empty = its pieces need no particular one. */
-  tuned: number[];
 }
 
 export interface TheorySummary {
   /** Most common first. */
   archetypes: TheoryArchetypeSummary[];
+  /**
+   * Stat indices, most common first. Empty = most farmed pieces need no particular one.
+   * Not per archetype: any farmed piece can be the one with a needed tuned stat.
+   */
+  tuned: number[];
   /**
    * ARMOR_SLOTS indices in slot order. Not per archetype: farmed pieces are interchangeable
    * across a build's open slots. Empty = no particular slots stand out.
@@ -85,7 +89,6 @@ function farmedPieces(recipe: TheoryRecipe): TheoryPiece[] {
 
 function summarizeArchetype(pieces: TheoryPiece[], share: number): TheoryArchetypeSummary {
   const { archetype, primary, secondary } = pieces[0];
-  const tuned = pieces.flatMap((piece) => (piece.tuning ? [piece.tuning.plus] : []));
   return {
     name: archetype,
     primary,
@@ -97,13 +100,15 @@ function summarizeArchetype(pieces: TheoryPiece[], share: number): TheoryArchety
       TERTIARY_SHARE,
       MAX_TERTIARIES,
     ).map((t) => t.key),
-    tuned:
-      tuned.length / pieces.length >= TUNED_SHARE
-        ? ranked(countBy(tuned, (stat) => stat), tuned.length, TUNED_STAT_SHARE, MAX_TUNED, true).map(
-            (t) => t.key,
-          )
-        : [],
   };
+}
+
+function tunedStats(farmed: TheoryPiece[]): number[] {
+  const tuned = farmed.flatMap((piece) => (piece.tuning ? [piece.tuning.plus] : []));
+  if (tuned.length / farmed.length < TUNED_SHARE) return [];
+  return ranked(countBy(tuned, (stat) => stat), tuned.length, TUNED_STAT_SHARE, MAX_TUNED, true).map(
+    (t) => t.key,
+  );
 }
 
 /**
@@ -143,6 +148,7 @@ export function summarizeTheory(recipes: readonly TheoryRecipe[]): TheorySummary
         share,
       ),
     ),
+    tuned: tunedStats(farmed),
     slots: slotsToFarm(recipes),
     setHashes: [...new Set(farmed.flatMap((piece) => piece.setHash ?? []))],
     builds: recipes.length,

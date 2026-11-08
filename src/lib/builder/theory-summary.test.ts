@@ -26,7 +26,7 @@ describe("summarizeTheory", () => {
     expect(s.archetypes.map((a) => a.name)).toEqual(["Gunner", "Powerhouse"]);
     expect(s.archetypes[0].share).toBeCloseTo(0.6);
     expect(s.archetypes[0].tertiaries).toEqual([5]);
-    expect(s.archetypes[0].tuned).toEqual([]);
+    expect(s.tuned).toEqual([]);
     expect(s.builds).toBe(2);
   });
 
@@ -43,12 +43,11 @@ describe("summarizeTheory", () => {
     ])!;
     expect(s.archetypes.map((a) => a.name)).toEqual(["Gunner", "Powerhouse"]);
     expect(s.archetypes[0].share).toBeCloseTo(2 / 3);
-    expect(s.archetypes[0].tuned).toEqual([0]);
-    expect(s.archetypes[1].tuned).toEqual([]);
+    expect(s.tuned).toEqual([0]);
     expect(s.setHashes).toEqual([7]);
   });
 
-  it("gives each archetype its own tertiary and tuning", () => {
+  it("gives each archetype its own tertiary, and counts tuning across the whole list", () => {
     const s = summarizeTheory([
       recipe([
         piece("Gunner", 5, { tuning: { plus: 1, minus: 2 } }),
@@ -57,10 +56,11 @@ describe("summarizeTheory", () => {
         piece("Powerhouse", 2, { tuning: { plus: 3, minus: 1 } }),
       ]),
     ])!;
-    expect(s.archetypes.map((a) => [a.name, a.tertiaries, a.tuned])).toEqual([
-      ["Gunner", [5], [1]],
-      ["Powerhouse", [2], [3]],
+    expect(s.archetypes.map((a) => [a.name, a.tertiaries])).toEqual([
+      ["Gunner", [5]],
+      ["Powerhouse", [2]],
     ]);
+    expect(s.tuned).toEqual([1, 3]);
   });
 
   describe("slots", () => {
