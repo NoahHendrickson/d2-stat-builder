@@ -6,6 +6,7 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { Search01Icon } from "@hugeicons/core-free-icons";
 import { Input, SearchClearButton } from "@/components/ui/input";
 import { SetRow } from "@/components/builder/set-row";
+import { useSetSlotIcons } from "@/components/builder/use-set-slot-icons";
 import { SetListControls } from "@/components/builder/set-list-controls";
 import { LegacyRaidSets } from "@/components/builder/legacy-raid-sets";
 import { getArchetypes } from "@/lib/armory/archetypes";
@@ -18,7 +19,7 @@ import {
   type SetMinOwned,
 } from "@/lib/armory/set-filters";
 import { DEFAULT_SET_SORT, sortSets, type SetSortKey } from "@/lib/armory/set-sort";
-import { setSlotIcons, type ArmorSetInfo } from "@/lib/armory/sets";
+import type { ArmorSetInfo } from "@/lib/armory/sets";
 import type { StatIconMap } from "@/lib/armory/stats";
 import type { Manifest } from "@/lib/manifest/load";
 
@@ -121,11 +122,7 @@ export function SetBonusesSection({
     ];
   }, [sets, sort, pinned]);
   const archetypes = useMemo(() => (manifest ? getArchetypes(manifest) : []), [manifest]);
-  const getSlotIcons = useCallback(
-    (setHash: number) =>
-      manifest && classType !== null ? setSlotIcons(manifest, setHash, classType) : {},
-    [manifest, classType],
-  );
+  const getSlotIcons = useSetSlotIcons(manifest, classType);
 
   // One grid modal for the whole list; mounted from its first open on (lazy chunk).
   const [grid, setGrid] = useState<{ open: boolean; setHash: number } | null>(null);

@@ -5,7 +5,7 @@ import type { CSSProperties, ReactNode } from "react";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { InformationCircleIcon } from "@hugeicons/core-free-icons";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { DetailCard, DetailSection } from "@/components/weapons/weapon-detail-card";
+import { DetailCard, DetailSection } from "@/components/detail-card";
 import type { Roll } from "@/lib/weapons/pick-slots";
 import type { PerkRef, WeaponSummary } from "@/lib/weapons/types";
 import type { WeaponPopularityView } from "@/lib/weapons/popularity-view";

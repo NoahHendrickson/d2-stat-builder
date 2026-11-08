@@ -1,28 +1,58 @@
-// The gist of a theoretical build list: which archetypes, tertiaries and tuned stats
-// the pieces to farm have most often, for a one-line "what to farm" summary.
+// The gist of a theoretical build list: which archetypes the pieces to farm are most
+// often and the tertiaries each of them has, with the tuned stats and slots the list has in
+// common, for the "What to farm" card.
 //
 // Runtime imports are relative (not `@/`), matching sort-loadouts.ts.
-import type { TheoryRecipe } from "../optimizer/theory";
+import { countBy } from "../count-by";
+import { NUM_SLOTS } from "../optimizer/floors";
+import type { TheoryPiece, TheoryRecipe } from "../optimizer/theory";
 
 /** An archetype shows when at least this share of the farmed pieces are it (top 3). */
 const ARCHETYPE_SHARE = 0.15;
 const MAX_ARCHETYPES = 3;
-/** A tertiary shows when at least this share of the farmed pieces have it (top 2). */
-const TERTIARY_SHARE = 0.25;
+/**
+ * A tertiary shows when at least this share of an archetype's farmed pieces have it (top 2).
+ * Above 1/4: an archetype has four possible tertiaries, so an even spread names none.
+ */
+const TERTIARY_SHARE = 0.3;
 const MAX_TERTIARIES = 2;
 /** Tuning is worth a mention when at least this share of the farmed pieces need one. */
 const TUNED_SHARE = 0.3;
 /** …and a tuned stat shows when at least this share of those pieces use it (top 2). */
 const TUNED_STAT_SHARE = 0.3;
 const MAX_TUNED = 2;
+/**
+ * Slots are named when at least this share of the list's builds use an owned legendary.
+ * Low on purpose: the search fills most lists with builds that farm all five…
+ */
+const SLOT_BOUND_BUILDS = 0.15;
+/** …and a slot when at least this share of those builds farm a piece for it. */
+const SLOT_BUILDS = 0.6;
 
-export interface TheorySummary {
-  /** Most common first, each with its share of the farmed pieces (0–1). */
-  archetypes: { name: string; share: number }[];
+export interface TheoryArchetypeSummary {
+  name: string;
+  /** Its two main stats (stat indices). */
+  primary: number;
+  secondary: number;
+  /** Its share of the farmed pieces (0–1). */
+  share: number;
   /** Stat indices, most common first. Empty = none is common enough: any will do. */
   tertiaries: number[];
-  /** Stat indices, most common first. null = most farmed pieces need no particular one. */
-  tuned: number[] | null;
+}
+
+export interface TheorySummary {
+  /** Most common first. */
+  archetypes: TheoryArchetypeSummary[];
+  /**
+   * Stat indices, most common first. Empty = most farmed pieces need no particular one.
+   * Not per archetype: any farmed piece can be the one with a needed tuned stat.
+   */
+  tuned: number[];
+  /**
+   * ARMOR_SLOTS indices in slot order. Not per archetype: farmed pieces are interchangeable
+   * across a build's open slots. Empty = no particular slots stand out.
+   */
+  slots: number[];
   /** The required sets the farmed pieces come from. */
   setHashes: number[];
   /** Builds the summary is drawn from. */
@@ -31,7 +61,8 @@ export interface TheorySummary {
 
 /**
  * The keys with at least `min` of `of`, most common first, at most `max`. `keepFirst`
- * shows the top one regardless, so there's always something to farm for.
+ * shows the top one regardless, so there's always something to farm for; without it, a
+ * tie at the cap names neither side rather than picking by insertion order.
  */
 function ranked<K>(
   counts: Map<K, number>,
@@ -40,48 +71,86 @@ function ranked<K>(
   max: number,
   keepFirst = false,
 ): { key: K; share: number }[] {
-  return [...counts]
+  const kept = [...counts]
     .map(([key, n]) => ({ key, share: n / of }))
     .sort((a, b) => b.share - a.share)
-    .filter((x, i) => (keepFirst && i === 0) || x.share >= min)
-    .slice(0, max);
+    .filter((x, i) => (keepFirst && i === 0) || x.share >= min);
+  const top = kept.slice(0, max);
+  if (!keepFirst) {
+    while (top.length > 0 && kept[top.length]?.share === top[top.length - 1].share) top.pop();
+  }
+  return top;
+}
+
+/** A build's legendaries left to farm (owned pieces and the exotic aren't hunted). */
+function farmedPieces(recipe: TheoryRecipe): TheoryPiece[] {
+  return recipe.pieces.filter((piece) => !piece.owned && !piece.exotic);
+}
+
+function summarizeArchetype(pieces: TheoryPiece[], share: number): TheoryArchetypeSummary {
+  const { archetype, primary, secondary } = pieces[0];
+  return {
+    name: archetype,
+    primary,
+    secondary,
+    share,
+    tertiaries: ranked(
+      countBy(pieces, (piece) => piece.tertiary),
+      pieces.length,
+      TERTIARY_SHARE,
+      MAX_TERTIARIES,
+    ).map((t) => t.key),
+  };
+}
+
+function tunedStats(farmed: TheoryPiece[]): number[] {
+  const tuned = farmed.flatMap((piece) => (piece.tuning ? [piece.tuning.plus] : []));
+  if (tuned.length / farmed.length < TUNED_SHARE) return [];
+  return ranked(countBy(tuned, (stat) => stat), tuned.length, TUNED_STAT_SHARE, MAX_TUNED, true).map(
+    (t) => t.key,
+  );
 }
 
 /**
- * Summarize the legendaries `recipes` would have you farm (owned pieces and the exotic
- * are left out: they're not what you'd be hunting). Null when there's nothing to farm.
+ * The slots most builds leave to farm. Only builds with an owned legendary seated say
+ * anything about that: without one, every slot is open. Reads the farmed pieces rather
+ * than `openSlots`, which still lists an unowned exotic's slot.
  */
+function slotsToFarm(recipes: readonly TheoryRecipe[]): number[] {
+  const bound = recipes.filter(
+    (recipe) =>
+      recipe.pieces.some((piece) => piece.owned && !piece.exotic) && farmedPieces(recipe).length > 0,
+  );
+  if (bound.length < recipes.length * SLOT_BOUND_BUILDS) return [];
+  const slots = ranked(
+    countBy(bound.flatMap(farmedPieces), (piece) => piece.slot),
+    bound.length,
+    SLOT_BUILDS,
+    NUM_SLOTS,
+  ).map((s) => s.key);
+  return slots.length < NUM_SLOTS ? slots.sort((a, b) => a - b) : [];
+}
+
+/** Summarize the legendaries `recipes` would have you farm. Null when there's nothing to farm. */
 export function summarizeTheory(recipes: readonly TheoryRecipe[]): TheorySummary | null {
-  const archetypes = new Map<string, number>();
-  const tertiaries = new Map<number, number>();
-  const tuned = new Map<number, number>();
-  const sets = new Set<number>();
-  let pieces = 0;
-  let tunedPieces = 0;
-  for (const recipe of recipes) {
-    for (const piece of recipe.pieces) {
-      if (piece.owned || piece.exotic) continue;
-      pieces++;
-      archetypes.set(piece.archetype, (archetypes.get(piece.archetype) ?? 0) + 1);
-      tertiaries.set(piece.tertiary, (tertiaries.get(piece.tertiary) ?? 0) + 1);
-      if (piece.tuning) {
-        tunedPieces++;
-        tuned.set(piece.tuning.plus, (tuned.get(piece.tuning.plus) ?? 0) + 1);
-      }
-      if (piece.setHash !== undefined) sets.add(piece.setHash);
-    }
-  }
-  if (pieces === 0) return null;
+  const farmed = recipes.flatMap(farmedPieces);
+  if (farmed.length === 0) return null;
   return {
-    archetypes: ranked(archetypes, pieces, ARCHETYPE_SHARE, MAX_ARCHETYPES, true).map(
-      ({ key, share }) => ({ name: key, share }),
+    archetypes: ranked(
+      countBy(farmed, (piece) => piece.archetype),
+      farmed.length,
+      ARCHETYPE_SHARE,
+      MAX_ARCHETYPES,
+      true,
+    ).map(({ key, share }) =>
+      summarizeArchetype(
+        farmed.filter((piece) => piece.archetype === key),
+        share,
+      ),
     ),
-    tertiaries: ranked(tertiaries, pieces, TERTIARY_SHARE, MAX_TERTIARIES).map((t) => t.key),
-    tuned:
-      tunedPieces / pieces >= TUNED_SHARE
-        ? ranked(tuned, tunedPieces, TUNED_STAT_SHARE, MAX_TUNED, true).map((t) => t.key)
-        : null,
-    setHashes: [...sets],
+    tuned: tunedStats(farmed),
+    slots: slotsToFarm(recipes),
+    setHashes: [...new Set(farmed.flatMap((piece) => piece.setHash ?? []))],
     builds: recipes.length,
   };
 }

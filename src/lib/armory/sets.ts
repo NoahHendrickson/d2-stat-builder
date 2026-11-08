@@ -122,6 +122,9 @@ export interface SetSlotIcon {
   watermark?: string;
 }
 
+/** A set's look per slot; slots the manifest has no iconned piece for are absent. */
+export type SetSlotIcons = Partial<Record<ArmorSlot, SetSlotIcon>>;
+
 /**
  * The set's own item icon per slot for one class, from the set definition's item list
  * (every class's pieces are listed; the first match per slot wins). Slots the manifest
@@ -131,8 +134,8 @@ export function setSlotIcons(
   manifest: Manifest,
   setHash: number,
   classType: number,
-): Partial<Record<ArmorSlot, SetSlotIcon>> {
-  const out: Partial<Record<ArmorSlot, SetSlotIcon>> = {};
+): SetSlotIcons {
+  const out: SetSlotIcons = {};
   const set = manifest.def("DestinyEquipableItemSetDefinition", setHash);
   for (const itemHash of set?.setItems ?? []) {
     const def = manifest.def("DestinyInventoryItemDefinition", itemHash);
