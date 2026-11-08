@@ -99,13 +99,19 @@ const columnsAlignedMinWidth = (m: TileMetrics) =>
  * - `columns`: character columns (InventoryGrid), the vault one more column level with
  *   their slots (aligned) or below them. `characters`: just the current one with no tabs
  *   (`current`, when picked, at any width), every one side by side (`all`), or, when all
- *   don't fit, one at a time under tabs (`tabs`). The legacy layout, and the new one's
+ *   don't fit, one at a time under tabs (`tabs`). `characterMenu`: whether the Characters
+ *   shown menu is offered (legacy columns picked, not the rows layout's fallback). The legacy layout, and the new one's
  *   fallback when a row doesn't fit.
  * - `phone`: one character at a time under tabs, the vault behind a tab of its own.
  */
 export type ItemsPagePlan =
   | { kind: "rows"; vault: "beside" | "below" }
-  | { kind: "columns"; characters: "all" | "current" | "tabs"; vault: "aligned" | "below" }
+  | {
+      kind: "columns";
+      characters: "all" | "current" | "tabs";
+      vault: "aligned" | "below";
+      characterMenu: boolean;
+    }
   | { kind: "phone" };
 
 /**
@@ -130,21 +136,17 @@ export function itemsPagePlan({
   if (phone) return { kind: "phone" };
   if (width <= 0) return null;
   if (layout === "legacy") {
-    return {
-      kind: "columns",
-      characters:
-        characterColumns === "current"
-          ? "current"
-          : width < columnsAllCharactersMinWidth(tiles)
-            ? "tabs"
-            : "all",
-      vault: width >= columnsAlignedMinWidth(tiles) ? "aligned" : "below",
-    };
+    const vault = width >= columnsAlignedMinWidth(tiles) ? "aligned" : "below";
+    if (characterColumns === "current") {
+      return { kind: "columns", characters: "current", vault, characterMenu: true };
+    }
+    const characters = width < columnsAllCharactersMinWidth(tiles) ? "tabs" : "all";
+    return { kind: "columns", characters, vault, characterMenu: true };
   }
   const row = characterRowWidth(tiles);
   if (row + LAYOUT_GAP_PX + vaultBesideMinWidth(tiles) <= width) {
     return { kind: "rows", vault: "beside" };
   }
   if (row <= width) return { kind: "rows", vault: "below" };
-  return { kind: "columns", characters: "tabs", vault: "below" };
+  return { kind: "columns", characters: "tabs", vault: "below", characterMenu: false };
 }
