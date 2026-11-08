@@ -2,8 +2,6 @@
 //
 // FEEDBACK_GITHUB_TOKEN is a fine-grained token with Issues read/write on that one repo
 // and nothing else. FEEDBACK_GITHUB_REPO is `owner/name`.
-import { createHmac } from "node:crypto";
-import { safeEqual } from "@/lib/http/safe-equal";
 import type { FeedbackIssue } from "./issue-format";
 
 const DEFAULT_REPO = "NoahHendrickson/d2-conflux-feedback";
@@ -74,23 +72,4 @@ export async function recentIssueBodies(c: GithubConfig, since: Date) {
     if (issues.length < 100) break;
   }
   return out;
-}
-
-/** The issue's labels now (a webhook payload's copy can be stale or replayed). */
-export async function issueLabels(c: GithubConfig, issue: number): Promise<string[]> {
-  const labels = await github<{ name: string }[]>(c, `/issues/${issue}/labels`);
-  return labels.map((l) => l.name);
-}
-
-export function addLabel(c: GithubConfig, issue: number, label: string) {
-  return github<unknown>(c, `/issues/${issue}/labels`, {
-    method: "POST",
-    body: JSON.stringify({ labels: [label] }),
-  });
-}
-
-/** Checks GitHub's `X-Hub-Signature-256` header against the raw body. */
-export function verifyGithubSignature(secret: string, rawBody: string, header: string | null) {
-  if (!header?.startsWith("sha256=")) return false;
-  return safeEqual(header, `sha256=${createHmac("sha256", secret).update(rawBody).digest("hex")}`);
 }
