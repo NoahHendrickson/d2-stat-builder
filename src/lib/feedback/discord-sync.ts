@@ -13,7 +13,6 @@ import {
   feedbackThreads,
   getChannel,
   getMessage,
-  sendMessage,
   snowflakeTime,
   type DiscordConfig,
   type DiscordForum,
@@ -21,13 +20,7 @@ import {
   type DiscordThread,
 } from "./discord";
 import { createIssue, recentIssueBodies, type CreatedIssue, type GithubConfig } from "./github";
-import {
-  DISCORD_REPLIES,
-  forumPostIssue,
-  messageIssue,
-  parseMarkers,
-  type FeedbackIssue,
-} from "./issue-format";
+import { forumPostIssue, messageIssue, parseMarkers, type FeedbackIssue } from "./issue-format";
 
 /** Posts older than this are left alone, and issues older than this aren't read back. */
 const MAX_POST_AGE_MS = 14 * 24 * 60 * 60 * 1000;
@@ -41,7 +34,6 @@ export interface FileDeps {
   /** Source message ids that already have an issue. */
   filedMessageIds: () => Promise<Set<string>>;
   file: (issue: FeedbackIssue) => Promise<CreatedIssue>;
-  reply: (channelId: string, content: string, replyTo: string) => Promise<unknown>;
 }
 
 export interface SyncDeps extends FileDeps {
@@ -51,15 +43,6 @@ export interface SyncDeps extends FileDeps {
   /** A post's starter message, or null when it was deleted. */
   starter: (thread: DiscordThread) => Promise<DiscordMessage | null>;
   now: number;
-}
-
-/** File it, then thank the poster. Filed is what matters; the thank-you is best effort. */
-async function fileAndThank(d: FileDeps, issue: FeedbackIssue, message: DiscordMessage) {
-  const created = await d.file(issue);
-  await d.reply(message.channel_id, DISCORD_REPLIES.tracked, message.id).catch((err) =>
-    console.error("Feedback: thank-you reply failed:", errorText(err)),
-  );
-  return created;
 }
 
 export interface SyncResult {
@@ -96,11 +79,7 @@ export async function syncDiscordFeedback(d: SyncDeps): Promise<SyncResult> {
       }
       const forum = thread.parent_id ? forums.get(thread.parent_id) : undefined;
       const tagNames = (thread.applied_tags ?? []).flatMap((id) => forum?.tags.get(id) ?? []);
-      const issue = await fileAndThank(
-        d,
-        forumPostIssue(d.guildId, thread, starter, forum?.name ?? "", tagNames),
-        starter,
-      );
+      const issue = await d.file(forumPostIssue(d.guildId, thread, starter, forum?.name ?? "", tagNames));
       result.filed.push(issue.number);
     } catch (err) {
       // One bad post (no access, a refused issue) mustn't hold up the rest on every run.
@@ -119,7 +98,7 @@ export async function sendToTracker(
   channelName?: string,
 ): Promise<string> {
   if ((await d.filedMessageIds()).has(message.id)) return "That message is already in the tracker.";
-  const issue = await fileAndThank(d, messageIssue(d.guildId, message, channelName), message);
+  const issue = await d.file(messageIssue(d.guildId, message, channelName));
   return `Filed as ${d.repoName}#${issue.number}: ${issue.html_url}`;
 }
 
@@ -137,7 +116,6 @@ export function liveFileDeps(dc: DiscordConfig, gh: GithubConfig): FileDeps {
     guildId: dc.guildId,
     filedMessageIds: () => filedDiscordMessageIds(gh),
     file: (issue) => createIssue(gh, issue),
-    reply: (channelId, content, replyTo) => sendMessage(dc, channelId, content, replyTo),
   };
 }
 

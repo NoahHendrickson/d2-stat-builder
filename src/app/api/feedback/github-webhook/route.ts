@@ -9,6 +9,9 @@ interface IssuesEvent {
   issue?: { number: number; body: string | null; state_reason?: string | null };
 }
 
+/** Off for now: the bot doesn't tell players in Discord that their report was fixed. */
+const FIXED_REPLY_ON = false;
+
 /**
  * The feedback repo's webhook (Issues events). When an issue that came from Discord is
  * closed as completed, the bot says so under the original message, once: the issue then
@@ -23,6 +26,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Bad signature" }, { status: 401 });
   }
   if (request.headers.get("x-github-event") !== "issues") return NextResponse.json({ ignored: true });
+  if (!FIXED_REPLY_ON) return NextResponse.json({ ignored: "fixed reply is off" });
 
   const event = JSON.parse(raw) as IssuesEvent;
   if (event.action !== "closed" || event.issue?.state_reason !== "completed") {

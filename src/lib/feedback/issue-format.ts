@@ -214,8 +214,7 @@ export function messageIssue(guildId: string, message: DiscordMessage, channelNa
   };
 }
 
-/** What the bot says in Discord when an issue is filed and when it's fixed. */
+/** What the bot says in Discord when an issue is fixed. */
 export const DISCORD_REPLIES = {
-  tracked: "Thanks, this is logged for review. I'll reply here when it's fixed.",
   fixed: "This is fixed in the latest update on https://d2conflux.com. Thanks for reporting it!",
 } as const;
