@@ -16,6 +16,7 @@ export const CHANGELOG: readonly ChangelogEntry[] = [
     changes: [
       "Loadouts: the In-game tab shows what's in each character's slots and is where you build activity sets.",
       "Loadouts: Import DIM loadout in the ⋮ menu brings in a loadout from a DIM link.",
+      "Loadouts: saving or applying a build now puts each tuning on the right piece when your exotic already has one on.",
     ],
   },
   {

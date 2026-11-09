@@ -26,6 +26,7 @@ import type { StatModHashes } from "@/lib/dim/mod-hashes";
 import {
   buildDimLoadout,
   buildDimLoadoutUrl,
+  buildTuningPlacement,
   defaultLoadoutName,
   type DimLoadout,
 } from "@/lib/dim/loadout-link";
@@ -455,6 +456,9 @@ export function BuildActions({
           pieces={livePieces}
           manifest={manifest}
           insertablePlugs={insertablePlugs}
+          tuningPlacement={
+            tuningPlugHashes ? buildTuningPlacement(loadout, pieces, tuningPlugHashes) : undefined
+          }
           buildClass={buildClass}
           defaultName={saveContext.defaultName}
           subclassItemHash={saveContext.subclassItemHash}

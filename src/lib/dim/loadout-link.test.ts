@@ -7,6 +7,7 @@ import {
   abbreviateSetName,
   buildDimLoadout,
   buildDimLoadoutUrl,
+  buildTuningPlacement,
   decomposeModBonus,
   defaultLoadoutName,
   type DimLoadoutInput,
@@ -118,6 +119,34 @@ test("tuning mods: balanced + directional resolve to plug hashes; unknown skippe
     }),
   );
   expect(dim.parameters.mods).toEqual([BALANCED_TUNING_PLUG_HASH, 7001]);
+});
+
+test("buildTuningPlacement pins each tuning to the piece the optimizer gave it to", () => {
+  const tuningSocket = { index: 11, kind: "tuning" as const, category: "tuning" };
+  const pieces = [
+    makePiece(0, { armorSockets: [{ index: 1, kind: "general", category: "general" }, tuningSocket] }),
+    makePiece(1, { armorSockets: [{ ...tuningSocket, index: 12 }] }),
+    undefined, // dropped out of the armory
+    makePiece(3), // no sockets read (a theoretical piece)
+    makePiece(4, { armorSockets: [tuningSocket] }),
+  ];
+  const placement = buildTuningPlacement(
+    makeLoadout({
+      tuning: [
+        { kind: "directional", plus: 0, minus: 1 },
+        { kind: "balanced" },
+        { kind: "balanced" },
+        { kind: "balanced" },
+        { kind: "directional", plus: 4, minus: 2 }, // not in the map — left out
+      ],
+    }),
+    pieces,
+    makeInput().tuningPlugHashes,
+  );
+  expect(placement).toEqual({
+    "1000": { 11: 7001 },
+    "1001": { 12: BALANCED_TUNING_PLUG_HASH },
+  });
 });
 
 test("artifice picks resolve to artifice mod hashes; missing hash warns and skips", () => {

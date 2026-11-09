@@ -1,5 +1,6 @@
 import type { ArmorPiece } from "@/lib/armory/normalize";
-import type { OptimizerLoadout } from "@/lib/optimizer/types";
+import type { ModPlacement } from "@/lib/loadouts/types";
+import type { AppliedTuning, OptimizerLoadout } from "@/lib/optimizer/types";
 import type { StatModHashes } from "./mod-hashes";
 import { isDreamersBondId } from "../armory/dreamers-bond";
 import {
@@ -100,6 +101,37 @@ export function decomposeModBonus(
   return { majors, minors };
 }
 
+/** The plug for one of the optimizer's tuning picks; undefined if the manifest has no such directional. */
+function tuningPlugHash(
+  tune: AppliedTuning,
+  tuningPlugHashes: Map<string, number>,
+): number | undefined {
+  return tune.kind === "balanced"
+    ? BALANCED_TUNING_PLUG_HASH
+    : tuningPlugHashes.get(`${tune.plus}-${tune.minus}`);
+}
+
+/**
+ * The build's tuning as socket choices: each pick on the piece the optimizer gave it to.
+ * The flat mods list can't say which piece a tuning is for, and it matters: Balanced
+ * Tuning's +1s land on the piece's own low stats, so on another piece the totals differ.
+ * `pieces` is aligned to `loadout.pieceIds`; a piece with no tuning socket is left out.
+ */
+export function buildTuningPlacement(
+  loadout: OptimizerLoadout,
+  pieces: readonly (ArmorPiece | undefined)[],
+  tuningPlugHashes: Map<string, number>,
+): ModPlacement {
+  const placement: ModPlacement = {};
+  loadout.tuning.forEach((tune, slot) => {
+    const piece = pieces[slot];
+    const socket = piece?.armorSockets?.find((s) => s.kind === "tuning");
+    const hash = tune ? tuningPlugHash(tune, tuningPlugHashes) : undefined;
+    if (piece && socket && hash !== undefined) placement[piece.instanceId] = { [socket.index]: hash };
+  });
+  return placement;
+}
+
 export function buildDimLoadout(input: DimLoadoutInput): DimLoadout {
   const {
     loadout,
@@ -150,13 +182,9 @@ export function buildDimLoadout(input: DimLoadoutInput): DimLoadout {
 
   for (const tune of loadout.tuning) {
     if (!tune) continue;
-    if (tune.kind === "balanced") {
-      mods.push(BALANCED_TUNING_PLUG_HASH);
-      continue;
-    }
-    const hash = tuningPlugHashes.get(`${tune.plus}-${tune.minus}`);
+    const hash = tuningPlugHash(tune, tuningPlugHashes);
     if (hash === undefined) {
-      console.warn(`DIM link: no tuning plug for +${tune.plus}/-${tune.minus}`);
+      console.warn("DIM link: no tuning plug for", tune);
       continue;
     }
     mods.push(hash);

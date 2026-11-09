@@ -126,6 +126,18 @@ interface PieceState {
   baseUsed: number;
 }
 
+/** A loadout mod still to place. */
+interface Entry {
+  hash: number;
+  info: PlugInfo;
+}
+
+/** A socket a mod could go into. */
+interface Seat {
+  st: PieceState;
+  socket: PlanSocket;
+}
+
 const GROUP_LABEL: Record<SubclassPlugGroup["kind"], string> = {
   super: "Super", ability: "Ability", aspect: "Aspect", fragment: "Fragment",
 };
@@ -139,7 +151,12 @@ const GROUP_LABEL: Record<SubclassPlugGroup["kind"], string> = {
  */
 export function planWithPriority(input: PlanInput, first: number[]): ApplyPlan {
   const own = planLoadoutPlugs({ ...input, modHashes: first });
-  return planLoadoutPlugs({ ...input, placements: { ...own.assigned, ...input.placements } });
+  // Per piece, so a pinned socket doesn't drop the priority mods seated beside it.
+  const placements = { ...own.assigned };
+  for (const [instanceId, sockets] of Object.entries(input.placements ?? {})) {
+    placements[instanceId] = { ...placements[instanceId], ...sockets };
+  }
+  return planLoadoutPlugs({ ...input, placements });
 }
 
 export function planLoadoutPlugs(input: PlanInput): ApplyPlan {
@@ -183,13 +200,8 @@ export function planLoadoutPlugs(input: PlanInput): ApplyPlan {
     return after <= capacity(st);
   };
 
-  const place = (st: PieceState, socket: PlanSocket, hash: number, info: PlugInfo) => {
-    st.taken.set(socket.index, `${info.name} → ${st.piece.name}`);
-    st.plugs.set(socket.index, hash);
-  };
-
   // Mods still to place (multiset, in loadout order).
-  const remaining: { hash: number; info: PlugInfo }[] = [];
+  const remaining: Entry[] = [];
   for (const hash of input.modHashes) {
     const info = plugInfo(hash);
     if (!info) {
@@ -199,10 +211,17 @@ export function planLoadoutPlugs(input: PlanInput): ApplyPlan {
   }
   const takeRemaining = (hash: number) => {
     const i = remaining.findIndex((r) => r.hash === hash);
-    return i >= 0 ? remaining.splice(i, 1)[0] : undefined;
+    if (i >= 0) remaining.splice(i, 1);
+  };
+  /** Seat a mod still to place: it leaves the list and the socket is spoken for. */
+  const claim = ({ st, socket }: Seat, { hash, info }: Entry) => {
+    takeRemaining(hash);
+    st.taken.set(socket.index, `${info.name} → ${st.piece.name}`);
+    st.plugs.set(socket.index, hash);
   };
 
-  // --- Pass 1: explicit placements the user chose in the mod picker.
+  // --- Pass 1: explicit placements — the user's picks in the mod picker, and a build's
+  // own tuning seats when it is saved (see `buildTuningPlacement`).
   for (const [instanceId, sockets] of Object.entries(input.placements ?? {})) {
     const st = states.get(instanceId);
     if (!st) continue;
@@ -211,40 +230,11 @@ export function planLoadoutPlugs(input: PlanInput): ApplyPlan {
       if (!socket) continue;
       const entry = remaining.find((r) => r.hash === hash);
       if (!entry) continue; // placement for a mod the loadout no longer lists
-      if (fits(st, socket, hash, entry.info)) {
-        takeRemaining(hash);
-        place(st, socket, hash, entry.info);
-      }
+      if (fits(st, socket, hash, entry.info)) claim({ st, socket }, entry);
       // Otherwise leave it for auto-placement (which reports a reason if nothing fits).
     }
   }
 
-  // --- Pass 2: lock in mods already sitting in a matching socket, while they still fit
-  // (explicit placements may have spent the energy); the rest fall through to pass 3.
-  for (const entry of [...remaining]) {
-    for (const st of states.values()) {
-      const socket = st.piece.sockets.find(
-        (s) => s.current === entry.hash && fits(st, s, entry.hash, entry.info),
-      );
-      if (socket) {
-        takeRemaining(entry.hash);
-        place(st, socket, entry.hash, entry.info);
-        break;
-      }
-    }
-  }
-
-  // --- Pass 3: auto-place the rest, most-constrained first (fewest candidate
-  // sockets), then costliest; each onto the piece with the most free energy.
-  const candidatesFor = (hash: number, info: PlugInfo) => {
-    const out: { st: PieceState; socket: PlanSocket }[] = [];
-    for (const st of states.values()) {
-      for (const socket of st.piece.sockets) {
-        if (fits(st, socket, hash, info)) out.push({ st, socket });
-      }
-    }
-    return out;
-  };
   const skipReason = (info: PlugInfo) => {
     switch (info.kind) {
       case "general":
@@ -257,32 +247,114 @@ export function planLoadoutPlugs(input: PlanInput): ApplyPlan {
         return "no socket on this armor takes it (or not enough energy)";
     }
   };
-  // Directional tuning is pickier than Balanced (it needs a specific roll), so on a
-  // candidate-count tie it goes first and Balanced takes what's left.
-  const specificity = (info: PlugInfo) =>
-    info.kind === "tuning" && info.tunedPlus !== undefined ? 1 : 0;
+  /** Give up on a mod no socket can take: report it and keep it for the editor. */
+  const skip = (entry: Entry) => {
+    takeRemaining(entry.hash);
+    const reason = skipReason(entry.info);
+    skipped.push(`${entry.info.name}: ${reason}`);
+    unplaced.push({ hash: entry.hash, reason });
+  };
+
+  // --- Pass 2: tuning, seated as a whole. A piece has one tuning socket and a directional
+  // only fits its own roll (or a flexible exotic), so placing them one at a time can
+  // strand a mod: an exotic that keeps a directional a fixed-roll piece needed leaves
+  // that piece empty and another directional with nowhere to go. So a (seat, mod) pair
+  // is only committed while the rest can still fill as many seats as the armor allows.
+  // Pairs are tried in order of preference: a mod already socketed stays where it is,
+  // then directionals on their exact roll, then on flexible pieces, then Balanced.
+  const seats: Seat[] = [];
+  for (const st of states.values()) {
+    for (const socket of st.piece.sockets) {
+      if (socket.kind === "tuning" && !st.taken.has(socket.index)) seats.push({ st, socket });
+    }
+  }
+  const tunings = remaining.filter((r) => r.info.kind === "tuning");
+  // Tuning costs no energy and each seat is its own socket, so one pair never changes
+  // whether another fits: the table is fixed for the whole pass.
+  const takes = seats.map(({ st, socket }) => tunings.map((m) => fits(st, socket, m.hash, m.info)));
+  const seatFree = seats.map(() => true);
+  const modFree = tunings.map(() => true);
+  /** How many of the free seats can hold a free mod at once (augmenting paths). */
+  const mostSeated = (): number => {
+    const holder = tunings.map(() => -1);
+    const augment = (s: number, seen: boolean[]): boolean => {
+      for (let m = 0; m < tunings.length; m++) {
+        if (!modFree[m] || !takes[s][m] || seen[m]) continue;
+        seen[m] = true;
+        if (holder[m] < 0 || augment(holder[m], seen)) {
+          holder[m] = s;
+          return true;
+        }
+      }
+      return false;
+    };
+    let count = 0;
+    for (let s = 0; s < seats.length; s++) {
+      if (seatFree[s] && augment(s, tunings.map(() => false))) count++;
+    }
+    return count;
+  };
+  const preference = (s: number, m: number) => {
+    if (seats[s].socket.current === tunings[m].hash) return 0;
+    if (tunings[m].info.tunedPlus === undefined) return 3;
+    return seats[s].st.piece.flexibleTuning ? 2 : 1;
+  };
+  const pairs: { s: number; m: number; rank: number }[] = [];
+  seats.forEach((_, s) =>
+    tunings.forEach((_, m) => {
+      if (takes[s][m]) pairs.push({ s, m, rank: preference(s, m) });
+    }),
+  );
+  pairs.sort((a, b) => a.rank - b.rank);
+  let toSeat = mostSeated();
+  for (const { s, m } of pairs) {
+    if (!seatFree[s] || !modFree[m]) continue;
+    seatFree[s] = modFree[m] = false;
+    if (mostSeated() < toSeat - 1) {
+      seatFree[s] = modFree[m] = true; // this pair would cost another mod its seat
+      continue;
+    }
+    toSeat--;
+    claim(seats[s], tunings[m]);
+  }
+  for (const m of tunings.keys()) if (modFree[m]) skip(tunings[m]);
+
+  // --- Pass 3: lock in mods already sitting in a matching socket, while they still fit
+  // (explicit placements may have spent the energy); the rest fall through to pass 4.
+  for (const entry of [...remaining]) {
+    for (const st of states.values()) {
+      const socket = st.piece.sockets.find(
+        (s) => s.current === entry.hash && fits(st, s, entry.hash, entry.info),
+      );
+      if (socket) {
+        claim({ st, socket }, entry);
+        break;
+      }
+    }
+  }
+
+  // --- Pass 4: auto-place the rest, most-constrained first (fewest candidate
+  // sockets), then costliest; each onto the piece with the most free energy.
+  const candidatesFor = (hash: number, info: PlugInfo) => {
+    const out: Seat[] = [];
+    for (const st of states.values()) {
+      for (const socket of st.piece.sockets) {
+        if (fits(st, socket, hash, info)) out.push({ st, socket });
+      }
+    }
+    return out;
+  };
   while (remaining.length > 0) {
     const ranked = remaining
       .map((entry) => ({ entry, candidates: candidatesFor(entry.hash, entry.info) }))
-      .sort(
-        (a, b) =>
-          a.candidates.length - b.candidates.length ||
-          specificity(b.entry.info) - specificity(a.entry.info) ||
-          b.entry.info.cost - a.entry.info.cost,
-      );
+      .sort((a, b) => a.candidates.length - b.candidates.length || b.entry.info.cost - a.entry.info.cost);
     const { entry, candidates } = ranked[0];
-    takeRemaining(entry.hash);
     if (candidates.length === 0) {
-      const reason = skipReason(entry.info);
-      skipped.push(`${entry.info.name}: ${reason}`);
-      unplaced.push({ hash: entry.hash, reason });
+      skip(entry);
       continue;
     }
-    // Tuning: keep flexible exotics for last so a directional lands on its exact roll.
-    const flex = (c: { st: PieceState }) =>
-      entry.info.kind === "tuning" && c.st.piece.flexibleTuning ? 1 : 0;
-    candidates.sort((a, b) => flex(a) - flex(b) || freeEnergy(b.st) - freeEnergy(a.st));
-    place(candidates[0].st, candidates[0].socket, entry.hash, entry.info);
+    candidates.sort((a, b) => freeEnergy(b.st) - freeEnergy(a.st));
+    claim(candidates[0], entry);
   }
 
   // --- Armor actions: diff each socket's current plug against the plan's. Actions that
