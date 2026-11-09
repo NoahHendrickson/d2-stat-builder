@@ -83,6 +83,18 @@ describe("a loadout planned after another one in the same run", () => {
     expect(known.get("spare")).toEqual({ location: "vault" });
   });
 
+  test("a piece that reached the character but didn't equip is in its inventory", () => {
+    const known = spotsAfterApply(
+      new Map(),
+      stale,
+      [{ itemInstanceId: "boots", ok: false, staged: true }],
+      CHAR,
+    );
+    const armory = withKnownSpots(stale, known);
+    expect(known.get("boots")).toEqual({ location: "inventory", characterId: CHAR });
+    expect(planTransfers([stateOf(armory, "boots")], CHAR)).toEqual([]);
+  });
+
   test("moves add up across a run", () => {
     const first = spotsAfterApply(new Map(), stale, [ok("helm-a")], CHAR);
     const second = spotsAfterApply(first, withKnownSpots(stale, first), [ok("old-helm")], CHAR);

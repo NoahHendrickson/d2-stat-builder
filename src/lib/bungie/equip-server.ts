@@ -116,6 +116,8 @@ export interface ItemResult {
   message?: string;
   /** Instance ids of pieces vaulted off the target character to make room for this one. */
   vaulted?: string[];
+  /** Not equipped, but it did reach the target character's inventory. */
+  staged?: true;
 }
 
 export interface PlugRequest {
@@ -425,20 +427,21 @@ export async function stageAndEquip({
         if (err instanceof BungieHttpError && err.status === 401) throw err;
         const message = equipMessage(err);
         for (const id of ids) {
-          const result = withVaulted({ itemInstanceId: id, ok: false, message });
+          const result = withVaulted({ itemInstanceId: id, ok: false, message, staged: true });
           results.push(result);
           emitResult(result);
         }
         return;
       }
       for (const r of res.Response.equipResults ?? []) {
+        const ok = r.equipStatus === SUCCESS;
         const result = withVaulted({
           itemInstanceId: r.itemInstanceId,
-          ok: r.equipStatus === SUCCESS,
-          message:
-            r.equipStatus === SUCCESS
-              ? undefined
-              : (EQUIP_MESSAGES[r.equipStatus] ?? `Equip failed (code ${r.equipStatus})`),
+          ok,
+          message: ok
+            ? undefined
+            : (EQUIP_MESSAGES[r.equipStatus] ?? `Equip failed (code ${r.equipStatus})`),
+          ...(ok ? {} : { staged: true as const }),
         });
         results.push(result);
         emitResult(result);

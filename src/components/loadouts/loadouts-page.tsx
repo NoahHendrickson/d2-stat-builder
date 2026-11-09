@@ -51,7 +51,8 @@ export function LoadoutsPage({
         <TabsTrigger value="conflux">Conflux</TabsTrigger>
         <TabsTrigger value={IN_GAME_VIEW}>In-game</TabsTrigger>
       </TabsList>
-      <TabsContent value="conflux" className={PANEL_CLASS}>
+      {/* Kept mounted, so flipping tabs keeps each one's search, filters and scroll. */}
+      <TabsContent value="conflux" keepMounted className={PANEL_CLASS}>
         <LoadoutsList
           armory={armory}
           provisional={provisional}
@@ -59,8 +60,9 @@ export function LoadoutsPage({
           onArmoryChanged={onArmoryChanged}
         />
       </TabsContent>
-      <TabsContent value={IN_GAME_VIEW} className={PANEL_CLASS}>
+      <TabsContent value={IN_GAME_VIEW} keepMounted className={PANEL_CLASS}>
         <InGameLoadoutsView
+          active={view === IN_GAME_VIEW}
           armory={armory}
           provisional={provisional}
           manifest={manifest}

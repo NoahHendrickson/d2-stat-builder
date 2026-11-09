@@ -343,9 +343,9 @@ export function LoadoutsList({
     (saved: SavedLoadout) => {
       // Read the names at click time (not via a dependency) so this callback — and with
       // it every memoized row — doesn't change identity after each mutation.
-      const existingNames = (queryClient.getQueryData<SavedLoadout[]>(LOADOUTS_QUERY_KEY) ?? [])
-        .filter((l) => !l.setOnly)
-        .map((l) => l.loadout.name);
+      const existingNames = (
+        queryClient.getQueryData<SavedLoadout[]>(LOADOUTS_QUERY_KEY) ?? []
+      ).map((l) => l.loadout.name);
       const data: SavedLoadoutData = {
         version: LOADOUT_SCHEMA_VERSION,
         loadout: {

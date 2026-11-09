@@ -13,7 +13,8 @@ import {
   stopActivitySet,
   useActivitySetRun,
 } from "@/lib/loadouts/activity-set-run";
-import { rereadInGameSlots } from "@/lib/loadouts/ingame-save";
+import { rereadInGameSlots, useSlotsSettling } from "@/lib/loadouts/ingame-save";
+import { CLASS_NAMES } from "@/lib/armory/stats";
 import { CharacterEmblemTabs } from "@/components/builder/class-emblem-tabs";
 import { ActivitySetCards } from "@/components/loadouts/activity-set-cards";
 import { ConfirmDialog } from "@/components/loadouts/confirm-dialog";
@@ -34,12 +35,15 @@ import { cn } from "@/lib/utils";
  * now, and the activity sets (saved loadouts assigned to slots) built on this screen.
  */
 export function InGameLoadoutsView({
+  active,
   armory,
   provisional,
   manifest,
   onArmoryChanged,
   refreshArmory,
 }: {
+  /** The tab is showing. It stays mounted while hidden. */
+  active: boolean;
   armory: Armory;
   provisional: boolean;
   manifest: Manifest;
@@ -48,9 +52,14 @@ export function InGameLoadoutsView({
 }) {
   const queryClient = useQueryClient();
   const setRun = useActivitySetRun();
-  const sets = useSetEditor({ armory, manifest });
+  // Nothing is fetched until the tab is first opened; after that it stays up to date.
+  const [opened, setOpened] = useState(active);
+  if (active && !opened) setOpened(true);
+  const sets = useSetEditor({ armory, manifest, active: opened });
   const { character, activeSet, activeSetCharacter, inGame, slots, filled, selectedSlot } = sets;
   const { isFetching, refetch } = sets.slotsQuery;
+  // A write is waiting on Bungie, so the slots shown may still be the old ones.
+  const settling = useSlotsSettling(character?.id);
 
   const slotActions = useSlotActions({
     armory,
@@ -69,6 +78,8 @@ export function InGameLoadoutsView({
   const [peek, setPeek] = useState(false);
 
   const gearLocked = provisional || slotActions.applying;
+  /** Copying a slot now could store gear it no longer holds, or lose its mods. */
+  const copyLocked = provisional || settling;
   const atSetLimit = sets.allSets.length >= MAX_ACTIVITY_SETS;
   // Which slots the open set fills. A name of null means its loadout has been deleted,
   // which can only be said once the loadouts are in.
@@ -97,9 +108,16 @@ export function InGameLoadoutsView({
   // Drawn inside whichever entry on the left is open.
   const slotGrid =
     activeSet && !activeSetCharacter ? (
-      <p className="text-muted-foreground text-sm">
-        This set&apos;s character is no longer on your account, so it can&apos;t be applied to the game.
-      </p>
+      <div className="flex flex-col items-start gap-2">
+        <p className="text-muted-foreground text-sm">
+          This set&apos;s character is no longer on your account, so it can&apos;t be applied to the game.
+        </p>
+        {character?.classType === activeSet.classType && (
+          <Button size="sm" onClick={() => sets.moveSetTo(activeSet, character.id)} disabled={setLocked}>
+            Move to this {CLASS_NAMES[character.classType] ?? "character"}
+          </Button>
+        )}
+      </div>
     ) : !inGame || slots.length === 0 ? (
       <SlotsState
         hasCharacter={!!character}
@@ -118,7 +136,7 @@ export function InGameLoadoutsView({
         labelsFor={(index) => activeSet?.slots.find((s) => s.index === index)?.labels}
         peek={peek}
         onToggleSlot={
-          activeSet && activeSetCharacter && !setLocked && !provisional ? sets.toggleSlot : undefined
+          activeSet && activeSetCharacter && !setLocked && !copyLocked ? sets.toggleSlot : undefined
         }
       />
     );
@@ -150,7 +168,7 @@ export function InGameLoadoutsView({
                   tooltip="Reload from the game"
                   label="Reload from the game"
                   icon={RefreshIcon}
-                  iconClassName={cn(isFetching && "animate-spin")}
+                  iconClassName={cn((isFetching || settling) && "animate-spin")}
                   onClick={() => void refetch()}
                   disabled={isFetching || !character}
                 />
@@ -164,7 +182,7 @@ export function InGameLoadoutsView({
                   variant="emphatic"
                   className="w-full gap-1.5"
                   onClick={sets.startSetFromSlots}
-                  disabled={filled.length === 0 || atSetLimit || isFetching || provisional}
+                  disabled={filled.length === 0 || atSetLimit || isFetching || copyLocked}
                 >
                   <HugeiconsIcon icon={FloppyDiskIcon} aria-hidden />
                   Save as set
@@ -220,7 +238,7 @@ export function InGameLoadoutsView({
                   weaponMap={sets.weaponMap}
                   manifest={manifest}
                   disabled={setLocked}
-                  copyDisabled={provisional}
+                  copyDisabled={copyLocked}
                   onAssign={(loadoutId) => sets.assignSlot(selectedSlot.index, loadoutId)}
                   onCopySlot={() => sets.copySlotIntoSet(selectedSlot)}
                   onCustomize={(slot) => setDialog({ kind: "customize-set-slot", slot })}
@@ -235,7 +253,7 @@ export function InGameLoadoutsView({
                   pieceMap={sets.pieceMap}
                   weaponMap={sets.weaponMap}
                   manifest={manifest}
-                  disabled={gearLocked || setRun !== null}
+                  disabled={gearLocked || settling || setRun !== null}
                   onEdit={() => editor.editSlot(selectedSlot)}
                   onCustomize={() => setDialog({ kind: "customize", slot: selectedSlot })}
                   onReplace={() => setDialog({ kind: "pick", slot: selectedSlot })}

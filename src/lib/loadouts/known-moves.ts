@@ -19,7 +19,7 @@ export type KnownSpots = ReadonlyMap<string, GearSpot>;
 export function spotsAfterApply(
   known: KnownSpots,
   armory: Armory,
-  results: readonly Pick<ItemResult, "itemInstanceId" | "ok" | "vaulted">[],
+  results: readonly Pick<ItemResult, "itemInstanceId" | "ok" | "vaulted" | "staged">[],
   characterId: string,
 ): KnownSpots {
   const next = new Map(known);
@@ -30,8 +30,15 @@ export function spotsAfterApply(
 
   for (const result of results) {
     for (const id of result.vaulted ?? []) next.set(id, { location: "vault" });
-    if (!result.ok) continue;
     const id = result.itemInstanceId;
+    if (!result.ok) {
+      // It made it onto the character before the equip failed.
+      const item = result.staged && gear.find((g) => g.instanceId === id);
+      if (item && spotOf(item).characterId !== characterId) {
+        next.set(id, { location: "inventory", characterId });
+      }
+      continue;
+    }
     if (subclassIds.includes(id)) {
       for (const other of subclassIds) next.delete(other);
       next.set(id, { location: "equipped", characterId });

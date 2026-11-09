@@ -55,9 +55,18 @@ type Pane = { kind: "current" } | { kind: "set"; id: string };
  * Which character and set the In-game tab has open, and the working copy of that set.
  * The components around it draw this state and call its actions.
  */
-export function useSetEditor({ armory, manifest }: { armory: Armory; manifest: Manifest }) {
-  const loadouts = useLoadoutsWithSetCopies();
-  const { createMany, removeMany } = useLoadoutMutations();
+export function useSetEditor({
+  armory,
+  manifest,
+  active,
+}: {
+  armory: Armory;
+  manifest: Manifest;
+  /** The In-game tab has been shown; until then nothing is fetched for it. */
+  active: boolean;
+}) {
+  const loadouts = useLoadoutsWithSetCopies(active);
+  const { createMany } = useLoadoutMutations();
   const allSets = useActivitySets();
   const { draft, saving } = useSetDraft();
 
@@ -82,7 +91,7 @@ export function useSetEditor({ armory, manifest }: { armory: Armory; manifest: M
   const [leaving, setLeaving] = useState<(() => void) | null>(null);
   const [saveAttention, setSaveAttention] = useState(0);
 
-  const slotsQuery = useInGameLoadouts(character?.id, true);
+  const slotsQuery = useInGameLoadouts(character?.id, active);
   const inGame = slotsQuery.data;
   const slots = useMemo(() => inGame?.slots ?? [], [inGame]);
   const filled = useMemo(() => slots.filter((s) => !s.empty), [slots]);
@@ -144,11 +153,6 @@ export function useSetEditor({ armory, manifest }: { armory: Armory; manifest: M
 
   const askToLeave = useCallback((go: () => void) => setLeaving(() => go), []);
   useUnsavedChangesGuard(unsaved, askToLeave);
-
-  /** Delete private copies nothing uses any more. */
-  const deleteOrphans = (ids: string[]) => {
-    if (ids.length > 0) removeMany.mutate(ids, { onError: reportLoadoutError(toast) });
-  };
 
   const dropDraft = () => {
     replaceSetDraft(null);
@@ -217,7 +221,7 @@ export function useSetEditor({ armory, manifest }: { armory: Armory; manifest: M
     await (copies.length > 0 ? createMany.mutateAsync(copies.map((c) => c.data)) : Promise.resolve([]))
       .then((stored) => {
         const storedIds = new Map(copies.map((c, i) => [c.id, stored[i].id]));
-        deleteOrphans(saveActivitySet(savedSetFromDraft(draft, name, storedIds), all));
+        saveActivitySet(savedSetFromDraft(draft, name, storedIds));
         replaceSetDraft(null);
         toast.success(`${name} saved`);
       })
@@ -289,8 +293,17 @@ export function useSetEditor({ armory, manifest }: { armory: Armory; manifest: M
 
     /** Renaming a saved set takes effect at once, without touching any other unsaved edits. */
     renameSet: (saved: ActivitySet, name: string) => {
-      saveActivitySet({ ...saved, name }, all);
+      saveActivitySet({ ...saved, name });
       if (draft?.set.id === saved.id) changeSetDraft(saved, (d) => withDraftName(d, name));
+    },
+
+    /** Give a set whose character has left the account to this one, of the same class. */
+    moveSetTo: (set: ActivitySet, characterId: string) => {
+      const saved = allSets.find((s) => s.id === set.id);
+      if (saved) saveActivitySet({ ...saved, characterId });
+      if (draft?.set.id === set.id) {
+        changeSetDraft(set, (d) => ({ ...d, set: { ...d.set, characterId } }));
+      }
     },
 
     deleteSet: (set: ActivitySet) => {
@@ -298,7 +311,7 @@ export function useSetEditor({ armory, manifest }: { armory: Armory; manifest: M
         dropDraft();
         selectPane({ kind: "current" });
       }
-      deleteOrphans(removeActivitySet(set.id, all));
+      removeActivitySet(set.id);
       toast.success("Activity set deleted");
     },
 

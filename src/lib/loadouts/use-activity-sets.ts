@@ -1,8 +1,7 @@
 "use client";
 
 import { getSetting, setSetting, useSetting } from "../settings/synced-settings";
-import { orphanedSetLoadouts, type ActivitySet } from "./activity-sets";
-import type { SavedLoadout } from "./types";
+import type { ActivitySet } from "./activity-sets";
 
 // Stored and synced to the account by synced-settings.ts.
 
@@ -10,30 +9,23 @@ export function useActivitySets(): ActivitySet[] {
   return useSetting("activitySets");
 }
 
-type LoadoutRows = readonly Pick<SavedLoadout, "id" | "setOnly">[];
+// Private copies a set stops using are cleaned up by the server once the list syncs
+// (see reconcileSetCopies), so nothing here has to see the loadouts list.
 
-/** Store the new list; answers with the private copies no set uses any more. */
-function writeSets(next: ActivitySet[], loadouts: LoadoutRows): string[] {
-  const before = getSetting("activitySets");
-  setSetting("activitySets", next);
-  return orphanedSetLoadouts(before, next, loadouts);
-}
-
-/**
- * Add a new set (at the end) or replace the one with the same id in place. Answers with
- * the private copies that left unused, for the caller to delete.
- */
-export function saveActivitySet(set: ActivitySet, loadouts: LoadoutRows): string[] {
+/** Add a new set (at the end) or replace the one with the same id in place. */
+export function saveActivitySet(set: ActivitySet): void {
   const sets = getSetting("activitySets");
-  return writeSets(
+  setSetting(
+    "activitySets",
     sets.some((s) => s.id === set.id)
       ? sets.map((s) => (s.id === set.id ? set : s))
       : [...sets, set],
-    loadouts,
   );
 }
 
-/** Remove a set. Answers with the private copies that left unused, for the caller to delete. */
-export function removeActivitySet(id: string, loadouts: LoadoutRows): string[] {
-  return writeSets(getSetting("activitySets").filter((s) => s.id !== id), loadouts);
+export function removeActivitySet(id: string): void {
+  setSetting(
+    "activitySets",
+    getSetting("activitySets").filter((s) => s.id !== id),
+  );
 }

@@ -8,12 +8,14 @@ import {
   type InGameLoadoutSlot,
   type SlotIdentifiers,
 } from "@/lib/bungie/ingame-loadouts";
+import { inGameImportName } from "@/lib/loadouts/ingame-import";
 import { Emblem } from "@/components/loadouts/ingame-save-dialog";
 import { TooltipLabel } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
+/** What a slot is called on screen: the game's name for it, the same one an import uses. */
 export const inGameSlotName = (slot: InGameLoadoutSlot, identifiers: InGameLoadoutIdentifiers) =>
-  slot.empty ? "Empty" : (identifiers.names.find((n) => n.hash === slot.nameHash)?.name ?? "Saved");
+  slot.empty ? "Empty" : inGameImportName(slot, identifiers.names);
 
 /**
  * A character's in-game slots as the game lays them out: numbered emblems four across,

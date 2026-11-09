@@ -130,9 +130,11 @@ export async function GET(request: Request) {
         if (item.itemInstanceId) hashes.set(item.itemInstanceId, item.itemHash);
       }
     }
+    const mintedAt = Date.parse(profile.Response.responseMintedTimestamp);
     return NextResponse.json({
       slots: toSlots(loadouts, (id) => hashes.get(id)),
       identifiers,
+      ...(Number.isFinite(mintedAt) ? { mintedAt } : {}),
     } satisfies InGameLoadoutsResponse);
   } catch (err) {
     return bungieErrorResponse(err, REAUTH_MESSAGE);

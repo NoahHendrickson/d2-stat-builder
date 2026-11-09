@@ -1,5 +1,10 @@
 import { test, expect } from "vitest";
-import { LoadoutLimitError, MAX_LOADOUTS_PER_ACCOUNT, MemoryLoadoutStore } from "./store";
+import {
+  LoadoutLimitError,
+  MAX_LOADOUTS_PER_ACCOUNT,
+  MemoryLoadoutStore,
+  SET_COPY_GRACE_MS,
+} from "./store";
 import type { SavedLoadoutData } from "./types";
 
 const data = (name: string): SavedLoadoutData => ({
@@ -59,6 +64,22 @@ test("createMany stores nothing when they wouldn't all fit", async () => {
   for (let i = 0; i < MAX_LOADOUTS_PER_ACCOUNT - 1; i++) await store.create("o", data("full"));
   await expect(store.createMany("o", [data("A"), data("B")])).rejects.toBeInstanceOf(LoadoutLimitError);
   expect(await store.list("o")).toHaveLength(MAX_LOADOUTS_PER_ACCOUNT - 1);
+});
+
+test("an unused set copy is deleted after the grace period, and kept if used again", async () => {
+  let t = 0;
+  const store = new MemoryLoadoutStore(() => t);
+  const copy = await store.create("o", { ...data("copy"), setOnly: true });
+  const back = await store.create("o", { ...data("back"), setOnly: true });
+  const mine = await store.create("o", data("mine"));
+
+  expect(await store.reconcileSetCopies("o", [])).toEqual([]);
+  t += SET_COPY_GRACE_MS / 2;
+  // Another browser's list still uses one of them.
+  expect(await store.reconcileSetCopies("o", [back.id])).toEqual([]);
+  t += SET_COPY_GRACE_MS / 2;
+  expect(await store.reconcileSetCopies("o", [])).toEqual([copy.id]);
+  expect((await store.list("o")).map((l) => l.id).sort()).toEqual([back.id, mine.id].sort());
 });
 
 test("deleteMany removes only the owner's listed rows", async () => {

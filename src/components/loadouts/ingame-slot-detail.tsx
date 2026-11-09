@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactElement, type ReactNode } from "react";
+import { useMemo, useState, type ReactElement, type ReactNode } from "react";
 import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
 import {
   Add01Icon,
@@ -118,19 +118,29 @@ function SlotDetailFrame({
   );
 }
 
-/** A slot's gear as a loadout, for showing it. */
-function slotAsLoadout(
+/**
+ * A slot's gear as a loadout, for showing it. Memoized: the conversion and resolve are
+ * heavy, and the view re-renders on every keystroke in a new set's name.
+ */
+function useSlotAsLoadout(
   slot: InGameLoadoutSlot,
   identifiers: InGameLoadoutIdentifiers,
   classType: number,
   { pieceMap, weaponMap, manifest }: GearLookups,
 ) {
-  const data = inGameSlotAsLoadout(slot, identifiers.names, { classType, pieceMap, weaponMap, manifest });
-  return {
-    data,
-    shown: transientLoadout(`slot-${slot.index}`, data),
-    resolved: resolveLoadout(data.loadout, pieceMap, manifest, weaponMap),
-  };
+  return useMemo(() => {
+    const data = inGameSlotAsLoadout(slot, identifiers.names, {
+      classType,
+      pieceMap,
+      weaponMap,
+      manifest,
+    });
+    return {
+      data,
+      shown: transientLoadout(`slot-${slot.index}`, data),
+      resolved: resolveLoadout(data.loadout, pieceMap, manifest, weaponMap),
+    };
+  }, [slot, identifiers, classType, pieceMap, weaponMap, manifest]);
 }
 
 /** Read-only: what the game holds in a slot right now, seen from an activity set. */
@@ -144,7 +154,7 @@ function SlotPeek({
   identifiers: InGameLoadoutIdentifiers;
   classType: number;
 }) {
-  const { shown, resolved } = slotAsLoadout(slot, identifiers, classType, lookups);
+  const { shown, resolved } = useSlotAsLoadout(slot, identifiers, classType, lookups);
   return (
     <section aria-label="This slot's current loadout" className="flex flex-col gap-2">
       <h4 className="d2-label">This slot&apos;s current loadout</h4>
@@ -179,6 +189,7 @@ export function CurrentSlotDetail({
 }) {
   const { manifest } = lookups;
   const name = inGameSlotName(slot, identifiers);
+  const { data, shown, resolved } = useSlotAsLoadout(slot, identifiers, classType, lookups);
   const frame = {
     slot,
     identifiers,
@@ -203,8 +214,6 @@ export function CurrentSlotDetail({
       </SlotDetailFrame>
     );
   }
-
-  const { data, shown, resolved } = slotAsLoadout(slot, identifiers, classType, lookups);
 
   return (
     <SlotDetailFrame
@@ -373,6 +382,10 @@ export function SetSlotDetail({
   const shown = slotAppearanceInSet(slot, !!loadoutId, identifiers, labels);
   const subtitle = `Slot ${slot.index + 1}, ${loadoutId ? inGameSlotName(shown, identifiers) : name}`;
   const saved = loadoutId ? loadouts.find((l) => l.id === loadoutId) : undefined;
+  const resolved = useMemo(
+    () => saved && resolveLoadout(saved.loadout, pieceMap, manifest, weaponMap),
+    [saved, pieceMap, manifest, weaponMap],
+  );
   const frame = { slot: shown, identifiers, manifest };
 
   if (!loadoutId) {
@@ -494,7 +507,6 @@ export function SetSlotDetail({
     );
   }
 
-  const resolved = resolveLoadout(saved.loadout, pieceMap, manifest, weaponMap);
   return (
     <SlotDetailFrame
       {...frame}
@@ -529,7 +541,7 @@ export function SetSlotDetail({
         </>
       }
     >
-      <LoadoutCardBodyArmorFirst saved={saved} resolved={resolved} manifest={manifest} />
+      <LoadoutCardBodyArmorFirst saved={saved} resolved={resolved!} manifest={manifest} />
     </SlotDetailFrame>
   );
 }

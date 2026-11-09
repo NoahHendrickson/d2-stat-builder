@@ -4,6 +4,8 @@ import { isSettingKey, MAX_SETTING_BODY_LENGTH, parseSettingValue } from "@/lib/
 import { getServerSettingsStore } from "@/lib/settings/neon-store";
 import { notConfigured, storageError } from "@/lib/loadouts/api-responses";
 import { rejectCrossSite } from "@/lib/http/same-origin";
+import { referencedLoadoutIds, type ActivitySet } from "@/lib/loadouts/activity-sets";
+import { getServerLoadoutStore } from "@/lib/loadouts/neon-store";
 
 type Ctx = { params: Promise<{ key: string }> };
 
@@ -38,7 +40,15 @@ export async function PUT(request: Request, { params }: Ctx) {
   if (!value) return NextResponse.json({ error: "Invalid setting" }, { status: 400 });
 
   try {
-    return NextResponse.json(await store.put(user.membershipId, key, value));
+    const stored = await store.put(user.membershipId, key, value);
+    if (key === "activitySets") {
+      // The account's list has changed, so its private copies follow it. A failure here
+      // doesn't fail the save; the next sync tries again.
+      await getServerLoadoutStore()
+        ?.reconcileSetCopies(user.membershipId, referencedLoadoutIds(value as ActivitySet[]))
+        .catch((err: unknown) => console.error("Reconciling activity set copies failed", err));
+    }
+    return NextResponse.json(stored);
   } catch (err) {
     return storageError(err, "Settings");
   }

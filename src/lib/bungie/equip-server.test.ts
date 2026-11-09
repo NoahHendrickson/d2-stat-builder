@@ -472,8 +472,16 @@ describe("stageAndEquip equip errors", () => {
         ok: false,
         message: "Moved, but Bungie is limiting equips — apply again in a moment",
         vaulted: ["spare-1"],
+        staged: true,
       },
     ]);
+  });
+
+  test("a piece that reached the character but failed to equip says so", async () => {
+    transferItem.mockResolvedValue({});
+    equipItems.mockResolvedValue({ Response: { equipResults: [{ itemInstanceId: "helm", equipStatus: 1671 }] } });
+    const results = await run({ http, membershipType: 3, membershipId: "m", characterId: TARGET, items: [helm] });
+    expect(results[0]).toMatchObject({ ok: false, staged: true });
   });
 
   test("a 401 on the equip is still thrown", async () => {

@@ -66,9 +66,9 @@ export interface SavedLoadoutData {
   optimizer?: OptimizerLoadout;
   builder?: BuilderSnapshot;
   /**
-   * A copy of an in-game slot kept for an activity set. useLoadouts leaves these out, so
-   * they're never listed with the player's loadouts, and they're deleted once no set
-   * uses them (see orphanedSetLoadouts).
+   * A copy of an in-game slot kept for an activity set. The list route leaves these out
+   * unless asked, so they're never shown as the player's loadouts, and the server deletes
+   * one a while after no set uses it (see reconcileSetCopies).
    */
   setOnly?: true;
 }
@@ -78,6 +78,17 @@ export interface SavedLoadout extends SavedLoadoutData {
   /** Epoch ms. */
   createdAt: number;
   updatedAt: number;
+}
+
+/**
+ * A loadout from outside (a share link, an import) as one of the player's own: it never
+ * comes in as an activity set's private copy, which they couldn't see or delete.
+ */
+export function asPlayerLoadout<T extends SavedLoadoutData | null>(data: T): T {
+  if (!data?.setOnly) return data;
+  const copy = { ...data };
+  delete copy.setOnly;
+  return copy;
 }
 
 /** Loadout data read as a saved row, for code that shows it; nothing about it is stored. */

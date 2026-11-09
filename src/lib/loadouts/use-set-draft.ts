@@ -1,6 +1,6 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
+import { createStore, useStore } from "../create-store";
 import type { ActivitySet } from "./activity-sets";
 import { draftFromSet, type SetDraft } from "./set-draft";
 
@@ -14,36 +14,24 @@ interface SetDraftState {
 }
 
 const NOTHING: SetDraftState = { draft: null, saving: false };
-let state = NOTHING;
-const listeners = new Set<() => void>();
-
-function setState(next: SetDraftState) {
-  state = next;
-  for (const listener of listeners) listener();
-}
-
-function subscribe(listener: () => void) {
-  listeners.add(listener);
-  return () => {
-    listeners.delete(listener);
-  };
-}
+const store = createStore(NOTHING);
 
 export function useSetDraft(): SetDraftState {
-  return useSyncExternalStore(subscribe, () => state, () => NOTHING);
+  return useStore(store, NOTHING);
 }
 
 /** Start editing a new draft, or drop the current one with null. */
 export function replaceSetDraft(draft: SetDraft | null): void {
-  setState({ ...state, draft });
+  store.set({ ...store.get(), draft });
 }
 
 /** Change `set`'s working copy, starting one if it isn't already being edited. */
 export function changeSetDraft(set: ActivitySet, change: (draft: SetDraft) => SetDraft): void {
+  const state = store.get();
   const current = state.draft?.set.id === set.id ? state.draft : draftFromSet(set);
-  setState({ ...state, draft: change(current) });
+  store.set({ ...state, draft: change(current) });
 }
 
 export function setSetDraftSaving(saving: boolean): void {
-  setState({ ...state, saving });
+  store.set({ ...store.get(), saving });
 }

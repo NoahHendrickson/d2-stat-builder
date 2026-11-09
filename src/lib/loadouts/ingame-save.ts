@@ -3,6 +3,7 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { toast } from "@/lib/toast";
 import { handleSessionExpired } from "@/lib/auth/sign-out";
+import { createStore, useStore } from "@/lib/create-store";
 import type {
   InGameLoadoutsResponse,
   SlotIdentifiers,
@@ -17,17 +18,56 @@ export interface InGameSlotChoice extends SlotIdentifiers {
 }
 
 /**
- * Bungie can serve the old slots for a few seconds after one changes, so a re-read right
- * after a write would put the old contents back on screen.
+ * Bungie can serve the old slots for a while after one changes, so a read is only taken
+ * once its profile was built after the write. Until then the slots shown are what this
+ * app wrote (or, after an equip, what was there before), so copying from them waits.
  */
 const SLOT_REREAD_DELAY_MS = 3000;
+const SLOT_REREAD_TRIES = 5;
+/** Bungie's clock and ours needn't agree to the second. */
+const CLOCK_SLACK_MS = 2000;
 
-/** Refresh a character's slots once Bungie has caught up with a write. */
-export function rereadInGameSlots(queryClient: QueryClient, characterId: string): void {
-  setTimeout(
-    () => void queryClient.invalidateQueries({ queryKey: inGameLoadoutsKey(characterId) }),
-    SLOT_REREAD_DELAY_MS,
-  );
+/** Characters whose slots are waiting on a read newer than a write, and how many writes. */
+const settling = createStore<ReadonlyMap<string, number>>(new Map());
+
+function markSettling(characterId: string, change: 1 | -1) {
+  const next = new Map(settling.get());
+  const count = (next.get(characterId) ?? 0) + change;
+  if (count > 0) next.set(characterId, count);
+  else next.delete(characterId);
+  settling.set(next);
+}
+
+const NONE_SETTLING: ReadonlyMap<string, number> = new Map();
+
+/** Whether this character's slots may still show what was there before a write. */
+export function useSlotsSettling(characterId: string | undefined): boolean {
+  return useStore(settling, NONE_SETTLING).has(characterId ?? "");
+}
+
+/**
+ * Re-read a character's slots once Bungie has caught up with a write made at `since`.
+ * A read from before the write is dropped, so it can't undo what's on screen; if none
+ * catches up, the slots are left as they are.
+ */
+export async function rereadInGameSlots(
+  queryClient: QueryClient,
+  characterId: string,
+  since: number = Date.now(),
+): Promise<void> {
+  markSettling(characterId, 1);
+  try {
+    for (let i = 0; i < SLOT_REREAD_TRIES; i++) {
+      await new Promise((r) => setTimeout(r, SLOT_REREAD_DELAY_MS));
+      const fresh = await fetchInGameLoadouts(characterId).catch(() => null);
+      if (fresh && (fresh.mintedAt ?? -Infinity) >= since - CLOCK_SLACK_MS) {
+        queryClient.setQueryData(inGameLoadoutsKey(characterId), fresh);
+        return;
+      }
+    }
+  } finally {
+    markSettling(characterId, -1);
+  }
 }
 
 /** Bungie asks for at least a second between loadout actions (snapshot, clear). */
@@ -62,7 +102,11 @@ export async function fetchInGameLoadouts(characterId: string): Promise<InGameLo
       data?.reauth === true,
     );
   }
-  return { slots: data.slots, identifiers: data.identifiers };
+  return {
+    slots: data.slots,
+    identifiers: data.identifiers,
+    ...(typeof data.mintedAt === "number" ? { mintedAt: data.mintedAt } : {}),
+  };
 }
 
 /** Every piece equipped and every planned mod socketed — what the slot is about to capture. */
@@ -177,7 +221,7 @@ export async function clearInGameSlots({
   }
   // The route cleared the dead session; forget the local player data too.
   if (failure?.reauth) void handleSessionExpired(queryClient);
-  else rereadInGameSlots(queryClient, characterId);
+  else void rereadInGameSlots(queryClient, characterId);
   return { cleared, failure };
 }
 

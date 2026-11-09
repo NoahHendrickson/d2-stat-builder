@@ -160,7 +160,11 @@ export default async function ({ page, app, stub, step, shot, expect }) {
 
   await step("lo-set-from-slots: Save as set copies the filled slots", async () => {
     await page.click({ role: "button", name: "In the game now" });
-    await page.click({ role: "button", name: "Save as set" });
+    const saveAsSet = { role: "button", name: "Save as set" };
+    // The set just applied is still waiting on a fresh read of the slots; copying waits too.
+    expect((await page.attr(saveAsSet, "disabled")) !== null, "copying waits while the slots catch up");
+    await page.waitFor(async () => (await page.attr(saveAsSet, "disabled")) === null, { timeout: 30000 });
+    await page.click(saveAsSet);
     expect(!(await page.exists({ role: "dialog", name: "Save these slots as a set" })), "no dialog: the new set opens straight away");
     await page.waitFor({ role: "radio", name: /^Slot 3, Crucible: Crucible/i });
     expect(stub.requests.filter((r) => r.method === "POST" && r.path === "/api/loadouts").length === 0, "nothing is stored before Save");
@@ -196,12 +200,13 @@ export default async function ({ page, app, stub, step, shot, expect }) {
     expect(stub.store.loadouts.size === 4, "removing a slot changes nothing until Save");
     await page.click({ role: "button", name: "Save changes" });
     await app.toast(/Trials saved/);
-    await page.waitFor(() => stub.store.loadouts.size === 3);
-    expect(stub.last("DELETE", "/api/loadouts")?.status === 200, "a removed copy is deleted on Save");
+    const unused = () => [...stub.store.loadouts.values()].filter((l) => l.setOnly && l.unusedSince).length;
+    await page.waitFor(() => unused() === 1);
+    expect(!stub.last("DELETE", "/api/loadouts"), "a removed copy is left for the server to clean up, not deleted at once");
     await page.click({ role: "button", name: "Delete Trials" });
     await page.click({ role: "button", name: "Delete" }, { within: { role: "dialog", name: "Delete activity set?" } });
     await app.toast(/Activity set deleted/);
-    await page.waitFor(() => stub.store.loadouts.size === 2);
+    await page.waitFor(() => unused() === 2);
   });
 
   await step("lo-ingame-customize: a slot's name, icon and color change without touching its gear", async () => {
@@ -323,7 +328,24 @@ export default async function ({ page, app, stub, step, shot, expect }) {
     await page.waitFor({ role: "article", name: "Raid build" });
     expect((await page.evalJs("location.search")) === "", "the tab left the URL");
     expect(/\b2 Loadouts\b/i.test(await page.waitForText(/\b\d+ Loadouts?\b/i)), "copies stay out of the list");
+    expect(
+      stub.requests.some((r) => r.method === "GET" && r.path === "/api/loadouts?copies=1") &&
+        stub.requests.some((r) => r.method === "GET" && r.path === "/api/loadouts"),
+      "only the In-game tab asks for sets' copies",
+    );
     await shot("conflux");
+
+    const search = { role: "searchbox", name: /^Search loadouts/ };
+    await page.fill(search, "Raid");
+    const slotReads = () => stub.requests.filter((r) => r.method === "GET" && r.path.startsWith("/api/bungie/ingame-loadouts")).length;
+    const readsBefore = slotReads();
+    await page.click({ role: "tab", name: "In-game" });
+    await page.waitFor({ role: "button", name: "In the game now" });
+    await page.click({ role: "tab", name: "Conflux" });
+    await page.waitFor(search);
+    expect((await page.value(search)) === "Raid", "flipping tabs keeps the Conflux search");
+    expect(slotReads() === readsBefore, "and doesn't re-read the in-game slots");
+    await page.fill(search, "");
   });
 
   await step("lo-ingame-edit: an edited slot saves to the slot, Conflux, or both", async () => {

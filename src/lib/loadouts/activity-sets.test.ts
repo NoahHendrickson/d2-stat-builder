@@ -2,7 +2,7 @@ import { describe, expect, test } from "vitest";
 import {
   activitySetsForCharacter,
   loadoutClassType,
-  orphanedSetLoadouts,
+  referencedLoadoutIds,
   MAX_ACTIVITY_SETS,
   parseActivitySets,
   sameActivitySet,
@@ -110,23 +110,10 @@ test("a full list of full sets fits under the settings limit", () => {
   expect(JSON.stringify({ value: sets }).length).toBeLessThan(MAX_SETTING_BODY_LENGTH);
 });
 
-describe("orphanedSetLoadouts", () => {
-  const withSlots = (id: string, ...loadoutIds: string[]) =>
-    set(id, { slots: loadoutIds.map((loadoutId, index) => ({ index, loadoutId })) }) as ActivitySet;
-  const loadouts = [{ id: "copy", setOnly: true as const }, { id: "shared", setOnly: true as const }, { id: "mine" }];
-
-  test("returns a set-only loadout no set uses any more", () => {
-    expect(orphanedSetLoadouts([withSlots("1", "copy")], [withSlots("1")], loadouts)).toEqual(["copy"]);
-  });
-
-  test("keeps one another set still uses", () => {
-    const before = [withSlots("1", "shared"), withSlots("2", "shared")];
-    expect(orphanedSetLoadouts(before, [withSlots("2", "shared")], loadouts)).toEqual([]);
-  });
-
-  test("never returns the player's own loadouts", () => {
-    expect(orphanedSetLoadouts([withSlots("1", "mine")], [], loadouts)).toEqual([]);
-  });
+test("referencedLoadoutIds lists each assigned loadout once", () => {
+  const a = set("1", { slots: [{ index: 0, loadoutId: "x" }, { index: 1, loadoutId: "y" }] }) as ActivitySet;
+  const b = set("2", { slots: [{ index: 0, loadoutId: "x" }] }) as ActivitySet;
+  expect(referencedLoadoutIds([a, b]).sort()).toEqual(["x", "y"]);
 });
 
 describe("parseActivitySets", () => {

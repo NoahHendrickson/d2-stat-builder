@@ -65,7 +65,8 @@ export function createStub({ profile, seed = {} }) {
         ? json(200, { loadout: { id: "dim-1", name: "From DIM", classType: 1, equipped: [{ hash: 30472172, id: "123" }], unequipped: [{ hash: 1 }], parameters: { mods: [] }, createdAt: 1 } })
         : json(404, { error: "Not found" })],
 
-    ["GET", /^\/api\/loadouts$/, () => json(200, { loadouts: [...store.loadouts.values()] })],
+    ["GET", /^\/api\/loadouts$/, (_b, _m, u) =>
+      json(200, { loadouts: [...store.loadouts.values()].filter((l) => u.searchParams.get("copies") === "1" || !l.setOnly) })],
     ["POST", /^\/api\/loadouts$/, (b) => {
       const t = now();
       const stored = (data) => {
@@ -103,6 +104,11 @@ export function createStub({ profile, seed = {} }) {
       store.sharesDown ? json(503, { error: "Share storage isn't configured", configured: false })
         : store.shares.has(code) ? json(200, { loadout: store.shares.get(code) }) : json(404, { error: "Share not found" })],
     ["DELETE", /^\/api\/loadouts$/, (b) => {
+      if (b?.all === true) {
+        const ids = [...store.loadouts.values()].filter((l) => !l.setOnly).map((l) => l.id);
+        for (const id of ids) store.loadouts.delete(id);
+        return json(200, { deleted: ids });
+      }
       if (!Array.isArray(b?.ids)) return bad();
       const ids = b.ids.filter((id) => typeof id === "string" && UUID.test(id) && store.loadouts.has(id));
       for (const id of ids) store.loadouts.delete(id);
@@ -114,6 +120,15 @@ export function createStub({ profile, seed = {} }) {
       if (!SYNCED.includes(key)) return json(404, { error: "Unknown setting" });
       if (!Array.isArray(b?.value)) return bad();
       store.settings[key] = { value: b.value, updatedAt: now() };
+      // As the server does: a private copy no set uses is marked, and deleted after a week.
+      if (key === "activitySets") {
+        const used = new Set(b.value.flatMap((s) => (s.slots ?? []).map((slot) => slot.loadoutId)));
+        for (const l of store.loadouts.values()) {
+          if (!l.setOnly) continue;
+          if (used.has(l.id)) delete l.unusedSince;
+          else l.unusedSince ??= now();
+        }
+      }
       return json(200, store.settings[key]);
     }],
 
@@ -180,7 +195,7 @@ export function createStub({ profile, seed = {} }) {
       return { status: 200, body: lines.map((l) => JSON.stringify(l)).join("\n") + "\n", headers: { "content-type": "application/x-ndjson" } };
     }],
     ["POST", /^\/api\/bungie\/apply-loadout\/cancel$/, () => json(200, { ok: true })],
-    ["GET", /^\/api\/bungie\/ingame-loadouts$/, () => json(200, { slots: store.ingameSlots, identifiers: IDENTIFIERS })],
+    ["GET", /^\/api\/bungie\/ingame-loadouts$/, () => json(200, { slots: store.ingameSlots, identifiers: IDENTIFIERS, mintedAt: now() })],
     ["POST", /^\/api\/bungie\/ingame-loadouts$/, (b) => (Number.isInteger(b?.loadoutIndex) ? json(200, { ok: true }) : bad())],
     ["PATCH", /^\/api\/bungie\/ingame-loadouts$/, (b) => {
       const slot = store.ingameSlots[b?.loadoutIndex];
@@ -213,7 +228,7 @@ export function createStub({ profile, seed = {} }) {
     for (const [m, rx, fn] of routes) {
       const match = m === method && rx.exec(u.pathname);
       if (match) {
-        const res = fn(body, match.slice(1));
+        const res = fn(body, match.slice(1), u);
         entry.status = res.status;
         return res;
       }

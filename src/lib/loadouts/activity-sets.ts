@@ -134,20 +134,9 @@ export function sameActivitySet(a: ActivitySet, b: ActivitySet): boolean {
   );
 }
 
-/**
- * The set-only loadouts a change to the sets just left unused: referenced before, by no
- * set after. Loadouts from the player's own list are never returned.
- */
-export function orphanedSetLoadouts(
-  before: readonly ActivitySet[],
-  after: readonly ActivitySet[],
-  loadouts: readonly Pick<SavedLoadout, "id" | "setOnly">[],
-): string[] {
-  const ids = (sets: readonly ActivitySet[]) =>
-    new Set(sets.flatMap((s) => s.slots.map((slot) => slot.loadoutId)));
-  const kept = ids(after);
-  const dropped = [...ids(before)].filter((id) => !kept.has(id));
-  return dropped.filter((id) => loadouts.find((l) => l.id === id)?.setOnly === true);
+/** Every loadout some set assigns to a slot. */
+export function referencedLoadoutIds(sets: readonly ActivitySet[]): string[] {
+  return [...new Set(sets.flatMap((s) => s.slots.map((slot) => slot.loadoutId)))];
 }
 
 /** The class a saved loadout is for; an any-class loadout takes its armor's class. */

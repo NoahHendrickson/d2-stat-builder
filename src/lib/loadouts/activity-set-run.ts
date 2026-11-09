@@ -1,9 +1,9 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
 import type { QueryClient } from "@tanstack/react-query";
 import { toast } from "@/lib/toast";
 import { handleSessionExpired } from "@/lib/auth/sign-out";
+import { createStore, useStore } from "@/lib/create-store";
 import type { Armory } from "@/lib/armory/fetch";
 import type { RefreshResult } from "@/lib/armory/use-armory";
 import type { Manifest } from "@/lib/manifest/load";
@@ -34,30 +34,18 @@ export interface ActivitySetRunState {
   stopping: boolean;
 }
 
-let state: ActivitySetRunState | null = null;
-const listeners = new Set<() => void>();
-
-function setState(next: ActivitySetRunState | null) {
-  state = next;
-  for (const l of listeners) l();
-}
-
-const readState = () => state;
-
-function subscribe(listener: () => void) {
-  listeners.add(listener);
-  return () => {
-    listeners.delete(listener);
-  };
-}
+const runStore = createStore<ActivitySetRunState | null>(null);
+const setState = runStore.set;
+const readState = runStore.get;
 
 /** The set being run right now, if any. Only one runs at a time. */
 export function useActivitySetRun(): ActivitySetRunState | null {
-  return useSyncExternalStore(subscribe, () => state, () => null);
+  return useStore(runStore, null);
 }
 
 /** Finish the slot in progress, then stop. */
 export function stopActivitySet(): void {
+  const state = readState();
   if (state) setState({ ...state, stopping: true });
 }
 
@@ -120,7 +108,7 @@ export async function runActivitySet({
   manifest: Manifest;
   queryClient: QueryClient;
 }): Promise<void> {
-  if (state || set.slots.length === 0) return;
+  if (readState() || set.slots.length === 0) return;
   const total = set.slots.length;
   setState({ setId: set.id, position: 0, total, stopping: false });
 

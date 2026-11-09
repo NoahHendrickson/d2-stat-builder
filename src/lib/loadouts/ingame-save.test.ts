@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { QueryClient } from "@tanstack/react-query";
 import type { InGameLoadoutsResponse } from "@/lib/bungie/ingame-loadouts";
-import { clearInGameSlots, inGameLoadoutsKey, relabelInGameSlot } from "./ingame-save";
+import { clearInGameSlots, inGameLoadoutsKey, relabelInGameSlot, rereadInGameSlots } from "./ingame-save";
 
 const signOut = vi.hoisted(() => vi.fn(async () => {}));
 vi.mock("@/lib/auth/sign-out", () => ({ handleSessionExpired: signOut }));
@@ -18,6 +18,10 @@ const slots: InGameLoadoutsResponse = {
   slots: [filled(0), filled(1), filled(2)],
   identifiers: { names: [], icons: [], colors: [] },
 };
+
+/** The slot writes, leaving out the re-reads that follow them. */
+const deletes = (fetchMock: { mock: { calls: [string, RequestInit?][] } }) =>
+  fetchMock.mock.calls.filter(([, init]) => init?.method === "DELETE");
 
 /** Answers each DELETE in turn with the given status (200 = cleared). */
 function bungie(...statuses: number[]) {
@@ -101,7 +105,7 @@ describe("clearInGameSlots", () => {
     const fetchMock = bungie(200, 200);
     const { result, onProgress } = await run([0, 2]);
     expect(result).toEqual({ cleared: 2, failure: undefined });
-    expect(fetchMock.mock.calls.map(([, init]) => JSON.parse(String(init?.body)))).toEqual([
+    expect(deletes(fetchMock).map(([, init]) => JSON.parse(String(init?.body)))).toEqual([
       { characterId: "c1", loadoutIndex: 0 },
       { characterId: "c1", loadoutIndex: 2 },
     ]);
@@ -113,7 +117,7 @@ describe("clearInGameSlots", () => {
     const fetchMock = bungie(200, 502);
     const { result } = await run([0, 1, 2]);
     expect(result).toEqual({ cleared: 1, failure: { index: 1, error: "Throttled", reauth: false } });
-    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(deletes(fetchMock)).toHaveLength(2);
     expect(emptied()).toEqual([0]);
     expect(signOut).not.toHaveBeenCalled();
   });
@@ -123,5 +127,36 @@ describe("clearInGameSlots", () => {
     const { result } = await run([0, 1]);
     expect(result.failure).toEqual({ index: 0, error: "Not signed in", reauth: true });
     expect(signOut).toHaveBeenCalledWith(queryClient);
+  });
+});
+
+describe("rereadInGameSlots", () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.unstubAllGlobals());
+
+  test("drops reads from before the write, and takes the first one after it", async () => {
+    const queryClient = new QueryClient();
+    queryClient.setQueryData(inGameLoadoutsKey("c1"), slots);
+    const since = Date.now();
+    const answers = [since - 60_000, since + 1000].map((mintedAt, i) => ({
+      ...slots,
+      slots: slots.slots.map((s) => ({ ...s, nameHash: 100 + i })),
+      mintedAt,
+    }));
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json(answers.shift() ?? answers[0])));
+    const reading = rereadInGameSlots(queryClient, "c1", since);
+    await vi.runAllTimersAsync();
+    await reading;
+    expect(queryClient.getQueryData<InGameLoadoutsResponse>(inGameLoadoutsKey("c1"))!.slots[0].nameHash).toBe(101);
+  });
+
+  test("a read that never catches up leaves the slots as they are", async () => {
+    const queryClient = new QueryClient();
+    queryClient.setQueryData(inGameLoadoutsKey("c1"), slots);
+    vi.stubGlobal("fetch", vi.fn(async () => Response.json({ ...slots, slots: [], mintedAt: 0 })));
+    const reading = rereadInGameSlots(queryClient, "c1", Date.now());
+    await vi.runAllTimersAsync();
+    await reading;
+    expect(queryClient.getQueryData<InGameLoadoutsResponse>(inGameLoadoutsKey("c1"))!.slots).toHaveLength(3);
   });
 });

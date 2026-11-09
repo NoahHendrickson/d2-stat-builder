@@ -41,6 +41,8 @@ export interface InGameLoadoutsResponse {
   /** Only the slots this character has unlocked. */
   slots: InGameLoadoutSlot[];
   identifiers: InGameLoadoutIdentifiers;
+  /** When Bungie built the profile these came from (epoch ms), to tell a stale read. */
+  mintedAt?: number;
 }
 
 export interface SlotIdentifiers {

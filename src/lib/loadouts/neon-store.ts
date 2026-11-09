@@ -9,7 +9,12 @@ import { cacheLife, cacheTag } from "next/cache";
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
 import { fromDatabaseUrl, lazySchema } from "../db/neon";
 import { ACCOUNT_READ_LIFE, expiring, fromCache, loggedRead } from "../read-cache";
-import { LoadoutLimitError, MAX_LOADOUTS_PER_ACCOUNT, type LoadoutStore } from "./store";
+import {
+  LoadoutLimitError,
+  MAX_LOADOUTS_PER_ACCOUNT,
+  SET_COPY_GRACE_MS,
+  type LoadoutStore,
+} from "./store";
 import { parseSavedLoadoutData, type SavedLoadout, type SavedLoadoutData } from "./types";
 
 interface Row {
@@ -20,6 +25,7 @@ interface Row {
 }
 
 const toMs = (v: string | Date) => (v instanceof Date ? v.getTime() : Date.parse(v));
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function rowToLoadout(row: Row): SavedLoadout | null {
   const data = parseSavedLoadoutData(row.data);
@@ -134,6 +140,29 @@ export class NeonLoadoutStore implements LoadoutStore {
     return rows.length > 0;
   }
 
+  async reconcileSetCopies(membershipId: string, referenced: readonly string[]): Promise<string[]> {
+    await this.ensureSchema();
+    // An id that isn't a stored row's would fail the uuid cast; it can't name a copy anyway.
+    const used = referenced.filter((id) => UUID.test(id));
+    const now = Date.now();
+    // When a copy was first seen unused rides in its own data, so no column is needed;
+    // parseSavedLoadoutData ignores it.
+    await this.sql`
+      UPDATE loadouts SET data = data - 'unusedSince'
+      WHERE membership_id = ${membershipId} AND id = ANY(${used}::uuid[]) AND data ? 'unusedSince'`;
+    await this.sql`
+      UPDATE loadouts SET data = data || jsonb_build_object('unusedSince', ${now}::bigint)
+      WHERE membership_id = ${membershipId} AND data->>'setOnly' = 'true'
+        AND NOT (id = ANY(${used}::uuid[])) AND NOT (data ? 'unusedSince')`;
+    const rows = (await this.sql`
+      DELETE FROM loadouts
+      WHERE membership_id = ${membershipId} AND data->>'setOnly' = 'true'
+        AND NOT (id = ANY(${used}::uuid[]))
+        AND (data->>'unusedSince')::bigint <= ${now - SET_COPY_GRACE_MS}::bigint
+      RETURNING id`) as Pick<Row, "id">[];
+    return rows.map((r) => r.id);
+  }
+
   async deleteMany(membershipId: string, ids: readonly string[]): Promise<string[]> {
     await this.ensureSchema();
     if (ids.length === 0) return [];
@@ -188,6 +217,11 @@ class CachedLoadoutStore implements LoadoutStore {
   }
   deleteMany(membershipId: string, ids: readonly string[]) {
     return expiring(accountTag(membershipId), () => neonStore().deleteMany(membershipId, ids));
+  }
+  reconcileSetCopies(membershipId: string, referenced: readonly string[]) {
+    return expiring(accountTag(membershipId), () =>
+      neonStore().reconcileSetCopies(membershipId, referenced),
+    );
   }
 }
 

@@ -1,6 +1,6 @@
 // Browser side of share links: store a snapshot for a short link, and read one back.
 import { buildShareUrl, isShareCode, shareableData, shortShareUrl } from "./share";
-import { parseSavedLoadoutData, type SavedLoadoutData } from "./types";
+import { asPlayerLoadout, parseSavedLoadoutData, type SavedLoadoutData } from "./types";
 
 /** Why a short link didn't open: it isn't stored, its loadout doesn't parse, or the server or network failed. */
 export type ShareFetchFailure = "missing" | "unreadable" | "unavailable";
@@ -35,7 +35,7 @@ export async function fetchShare(code: string): Promise<SavedLoadoutData> {
   // 503 means storage isn't configured, which retrying won't fix.
   if (!res.ok) throw new ShareFetchError("unavailable", { retryable: res.status >= 500 && res.status !== 503 });
   const body = (await res.json().catch(() => null)) as { loadout?: unknown } | null;
-  const data = parseSavedLoadoutData(body?.loadout);
+  const data = asPlayerLoadout(parseSavedLoadoutData(body?.loadout));
   if (!data) throw new ShareFetchError("unreadable");
   return data;
 }

@@ -16,6 +16,8 @@ import {
 } from "./types";
 
 export const LOADOUTS_QUERY_KEY = ["loadouts"] as const;
+/** The same list with activity sets' private copies, which the server leaves out unless asked. */
+const WITH_SET_COPIES_KEY = ["loadouts", "with-set-copies"] as const;
 
 /** A failed /api/loadouts call, carrying the HTTP status (503 = storage not configured). */
 export class LoadoutsApiError extends Error {
@@ -63,35 +65,33 @@ function writeData(saved: SavedLoadout, loadout = saved.loadout): SavedLoadoutDa
     ...(saved.optimizer ? { optimizer: saved.optimizer } : {}),
     ...(saved.builder ? { builder: saved.builder } : {}),
     ...(saved.modPlacement ? { modPlacement: saved.modPlacement } : {}),
+    ...(saved.setOnly ? { setOnly: saved.setOnly } : {}),
   };
 }
 
-const withoutSetCopies = (list: SavedLoadout[]) => list.filter((l) => !l.setOnly);
-
 /** The signed-in player's saved loadouts, newest-edited first. */
 export function useLoadouts() {
-  return useLoadoutRows(withoutSetCopies);
+  return useLoadoutRows(LOADOUTS_QUERY_KEY, "/api/loadouts", true);
 }
 
 /**
  * Every stored row, including the private copies activity sets keep (`setOnly`). Only
  * for what has to see those; anything showing the player's loadouts wants useLoadouts.
  */
-export function useLoadoutsWithSetCopies() {
-  return useLoadoutRows();
+export function useLoadoutsWithSetCopies(enabled = true) {
+  return useLoadoutRows(WITH_SET_COPIES_KEY, "/api/loadouts?copies=1", enabled);
 }
 
-function useLoadoutRows(select?: (list: SavedLoadout[]) => SavedLoadout[]) {
+function useLoadoutRows(queryKey: readonly string[], path: string, enabled: boolean) {
   const session = useSession();
   return useQuery<SavedLoadout[], LoadoutsApiError>({
-    queryKey: LOADOUTS_QUERY_KEY,
-    select,
-    enabled: session.data?.authenticated === true,
+    queryKey,
+    enabled: enabled && session.data?.authenticated === true,
     staleTime: 60_000,
     // A 503 (not configured) or 401 can't be fixed by retrying.
     retry: (count, err) => err.status >= 500 && err.status !== 503 && count < 2,
     queryFn: async () => {
-      const { loadouts } = await api<{ loadouts: unknown[] }>("/api/loadouts");
+      const { loadouts } = await api<{ loadouts: unknown[] }>(path);
       return loadouts
         .map(parseSavedLoadout)
         .filter((l): l is SavedLoadout => l !== null);
@@ -113,10 +113,15 @@ export const reportLoadoutError = (pending: Notifier) => (err: { notConfigured: 
  */
 export function useLoadoutMutations() {
   const queryClient = useQueryClient();
-  const patchList = (fn: (list: SavedLoadout[]) => SavedLoadout[]) =>
+  /** Write a change into both cached lists; the player's own never holds a set's copies. */
+  const patchList = (fn: (list: SavedLoadout[]) => SavedLoadout[]) => {
     queryClient.setQueryData<SavedLoadout[]>(LOADOUTS_QUERY_KEY, (list) =>
+      list ? fn(list).filter((l) => !l.setOnly) : list,
+    );
+    queryClient.setQueryData<SavedLoadout[]>(WITH_SET_COPIES_KEY, (list) =>
       list ? fn(list) : list,
     );
+  };
 
   const create = useMutation<SavedLoadout, LoadoutsApiError, SavedLoadoutData>({
     mutationFn: async (data) => {

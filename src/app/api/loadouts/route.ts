@@ -11,13 +11,19 @@ import { LoadoutLimitError, MAX_LOADOUTS_PER_ACCOUNT } from "@/lib/loadouts/stor
  * membership id. No Bungie call is involved, so the cookie's signature is the only
  * thing standing between accounts — see session.ts.
  */
-export async function GET() {
+/**
+ * The player's loadouts. Activity sets' private copies are left out unless `?copies=1`
+ * asks for them: they aren't the player's to see as loadouts.
+ */
+export async function GET(request: Request) {
   const user = await readUser();
   if (!user) return NextResponse.json({ error: "Not signed in" }, { status: 401 });
   const store = getServerLoadoutStore();
   if (!store) return notConfigured();
+  const withCopies = new URL(request.url).searchParams.get("copies") === "1";
   try {
-    return NextResponse.json({ loadouts: await store.list(user.membershipId) });
+    const loadouts = await store.list(user.membershipId);
+    return NextResponse.json({ loadouts: withCopies ? loadouts : loadouts.filter((l) => !l.setOnly) });
   } catch (err) {
     return storageError(err);
   }
@@ -77,13 +83,22 @@ export async function DELETE(request: Request) {
   const store = getServerLoadoutStore();
   if (!store) return notConfigured();
 
-  const body = (await request.json().catch(() => null)) as { ids?: unknown } | null;
-  if (!Array.isArray(body?.ids) || body.ids.length > MAX_BULK_DELETE || !body.ids.every(isLoadoutId)) {
+  const body = (await request.json().catch(() => null)) as { ids?: unknown; all?: unknown } | null;
+  // `{ all: true }` comes from tabs still running the release before activity sets' copies;
+  // it means every loadout they could see. Drop it once those tabs are gone.
+  const legacyAll = body?.all === true;
+  if (
+    !legacyAll &&
+    (!Array.isArray(body?.ids) || body.ids.length > MAX_BULK_DELETE || !body.ids.every(isLoadoutId))
+  ) {
     return NextResponse.json({ error: "Invalid delete request" }, { status: 400 });
   }
 
   try {
-    const deleted = await store.deleteMany(user.membershipId, [...new Set(body.ids)]);
+    const ids = legacyAll
+      ? (await store.list(user.membershipId)).filter((l) => !l.setOnly).map((l) => l.id)
+      : [...new Set(body!.ids as string[])];
+    const deleted = await store.deleteMany(user.membershipId, ids);
     return NextResponse.json({ deleted });
   } catch (err) {
     return storageError(err);
