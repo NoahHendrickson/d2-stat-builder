@@ -1,13 +1,13 @@
 "use client";
 
-import { useSyncExternalStore } from "react";
 import type { QueryClient } from "@tanstack/react-query";
 import { toast } from "@/lib/toast";
 import { handleSessionExpired } from "@/lib/auth/sign-out";
+import { createStore, useStore } from "@/lib/create-store";
 import type { Armory } from "@/lib/armory/fetch";
 import type { RefreshResult } from "@/lib/armory/use-armory";
 import type { Manifest } from "@/lib/manifest/load";
-import { defaultIdentifiers, type InGameLoadoutsResponse } from "@/lib/bungie/ingame-loadouts";
+import { slotLabelsInSet, type InGameLoadoutsResponse } from "@/lib/bungie/ingame-loadouts";
 import type { ActivitySet } from "./activity-sets";
 import { applySavedLoadout } from "./apply-client";
 import {
@@ -17,6 +17,7 @@ import {
   snapshotInGame,
   waitBetweenLoadoutActions,
 } from "./ingame-save";
+import { spotsAfterApply, withKnownSpots, type KnownSpots } from "./known-moves";
 import { resolveLoadout } from "./resolve";
 import type { SavedLoadout } from "./types";
 
@@ -33,30 +34,18 @@ export interface ActivitySetRunState {
   stopping: boolean;
 }
 
-let state: ActivitySetRunState | null = null;
-const listeners = new Set<() => void>();
-
-function setState(next: ActivitySetRunState | null) {
-  state = next;
-  for (const l of listeners) l();
-}
-
-const readState = () => state;
-
-function subscribe(listener: () => void) {
-  listeners.add(listener);
-  return () => {
-    listeners.delete(listener);
-  };
-}
+const runStore = createStore<ActivitySetRunState | null>(null);
+const setState = runStore.set;
+const readState = runStore.get;
 
 /** The set being run right now, if any. Only one runs at a time. */
 export function useActivitySetRun(): ActivitySetRunState | null {
-  return useSyncExternalStore(subscribe, () => state, () => null);
+  return useStore(runStore, null);
 }
 
 /** Finish the slot in progress, then stop. */
 export function stopActivitySet(): void {
+  const state = readState();
   if (state) setState({ ...state, stopping: true });
 }
 
@@ -100,7 +89,8 @@ interface SlotResult {
 /**
  * Save every loadout in `set` into its in-game slot, in slot order. Reports one summary
  * toast at the end; each loadout's equip shows on the apply progress card as it runs.
- * The slots' names, icons and colours are kept (an empty slot gets the first of each).
+ * A slot gets the name, icon and colour the set chose for it; without a choice it keeps
+ * its own (an empty slot gets the first of each).
  */
 export async function runActivitySet({
   set,
@@ -118,12 +108,13 @@ export async function runActivitySet({
   manifest: Manifest;
   queryClient: QueryClient;
 }): Promise<void> {
-  if (state || set.slots.length === 0) return;
+  if (readState() || set.slots.length === 0) return;
   const total = set.slots.length;
   setState({ setId: set.id, position: 0, total, stopping: false });
 
   const results: SlotResult[] = [];
   let current = armory;
+  let known: KnownSpots = new Map();
   let signedOut = false;
   try {
     let inGame: InGameLoadoutsResponse;
@@ -134,6 +125,8 @@ export async function runActivitySet({
       if (err instanceof InGameLoadoutsError && err.reauth) void handleSessionExpired(queryClient);
       return;
     }
+    // The page's copy can be minutes old; the first loadout shouldn't plan from it.
+    current = await freshArmory(refreshArmory, 0, armory);
 
     for (const [i, assignment] of set.slots.entries()) {
       // Read through a call: TypeScript would otherwise keep the null it narrowed to above.
@@ -148,7 +141,7 @@ export async function runActivitySet({
         continue;
       }
       const slot = inGame.slots.find((s) => s.index === assignment.index);
-      const identifiers = slot && defaultIdentifiers(slot, inGame.identifiers);
+      const identifiers = slot && slotLabelsInSet(slot, assignment.labels, inGame.identifiers);
       if (!slot || !identifiers) {
         skip("the slot isn't unlocked on this character");
         continue;
@@ -176,6 +169,7 @@ export async function runActivitySet({
         queryClient,
         batch: `${set.name}: slot ${assignment.index + 1} (${i + 1} of ${total})`,
       });
+      if (outcome) known = spotsAfterApply(known, current, outcome.equip, set.characterId);
       // Cancel on the progress card stops the whole run; this slot counts as not run.
       if (outcome?.cancelled) break;
       if (!outcome) {
@@ -202,7 +196,9 @@ export async function runActivitySet({
 
       // Gear moved: the next loadout plans its equips from where things are now.
       const last = i === total - 1;
-      if (outcome && !last) current = await freshArmory(refreshArmory, Date.now(), current);
+      if (outcome && !last) {
+        current = withKnownSpots(await freshArmory(refreshArmory, Date.now(), current), known);
+      }
     }
   } finally {
     setState(null);

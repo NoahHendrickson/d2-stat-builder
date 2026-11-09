@@ -4,6 +4,7 @@ import {
   getDestinyManifest,
   getProfile,
   snapshotLoadout,
+  updateLoadoutIdentifiers,
   type DestinyComponentType,
   type DestinyLoadoutColorDefinition,
   type DestinyLoadoutIconDefinition,
@@ -129,9 +130,11 @@ export async function GET(request: Request) {
         if (item.itemInstanceId) hashes.set(item.itemInstanceId, item.itemHash);
       }
     }
+    const mintedAt = Date.parse(profile.Response.responseMintedTimestamp);
     return NextResponse.json({
       slots: toSlots(loadouts, (id) => hashes.get(id)),
       identifiers,
+      ...(Number.isFinite(mintedAt) ? { mintedAt } : {}),
     } satisfies InGameLoadoutsResponse);
   } catch (err) {
     return bungieErrorResponse(err, REAUTH_MESSAGE);
@@ -181,6 +184,11 @@ async function slotAction<T extends SlotRequest>(
  */
 export function POST(request: Request) {
   return slotAction(request, parseSnapshotRequest, snapshotLoadout);
+}
+
+/** Change a slot's name, icon and colour. Its gear stays as it is. */
+export function PATCH(request: Request) {
+  return slotAction(request, parseSnapshotRequest, updateLoadoutIdentifiers);
 }
 
 /**

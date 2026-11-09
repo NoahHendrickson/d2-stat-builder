@@ -147,7 +147,16 @@ function WeaponSlot({ item }: { item: ResolvedWeaponItem }) {
  * The saved artifact at the foot of the subclass box: its name on top, then the art with
  * its perks in grid order beside it, two rows of four.
  */
-function ArtifactBlock({ artifact, manifest }: { artifact: ResolvedArtifact; manifest: Manifest }) {
+function ArtifactBlock({
+  artifact,
+  manifest,
+  footer = true,
+}: {
+  artifact: ResolvedArtifact;
+  manifest: Manifest;
+  /** At the foot of the subclass box, ruled off from it; false when it stands alone. */
+  footer?: boolean;
+}) {
   const picked = new Set(artifact.perks);
   const ordered = artifactPerkColumns(artifactPerkSockets(manifest, artifact.itemHash))
     .flat()
@@ -158,15 +167,16 @@ function ArtifactBlock({ artifact, manifest }: { artifact: ResolvedArtifact; man
     <div
       role="group"
       aria-label={`Artifact: ${artifact.name}`}
-      className="mt-auto flex flex-col gap-2 border-t border-foreground/15 pt-3"
+      className={cn("flex flex-col gap-2", footer && "mt-auto border-t border-foreground/15 pt-3")}
     >
       <span className="truncate text-sm font-medium" title={artifact.name}>
         {artifact.name}
       </span>
-      <div className="flex min-w-0 items-center gap-2.5">
+      {/* Perks sit beside the art when there's room for four across, else under it. */}
+      <div className="flex min-w-0 flex-wrap items-center gap-2.5">
         <ArmorThumb icon={artifact.icon} size={64} className={TILE_FRAME} />
         {perks.length > 0 ? (
-          <div role="group" aria-label="Artifact perks" className="grid grid-cols-4 gap-1">
+          <div role="group" aria-label="Artifact perks" className="flex max-w-[8.75rem] flex-wrap gap-1">
             {perks.map((hash) => (
               <PlugIcon
                 key={hash}
@@ -332,10 +342,13 @@ function PieceColumn({
   item,
   placement,
   manifest,
+  largeMods = false,
 }: {
   item: ResolvedArmorItem;
   placement: Record<number, number> | undefined;
   manifest: Manifest;
+  /** The box has the card's full width to share, so mods can run larger. */
+  largeMods?: boolean;
 }) {
   const { piece } = item;
   const top: SocketTile[] = [];
@@ -377,14 +390,16 @@ function PieceColumn({
         >
           {item.name}
         </span>
-        {/* Power is on the tile. */}
-        {item.missing ? (
-          <span className="text-warning text-xs">Missing</span>
-        ) : (
-          <span className="text-muted-foreground text-xs">{slotLabel}</span>
-        )}
+        {item.missing && <span className="text-warning text-xs">Missing</span>}
       </div>
-      <div className="flex flex-col gap-2 @6xl:grid @6xl:grid-cols-[auto_repeat(3,minmax(0,2.75rem))] @6xl:gap-1">
+      <div
+        className={cn(
+          "flex flex-col gap-2 @6xl:grid @6xl:gap-1",
+          largeMods
+            ? "@6xl:grid-cols-[auto_repeat(3,minmax(0,3.25rem))]"
+            : "@6xl:grid-cols-[auto_repeat(3,minmax(0,2.75rem))]",
+        )}
+      >
         {item.icon ? (
           <PieceTile item={item} manifest={manifest} />
         ) : (
@@ -401,6 +416,49 @@ function PieceColumn({
   );
 }
 
+interface CardBodyProps {
+  saved: SavedLoadout;
+  resolved: ResolvedLoadout;
+  manifest: Manifest;
+}
+
+function armorColumns({ saved, resolved, manifest }: CardBodyProps, largeMods = false) {
+  return resolved.armor.map((item, i) => (
+    <PieceColumn
+      key={`${item.ref.id ?? item.ref.hash}-${i}`}
+      item={item}
+      placement={item.ref.id ? saved.modPlacement?.[item.ref.id] : undefined}
+      manifest={manifest}
+      largeMods={largeMods}
+    />
+  ));
+}
+
+function weaponSlots(resolved: ResolvedLoadout) {
+  return resolved.weapons.map((item) => <WeaponSlot key={item.ref.id ?? item.ref.hash} item={item} />);
+}
+
+/** Loadouts from elsewhere (imports, DIM) carry a mod list but no per-piece placement. */
+function UnplacedMods({ saved, manifest }: Pick<CardBodyProps, "saved" | "manifest">) {
+  if (saved.modPlacement || saved.loadout.parameters.mods.length === 0) return null;
+  return (
+    <div className="flex items-center gap-2 text-xs">
+      <span className="d2-label text-[10px]">Mods</span>
+      <div className="flex flex-wrap gap-1">
+        {saved.loadout.parameters.mods.map((hash, i) => (
+          <PlugIcon
+            key={`${hash}-${i}`}
+            hash={hash}
+            manifest={manifest}
+            size={40}
+            sizeClassName={MOD_SIZE_CLASS}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
 /**
  * The card's body, laid out like the editor drawer: the subclass box (artifact at its
  * foot) on the far left, then one box per armor piece with its mods, and the weapons as a
@@ -408,69 +466,82 @@ function PieceColumn({
  * the subclass sits on top and the weapons span the card; below `@6xl` the pieces shrink
  * to icon columns.
  */
-export function LoadoutCardBody({
-  saved,
-  resolved,
-  manifest,
-}: {
-  saved: SavedLoadout;
-  resolved: ResolvedLoadout;
-  manifest: Manifest;
-}) {
-  const { loadout, modPlacement } = saved;
-  const pieceCols = Math.max(resolved.armor.length, 1);
+export function LoadoutCardBody(props: CardBodyProps) {
+  const { saved, resolved, manifest } = props;
   const hasWeapons = resolved.weapons.length > 0;
   return (
     <div className="flex flex-col gap-3">
       <div
         className="grid gap-2 max-md:gap-1.5 [grid-template-columns:repeat(var(--pieces),minmax(0,1fr))] @3xl:[grid-template-columns:minmax(18.5rem,1.25fr)_repeat(var(--pieces),minmax(0,1fr))]"
-        style={{ "--pieces": pieceCols } as CSSProperties}
+        style={{ "--pieces": Math.max(resolved.armor.length, 1) } as CSSProperties}
       >
         <div className={cn("col-span-full @3xl:col-span-1", hasWeapons && "@3xl:row-span-2")}>
           <SubclassColumn
             subclass={resolved.subclass}
             artifact={resolved.artifact}
             manifest={manifest}
-            classType={loadout.classType}
+            classType={saved.loadout.classType}
           />
         </div>
-        {resolved.armor.map((item, i) => (
-          <PieceColumn
-            key={`${item.ref.id ?? item.ref.hash}-${i}`}
-            item={item}
-            placement={item.ref.id ? modPlacement?.[item.ref.id] : undefined}
-            manifest={manifest}
-          />
-        ))}
+        {armorColumns(props)}
         {hasWeapons && (
           <div
             role="group"
             aria-label="Weapons"
             className="col-span-full grid grid-cols-1 gap-2 @lg:grid-cols-3 @3xl:col-[2/-1]"
           >
-            {resolved.weapons.map((item) => (
-              <WeaponSlot key={item.ref.id ?? item.ref.hash} item={item} />
-            ))}
+            {weaponSlots(resolved)}
           </div>
         )}
       </div>
-      {/* Loadouts from elsewhere (imports, DIM) carry a mod list but no per-piece placement. */}
-      {!modPlacement && loadout.parameters.mods.length > 0 && (
-        <div className="flex items-center gap-2 text-xs">
-          <span className="d2-label text-[10px]">Mods</span>
-          <div className="flex flex-wrap gap-1">
-            {loadout.parameters.mods.map((hash, i) => (
-              <PlugIcon
-                key={`${hash}-${i}`}
-                hash={hash}
-                manifest={manifest}
-                size={40}
-                sizeClassName={MOD_SIZE_CLASS}
-              />
-            ))}
-          </div>
+      <UnplacedMods saved={saved} manifest={manifest} />
+    </div>
+  );
+}
+
+/**
+ * The same loadout with the armor row across the card's full width, for larger mods, and
+ * the subclass, artifact and weapons on a row under it.
+ */
+export function LoadoutCardBodyArmorFirst(props: CardBodyProps) {
+  const { saved, resolved, manifest } = props;
+  return (
+    <div className="flex flex-col gap-3">
+      <div
+        className="grid gap-2 max-md:gap-1.5 [grid-template-columns:repeat(var(--pieces),minmax(0,1fr))]"
+        style={{ "--pieces": Math.max(resolved.armor.length, 1) } as CSSProperties}
+      >
+        {armorColumns(props, true)}
+      </div>
+      {/* Five columns, so the row lines up with the armor above it. */}
+      <div className="grid grid-cols-1 gap-2 @3xl:grid-cols-5">
+        <div className="@3xl:col-span-2">
+          <SubclassColumn
+            subclass={resolved.subclass}
+            artifact={undefined}
+            manifest={manifest}
+            classType={saved.loadout.classType}
+          />
         </div>
-      )}
+        {resolved.artifact && (
+          <section aria-label="Artifact" className={COLUMN_WELL_CLASS}>
+            <ArtifactBlock artifact={resolved.artifact} manifest={manifest} footer={false} />
+          </section>
+        )}
+        {resolved.weapons.length > 0 && (
+          <div
+            role="group"
+            aria-label="Weapons"
+            className={cn(
+              "grid grid-cols-1 content-start gap-2",
+              resolved.artifact ? "@3xl:col-span-2" : "@3xl:col-span-3",
+            )}
+          >
+            {weaponSlots(resolved)}
+          </div>
+        )}
+      </div>
+      <UnplacedMods saved={saved} manifest={manifest} />
     </div>
   );
 }

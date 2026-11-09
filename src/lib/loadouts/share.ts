@@ -7,6 +7,7 @@
 // Runtime imports are relative for vitest.
 import {
   LOADOUT_SCHEMA_VERSION,
+  asPlayerLoadout,
   parseSavedLoadoutData,
   type SavedLoadoutData,
 } from "./types";
@@ -71,7 +72,7 @@ export function shareSourceFrom(
   const json = fragment.get(SHARE_PARAM) ?? search.get(SHARE_PARAM);
   if (!json) return null;
   try {
-    const data = parseSavedLoadoutData(JSON.parse(json));
+    const data = asPlayerLoadout(parseSavedLoadoutData(JSON.parse(json)));
     return data && { kind: "inline", key: `${SHARE_PARAM}=${json}`, data };
   } catch {
     return null;

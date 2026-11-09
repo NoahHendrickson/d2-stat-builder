@@ -72,44 +72,93 @@ export function EmptySlotIcon() {
 /** More than this many matches and the list asks for a narrower search instead. */
 const MAX_OPTIONS = 60;
 
+/** One perk as the game draws it: a circle, filled blue when it's the one equipped. */
+function WeaponPerk({
+  hash,
+  manifest,
+  current,
+  focusable,
+  frameClass,
+  iconClass,
+  iconSize,
+}: {
+  hash: number;
+  manifest: Manifest;
+  current: boolean;
+  /** Off when the perk sits inside a button, which already takes the focus. */
+  focusable: boolean;
+  frameClass: string;
+  iconClass: string;
+  iconSize: number;
+}) {
+  const def = manifest.def("DestinyInventoryItemDefinition", hash)?.displayProperties;
+  const name = def?.name ?? "Unknown perk";
+  return (
+    <TooltipLabel label={current ? `${name} (equipped)` : name}>
+      <span
+        tabIndex={focusable ? 0 : undefined}
+        className={cn(
+          "border-foreground/12 flex items-center justify-center rounded-full border outline-none focus-visible:ring-1 focus-visible:ring-outline-strong",
+          frameClass,
+          current ? "bg-[#305f8e]" : "bg-foreground/4",
+        )}
+      >
+        {def?.icon && (
+          <Image
+            src={`${BUNGIE_IMAGE_BASE}${def.icon}`}
+            alt={name}
+            width={iconSize}
+            height={iconSize}
+            className={iconClass}
+            unoptimized
+          />
+        )}
+      </span>
+    </TooltipLabel>
+  );
+}
+
+/** The perks a weapon has in each socket, in one line under its name. */
+function EquippedPerks({ perks, manifest }: { perks: WeaponPerks; manifest: Manifest }) {
+  return (
+    <span className="flex items-center gap-1" aria-label="Equipped perks">
+      {perks.columns.map((column, i) => (
+        <WeaponPerk
+          key={i}
+          hash={column.current}
+          manifest={manifest}
+          current
+          focusable={false}
+          frameClass="size-6"
+          iconClass="size-4"
+          iconSize={16}
+        />
+      ))}
+    </span>
+  );
+}
+
 /**
- * A weapon's roll under its row in the picker, like the Manager's perk grid but smaller:
- * one column per perk socket, with the perk it has filled blue.
+ * A weapon's whole roll under its row in the picker, like the Manager's perk grid but
+ * smaller: one column per perk socket, with the perk it has filled blue.
  */
 function WeaponPerkGrid({ perks, manifest }: { perks: WeaponPerks; manifest: Manifest }) {
-  const plug = (hash: number) =>
-    manifest.def("DestinyInventoryItemDefinition", hash)?.displayProperties;
   return (
-    <div className="d2-reveal flex gap-1 pt-1 pr-1 pb-2 pl-11" aria-label="Perks">
+    <div className="d2-reveal flex gap-1 pt-1 pr-1 pb-2 pl-15" aria-label="Perks">
       {perks.columns.map((column, i) => (
         <div key={i} className="flex flex-col gap-1">
-          {column.options.map((hash) => {
-            const def = plug(hash);
-            const current = hash === column.current;
-            const name = def?.name ?? "Unknown perk";
-            return (
-              <TooltipLabel key={hash} label={current ? `${name} (equipped)` : name}>
-                <span
-                  tabIndex={0}
-                  className={cn(
-                    "border-foreground/12 flex size-7 items-center justify-center rounded-full border outline-none focus-visible:ring-1 focus-visible:ring-outline-strong",
-                    current ? "bg-[#305f8e]" : "bg-foreground/4",
-                  )}
-                >
-                  {def?.icon && (
-                    <Image
-                      src={`${BUNGIE_IMAGE_BASE}${def.icon}`}
-                      alt={name}
-                      width={20}
-                      height={20}
-                      className="size-5"
-                      unoptimized
-                    />
-                  )}
-                </span>
-              </TooltipLabel>
-            );
-          })}
+          {column.options.map((hash) => (
+            <WeaponPerk
+              key={hash}
+              hash={hash}
+              manifest={manifest}
+              current={hash === column.current}
+              focusable
+              frameClass="size-7"
+              iconClass="size-5"
+              iconSize={20}
+            />
+          ))}
         </div>
       ))}
     </div>
@@ -175,6 +224,8 @@ function SlotPicker({
               icon={live?.icon ?? pickDef?.displayProperties.icon}
               watermark={live?.watermark}
               size={48}
+              masterworked={live?.masterworked}
+              gearTier={live?.gearTier}
               className={cn(!live && "opacity-50")}
             />
           ) : (
@@ -245,15 +296,29 @@ function SlotPicker({
                         blocked && "cursor-not-allowed opacity-40",
                       )}
                     >
-                      <ArmorThumb icon={weapon.icon} watermark={weapon.watermark} size={32} />
-                      <span
-                        className={cn("min-w-0 flex-1 truncate text-sm leading-5", weapon.isExotic && "text-exotic")}
-                      >
-                        {weapon.name}
+                      <ArmorThumb
+                        icon={weapon.icon}
+                        watermark={weapon.watermark}
+                        size={48}
+                        masterworked={weapon.masterworked}
+                        gearTier={weapon.gearTier}
+                      />
+                      <span className="flex min-w-0 flex-1 flex-col gap-1">
+                        <span className="flex min-w-0 items-center gap-2">
+                          <span
+                            className={cn("min-w-0 flex-1 truncate text-sm leading-5", weapon.isExotic && "text-exotic")}
+                          >
+                            {weapon.name}
+                            {weapon.masterworked && <span className="sr-only"> (masterworked)</span>}
+                          </span>
+                          {weapon.power !== undefined && (
+                            <PowerValue value={weapon.power} size="xs" tone="gold" className="shrink-0" />
+                          )}
+                        </span>
+                        {weapon.perks && (
+                          <EquippedPerks perks={weapon.perks} manifest={section.manifest} />
+                        )}
                       </span>
-                      {weapon.power !== undefined && (
-                        <PowerValue value={weapon.power} size="xs" tone="gold" className="shrink-0" />
-                      )}
                     </button>
                     {weapon.perks && (
                       <button

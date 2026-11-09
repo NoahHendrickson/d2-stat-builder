@@ -241,6 +241,38 @@ describe("stageAndEquip make-room from the live inventory", () => {
     expect(results.every((r) => r.ok)).toBe(true);
   });
 
+  test("spares that can't be moved don't use up the live inventory", async () => {
+    const stale = [1, 2, 3].map((n) => ({
+      itemInstanceId: `stale-${n}`,
+      itemHash: 1,
+      location: "inventory" as const,
+      characterId: TARGET,
+    }));
+    getCharacter.mockResolvedValue({
+      Response: {
+        inventory: {
+          data: { items: [{ itemHash: 2, itemInstanceId: "live", bucketHash: 3448274439, state: 0, transferStatus: 0 }] },
+        },
+      },
+    });
+    let room = false;
+    transferItem.mockImplementation((_http: unknown, body: { itemId: string; transferToVault: boolean }) => {
+      if (body.itemId.startsWith("stale")) throw new BungieHttpError(200, "Bungie POST …: not found", 1623);
+      if (body.itemId === "live") room = true;
+      else if (!room) throw noRoom();
+      return Promise.resolve({});
+    });
+    const results = await run({
+      http,
+      membershipType: 3,
+      membershipId: "m",
+      characterId: TARGET,
+      items: [{ ...helm, slot: "helmet" }],
+      spares: { helm: stale },
+    });
+    expect(results[0]).toMatchObject({ ok: true, vaulted: ["live"] });
+  });
+
   test("the per-item cap spans the client's spares and the live ones", async () => {
     liveInventory(live("live-1"), live("live-2"));
     const cantMove = () => new BungieHttpError(200, "raw", 1660);
@@ -440,8 +472,16 @@ describe("stageAndEquip equip errors", () => {
         ok: false,
         message: "Moved, but Bungie is limiting equips — apply again in a moment",
         vaulted: ["spare-1"],
+        staged: true,
       },
     ]);
+  });
+
+  test("a piece that reached the character but failed to equip says so", async () => {
+    transferItem.mockResolvedValue({});
+    equipItems.mockResolvedValue({ Response: { equipResults: [{ itemInstanceId: "helm", equipStatus: 1671 }] } });
+    const results = await run({ http, membershipType: 3, membershipId: "m", characterId: TARGET, items: [helm] });
+    expect(results[0]).toMatchObject({ ok: false, staged: true });
   });
 
   test("a 401 on the equip is still thrown", async () => {

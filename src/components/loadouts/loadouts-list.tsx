@@ -11,7 +11,6 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import { useRouter } from "next/navigation";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
-  Add01Icon,
   ArrowUpDownIcon,
   CheckListIcon,
   Delete02Icon,
@@ -19,9 +18,8 @@ import {
   MoreVerticalIcon,
   Search01Icon,
 } from "@hugeicons/core-free-icons";
-import { toast, type Notifier } from "@/lib/toast";
+import { toast } from "@/lib/toast";
 import type { Armory } from "@/lib/armory/fetch";
-import type { RefreshResult } from "@/lib/armory/use-armory";
 import type { Manifest } from "@/lib/manifest/load";
 import { SUBCLASSES, type Subclass } from "@/lib/armory/fragments";
 import { CLASS_NAMES, STAT_HASH_TO_INDEX } from "@/lib/armory/stats";
@@ -36,6 +34,7 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import {
   LOADOUTS_QUERY_KEY,
+  reportLoadoutError,
   useLoadoutMutations,
   useLoadouts,
 } from "@/lib/loadouts/use-loadouts";
@@ -54,8 +53,6 @@ import { countMajorStatMods, isMajorStatMod } from "@/lib/dim/mod-hashes";
 import { selectionsForLoadout } from "@/lib/loadouts/load-in-builder";
 import { setOptimizingLoadout } from "@/lib/loadouts/optimizing-loadout";
 import { loadoutSubclass, withLoadoutSubclass } from "@/lib/loadouts/subclass";
-import { loadoutArtifactRef, loadoutWeaponRefs } from "@/lib/loadouts/weapons";
-import { lastPlayedCharacter } from "@/lib/bungie/equip-client";
 import {
   LOADOUT_SCHEMA_VERSION,
   MAX_TAGS,
@@ -77,23 +74,18 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import type { ActivitySet } from "@/lib/loadouts/activity-sets";
-import { useActivitySets } from "@/lib/loadouts/use-activity-sets";
-import {
-  runActivitySet,
-  stopActivitySet,
-  useActivitySetRun,
-} from "@/lib/loadouts/activity-set-run";
-import {
-  ActivitySetStrip,
-  useActivitySetDialogs,
-} from "@/components/loadouts/activity-set-strip";
+import { useActivitySetRun } from "@/lib/loadouts/activity-set-run";
 import { ConfirmDialog } from "@/components/loadouts/confirm-dialog";
 import { InGameDeleteDialog } from "@/components/loadouts/ingame-delete-dialog";
 import { InGameImportDialog } from "@/components/loadouts/ingame-import-dialog";
+import { DimImportDialog } from "@/components/loadouts/dim-import-dialog";
 import { type ModsSection } from "@/lib/loadouts/mod-placement";
-import { commitLoadout, modsSectionForPieces } from "@/lib/loadouts/commit";
+import { commitEditedLoadout } from "@/lib/loadouts/commit";
 import { resolveLoadout } from "@/lib/loadouts/resolve";
+import {
+  editorModsFor,
+  useLoadoutEditorSections,
+} from "@/components/loadouts/use-loadout-editor-sections";
 import { LoadoutRow } from "@/components/loadouts/loadout-row";
 import { LoadoutIndex } from "@/components/loadouts/loadout-index";
 import { useCurrentRow } from "@/components/loadouts/use-current-row";
@@ -110,6 +102,7 @@ type DialogState =
   | { kind: "delete-many"; ids: string[] }
   | { kind: "delete-all" }
   | { kind: "import-ingame" }
+  | { kind: "import-dim" }
   | { kind: "delete-ingame" };
 
 const SUBCLASS_OPTIONS = SUBCLASSES.map((sc) => ({ value: sc, label: sc }));
@@ -129,21 +122,17 @@ export function LoadoutsList({
   provisional = false,
   manifest,
   onArmoryChanged,
-  refreshArmory,
 }: {
   armory: Armory;
   /** `armory` is last visit's copy; applying a loadout waits for the live profile. */
   provisional?: boolean;
   manifest: Manifest;
   onArmoryChanged: () => void;
-  /** Re-reads the profile and resolves with the new armory (an activity set runs on it). */
-  refreshArmory: () => Promise<RefreshResult>;
 }) {
   const router = useRouter();
   const queryClient = useQueryClient();
   const loadouts = useLoadouts();
   const { create, update, remove, removeMany, setTag } = useLoadoutMutations();
-  const activitySets = useActivitySets();
   const setRun = useActivitySetRun();
 
   const [query, setQuery] = useState("");
@@ -155,7 +144,6 @@ export function LoadoutsList({
   const [tagFilter, setTagFilter] = useState<string[]>([]);
   const [sortKey, setSortKey] = useState<LoadoutListSortKey>("created");
   const [dialog, setDialog] = useState<DialogState>({ kind: "none" });
-  const setDialogs = useActivitySetDialogs();
   // Expanded rows, by id — kept here (not in the row) so it survives virtualization.
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(
     () => new Set(),
@@ -187,8 +175,23 @@ export function LoadoutsList({
   // A share link lands here (#s=<code>, or an older #import=<json> / ?import=<json>);
   // offer to save a copy.
   const sharedImport = useSharedImport();
-  const importData = sharedImport.data;
-  const importOpen = importData !== null && dialog.kind === "none" && !setDialogs.open;
+  // A loadout found through Import DIM loadout goes through the same review drawer.
+  const [dimImport, setDimImport] = useState<SavedLoadoutData | null>(null);
+  const pendingImport = dimImport
+    ? {
+        data: dimImport,
+        key: dimImport.loadout.id,
+        title: "Review DIM loadout",
+        dismiss: () => setDimImport(null),
+      }
+    : sharedImport.data && {
+        data: sharedImport.data,
+        key: sharedImport.key ?? undefined,
+        title: "Import shared loadout",
+        dismiss: sharedImport.dismiss,
+      };
+  const importData = pendingImport?.data ?? null;
+  const importOpen = importData !== null && dialog.kind === "none";
 
   const pieceMap = useMemo(
     () => new Map(armory.pieces.map((p) => [p.instanceId, p])),
@@ -271,34 +274,17 @@ export function LoadoutsList({
   const showIndex = useMinWidth(1024);
   const { currentId, jumpTo } = useCurrentRow(virtualizer, shown, showIndex);
 
-  /** Reports a failed save on the action's spinner toast. */
-  const mutationError = (pending: Notifier) => (err: { notConfigured: boolean; message: string }) =>
-    pending.error(
-      err.notConfigured
-        ? "Loadout storage isn't configured — set DATABASE_URL"
-        : err.message,
-    );
-
   // Row callbacks take the loadout as an argument and are memoized so the rows
   // (React.memo) only re-render when their own data changes.
 
   /** Open Edit; the mod picker is available when every piece is still in the armory. */
   const openEdit = useCallback(
-    (saved: SavedLoadout) => {
-      const resolved = resolveLoadout(saved.loadout, pieceMap, manifest, weaponMap);
-      let mods: ModsSection | undefined;
-      if (resolved.armor.length > 0 && !resolved.missing) {
-        const pieces = resolved.armor.map((a) => a.piece!);
-        mods = modsSectionForPieces(
-          pieces,
-          saved.loadout.parameters.mods,
-          manifest,
-          armory.insertablePlugs,
-          saved.modPlacement,
-        );
-      }
-      setDialog({ kind: "edit", loadout: saved, mods });
-    },
+    (saved: SavedLoadout) =>
+      setDialog({
+        kind: "edit",
+        loadout: saved,
+        mods: editorModsFor(saved, pieceMap, weaponMap, manifest, armory.insertablePlugs),
+      }),
     [pieceMap, weaponMap, manifest, armory.insertablePlugs],
   );
   const openDelete = useCallback(
@@ -306,48 +292,20 @@ export function LoadoutsList({
     [],
   );
 
-  const editLoadout = ({
-    name,
-    notes,
-    placement,
-    desiredStatMods,
-    subclass,
-    weapons,
-    artifact,
-    stats,
-  }: LoadoutDetailsValues) => {
+  const editLoadout = (values: LoadoutDetailsValues) => {
     if (dialog.kind !== "edit") return;
-    const { id, loadout, optimizer, builder, modPlacement } = dialog.loadout;
-    const next: SavedLoadoutData = {
-      version: LOADOUT_SCHEMA_VERSION,
-      loadout: {
-        ...loadout,
-        name,
-        ...(notes ? { notes } : { notes: undefined }),
-      },
-      ...(optimizer ? { optimizer } : {}),
-      ...(builder ? { builder } : {}),
-      ...(modPlacement && Object.keys(modPlacement).length > 0
-        ? { modPlacement }
-        : {}),
-    };
     const pending = toast.loading("Saving loadout");
     update.mutate(
       {
-        id,
-        data: commitLoadout(
-          next,
-          manifest,
-          { placement, desiredStatMods, subclass, weapons, artifact, stats },
-          dialog.mods,
-        ),
+        id: dialog.loadout.id,
+        data: commitEditedLoadout(dialog.loadout, values, manifest, dialog.mods),
       },
       {
         onSuccess: () => {
           setDialog({ kind: "none" });
           pending.success("Loadout updated");
         },
-        onError: mutationError(pending),
+        onError: reportLoadoutError(pending),
       },
     );
   };
@@ -360,7 +318,7 @@ export function LoadoutsList({
         setDialog({ kind: "none" });
         pending.success("Loadout deleted");
       },
-      onError: mutationError(pending),
+      onError: reportLoadoutError(pending),
     });
   };
 
@@ -368,7 +326,7 @@ export function LoadoutsList({
     if (dialog.kind !== "delete-many" && dialog.kind !== "delete-all") return;
     const everything = dialog.kind === "delete-all";
     const pending = toast.loading(everything ? "Deleting all loadouts" : "Deleting loadouts");
-    removeMany.mutate(everything ? "all" : dialog.ids, {
+    removeMany.mutate(everything ? all.map((l) => l.id) : dialog.ids, {
       onSuccess: (deleted) => {
         setDialog({ kind: "none" });
         stopSelecting();
@@ -376,7 +334,7 @@ export function LoadoutsList({
           `${deleted.length} ${deleted.length === 1 ? "loadout" : "loadouts"} deleted`,
         );
       },
-      onError: mutationError(pending),
+      onError: reportLoadoutError(pending),
     });
   };
 
@@ -401,7 +359,7 @@ export function LoadoutsList({
       const pending = toast.loading("Duplicating loadout");
       createMutate(data, {
         onSuccess: () => pending.success("Loadout duplicated"),
-        onError: mutationError(pending),
+        onError: reportLoadoutError(pending),
       });
     },
     [createMutate, queryClient],
@@ -423,7 +381,7 @@ export function LoadoutsList({
       pending.success(saved === 1 ? "Loadout imported" : `${saved} loadouts imported`);
     } catch (err) {
       const e = err as { notConfigured: boolean; message: string };
-      if (saved === 0) mutationError(pending)(e);
+      if (saved === 0) reportLoadoutError(pending)(e);
       else pending.error(`Imported ${saved} of ${datas.length}`, e.message);
     }
   };
@@ -441,10 +399,10 @@ export function LoadoutsList({
     const pending = toast.loading("Importing loadout");
     create.mutate(withLoadoutSubclass(data, subclass, manifest), {
       onSuccess: () => {
-        sharedImport.dismiss();
+        pendingImport?.dismiss();
         pending.success("Loadout imported");
       },
-      onError: mutationError(pending),
+      onError: reportLoadoutError(pending),
     });
   };
 
@@ -505,41 +463,11 @@ export function LoadoutsList({
 
   const editorLoadout = dialog.kind === "edit" ? dialog.loadout : undefined;
   const editorMods = dialog.kind === "edit" ? dialog.mods : undefined;
-  const editorWeapons = useMemo(() => {
-    // Without the weapon list (an armory cached before weapons were tracked) the pickers
-    // would be empty and a save would look like "remove every weapon" — so no section.
-    if (dialog.kind !== "edit" || !armory.weapons) return undefined;
-    return {
-      manifest,
-      owned: armory.weapons,
-      initial: loadoutWeaponRefs(manifest, dialog.loadout.loadout),
-    };
-  }, [dialog, armory.weapons, manifest]);
-  const editorArtifact = useMemo(() => {
-    if (dialog.kind !== "edit") return undefined;
-    const { loadout } = dialog.loadout;
-    const classType =
-      loadout.classType < 3
-        ? loadout.classType
-        : loadout.equipped.map((ref) => pieceMap.get(ref.id ?? "")).find(Boolean)?.classType;
-    const owned = lastPlayedCharacter(armory.characters, classType)?.artifacts;
-    // No artifacts read (stale cache, no profile data): no section, so a save can't
-    // read as "remove the artifact".
-    if (!owned?.length) return undefined;
-    return {
-      manifest,
-      owned,
-      initial: loadoutArtifactRef(manifest, loadout),
-    };
-  }, [dialog, armory.characters, pieceMap, manifest]);
-  const editorSubclass = useMemo(() => {
-    if (!editorLoadout || editorLoadout.loadout.classType >= 3) return undefined;
-    return {
-      manifest,
-      classType: editorLoadout.loadout.classType,
-      initial: loadoutSubclass(editorLoadout.loadout),
-    };
-  }, [editorLoadout, manifest]);
+  const {
+    weapons: editorWeapons,
+    artifact: editorArtifact,
+    subclass: editorSubclass,
+  } = useLoadoutEditorSections(editorLoadout, armory, pieceMap, manifest);
   const importSubclass = useMemo(() => {
     if (!importData || importData.loadout.classType >= 3) return undefined;
     return {
@@ -548,16 +476,6 @@ export function LoadoutsList({
       initial: loadoutSubclass(importData.loadout),
     };
   }, [importData, manifest]);
-
-  const runSet = (set: ActivitySet) =>
-    void runActivitySet({
-      set,
-      loadouts: all,
-      armory,
-      refreshArmory,
-      manifest,
-      queryClient,
-    });
 
   const sortLabel =
     LOADOUT_LIST_SORT_OPTIONS.find((o) => o.key === sortKey)?.label ?? "Sort";
@@ -668,16 +586,16 @@ export function LoadoutsList({
               </DropdownMenuTrigger>
             </TooltipLabel>
             <DropdownMenuContent align="end" className="w-max min-w-52">
-              <DropdownMenuItem onClick={setDialogs.openNew}>
-                <HugeiconsIcon icon={Add01Icon} aria-hidden />
-                New activity set
-              </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={() => setDialog({ kind: "import-ingame" })}
                 disabled={provisional}
               >
                 <HugeiconsIcon icon={FileImportIcon} aria-hidden />
                 Import in-game loadout
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setDialog({ kind: "import-dim" })}>
+                <HugeiconsIcon icon={FileImportIcon} aria-hidden />
+                Import DIM loadout
               </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={() => setSelecting(true)}
@@ -708,19 +626,6 @@ export function LoadoutsList({
           </DropdownMenu>
         </div>
       </div>
-
-      <ActivitySetStrip
-        sets={activitySets}
-        characters={armory.characters}
-        loadouts={all}
-        pieceMap={pieceMap}
-        manifest={manifest}
-        run={setRun}
-        canRun={!provisional && !loadouts.isPending}
-        dialogs={setDialogs}
-        onRun={runSet}
-        onStop={stopActivitySet}
-      />
 
       {selecting && all.length > 0 && (
         <div className="d2-reveal flex flex-wrap items-center gap-3">
@@ -904,6 +809,16 @@ export function LoadoutsList({
           onImport={(datas) => void importInGame(datas)}
         />
       )}
+      {dialog.kind === "import-dim" && (
+        <DimImportDialog
+          manifest={manifest}
+          onOpenChange={(open) => !open && setDialog({ kind: "none" })}
+          onResolved={(data) => {
+            setDimImport(data);
+            setDialog({ kind: "none" });
+          }}
+        />
+      )}
       {dialog.kind === "delete-ingame" && (
         <InGameDeleteDialog
           open
@@ -914,9 +829,9 @@ export function LoadoutsList({
       )}
       <LoadoutEditorDrawer
         open={importOpen}
-        onOpenChange={(open) => !open && sharedImport.dismiss()}
-        formKey={sharedImport.key ?? undefined}
-        title="Import shared loadout"
+        onOpenChange={(open) => !open && pendingImport?.dismiss()}
+        formKey={pendingImport?.key}
+        title={pendingImport?.title ?? "Import shared loadout"}
         description="Save a copy of this loadout to your account. Items you don't own will show as missing."
         submitLabel="Import"
         initialName={importData?.loadout.name ?? ""}

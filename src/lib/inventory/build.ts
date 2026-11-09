@@ -3,6 +3,13 @@ import type {
   DestinyItemComponent,
   DestinyProfileResponse,
 } from "bungie-api-ts/destiny2";
+import {
+  ITEM_STATE_CRAFTED,
+  ITEM_STATE_ENHANCED,
+  ITEM_STATE_HIGHLIGHTED_OBJECTIVE,
+  ITEM_STATE_LOCKED,
+  ITEM_STATE_MASTERWORK,
+} from "@/lib/bungie/item-state";
 import type { Manifest } from "@/lib/manifest/load";
 import { parseArchetypeDescription } from "@/lib/armory/archetypes";
 import {
@@ -156,12 +163,6 @@ export const OTHER_BUCKET = 0;
 const ITEM_TYPE_ARMOR = 2;
 const ITEM_TYPE_WEAPON = 3;
 const TIER_TYPE_EXOTIC = 6;
-/** ItemState flags. */
-const ITEM_STATE_LOCKED = 1;
-const ITEM_STATE_MASTERWORK = 4;
-const ITEM_STATE_CRAFTED = 8;
-const ITEM_STATE_HIGHLIGHTED_OBJECTIVE = 16;
-const ITEM_STATE_ENHANCED = 32;
 
 /**
  * Since Monument of Triumph (2026) every weapon stuns a champion, set by its frame

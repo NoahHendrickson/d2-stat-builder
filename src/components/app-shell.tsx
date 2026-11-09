@@ -16,7 +16,7 @@ import { SignInCard, useAuthResultToast } from "@/components/auth/sign-in-card";
 import { BugReportDialog } from "@/components/bug-report/bug-report-dialog";
 import { ArmoryDiagnosticsGate } from "@/components/armory/armory-diagnostics-gate";
 import { ApplyProgressSection } from "@/components/loadouts/apply-progress-card";
-import { loadLoadoutsList } from "@/components/loadouts/loadouts-list-chunk";
+import { loadLoadoutsPage } from "@/components/loadouts/loadouts-page-chunk";
 import { Button } from "@/components/ui/button";
 import { Drawer, DrawerClose, DrawerContent } from "@/components/ui/drawer";
 import { SettingsSync } from "@/components/settings-sync";
@@ -114,14 +114,14 @@ export function AppShell({ children }: { children: ReactNode }) {
   // list ready; LoadoutsList shares and revalidates this same query.
   useLoadouts();
   // Its code too: the list is a chunk of its own, and a first visit that had to wait
-  // for it sat on the placeholder for ~300ms (see ReadyLoadoutsList).
+  // for it sat on the placeholder for ~300ms (see ReadyLoadoutsPage).
   const session = useSession();
   const authed = session.data?.authenticated === true;
   const checked = session.data !== undefined || session.isError;
   useAuthResultToast();
   useEffect(() => {
     if (!authed) return;
-    return whenIdle(() => void loadLoadoutsList());
+    return whenIdle(() => void loadLoadoutsPage());
   }, [authed]);
   const desktop = useMinWidth(SIDEBAR_BREAKPOINT_PX);
   // The sidebar's links prefetch their views as soon as they're on screen. Below the

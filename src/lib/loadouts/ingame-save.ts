@@ -3,6 +3,7 @@
 import type { QueryClient } from "@tanstack/react-query";
 import { toast } from "@/lib/toast";
 import { handleSessionExpired } from "@/lib/auth/sign-out";
+import { createStore, useStore } from "@/lib/create-store";
 import type {
   InGameLoadoutsResponse,
   SlotIdentifiers,
@@ -14,6 +15,59 @@ import { applySavedLoadout, type ApplyOutcome } from "./apply-client";
 /** Which in-game slot to save into, and what to label it. */
 export interface InGameSlotChoice extends SlotIdentifiers {
   loadoutIndex: number;
+}
+
+/**
+ * Bungie can serve the old slots for a while after one changes, so a read is only taken
+ * once its profile was built after the write. Until then the slots shown are what this
+ * app wrote (or, after an equip, what was there before), so copying from them waits.
+ */
+const SLOT_REREAD_DELAY_MS = 3000;
+const SLOT_REREAD_TRIES = 5;
+/** Bungie's clock and ours needn't agree to the second. */
+const CLOCK_SLACK_MS = 2000;
+
+/** Characters whose slots are waiting on a read newer than a write, and how many writes. */
+const settling = createStore<ReadonlyMap<string, number>>(new Map());
+
+function markSettling(characterId: string, change: 1 | -1) {
+  const next = new Map(settling.get());
+  const count = (next.get(characterId) ?? 0) + change;
+  if (count > 0) next.set(characterId, count);
+  else next.delete(characterId);
+  settling.set(next);
+}
+
+const NONE_SETTLING: ReadonlyMap<string, number> = new Map();
+
+/** Whether this character's slots may still show what was there before a write. */
+export function useSlotsSettling(characterId: string | undefined): boolean {
+  return useStore(settling, NONE_SETTLING).has(characterId ?? "");
+}
+
+/**
+ * Re-read a character's slots once Bungie has caught up with a write made at `since`.
+ * A read from before the write is dropped, so it can't undo what's on screen; if none
+ * catches up, the slots are left as they are.
+ */
+export async function rereadInGameSlots(
+  queryClient: QueryClient,
+  characterId: string,
+  since: number = Date.now(),
+): Promise<void> {
+  markSettling(characterId, 1);
+  try {
+    for (let i = 0; i < SLOT_REREAD_TRIES; i++) {
+      await new Promise((r) => setTimeout(r, SLOT_REREAD_DELAY_MS));
+      const fresh = await fetchInGameLoadouts(characterId).catch(() => null);
+      if (fresh && (fresh.mintedAt ?? -Infinity) >= since - CLOCK_SLACK_MS) {
+        queryClient.setQueryData(inGameLoadoutsKey(characterId), fresh);
+        return;
+      }
+    }
+  } finally {
+    markSettling(characterId, -1);
+  }
 }
 
 /** Bungie asks for at least a second between loadout actions (snapshot, clear). */
@@ -48,7 +102,11 @@ export async function fetchInGameLoadouts(characterId: string): Promise<InGameLo
       data?.reauth === true,
     );
   }
-  return { slots: data.slots, identifiers: data.identifiers };
+  return {
+    slots: data.slots,
+    identifiers: data.identifiers,
+    ...(typeof data.mintedAt === "number" ? { mintedAt: data.mintedAt } : {}),
+  };
 }
 
 /** Every piece equipped and every planned mod socketed — what the slot is about to capture. */
@@ -63,7 +121,7 @@ export function fullyApplied({
 export type SlotActionResult = { ok: true } | { ok: false; error: string; reauth: boolean };
 
 /** One action on the in-game loadouts route. Never throws. */
-async function slotAction(method: "POST" | "DELETE", body: SlotRequest): Promise<SlotActionResult> {
+async function slotAction(method: "POST" | "PATCH" | "DELETE", body: SlotRequest): Promise<SlotActionResult> {
   try {
     const res = await fetch("/api/bungie/ingame-loadouts", {
       method,
@@ -87,6 +145,35 @@ export const snapshotInGame = (characterId: string, choice: InGameSlotChoice) =>
 /** Empty an in-game slot — gear and labels both. Never throws. */
 export const clearInGameSlot = (characterId: string, loadoutIndex: number) =>
   slotAction("DELETE", { characterId, loadoutIndex });
+
+/**
+ * Change a filled slot's name, icon and colour, leaving its gear alone. Every view of the
+ * slot updates as soon as Bungie accepts it. A dead session signs out. Never throws.
+ */
+export async function relabelInGameSlot({
+  characterId,
+  choice,
+  queryClient,
+}: {
+  characterId: string;
+  choice: InGameSlotChoice;
+  queryClient: QueryClient;
+}): Promise<SlotActionResult> {
+  const { loadoutIndex, ...labels } = choice;
+  const result = await slotAction("PATCH", { characterId, ...choice } satisfies SnapshotRequest);
+  if (result.ok) {
+    queryClient.setQueryData<InGameLoadoutsResponse>(inGameLoadoutsKey(characterId), (prev) =>
+      prev && {
+        ...prev,
+        slots: prev.slots.map((s) => (s.index === loadoutIndex ? { ...s, ...labels } : s)),
+      },
+    );
+  } else if (result.reauth) {
+    // The route cleared the dead session; forget the local player data too.
+    void handleSessionExpired(queryClient);
+  }
+  return result;
+}
 
 export interface ClearSlotsResult {
   /** How many slots were emptied, from the front of `indexes`. */
@@ -134,7 +221,7 @@ export async function clearInGameSlots({
   }
   // The route cleared the dead session; forget the local player data too.
   if (failure?.reauth) void handleSessionExpired(queryClient);
-  else void queryClient.invalidateQueries({ queryKey: key });
+  else void rereadInGameSlots(queryClient, characterId);
   return { cleared, failure };
 }
 

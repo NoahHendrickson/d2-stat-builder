@@ -41,6 +41,8 @@ export interface InGameLoadoutsResponse {
   /** Only the slots this character has unlocked. */
   slots: InGameLoadoutSlot[];
   identifiers: InGameLoadoutIdentifiers;
+  /** When Bungie built the profile these came from (epoch ms), to tell a stale read. */
+  mintedAt?: number;
 }
 
 export interface SlotIdentifiers {
@@ -122,6 +124,44 @@ export function defaultIdentifiers(
   };
 }
 
+/**
+ * What an activity set labels a slot with when applied: the `chosen` identifiers, except
+ * any Bungie has since retired, which fall back to the slot's default.
+ */
+export function slotLabelsInSet(
+  slot: InGameLoadoutSlot | undefined,
+  chosen: SlotIdentifiers | undefined,
+  identifiers: InGameLoadoutIdentifiers,
+): SlotIdentifiers | undefined {
+  const defaults = defaultIdentifiers(slot, identifiers);
+  if (!defaults || !chosen) return defaults;
+  const pick = (list: { hash: number }[], key: keyof SlotIdentifiers) =>
+    list.some((d) => d.hash === chosen[key]) ? chosen[key] : defaults[key];
+  return {
+    nameHash: pick(identifiers.names, "nameHash"),
+    iconHash: pick(identifiers.icons, "iconHash"),
+    colorHash: pick(identifiers.colors, "colorHash"),
+  };
+}
+
+/**
+ * How a slot reads inside an activity set. One the set leaves alone shows as empty,
+ * whatever the game holds there. One it fills shows the emblem it will have once applied:
+ * what the set chose for it, else its own, else the first of each list for a slot that's
+ * empty today.
+ */
+export function slotAppearanceInSet(
+  slot: InGameLoadoutSlot,
+  inSet: boolean,
+  identifiers: InGameLoadoutIdentifiers,
+  chosen?: SlotIdentifiers,
+): InGameLoadoutSlot {
+  if (!inSet) return { ...slot, empty: true };
+  if (!slot.empty && !chosen) return slot;
+  const labels = slotLabelsInSet(slot, chosen, identifiers);
+  return labels ? { ...slot, ...labels, empty: false } : slot;
+}
+
 const isUint32 = (v: unknown): v is number =>
   Number.isInteger(v) && (v as number) >= 0 && (v as number) <= 0xffffffff;
 
@@ -143,11 +183,17 @@ export function parseSlotRequest(body: unknown): SlotRequest | null {
   return { characterId: b.characterId, loadoutIndex: b.loadoutIndex as number };
 }
 
+/** A name, icon and colour; undefined unless all three are valid hashes. */
+export function parseSlotIdentifiers(v: unknown): SlotIdentifiers | undefined {
+  const b = v as Partial<SlotIdentifiers> | null;
+  if (!b || typeof b !== "object") return undefined;
+  if (!isUint32(b.nameHash) || !isUint32(b.iconHash) || !isUint32(b.colorHash)) return undefined;
+  return { nameHash: b.nameHash, iconHash: b.iconHash, colorHash: b.colorHash };
+}
+
 /** Validate a client-supplied snapshot request; null if malformed. */
 export function parseSnapshotRequest(body: unknown): SnapshotRequest | null {
   const slot = parseSlotRequest(body);
-  if (!slot) return null;
-  const b = body as Partial<SnapshotRequest>;
-  if (!isUint32(b.nameHash) || !isUint32(b.iconHash) || !isUint32(b.colorHash)) return null;
-  return { ...slot, nameHash: b.nameHash, iconHash: b.iconHash, colorHash: b.colorHash };
+  const labels = parseSlotIdentifiers(body);
+  return slot && labels ? { ...slot, ...labels } : null;
 }

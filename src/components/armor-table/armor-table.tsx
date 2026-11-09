@@ -20,7 +20,7 @@ import {
 } from "@/lib/inventory/annotations";
 import { useBuildUsage } from "@/lib/build-usage/use-build-usage";
 import { BUILD_USAGE_PAUSED } from "@/lib/build-usage/paused";
-import { useLoadouts } from "@/lib/loadouts/use-loadouts";
+import { useLoadoutsWithSetCopies } from "@/lib/loadouts/use-loadouts";
 import {
   MIN_ELIGIBLE_QUERIES,
   loadoutPieceIds,
@@ -218,7 +218,8 @@ export function ArmorTable() {
 
   const pieces = armory.data?.pieces;
   const buildUsage = useBuildUsage();
-  const savedLoadouts = useLoadouts();
+  // With sets' private copies: a piece one of them uses is still in a loadout.
+  const savedLoadouts = useLoadoutsWithSetCopies();
   // Ratings wait for the saved loadouts too: a piece in one is always "often used", so
   // rating before they load would offer it up for cleanup.
   const usage = savedLoadouts.isSuccess ? buildUsage.data?.pieces : undefined;

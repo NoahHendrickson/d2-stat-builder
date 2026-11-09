@@ -1,6 +1,16 @@
 import { describe, expect, test } from "vitest";
-import { loadoutClassType, parseActivitySets } from "./activity-sets";
-import { mergeSettingValues, parseSettingValue } from "../settings/keys";
+import {
+  activitySetsForCharacter,
+  loadoutClassType,
+  referencedLoadoutIds,
+  MAX_ACTIVITY_SETS,
+  parseActivitySets,
+  sameActivitySet,
+  withSlotAssignment,
+  withSlotLabels,
+  type ActivitySet,
+} from "./activity-sets";
+import { MAX_SETTING_BODY_LENGTH, mergeSettingValues, parseSettingValue } from "../settings/keys";
 import type { SavedLoadout } from "./types";
 
 const set = (id: string, extra: Record<string, unknown> = {}) => ({
@@ -10,6 +20,100 @@ const set = (id: string, extra: Record<string, unknown> = {}) => ({
   classType: 1,
   slots: [{ index: 0, loadoutId: "a" }],
   ...extra,
+});
+
+describe("withSlotAssignment", () => {
+  const base = set("1", {
+    slots: [
+      { index: 1, loadoutId: "a" },
+      { index: 4, loadoutId: "b" },
+    ],
+  }) as ActivitySet;
+
+  test("adds a slot in slot order", () => {
+    expect(withSlotAssignment(base, 2, "c").slots.map((s) => s.index)).toEqual([1, 2, 4]);
+  });
+
+  test("replaces a slot's loadout", () => {
+    expect(withSlotAssignment(base, 4, "c").slots).toEqual([
+      { index: 1, loadoutId: "a" },
+      { index: 4, loadoutId: "c" },
+    ]);
+  });
+
+  test("clears a slot and leaves the others", () => {
+    expect(withSlotAssignment(base, 1, undefined).slots).toEqual([{ index: 4, loadoutId: "b" }]);
+  });
+});
+
+describe("activitySetsForCharacter", () => {
+  const mine = set("mine", { characterId: "1" }) as ActivitySet;
+  const other = set("other", { characterId: "2" }) as ActivitySet;
+  const orphan = set("orphan", { characterId: "9" }) as ActivitySet;
+
+  test("lists the character's sets and any whose character is gone", () => {
+    const shown = activitySetsForCharacter([mine, other, orphan], "1", ["1", "2"]);
+    expect(shown.map((s) => s.id)).toEqual(["mine", "orphan"]);
+  });
+});
+
+describe("sameActivitySet", () => {
+  const base = set("1") as ActivitySet;
+
+  test("ignores spaces around the name", () => {
+    expect(sameActivitySet({ ...base, name: " Raid " }, base)).toBe(true);
+  });
+
+  test("notices a new name or a changed slot", () => {
+    expect(sameActivitySet({ ...base, name: "Trials" }, base)).toBe(false);
+    expect(sameActivitySet(withSlotAssignment(base, 0, "b"), base)).toBe(false);
+    expect(sameActivitySet(withSlotAssignment(base, 3, "b"), base)).toBe(false);
+  });
+});
+
+describe("slot labels", () => {
+  const labels = { nameHash: 1, iconHash: 2, colorHash: 3 };
+  const base = set("1", { slots: [{ index: 1, loadoutId: "a" }] }) as ActivitySet;
+  const labelled = withSlotLabels(base, 1, labels);
+
+  test("are set on the one slot", () => {
+    expect(labelled.slots).toEqual([{ index: 1, loadoutId: "a", labels }]);
+    expect(withSlotLabels(base, 9, labels).slots).toEqual(base.slots);
+  });
+
+  test("count as an unsaved change", () => {
+    expect(sameActivitySet(labelled, base)).toBe(false);
+    expect(sameActivitySet(withSlotLabels(labelled, 1, { ...labels, iconHash: 9 }), labelled)).toBe(false);
+    expect(sameActivitySet(withSlotLabels(base, 1, labels), labelled)).toBe(true);
+  });
+
+  test("stay when the slot's loadout is swapped and go when it's removed", () => {
+    expect(withSlotAssignment(labelled, 1, "b").slots).toEqual([{ index: 1, loadoutId: "b", labels }]);
+    expect(withSlotAssignment(labelled, 1, undefined).slots).toEqual([]);
+  });
+
+  test("survive parsing, and malformed ones are dropped without losing the slot", () => {
+    const parse = (l: unknown) =>
+      parseActivitySets([{ ...base, slots: [{ index: 1, loadoutId: "a", labels: l }] }])[0].slots;
+    expect(parse(labels)).toEqual([{ index: 1, loadoutId: "a", labels }]);
+    expect(parse({ ...labels, iconHash: -1 })).toEqual([{ index: 1, loadoutId: "a" }]);
+    expect(parse("nope")).toEqual([{ index: 1, loadoutId: "a" }]);
+  });
+});
+
+test("a full list of full sets fits under the settings limit", () => {
+  const labels = { nameHash: 0xffffffff, iconHash: 0xffffffff, colorHash: 0xffffffff };
+  const slots = Array.from({ length: 32 }, (_, index) => ({ index, loadoutId: "x".repeat(36), labels }));
+  const sets = Array.from({ length: MAX_ACTIVITY_SETS }, (_, i) =>
+    set(String(i), { name: "n".repeat(60), characterId: "1".repeat(20), slots }),
+  );
+  expect(JSON.stringify({ value: sets }).length).toBeLessThan(MAX_SETTING_BODY_LENGTH);
+});
+
+test("referencedLoadoutIds lists each assigned loadout once", () => {
+  const a = set("1", { slots: [{ index: 0, loadoutId: "x" }, { index: 1, loadoutId: "y" }] }) as ActivitySet;
+  const b = set("2", { slots: [{ index: 0, loadoutId: "x" }] }) as ActivitySet;
+  expect(referencedLoadoutIds([a, b]).sort()).toEqual(["x", "y"]);
 });
 
 describe("parseActivitySets", () => {

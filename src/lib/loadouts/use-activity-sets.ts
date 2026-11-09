@@ -9,6 +9,9 @@ export function useActivitySets(): ActivitySet[] {
   return useSetting("activitySets");
 }
 
+// Private copies a set stops using are cleaned up by the server once the list syncs
+// (see reconcileSetCopies), so nothing here has to see the loadouts list.
+
 /** Add a new set (at the end) or replace the one with the same id in place. */
 export function saveActivitySet(set: ActivitySet): void {
   const sets = getSetting("activitySets");

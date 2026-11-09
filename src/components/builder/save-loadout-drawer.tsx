@@ -161,9 +161,9 @@ function SaveLoadoutDrawerSession({
       submitLabel={updating ? "Update loadout" : "Save"}
       initialName={defaultName}
       initialNotes={updating?.loadout.notes}
-      secondaryAction={
+      secondaryActions={
         updating
-          ? { label: "Save as new", onSubmit: finish(NEW), busy: pending === "new" }
+          ? [{ label: "Save as new", onSubmit: finish(NEW), busy: pending === "new" }]
           : undefined
       }
       mods={picker.mods}

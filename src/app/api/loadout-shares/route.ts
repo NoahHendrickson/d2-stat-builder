@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { readUser } from "@/lib/bungie/session";
 import { getShareStore, MAX_SHARES_PER_DAY, ShareLimitError } from "@/lib/loadouts/share-store";
-import { parseSavedLoadoutData } from "@/lib/loadouts/types";
+import { asPlayerLoadout, parseSavedLoadoutData } from "@/lib/loadouts/types";
 import { notConfigured, storageError } from "@/lib/loadouts/api-responses";
 import { rejectCrossSite } from "@/lib/http/same-origin";
 
@@ -14,7 +14,7 @@ export async function POST(request: Request) {
   const store = getShareStore();
   if (!store) return notConfigured("Share");
 
-  const data = parseSavedLoadoutData(await request.json().catch(() => null));
+  const data = asPlayerLoadout(parseSavedLoadoutData(await request.json().catch(() => null)));
   if (!data) return NextResponse.json({ error: "Invalid loadout" }, { status: 400 });
 
   try {

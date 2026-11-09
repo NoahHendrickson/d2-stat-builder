@@ -23,13 +23,7 @@ import type { ArmorPiece } from "@/lib/armory/normalize";
 import type { LoadoutWeapon } from "@/lib/armory/weapons";
 import type { ArmoryCharacter } from "@/lib/armory/fetch";
 import type { Manifest } from "@/lib/manifest/load";
-import {
-  CLASS_NAMES,
-  STAT_DISPLAY_ORDER,
-  STAT_LABELS,
-  STAT_ORDER,
-  type StatIconMap,
-} from "@/lib/armory/stats";
+import { CLASS_NAMES, type StatIconMap } from "@/lib/armory/stats";
 import { lastPlayedCharacter } from "@/lib/bungie/equip-client";
 import { buildDimLoadoutUrl } from "@/lib/dim/loadout-link";
 import { applySavedLoadout } from "@/lib/loadouts/apply-client";
@@ -38,7 +32,6 @@ import { formatRelativeTime } from "@/lib/armor-table/relative-time";
 import { resolveLoadout } from "@/lib/loadouts/resolve";
 import { loadoutHashtags, type SavedLoadout } from "@/lib/loadouts/types";
 import { LoadoutTagAssignSubmenu } from "@/components/loadouts/loadout-tag-menu";
-import { StatGlyph } from "@/components/stat-glyph";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -55,12 +48,8 @@ import {
   SetBonusChip,
 } from "@/components/loadouts/loadout-row-details";
 import { LoadoutCardBody } from "@/components/loadouts/loadout-card-body";
+import { LoadoutStatLine } from "@/components/loadouts/loadout-stat-line";
 import { InGameSaveDialog } from "@/components/loadouts/ingame-save-dialog";
-
-const STAT_COLS = STAT_DISPLAY_ORDER.map((key) => ({
-  key,
-  i: STAT_ORDER.indexOf(key),
-}));
 
 /**
  * One saved loadout as a large card on the loadouts page: name, set bonuses, the stat
@@ -244,24 +233,7 @@ export const LoadoutRow = memo(function LoadoutRow({
           className="text-foreground hover:bg-foreground/6 d2-hover-ring flex h-9 items-center gap-4 rounded-none normal:rounded-[8px] px-2 text-sm leading-5 tabular-nums outline-none transition-[background-color,outline-offset] focus-visible:ring-1 focus-visible:ring-outline-strong max-md:w-full max-md:justify-between max-md:gap-1 max-md:px-1"
         >
           {optimizer ? (
-            <>
-              <span className="text-base font-medium">{optimizer.total}</span>
-              {STAT_COLS.map(({ key, i }) => {
-                const value = optimizer.stats[i];
-                return (
-                  <span key={key} className="flex items-center gap-1 max-md:gap-0.5">
-                    <StatGlyph
-                      src={statIcons[key]}
-                      label={STAT_LABELS[key]}
-                      className="size-4 opacity-75 max-md:size-3.5"
-                    />
-                    <span className={cn(value === 0 && "text-muted-foreground")}>
-                      {value}
-                    </span>
-                  </span>
-                );
-              })}
-            </>
+            <LoadoutStatLine optimizer={optimizer} statIcons={statIcons} />
           ) : (
             <span className="text-muted-foreground">Details</span>
           )}

@@ -26,6 +26,9 @@ export type StoredSettings = { [K in SettingKey]?: StoredSetting<K> };
 
 export const SETTING_KEYS: readonly SettingKey[] = ["links", "pinnedSets", "activitySets"];
 
+/** The largest PUT the settings route takes: room for MAX_ACTIVITY_SETS full sets. */
+export const MAX_SETTING_BODY_LENGTH = 320 * 1024;
+
 export function isSettingKey(key: string): key is SettingKey {
   return (SETTING_KEYS as readonly string[]).includes(key);
 }

@@ -49,7 +49,6 @@ Each feature file starts with an H1 title and one paragraph describing the behav
 
 These features have no recipe yet:
 - Compare and the perk finder (Items → popover → "Compare N copies")
-- Activity sets
 - Import in-game loadout
 - Share links (`#import=`)
 - Cleanup view on /armor

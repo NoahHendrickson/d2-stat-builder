@@ -146,7 +146,8 @@ export default async function ({ page, app, stub, step, shot, expect, log }) {
     await page.click({ role: "button", name: "Delete all" }, { within: confirm });
     await page.waitForText(/No saved loadouts yet/);
     const del = stub.last("DELETE", "/api/loadouts");
-    expect(del?.path === "/api/loadouts" && del.body?.all === true, "bulk DELETE /api/loadouts sent {all:true}");
+    // By id, so an activity set's private copies survive it.
+    expect(del?.path === "/api/loadouts" && del.body?.ids?.length > 0 && !del.body.all, "bulk DELETE /api/loadouts named the listed ids");
     expect(stub.store.loadouts.size === 0, "the store is empty");
     await shot("empty");
   });

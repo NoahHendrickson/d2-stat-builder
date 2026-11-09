@@ -9,7 +9,12 @@ import { cacheLife, cacheTag } from "next/cache";
 import { neon, type NeonQueryFunction } from "@neondatabase/serverless";
 import { fromDatabaseUrl, lazySchema } from "../db/neon";
 import { ACCOUNT_READ_LIFE, expiring, fromCache, loggedRead } from "../read-cache";
-import { LoadoutLimitError, MAX_LOADOUTS_PER_ACCOUNT, type LoadoutStore } from "./store";
+import {
+  LoadoutLimitError,
+  MAX_LOADOUTS_PER_ACCOUNT,
+  SET_COPY_GRACE_MS,
+  type LoadoutStore,
+} from "./store";
 import { parseSavedLoadoutData, type SavedLoadout, type SavedLoadoutData } from "./types";
 
 interface Row {
@@ -20,6 +25,7 @@ interface Row {
 }
 
 const toMs = (v: string | Date) => (v instanceof Date ? v.getTime() : Date.parse(v));
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function rowToLoadout(row: Row): SavedLoadout | null {
   const data = parseSavedLoadoutData(row.data);
@@ -86,6 +92,32 @@ export class NeonLoadoutStore implements LoadoutStore {
     return row;
   }
 
+  async createMany(
+    membershipId: string,
+    data: readonly SavedLoadoutData[],
+  ): Promise<SavedLoadout[]> {
+    await this.ensureSchema();
+    if (data.length === 0) return [];
+    const ids = data.map(() => crypto.randomUUID());
+    // One statement, so every row lands or none does; the cap rides in it as in `create`.
+    const rows = (await this.sql`
+      INSERT INTO loadouts (id, membership_id, data)
+      SELECT new.id, ${membershipId}, new.payload::jsonb
+      FROM unnest(${ids}::uuid[], ${data.map((d) => JSON.stringify(d))}::text[])
+        AS new(id, payload)
+      WHERE (SELECT count(*) FROM loadouts WHERE membership_id = ${membershipId})
+        + ${data.length}::int <= ${MAX_LOADOUTS_PER_ACCOUNT}::int
+      RETURNING id, data, created_at, updated_at`) as Row[];
+    if (rows.length === 0) throw new LoadoutLimitError();
+    const byId = new Map(rows.map((row) => [row.id, row]));
+    return ids.map((id) => {
+      const row = byId.get(id);
+      const saved = row && rowToLoadout(row);
+      if (!saved) throw new Error("Stored loadout failed to parse back");
+      return saved;
+    });
+  }
+
   async update(
     membershipId: string,
     id: string,
@@ -108,19 +140,36 @@ export class NeonLoadoutStore implements LoadoutStore {
     return rows.length > 0;
   }
 
-  async deleteMany(membershipId: string, ids: readonly string[] | "all"): Promise<string[]> {
+  async reconcileSetCopies(membershipId: string, referenced: readonly string[]): Promise<string[]> {
     await this.ensureSchema();
-    if (ids !== "all" && ids.length === 0) return [];
-    const rows = (
-      ids === "all"
-        ? await this.sql`
-            DELETE FROM loadouts WHERE membership_id = ${membershipId}
-            RETURNING id`
-        : await this.sql`
-            DELETE FROM loadouts
-            WHERE membership_id = ${membershipId} AND id = ANY(${[...ids]}::uuid[])
-            RETURNING id`
-    ) as Pick<Row, "id">[];
+    // An id that isn't a stored row's would fail the uuid cast; it can't name a copy anyway.
+    const used = referenced.filter((id) => UUID.test(id));
+    const now = Date.now();
+    // When a copy was first seen unused rides in its own data, so no column is needed;
+    // parseSavedLoadoutData ignores it.
+    await this.sql`
+      UPDATE loadouts SET data = data - 'unusedSince'
+      WHERE membership_id = ${membershipId} AND id = ANY(${used}::uuid[]) AND data ? 'unusedSince'`;
+    await this.sql`
+      UPDATE loadouts SET data = data || jsonb_build_object('unusedSince', ${now}::bigint)
+      WHERE membership_id = ${membershipId} AND data->>'setOnly' = 'true'
+        AND NOT (id = ANY(${used}::uuid[])) AND NOT (data ? 'unusedSince')`;
+    const rows = (await this.sql`
+      DELETE FROM loadouts
+      WHERE membership_id = ${membershipId} AND data->>'setOnly' = 'true'
+        AND NOT (id = ANY(${used}::uuid[]))
+        AND (data->>'unusedSince')::bigint <= ${now - SET_COPY_GRACE_MS}::bigint
+      RETURNING id`) as Pick<Row, "id">[];
+    return rows.map((r) => r.id);
+  }
+
+  async deleteMany(membershipId: string, ids: readonly string[]): Promise<string[]> {
+    await this.ensureSchema();
+    if (ids.length === 0) return [];
+    const rows = (await this.sql`
+      DELETE FROM loadouts
+      WHERE membership_id = ${membershipId} AND id = ANY(${[...ids]}::uuid[])
+      RETURNING id`) as Pick<Row, "id">[];
     return rows.map((r) => r.id);
   }
 }
@@ -157,14 +206,22 @@ class CachedLoadoutStore implements LoadoutStore {
   create(membershipId: string, data: SavedLoadoutData, id?: string) {
     return expiring(accountTag(membershipId), () => neonStore().create(membershipId, data, id));
   }
+  createMany(membershipId: string, data: readonly SavedLoadoutData[]) {
+    return expiring(accountTag(membershipId), () => neonStore().createMany(membershipId, data));
+  }
   update(membershipId: string, id: string, data: SavedLoadoutData) {
     return expiring(accountTag(membershipId), () => neonStore().update(membershipId, id, data));
   }
   delete(membershipId: string, id: string) {
     return expiring(accountTag(membershipId), () => neonStore().delete(membershipId, id));
   }
-  deleteMany(membershipId: string, ids: readonly string[] | "all") {
+  deleteMany(membershipId: string, ids: readonly string[]) {
     return expiring(accountTag(membershipId), () => neonStore().deleteMany(membershipId, ids));
+  }
+  reconcileSetCopies(membershipId: string, referenced: readonly string[]) {
+    return expiring(accountTag(membershipId), () =>
+      neonStore().reconcileSetCopies(membershipId, referenced),
+    );
   }
 }
 

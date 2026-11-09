@@ -63,6 +63,8 @@ function equipMessage(err: unknown): string {
 
 /** DestinyNoRoomInDestination — the target bucket (character slot or vault) is full. */
 const NO_ROOM = 1642;
+/** DestinyItemNotFound — it isn't where we said it was. */
+const ITEM_NOT_FOUND = 1623;
 
 /** Friendly text for the PlatformErrorCodes a vault↔character transfer realistically returns. */
 const TRANSFER_MESSAGES: Record<number, string> = {
@@ -114,6 +116,8 @@ export interface ItemResult {
   message?: string;
   /** Instance ids of pieces vaulted off the target character to make room for this one. */
   vaulted?: string[];
+  /** Not equipped, but it did reach the target character's inventory. */
+  staged?: true;
 }
 
 export interface PlugRequest {
@@ -207,6 +211,10 @@ function spareSource(
         return spare;
       }
       return undefined;
+    },
+    /** The last spare wasn't there to move, so it shouldn't count as a try. */
+    refund() {
+      budget++;
     },
     close() {
       budget = 0;
@@ -378,6 +386,8 @@ export async function stageAndEquip({
             source.close();
           } else {
             message = `Couldn't make room: ${transferMessage(err, true)}`;
+            // A stale entry in the client's list; it mustn't use up the live ones.
+            if (err instanceof BungieHttpError && err.code === ITEM_NOT_FOUND) source.refund();
           }
         }
       }
@@ -417,20 +427,21 @@ export async function stageAndEquip({
         if (err instanceof BungieHttpError && err.status === 401) throw err;
         const message = equipMessage(err);
         for (const id of ids) {
-          const result = withVaulted({ itemInstanceId: id, ok: false, message });
+          const result = withVaulted({ itemInstanceId: id, ok: false, message, staged: true });
           results.push(result);
           emitResult(result);
         }
         return;
       }
       for (const r of res.Response.equipResults ?? []) {
+        const ok = r.equipStatus === SUCCESS;
         const result = withVaulted({
           itemInstanceId: r.itemInstanceId,
-          ok: r.equipStatus === SUCCESS,
-          message:
-            r.equipStatus === SUCCESS
-              ? undefined
-              : (EQUIP_MESSAGES[r.equipStatus] ?? `Equip failed (code ${r.equipStatus})`),
+          ok,
+          message: ok
+            ? undefined
+            : (EQUIP_MESSAGES[r.equipStatus] ?? `Equip failed (code ${r.equipStatus})`),
+          ...(ok ? {} : { staged: true as const }),
         });
         results.push(result);
         emitResult(result);

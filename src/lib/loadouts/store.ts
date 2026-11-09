@@ -8,6 +8,12 @@ import type { SavedLoadout, SavedLoadoutData } from "./types";
 /** Most loadouts one account may keep — far past real use, but bounds what one account can store. */
 export const MAX_LOADOUTS_PER_ACCOUNT = 1000;
 
+/**
+ * How long an activity set's private copy is kept once no set uses it. Long enough that
+ * a second browser still holding an older copy of the set list can bring it back.
+ */
+export const SET_COPY_GRACE_MS = 7 * 24 * 60 * 60_000;
+
 /** Thrown by `create` when the owner already has MAX_LOADOUTS_PER_ACCOUNT rows. */
 export class LoadoutLimitError extends Error {
   constructor() {
@@ -24,17 +30,30 @@ export interface LoadoutStore {
    * LoadoutLimitError when the owner is at MAX_LOADOUTS_PER_ACCOUNT.
    */
   create(membershipId: string, data: SavedLoadoutData, id?: string): Promise<SavedLoadout>;
+  /**
+   * Stores every row or none, and returns them in the order given. Throws
+   * LoadoutLimitError when they wouldn't all fit under MAX_LOADOUTS_PER_ACCOUNT.
+   */
+  createMany(membershipId: string, data: readonly SavedLoadoutData[]): Promise<SavedLoadout[]>;
   /** Returns null when the row doesn't exist for this owner. */
   update(membershipId: string, id: string, data: SavedLoadoutData): Promise<SavedLoadout | null>;
   /** Returns false when the row doesn't exist for this owner. */
   delete(membershipId: string, id: string): Promise<boolean>;
-  /** Deletes the given rows (or every row with "all"); returns the ids actually removed. */
-  deleteMany(membershipId: string, ids: readonly string[] | "all"): Promise<string[]>;
+  /** Deletes the given rows; returns the ids actually removed. */
+  deleteMany(membershipId: string, ids: readonly string[]): Promise<string[]>;
+  /**
+   * Bring the activity sets' private copies in line with the ids the account's sets use:
+   * a copy no set uses is marked, one used again is unmarked, and one left unused for
+   * SET_COPY_GRACE_MS is deleted. Returns the ids deleted.
+   */
+  reconcileSetCopies(membershipId: string, referenced: readonly string[]): Promise<string[]>;
 }
 
 /** In-memory store — unit tests and a fallback when no database is configured. */
 export class MemoryLoadoutStore implements LoadoutStore {
   private rows = new Map<string, Map<string, SavedLoadout>>();
+  /** Private copy id → when it was first seen unused. */
+  private unusedSince = new Map<string, number>();
   constructor(private readonly now: () => number = Date.now) {}
 
   private bucket(membershipId: string) {
@@ -64,6 +83,13 @@ export class MemoryLoadoutStore implements LoadoutStore {
     return row;
   }
 
+  async createMany(membershipId: string, data: readonly SavedLoadoutData[]) {
+    if (this.bucket(membershipId).size + data.length > MAX_LOADOUTS_PER_ACCOUNT) {
+      throw new LoadoutLimitError();
+    }
+    return Promise.all(data.map((d) => this.create(membershipId, d)));
+  }
+
   async update(membershipId: string, id: string, data: SavedLoadoutData) {
     const existing = this.bucket(membershipId).get(id);
     if (!existing) return null;
@@ -81,9 +107,30 @@ export class MemoryLoadoutStore implements LoadoutStore {
     return this.bucket(membershipId).delete(id);
   }
 
-  async deleteMany(membershipId: string, ids: readonly string[] | "all") {
+  async deleteMany(membershipId: string, ids: readonly string[]) {
     const bucket = this.bucket(membershipId);
-    const targets = ids === "all" ? [...bucket.keys()] : ids;
-    return targets.filter((id) => bucket.delete(id));
+    return ids.filter((id) => bucket.delete(id));
+  }
+
+  async reconcileSetCopies(membershipId: string, referenced: readonly string[]) {
+    const bucket = this.bucket(membershipId);
+    const used = new Set(referenced);
+    const now = this.now();
+    const deleted: string[] = [];
+    for (const row of [...bucket.values()]) {
+      if (!row.setOnly) continue;
+      if (used.has(row.id)) {
+        this.unusedSince.delete(row.id);
+        continue;
+      }
+      const since = this.unusedSince.get(row.id) ?? now;
+      this.unusedSince.set(row.id, since);
+      if (now - since >= SET_COPY_GRACE_MS) {
+        bucket.delete(row.id);
+        this.unusedSince.delete(row.id);
+        deleted.push(row.id);
+      }
+    }
+    return deleted;
   }
 }

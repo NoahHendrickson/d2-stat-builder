@@ -40,7 +40,7 @@ import { cn } from "@/lib/utils";
 const SWATCH_CLASS =
   "d2-hover-ring relative shrink-0 overflow-hidden rounded-none outline-none transition-shadow focus-visible:ring-1 focus-visible:ring-outline-strong";
 
-/** A loadout's emblem as the game draws it: the icon over its colour. */
+/** A loadout's emblem as the game draws it: the icon over its colour, with a faint white edge. */
 export function Emblem({
   identifiers,
   iconHash,
@@ -76,6 +76,8 @@ export function Emblem({
           unoptimized
         />
       )}
+      {/* Above any overlay the tile adds, so the edge stays even all the way round. */}
+      <span aria-hidden className="pointer-events-none absolute inset-0 z-10 border-2 border-white/24" />
     </>
   );
 }
@@ -141,6 +143,142 @@ function SlotPicker({
   );
 }
 
+/** Pick the name, icon and colour a slot carries, from the game's own lists. */
+function SlotIdentifierFields({
+  identifiers,
+  chosen,
+  onChange,
+}: {
+  identifiers: InGameLoadoutIdentifiers;
+  chosen: SlotIdentifiers;
+  onChange: (next: Partial<SlotIdentifiers>) => void;
+}) {
+  return (
+    <>
+      <section className="flex flex-col gap-2">
+        <h3 className="d2-label">Name</h3>
+        <Select
+          items={Object.fromEntries(identifiers.names.map((n) => [String(n.hash), n.name]))}
+          value={String(chosen.nameHash)}
+          onValueChange={(v) => v != null && onChange({ nameHash: Number(v) })}
+        >
+          <SelectTrigger className="w-full" aria-label="Name">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent alignItemWithTrigger={false}>
+            {identifiers.names.map((n) => (
+              <SelectItem key={n.hash} value={String(n.hash)}>
+                {n.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </section>
+
+      <section className="flex flex-col gap-2">
+        <h3 className="d2-label">Icon</h3>
+        <div role="radiogroup" aria-label="Icon" className="flex flex-wrap gap-2">
+          {identifiers.icons.map((icon, i) => {
+            const checked = icon.hash === chosen.iconHash;
+            return (
+              <button
+                key={icon.hash}
+                type="button"
+                role="radio"
+                aria-checked={checked}
+                aria-label={`Icon ${i + 1}`}
+                onClick={() => onChange({ iconHash: icon.hash })}
+                className={cn(SWATCH_CLASS, "size-9", checked && "d2-tile-selected")}
+              >
+                <Emblem
+                  identifiers={identifiers}
+                  iconHash={icon.hash}
+                  colorHash={chosen.colorHash}
+                  size={36}
+                />
+              </button>
+            );
+          })}
+        </div>
+      </section>
+
+      <section className="flex flex-col gap-2">
+        <h3 className="d2-label">Color</h3>
+        <div role="radiogroup" aria-label="Color" className="flex flex-wrap gap-2">
+          {identifiers.colors.map((color, i) => {
+            const checked = color.hash === chosen.colorHash;
+            return (
+              <button
+                key={color.hash}
+                type="button"
+                role="radio"
+                aria-checked={checked}
+                aria-label={`Color ${i + 1}`}
+                onClick={() => onChange({ colorHash: color.hash })}
+                className={cn(SWATCH_CLASS, "size-6", checked && "d2-tile-selected")}
+              >
+                <Emblem identifiers={identifiers} colorHash={color.hash} size={24} />
+              </button>
+            );
+          })}
+        </div>
+      </section>
+    </>
+  );
+}
+
+/** Change a filled slot's name, icon and colour. The gear in it isn't touched. */
+export function SlotCustomizeDialog({
+  slot,
+  identifiers,
+  description = "Changes how this loadout appears in the game. Its gear stays as it is.",
+  onOpenChange,
+  onConfirm,
+}: {
+  slot: InGameLoadoutSlot;
+  identifiers: InGameLoadoutIdentifiers;
+  description?: string;
+  onOpenChange: (open: boolean) => void;
+  onConfirm: (labels: SlotIdentifiers) => void;
+}) {
+  const [picks, setPicks] = useState<Partial<SlotIdentifiers>>({});
+  const defaults = defaultIdentifiers(slot, identifiers);
+  const chosen = defaults ? { ...defaults, ...picks } : undefined;
+  const unchanged =
+    !chosen ||
+    (chosen.nameHash === slot.nameHash &&
+      chosen.iconHash === slot.iconHash &&
+      chosen.colorHash === slot.colorHash);
+
+  return (
+    <Dialog open onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader className="pr-8">
+          <DialogTitle>Customize slot {slot.index + 1}</DialogTitle>
+          <DialogDescription>{description}</DialogDescription>
+        </DialogHeader>
+        {chosen && (
+          <div className="flex flex-col gap-4">
+            <SlotIdentifierFields
+              identifiers={identifiers}
+              chosen={chosen}
+              onChange={(next) => setPicks((p) => ({ ...p, ...next }))}
+            />
+          </div>
+        )}
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button onClick={() => chosen && onConfirm(chosen)} disabled={unchanged}>
+            Save
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 /**
  * The gear a filled slot holds, subclass first, named on hover. With `countMissing`,
  * items the player no longer has are counted in a note instead of shown as blanks.
@@ -197,6 +335,7 @@ export function InGameSaveDialog({
   loadoutName,
   character,
   manifest,
+  initialSlotIndex,
   onConfirm,
 }: {
   open: boolean;
@@ -206,10 +345,12 @@ export function InGameSaveDialog({
   character: ArmoryCharacter;
   /** Names and icons for the gear in the slot being replaced. */
   manifest: Manifest;
+  /** The slot to start on, when the player already chose one. */
+  initialSlotIndex?: number;
   onConfirm: (choice: InGameSlotChoice) => void;
 }) {
   const { data, error, isFetching, refetch } = useInGameLoadouts(character.id, open);
-  const [slotIndex, setSlotIndex] = useState<number>();
+  const [slotIndex, setSlotIndex] = useState(initialSlotIndex);
   // The user's own picks; anything not picked follows the selected slot's defaults.
   const [picks, setPicks] = useState<Partial<SlotIdentifiers>>({});
 
@@ -277,80 +418,11 @@ export function InGameSaveDialog({
             )}
 
             {slot && (
-              <>
-                <section className="flex flex-col gap-2">
-                  <h3 className="d2-label">Name</h3>
-                  <Select
-                    items={Object.fromEntries(
-                      data.identifiers.names.map((n) => [String(n.hash), n.name]),
-                    )}
-                    value={String(chosen.nameHash)}
-                    onValueChange={(v) =>
-                      v != null && setPicks((p) => ({ ...p, nameHash: Number(v) }))
-                    }
-                  >
-                    <SelectTrigger className="w-full" aria-label="Name">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent alignItemWithTrigger={false}>
-                      {data.identifiers.names.map((n) => (
-                        <SelectItem key={n.hash} value={String(n.hash)}>
-                          {n.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </section>
-
-                <section className="flex flex-col gap-2">
-                  <h3 className="d2-label">Icon</h3>
-                  <div role="radiogroup" aria-label="Icon" className="flex flex-wrap gap-2">
-                    {data.identifiers.icons.map((icon, i) => {
-                      const checked = icon.hash === chosen.iconHash;
-                      return (
-                        <button
-                          key={icon.hash}
-                          type="button"
-                          role="radio"
-                          aria-checked={checked}
-                          aria-label={`Icon ${i + 1}`}
-                          onClick={() => setPicks((p) => ({ ...p, iconHash: icon.hash }))}
-                          className={cn(SWATCH_CLASS, "size-9", checked && "d2-tile-selected")}
-                        >
-                          <Emblem
-                            identifiers={data.identifiers}
-                            iconHash={icon.hash}
-                            colorHash={chosen.colorHash}
-                            size={36}
-                          />
-                        </button>
-                      );
-                    })}
-                  </div>
-                </section>
-
-                <section className="flex flex-col gap-2">
-                  <h3 className="d2-label">Color</h3>
-                  <div role="radiogroup" aria-label="Color" className="flex flex-wrap gap-2">
-                    {data.identifiers.colors.map((color, i) => {
-                      const checked = color.hash === chosen.colorHash;
-                      return (
-                        <button
-                          key={color.hash}
-                          type="button"
-                          role="radio"
-                          aria-checked={checked}
-                          aria-label={`Color ${i + 1}`}
-                          onClick={() => setPicks((p) => ({ ...p, colorHash: color.hash }))}
-                          className={cn(SWATCH_CLASS, "size-6", checked && "d2-tile-selected")}
-                        >
-                          <Emblem identifiers={data.identifiers} colorHash={color.hash} size={24} />
-                        </button>
-                      );
-                    })}
-                  </div>
-                </section>
-              </>
+              <SlotIdentifierFields
+                identifiers={data.identifiers}
+                chosen={chosen}
+                onChange={(next) => setPicks((p) => ({ ...p, ...next }))}
+              />
             )}
           </div>
         )}

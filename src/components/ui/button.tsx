@@ -9,7 +9,8 @@ import { cn } from "@/lib/utils"
  * Buttons per the Figma sidebar (69:863): square, sentence-case controls that
  * match the fields — `default` is the lifted chip with the app's centre-bright
  * line (`d2-line`), `outline` the same without the fill, `dashed` the dashed-frame square icon well beside
- * a loadout — `ghost` is the 10px hover pill used for icon buttons, and the
+ * a loadout — `ghost` is the frameless square for icon buttons (the page's hover ring and
+ * a light fill, so it never needs its own corners or hover at the call site), and the
  * one loud element is `emphatic`: the square, uppercase, display-face green
  * EQUIP with its white/24 line.
  */
@@ -27,7 +28,7 @@ const buttonVariants = cva(
           // 12px uppercase EQUIP label in Geist, with the centre-bright line.
           "d2-heading d2-equip d2-hover-ring rounded-none text-xs tracking-[0.02em] text-emphatic-foreground hover:[--equip-fill:var(--emphatic-light)] hover:d2-line-drift aria-expanded:[--equip-fill:var(--emphatic-light)]",
         ghost:
-          "rounded-[10px] border-transparent text-foreground hover:bg-foreground/8 aria-expanded:bg-foreground/8",
+          "d2-hover-ring border-transparent text-foreground hover:bg-foreground/6 aria-expanded:bg-foreground/6",
         dashed:
           // Figma 69:883: faint white/16 frame with corner ticks over the white/4 fill, no shadow.
           "d2-corner-well d2-hover-ring rounded-none text-foreground hover:[--tick-alpha:60%] hover:[--lifted:color-mix(in_srgb,var(--foreground)_8%,transparent)] aria-expanded:[--tick-alpha:60%] aria-expanded:[--lifted:color-mix(in_srgb,var(--foreground)_8%,transparent)]",

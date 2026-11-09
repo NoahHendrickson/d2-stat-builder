@@ -4,6 +4,8 @@ import {
   defaultIdentifiers,
   parseSlotRequest,
   parseSnapshotRequest,
+  slotAppearanceInSet,
+  slotLabelsInSet,
   toSlots,
   UNSET_PLUG_HASH,
   type InGameLoadoutIdentifiers,
@@ -120,5 +122,60 @@ describe("parseSlotRequest", () => {
     expect(parseSlotRequest({ ...body, loadoutIndex: -1 })).toBeNull();
     expect(parseSlotRequest({ ...body, loadoutIndex: "2" })).toBeNull();
     expect(parseSlotRequest({ ...body, loadoutIndex: 400 })).toBeNull();
+  });
+});
+
+describe("slotAppearanceInSet", () => {
+  const lists: InGameLoadoutIdentifiers = {
+    names: [{ hash: 1, name: "Alpha" }],
+    icons: [{ hash: 2, path: "/i" }],
+    colors: [{ hash: 3, path: "/c" }],
+  };
+  const filled = { index: 0, nameHash: 9, iconHash: 9, colorHash: 9, items: [{ itemInstanceId: "1" }], empty: false };
+  const empty = { ...filled, items: [], empty: true };
+
+  test("a slot the set leaves alone reads as empty, even if the game has gear there", () => {
+    expect(slotAppearanceInSet(filled, false, lists).empty).toBe(true);
+  });
+
+  test("a filled slot in the set keeps its emblem", () => {
+    expect(slotAppearanceInSet(filled, true, lists)).toBe(filled);
+  });
+
+  test("an empty slot in the set shows the emblem it will get", () => {
+    expect(slotAppearanceInSet(empty, true, lists)).toMatchObject({ iconHash: 2, colorHash: 3, empty: false });
+  });
+
+  describe("with labels the set chose", () => {
+    const wide: InGameLoadoutIdentifiers = {
+      names: [...lists.names, { hash: 11, name: "Beta" }],
+      icons: [...lists.icons, { hash: 12, path: "/j" }],
+      colors: [...lists.colors, { hash: 13, path: "/d" }],
+    };
+    const chosen = { nameHash: 11, iconHash: 12, colorHash: 13 };
+
+    test("a filled slot shows them instead of its own", () => {
+      expect(slotAppearanceInSet(filled, true, wide, chosen)).toMatchObject({ ...chosen, empty: false });
+    });
+
+    test("an empty slot shows them too", () => {
+      expect(slotAppearanceInSet(empty, true, wide, chosen)).toMatchObject({ ...chosen, empty: false });
+    });
+
+    test("a slot the set leaves alone still reads as empty", () => {
+      expect(slotAppearanceInSet(filled, false, wide, chosen).empty).toBe(true);
+    });
+
+    test("an identifier Bungie retired falls back to the slot's default", () => {
+      expect(slotLabelsInSet(empty, { ...chosen, iconHash: 999 }, wide)).toEqual({
+        nameHash: 11,
+        iconHash: 2,
+        colorHash: 13,
+      });
+    });
+
+    test("no choice means the slot's defaults", () => {
+      expect(slotLabelsInSet(empty, undefined, wide)).toEqual({ nameHash: 1, iconHash: 2, colorHash: 3 });
+    });
   });
 });
