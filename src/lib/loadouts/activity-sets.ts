@@ -3,7 +3,7 @@
 // account-synced setting (settings/keys.ts). Pure — runtime imports stay relative so
 // the module runs under vitest.
 import type { ArmorPiece } from "../armory/normalize";
-import type { SlotIdentifiers } from "../bungie/ingame-loadouts";
+import { parseSlotIdentifiers, type SlotIdentifiers } from "../bungie/ingame-loadouts";
 import type { SavedLoadout } from "./types";
 
 /** One in-game slot and the saved loadout that goes into it. */
@@ -37,15 +37,6 @@ const isObj = (v: unknown): v is Record<string, unknown> =>
 const isId = (v: unknown): v is string =>
   typeof v === "string" && v.length > 0 && v.length <= MAX_ID_LENGTH;
 
-const isHash = (v: unknown): v is number =>
-  Number.isInteger(v) && (v as number) >= 0 && (v as number) <= 0xffffffff;
-
-function parseLabels(v: unknown): SlotIdentifiers | undefined {
-  if (!isObj(v) || !isHash(v.nameHash) || !isHash(v.iconHash) || !isHash(v.colorHash))
-    return undefined;
-  return { nameHash: v.nameHash, iconHash: v.iconHash, colorHash: v.colorHash };
-}
-
 function parseSlots(v: unknown): ActivitySetSlot[] | null {
   if (!Array.isArray(v)) return null;
   const byIndex = new Map<number, ActivitySetSlot>();
@@ -53,7 +44,7 @@ function parseSlots(v: unknown): ActivitySetSlot[] | null {
     if (!isObj(s) || !Number.isInteger(s.index) || !isId(s.loadoutId)) continue;
     const index = s.index as number;
     if (index < 0 || index > MAX_SLOT_INDEX) continue;
-    const labels = parseLabels(s.labels);
+    const labels = parseSlotIdentifiers(s.labels);
     byIndex.set(index, { index, loadoutId: s.loadoutId, ...(labels && { labels }) });
   }
   return [...byIndex.values()].sort((a, b) => a.index - b.index);

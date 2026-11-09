@@ -18,14 +18,14 @@ export const LOADOUT_SCHEMA_VERSION = 1;
 /** Size caps — keep a single row small and reject junk early. */
 export const MAX_NAME_LENGTH = 120;
 export const MAX_NOTES_LENGTH = 4000;
-const MAX_ITEMS = 12;
+export const MAX_ITEMS = 12;
 /** Also bounds how many plug inserts one apply request may carry (see apply-loadout route). */
 export const MAX_MODS = 40;
-const MAX_SOCKET_OVERRIDES = 24;
-const MAX_ARTIFACT_UNLOCKS = 40;
+export const MAX_SOCKET_OVERRIDES = 24;
+export const MAX_ARTIFACT_UNLOCKS = 40;
 const MAX_PLACEMENT_ITEMS = 8;
 const MAX_PLACEMENT_SOCKETS = 12;
-const MAX_STAT_CONSTRAINTS = 6;
+export const MAX_STAT_CONSTRAINTS = 6;
 export const MAX_SET_BONUSES = 8;
 
 /**
@@ -66,8 +66,9 @@ export interface SavedLoadoutData {
   optimizer?: OptimizerLoadout;
   builder?: BuilderSnapshot;
   /**
-   * A copy of an in-game slot kept for an activity set. Never listed with the player's
-   * loadouts, and deleted once no set uses it (see orphanedSetLoadouts).
+   * A copy of an in-game slot kept for an activity set. useLoadouts leaves these out, so
+   * they're never listed with the player's loadouts, and they're deleted once no set
+   * uses them (see orphanedSetLoadouts).
    */
   setOnly?: true;
 }
@@ -77,6 +78,11 @@ export interface SavedLoadout extends SavedLoadoutData {
   /** Epoch ms. */
   createdAt: number;
   updatedAt: number;
+}
+
+/** Loadout data read as a saved row, for code that shows it; nothing about it is stored. */
+export function transientLoadout(id: string, data: SavedLoadoutData): SavedLoadout {
+  return { ...data, id, createdAt: 0, updatedAt: 0 };
 }
 
 /**
@@ -92,9 +98,9 @@ export function newerSavedLoadout(
 
 // --- primitives ---
 
-const isObj = (v: unknown): v is Record<string, unknown> =>
+export const isObj = (v: unknown): v is Record<string, unknown> =>
   typeof v === "object" && v !== null && !Array.isArray(v);
-const isInt = (v: unknown): v is number => Number.isInteger(v);
+export const isInt = (v: unknown): v is number => Number.isInteger(v);
 const isFiniteNum = (v: unknown): v is number =>
   typeof v === "number" && Number.isFinite(v);
 

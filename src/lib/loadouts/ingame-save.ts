@@ -16,6 +16,20 @@ export interface InGameSlotChoice extends SlotIdentifiers {
   loadoutIndex: number;
 }
 
+/**
+ * Bungie can serve the old slots for a few seconds after one changes, so a re-read right
+ * after a write would put the old contents back on screen.
+ */
+const SLOT_REREAD_DELAY_MS = 3000;
+
+/** Refresh a character's slots once Bungie has caught up with a write. */
+export function rereadInGameSlots(queryClient: QueryClient, characterId: string): void {
+  setTimeout(
+    () => void queryClient.invalidateQueries({ queryKey: inGameLoadoutsKey(characterId) }),
+    SLOT_REREAD_DELAY_MS,
+  );
+}
+
 /** Bungie asks for at least a second between loadout actions (snapshot, clear). */
 const LOADOUT_ACTION_GAP_MS = 1000;
 
@@ -163,7 +177,7 @@ export async function clearInGameSlots({
   }
   // The route cleared the dead session; forget the local player data too.
   if (failure?.reauth) void handleSessionExpired(queryClient);
-  else void queryClient.invalidateQueries({ queryKey: key });
+  else rereadInGameSlots(queryClient, characterId);
   return { cleared, failure };
 }
 

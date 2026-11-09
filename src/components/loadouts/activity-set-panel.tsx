@@ -9,8 +9,8 @@ import {
 } from "@hugeicons/core-free-icons";
 import { CLASS_NAMES } from "@/lib/armory/stats";
 import type { Manifest } from "@/lib/manifest/load";
-import type { ActivitySetRunState } from "@/lib/loadouts/activity-set-run";
 import type { ActivitySet } from "@/lib/loadouts/activity-sets";
+import type { SetFooterStatus } from "@/lib/loadouts/set-draft";
 import { loadoutSubclass } from "@/lib/loadouts/subclass";
 import type { SavedLoadout } from "@/lib/loadouts/types";
 import { ArmorThumb } from "@/components/armor-thumb";
@@ -152,20 +152,14 @@ function RunConfirmDialog({
 }
 
 /**
- * The bottom of an open set's card: where it stands and what to do next. Save while
- * there's anything unsaved, Apply in-game once there isn't, Stop while it's running. Saving
- * keeps the set here and changes nothing in the game; applying does that (see
- * runActivitySet), after a confirmation.
+ * The bottom of an open set's card: what to do next and where it stands. Saving keeps the
+ * set here and changes nothing in the game; applying does that (see runActivitySet), after
+ * a confirmation.
  */
 export function ActivitySetFooter({
   set,
-  isNew,
-  dirty,
-  saving,
-  hasCharacter,
   loadouts,
-  run,
-  canRun,
+  status,
   saveAttention,
   onSaveAttentionEnd,
   onSave,
@@ -175,18 +169,8 @@ export function ActivitySetFooter({
 }: {
   /** The working copy; its name may still be blank. */
   set: ActivitySet;
-  /** Never saved yet. */
-  isNew: boolean;
-  /** An existing set with edits not saved yet. */
-  dirty: boolean;
-  saving: boolean;
-  /** False when the set's character has left the account. */
-  hasCharacter: boolean;
   loadouts: readonly SavedLoadout[];
-  /** The run in progress, whichever set it's for. */
-  run: ActivitySetRunState | null;
-  /** False while gear is still provisional or the loadouts are loading. */
-  canRun: boolean;
+  status: SetFooterStatus;
   /** Above 0 pulses Save, pointing out what's unsaved; a new value replays it. */
   saveAttention: number;
   onSaveAttentionEnd: () => void;
@@ -196,38 +180,28 @@ export function ActivitySetFooter({
   onStop: () => void;
 }) {
   const [confirming, setConfirming] = useState(false);
-  const running = run?.setId === set.id;
-  const count = set.slots.length;
-  const unsaved = isNew || dirty;
-  const named = set.name.trim().length > 0;
-  const blocked = !named ? "Name this set to save it" : count === 0 ? "Add a loadout to save it" : null;
 
   return (
     <div className="flex flex-col gap-2">
-      {running ? (
-        <Button variant="outline" className="w-full gap-1.5" onClick={onStop} disabled={run.stopping}>
+      {status.kind === "running" && (
+        <Button variant="outline" className="w-full gap-1.5" onClick={onStop} disabled={status.stopping}>
           <HugeiconsIcon icon={Loading03Icon} className="animate-spin" aria-hidden />
           Stop
         </Button>
-      ) : unsaved ? (
+      )}
+      {status.kind === "unsaved" && (
         <div className="flex gap-2">
-          <Button variant="outline" onClick={onDiscard} disabled={saving}>
+          <Button variant="outline" onClick={onDiscard} disabled={status.saving}>
             Discard
           </Button>
           <span className="relative flex min-w-0 flex-1">
-            {/* Without a name it stays pressable: pressing it shows what's missing. */}
-            <Button
-              variant="emphatic"
-              className="w-full gap-1.5"
-              onClick={onSave}
-              disabled={saving || (named && count === 0)}
-            >
+            <Button variant="emphatic" className="w-full gap-1.5" onClick={onSave} disabled={!status.canSave}>
               <HugeiconsIcon
-                icon={saving ? Loading03Icon : FloppyDiskIcon}
-                className={cn(saving && "animate-spin")}
+                icon={status.saving ? Loading03Icon : FloppyDiskIcon}
+                className={cn(status.saving && "animate-spin")}
                 aria-hidden
               />
-              {isNew ? "Save set" : "Save changes"}
+              {status.isNew ? "Save set" : "Save changes"}
             </Button>
             {saveAttention > 0 && (
               <span
@@ -239,13 +213,14 @@ export function ActivitySetFooter({
             )}
           </span>
         </div>
-      ) : hasCharacter ? (
+      )}
+      {status.kind === "saved" && (
         <>
           <Button
             variant="emphatic"
             className="w-full gap-1.5"
             onClick={() => setConfirming(true)}
-            disabled={!canRun || run !== null || count === 0}
+            disabled={!status.canApply}
           >
             <HugeiconsIcon icon={GameController03Icon} aria-hidden />
             Apply in-game
@@ -261,14 +236,14 @@ export function ActivitySetFooter({
             }}
           />
         </>
-      ) : null}
+      )}
       <div aria-live="polite" className="text-muted-foreground text-sm leading-5 tabular-nums empty:hidden">
-        {running
-          ? run.stopping
-            ? `Stopping after ${run.position} of ${run.total}`
-            : `Applying ${run.position} of ${run.total}`
-          : unsaved
-            ? (blocked ?? (isNew ? "Not saved yet" : "Unsaved changes"))
+        {status.kind === "running"
+          ? status.stopping
+            ? `Stopping after ${status.position} of ${status.total}`
+            : `Applying ${status.position} of ${status.total}`
+          : status.kind === "unsaved"
+            ? status.message
             : null}
       </div>
     </div>

@@ -7,12 +7,20 @@
 //
 // Runtime imports are relative so the module runs under vitest.
 import { ASSUME_MASTERWORK_ALL } from "../dim/loadout-link";
+import type { Manifest } from "../manifest/load";
+import { isBuildItem } from "./ingame-import";
 import {
   LOADOUT_SCHEMA_VERSION,
+  MAX_ARTIFACT_UNLOCKS,
+  MAX_ITEMS,
   MAX_MODS,
   MAX_NAME_LENGTH,
   MAX_NOTES_LENGTH,
   MAX_SET_BONUSES,
+  MAX_SOCKET_OVERRIDES,
+  MAX_STAT_CONSTRAINTS,
+  isInt,
+  isObj,
   parseDimLoadout,
   type SavedLoadoutData,
 } from "./types";
@@ -20,17 +28,9 @@ import {
 export type DimLink = { kind: "share"; id: string } | { kind: "inline"; loadout: unknown };
 
 const SHARE_ID = /^[a-z0-9]{4,16}$/;
-/** The most items a saved loadout holds. */
-const MAX_ITEMS = 12;
-const MAX_SOCKET_OVERRIDES = 24;
-const MAX_STAT_CONSTRAINTS = 6;
-const MAX_ARTIFACT_UNLOCKS = 40;
 /** DIM's older constraints use tiers; a tier is ten points of a stat. */
 const POINTS_PER_TIER = 10;
 
-const isObj = (v: unknown): v is Record<string, unknown> =>
-  typeof v === "object" && v !== null && !Array.isArray(v);
-const isInt = (v: unknown): v is number => Number.isInteger(v);
 const ints = (v: unknown): number[] => (Array.isArray(v) ? v.filter(isInt) : []);
 
 export const isDimShareId = (id: string) => SHARE_ID.test(id);
@@ -113,11 +113,15 @@ function artifactUnlocks(raw: unknown) {
 
 /**
  * A DIM loadout as a loadout to save here, or null if there's nothing usable in it.
- * Only what it equips comes across: this app doesn't use DIM's unequipped items.
+ * Only the build it equips comes across: this app doesn't use DIM's unequipped items, and
+ * can't equip a Ghost, ship or the like, which would otherwise leave the loadout unusable.
  */
-export function savedDataFromDimLoadout(raw: unknown): SavedLoadoutData | null {
+export function savedDataFromDimLoadout(raw: unknown, manifest: Manifest): SavedLoadoutData | null {
   if (!isObj(raw)) return null;
-  const equipped = (Array.isArray(raw.equipped) ? raw.equipped : []).flatMap(item).slice(0, MAX_ITEMS);
+  const equipped = (Array.isArray(raw.equipped) ? raw.equipped : [])
+    .flatMap(item)
+    .filter((ref) => isBuildItem(manifest, ref.hash))
+    .slice(0, MAX_ITEMS);
   const p = isObj(raw.parameters) ? raw.parameters : {};
   const mods = ints(p.mods).slice(0, MAX_MODS);
   if (equipped.length === 0 && mods.length === 0) return null;
@@ -152,14 +156,18 @@ export function savedDataFromDimLoadout(raw: unknown): SavedLoadoutData | null {
 export class DimImportError extends Error {}
 
 /** The loadout behind a pasted DIM link. Every failure is a DimImportError. */
-export async function resolveDimLink(text: string): Promise<SavedLoadoutData> {
+export async function resolveDimLink(
+  text: string,
+  manifest: Manifest,
+  signal?: AbortSignal,
+): Promise<SavedLoadoutData> {
   const link = parseDimLink(text);
   if (!link) throw new DimImportError("That doesn't look like a DIM loadout link");
   let raw = link.kind === "inline" ? link.loadout : undefined;
   if (link.kind === "share") {
     let res: Response;
     try {
-      res = await fetch(`/api/dim-share/${encodeURIComponent(link.id)}`);
+      res = await fetch(`/api/dim-share/${encodeURIComponent(link.id)}`, { signal });
     } catch {
       throw new DimImportError("Couldn't reach DIM. Check your connection and try again.");
     }
@@ -167,7 +175,7 @@ export async function resolveDimLink(text: string): Promise<SavedLoadoutData> {
     if (!res.ok) throw new DimImportError("Couldn't reach DIM. Try again in a moment.");
     raw = ((await res.json().catch(() => null)) as { loadout?: unknown } | null)?.loadout;
   }
-  const data = savedDataFromDimLoadout(raw);
+  const data = savedDataFromDimLoadout(raw, manifest);
   if (!data) throw new DimImportError("That DIM loadout can't be read");
   return data;
 }

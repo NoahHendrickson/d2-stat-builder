@@ -4,6 +4,7 @@
 //
 // Runtime imports are relative so the module runs under vitest.
 import type { DestinyItemComponent, DestinyProfileResponse } from "bungie-api-ts/destiny2";
+import { ITEM_STATE_LOCKED, ITEM_STATE_MASTERWORK } from "../bungie/item-state";
 import type { Manifest } from "../manifest/load";
 import { weaponRoll } from "../inventory/weapon-details";
 import { itemWatermark, type ArmorLocation } from "./normalize";
@@ -53,9 +54,6 @@ export interface LoadoutWeapon {
 }
 
 const POSTMASTER_BUCKET = 215593132;
-/** ItemState flags. */
-const ITEM_STATE_LOCKED = 1;
-const ITEM_STATE_MASTERWORK = 4;
 
 /** The slot a weapon definition equips in; undefined for anything that isn't a weapon. */
 export function weaponSlotOfHash(

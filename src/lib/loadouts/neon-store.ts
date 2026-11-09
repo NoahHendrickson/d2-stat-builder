@@ -86,6 +86,32 @@ export class NeonLoadoutStore implements LoadoutStore {
     return row;
   }
 
+  async createMany(
+    membershipId: string,
+    data: readonly SavedLoadoutData[],
+  ): Promise<SavedLoadout[]> {
+    await this.ensureSchema();
+    if (data.length === 0) return [];
+    const ids = data.map(() => crypto.randomUUID());
+    // One statement, so every row lands or none does; the cap rides in it as in `create`.
+    const rows = (await this.sql`
+      INSERT INTO loadouts (id, membership_id, data)
+      SELECT new.id, ${membershipId}, new.payload::jsonb
+      FROM unnest(${ids}::uuid[], ${data.map((d) => JSON.stringify(d))}::text[])
+        AS new(id, payload)
+      WHERE (SELECT count(*) FROM loadouts WHERE membership_id = ${membershipId})
+        + ${data.length}::int <= ${MAX_LOADOUTS_PER_ACCOUNT}::int
+      RETURNING id, data, created_at, updated_at`) as Row[];
+    if (rows.length === 0) throw new LoadoutLimitError();
+    const byId = new Map(rows.map((row) => [row.id, row]));
+    return ids.map((id) => {
+      const row = byId.get(id);
+      const saved = row && rowToLoadout(row);
+      if (!saved) throw new Error("Stored loadout failed to parse back");
+      return saved;
+    });
+  }
+
   async update(
     membershipId: string,
     id: string,
@@ -108,19 +134,13 @@ export class NeonLoadoutStore implements LoadoutStore {
     return rows.length > 0;
   }
 
-  async deleteMany(membershipId: string, ids: readonly string[] | "all"): Promise<string[]> {
+  async deleteMany(membershipId: string, ids: readonly string[]): Promise<string[]> {
     await this.ensureSchema();
-    if (ids !== "all" && ids.length === 0) return [];
-    const rows = (
-      ids === "all"
-        ? await this.sql`
-            DELETE FROM loadouts WHERE membership_id = ${membershipId}
-            RETURNING id`
-        : await this.sql`
-            DELETE FROM loadouts
-            WHERE membership_id = ${membershipId} AND id = ANY(${[...ids]}::uuid[])
-            RETURNING id`
-    ) as Pick<Row, "id">[];
+    if (ids.length === 0) return [];
+    const rows = (await this.sql`
+      DELETE FROM loadouts
+      WHERE membership_id = ${membershipId} AND id = ANY(${[...ids]}::uuid[])
+      RETURNING id`) as Pick<Row, "id">[];
     return rows.map((r) => r.id);
   }
 }
@@ -157,13 +177,16 @@ class CachedLoadoutStore implements LoadoutStore {
   create(membershipId: string, data: SavedLoadoutData, id?: string) {
     return expiring(accountTag(membershipId), () => neonStore().create(membershipId, data, id));
   }
+  createMany(membershipId: string, data: readonly SavedLoadoutData[]) {
+    return expiring(accountTag(membershipId), () => neonStore().createMany(membershipId, data));
+  }
   update(membershipId: string, id: string, data: SavedLoadoutData) {
     return expiring(accountTag(membershipId), () => neonStore().update(membershipId, id, data));
   }
   delete(membershipId: string, id: string) {
     return expiring(accountTag(membershipId), () => neonStore().delete(membershipId, id));
   }
-  deleteMany(membershipId: string, ids: readonly string[] | "all") {
+  deleteMany(membershipId: string, ids: readonly string[]) {
     return expiring(accountTag(membershipId), () => neonStore().deleteMany(membershipId, ids));
   }
 }

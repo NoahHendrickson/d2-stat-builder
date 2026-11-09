@@ -34,7 +34,7 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import {
   LOADOUTS_QUERY_KEY,
-  reportLoadoutError as mutationError,
+  reportLoadoutError,
   useLoadoutMutations,
   useLoadouts,
 } from "@/lib/loadouts/use-loadouts";
@@ -177,12 +177,21 @@ export function LoadoutsList({
   const sharedImport = useSharedImport();
   // A loadout found through Import DIM loadout goes through the same review drawer.
   const [dimImport, setDimImport] = useState<SavedLoadoutData | null>(null);
-  const importData = dimImport ?? sharedImport.data;
+  const pendingImport = dimImport
+    ? {
+        data: dimImport,
+        key: dimImport.loadout.id,
+        title: "Review DIM loadout",
+        dismiss: () => setDimImport(null),
+      }
+    : sharedImport.data && {
+        data: sharedImport.data,
+        key: sharedImport.key ?? undefined,
+        title: "Import shared loadout",
+        dismiss: sharedImport.dismiss,
+      };
+  const importData = pendingImport?.data ?? null;
   const importOpen = importData !== null && dialog.kind === "none";
-  const dismissImport = () => {
-    if (dimImport) setDimImport(null);
-    else sharedImport.dismiss();
-  };
 
   const pieceMap = useMemo(
     () => new Map(armory.pieces.map((p) => [p.instanceId, p])),
@@ -205,8 +214,7 @@ export function LoadoutsList({
     [armory.characters],
   );
 
-  // An activity set's private copies of in-game slots aren't the player's loadouts.
-  const all = useMemo(() => (loadouts.data ?? []).filter((l) => !l.setOnly), [loadouts.data]);
+  const all = useMemo(() => loadouts.data ?? [], [loadouts.data]);
   // Captured once per mount: relative "edited … ago" labels don't need to tick.
   const [now] = useState(() => Date.now());
   const hashtags = useMemo(() => collectHashtags(all), [all]);
@@ -297,7 +305,7 @@ export function LoadoutsList({
           setDialog({ kind: "none" });
           pending.success("Loadout updated");
         },
-        onError: mutationError(pending),
+        onError: reportLoadoutError(pending),
       },
     );
   };
@@ -310,7 +318,7 @@ export function LoadoutsList({
         setDialog({ kind: "none" });
         pending.success("Loadout deleted");
       },
-      onError: mutationError(pending),
+      onError: reportLoadoutError(pending),
     });
   };
 
@@ -318,7 +326,6 @@ export function LoadoutsList({
     if (dialog.kind !== "delete-many" && dialog.kind !== "delete-all") return;
     const everything = dialog.kind === "delete-all";
     const pending = toast.loading(everything ? "Deleting all loadouts" : "Deleting loadouts");
-    // By id, not "all", so an activity set's private copies stay.
     removeMany.mutate(everything ? all.map((l) => l.id) : dialog.ids, {
       onSuccess: (deleted) => {
         setDialog({ kind: "none" });
@@ -327,7 +334,7 @@ export function LoadoutsList({
           `${deleted.length} ${deleted.length === 1 ? "loadout" : "loadouts"} deleted`,
         );
       },
-      onError: mutationError(pending),
+      onError: reportLoadoutError(pending),
     });
   };
 
@@ -336,9 +343,9 @@ export function LoadoutsList({
     (saved: SavedLoadout) => {
       // Read the names at click time (not via a dependency) so this callback — and with
       // it every memoized row — doesn't change identity after each mutation.
-      const existingNames = (
-        queryClient.getQueryData<SavedLoadout[]>(LOADOUTS_QUERY_KEY) ?? []
-      ).map((l) => l.loadout.name);
+      const existingNames = (queryClient.getQueryData<SavedLoadout[]>(LOADOUTS_QUERY_KEY) ?? [])
+        .filter((l) => !l.setOnly)
+        .map((l) => l.loadout.name);
       const data: SavedLoadoutData = {
         version: LOADOUT_SCHEMA_VERSION,
         loadout: {
@@ -352,7 +359,7 @@ export function LoadoutsList({
       const pending = toast.loading("Duplicating loadout");
       createMutate(data, {
         onSuccess: () => pending.success("Loadout duplicated"),
-        onError: mutationError(pending),
+        onError: reportLoadoutError(pending),
       });
     },
     [createMutate, queryClient],
@@ -374,7 +381,7 @@ export function LoadoutsList({
       pending.success(saved === 1 ? "Loadout imported" : `${saved} loadouts imported`);
     } catch (err) {
       const e = err as { notConfigured: boolean; message: string };
-      if (saved === 0) mutationError(pending)(e);
+      if (saved === 0) reportLoadoutError(pending)(e);
       else pending.error(`Imported ${saved} of ${datas.length}`, e.message);
     }
   };
@@ -392,10 +399,10 @@ export function LoadoutsList({
     const pending = toast.loading("Importing loadout");
     create.mutate(withLoadoutSubclass(data, subclass, manifest), {
       onSuccess: () => {
-        dismissImport();
+        pendingImport?.dismiss();
         pending.success("Loadout imported");
       },
-      onError: mutationError(pending),
+      onError: reportLoadoutError(pending),
     });
   };
 
@@ -804,6 +811,7 @@ export function LoadoutsList({
       )}
       {dialog.kind === "import-dim" && (
         <DimImportDialog
+          manifest={manifest}
           onOpenChange={(open) => !open && setDialog({ kind: "none" })}
           onResolved={(data) => {
             setDimImport(data);
@@ -821,9 +829,9 @@ export function LoadoutsList({
       )}
       <LoadoutEditorDrawer
         open={importOpen}
-        onOpenChange={(open) => !open && dismissImport()}
-        formKey={dimImport ? dimImport.loadout.id : (sharedImport.key ?? undefined)}
-        title={dimImport ? "Review DIM loadout" : "Import shared loadout"}
+        onOpenChange={(open) => !open && pendingImport?.dismiss()}
+        formKey={pendingImport?.key}
+        title={pendingImport?.title ?? "Import shared loadout"}
         description="Save a copy of this loadout to your account. Items you don't own will show as missing."
         submitLabel="Import"
         initialName={importData?.loadout.name ?? ""}

@@ -40,7 +40,7 @@ export function modsSectionForPieces(
 /** The editor's whole form applied to `base`: its name and notes, then everything else. */
 export function commitEditedLoadout(
   base: SavedLoadoutData,
-  { name, notes, ...values }: { name: string; notes: string } & Parameters<typeof commitLoadout>[2],
+  { name, notes, ...values }: { name: string; notes: string } & EditorCommitValues,
   manifest: Manifest,
   mods?: ModsSection,
 ): SavedLoadoutData {
@@ -60,6 +60,18 @@ export function commitEditedLoadout(
   return commitLoadout(next, manifest, values, mods);
 }
 
+/** What the editor's form contributes besides the name and notes. */
+export interface EditorCommitValues {
+  placement?: ModPlacement;
+  desiredStatMods?: number[];
+  subclass?: DimLoadoutItem | null;
+  /** Absent when the editor showed no Weapons row: the saved refs are kept. */
+  weapons?: DimLoadoutItem[];
+  /** Absent when the editor showed no artifact slot; null removes it. */
+  artifact?: DimLoadoutItem | null;
+  stats?: EditorTotals;
+}
+
 /**
  * Apply the editor form onto a saved-loadout payload: mods from the picker,
  * DIM subclass carrier, weapons, artifact, and displayed totals. Save and Edit
@@ -68,16 +80,7 @@ export function commitEditedLoadout(
 export function commitLoadout(
   data: SavedLoadoutData,
   manifest: Manifest,
-  values: {
-    placement?: ModPlacement;
-    desiredStatMods?: number[];
-    subclass?: DimLoadoutItem | null;
-    /** Absent when the editor showed no Weapons row: the saved refs are kept. */
-    weapons?: DimLoadoutItem[];
-    /** Absent when the editor showed no artifact slot; null removes it. */
-    artifact?: DimLoadoutItem | null;
-    stats?: EditorTotals;
-  },
+  values: EditorCommitValues,
   mods?: ModsSection,
 ): SavedLoadoutData {
   let next = data;

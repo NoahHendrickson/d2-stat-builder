@@ -1,9 +1,10 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Loading03Icon } from "@hugeicons/core-free-icons";
 import { DimImportError, resolveDimLink } from "@/lib/loadouts/dim-import";
+import type { Manifest } from "@/lib/manifest/load";
 import type { SavedLoadoutData } from "@/lib/loadouts/types";
 import { Button } from "@/components/ui/button";
 import {
@@ -21,24 +22,33 @@ import { Input } from "@/components/ui/input";
  * import drawer, where the player can review it first.
  */
 export function DimImportDialog({
+  manifest,
   onOpenChange,
   onResolved,
 }: {
+  manifest: Manifest;
   onOpenChange: (open: boolean) => void;
   onResolved: (data: SavedLoadoutData) => void;
 }) {
   const [link, setLink] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // Closing the dialog drops the lookup: a late answer mustn't open the drawer.
+  const lookup = useRef<AbortController | null>(null);
+  useEffect(() => () => lookup.current?.abort(), []);
 
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     if (busy || !link.trim()) return;
     setBusy(true);
     setError(null);
+    const controller = new AbortController();
+    lookup.current = controller;
     try {
-      onResolved(await resolveDimLink(link));
+      const data = await resolveDimLink(link, manifest, controller.signal);
+      if (!controller.signal.aborted) onResolved(data);
     } catch (err) {
+      if (controller.signal.aborted) return;
       setError(err instanceof DimImportError ? err.message : "That DIM loadout can't be read");
     } finally {
       setBusy(false);

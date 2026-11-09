@@ -29,6 +29,9 @@ export function inGameImportName(slot: InGameLoadoutSlot, names: { hash: number;
   return (name || `Loadout ${slot.index + 1}`).slice(0, MAX_NAME_LENGTH);
 }
 
+/** Where `slotItemOrder` puts anything that isn't part of a build. */
+const NOT_BUILD_GEAR = 99;
+
 /**
  * Where an item sits when a loadout's gear is listed: subclass, then weapons, then
  * armor, each in slot order, then the artifact; anything else last.
@@ -41,8 +44,12 @@ export function slotItemOrder(manifest: Manifest, itemHash: number): number {
   const armor = ARMOR_BUCKETS[bucket as keyof typeof ARMOR_BUCKETS];
   if (armor) return 1 + WEAPON_SLOTS.length + ARMOR_SLOTS.indexOf(armor);
   if (bucket === ARTIFACT_BUCKET) return 1 + WEAPON_SLOTS.length + ARMOR_SLOTS.length;
-  return 99;
+  return NOT_BUILD_GEAR;
 }
+
+/** A subclass, weapon, armor piece or artifact, as opposed to a Ghost, ship and the like. */
+export const isBuildItem = (manifest: Manifest, itemHash: number) =>
+  slotItemOrder(manifest, itemHash) !== NOT_BUILD_GEAR;
 
 /**
  * The subclass carrier: only the sockets this app models (abilities, aspects,
@@ -109,13 +116,26 @@ function piecePlacement(item: InGameLoadoutItem, piece: ArmorPiece, manifest: Ma
   return out;
 }
 
-export interface InGameImportInput {
-  slot: InGameLoadoutSlot;
-  name: string;
+/** What's needed to turn a slot's gear into a loadout. */
+export interface SlotGearLookups {
   classType: number;
   pieceMap: ReadonlyMap<string, ArmorPiece>;
   weaponMap: ReadonlyMap<string, LoadoutWeapon>;
   manifest: Manifest;
+}
+
+export interface InGameImportInput extends SlotGearLookups {
+  slot: InGameLoadoutSlot;
+  name: string;
+}
+
+/** A slot's gear as a loadout, under the name the game shows for it. */
+export function inGameSlotAsLoadout(
+  slot: InGameLoadoutSlot,
+  names: { hash: number; name: string }[],
+  lookups: SlotGearLookups,
+): SavedLoadoutData {
+  return inGameSlotToLoadout({ slot, name: inGameImportName(slot, names), ...lookups });
 }
 
 /**

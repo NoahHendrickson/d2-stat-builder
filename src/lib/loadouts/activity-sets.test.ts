@@ -3,13 +3,14 @@ import {
   activitySetsForCharacter,
   loadoutClassType,
   orphanedSetLoadouts,
+  MAX_ACTIVITY_SETS,
   parseActivitySets,
   sameActivitySet,
   withSlotAssignment,
   withSlotLabels,
   type ActivitySet,
 } from "./activity-sets";
-import { mergeSettingValues, parseSettingValue } from "../settings/keys";
+import { MAX_SETTING_BODY_LENGTH, mergeSettingValues, parseSettingValue } from "../settings/keys";
 import type { SavedLoadout } from "./types";
 
 const set = (id: string, extra: Record<string, unknown> = {}) => ({
@@ -98,6 +99,15 @@ describe("slot labels", () => {
     expect(parse({ ...labels, iconHash: -1 })).toEqual([{ index: 1, loadoutId: "a" }]);
     expect(parse("nope")).toEqual([{ index: 1, loadoutId: "a" }]);
   });
+});
+
+test("a full list of full sets fits under the settings limit", () => {
+  const labels = { nameHash: 0xffffffff, iconHash: 0xffffffff, colorHash: 0xffffffff };
+  const slots = Array.from({ length: 32 }, (_, index) => ({ index, loadoutId: "x".repeat(36), labels }));
+  const sets = Array.from({ length: MAX_ACTIVITY_SETS }, (_, i) =>
+    set(String(i), { name: "n".repeat(60), characterId: "1".repeat(20), slots }),
+  );
+  expect(JSON.stringify({ value: sets }).length).toBeLessThan(MAX_SETTING_BODY_LENGTH);
 });
 
 describe("orphanedSetLoadouts", () => {

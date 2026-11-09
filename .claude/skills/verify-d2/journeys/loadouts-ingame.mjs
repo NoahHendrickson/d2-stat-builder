@@ -177,9 +177,9 @@ export default async function ({ page, app, stub, step, shot, expect }) {
     await page.click({ role: "button", name: "Save set" });
     await app.toast(/Trials saved/);
     const posts = stub.requests.filter((r) => r.method === "POST" && r.path === "/api/loadouts");
-    expect(posts.length === 2, `one POST per filled slot (${posts.length})`);
+    expect(posts.length === 1 && posts[0].body?.loadouts?.length === 2, `one all-or-nothing POST for the filled slots (${posts.length})`);
     expect(
-      posts.every((p) => p.body?.setOnly === true),
+      posts[0].body.loadouts.every((l) => l.setOnly === true),
       "the copies are private to the set",
     );
     await page.waitFor(() => lastSets().some((s) => s.name === "Trials"));
@@ -197,7 +197,7 @@ export default async function ({ page, app, stub, step, shot, expect }) {
     await page.click({ role: "button", name: "Save changes" });
     await app.toast(/Trials saved/);
     await page.waitFor(() => stub.store.loadouts.size === 3);
-    expect(stub.last("DELETE", "/api/loadouts/")?.status === 200, "a removed copy is deleted on Save");
+    expect(stub.last("DELETE", "/api/loadouts")?.status === 200, "a removed copy is deleted on Save");
     await page.click({ role: "button", name: "Delete Trials" });
     await page.click({ role: "button", name: "Delete" }, { within: { role: "dialog", name: "Delete activity set?" } });
     await app.toast(/Activity set deleted/);
@@ -274,15 +274,21 @@ export default async function ({ page, app, stub, step, shot, expect }) {
     await page.click({ role: "button", name: "Save changes" });
     await app.toast(/saved/);
     const post = stub.last("POST", "/api/loadouts");
-    expect(post.body.loadout.name === "Raid private" && post.body.setOnly === true, "the copy is private to the set");
+    expect(post.body.loadouts?.[0]?.loadout?.name === "Raid private" && post.body.loadouts[0].setOnly === true, "the copy is private to the set");
     await page.waitFor(() => stub.store.loadouts.get(lastSets()[0].slots[0].loadoutId)?.setOnly === true);
     expect(stub.store.loadouts.get(lastSets()[0].slots[0].loadoutId).loadout.name === "Raid private", "the saved set points at the copy");
 
     await page.click({ role: "button", name: "Edit" }, { within: copy });
     await page.waitFor(drawer);
     expect(!(await page.exists({ role: "button", name: "Save to Conflux only" }, { within: drawer })), "a private copy has nowhere else to go");
-    await page.press("Escape");
+    await page.fill({ role: "textbox", name: "Loadout name" }, "Raid private 2", { within: drawer });
+    const putsBeforeCopyEdit = puts();
+    await page.click({ role: "button", name: "Save changes" }, { within: drawer });
     await page.waitFor(drawer, { gone: true });
+    await page.waitFor({ role: "article", name: "Raid private 2" });
+    expect(puts() === putsBeforeCopyEdit, "editing a stored copy waits for the set's Save");
+    await page.click({ role: "button", name: "Discard" });
+    await page.waitFor(copy);
   });
 
   await step("lo-set-peek: Peek shows what the game holds in the set's slots", async () => {

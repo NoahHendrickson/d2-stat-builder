@@ -10,34 +10,30 @@ export function useActivitySets(): ActivitySet[] {
   return useSetting("activitySets");
 }
 
-/** Add a new set (at the end) or replace the one with the same id in place. */
-export function saveActivitySet(set: ActivitySet): void {
-  const sets = getSetting("activitySets");
-  setSetting(
-    "activitySets",
-    sets.some((s) => s.id === set.id)
-      ? sets.map((s) => (s.id === set.id ? set : s))
-      : [...sets, set],
-  );
+type LoadoutRows = readonly Pick<SavedLoadout, "id" | "setOnly">[];
+
+/** Store the new list; answers with the private copies no set uses any more. */
+function writeSets(next: ActivitySet[], loadouts: LoadoutRows): string[] {
+  const before = getSetting("activitySets");
+  setSetting("activitySets", next);
+  return orphanedSetLoadouts(before, next, loadouts);
 }
 
 /**
- * Make a change to the sets, then report the set-only loadouts it left unused so the
- * caller can delete them.
+ * Add a new set (at the end) or replace the one with the same id in place. Answers with
+ * the private copies that left unused, for the caller to delete.
  */
-export function changeActivitySets(
-  change: () => void,
-  loadouts: readonly SavedLoadout[],
-  onOrphan: (loadoutId: string) => void,
-): void {
-  const before = getSetting("activitySets");
-  change();
-  orphanedSetLoadouts(before, getSetting("activitySets"), loadouts).forEach(onOrphan);
+export function saveActivitySet(set: ActivitySet, loadouts: LoadoutRows): string[] {
+  const sets = getSetting("activitySets");
+  return writeSets(
+    sets.some((s) => s.id === set.id)
+      ? sets.map((s) => (s.id === set.id ? set : s))
+      : [...sets, set],
+    loadouts,
+  );
 }
 
-export function removeActivitySet(id: string): void {
-  setSetting(
-    "activitySets",
-    getSetting("activitySets").filter((s) => s.id !== id),
-  );
+/** Remove a set. Answers with the private copies that left unused, for the caller to delete. */
+export function removeActivitySet(id: string, loadouts: LoadoutRows): string[] {
+  return writeSets(getSetting("activitySets").filter((s) => s.id !== id), loadouts);
 }

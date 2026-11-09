@@ -54,7 +54,7 @@ export default async function ({ page, app, stub, step, shot, expect }) {
 
   await step("lo-dim-import: DIM's own full link works too", async () => {
     await openDialog();
-    const loadout = { name: "Inline DIM", classType: 1, equipped: [{ hash: 3448274439 }] };
+    const loadout = { name: "Inline DIM", classType: 1, equipped: [{ hash: 30472172 }] };
     await go(`https://app.destinyitemmanager.com/loadouts?loadout=${encodeURIComponent(JSON.stringify(loadout))}`);
     await page.waitFor(drawer);
     expect((await page.value({ role: "textbox", name: "Loadout name" }, { within: drawer })) === "Inline DIM", "the name came across");

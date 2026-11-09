@@ -1,5 +1,21 @@
 import { afterEach, describe, expect, test, vi } from "vitest";
-import { DimImportError, parseDimLink, resolveDimLink, savedDataFromDimLoadout } from "./dim-import";
+import { ARMOR_BUCKETS } from "../armory/stats";
+import type { Manifest } from "../manifest/load";
+import {
+  DimImportError,
+  parseDimLink,
+  resolveDimLink as resolveLink,
+  savedDataFromDimLoadout as fromDim,
+} from "./dim-import";
+
+const GHOST = 777;
+const ARMOR_BUCKET = Number(Object.keys(ARMOR_BUCKETS)[0]);
+const manifest = {
+  def: (_table: string, hash: number) =>
+    hash === GHOST ? { inventory: { bucketTypeHash: 4023194814 } } : { inventory: { bucketTypeHash: ARMOR_BUCKET } },
+} as unknown as Manifest;
+const savedDataFromDimLoadout = (raw: unknown) => fromDim(raw, manifest);
+const resolveDimLink = (text: string) => resolveLink(text, manifest);
 
 const inlineLink = (loadout: unknown, base = "https://app.destinyitemmanager.com/loadouts") =>
   `${base}?loadout=${encodeURIComponent(JSON.stringify(loadout))}`;
@@ -97,6 +113,12 @@ describe("savedDataFromDimLoadout", () => {
     expect(savedDataFromDimLoadout({ name: "Empty", equipped: [] })).toBeNull();
     expect(savedDataFromDimLoadout("junk")).toBeNull();
   });
+});
+
+test("leaves out gear that isn't part of a build, before the item limit", () => {
+  const armor = Array.from({ length: 12 }, (_, i) => ({ hash: i + 1 }));
+  const data = savedDataFromDimLoadout({ name: "Raid", equipped: [{ hash: GHOST }, ...armor] })!;
+  expect(data.loadout.equipped.map((ref) => ref.hash)).toEqual(armor.map((ref) => ref.hash));
 });
 
 describe("resolveDimLink", () => {

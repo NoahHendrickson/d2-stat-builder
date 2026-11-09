@@ -22,13 +22,13 @@ import {
 } from "@/lib/bungie/ingame-loadouts";
 import type { Manifest } from "@/lib/manifest/load";
 import { statIconsFromManifest } from "@/lib/manifest/stat-icons";
-import { inGameImportName, inGameSlotToLoadout } from "@/lib/loadouts/ingame-import";
+import { inGameSlotAsLoadout } from "@/lib/loadouts/ingame-import";
 import { resolveLoadout } from "@/lib/loadouts/resolve";
-import type { SavedLoadout, SavedLoadoutData } from "@/lib/loadouts/types";
+import { transientLoadout, type SavedLoadout, type SavedLoadoutData } from "@/lib/loadouts/types";
 import { LoadoutPickList } from "@/components/loadouts/activity-set-panel";
 import { Emblem } from "@/components/loadouts/ingame-save-dialog";
 import { inGameSlotName } from "@/components/loadouts/ingame-slot-grid";
-import { LoadoutCardBody } from "@/components/loadouts/loadout-card-body";
+import { LoadoutCardBodyArmorFirst } from "@/components/loadouts/loadout-card-body";
 import { LoadoutStatLine } from "@/components/loadouts/loadout-stat-line";
 import { EmptySlotIcon, LOADOUT_SLOT_CLASS } from "@/components/loadouts/loadout-weapons-editor";
 import { Button } from "@/components/ui/button";
@@ -118,23 +118,19 @@ function SlotDetailFrame({
   );
 }
 
-/** A slot's gear as a loadout, for showing it; a card only reads it, so no real row is needed. */
+/** A slot's gear as a loadout, for showing it. */
 function slotAsLoadout(
   slot: InGameLoadoutSlot,
   identifiers: InGameLoadoutIdentifiers,
   classType: number,
   { pieceMap, weaponMap, manifest }: GearLookups,
 ) {
-  const data = inGameSlotToLoadout({
-    slot,
-    name: inGameImportName(slot, identifiers.names),
-    classType,
-    pieceMap,
-    weaponMap,
-    manifest,
-  });
-  const shown: SavedLoadout = { ...data, id: `slot-${slot.index}`, createdAt: 0, updatedAt: 0 };
-  return { data, shown, resolved: resolveLoadout(data.loadout, pieceMap, manifest, weaponMap) };
+  const data = inGameSlotAsLoadout(slot, identifiers.names, { classType, pieceMap, weaponMap, manifest });
+  return {
+    data,
+    shown: transientLoadout(`slot-${slot.index}`, data),
+    resolved: resolveLoadout(data.loadout, pieceMap, manifest, weaponMap),
+  };
 }
 
 /** Read-only: what the game holds in a slot right now, seen from an activity set. */
@@ -152,7 +148,7 @@ function SlotPeek({
   return (
     <section aria-label="This slot's current loadout" className="flex flex-col gap-2">
       <h4 className="d2-label">This slot&apos;s current loadout</h4>
-      <LoadoutCardBody saved={shown} resolved={resolved} manifest={lookups.manifest} armorFirst />
+      <LoadoutCardBodyArmorFirst saved={shown} resolved={resolved} manifest={lookups.manifest} />
     </section>
   );
 }
@@ -238,7 +234,7 @@ export function CurrentSlotDetail({
             <HugeiconsIcon icon={ArrowDataTransferHorizontalIcon} aria-hidden />
             Replace
           </Button>
-          <Button className={ACTION_CLASS} size="xs" onClick={onCopy}>
+          <Button className={ACTION_CLASS} size="xs" onClick={onCopy} disabled={disabled}>
             <HugeiconsIcon icon={Copy01Icon} aria-hidden />
             Copy to Conflux
           </Button>
@@ -255,7 +251,7 @@ export function CurrentSlotDetail({
         </>
       }
     >
-      <LoadoutCardBody saved={shown} resolved={resolved} manifest={manifest} armorFirst />
+      <LoadoutCardBodyArmorFirst saved={shown} resolved={resolved} manifest={manifest} />
     </SlotDetailFrame>
   );
 }
@@ -335,8 +331,10 @@ export function SetSlotDetail({
   peek,
   onPeekChange,
   canPeek,
+  loadoutsLoaded,
   options,
   disabled,
+  copyDisabled,
   onAssign,
   onCopySlot,
   onCustomize,
@@ -356,10 +354,14 @@ export function SetSlotDetail({
   canPeek: boolean;
   /** Every loadout, the set's private copies included. */
   loadouts: readonly SavedLoadout[];
+  /** Until they're in, a loadout that can't be found may just not have loaded. */
+  loadoutsLoaded: boolean;
   /** The player's own loadouts this set's character can wear. */
   options: readonly SavedLoadout[];
   /** The set is being saved in-game. */
   disabled: boolean;
+  /** Gear is still provisional, so a copy made now could lose its mods. */
+  copyDisabled: boolean;
   onAssign: (loadoutId: string | undefined) => void;
   onCopySlot: () => void;
   /** Called with the slot as the set will leave it. */
@@ -387,7 +389,7 @@ export function SetSlotDetail({
               type="button"
               className={cn(SLOT_CTA_CLASS, "flex-1")}
               onClick={onCopySlot}
-              disabled={disabled || slot.empty}
+              disabled={disabled || copyDisabled || slot.empty}
             >
               <SlotCtaContent
                 icon={Copy01Icon}
@@ -461,6 +463,16 @@ export function SetSlotDetail({
     </LoadoutPickPopover>
   );
 
+  if (!saved && !loadoutsLoaded) {
+    return (
+      <SlotDetailFrame {...frame} title="Loadout not loaded" subtitle={subtitle} actions={null}>
+        <p className="text-muted-foreground text-sm">
+          Your saved loadouts haven&apos;t loaded yet, so this slot can&apos;t be shown.
+        </p>
+      </SlotDetailFrame>
+    );
+  }
+
   if (!saved) {
     return (
       <SlotDetailFrame
@@ -517,7 +529,7 @@ export function SetSlotDetail({
         </>
       }
     >
-      <LoadoutCardBody saved={saved} resolved={resolved} manifest={manifest} armorFirst />
+      <LoadoutCardBodyArmorFirst saved={saved} resolved={resolved} manifest={manifest} />
     </SlotDetailFrame>
   );
 }

@@ -181,11 +181,17 @@ export function parseSlotRequest(body: unknown): SlotRequest | null {
   return { characterId: b.characterId, loadoutIndex: b.loadoutIndex as number };
 }
 
+/** A name, icon and colour; undefined unless all three are valid hashes. */
+export function parseSlotIdentifiers(v: unknown): SlotIdentifiers | undefined {
+  const b = v as Partial<SlotIdentifiers> | null;
+  if (!b || typeof b !== "object") return undefined;
+  if (!isUint32(b.nameHash) || !isUint32(b.iconHash) || !isUint32(b.colorHash)) return undefined;
+  return { nameHash: b.nameHash, iconHash: b.iconHash, colorHash: b.colorHash };
+}
+
 /** Validate a client-supplied snapshot request; null if malformed. */
 export function parseSnapshotRequest(body: unknown): SnapshotRequest | null {
   const slot = parseSlotRequest(body);
-  if (!slot) return null;
-  const b = body as Partial<SnapshotRequest>;
-  if (!isUint32(b.nameHash) || !isUint32(b.iconHash) || !isUint32(b.colorHash)) return null;
-  return { ...slot, nameHash: b.nameHash, iconHash: b.iconHash, colorHash: b.colorHash };
+  const labels = parseSlotIdentifiers(body);
+  return slot && labels ? { ...slot, ...labels } : null;
 }

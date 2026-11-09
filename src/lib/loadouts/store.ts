@@ -24,12 +24,17 @@ export interface LoadoutStore {
    * LoadoutLimitError when the owner is at MAX_LOADOUTS_PER_ACCOUNT.
    */
   create(membershipId: string, data: SavedLoadoutData, id?: string): Promise<SavedLoadout>;
+  /**
+   * Stores every row or none, and returns them in the order given. Throws
+   * LoadoutLimitError when they wouldn't all fit under MAX_LOADOUTS_PER_ACCOUNT.
+   */
+  createMany(membershipId: string, data: readonly SavedLoadoutData[]): Promise<SavedLoadout[]>;
   /** Returns null when the row doesn't exist for this owner. */
   update(membershipId: string, id: string, data: SavedLoadoutData): Promise<SavedLoadout | null>;
   /** Returns false when the row doesn't exist for this owner. */
   delete(membershipId: string, id: string): Promise<boolean>;
-  /** Deletes the given rows (or every row with "all"); returns the ids actually removed. */
-  deleteMany(membershipId: string, ids: readonly string[] | "all"): Promise<string[]>;
+  /** Deletes the given rows; returns the ids actually removed. */
+  deleteMany(membershipId: string, ids: readonly string[]): Promise<string[]>;
 }
 
 /** In-memory store — unit tests and a fallback when no database is configured. */
@@ -64,6 +69,13 @@ export class MemoryLoadoutStore implements LoadoutStore {
     return row;
   }
 
+  async createMany(membershipId: string, data: readonly SavedLoadoutData[]) {
+    if (this.bucket(membershipId).size + data.length > MAX_LOADOUTS_PER_ACCOUNT) {
+      throw new LoadoutLimitError();
+    }
+    return Promise.all(data.map((d) => this.create(membershipId, d)));
+  }
+
   async update(membershipId: string, id: string, data: SavedLoadoutData) {
     const existing = this.bucket(membershipId).get(id);
     if (!existing) return null;
@@ -81,9 +93,8 @@ export class MemoryLoadoutStore implements LoadoutStore {
     return this.bucket(membershipId).delete(id);
   }
 
-  async deleteMany(membershipId: string, ids: readonly string[] | "all") {
+  async deleteMany(membershipId: string, ids: readonly string[]) {
     const bucket = this.bucket(membershipId);
-    const targets = ids === "all" ? [...bucket.keys()] : ids;
-    return targets.filter((id) => bucket.delete(id));
+    return ids.filter((id) => bucket.delete(id));
   }
 }

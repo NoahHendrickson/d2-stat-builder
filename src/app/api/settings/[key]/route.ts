@@ -1,12 +1,9 @@
 import { NextResponse } from "next/server";
 import { readUser } from "@/lib/bungie/session";
-import { isSettingKey, parseSettingValue } from "@/lib/settings/keys";
+import { isSettingKey, MAX_SETTING_BODY_LENGTH, parseSettingValue } from "@/lib/settings/keys";
 import { getServerSettingsStore } from "@/lib/settings/neon-store";
 import { notConfigured, storageError } from "@/lib/loadouts/api-responses";
 import { rejectCrossSite } from "@/lib/http/same-origin";
-
-/** Settings are small lists; anything bigger is not something this app wrote. */
-const MAX_BODY_LENGTH = 64 * 1024;
 
 type Ctx = { params: Promise<{ key: string }> };
 
@@ -24,7 +21,8 @@ export async function PUT(request: Request, { params }: Ctx) {
     return NextResponse.json({ error: "Unknown setting" }, { status: 404 });
   }
   const text = await request.text().catch(() => "");
-  if (text.length > MAX_BODY_LENGTH) {
+  // Settings are small lists; anything bigger is not something this app wrote.
+  if (text.length > MAX_SETTING_BODY_LENGTH) {
     return NextResponse.json({ error: "Setting too large" }, { status: 413 });
   }
   let body: unknown;

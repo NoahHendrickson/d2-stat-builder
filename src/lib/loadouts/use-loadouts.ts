@@ -66,11 +66,26 @@ function writeData(saved: SavedLoadout, loadout = saved.loadout): SavedLoadoutDa
   };
 }
 
+const withoutSetCopies = (list: SavedLoadout[]) => list.filter((l) => !l.setOnly);
+
 /** The signed-in player's saved loadouts, newest-edited first. */
 export function useLoadouts() {
+  return useLoadoutRows(withoutSetCopies);
+}
+
+/**
+ * Every stored row, including the private copies activity sets keep (`setOnly`). Only
+ * for what has to see those; anything showing the player's loadouts wants useLoadouts.
+ */
+export function useLoadoutsWithSetCopies() {
+  return useLoadoutRows();
+}
+
+function useLoadoutRows(select?: (list: SavedLoadout[]) => SavedLoadout[]) {
   const session = useSession();
   return useQuery<SavedLoadout[], LoadoutsApiError>({
     queryKey: LOADOUTS_QUERY_KEY,
+    select,
     enabled: session.data?.authenticated === true,
     staleTime: 60_000,
     // A 503 (not configured) or 401 can't be fixed by retrying.
@@ -84,18 +99,18 @@ export function useLoadouts() {
   });
 }
 
-/**
- * Create / update / delete. Each writes the server's response straight into the cached
- * list instead of invalidating it: the row that came back is authoritative, and a
- * refetch of the whole list (which grows with every save) after every edit would be a
- * full-list re-render for nothing.
- */
 /** Reports a failed save on the action's spinner toast. */
 export const reportLoadoutError = (pending: Notifier) => (err: { notConfigured: boolean; message: string }) =>
   pending.error(
     err.notConfigured ? "Loadout storage isn't configured — set DATABASE_URL" : err.message,
   );
 
+/**
+ * Create / update / delete. Each writes the server's response straight into the cached
+ * list instead of invalidating it: the row that came back is authoritative, and a
+ * refetch of the whole list (which grows with every save) after every edit would be a
+ * full-list re-render for nothing.
+ */
 export function useLoadoutMutations() {
   const queryClient = useQueryClient();
   const patchList = (fn: (list: SavedLoadout[]) => SavedLoadout[]) =>
@@ -114,6 +129,22 @@ export function useLoadoutMutations() {
       return parsed;
     },
     onSuccess: (saved) => patchList((list) => [saved, ...list]),
+  });
+
+  /** Stores all of them or none, returned in the order given. */
+  const createMany = useMutation<SavedLoadout[], LoadoutsApiError, readonly SavedLoadoutData[]>({
+    mutationFn: async (data) => {
+      const { loadouts } = await api<{ loadouts: unknown[] }>("/api/loadouts", {
+        method: "POST",
+        body: JSON.stringify({ loadouts: data }),
+      });
+      const parsed = loadouts.map(parseSavedLoadout);
+      if (!parsed.every((l) => l !== null)) {
+        throw new LoadoutsApiError(500, "Server returned an unreadable loadout");
+      }
+      return parsed as SavedLoadout[];
+    },
+    onSuccess: (saved) => patchList((list) => [...saved, ...list]),
   });
 
   const update = useMutation<
@@ -145,20 +176,16 @@ export function useLoadoutMutations() {
     onSuccess: (_, id) => patchList((list) => list.filter((l) => l.id !== id)),
   });
 
-  /** Bulk delete: the listed ids, or "all" for every loadout on the account. */
-  const removeMany = useMutation<string[], LoadoutsApiError, readonly string[] | "all">({
-    mutationFn: async (target) => {
+  /** Bulk delete by id. */
+  const removeMany = useMutation<string[], LoadoutsApiError, readonly string[]>({
+    mutationFn: async (ids) => {
       const { deleted } = await api<{ deleted: string[] }>("/api/loadouts", {
         method: "DELETE",
-        body: JSON.stringify(target === "all" ? { all: true } : { ids: target }),
+        body: JSON.stringify({ ids }),
       });
       return deleted;
     },
-    onSuccess: (deleted, target) => {
-      if (target === "all") {
-        patchList(() => []);
-        return;
-      }
+    onSuccess: (deleted) => {
       const gone = new Set(deleted);
       patchList((list) => list.filter((l) => !gone.has(l.id)));
     },
@@ -240,5 +267,5 @@ export function useLoadoutMutations() {
     [queryClient, updateMutateAsync],
   );
 
-  return { create, update, remove, removeMany, setTag };
+  return { create, createMany, update, remove, removeMany, setTag };
 }

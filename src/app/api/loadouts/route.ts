@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { readUser } from "@/lib/bungie/session";
 import { getServerLoadoutStore } from "@/lib/loadouts/neon-store";
-import { parseSavedLoadoutData } from "@/lib/loadouts/types";
+import { parseSavedLoadoutData, type SavedLoadoutData } from "@/lib/loadouts/types";
 import { isLoadoutId, notConfigured, storageError } from "@/lib/loadouts/api-responses";
 import { rejectCrossSite } from "@/lib/http/same-origin";
 import { LoadoutLimitError, MAX_LOADOUTS_PER_ACCOUNT } from "@/lib/loadouts/store";
@@ -23,6 +23,17 @@ export async function GET() {
   }
 }
 
+/** Most loadouts one bulk create accepts: an activity set can't hold more. */
+const MAX_BULK_CREATE = 32;
+
+/** Every entry must be a valid loadout, or nothing is stored. */
+function parseBulkCreate(list: unknown[]): SavedLoadoutData[] | null {
+  if (list.length === 0 || list.length > MAX_BULK_CREATE) return null;
+  const parsed = list.map(parseSavedLoadoutData);
+  return parsed.every((d) => d !== null) ? (parsed as SavedLoadoutData[]) : null;
+}
+
+/** Create one loadout, or with `{ loadouts: [...] }` several, all or none, in that order. */
 export async function POST(request: Request) {
   const refused = rejectCrossSite(request);
   if (refused) return refused;
@@ -31,10 +42,16 @@ export async function POST(request: Request) {
   const store = getServerLoadoutStore();
   if (!store) return notConfigured();
 
-  const data = parseSavedLoadoutData(await request.json().catch(() => null));
-  if (!data) return NextResponse.json({ error: "Invalid loadout" }, { status: 400 });
-
+  const body = (await request.json().catch(() => null)) as { loadouts?: unknown } | null;
   try {
+    if (Array.isArray(body?.loadouts)) {
+      const data = parseBulkCreate(body.loadouts);
+      if (!data) return NextResponse.json({ error: "Invalid loadouts" }, { status: 400 });
+      const loadouts = await store.createMany(user.membershipId, data);
+      return NextResponse.json({ loadouts }, { status: 201 });
+    }
+    const data = parseSavedLoadoutData(body);
+    if (!data) return NextResponse.json({ error: "Invalid loadout" }, { status: 400 });
     const loadout = await store.create(user.membershipId, data);
     return NextResponse.json({ loadout }, { status: 201 });
   } catch (err) {
@@ -51,10 +68,7 @@ export async function POST(request: Request) {
 /** Most ids one bulk delete accepts — well past any real library. */
 const MAX_BULK_DELETE = 1000;
 
-/**
- * Bulk delete: `{ ids: [...] }` removes those rows, `{ all: true }` removes every row
- * this account owns. Answers with the ids that were actually deleted.
- */
+/** Bulk delete: `{ ids: [...] }` removes those rows. Answers with the ids actually deleted. */
 export async function DELETE(request: Request) {
   const refused = rejectCrossSite(request);
   if (refused) return refused;
@@ -63,22 +77,14 @@ export async function DELETE(request: Request) {
   const store = getServerLoadoutStore();
   if (!store) return notConfigured();
 
-  const body = (await request.json().catch(() => null)) as { ids?: unknown; all?: unknown } | null;
-  let target: string[] | "all";
-  if (body?.all === true) {
-    target = "all";
-  } else if (
-    Array.isArray(body?.ids) &&
-    body.ids.length <= MAX_BULK_DELETE &&
-    body.ids.every(isLoadoutId)
-  ) {
-    target = [...new Set(body.ids)];
-  } else {
+  const body = (await request.json().catch(() => null)) as { ids?: unknown } | null;
+  if (!Array.isArray(body?.ids) || body.ids.length > MAX_BULK_DELETE || !body.ids.every(isLoadoutId)) {
     return NextResponse.json({ error: "Invalid delete request" }, { status: 400 });
   }
 
   try {
-    return NextResponse.json({ deleted: await store.deleteMany(user.membershipId, target) });
+    const deleted = await store.deleteMany(user.membershipId, [...new Set(body.ids)]);
+    return NextResponse.json({ deleted });
   } catch (err) {
     return storageError(err);
   }
