@@ -20,6 +20,7 @@ export function useOptimizer() {
     run: store.run,
     cancel: store.cancel,
     applyPending: store.applyPending,
+    retry: store.retry,
     /** Non-subscribing read of the current snapshot, for click-time reads of `shown`. */
     getSnapshot: store.getSnapshot,
     progress: store.progress,

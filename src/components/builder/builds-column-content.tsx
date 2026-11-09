@@ -9,7 +9,7 @@ import {
   MAX_SHOWN,
   type GetBuilderState,
 } from "@/components/builder/build-results";
-import type { PoolGap } from "@/components/builder/empty-builds";
+import type { OverMaxFix, PoolGap } from "@/components/builder/empty-builds";
 import { LinkedLoadoutBanner } from "@/components/builder/linked-loadout-banner";
 import { LoadoutSortControls } from "@/components/builder/loadout-sort-controls";
 import { TheoryIntroAlert } from "@/components/builder/theory-intro-alert";
@@ -38,6 +38,7 @@ import {
   THEORY_SORT_OPTIONS,
   type TheorySortState,
 } from "@/lib/builder/sort-theory";
+import type { SearchFailure } from "@/lib/optimizer/optimizer-store";
 import { useStoreValue, type ValueStore } from "@/lib/value-store";
 
 const LOADING_ROWS = 5;
@@ -47,18 +48,24 @@ export type BuildsViewState =
   | "idle"
   | "searching"
   | "results"
-  | "no-matches";
+  | "no-matches"
+  | "failed";
 
 function getBuildsViewState({
   ready,
   showLoading,
   result,
+  failed,
 }: {
   ready: boolean;
   showLoading: boolean;
   result: OptimizerOutput | null;
+  failed: SearchFailure | null;
 }): BuildsViewState {
   if (!ready) return "not-ready";
+  // A crash leaves an older query's list behind: it doesn't match these targets. A
+  // crash after this query's own list was up keeps that list (only maximums were left).
+  if (failed && !failed.listIsCurrent) return "failed";
   if (showLoading) return "searching";
   if (!result) return "idle";
   if (result.loadouts.length === 0) return "no-matches";
@@ -75,6 +82,8 @@ function getBuildsStatusLabel(state: BuildsViewState, result: OptimizerOutput | 
       return "Searching…";
     case "no-matches":
       return "No builds match";
+    case "failed":
+      return "Search failed";
     case "results":
       // combosValid is exact until the heap fills; after that the walk skips subtrees it
       // can prove can't enter the list without counting them, so it's a lower bound.
@@ -136,12 +145,13 @@ export function buildsHeader({
   running,
   result,
   theory,
+  failed,
 }: Pick<
   BuildsColumnContentProps,
-  "mode" | "ready" | "showLoading" | "running" | "result" | "theory"
+  "mode" | "ready" | "showLoading" | "running" | "result" | "theory" | "failed"
 >): BuildsHeader {
   if (mode === "theoretical") return theoryHeader(ready, theory);
-  const state = getBuildsViewState({ ready, showLoading, result });
+  const state = getBuildsViewState({ ready, showLoading, result, failed });
   return {
     title: "Builds",
     state,
@@ -172,6 +182,12 @@ export interface BuildsColumnContentProps {
   /** Apply the waiting better list (the explicit user action that changes the list). */
   onShowPending: () => void;
   onCancel: () => void;
+  /** The latest search crashed (see SearchFailure); null otherwise. */
+  failed: SearchFailure | null;
+  /** Run the crashed search again. */
+  onRetry: () => void;
+  /** Targets past their maximums on a settled empty result (see OverMaxFix). */
+  overMax?: OverMaxFix;
   pieceMap: Map<string, ArmorPiece>;
   setMap: Map<number, ArmorSetInfo>;
   statIcons: StatIconMap;
@@ -321,6 +337,9 @@ function ActualBuildsBody({
   refinementProgress,
   onShowPending,
   onCancel,
+  failed,
+  onRetry,
+  overMax,
   pieceMap,
   setMap,
   statIcons,
@@ -340,6 +359,8 @@ function ActualBuildsBody({
   sort,
   onSortChange,
 }: BodyProps<LoadoutSortState>) {
+  // After a crash an older query's list must not pass for these targets' builds.
+  const listShown = result !== null && (!failed || failed.listIsCurrent);
   return (
     <div className="space-y-5">
       <HeaderRow
@@ -359,13 +380,15 @@ function ActualBuildsBody({
           manifest={manifest}
         />
       )}
+      {failed && <SearchFailedNotice failure={failed} onRetry={onRetry} />}
       {showLoading &&
+        !(failed && !failed.listIsCurrent) &&
         (result ? (
           <BuildsProgressBar progress={displayedProgress} />
         ) : (
           <BuildsLoading progress={displayedProgress} />
         ))}
-      {result ? (
+      {listShown ? (
         <BuildResults
           result={result}
           refinement={refinement}
@@ -388,12 +411,35 @@ function ActualBuildsBody({
           updateTarget={updateTarget}
           sort={sort}
           poolGap={poolGap}
+          overMax={overMax}
         />
-      ) : !showLoading ? (
+      ) : !showLoading && !failed ? (
         <p className="text-muted-foreground text-sm">
           Pick an exotic, set bonuses, and stat targets — builds update as you go.
         </p>
       ) : null}
+    </div>
+  );
+}
+
+/** The search worker crashed: say so plainly and offer to run it again. */
+function SearchFailedNotice({
+  failure,
+  onRetry,
+}: {
+  failure: SearchFailure;
+  onRetry: () => void;
+}) {
+  return (
+    <div role="alert" className="flex flex-wrap items-center gap-3">
+      <p className="text-muted-foreground text-sm">
+        {failure.listIsCurrent
+          ? "The search stopped before it could prove the stat maximums."
+          : "The search stopped before it found any builds."}
+      </p>
+      <Button size="sm" variant="outline" onClick={onRetry}>
+        Retry
+      </Button>
     </div>
   );
 }

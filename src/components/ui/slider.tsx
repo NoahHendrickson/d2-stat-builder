@@ -48,10 +48,13 @@ function Slider({
   max = 100,
   step = 1,
   ceiling,
+  invalid = false,
   ...props
 }: SliderPrimitive.Root.Props & {
   /** Optional achievable-maximum overlay: a lighter fill from `min` up to this value. */
   ceiling?: number
+  /** The value is one that can't be met: the bar's frame turns red (see d2-bar-invalid). */
+  invalid?: boolean
 }) {
   const _values = Array.isArray(value)
     ? value
@@ -157,11 +160,15 @@ function Slider({
       >
         <SliderPrimitive.Track
           data-slot="slider-track"
+          data-invalid={invalid || undefined}
           // box-content: Base UI sets `height: inherit` (horizontal) / `width: inherit`
           // (vertical) on the Indicator, so the track's declared size must be its
           // inner size. The 10px well; the frame is a ::before 3px outside it
           // (2px gap + the 1px line).
-          className="relative box-content grow rounded-none select-none before:pointer-events-none before:absolute before:-inset-[3px] before:d2-line before:content-[''] normal:overflow-hidden normal:rounded-full normal:bg-foreground/16 normal:before:content-none data-horizontal:normal:h-2 data-horizontal:h-2.5 data-horizontal:w-full data-vertical:h-full data-vertical:w-2.5"
+          className={cn(
+            "relative box-content grow rounded-none select-none before:pointer-events-none before:absolute before:-inset-[3px] before:d2-line before:content-[''] normal:overflow-hidden normal:rounded-full normal:bg-foreground/16 normal:before:content-none data-horizontal:normal:h-2 data-horizontal:h-2.5 data-horizontal:w-full data-vertical:h-full data-vertical:w-2.5",
+            invalid && "d2-bar-invalid"
+          )}
         >
           {ceiling != null && (
             <div

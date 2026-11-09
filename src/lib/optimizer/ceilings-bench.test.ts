@@ -265,6 +265,7 @@ function runEditLoop(name: string, inputA: OptimizerInput) {
     {
       onProgress: () => {},
       onCeilings: () => {},
+      onBuilds: () => {},
       onBetter: () => {},
       onResult: (out, refining) => {
         if (!refining) outputA = out;

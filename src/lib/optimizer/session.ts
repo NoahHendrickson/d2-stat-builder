@@ -20,6 +20,13 @@ export interface SessionCallbacks {
   /** Ceiling updates as they refine (seed first, then per-stat improvements). */
   onCeilings: (ceilings: number[]) => void;
   /**
+   * The first solve's build list, posted the moment its walk ends and before the in-line
+   * ceiling proof (see SolveOptions.onBuilds). Its loadouts are exactly the first
+   * onResult's; its ceilings are seeds, so it is not a result. Skipped for an empty
+   * list: there the maximums are the explanation, so the UI waits for them.
+   */
+  onBuilds: (output: OptimizerOutput) => void;
+  /**
    * A results post. `refining: true` means background work is still running and this
    * build list is frozen for this query (the UI never changes a shown list on its own)
    * — either the search was time-capped (both background phases follow) or the walk
@@ -81,6 +88,9 @@ export function runSolveSession(
   const first = solve(input, {
     onProgress: cb.onProgress,
     onCeilings: cb.onCeilings,
+    onBuilds: (early) => {
+      if (early.loadouts.length > 0) cb.onBuilds(early);
+    },
     topNBudgetMs: budgets.topNBudgetMs,
     ceilingBudgetMs: budgets.ceilingBudgetMs,
     // Cross-edit carryover (see carryover.ts): proven bounds from the previous query when

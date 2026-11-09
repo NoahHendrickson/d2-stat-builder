@@ -118,6 +118,8 @@ import {
 } from "@/lib/dim/subclasses";
 import { useApplyCurrentFragments } from "@/lib/armory/use-apply-current-fragments";
 import { useAutoSearch } from "@/lib/optimizer/use-auto-search";
+import { emptyStatStates, overMaxCulprits } from "@/lib/optimizer/over-max";
+import type { OverMaxFix } from "@/components/builder/empty-builds";
 import { useOptimizerWarmup } from "@/lib/optimizer/use-optimizer-warmup";
 import { MAX_SET_BONUSES, type BuilderSnapshot, type QueryOrigin } from "@/lib/loadouts/types";
 import { togglePinnedSet, usePinnedSets } from "@/lib/settings/pinned-sets";
@@ -148,6 +150,9 @@ export function BuilderPanel({
     refinement,
     applyPending,
     getSnapshot,
+    shown: shownResult,
+    failed,
+    retry,
   } = useOptimizer();
   // `progress` is a value store: the smoother reads it per frame and writes the eased
   // value to another store; neither touches this component's render.
@@ -244,6 +249,9 @@ export function BuilderPanel({
   useEffect(() => {
     if (!classes.length) return;
     if (classType === null || !classes.includes(classType))
+      // Pre-existing (flagged by the newer react-hooks rule); moving it into render
+      // would change when the class settles, which is out of scope here.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setClassType(classes[0]);
   }, [classes, classType]);
 
@@ -870,8 +878,12 @@ export function BuilderPanel({
   // inputs, so its identity changing is the "something changed" signal. Paused on the
   // theoretical tab. Coming back dispatches at once, and the store drops it as a repeat
   // unless a shared setting (class, pools) changed meanwhile: Builds' inputs read only
-  // the Builds tab.
-  useAutoSearch(searchReady && classType !== null && !theoretical, runOptimizer);
+  // the Builds tab. One-shot edits search at once; slider drags and typing mark their
+  // edits as bursts (`autoSearch.burst`) and search on release, Enter or a pause.
+  const autoSearch = useAutoSearch(
+    searchReady && classType !== null && !theoretical,
+    runOptimizer,
+  );
 
   const theory = useTheoryBuilds({
     active: theoretical,
@@ -949,6 +961,36 @@ export function BuilderPanel({
       updateTab("targets", (prev) => prev.map((v, idx) => (idx === i ? value : v))),
     [updateTab],
   );
+  // A slider drag or typed value: its search waits for a pause, a release or Enter.
+  const setTargetBurst = useCallback(
+    (i: number, value: number) => {
+      autoSearch.burst();
+      setTarget(i, value);
+    },
+    [autoSearch, setTarget],
+  );
+
+  // Nothing matches and one target alone is to blame (see overMaxCulprits). Read only
+  // from a SETTLED empty result for the targets on screen — never from maximums still
+  // streaming in, so a row can't flash red on a search that has builds, and the Set
+  // buttons can't name a maximum the bars have already passed (the background pass
+  // keeps raising them). A capped walk proved nothing (its own copy stays), and a
+  // better list waiting behind "Show them" isn't empty.
+  const actualTargets = tabs.actual.targets;
+  const overMax = useMemo((): { fix: OverMaxFix; rows: ReturnType<typeof emptyStatStates> } | null => {
+    if (theoretical || running || failed || !shownResult) return null;
+    if (refinement.phase === "running") return null;
+    const { result, origin } = shownResult;
+    if (result.loadouts.length > 0 || origin.classType !== (classType ?? undefined)) return null;
+    if (origin.targets.some((v, s) => v !== actualTargets[s])) return null;
+    const exhaustive = !result.capped || (refinement.phase === "done" && refinement.verified);
+    if (!exhaustive || (refinement.phase === "done" && refinement.pending)) return null;
+    const culprits = overMaxCulprits(result, actualTargets);
+    return {
+      fix: { culprits, onSet: setTarget },
+      rows: emptyStatStates(result, culprits),
+    };
+  }, [theoretical, running, failed, shownResult, classType, actualTargets, refinement, setTarget]);
   // Section Reset buttons: always clickable. A section already at its default keeps
   // its state object, so the click is a no-op (no re-render, no new search).
   // Resetting the targets starts over, so it also ends a linked loadout.
@@ -1124,6 +1166,9 @@ export function BuilderPanel({
       refinementProgress,
       onShowPending: applyPending,
       onCancel: cancel,
+      failed,
+      onRetry: retry,
+      overMax: overMax?.fix,
       pieceMap,
       setMap,
       statIcons,
@@ -1156,6 +1201,9 @@ export function BuilderPanel({
       refinementProgress,
       applyPending,
       cancel,
+      failed,
+      retry,
+      overMax,
       pieceMap,
       setMap,
       statIcons,
@@ -1215,6 +1263,9 @@ export function BuilderPanel({
                       value={tab.targets[i]}
                       ceilingsView={settingsView.ceilings}
                       onChange={setTarget}
+                      onBurstChange={setTargetBurst}
+                      onCommit={autoSearch.commit}
+                      emptyState={overMax?.rows[i]}
                     />
                   );
                 })}
@@ -1343,6 +1394,8 @@ export function BuilderPanel({
                   <PowerRangeControls
                     value={powerRange}
                     onChange={onPowerRangeChange}
+                    onBurst={autoSearch.burst}
+                    onCommit={autoSearch.commit}
                     slotPieces={powerSlotPieces}
                     weaponPlan={weaponPlan}
                     legacyArmor={useLegacyArmor}

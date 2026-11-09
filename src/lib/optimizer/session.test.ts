@@ -8,6 +8,7 @@ import { realWarlockCodaInput, realWarlockTwoSetInput } from "./real-pool.fixtur
 
 type SessionEvent =
   | { type: "progress"; value: number }
+  | { type: "builds"; output: OptimizerOutput }
   | { type: "better"; output: OptimizerOutput }
   | { type: "result"; output: OptimizerOutput; refining: boolean; verified: boolean };
 
@@ -31,6 +32,11 @@ function collector() {
       SessionEvent,
       { type: "result" }
     >[];
+  const builds = () =>
+    events.filter((e) => e.type === "builds") as Extract<
+      SessionEvent,
+      { type: "builds" }
+    >[];
   const better = () =>
     events.filter((e) => e.type === "better") as Extract<
       SessionEvent,
@@ -39,10 +45,12 @@ function collector() {
   return {
     events,
     results,
+    builds,
     better,
     cb: {
       onProgress: (value: number) => events.push({ type: "progress", value }),
       onCeilings: () => {},
+      onBuilds: (output: OptimizerOutput) => events.push({ type: "builds", output }),
       onBetter: (output: OptimizerOutput) => events.push({ type: "better", output }),
       onResult: (output: OptimizerOutput, refining: boolean, verified: boolean) =>
         events.push({ type: "result", output, refining, verified }),
@@ -67,13 +75,69 @@ test("an uncapped search posts exactly one final, verified result", () => {
     minimums: [0, 0, 0, 0, 0, 0],
     allowTuning: false,
   };
-  const { results, better, cb } = collector();
+  const { events, results, builds, better, cb } = collector();
   runSolveSession(input, cb);
   expect(results()).toHaveLength(1);
   expect(results()[0].refining).toBe(false);
   expect(results()[0].verified).toBe(true);
   expect(results()[0].output.capped).toBe(false);
   expect(better()).toHaveLength(0);
+  // The list went out first, ahead of the ceilings proof, and it is the result's list.
+  expect(builds()).toHaveLength(1);
+  expect(events.findIndex((e) => e.type === "builds")).toBeLessThan(
+    events.findIndex((e) => e.type === "result"),
+  );
+  expect(builds()[0].output.loadouts).toEqual(results()[0].output.loadouts);
+});
+
+test("the early list carries the result's list and counters, with seed ceilings only", () => {
+  const input = realWarlockTwoSetInput();
+  const { events, results, builds, cb } = collector();
+  runSolveSession(input, cb, {
+    topNBudgetMs: 60_000,
+    ceilingBudgetMs: 10, // the in-line proof can't finish: a background pass follows
+    refineCeilingBudgetMs: 10,
+  });
+  expect(builds()).toHaveLength(1);
+  const early = builds()[0].output;
+  const [first] = results();
+  expect(events.findIndex((e) => e.type === "builds")).toBeLessThan(
+    events.findIndex((e) => e.type === "result"),
+  );
+  expect(early.loadouts.length).toBeGreaterThan(0);
+  expect(early.loadouts).toEqual(first.output.loadouts);
+  expect(early.combosTried).toBe(first.output.combosTried);
+  expect(early.combosValid).toBe(first.output.combosValid);
+  expect(early.combosValidExact).toBe(first.output.combosValidExact);
+  expect(early.capped).toBe(first.output.capped);
+  // Nothing is proven yet: the trivial upper, never exact, and seeds under the result's.
+  expect(early.ceilingsExact).toBe(false);
+  expect(early.ceilingUppers).toEqual([200, 200, 200, 200, 200, 200]);
+  for (let s = 0; s < 6; s++) {
+    expect(early.ceilings[s]).toBeLessThanOrEqual(first.output.ceilings[s]);
+  }
+}, 60_000);
+
+test("an empty walk posts no early list: its maximums come with the result", () => {
+  const piece = (id: string, stats: number[]): OptimizerPiece => ({ id, stats, exotic: false });
+  const input: OptimizerInput = {
+    slots: [
+      [piece("h", [30, 0, 0, 0, 0, 0])],
+      [piece("a", [0, 20, 0, 0, 0, 0])],
+      [piece("c", [0, 0, 10, 0, 0, 0])],
+      [piece("l", [0, 0, 0, 40, 0, 0])],
+      [piece("k", [0, 0, 0, 0, 15, 0])],
+    ],
+    minimums: [0, 0, 0, 0, 100, 0],
+    allowTuning: false,
+  };
+  const { results, builds, cb } = collector();
+  runSolveSession(input, cb);
+  expect(builds()).toHaveLength(0);
+  expect(results()).toHaveLength(1);
+  expect(results()[0].output.loadouts).toHaveLength(0);
+  // Super's own maximum ignores its own target: 15, which is what the UI offers.
+  expect(results()[0].output.ceilings[4]).toBe(15);
 });
 
 const realInput = realWarlockCodaInput;
@@ -118,7 +182,7 @@ function blindSpotInput(): OptimizerInput {
 
 test("a capped search freezes its list, refines ceilings, and offers a better list", () => {
   const input = blindSpotInput();
-  const { events, results, better, cb } = collector();
+  const { events, results, builds, better, cb } = collector();
   runSolveSession(input, cb, {
     topNBudgetMs: 1,
     ceilingBudgetMs: 50,
@@ -132,6 +196,10 @@ test("a capped search freezes its list, refines ceilings, and offers a better li
   expect(interim.output.capped).toBe(true);
   expect(final.refining).toBe(false);
   expect(final.verified).toBe(true); // background build search ran to exhaustion
+  // A capped walk's list also goes out early, and it is the frozen list.
+  expect(builds()).toHaveLength(1);
+  expect(builds()[0].output.capped).toBe(true);
+  expect(builds()[0].output.loadouts).toEqual(interim.output.loadouts);
 
   // The shown build list is FROZEN: the final post repeats the capped list verbatim
   // (and stays flagged capped — it is still a best-effort list for these targets).

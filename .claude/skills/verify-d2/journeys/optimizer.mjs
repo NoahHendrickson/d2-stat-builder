@@ -1,5 +1,6 @@
 // Stat optimizer (/): targets filter the builds, a build opens, Dream build answers, and
-// "Save as loadout" stores a loadout that the Loadouts page then lists. See features/optimizer.md.
+// "Save as loadout" stores a loadout that the Loadouts page then lists, and a target past its
+// max gets a red bar frame, is named, and is set to its max in one click. See features/optimizer.md.
 export const meta = { fixture: "full" };
 
 const CARD = { role: "button", name: / Health \d+ Melee \d+ Grenade \d+ Super \d+ Class \d+ Weapons \d+/ };
@@ -91,5 +92,82 @@ export default async function ({ page, app, stub, step, shot, expect, log }) {
     await app.nav("/loadouts");
     expect(await page.exists({ role: "article", name: "verify-d2 build" }), 'Loadouts lists an article named "verify-d2 build"');
     await shot("loadouts-after-save");
+  });
+
+  // ---- opt-overmax: a target past its max -------------------------------------------
+  const OVER_COPY = /(\w+) can reach (at least )?(\d+) with your other targets\./;
+  /** Fill a stat's number box and press Enter (Enter searches at once). */
+  const setTarget = async (stat, v) => {
+    await page.fill({ role: "spinbutton", name: `${stat} target value` }, String(v));
+    await page.press("Enter");
+  };
+  /** The Super pill on every listed card (the first ten). */
+  const superOnCards = async (within) => {
+    const cards = await page.findAll(CARD, within ? { within } : undefined);
+    const v = [];
+    for (let nth = 0; nth < Math.min(cards.length, 10); nth++) v.push(Number(/ Super (\d+) /.exec(await page.name({ ...CARD, nth }, within ? { within } : undefined))?.[1]));
+    return v;
+  };
+  let superMax = 0;
+
+  await step("opt-overmax: a target past its max gets a red bar frame, is named, and is fixed in one click", async () => {
+    await app.open("/");
+    for (const [stat, v] of [["Health", 100], ["Melee", 60], ["Grenade", 90], ["Super", 200]]) await setTarget(stat, v);
+    await page.waitForText(/No builds match/, { timeout: 60000 });
+    const copy = await page.waitForText(OVER_COPY, { timeout: 60000 });
+    const [, stat, atLeast, max] = OVER_COPY.exec(copy);
+    log(`  empty list: "${copy}"`);
+    expect(stat === "Super", `the message names Super (${stat})`);
+    superMax = Number(max);
+    expect(superMax > 0 && superMax < 200, `Super's max is between 0 and 200 (${superMax}${atLeast ? ", unproven" : ""})`);
+    // The marked row is Super's, and only Super's: the frame around its bar is red (the
+    // row itself has no outline), and its number box is marked invalid.
+    const marked = await page.evalJs(`(() => { const probe = document.body.appendChild(document.createElement("i")); probe.style.color = "var(--destructive)"; const red = getComputedStyle(probe).color; probe.remove(); return [...document.querySelectorAll("[data-over-max]")].map((r) => { const track = r.querySelector("[data-slot=slider-track]"); return [r.querySelector("input")?.getAttribute("aria-label"), track?.hasAttribute("data-invalid"), getComputedStyle(track, "::before").borderTopColor === red, getComputedStyle(r).outlineStyle]; }); })()`);
+    log(`  marked rows: ${JSON.stringify(marked)}`);
+    expect(marked.length === 1 && marked[0][0] === "Super target value", "only the Super row is marked");
+    expect(marked[0][1] === true && marked[0][2] === true, "the frame around the Super bar is red");
+    expect(marked[0][3] === "none", "the row itself has no outline");
+    expect((await page.count({ css: "[data-slot=slider-track][data-invalid]" })) === 1, "no other bar is red");
+    expect((await page.attr({ role: "spinbutton", name: "Super target value" }, "aria-invalid")) === "true", "the Super number box is aria-invalid");
+    // Rows the other targets leave no max read as sitting at their own target ("100 / 100").
+    const noMax = await page.evalJs(`["Health", "Melee", "Grenade", "Class", "Weapons"].map((s) => { const input = document.querySelector('input[aria-label="' + s + ' target value"]'); return [s, input.value, input.closest(".space-y-1").querySelector("span[aria-hidden].whitespace-nowrap")?.innerText]; })`);
+    log(`  rows with no max: ${JSON.stringify(noMax)}`);
+    expect(noMax.every(([, value, inline]) => inline === "/ " + value), "the other five rows read their own target as the max");
+    await shot("over-max");
+
+    await page.click({ role: "button", name: `Set Super to ${superMax}` });
+    await page.waitFor(async () => (await page.value({ role: "spinbutton", name: "Super target value" })) === String(superMax));
+    await page.waitFor(async () => { const v = await superOnCards(); return v.length > 0 && v.every((x) => x >= superMax); }, { timeout: 60000 });
+    const status = await settled();
+    log(`  after Set Super to ${superMax}: ${status}`);
+    expect(COUNT.test(status), `builds are back (${status})`);
+    expect((await page.count({ css: "[data-over-max]" })) === 0, "no row is marked any more");
+    await shot("over-max-fixed");
+  });
+
+  await step("opt-overmax: the Set button works in the phone's builds sheet", async () => {
+    await setTarget("Super", 200);
+    await page.waitForText(OVER_COPY, { timeout: 60000 });
+    await page.s("Emulation.setDeviceMetricsOverride", { width: 390, height: 844, deviceScaleFactor: 1, mobile: true });
+    try {
+      const bar = { css: '[aria-controls="builds-mobile-sheet"]' };
+      await page.waitFor(bar);
+      await page.click(bar);
+      const sheet = { css: "#builds-mobile-sheet" };
+      const fix = { role: "button", name: `Set Super to ${superMax}` };
+      await page.waitFor(fix, { within: sheet });
+      await shot("over-max-phone", { within: sheet });
+      await page.click(fix, { within: sheet });
+      // The builds this brings back land in the open sheet.
+      await page.waitFor(async () => { const v = await superOnCards(sheet); return v.length > 0 && v.every((x) => x >= superMax); }, { timeout: 60000 });
+      expect((await superOnCards(sheet)).length > 0, "builds are listed in the sheet");
+      await shot("over-max-phone-fixed", { within: sheet });
+      // The sheet hides the page behind it: close it to read the target.
+      await page.press("Escape");
+      await page.waitFor(sheet, { gone: true });
+      expect((await page.value({ role: "spinbutton", name: "Super target value" })) === String(superMax), `Super is set to ${superMax}`);
+    } finally {
+      await page.s("Emulation.setDeviceMetricsOverride", { width: 1600, height: 1000, deviceScaleFactor: 1, mobile: false });
+    }
   });
 }

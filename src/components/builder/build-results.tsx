@@ -37,7 +37,7 @@ import {
   STAT_ORDER,
   type StatIconMap,
 } from "@/lib/armory/stats";
-import { EmptyBuilds, type PoolGap } from "@/components/builder/empty-builds";
+import { EmptyBuilds, type OverMaxFix, type PoolGap } from "@/components/builder/empty-builds";
 import {
   sortLoadouts,
   type LoadoutCostFn,
@@ -774,6 +774,10 @@ function SearchStatus({
   switch (refinement.phase) {
     case "idle":
       return cappedBanner;
+    case "proving":
+      // The list is up and the in-line maximums pass ends within ~1.2 s: nothing to say
+      // yet (a capped list's banner and the background card follow its result).
+      return null;
     case "running":
       // Alert-style card sized like a build row (same rounded border footprint) — the
       // background search materially changes what the sliders offer, so it earns more
@@ -888,6 +892,7 @@ export function BuildResults({
   updateTarget,
   sort,
   poolGap,
+  overMax,
 }: {
   result: OptimizerOutput;
   refinement: RefinementState;
@@ -901,6 +906,8 @@ export function BuildResults({
   sort: LoadoutSortState;
   /** Set when the pool can't fill a slot: the empty list explains it and offers the fix. */
   poolGap?: PoolGap;
+  /** Set when one target alone keeps every build out: the empty list names it. */
+  overMax?: OverMaxFix;
 } & BuildActionProps) {
   // "Upgrade cost" sorts by a scarcity-weighted total of each build's remaining
   // masterwork materials (see materialScore). Builds with an unknown cost sort last.
@@ -944,7 +951,7 @@ export function BuildResults({
     return (
       <div className="space-y-3">
         {status}
-        <EmptyBuilds result={result} refinement={refinement} poolGap={poolGap} />
+        <EmptyBuilds result={result} refinement={refinement} poolGap={poolGap} overMax={overMax} />
       </div>
     );
   }

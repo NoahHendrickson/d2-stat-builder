@@ -9,6 +9,7 @@ import {
   buildSlots,
   computeSuffixBounds,
   makeJointMinCheck,
+  makeSetCheck,
   nextExoticCount,
   type SuffixBounds,
 } from "./bounds";
@@ -172,12 +173,23 @@ export function runCeilings(
   // Armor power range — the same tracker the top-N walk uses (null when none is set).
   const power = createPowerTracker(slots, input.powerRange);
 
-  const canReachSets = (k: number): boolean => {
-    for (let r = 0; r < reqs.length; r++) {
-      if (setCounts[r] + setSuffix[r][k] < reqs[r].count) return false;
+  // The pool a probe walks: `slots` with pieces that are interchangeable FOR THE PROBE
+  // collapsed to their first one (see projectSlots). Rebuilt per set of targeted stats.
+  let probeSlots: InternalPiece[][] = slots;
+  const projected = new Map<number, InternalPiece[][]>();
+  const reqSets = new Set(reqs.map((r) => r.setHash));
+  const projectFor = (mins: number[]): InternalPiece[][] => {
+    let mask = 0;
+    for (let s = 0; s < NUM_STATS; s++) if (mins[s] > 0) mask |= 1 << s;
+    let pool = projected.get(mask);
+    if (!pool) {
+      pool = projectSlots(slots, mask, reqSets, input.powerRange !== undefined);
+      projected.set(mask, pool);
     }
-    return true;
+    return pool;
   };
+
+  const canReachSets = makeSetCheck(slots, reqs, setCounts, setSuffix, needExotic);
   // Can every probe minimum still be reached from slot k? The SAME bound as the top-N
   // search (makeJointMinCheck), reading probeMins live as the binary search mutates it —
   // the joint budget check is what keeps UNsatisfiable probes from degenerating into
@@ -253,10 +265,10 @@ export function runCeilings(
       return;
     }
     if (!canReachMin(k)) return;
-    if (!canReachSets(k)) return;
+    if (!canReachSets(k, exoticCount)) return;
     if (needExotic && exoticCount + exoticSuffix[k] < 1) return;
     if (power && !power.feasible(k)) return;
-    for (const p of slots[k]) {
+    for (const p of probeSlots[k]) {
       if (found || aborted) return;
       // The one exotic child rule, shared with the top-N walk.
       const nextExotic = nextExoticCount(exoticCount, p, k, needExotic, exoticSuffix);
@@ -290,6 +302,7 @@ export function runCeilings(
     aborted = false;
     found = false;
     witness = null;
+    probeSlots = projectFor(probeMins);
     search(0, 0);
     return witness;
   };
@@ -413,6 +426,57 @@ export function runCeilings(
   }
   stats.nodes = nodes;
   return { ceilings: ceiling, uppers, exact, stats };
+}
+
+/**
+ * The pool a feasibility probe walks. A probe only asks "does any build meet these
+ * minimums", and that answer reads a piece through the stats in `mask` (those with a
+ * positive probe minimum: a zero minimum is always met, mods only cover deficits, and
+ * every prune — makeJointMinCheck, the subset masks, the tuner's joint check — charges
+ * only stats that can be short), its tuning options as they move those stats, its
+ * exotic flag (the ≤1 / require rule), its set when a requirement names that set, its
+ * artifice +3, and its power when a range is set. Two pieces of a slot alike on all of
+ * that are interchangeable for the probe: a completion with one is feasible iff it is
+ * with the other. So each slot keeps the FIRST piece of every such class, in pool order.
+ *
+ * Results don't change, not even the witness: the walk visits the same nodes in the same
+ * order minus subtrees rooted at a later twin of a sibling it already walked, and that
+ * sibling found nothing (else the probe had stopped). The first witness is the same
+ * real build, so the harvest is too. The suffix bounds stay those of the full pool:
+ * on the stats in `mask` a class's pieces contribute identically.
+ */
+export function projectSlots(
+  slots: InternalPiece[][],
+  mask: number,
+  reqSets: ReadonlySet<number>,
+  keyPower: boolean,
+): InternalPiece[][] {
+  const stats: number[] = [];
+  for (let s = 0; s < NUM_STATS; s++) if (mask & (1 << s)) stats.push(s);
+  return slots.map((slot) => {
+    const seen = new Set<string>();
+    const kept: InternalPiece[] = [];
+    for (const p of slot) {
+      let key =
+        (p.exotic ? "E" : "L") +
+        (p.artifice ? "A" : "-") +
+        (p.setHash !== undefined && reqSets.has(p.setHash) ? `S${p.setHash}` : "S-") +
+        (keyPower ? `P${p.power ?? "?"}` : "") +
+        "|";
+      for (const s of stats) key += `${p.stats[s]},`;
+      const opts = new Set<string>();
+      for (const o of p.tuneOpts) {
+        let v = "";
+        for (const s of stats) v += `${o.vec[s]},`;
+        opts.add(v);
+      }
+      key += "|" + [...opts].sort().join(";");
+      if (seen.has(key)) continue;
+      seen.add(key);
+      kept.push(p);
+    }
+    return kept;
+  });
 }
 
 /**

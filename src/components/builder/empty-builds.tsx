@@ -4,8 +4,15 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useLeaveBuildsSurface } from "@/components/builder/leave-builds-surface";
 import type { PoolGapFix, PoolSetting } from "@/lib/armory/optimizer-pool";
-import { ARMOR_SLOTS, SLOT_LABELS } from "@/lib/armory/stats";
+import {
+  ARMOR_SLOTS,
+  SLOT_LABELS,
+  STAT_DISPLAY_ORDER,
+  STAT_LABELS,
+  STAT_ORDER,
+} from "@/lib/armory/stats";
 import { listAnd } from "@/lib/format-list";
+import type { OverMaxCulprit } from "@/lib/optimizer/over-max";
 import type { OptimizerOutput, RefinementState } from "@/lib/optimizer/types";
 
 /** A pool gap (see fillablePoolGap) and how to show its settings. */
@@ -14,20 +21,69 @@ export interface PoolGap extends PoolGapFix {
   onShowSettings: () => void;
 }
 
+/**
+ * Targets past their maximums on a settled empty result (see overMaxCulprits), and how to
+ * set one. The builder computes it only when the empty list is proven and is for the
+ * targets on screen.
+ */
+export interface OverMaxFix {
+  culprits: OverMaxCulprit[];
+  onSet: (stat: number, value: number) => void;
+}
+
 /** The Builds list with no builds in it: why, and what to do. */
 export function EmptyBuilds({
   result,
   refinement,
   poolGap,
+  overMax,
 }: {
   result: OptimizerOutput;
   refinement: RefinementState;
   poolGap?: PoolGap;
+  overMax?: OverMaxFix;
 }) {
   const gap = useGapForResult(result, poolGap);
   // A gap proves no build exists, whatever the search is still doing.
   if (gap) return <PoolGapNotice gap={gap} />;
+  if (overMax && overMax.culprits.length > 0) return <OverMaxNotice fix={overMax} />;
   return <p className="text-muted-foreground text-sm">{emptyBuildsCopy(result, refinement)}</p>;
+}
+
+const statLabel = (stat: number) => STAT_LABELS[STAT_ORDER[stat]];
+
+/**
+ * "Super can reach 122 with your other targets." With several culprits each one alone is
+ * enough, so the sentence lists them all and every one gets its own button. An unproven
+ * max is achievable but may be higher: "at least".
+ */
+function OverMaxNotice({ fix }: { fix: OverMaxFix }) {
+  const culprits = [...fix.culprits].sort(
+    (a, b) =>
+      STAT_DISPLAY_ORDER.indexOf(STAT_ORDER[a.stat]) -
+      STAT_DISPLAY_ORDER.indexOf(STAT_ORDER[b.stat]),
+  );
+  const reach = (c: OverMaxCulprit) => `${c.proven ? "" : "at least "}${c.max}`;
+  const parts = culprits.map((c, i) =>
+    i === 0 ? `${statLabel(c.stat)} can reach ${reach(c)}` : `${statLabel(c.stat)} ${reach(c)}`,
+  );
+  const list =
+    parts.length > 1 ? `${parts.slice(0, -1).join(", ")} or ${parts[parts.length - 1]}` : parts[0];
+  return (
+    <div className="space-y-3">
+      <p className="text-muted-foreground text-sm">
+        {list} with your other targets.{culprits.length > 1 && " Lowering any one is enough."}
+      </p>
+      <div className="flex flex-wrap gap-2">
+        {culprits.map((c) => (
+          // Stays in the phone's builds sheet: the builds this brings back land right here.
+          <Button key={c.stat} size="sm" onClick={() => fix.onSet(c.stat, c.max)}>
+            Set {statLabel(c.stat)} to {c.max}
+          </Button>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 /**

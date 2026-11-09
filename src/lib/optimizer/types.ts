@@ -204,9 +204,16 @@ export type RefineOutcome = "improved" | "confirmed";
  * exhaustion (the frozen list is proven complete); an outcome of null with
  * `verified: false` means the background pass itself timed out (the time-limit
  * messaging stays).
+ *
+ * "proving" is the short in-line window (at most the inline ceiling budget, ~1.2 s)
+ * between the early "builds" post and the run's first result: the list is on screen
+ * and final, and the slider maximums are still being proven. It has no UI of its own
+ * (a status card there would flash on ordinary searches); it only tells readers that
+ * the shown result is not a full result yet.
  */
 export type RefinementState =
   | { phase: "idle" }
+  | { phase: "proving" }
   | {
       phase: "running";
       progress: number;
@@ -257,10 +264,19 @@ export interface OptimizerRequest {
  * explicit user action). A final `refining: false` result always follows, carrying the
  * SAME frozen loadouts with the refined ceilings; `verified` is true when the background
  * build search ran to exhaustion (so "nothing better exists" is a proven claim).
+ *
+ * "builds" comes first when the walk found any build: the list as soon as the walk ends,
+ * ahead of the in-line ceiling proof (which can take up to its 1.2 s budget). Its
+ * loadouts and counters are exactly what the run's first "result" carries; its ceilings
+ * are only the seed (`ceilingUppers` the trivial STAT_CAP, `ceilingsExact` false), so
+ * it is never a full result: it must not feed the ceiling carry (the store's `last`) or
+ * anything that reads proven maximums. An empty walk posts no
+ * "builds": its maximums are what explain it, so the UI keeps loading until they land.
  */
 export type OptimizerResponse =
   | { seq: number; kind: "progress"; progress: number }
   | { seq: number; kind: "ceilings"; ceilings: StatArray }
+  | { seq: number; kind: "builds"; output: OptimizerOutput }
   | { seq: number; kind: "better"; output: OptimizerOutput }
   | {
       seq: number;

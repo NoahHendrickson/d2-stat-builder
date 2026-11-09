@@ -14,6 +14,8 @@ export const CHANGELOG: readonly ChangelogEntry[] = [
   {
     date: "2026-11-09",
     changes: [
+      "Optimizer: builds show up sooner, and clicks search at once instead of after a pause.",
+      "Optimizer: when a target is past its max, the empty Builds list names it and sets it to the max in one click.",
       "Loadouts: the In-game tab shows what's in each character's slots and is where you build activity sets.",
       "Loadouts: Import DIM loadout in the ⋮ menu brings in a loadout from a DIM link.",
       "Loadouts: saving or applying a build now puts each tuning on the right piece when your exotic already has one on.",
