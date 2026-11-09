@@ -17,6 +17,7 @@ import {
   snapshotInGame,
   waitBetweenLoadoutActions,
 } from "./ingame-save";
+import { spotsAfterApply, withKnownSpots, type KnownSpots } from "./known-moves";
 import { resolveLoadout } from "./resolve";
 import type { SavedLoadout } from "./types";
 
@@ -125,6 +126,7 @@ export async function runActivitySet({
 
   const results: SlotResult[] = [];
   let current = armory;
+  let known: KnownSpots = new Map();
   let signedOut = false;
   try {
     let inGame: InGameLoadoutsResponse;
@@ -135,6 +137,8 @@ export async function runActivitySet({
       if (err instanceof InGameLoadoutsError && err.reauth) void handleSessionExpired(queryClient);
       return;
     }
+    // The page's copy can be minutes old; the first loadout shouldn't plan from it.
+    current = await freshArmory(refreshArmory, 0, armory);
 
     for (const [i, assignment] of set.slots.entries()) {
       // Read through a call: TypeScript would otherwise keep the null it narrowed to above.
@@ -177,6 +181,7 @@ export async function runActivitySet({
         queryClient,
         batch: `${set.name}: slot ${assignment.index + 1} (${i + 1} of ${total})`,
       });
+      if (outcome) known = spotsAfterApply(known, current, outcome.equip, set.characterId);
       // Cancel on the progress card stops the whole run; this slot counts as not run.
       if (outcome?.cancelled) break;
       if (!outcome) {
@@ -203,7 +208,9 @@ export async function runActivitySet({
 
       // Gear moved: the next loadout plans its equips from where things are now.
       const last = i === total - 1;
-      if (outcome && !last) current = await freshArmory(refreshArmory, Date.now(), current);
+      if (outcome && !last) {
+        current = withKnownSpots(await freshArmory(refreshArmory, Date.now(), current), known);
+      }
     }
   } finally {
     setState(null);

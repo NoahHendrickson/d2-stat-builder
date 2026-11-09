@@ -63,6 +63,8 @@ function equipMessage(err: unknown): string {
 
 /** DestinyNoRoomInDestination — the target bucket (character slot or vault) is full. */
 const NO_ROOM = 1642;
+/** DestinyItemNotFound — it isn't where we said it was. */
+const ITEM_NOT_FOUND = 1623;
 
 /** Friendly text for the PlatformErrorCodes a vault↔character transfer realistically returns. */
 const TRANSFER_MESSAGES: Record<number, string> = {
@@ -207,6 +209,10 @@ function spareSource(
         return spare;
       }
       return undefined;
+    },
+    /** The last spare wasn't there to move, so it shouldn't count as a try. */
+    refund() {
+      budget++;
     },
     close() {
       budget = 0;
@@ -378,6 +384,8 @@ export async function stageAndEquip({
             source.close();
           } else {
             message = `Couldn't make room: ${transferMessage(err, true)}`;
+            // A stale entry in the client's list; it mustn't use up the live ones.
+            if (err instanceof BungieHttpError && err.code === ITEM_NOT_FOUND) source.refund();
           }
         }
       }
