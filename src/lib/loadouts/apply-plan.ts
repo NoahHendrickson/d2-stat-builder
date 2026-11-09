@@ -219,8 +219,78 @@ export function planLoadoutPlugs(input: PlanInput): ApplyPlan {
     }
   }
 
-  // --- Pass 2: lock in mods already sitting in a matching socket, while they still fit
-  // (explicit placements may have spent the energy); the rest fall through to pass 3.
+  const skipReason = (info: PlugInfo) => {
+    switch (info.kind) {
+      case "general":
+        return "no free mod socket with enough energy — remove other mods first";
+      case "tuning":
+        return info.tunedPlus === undefined ? "no tunable piece left" : "no piece tuned for that stat";
+      case "artifice":
+        return "no artifice piece left";
+      default:
+        return "no socket on this armor takes it (or not enough energy)";
+    }
+  };
+
+  // --- Pass 2: tuning, seated as a whole. A piece has one tuning socket and a directional
+  // only fits its own roll (or a flexible exotic), so placing them one at a time can
+  // strand a mod: an exotic that keeps a directional a fixed-roll piece needed leaves
+  // that piece empty and another directional with nowhere to go. This order seats as
+  // many as the armor can hold: directionals on their exact roll, the overflow on
+  // flexible pieces, Balanced in whatever is left. (A fixed piece takes only its own
+  // stat's directionals or Balanced, so giving it a directional never costs a seat.)
+  // Within each step a mod already socketed stays where it is.
+  type Seat = { st: PieceState; socket: PlanSocket };
+  const tuningSeats = (flexible: boolean): Seat[] => {
+    const out: Seat[] = [];
+    for (const st of states.values()) {
+      if (Boolean(st.piece.flexibleTuning) !== flexible) continue;
+      for (const socket of st.piece.sockets) if (socket.kind === "tuning") out.push({ st, socket });
+    }
+    return out;
+  };
+  const isTuning = (info: PlugInfo) => info.kind === "tuning";
+  const isDirectional = (info: PlugInfo) => isTuning(info) && info.tunedPlus !== undefined;
+  /** Fill `seats` from the remaining mods `want` picks, `defer`red ones only as a last resort. */
+  const seatTuning = (
+    seats: Seat[],
+    want: (info: PlugInfo) => boolean,
+    defer?: (hash: number) => boolean,
+  ) => {
+    const fitting = ({ st, socket }: Seat) =>
+      remaining.filter((r) => want(r.info) && fits(st, socket, r.hash, r.info));
+    const seat = ({ st, socket }: Seat, entry: { hash: number; info: PlugInfo }) => {
+      takeRemaining(entry.hash);
+      place(st, socket, entry.hash, entry.info);
+    };
+    const open: Seat[] = [];
+    for (const s of seats) {
+      const inPlace = fitting(s).find((r) => r.hash === s.socket.current);
+      if (inPlace) seat(s, inPlace);
+      else open.push(s);
+    }
+    for (const s of open) {
+      const options = fitting(s);
+      const entry = options.find((r) => !defer?.(r.hash)) ?? options[0];
+      if (entry) seat(s, entry);
+    }
+  };
+  const fixedSeats = tuningSeats(false);
+  const flexibleSeats = tuningSeats(true);
+  // A directional the exotic already holds is the one to leave for it, when there is a choice.
+  const onFlexible = new Set(flexibleSeats.map((s) => s.socket.current));
+  seatTuning(fixedSeats, isDirectional, (hash) => onFlexible.has(hash));
+  seatTuning(flexibleSeats, isDirectional);
+  seatTuning([...fixedSeats, ...flexibleSeats], isTuning);
+  for (const entry of remaining.filter((r) => isTuning(r.info))) {
+    takeRemaining(entry.hash);
+    const reason = skipReason(entry.info);
+    skipped.push(`${entry.info.name}: ${reason}`);
+    unplaced.push({ hash: entry.hash, reason });
+  }
+
+  // --- Pass 3: lock in mods already sitting in a matching socket, while they still fit
+  // (explicit placements may have spent the energy); the rest fall through to pass 4.
   for (const entry of [...remaining]) {
     for (const st of states.values()) {
       const socket = st.piece.sockets.find(
@@ -234,10 +304,10 @@ export function planLoadoutPlugs(input: PlanInput): ApplyPlan {
     }
   }
 
-  // --- Pass 3: auto-place the rest, most-constrained first (fewest candidate
+  // --- Pass 4: auto-place the rest, most-constrained first (fewest candidate
   // sockets), then costliest; each onto the piece with the most free energy.
   const candidatesFor = (hash: number, info: PlugInfo) => {
-    const out: { st: PieceState; socket: PlanSocket }[] = [];
+    const out: Seat[] = [];
     for (const st of states.values()) {
       for (const socket of st.piece.sockets) {
         if (fits(st, socket, hash, info)) out.push({ st, socket });
@@ -245,31 +315,10 @@ export function planLoadoutPlugs(input: PlanInput): ApplyPlan {
     }
     return out;
   };
-  const skipReason = (info: PlugInfo) => {
-    switch (info.kind) {
-      case "general":
-        return "no free mod socket with enough energy — remove other mods first";
-      case "tuning":
-        return info.tunedPlus === undefined ? "no tunable piece left" : "no piece tuned for that stat";
-      case "artifice":
-        return "no artifice piece left";
-      default:
-        return "no socket on this armor takes it (or not enough energy)";
-    }
-  };
-  // Directional tuning is pickier than Balanced (it needs a specific roll), so on a
-  // candidate-count tie it goes first and Balanced takes what's left.
-  const specificity = (info: PlugInfo) =>
-    info.kind === "tuning" && info.tunedPlus !== undefined ? 1 : 0;
   while (remaining.length > 0) {
     const ranked = remaining
       .map((entry) => ({ entry, candidates: candidatesFor(entry.hash, entry.info) }))
-      .sort(
-        (a, b) =>
-          a.candidates.length - b.candidates.length ||
-          specificity(b.entry.info) - specificity(a.entry.info) ||
-          b.entry.info.cost - a.entry.info.cost,
-      );
+      .sort((a, b) => a.candidates.length - b.candidates.length || b.entry.info.cost - a.entry.info.cost);
     const { entry, candidates } = ranked[0];
     takeRemaining(entry.hash);
     if (candidates.length === 0) {
@@ -278,10 +327,7 @@ export function planLoadoutPlugs(input: PlanInput): ApplyPlan {
       unplaced.push({ hash: entry.hash, reason });
       continue;
     }
-    // Tuning: keep flexible exotics for last so a directional lands on its exact roll.
-    const flex = (c: { st: PieceState }) =>
-      entry.info.kind === "tuning" && c.st.piece.flexibleTuning ? 1 : 0;
-    candidates.sort((a, b) => flex(a) - flex(b) || freeEnergy(b.st) - freeEnergy(a.st));
+    candidates.sort((a, b) => freeEnergy(b.st) - freeEnergy(a.st));
     place(candidates[0].st, candidates[0].socket, entry.hash, entry.info);
   }
 

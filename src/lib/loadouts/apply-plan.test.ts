@@ -350,17 +350,85 @@ describe("tuning + artifice", () => {
     expect(byHash(311)).toEqual(["t1"]);
     expect(byHash(300)).toEqual(["exo"]);
     expect(byHash(401)).toEqual(["art"]);
-    // The second artifice mod has zero candidates once the first is placed, so it is
-    // reported before the leftover Balanced Tuning.
+    // Tuning is seated before the other mods, so its leftover is reported first.
     expect(plan.skipped).toEqual([
-      "Artifice +3: no artifice piece left",
       "Balanced Tuning: no tunable piece left",
+      "Artifice +3: no artifice piece left",
     ]);
     // …and the same mods by hash, so an editor rebuilding the mod list can keep them.
     expect(plan.unplaced).toEqual([
-      { hash: 401, reason: "no artifice piece left" },
       { hash: 300, reason: "no tunable piece left" },
+      { hash: 401, reason: "no artifice piece left" },
     ]);
+  });
+
+  // The seat each tuning mod ends in, by piece — whether it was plugged or already there.
+  const tuningSeats = (result: ReturnType<typeof plan>) =>
+    Object.fromEntries(Object.entries(result.placement).map(([id, row]) => [id, row[11]]));
+  const tunedSocket = (current?: number): PlanSocket[] => [general(), { index: 11, kind: "tuning", current }];
+
+  test("an exotic already holding a directional gives it up when a fixed roll needs it", () => {
+    // Three +4s and two +1s over an exotic, three pieces rolled +4 and one rolled +1. The
+    // exotic has a +4 on from an earlier build: keeping it there would leave one +4 piece
+    // empty and the second +1 with nowhere to go.
+    const plan = planLoadoutPlugs({
+      pieces: [
+        piece({ instanceId: "exo", tunedStat: 0, flexibleTuning: true, sockets: tunedSocket(314) }),
+        piece({ instanceId: "arms", tunedStat: 4 }),
+        piece({ instanceId: "chest", tunedStat: 4 }),
+        piece({ instanceId: "legs", tunedStat: 4 }),
+        piece({ instanceId: "bond", tunedStat: 1 }),
+      ],
+      modHashes: [311, 314, 314, 314, 311],
+      plugInfo,
+    });
+    expect(plan.skipped).toEqual([]);
+    expect(tuningSeats(plan)).toEqual({ exo: 311, arms: 314, chest: 314, legs: 314, bond: 311 });
+  });
+
+  test("a piece holding Balanced gives it up for the directional only it can take", () => {
+    const plan = planLoadoutPlugs({
+      pieces: [
+        piece({ instanceId: "t1", tunedStat: 1, sockets: tunedSocket(300) }),
+        piece({ instanceId: "t4", tunedStat: 4 }),
+      ],
+      modHashes: [300, 311],
+      plugInfo,
+    });
+    expect(plan.skipped).toEqual([]);
+    expect(tuningSeats(plan)).toEqual({ t1: 311, t4: 300 });
+  });
+
+  test("tuning already where it belongs is left alone", () => {
+    // One more +4 than there are +4 pieces: the copy the exotic already holds stays on it.
+    const plan = planLoadoutPlugs({
+      pieces: [
+        piece({ instanceId: "exo", tunedStat: 0, flexibleTuning: true, sockets: tunedSocket(314) }),
+        piece({ instanceId: "legs", tunedStat: 4, sockets: tunedSocket(314) }),
+        piece({ instanceId: "bond", tunedStat: 1, sockets: tunedSocket(300) }),
+      ],
+      modHashes: [314, 300, 314],
+      plugInfo,
+    });
+    expect(plan.plugs).toEqual([]);
+    expect(plan.inPlace.map((p) => [p.plugItemHash, p.itemInstanceId])).toEqual([
+      [314, "exo"],
+      [314, "legs"],
+      [300, "bond"],
+    ]);
+  });
+
+  test("a tuning the user pinned in the mod picker is kept", () => {
+    const plan = planLoadoutPlugs({
+      pieces: [
+        piece({ instanceId: "exo", tunedStat: 0, flexibleTuning: true }),
+        piece({ instanceId: "legs", tunedStat: 4 }),
+      ],
+      modHashes: [314, 300],
+      plugInfo,
+      placements: { exo: { 11: 314 } },
+    });
+    expect(tuningSeats(plan)).toEqual({ exo: 314, legs: 300 });
   });
 
   test("a directional with no matching piece falls back to a flexible exotic", () => {
