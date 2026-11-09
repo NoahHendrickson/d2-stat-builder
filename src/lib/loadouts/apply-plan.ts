@@ -200,11 +200,6 @@ export function planLoadoutPlugs(input: PlanInput): ApplyPlan {
     return after <= capacity(st);
   };
 
-  const place = (st: PieceState, socket: PlanSocket, hash: number, info: PlugInfo) => {
-    st.taken.set(socket.index, `${info.name} → ${st.piece.name}`);
-    st.plugs.set(socket.index, hash);
-  };
-
   // Mods still to place (multiset, in loadout order).
   const remaining: Entry[] = [];
   for (const hash of input.modHashes) {
@@ -216,7 +211,13 @@ export function planLoadoutPlugs(input: PlanInput): ApplyPlan {
   }
   const takeRemaining = (hash: number) => {
     const i = remaining.findIndex((r) => r.hash === hash);
-    return i >= 0 ? remaining.splice(i, 1)[0] : undefined;
+    if (i >= 0) remaining.splice(i, 1);
+  };
+  /** Seat a mod still to place: it leaves the list and the socket is spoken for. */
+  const claim = ({ st, socket }: Seat, { hash, info }: Entry) => {
+    takeRemaining(hash);
+    st.taken.set(socket.index, `${info.name} → ${st.piece.name}`);
+    st.plugs.set(socket.index, hash);
   };
 
   // --- Pass 1: explicit placements — the user's picks in the mod picker, and a build's
@@ -229,10 +230,7 @@ export function planLoadoutPlugs(input: PlanInput): ApplyPlan {
       if (!socket) continue;
       const entry = remaining.find((r) => r.hash === hash);
       if (!entry) continue; // placement for a mod the loadout no longer lists
-      if (fits(st, socket, hash, entry.info)) {
-        takeRemaining(hash);
-        place(st, socket, hash, entry.info);
-      }
+      if (fits(st, socket, hash, entry.info)) claim({ st, socket }, entry);
       // Otherwise leave it for auto-placement (which reports a reason if nothing fits).
     }
   }
@@ -317,8 +315,7 @@ export function planLoadoutPlugs(input: PlanInput): ApplyPlan {
       continue;
     }
     toSeat--;
-    takeRemaining(tunings[m].hash);
-    place(seats[s].st, seats[s].socket, tunings[m].hash, tunings[m].info);
+    claim(seats[s], tunings[m]);
   }
   for (const m of tunings.keys()) if (modFree[m]) skip(tunings[m]);
 
@@ -330,8 +327,7 @@ export function planLoadoutPlugs(input: PlanInput): ApplyPlan {
         (s) => s.current === entry.hash && fits(st, s, entry.hash, entry.info),
       );
       if (socket) {
-        takeRemaining(entry.hash);
-        place(st, socket, entry.hash, entry.info);
+        claim({ st, socket }, entry);
         break;
       }
     }
@@ -357,9 +353,8 @@ export function planLoadoutPlugs(input: PlanInput): ApplyPlan {
       skip(entry);
       continue;
     }
-    takeRemaining(entry.hash);
     candidates.sort((a, b) => freeEnergy(b.st) - freeEnergy(a.st));
-    place(candidates[0].st, candidates[0].socket, entry.hash, entry.info);
+    claim(candidates[0], entry);
   }
 
   // --- Armor actions: diff each socket's current plug against the plan's. Actions that
