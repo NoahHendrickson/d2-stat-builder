@@ -12,6 +12,17 @@ export default async function ({ page, app, stub, step, shot, expect, log }) {
   };
   const drawer = { role: "dialog", name: "Import shared loadout" };
   const clip = () => page.evalJs("navigator.clipboard.readText()");
+  // The drawer slides in with no backdrop, so a click during the slide lands beside its button.
+  const drawerSettled = () => {
+    let last = "";
+    let steady = 0;
+    return page.waitFor(async () => {
+      const top = await page.evalJs("String([...document.querySelectorAll('[role=dialog]')].pop()?.getBoundingClientRect().top)");
+      steady = top === last ? steady + 1 : 0;
+      last = top;
+      return steady >= 3;
+    });
+  };
   let copied;
 
   await step("lo-share: Share copies a short link", async () => {
@@ -81,6 +92,7 @@ export default async function ({ page, app, stub, step, shot, expect, log }) {
     await page.goto("about:blank");
     await app.open("/loadouts#s=Share00000");
     await page.waitFor(drawer, { timeout: 30000 });
+    await drawerSettled();
     await page.click({ role: "button", name: "Cancel" }, { within: drawer });
     await page.waitFor(drawer, { gone: true });
     expect(!(await page.evalJs("location.hash")), "Cancel takes the link out of the URL");

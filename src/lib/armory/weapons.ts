@@ -40,6 +40,9 @@ export interface LoadoutWeapon {
   slot: WeaponSlot;
   isExotic: boolean;
   power?: number;
+  /** Tier 1–5, when Bungie reports one. */
+  gearTier?: number;
+  masterworked?: boolean;
   location: ArmorLocation;
   characterId?: string;
   locked?: boolean;
@@ -50,7 +53,9 @@ export interface LoadoutWeapon {
 }
 
 const POSTMASTER_BUCKET = 215593132;
+/** ItemState flags. */
 const ITEM_STATE_LOCKED = 1;
+const ITEM_STATE_MASTERWORK = 4;
 
 /** The slot a weapon definition equips in; undefined for anything that isn't a weapon. */
 export function weaponSlotOfHash(
@@ -79,7 +84,9 @@ export function normalizeWeapons(
       const def = manifest.def("DestinyInventoryItemDefinition", item.itemHash);
       const slot = WEAPON_BUCKETS[def?.inventory?.bucketTypeHash ?? 0];
       if (!def || !slot) continue;
-      const power = instances?.[item.itemInstanceId]?.primaryStat?.value;
+      const instance = instances?.[item.itemInstanceId];
+      const power = instance?.primaryStat?.value;
+      const gearTier = instance?.gearTier;
       const watermark = itemWatermark(def, item.versionNumber);
       const roll = weaponRoll(profile, manifest, item.itemInstanceId);
       const perks: WeaponPerks | undefined =
@@ -101,6 +108,8 @@ export function normalizeWeapons(
         slot,
         isExotic: def.inventory?.tierType === TIER_EXOTIC,
         ...(typeof power === "number" ? { power } : {}),
+        ...(typeof gearTier === "number" && gearTier >= 1 && gearTier <= 5 ? { gearTier } : {}),
+        ...((item.state ?? 0) & ITEM_STATE_MASTERWORK ? { masterworked: true } : {}),
         location,
         ...(characterId ? { characterId } : {}),
         ...((item.state ?? 0) & ITEM_STATE_LOCKED ? { locked: true } : {}),

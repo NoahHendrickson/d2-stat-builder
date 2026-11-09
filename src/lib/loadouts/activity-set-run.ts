@@ -7,7 +7,7 @@ import { handleSessionExpired } from "@/lib/auth/sign-out";
 import type { Armory } from "@/lib/armory/fetch";
 import type { RefreshResult } from "@/lib/armory/use-armory";
 import type { Manifest } from "@/lib/manifest/load";
-import { defaultIdentifiers, type InGameLoadoutsResponse } from "@/lib/bungie/ingame-loadouts";
+import { slotLabelsInSet, type InGameLoadoutsResponse } from "@/lib/bungie/ingame-loadouts";
 import type { ActivitySet } from "./activity-sets";
 import { applySavedLoadout } from "./apply-client";
 import {
@@ -100,7 +100,8 @@ interface SlotResult {
 /**
  * Save every loadout in `set` into its in-game slot, in slot order. Reports one summary
  * toast at the end; each loadout's equip shows on the apply progress card as it runs.
- * The slots' names, icons and colours are kept (an empty slot gets the first of each).
+ * A slot gets the name, icon and colour the set chose for it; without a choice it keeps
+ * its own (an empty slot gets the first of each).
  */
 export async function runActivitySet({
   set,
@@ -148,7 +149,7 @@ export async function runActivitySet({
         continue;
       }
       const slot = inGame.slots.find((s) => s.index === assignment.index);
-      const identifiers = slot && defaultIdentifiers(slot, inGame.identifiers);
+      const identifiers = slot && slotLabelsInSet(slot, assignment.labels, inGame.identifiers);
       if (!slot || !identifiers) {
         skip("the slot isn't unlocked on this character");
         continue;

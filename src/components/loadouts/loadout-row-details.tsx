@@ -11,7 +11,6 @@ import type { ArmoryCharacter } from "@/lib/armory/fetch";
 import { ManifestIcon, PlugIcon } from "@/components/loadouts/loadout-icons";
 import type { Manifest } from "@/lib/manifest/load";
 import {
-  SLOT_LABELS,
   STAT_DISPLAY_ORDER,
   STAT_LABELS,
   STAT_ORDER,
@@ -232,9 +231,7 @@ export function LoadoutRowDetails({
                     aria-hidden
                   />
                 )}
-                <TooltipLabel
-                  label={a.slot ? `${a.name} · ${SLOT_LABELS[a.slot]}` : a.name}
-                >
+                <TooltipLabel label={a.name}>
                   <span
                     className={cn("truncate", a.missing && "text-muted-foreground")}
                     tabIndex={0}

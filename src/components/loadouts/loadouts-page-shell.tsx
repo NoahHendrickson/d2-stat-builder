@@ -2,7 +2,7 @@
 
 import { Suspense, useCallback, useEffect, useState, type ComponentProps } from "react";
 import dynamic from "next/dynamic";
-import type { LoadoutsList } from "@/components/loadouts/loadouts-list";
+import type { LoadoutsPage } from "@/components/loadouts/loadouts-page";
 import { loadLoadoutsList, loadedLoadoutsList } from "@/components/loadouts/loadouts-list-chunk";
 import { useSession } from "@/lib/auth/use-session";
 import { useArmory } from "@/lib/armory/use-armory";
@@ -23,7 +23,7 @@ function LoadoutsListPlaceholder() {
  * Client-only: it never renders on the server (it needs both of those loaded).
  */
 const LazyLoadoutsList = dynamic(
-  () => import("@/components/loadouts/loadouts-list").then((m) => m.LoadoutsList),
+  () => import("@/components/loadouts/loadouts-page").then((m) => m.LoadoutsPage),
   { ssr: false, loading: () => <LoadoutsListPlaceholder /> },
 );
 
@@ -33,7 +33,7 @@ const LazyLoadoutsList = dynamic(
  * loaded chunk, and React keeps a placeholder up for ~300ms before replacing it: a wait
  * on every first visit. Picked once per mount, so the component never changes under the list.
  */
-function ReadyLoadoutsList(props: ComponentProps<typeof LoadoutsList>) {
+function ReadyLoadoutsList(props: ComponentProps<typeof LoadoutsPage>) {
   const [List] = useState(() => loadedLoadoutsList() ?? LazyLoadoutsList);
   return <List {...props} />;
 }
@@ -60,14 +60,15 @@ export function LoadoutsPageShell() {
   if (!authed) return null;
 
   // Cards lay out like the editor drawer (subclass + five piece columns), so they take
-  // the main column's width, capped so columns don't sprawl on very wide screens.
+  // the main column's width, capped so columns don't sprawl on very wide screens. Both
+  // tabs share the cap, so the tabs themselves stay put when switching.
   return (
-    <main className="mx-auto flex h-full min-h-0 w-full max-w-[100rem] flex-col px-4 py-6 lg:px-6">
+    <main className="mx-auto flex h-full min-h-0 w-full max-w-[120rem] flex-col px-4 py-6 lg:px-6">
       {!armory.data || manifestStatus.state !== "ready" ? (
         // Rows resolve items against the live armory and read icons from the manifest.
         <LoadoutsListPlaceholder />
       ) : (
-        // useSearchParams (share-link import) needs a Suspense boundary above it.
+        // useSearchParams (the view tabs, share-link import) needs a Suspense boundary above it.
         <Suspense fallback={<LoadoutsListPlaceholder />}>
           <ReadyLoadoutsList
             armory={armory.data}

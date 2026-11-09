@@ -65,6 +65,11 @@ export interface SavedLoadoutData {
    */
   optimizer?: OptimizerLoadout;
   builder?: BuilderSnapshot;
+  /**
+   * A copy of an in-game slot kept for an activity set. Never listed with the player's
+   * loadouts, and deleted once no set uses it (see orphanedSetLoadouts).
+   */
+  setOnly?: true;
 }
 
 export interface SavedLoadout extends SavedLoadoutData {
@@ -356,6 +361,7 @@ export function parseSavedLoadoutData(v: unknown): SavedLoadoutData | null {
     if (!mp) return null;
     if (Object.keys(mp).length > 0) out.modPlacement = mp;
   }
+  if (v.setOnly === true) out.setOnly = true;
   return out;
 }
 

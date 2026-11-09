@@ -122,6 +122,44 @@ export function defaultIdentifiers(
   };
 }
 
+/**
+ * What an activity set labels a slot with when applied: the `chosen` identifiers, except
+ * any Bungie has since retired, which fall back to the slot's default.
+ */
+export function slotLabelsInSet(
+  slot: InGameLoadoutSlot | undefined,
+  chosen: SlotIdentifiers | undefined,
+  identifiers: InGameLoadoutIdentifiers,
+): SlotIdentifiers | undefined {
+  const defaults = defaultIdentifiers(slot, identifiers);
+  if (!defaults || !chosen) return defaults;
+  const pick = (list: { hash: number }[], key: keyof SlotIdentifiers) =>
+    list.some((d) => d.hash === chosen[key]) ? chosen[key] : defaults[key];
+  return {
+    nameHash: pick(identifiers.names, "nameHash"),
+    iconHash: pick(identifiers.icons, "iconHash"),
+    colorHash: pick(identifiers.colors, "colorHash"),
+  };
+}
+
+/**
+ * How a slot reads inside an activity set. One the set leaves alone shows as empty,
+ * whatever the game holds there. One it fills shows the emblem it will have once applied:
+ * what the set chose for it, else its own, else the first of each list for a slot that's
+ * empty today.
+ */
+export function slotAppearanceInSet(
+  slot: InGameLoadoutSlot,
+  inSet: boolean,
+  identifiers: InGameLoadoutIdentifiers,
+  chosen?: SlotIdentifiers,
+): InGameLoadoutSlot {
+  if (!inSet) return { ...slot, empty: true };
+  if (!slot.empty && !chosen) return slot;
+  const labels = slotLabelsInSet(slot, chosen, identifiers);
+  return labels ? { ...slot, ...labels, empty: false } : slot;
+}
+
 const isUint32 = (v: unknown): v is number =>
   Number.isInteger(v) && (v as number) >= 0 && (v as number) <= 0xffffffff;
 

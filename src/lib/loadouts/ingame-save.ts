@@ -63,7 +63,7 @@ export function fullyApplied({
 export type SlotActionResult = { ok: true } | { ok: false; error: string; reauth: boolean };
 
 /** One action on the in-game loadouts route. Never throws. */
-async function slotAction(method: "POST" | "DELETE", body: SlotRequest): Promise<SlotActionResult> {
+async function slotAction(method: "POST" | "PATCH" | "DELETE", body: SlotRequest): Promise<SlotActionResult> {
   try {
     const res = await fetch("/api/bungie/ingame-loadouts", {
       method,
@@ -87,6 +87,35 @@ export const snapshotInGame = (characterId: string, choice: InGameSlotChoice) =>
 /** Empty an in-game slot — gear and labels both. Never throws. */
 export const clearInGameSlot = (characterId: string, loadoutIndex: number) =>
   slotAction("DELETE", { characterId, loadoutIndex });
+
+/**
+ * Change a filled slot's name, icon and colour, leaving its gear alone. Every view of the
+ * slot updates as soon as Bungie accepts it. A dead session signs out. Never throws.
+ */
+export async function relabelInGameSlot({
+  characterId,
+  choice,
+  queryClient,
+}: {
+  characterId: string;
+  choice: InGameSlotChoice;
+  queryClient: QueryClient;
+}): Promise<SlotActionResult> {
+  const { loadoutIndex, ...labels } = choice;
+  const result = await slotAction("PATCH", { characterId, ...choice } satisfies SnapshotRequest);
+  if (result.ok) {
+    queryClient.setQueryData<InGameLoadoutsResponse>(inGameLoadoutsKey(characterId), (prev) =>
+      prev && {
+        ...prev,
+        slots: prev.slots.map((s) => (s.index === loadoutIndex ? { ...s, ...labels } : s)),
+      },
+    );
+  } else if (result.reauth) {
+    // The route cleared the dead session; forget the local player data too.
+    void handleSessionExpired(queryClient);
+  }
+  return result;
+}
 
 export interface ClearSlotsResult {
   /** How many slots were emptied, from the front of `indexes`. */

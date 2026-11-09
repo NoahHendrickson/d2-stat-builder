@@ -2,7 +2,7 @@
 
 import { memo, useState, type ComponentType } from "react";
 import Image from "next/image";
-import Link from "next/link";
+import { GuardedLink } from "@/components/guarded-link";
 import { usePathname } from "next/navigation";
 import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
 import {
@@ -229,7 +229,7 @@ function NavItem({
 }) {
   const named = badge > 0 ? `${label} (${badge} new)` : label;
   const link = (
-    <Link
+    <GuardedLink
       href={href}
       onClick={onNavigate}
       aria-current={active ? "page" : undefined}
@@ -261,7 +261,7 @@ function NavItem({
           )}
         </>
       )}
-    </Link>
+    </GuardedLink>
   );
   return collapsed ? (
     <TooltipLabel label={soon ? `${label} (soon)` : named}>{link}</TooltipLabel>

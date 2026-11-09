@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
-import Link from "next/link";
+import { GuardedLink } from "@/components/guarded-link";
 import { usePathname } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { HugeiconsIcon } from "@hugeicons/react";
@@ -404,7 +404,7 @@ function SettingsLink({ onNavigate }: { onNavigate?: () => void }) {
   const active = usePathname() === "/settings";
   return (
     <TooltipLabel label="Settings">
-      <Link
+      <GuardedLink
         href="/settings"
         onClick={onNavigate}
         aria-label="Settings"
@@ -416,7 +416,7 @@ function SettingsLink({ onNavigate }: { onNavigate?: () => void }) {
         )}
       >
         <HugeiconsIcon icon={Settings01Icon} strokeWidth={active ? 2 : 1.5} className="size-5" aria-hidden />
-      </Link>
+      </GuardedLink>
     </TooltipLabel>
   );
 }

@@ -115,15 +115,15 @@ interface EditorProps {
   artifact?: ArtifactSection;
   busy?: boolean;
   /**
-   * A second way to submit the same form, beside the main button (Update loadout's
-   * "Save as new"). Gets the same values and the same checks as the main submit.
+   * Other ways to submit the same form, left of the main button (Update loadout's
+   * "Save as new"). Each gets the same values and the same checks as the main submit.
    */
-  secondaryAction?: {
+  secondaryActions?: readonly {
     label: string;
     onSubmit: (values: LoadoutDetailsValues) => void;
     /** Its save is the one in flight: the spinner goes here, not on the main button. */
     busy?: boolean;
-  };
+  }[];
   /** Piece/subclass grids; deferred so the header can paint during the slide. */
   showGrids?: boolean;
   onSubmit: (values: LoadoutDetailsValues) => void;
@@ -315,7 +315,7 @@ function EditorForm({
   weapons,
   artifact,
   busy = false,
-  secondaryAction,
+  secondaryActions,
   showGrids = true,
   onSubmit,
   onCancel,
@@ -518,7 +518,13 @@ function EditorForm({
             />
           )}
         </div>
-        <div className="ml-auto flex items-center gap-2">
+        <div
+          className={cn(
+            "ml-auto flex flex-wrap items-center justify-end gap-2 xl:flex-nowrap",
+            // Too many buttons to share the header row until the window is wide.
+            (secondaryActions?.length ?? 0) > 1 && "max-xl:col-span-full",
+          )}
+        >
           {overEnergy && (
             <span className="text-destructive text-xs">
               A piece is over its armor energy.
@@ -527,21 +533,22 @@ function EditorForm({
           <Button type="button" variant="outline" onClick={onCancel}>
             Cancel
           </Button>
-          {secondaryAction && (
+          {secondaryActions?.map((action) => (
             <Button
+              key={action.label}
               type="button"
               variant="outline"
               disabled={!canSubmit}
-              onClick={() => submitWith(secondaryAction.onSubmit)}
+              onClick={() => submitWith(action.onSubmit)}
             >
-              {secondaryAction.busy ? (
+              {action.busy ? (
                 <HugeiconsIcon icon={Loading03Icon} className="animate-spin" aria-hidden />
               ) : null}
-              {secondaryAction.label}
+              {action.label}
             </Button>
-          )}
+          ))}
           <Button type="submit" variant="emphatic" disabled={!canSubmit}>
-            {busy && !secondaryAction?.busy ? (
+            {busy && !secondaryActions?.some((action) => action.busy) ? (
               <HugeiconsIcon icon={Loading03Icon} className="animate-spin" aria-hidden />
             ) : null}
             {submitLabel}

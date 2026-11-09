@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { QueryClient } from "@tanstack/react-query";
 import type { InGameLoadoutsResponse } from "@/lib/bungie/ingame-loadouts";
-import { clearInGameSlots, inGameLoadoutsKey } from "./ingame-save";
+import { clearInGameSlots, inGameLoadoutsKey, relabelInGameSlot } from "./ingame-save";
 
 const signOut = vi.hoisted(() => vi.fn(async () => {}));
 vi.mock("@/lib/auth/sign-out", () => ({ handleSessionExpired: signOut }));
@@ -33,6 +33,44 @@ function bungie(...statuses: number[]) {
   vi.stubGlobal("fetch", fetchMock);
   return fetchMock;
 }
+
+describe("relabelInGameSlot", () => {
+  const choice = { loadoutIndex: 1, nameHash: 7, iconHash: 8, colorHash: 9 };
+  let queryClient: QueryClient;
+  beforeEach(() => {
+    queryClient = new QueryClient();
+    queryClient.setQueryData(inGameLoadoutsKey("c1"), slots);
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    signOut.mockClear();
+  });
+  const cached = () => queryClient.getQueryData<InGameLoadoutsResponse>(inGameLoadoutsKey("c1"))!;
+
+  test("sends the new labels and updates only that slot", async () => {
+    const fetchMock = bungie(200);
+    expect((await relabelInGameSlot({ characterId: "c1", choice, queryClient })).ok).toBe(true);
+    const [, init] = fetchMock.mock.calls[0];
+    expect(init?.method).toBe("PATCH");
+    expect(JSON.parse(String(init?.body))).toEqual({ characterId: "c1", ...choice });
+    expect(cached().slots[1]).toMatchObject({ nameHash: 7, iconHash: 8, colorHash: 9, empty: false });
+    expect(cached().slots[1].items).toHaveLength(1);
+    expect(cached().slots[0].nameHash).toBe(1);
+  });
+
+  test("a refusal changes nothing", async () => {
+    bungie(500);
+    expect((await relabelInGameSlot({ characterId: "c1", choice, queryClient })).ok).toBe(false);
+    expect(cached().slots[1].nameHash).toBe(1);
+    expect(signOut).not.toHaveBeenCalled();
+  });
+
+  test("a dead session signs out", async () => {
+    bungie(401);
+    await relabelInGameSlot({ characterId: "c1", choice, queryClient });
+    expect(signOut).toHaveBeenCalledOnce();
+  });
+});
 
 describe("clearInGameSlots", () => {
   let queryClient: QueryClient;

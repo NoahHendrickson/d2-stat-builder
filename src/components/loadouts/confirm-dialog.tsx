@@ -19,6 +19,7 @@ export function ConfirmDialog({
   title,
   description,
   confirmLabel,
+  cancelLabel = "Cancel",
   busy = false,
   onConfirm,
 }: {
@@ -27,6 +28,7 @@ export function ConfirmDialog({
   title: string;
   description?: string;
   confirmLabel: string;
+  cancelLabel?: string;
   busy?: boolean;
   onConfirm: () => void;
 }) {
@@ -39,7 +41,7 @@ export function ConfirmDialog({
         </DialogHeader>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>
-            Cancel
+            {cancelLabel}
           </Button>
           <Button variant="destructive" onClick={onConfirm} disabled={busy}>
             {busy ? <HugeiconsIcon icon={Loading03Icon} className="animate-spin" aria-hidden /> : null}

@@ -4,6 +4,7 @@ import {
   getDestinyManifest,
   getProfile,
   snapshotLoadout,
+  updateLoadoutIdentifiers,
   type DestinyComponentType,
   type DestinyLoadoutColorDefinition,
   type DestinyLoadoutIconDefinition,
@@ -181,6 +182,11 @@ async function slotAction<T extends SlotRequest>(
  */
 export function POST(request: Request) {
   return slotAction(request, parseSnapshotRequest, snapshotLoadout);
+}
+
+/** Change a slot's name, icon and colour. Its gear stays as it is. */
+export function PATCH(request: Request) {
+  return slotAction(request, parseSnapshotRequest, updateLoadoutIdentifiers);
 }
 
 /**

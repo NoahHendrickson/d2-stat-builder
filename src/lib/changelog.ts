@@ -12,6 +12,13 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    date: "2026-11-09",
+    changes: [
+      "Loadouts: the In-game tab shows what's in each character's slots and is where you build activity sets.",
+      "Loadouts: Import DIM loadout in the ⋮ menu brings in a loadout from a DIM link.",
+    ],
+  },
+  {
     date: "2026-11-08",
     changes: [
       "Farm list: add weapon rolls from Weapon search and armor from Theoretical or Dream builds, and get told when one drops.",

@@ -60,6 +60,10 @@ export function createStub({ profile, seed = {} }) {
     ["GET", /^\/api\/auth\/session$/, () => json(200, { authenticated: true, user: STUB_USER })],
     ["POST", /^\/api\/auth\/logout$/, () => json(200, { ok: true })],
     ["GET", /^\/api\/bungie\/profile$/, () => ({ status: 200, body: profile })],
+    ["GET", /^\/api\/dim-share\/([^/]+)$/, (_b, [id]) =>
+      id === "abc2345"
+        ? json(200, { loadout: { id: "dim-1", name: "From DIM", classType: 1, equipped: [{ hash: 3448274439, id: "123" }], unequipped: [{ hash: 1 }], parameters: { mods: [] }, createdAt: 1 } })
+        : json(404, { error: "Not found" })],
 
     ["GET", /^\/api\/loadouts$/, () => json(200, { loadouts: [...store.loadouts.values()] })],
     ["POST", /^\/api\/loadouts$/, (b) => {
@@ -171,6 +175,12 @@ export function createStub({ profile, seed = {} }) {
     ["POST", /^\/api\/bungie\/apply-loadout\/cancel$/, () => json(200, { ok: true })],
     ["GET", /^\/api\/bungie\/ingame-loadouts$/, () => json(200, { slots: store.ingameSlots, identifiers: IDENTIFIERS })],
     ["POST", /^\/api\/bungie\/ingame-loadouts$/, (b) => (Number.isInteger(b?.loadoutIndex) ? json(200, { ok: true }) : bad())],
+    ["PATCH", /^\/api\/bungie\/ingame-loadouts$/, (b) => {
+      const slot = store.ingameSlots[b?.loadoutIndex];
+      if (!characterIds.has(b?.characterId) || !slot || ![b.nameHash, b.iconHash, b.colorHash].every(Number.isInteger)) return bad();
+      store.ingameSlots[b.loadoutIndex] = { ...slot, nameHash: b.nameHash, iconHash: b.iconHash, colorHash: b.colorHash };
+      return json(200, { ok: true });
+    }],
     ["DELETE", /^\/api\/bungie\/ingame-loadouts$/, (b) => {
       // Like the route's parseSlotRequest, but the fixture's character ids aren't numeric
       // ("c1"), so the id must be one of its characters instead.

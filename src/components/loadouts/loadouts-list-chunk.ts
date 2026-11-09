@@ -1,16 +1,16 @@
-import type { LoadoutsList } from "./loadouts-list";
+import type { LoadoutsPage } from "./loadouts-page";
 
-let loaded: typeof LoadoutsList | undefined;
+let loaded: typeof LoadoutsPage | undefined;
 
 /**
- * Fetch the loadouts list's chunk (rows, editor drawer, apply flow). The bundler
+ * Fetch the loadouts page's chunk (rows, editor drawer, apply flow). The bundler
  * fetches it once however often this is called, and importing has no side effects.
  */
-export function loadLoadoutsList(): Promise<typeof LoadoutsList> {
-  return import("./loadouts-list").then((m) => (loaded = m.LoadoutsList));
+export function loadLoadoutsList(): Promise<typeof LoadoutsPage> {
+  return import("./loadouts-page").then((m) => (loaded = m.LoadoutsPage));
 }
 
-/** The list component, if its chunk is already in. */
-export function loadedLoadoutsList(): typeof LoadoutsList | undefined {
+/** The page component, if its chunk is already in. */
+export function loadedLoadoutsList(): typeof LoadoutsPage | undefined {
   return loaded;
 }

@@ -3,7 +3,7 @@
 import { useCallback } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSession } from "@/lib/auth/use-session";
-import { toast } from "@/lib/toast";
+import { toast, type Notifier } from "@/lib/toast";
 import {
   LOADOUT_SCHEMA_VERSION,
   editLoadoutTag,
@@ -90,6 +90,12 @@ export function useLoadouts() {
  * refetch of the whole list (which grows with every save) after every edit would be a
  * full-list re-render for nothing.
  */
+/** Reports a failed save on the action's spinner toast. */
+export const reportLoadoutError = (pending: Notifier) => (err: { notConfigured: boolean; message: string }) =>
+  pending.error(
+    err.notConfigured ? "Loadout storage isn't configured — set DATABASE_URL" : err.message,
+  );
+
 export function useLoadoutMutations() {
   const queryClient = useQueryClient();
   const patchList = (fn: (list: SavedLoadout[]) => SavedLoadout[]) =>

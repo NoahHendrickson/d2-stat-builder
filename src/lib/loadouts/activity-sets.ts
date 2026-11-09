@@ -3,6 +3,7 @@
 // account-synced setting (settings/keys.ts). Pure — runtime imports stay relative so
 // the module runs under vitest.
 import type { ArmorPiece } from "../armory/normalize";
+import type { SlotIdentifiers } from "../bungie/ingame-loadouts";
 import type { SavedLoadout } from "./types";
 
 /** One in-game slot and the saved loadout that goes into it. */
@@ -10,6 +11,8 @@ export interface ActivitySetSlot {
   /** Zero-based in-game slot; the game shows it as `index + 1`. */
   index: number;
   loadoutId: string;
+  /** The name, icon and colour to give the slot; without them it keeps its own. */
+  labels?: SlotIdentifiers;
 }
 
 export interface ActivitySet {
@@ -34,6 +37,15 @@ const isObj = (v: unknown): v is Record<string, unknown> =>
 const isId = (v: unknown): v is string =>
   typeof v === "string" && v.length > 0 && v.length <= MAX_ID_LENGTH;
 
+const isHash = (v: unknown): v is number =>
+  Number.isInteger(v) && (v as number) >= 0 && (v as number) <= 0xffffffff;
+
+function parseLabels(v: unknown): SlotIdentifiers | undefined {
+  if (!isObj(v) || !isHash(v.nameHash) || !isHash(v.iconHash) || !isHash(v.colorHash))
+    return undefined;
+  return { nameHash: v.nameHash, iconHash: v.iconHash, colorHash: v.colorHash };
+}
+
 function parseSlots(v: unknown): ActivitySetSlot[] | null {
   if (!Array.isArray(v)) return null;
   const byIndex = new Map<number, ActivitySetSlot>();
@@ -41,7 +53,8 @@ function parseSlots(v: unknown): ActivitySetSlot[] | null {
     if (!isObj(s) || !Number.isInteger(s.index) || !isId(s.loadoutId)) continue;
     const index = s.index as number;
     if (index < 0 || index > MAX_SLOT_INDEX) continue;
-    byIndex.set(index, { index, loadoutId: s.loadoutId });
+    const labels = parseLabels(s.labels);
+    byIndex.set(index, { index, loadoutId: s.loadoutId, ...(labels && { labels }) });
   }
   return [...byIndex.values()].sort((a, b) => a.index - b.index);
 }
@@ -74,6 +87,76 @@ export function parseActivitySets(value: unknown[]): ActivitySet[] {
     out.push(set);
   }
   return out.slice(0, MAX_ACTIVITY_SETS);
+}
+
+/**
+ * `set` with one slot assigned, or left alone when `loadoutId` is undefined; slots stay in
+ * order. Swapping the loadout in a slot keeps the labels chosen for it.
+ */
+export function withSlotAssignment(
+  set: ActivitySet,
+  index: number,
+  loadoutId: string | undefined,
+): ActivitySet {
+  const others = set.slots.filter((s) => s.index !== index);
+  const current = set.slots.find((s) => s.index === index);
+  return {
+    ...set,
+    slots: (loadoutId ? [...others, { ...current, index, loadoutId }] : others).sort(
+      (a, b) => a.index - b.index,
+    ),
+  };
+}
+
+/** `set` with the name, icon and colour chosen for one of its slots. */
+export function withSlotLabels(set: ActivitySet, index: number, labels: SlotIdentifiers): ActivitySet {
+  return { ...set, slots: set.slots.map((s) => (s.index === index ? { ...s, labels } : s)) };
+}
+
+/**
+ * The sets to list for a character: its own, plus any whose character has left the
+ * account (so they can still be found and deleted).
+ */
+export function activitySetsForCharacter(
+  sets: readonly ActivitySet[],
+  characterId: string | undefined,
+  accountCharacterIds: readonly string[],
+): ActivitySet[] {
+  return sets.filter(
+    (s) => s.characterId === characterId || !accountCharacterIds.includes(s.characterId),
+  );
+}
+
+/** Whether a working copy of a set matches the saved one; spaces around the name don't count. */
+export function sameActivitySet(a: ActivitySet, b: ActivitySet): boolean {
+  return (
+    a.name.trim() === b.name.trim() &&
+    a.slots.length === b.slots.length &&
+    a.slots.every(
+      (s, i) =>
+        s.index === b.slots[i].index &&
+        s.loadoutId === b.slots[i].loadoutId &&
+        s.labels?.nameHash === b.slots[i].labels?.nameHash &&
+        s.labels?.iconHash === b.slots[i].labels?.iconHash &&
+        s.labels?.colorHash === b.slots[i].labels?.colorHash,
+    )
+  );
+}
+
+/**
+ * The set-only loadouts a change to the sets just left unused: referenced before, by no
+ * set after. Loadouts from the player's own list are never returned.
+ */
+export function orphanedSetLoadouts(
+  before: readonly ActivitySet[],
+  after: readonly ActivitySet[],
+  loadouts: readonly Pick<SavedLoadout, "id" | "setOnly">[],
+): string[] {
+  const ids = (sets: readonly ActivitySet[]) =>
+    new Set(sets.flatMap((s) => s.slots.map((slot) => slot.loadoutId)));
+  const kept = ids(after);
+  const dropped = [...ids(before)].filter((id) => !kept.has(id));
+  return dropped.filter((id) => loadouts.find((l) => l.id === id)?.setOnly === true);
 }
 
 /** The class a saved loadout is for; an any-class loadout takes its armor's class. */

@@ -13,7 +13,7 @@ import { planPiecesFromArmor } from "./plan-pieces";
 import { plugInfoFromManifest } from "./plug-info";
 import { withLoadoutSubclass } from "./subclass";
 import { isLoadoutArtifactRef, isLoadoutWeaponRef, withLoadoutWeapons } from "./weapons";
-import type { ModPlacement, SavedLoadoutData } from "./types";
+import { LOADOUT_SCHEMA_VERSION, type ModPlacement, type SavedLoadoutData } from "./types";
 
 /**
  * Plan the live pieces into a picker section (Save and Edit both start here).
@@ -35,6 +35,29 @@ export function modsSectionForPieces(
   };
   const plan = priorityMods ? planWithPriority(input, priorityMods) : planLoadoutPlugs(input);
   return modsSectionFromPlan(pieces, getModCatalog(manifest), plan, insertablePlugs);
+}
+
+/** The editor's whole form applied to `base`: its name and notes, then everything else. */
+export function commitEditedLoadout(
+  base: SavedLoadoutData,
+  { name, notes, ...values }: { name: string; notes: string } & Parameters<typeof commitLoadout>[2],
+  manifest: Manifest,
+  mods?: ModsSection,
+): SavedLoadoutData {
+  const { loadout, optimizer, builder, modPlacement, setOnly } = base;
+  const next: SavedLoadoutData = {
+    version: LOADOUT_SCHEMA_VERSION,
+    loadout: {
+      ...loadout,
+      name,
+      ...(notes ? { notes } : { notes: undefined }),
+    },
+    ...(optimizer ? { optimizer } : {}),
+    ...(builder ? { builder } : {}),
+    ...(modPlacement && Object.keys(modPlacement).length > 0 ? { modPlacement } : {}),
+    ...(setOnly ? { setOnly } : {}),
+  };
+  return commitLoadout(next, manifest, values, mods);
 }
 
 /**
