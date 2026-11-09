@@ -14,7 +14,7 @@ import type { ArtifactSection } from "@/components/loadouts/loadout-artifact-edi
 import type { DimLoadout, DimLoadoutItem } from "@/lib/dim/loadout-link";
 import { modsSectionForPieces } from "@/lib/loadouts/commit";
 import { loadoutArtifactRef, loadoutWeaponRefs } from "@/lib/loadouts/weapons";
-import type { SavedLoadout } from "@/lib/loadouts/types";
+import type { ModPlacement, SavedLoadout } from "@/lib/loadouts/types";
 import { modsFromEditor, type ModsSection } from "@/lib/loadouts/mod-placement";
 import { loadoutSubclass } from "@/lib/loadouts/subclass";
 import type { Manifest } from "@/lib/manifest/load";
@@ -32,6 +32,8 @@ export interface SaveLoadoutDrawerProps {
   manifest: Manifest;
   /** Plugs the player can socket now — picks which copy of a mod the picker shows. */
   insertablePlugs?: ReadonlySet<number>;
+  /** The build's tuning, each on the piece the optimizer chose (see `buildTuningPlacement`). */
+  tuningPlacement?: ModPlacement;
   buildClass?: number;
   defaultName: string;
   /** The builder's subclass item — the fallback when the DIM loadout carries none. */
@@ -65,8 +67,9 @@ interface Picker {
  * The results column's "Save as loadout" drawer — the lazy half of BuildActions, so the
  * editor and the mod planning it needs load on the first Save click, not with the page.
  *
- * Mod picker: the optimizer's stat mods / tuning / artifice are pre-placed exactly as
- * Apply would place them; the user adds other mods on top. Mods the planner can't place
+ * Mod picker: the optimizer's stat mods and artifice are pre-placed exactly as Apply
+ * would place them, and its tuning on the pieces it chose (Balanced Tuning gives
+ * different stats on different pieces); the user adds other mods on top. Mods the planner can't place
  * on the live pieces — e.g. the class item's stat mod when the build uses a theoretical
  * (socket-less) exotic class item — are kept in the saved loadout, not dropped.
  *
@@ -88,6 +91,7 @@ function SaveLoadoutDrawerSession({
   pieces,
   manifest,
   insertablePlugs,
+  tuningPlacement,
   buildClass,
   defaultName,
   subclassItemHash,
@@ -109,7 +113,7 @@ function SaveLoadoutDrawerSession({
         dim.parameters.mods,
         manifest,
         insertablePlugs,
-        undefined,
+        tuningPlacement,
         updating ? makeDimLoadout(defaultName, undefined, NEW).parameters.mods : undefined,
       ),
       subclass:

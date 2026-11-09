@@ -418,6 +418,21 @@ describe("tuning + artifice", () => {
     ]);
   });
 
+  test("armor that already matches the loadout is not reshuffled", () => {
+    // The exotic holds the directional and the piece rolled for it holds Balanced. Balanced
+    // gives different stats on different pieces, so swapping the two would change the build.
+    const plan = planLoadoutPlugs({
+      pieces: [
+        piece({ instanceId: "exo", tunedStat: 0, flexibleTuning: true, sockets: tunedSocket(314) }),
+        piece({ instanceId: "legs", tunedStat: 4, sockets: tunedSocket(300) }),
+      ],
+      modHashes: [314, 300],
+      plugInfo,
+    });
+    expect(plan.plugs).toEqual([]);
+    expect(tuningSeats(plan)).toEqual({ exo: 314, legs: 300 });
+  });
+
   test("a tuning the user pinned in the mod picker is kept", () => {
     const plan = planLoadoutPlugs({
       pieces: [
@@ -573,6 +588,25 @@ describe("planWithPriority", () => {
   test("the priority mods are seated first and the rest share what's left", () => {
     const result = planWithPriority(input(), [101]);
     expect(result.assigned).toEqual({ p: { 1: 101 } });
+    expect(result.unplaced.map((u) => u.hash)).toEqual([601]);
+  });
+
+  test("a pinned socket on the same piece doesn't unseat the priority mods", () => {
+    const pinned: PlanInput = {
+      pieces: [
+        piece({
+          instanceId: "p",
+          tunedStat: 4,
+          sockets: [general(), helmetSlot(), { index: 11, kind: "tuning" }],
+          energy: { capacity: 6, used: 0 },
+        }),
+      ],
+      modHashes: [101, 601, 314],
+      plugInfo,
+      placements: { p: { 11: 314 } },
+    };
+    const result = planWithPriority(pinned, [101, 314]);
+    expect(result.assigned).toEqual({ p: { 1: 101, 11: 314 } });
     expect(result.unplaced.map((u) => u.hash)).toEqual([601]);
   });
 });
