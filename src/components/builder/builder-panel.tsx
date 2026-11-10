@@ -14,7 +14,7 @@ import { useArmory } from "@/lib/armory/use-armory";
 import { useManifest } from "@/lib/manifest/use-manifest";
 import { useOptimizer } from "@/lib/optimizer/use-optimizer";
 import { useSmoothedProgress } from "@/lib/use-smoothed-progress";
-import { availableSets, makeableSetReqs } from "@/lib/armory/sets";
+import { availableSets, makeableSetReqs, toggleSetReq } from "@/lib/armory/sets";
 import {
   makeableRaidReqs,
   ownedLegacyRaids,
@@ -1054,28 +1054,18 @@ export function BuilderPanel({
   const visibleSets = settingsView.setMap;
   const toggleSet = useCallback(
     (setHash: number, count: 2 | 4) => {
-      updateTab("setReqs", (prev) => {
+      updateTab("setReqs", (prev) =>
         // Toggles act on the requirements as shown (on Builds, the ones the owned pieces
         // make — see ownedSetReqs).
-        const shown = theoretical ? prev : makeableSetReqs(prev, visibleSets);
-        const next = { ...prev };
-        if (shown[setHash] === count) {
-          delete next[setHash];
-          return next;
-        }
-        next[setHash] = count;
-        // Requirements for sets no longer in the pool are kept (a pool toggle
-        // shouldn't drop one for good) but they're invisible here, so they must
-        // never crowd out a pick the player can actually see.
-        const keys = Object.keys(next);
-        if (keys.length > MAX_SET_BONUSES) {
-          const evict =
-            keys.find((h) => Number(h) !== setHash && !visibleSets.has(Number(h))) ??
-            keys.find((h) => Number(h) !== setHash);
-          if (evict !== undefined) delete next[Number(evict)];
-        }
-        return next;
-      });
+        toggleSetReq(
+          prev,
+          theoretical ? prev : makeableSetReqs(prev, visibleSets),
+          setHash,
+          count,
+          (h) => visibleSets.has(h),
+          MAX_SET_BONUSES,
+        ),
+      );
     },
     [visibleSets, theoretical, updateTab],
   );

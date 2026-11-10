@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classSets, makeableSetReqs } from "./sets";
+import { classSets, makeableSetReqs, toggleSetReq } from "./sets";
 import type { ArmorPiece } from "./normalize";
 import type { Manifest } from "../manifest/load";
 
@@ -58,5 +58,25 @@ describe("makeableSetReqs", () => {
   it("returns the same object when every requirement can be made", () => {
     const reqs = { 1: 2 as const };
     expect(makeableSetReqs(reqs, new Map([[1, owned(2)]]))).toBe(reqs);
+  });
+});
+
+describe("toggleSetReq", () => {
+  const all = () => true;
+
+  it("picking a 4-piece bonus drops another set's shown 4-piece bonus", () => {
+    const reqs = { 1: 4, 2: 2 } as const;
+    expect(toggleSetReq(reqs, reqs, 3, 4, all, 8)).toEqual({ 2: 2, 3: 4 });
+  });
+
+  it("leaves 2-piece bonuses alone, and a stored 4-piece the list shows as a 2-piece", () => {
+    // Set 1 is stored as 4 but only makes its 2-piece, so it isn't a second 4-piece.
+    expect(toggleSetReq({ 1: 4, 2: 2 }, { 1: 2, 2: 2 }, 3, 4, all, 8)).toEqual({ 1: 4, 2: 2, 3: 4 });
+    expect(toggleSetReq({ 1: 4 }, { 1: 4 }, 2, 2, all, 8)).toEqual({ 1: 4, 2: 2 });
+  });
+
+  it("clicking the shown bonus takes it off, and past the cap a hidden set goes first", () => {
+    expect(toggleSetReq({ 1: 4, 2: 2 }, { 1: 4, 2: 2 }, 1, 4, all, 8)).toEqual({ 2: 2 });
+    expect(toggleSetReq({ 1: 2, 2: 2 }, { 1: 2 }, 3, 2, (h) => h !== 2, 2)).toEqual({ 1: 2, 3: 2 });
   });
 });

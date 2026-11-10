@@ -116,6 +116,43 @@ export function makeableSetReqs(
   return changed ? kept : reqs;
 }
 
+/**
+ * `reqs` after a click on `setHash`'s `count`-piece bonus. The click acts on the
+ * requirements as the list shows them (`shown`, see makeableSetReqs): clicking the shown
+ * bonus takes it off. Picking a 4-piece bonus drops every other 4-piece bonus that is
+ * shown, since two of them need eight pieces. Requirements for sets the list can't show
+ * (`isVisible` false) are kept, a pool toggle shouldn't drop one for good, but past
+ * `max` they are the first to go so they never crowd out a pick the player can see.
+ */
+export function toggleSetReq(
+  reqs: Record<number, 2 | 4>,
+  shown: Record<number, 2 | 4>,
+  setHash: number,
+  count: 2 | 4,
+  isVisible: (setHash: number) => boolean,
+  max: number,
+): Record<number, 2 | 4> {
+  const next = { ...reqs };
+  if (shown[setHash] === count) {
+    delete next[setHash];
+    return next;
+  }
+  next[setHash] = count;
+  if (count === 4) {
+    for (const h of Object.keys(shown)) {
+      if (Number(h) !== setHash && shown[Number(h)] === 4) delete next[Number(h)];
+    }
+  }
+  const keys = Object.keys(next);
+  if (keys.length > max) {
+    const evict =
+      keys.find((h) => Number(h) !== setHash && !isVisible(Number(h))) ??
+      keys.find((h) => Number(h) !== setHash);
+    if (evict !== undefined) delete next[Number(evict)];
+  }
+  return next;
+}
+
 /** A set piece's look for one slot: its icon and season watermark. */
 export interface SetSlotIcon {
   icon: string;
