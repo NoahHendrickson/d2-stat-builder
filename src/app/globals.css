@@ -39,6 +39,9 @@
      over --foreground, and its gap from the control. */
   --d2-ring-alpha: 55%;
   --d2-ring-offset: 2px;
+  /* Thumb and track of the thin app scrollbar (d2-scroll and the
+     [data-scrollbars="classic"] base rule). */
+  --scrollbar-color: color-mix(in srgb, var(--foreground) 28%, transparent) transparent;
   --background: #d8d5cf;
   --foreground: #1f2124;
   --card: #eceae6;
@@ -397,13 +400,13 @@
     cursor: not-allowed;
   }
   /* Scrollbars that take up room (Windows; flagged by SCROLLBAR_SCRIPT): every
-     scroller gets d2-scroll's thin thumb instead of the stock grey bar with
-     arrows. Overlay platforms keep their native bars. d2-scroll still adds the
-     stable gutter where a pane wants one. */
+     scroller gets the thin bar in --scrollbar-color, the same pair d2-scroll sets,
+     instead of the stock grey bar with arrows. Overlay platforms keep their
+     native bars. d2-scroll still adds the stable gutter where a pane wants one. */
   [data-scrollbars="classic"],
   [data-scrollbars="classic"] * {
     scrollbar-width: thin;
-    scrollbar-color: color-mix(in srgb, var(--foreground) 28%, transparent) transparent;
+    scrollbar-color: var(--scrollbar-color);
   }
 }
 
@@ -1044,7 +1047,7 @@ input[type="number"] {
 @utility d2-scroll {
   scrollbar-gutter: stable;
   scrollbar-width: thin;
-  scrollbar-color: color-mix(in srgb, var(--foreground) 28%, transparent) transparent;
+  scrollbar-color: var(--scrollbar-color);
   &::-webkit-scrollbar {
     width: 10px;
     height: 10px;
