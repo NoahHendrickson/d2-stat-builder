@@ -396,6 +396,15 @@
   [role="button"][aria-disabled="true"] {
     cursor: not-allowed;
   }
+  /* Scrollbars that take up room (Windows; flagged by SCROLLBAR_SCRIPT): every
+     scroller gets d2-scroll's thin thumb instead of the stock grey bar with
+     arrows. Overlay platforms keep their native bars. d2-scroll still adds the
+     stable gutter where a pane wants one. */
+  [data-scrollbars="classic"],
+  [data-scrollbars="classic"] * {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in srgb, var(--foreground) 28%, transparent) transparent;
+  }
 }
 
 /* Hide the native number-input spinner. Its hit area overlaps the field and
