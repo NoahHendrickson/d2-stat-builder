@@ -37,7 +37,7 @@ import {
   STAT_ORDER,
   type StatIconMap,
 } from "@/lib/armory/stats";
-import { EmptyBuilds, type PoolGap } from "@/components/builder/empty-builds";
+import { EmptyBuilds, type OverMaxFix, type PoolGap } from "@/components/builder/empty-builds";
 import {
   sortLoadouts,
   type LoadoutCostFn,
@@ -65,7 +65,7 @@ import { MaterialCost, materialSummary } from "@/components/material-cost";
 import type {
   AppliedTuning,
   OptimizerLoadout,
-  OptimizerOutput,
+  BuildList,
   RefinementState,
 } from "@/lib/optimizer/types";
 
@@ -868,6 +868,7 @@ function SearchStatus({
 
 export function BuildResults({
   result,
+  final,
   refinement,
   refinementProgress,
   onShowPending,
@@ -888,8 +889,14 @@ export function BuildResults({
   updateTarget,
   sort,
   poolGap,
+  overMax,
 }: {
-  result: OptimizerOutput;
+  result: BuildList;
+  /**
+   * The maximums for `result` are in. Until then (at most ~1.2 s) a time-capped list
+   * says nothing yet: its banner or the background card follows with the result.
+   */
+  final: boolean;
   refinement: RefinementState;
   refinementProgress: ValueStore<number>;
   onShowPending: () => void;
@@ -901,6 +908,8 @@ export function BuildResults({
   sort: LoadoutSortState;
   /** Set when the pool can't fill a slot: the empty list explains it and offers the fix. */
   poolGap?: PoolGap;
+  /** Set when one target alone keeps every build out: the empty list names it. */
+  overMax?: OverMaxFix;
 } & BuildActionProps) {
   // "Upgrade cost" sorts by a scarcity-weighted total of each build's remaining
   // masterwork materials (see materialScore). Builds with an unknown cost sort last.
@@ -933,7 +942,7 @@ export function BuildResults({
   const entering = useEntrance(result.loadouts);
   const status = (
     <SearchStatus
-      capped={result.capped}
+      capped={result.capped && final}
       refinement={refinement}
       refinementProgress={refinementProgress}
       onShowPending={onShowPending}
@@ -944,7 +953,7 @@ export function BuildResults({
     return (
       <div className="space-y-3">
         {status}
-        <EmptyBuilds result={result} refinement={refinement} poolGap={poolGap} />
+        <EmptyBuilds result={result} refinement={refinement} poolGap={poolGap} overMax={overMax} />
       </div>
     );
   }

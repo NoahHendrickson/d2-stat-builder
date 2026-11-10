@@ -21,7 +21,8 @@
 import { describe, expect, test } from "vitest";
 import { mulberry32, randInt } from "./test-rng";
 import { solve } from "./solve";
-import { solveCeilings } from "./ceilings";
+import { projectSlots, solveCeilings } from "./ceilings";
+import { buildSlots } from "./bounds";
 import { NUM_SLOTS, NUM_STATS, clamp } from "./floors";
 import { createTuningSearcher, makeInternalPiece } from "./tuning";
 import type {
@@ -387,6 +388,114 @@ describe("independent exhaustive oracle", () => {
     // Coverage floors — deterministic (seeded), so these are fixed counts, not flaky.
     expect(feasibleCases).toBeGreaterThan(40);
     expect(exactCeilingCases).toBeGreaterThan(40);
+  });
+});
+
+describe("independent exhaustive oracle, two set requirements", () => {
+  // The joint set-slot prune (makeSetCheck) charges every required set's missing pieces
+  // against the remaining slots, so it only fires with several requirements: give every
+  // query two, over pieces spread across both sets.
+  test("feasibility, build legality, and ceilings agree on 120 seeded-random two-set pools", () => {
+    const rnd = mulberry32(0x2537);
+    let feasibleCases = 0;
+    let infeasibleCases = 0;
+    for (let iter = 0; iter < 120; iter++) {
+      const input = randomQuery(rnd);
+      for (const slot of input.slots) {
+        for (const piece of slot) {
+          const r = rnd();
+          piece.setHash = r < 0.4 ? 7 : r < 0.8 ? 8 : undefined;
+        }
+      }
+      input.setRequirements = [
+        { setHash: 7, count: randInt(rnd, 1, 2) },
+        { setHash: 8, count: randInt(rnd, 1, 3) },
+      ];
+      const ctx = `two-set iter ${iter}: reqs=${JSON.stringify(input.setRequirements)} mins=${input.minimums} exotic=${JSON.stringify(input.exotic)}`;
+      const truth = oracle(input);
+      const out = solve(input, GENEROUS);
+      expect(out.capped, ctx).toBe(false);
+      expect(out.loadouts.length > 0, `${ctx}: feasibility`).toBe(truth.feasible);
+      for (const lo of out.loadouts) checkLoadout(lo, input, ctx);
+      if (!truth.feasible) {
+        infeasibleCases++;
+        continue;
+      }
+      feasibleCases++;
+      for (let s = 0; s < NUM_STATS; s++) {
+        expect(out.ceilings[s], `${ctx}: ceiling ${s} over-reported`).toBeLessThanOrEqual(truth.ceilings[s]);
+        expect(out.ceilingUppers[s], `${ctx}: upper ${s} under the truth`).toBeGreaterThanOrEqual(truth.ceilings[s]);
+      }
+      if (out.ceilingsExact) {
+        expect(out.ceilings, `${ctx}: exact ceilings differ from oracle`).toEqual(truth.ceilings);
+      }
+    }
+    expect(feasibleCases).toBeGreaterThan(20);
+    expect(infeasibleCases).toBeGreaterThan(20);
+  });
+});
+
+describe("independent exhaustive oracle, few targets (probe pool projection)", () => {
+  /**
+   * The ceiling probes walk a pool where pieces alike on the targeted stats (and on
+   * tuning, exotic, set, artifice, power as those affect them) are collapsed to one
+   * (projectSlots). That only bites with few targets and archetype-shaped rolls, so:
+   * three pieces a slot, two or three targeted stats, and ceilings checked against the
+   * oracle. The floor proves the projection actually merged pieces in these queries.
+   */
+  test("ceilings agree with the oracle on 120 seeded-random pools where probe pools merge", () => {
+    const rnd = mulberry32(0x9e0c);
+    let merged = 0;
+    let exactCases = 0;
+    for (let iter = 0; iter < 120; iter++) {
+      const exoticSlot = rnd() < 0.5 ? randInt(rnd, 0, NUM_SLOTS - 1) : -1;
+      let tunable = 0;
+      let n = 0;
+      const slots: OptimizerPiece[][] = Array.from({ length: NUM_SLOTS }, (_, k) =>
+        Array.from({ length: 3 }, (_, i) => {
+          const exotic = k === exoticSlot && i === 0;
+          const tune = !exotic && tunable < 2 && rnd() < 0.3;
+          if (tune) tunable++;
+          return randomPiece(rnd, `c${n++}`, { exotic, tunable: tune, artifice: !tune && rnd() < 0.15 });
+        }),
+      );
+      const ref = slots.map((sp) => sp[randInt(rnd, 0, sp.length - 1)]);
+      const targeted = [0, 1, 2, 3, 4, 5].sort(() => rnd() - 0.5).slice(0, randInt(rnd, 2, 3));
+      const mins = new Array(NUM_STATS).fill(0);
+      for (const st of targeted) {
+        let v = 0;
+        for (const piece of ref) v += piece.stats[st];
+        mins[st] = Math.max(1, Math.min(200, v + randInt(rnd, -10, 15)));
+      }
+      const input: OptimizerInput = {
+        slots,
+        minimums: mins,
+        mods: { major: randInt(rnd, 0, 2), minor: randInt(rnd, 0, 2) },
+        exotic: { mode: exoticSlot >= 0 && rnd() < 0.5 ? "require" : "any" },
+      };
+      const ctx = `few-target iter ${iter}: mins=${mins} exotic=${JSON.stringify(input.exotic)}`;
+      let mask = 0;
+      for (const st of targeted) mask |= 1 << st;
+      const full = buildSlots(input);
+      const probe = projectSlots(full, mask, new Set(), false);
+      if (probe.some((slot, k) => slot.length < full[k].length)) merged++;
+
+      const truth = oracle(input);
+      const out = solve(input, GENEROUS);
+      expect(out.loadouts.length > 0, `${ctx}: feasibility`).toBe(truth.feasible);
+      if (!truth.feasible) continue;
+      for (let st = 0; st < NUM_STATS; st++) {
+        expect(out.ceilings[st], `${ctx}: ceiling ${st} over-reported`).toBeLessThanOrEqual(truth.ceilings[st]);
+        expect(out.ceilingUppers[st], `${ctx}: upper ${st} under the truth`).toBeGreaterThanOrEqual(truth.ceilings[st]);
+      }
+      if (out.ceilingsExact) {
+        exactCases++;
+        expect(out.ceilings, `${ctx}: exact ceilings differ from oracle`).toEqual(truth.ceilings);
+      }
+    }
+    // Seeded, so fixed counts (45 merged, 111 exact when written).
+    expect(merged).toBeGreaterThan(30);
+    expect(exactCases).toBeGreaterThan(80);
   });
 });
 

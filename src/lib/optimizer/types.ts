@@ -186,6 +186,17 @@ export interface OptimizerOutput {
 }
 
 /**
+ * A walk's build list on its own: the builds and their counters, with nothing about the
+ * stat maximums. This is what the early "builds" message carries, ahead of the in-line
+ * maximums proof. It has no ceiling fields on purpose, so nothing can read a maximum
+ * (or feed the ceiling carry) from a list whose maximums aren't proven yet.
+ */
+export type BuildList = Pick<
+  OptimizerOutput,
+  "loadouts" | "combosTried" | "combosValid" | "combosValidExact" | "capped"
+>;
+
+/**
  * How a background refinement resolved: "improved" = it proved higher per-stat maxima
  * than the capped search reported (the slider overlays rose — raise a target to
  * explore); "confirmed" = a fully proven "nothing better exists" — the build walk ran
@@ -257,10 +268,17 @@ export interface OptimizerRequest {
  * explicit user action). A final `refining: false` result always follows, carrying the
  * SAME frozen loadouts with the refined ceilings; `verified` is true when the background
  * build search ran to exhaustion (so "nothing better exists" is a proven claim).
+ *
+ * "builds" comes first when the walk found any build: the list as soon as the walk ends,
+ * ahead of the in-line ceiling proof (which can take up to its 1.2 s budget). Its
+ * loadouts and counters are exactly what the run's first "result" carries, and it has no
+ * maximums at all (see BuildList). An empty walk posts no "builds": its maximums are
+ * what explain it, so the UI keeps loading until they land.
  */
 export type OptimizerResponse =
   | { seq: number; kind: "progress"; progress: number }
   | { seq: number; kind: "ceilings"; ceilings: StatArray }
+  | { seq: number; kind: "builds"; builds: BuildList }
   | { seq: number; kind: "better"; output: OptimizerOutput }
   | {
       seq: number;

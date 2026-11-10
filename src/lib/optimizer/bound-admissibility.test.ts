@@ -11,7 +11,12 @@
  */
 import { describe, expect, test } from "vitest";
 import { mulberry32, randInt } from "./test-rng";
-import { computeSuffixBounds, makeAdmissionBound, makeJointMinCheck } from "./bounds";
+import {
+  computeSuffixBounds,
+  makeAdmissionBound,
+  makeJointMinCheck,
+  makeSetCheck,
+} from "./bounds";
 import { solveCeilings } from "./ceilings";
 import { solve } from "./solve";
 import {
@@ -23,7 +28,7 @@ import {
   type InternalPiece,
 } from "./tuning";
 import { realWarlockSlots } from "./real-pool.fixture";
-import type { ModBudget, OptimizerInput, OptimizerPiece } from "./types";
+import type { ModBudget, OptimizerInput, OptimizerPiece, SetRequirement } from "./types";
 
 interface RandomCase {
   slots: InternalPiece[][];
@@ -173,6 +178,90 @@ describe("joint-min bound admissibility (never prunes a feasible completion)", (
     // Coverage floor: the property is vacuous if the bound never fires. Deterministic
     // (seeded PRNG), so this is a fixed count, not a flaky threshold.
     expect(prunedChecked).toBeGreaterThan(100);
+  });
+});
+
+describe("set-requirement bound admissibility (never prunes a completion that meets every set)", () => {
+  /**
+   * Tiny pools of set pieces (sets 1–3, or none), a few exotics (now and then in a set),
+   * one to three requirements (now and then the same set twice), and the exotic rule on
+   * or off. Every prefix is enumerated, and wherever makeSetCheck prunes, brute force
+   * over every completion must find none that meets every requirement with the exotic
+   * rule (≤1 exotic; exactly 1 under "require").
+   */
+  test("~300 seeded-random pools: check=false ⇒ NO completion meets the requirements", () => {
+    const rng = mulberry32(0x5e75e7);
+    let pruned = 0;
+    let prunedJointOnly = 0;
+    for (let iter = 0; iter < 300; iter++) {
+      const slots: InternalPiece[][] = [];
+      for (let k = 0; k < NUM_SLOTS; k++) {
+        const pieces: InternalPiece[] = [];
+        for (let i = 0, n = randInt(rng, 1, 3); i < n; i++) {
+          const exotic = rng() < 0.3;
+          const setRoll = randInt(rng, 0, 3);
+          const setHash = setRoll === 0 || (exotic && rng() < 0.4) ? undefined : setRoll;
+          const piece: OptimizerPiece = { id: `s${k}p${i}`, stats: [10, 10, 10, 10, 10, 10], exotic, setHash };
+          pieces.push(makeInternalPiece(piece, true, true));
+        }
+        slots.push(pieces);
+      }
+      const reqs: SetRequirement[] = [];
+      for (let r = 0, n = randInt(rng, 1, 3); r < n; r++) {
+        reqs.push({ setHash: randInt(rng, 1, 3), count: randInt(rng, 1, 4) });
+      }
+      const needExotic = rng() < 0.5;
+      const { setSuffix } = computeSuffixBounds(slots, reqs, needExotic, (q) => q.exotic);
+      const setCounts = new Array(reqs.length).fill(0);
+      const check = makeSetCheck(slots, reqs, setCounts, setSuffix, needExotic);
+      const chosen: InternalPiece[] = [];
+      const push = (q: InternalPiece) => {
+        chosen.push(q);
+        for (let r = 0; r < reqs.length; r++) if (q.setHash === reqs[r].setHash) setCounts[r]++;
+      };
+      const pop = () => {
+        const q = chosen.pop()!;
+        for (let r = 0; r < reqs.length; r++) if (q.setHash === reqs[r].setHash) setCounts[r]--;
+      };
+      const exotics = () => chosen.filter((q) => q.exotic).length;
+      const anyValid = (k: number): boolean => {
+        if (exotics() > 1) return false;
+        if (k === NUM_SLOTS) {
+          if (needExotic && exotics() !== 1) return false;
+          return reqs.every((r, i) => setCounts[i] >= r.count);
+        }
+        for (const q of slots[k]) {
+          push(q);
+          const ok = anyValid(k + 1);
+          pop();
+          if (ok) return true;
+        }
+        return false;
+      };
+      const walk = (k: number): void => {
+        if (exotics() > 1) return;
+        if (!check(k, exotics())) {
+          pruned++;
+          const perReq = reqs.every((r, i) => setCounts[i] + setSuffix[i][k] >= r.count);
+          if (perReq) prunedJointOnly++;
+          expect(
+            anyValid(k),
+            `iter=${iter} k=${k} prefix=${chosen.map((q) => q.id)} reqs=${JSON.stringify(reqs)} needExotic=${needExotic}`,
+          ).toBe(false);
+          return;
+        }
+        if (k === NUM_SLOTS) return;
+        for (const q of slots[k]) {
+          push(q);
+          walk(k + 1);
+          pop();
+        }
+      };
+      walk(0);
+    }
+    // Coverage floors (seeded, so fixed counts): the joint part must actually fire.
+    expect(pruned).toBeGreaterThan(200);
+    expect(prunedJointOnly).toBeGreaterThan(25);
   });
 });
 

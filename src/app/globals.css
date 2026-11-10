@@ -905,6 +905,47 @@ input[type="number"] {
   }
 }
 
+/* A stat bar whose target is past its max (Slider's `invalid`): the frame around the
+   bar turns red, and a ring pushes out from it twice as it appears. Taking the mark
+   off and putting it back replays the ring. Reduced motion keeps the red frame and
+   drops the ring. `!important` because the plain line style colours the frame from a
+   more specific selector. The Normal theme's bar has no frame, so the bar itself
+   wears the red line (its own layer below: a nested Normal block here would change
+   where Tailwind sorts the utility). */
+@keyframes d2-bar-invalid-ring {
+  from {
+    outline-color: var(--destructive);
+    outline-offset: 0px;
+  }
+  to {
+    outline-color: transparent;
+    outline-offset: 6px;
+  }
+}
+@utility d2-bar-invalid {
+  &::before {
+    border-image-source: none !important;
+    border-color: var(--destructive) !important;
+    outline: 1px solid transparent;
+    animation: d2-bar-invalid-ring 700ms cubic-bezier(0.25, 0.6, 0.4, 1) 2;
+    @media (prefers-reduced-motion: reduce) {
+      animation: none;
+    }
+  }
+}
+@layer utilities {
+  [data-app-theme="normal"] .d2-bar-invalid {
+    box-shadow: 0 0 0 1px var(--destructive);
+    outline: 1px solid transparent;
+    animation: d2-bar-invalid-ring 700ms cubic-bezier(0.25, 0.6, 0.4, 1) 2;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    [data-app-theme="normal"] .d2-bar-invalid {
+      animation: none;
+    }
+  }
+}
+
 /* A list whose items rise in, the first eight cascading 30ms apart. Items that
    mount later (a re-sort, a new result) rise on their own; past eight they
    share the last delay, so a long list never waits on its tail. */

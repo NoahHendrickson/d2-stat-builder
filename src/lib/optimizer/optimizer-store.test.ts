@@ -4,7 +4,13 @@ afterEach(() => {
   vi.useRealTimers();
 });
 import { createOptimizerStore, type WorkerLike } from "./optimizer-store";
-import type { OptimizerInput, OptimizerOutput, OptimizerRequest, OptimizerResponse } from "./types";
+import type {
+  BuildList,
+  OptimizerInput,
+  OptimizerOutput,
+  OptimizerRequest,
+  OptimizerResponse,
+} from "./types";
 import type { QueryOrigin } from "../loadouts/types";
 
 /** A stand-in origin for tests that don't care which builder state a query came from. */
@@ -327,4 +333,226 @@ test("stale messages from a superseded run are ignored", () => {
   old.emit({ seq: oldSeq, kind: "result", output: output(), refining: false, verified: true });
   expect(store.getSnapshot().shown).toBeNull();
   expect(store.getSnapshot().running).toBe(true);
+});
+
+describe("the build list comes ahead of the maximums", () => {
+  const lo = (total: number) => ({
+    pieceIds: [`h${total}`, "a", "c", "l", "k"],
+    baseStats: [total, 0, 0, 0, 0, 0],
+    stats: [total, 0, 0, 0, 0, 0],
+    tuningBonus: [0, 0, 0, 0, 0, 0],
+    tuning: [null, null, null, null, null],
+    modBonus: [0, 0, 0, 0, 0, 0],
+    modsUsed: { major: 0, minor: 0 },
+    artificeBonus: [0, 0, 0, 0, 0, 0],
+    artifice: [null, null, null, null, null],
+    total,
+    exotic: false,
+    power: null,
+  });
+  /** What the worker posts early: the walk's list and counters, with no maximums. */
+  const early = (over: Partial<BuildList> = {}): BuildList => ({
+    loadouts: [lo(60), lo(50)],
+    combosTried: 2,
+    combosValid: 2,
+    combosValidExact: true,
+    capped: false,
+    ...over,
+  });
+  /** The shown result once it is final (the type has no maximums before that). */
+  const finalResult = (store: ReturnType<typeof setup>["store"]) => {
+    const shown = store.getSnapshot().shown;
+    if (!shown?.final) throw new Error("the shown result is not final");
+    return shown.result;
+  };
+  // The worker structured-clones every post, so the result's list is a new array.
+  const clone = <T,>(v: T): T => structuredClone(v);
+
+  test("the list shows at once, then the result keeps that very list", () => {
+    const { store, worker } = setup();
+    store.run(input(1), ORIGIN);
+    const seq = worker().posted[0].seq;
+    const first = early();
+    worker().emit({ seq, kind: "builds", builds: first });
+    let snap = store.getSnapshot();
+    expect(snap.shown?.result.loadouts).toBe(first.loadouts);
+    expect(snap.running).toBe(false); // the progress bar finishes here
+    expect(snap.shown?.final).toBe(false); // no maximums yet
+    expect(snap.refinement.phase).toBe("idle"); // and no status card for the short wait
+    const full = output({ loadouts: clone(first.loadouts), ceilings: [70, 1, 1, 1, 1, 1] });
+    worker().emit({ seq, kind: "result", output: full, refining: false, verified: true });
+    snap = store.getSnapshot();
+    expect(snap.refinement.phase).toBe("idle");
+    expect(finalResult(store).ceilings).toEqual([70, 1, 1, 1, 1, 1]);
+    expect(finalResult(store).ceilingsExact).toBe(true);
+    // Same list, same array: the cards don't replay their entrance.
+    expect(snap.shown?.result.loadouts).toBe(first.loadouts);
+    expect(store.ceilingsView.get()).toEqual({ values: [70, 1, 1, 1, 1, 1], exact: true });
+  });
+
+  test("a new query while the maximums are proven still terminates the worker", () => {
+    const { store, worker } = setup();
+    store.run(input(1), ORIGIN);
+    const w = worker();
+    w.emit({ seq: w.posted[0].seq, kind: "builds", builds: early() });
+    store.run(input(1), ORIGIN); // a repeat re-attaches: still in flight
+    expect(w.posted).toHaveLength(1);
+    store.run(input(2), ORIGIN);
+    expect(w.terminated).toBe(true);
+    expect(store.getSnapshot().running).toBe(true);
+    expect(store.getSnapshot().refinement.phase).toBe("idle");
+  });
+
+  test("an early list never feeds the ceiling carry", () => {
+    const { store, worker } = setup();
+    // A: a full result with proven ceilings.
+    store.run(input(10), ORIGIN);
+    let seq = worker().posted.at(-1)!.seq;
+    worker().emit({ seq, kind: "result", output: output({ ceilings: [40, 1, 1, 1, 1, 1] }), refining: false, verified: true });
+    // B (loosened): only its early list arrives. It has no maximums to carry.
+    store.run(input(5), ORIGIN);
+    seq = worker().posted.at(-1)!.seq;
+    worker().emit({ seq, kind: "builds", builds: early() });
+    // C (looser still): its carry comes from A's full result, the last one there was.
+    store.run(input(0), ORIGIN);
+    const carry = worker().posted.at(-1)!.carry;
+    expect(carry?.ceilingSeed).toEqual([40, 1, 1, 1, 1, 1]);
+    expect(carry?.ceilingUpperSeed).toBeUndefined();
+  });
+
+  test("an early list for the same run then a background pass keeps one list throughout", () => {
+    const { store, worker } = setup();
+    store.run(input(1), ORIGIN);
+    const seq = worker().posted[0].seq;
+    const first = early();
+    worker().emit({ seq, kind: "builds", builds: first });
+    const interim = output({ loadouts: clone(first.loadouts), ceilingsExact: false, ceilingUppers: [9, 9, 9, 9, 9, 9] });
+    worker().emit({ seq, kind: "result", output: interim, refining: true, verified: true });
+    let snap = store.getSnapshot();
+    expect(snap.refinement.phase).toBe("running");
+    expect(snap.shown?.result.loadouts).toBe(first.loadouts);
+    worker().emit({ seq, kind: "result", output: output({ loadouts: clone(first.loadouts) }), refining: false, verified: true });
+    snap = store.getSnapshot();
+    expect(snap.refinement.phase).toBe("done");
+    expect(snap.shown?.result.loadouts).toBe(first.loadouts);
+  });
+
+  test("an empty early list is ignored: the search keeps loading until the maximums land", () => {
+    const { store, worker } = setup();
+    store.run(input(1), ORIGIN);
+    const seq = worker().posted[0].seq;
+    worker().emit({ seq, kind: "builds", builds: early({ loadouts: [] }) });
+    expect(store.getSnapshot().shown).toBeNull();
+    expect(store.getSnapshot().running).toBe(true);
+    expect(store.getSnapshot().refinement.phase).toBe("idle");
+  });
+
+  test("a stale early list from a superseded run is ignored", () => {
+    const { store, worker } = setup();
+    store.run(input(1), ORIGIN);
+    const old = worker();
+    store.run(input(2), ORIGIN);
+    old.emit({ seq: old.posted[0].seq, kind: "builds", builds: early() });
+    expect(store.getSnapshot().shown).toBeNull();
+    expect(store.getSnapshot().running).toBe(true);
+  });
+});
+
+describe("a crashed search", () => {
+  const crash = (w: FakeWorker) => w.onerror?.(new Event("error"));
+
+  test("drops the worker, says so, and Retry runs the same query on a fresh one", () => {
+    const { store, worker } = setup();
+    store.run(input(1), ORIGIN);
+    const w = worker();
+    crash(w);
+    expect(w.terminated).toBe(true);
+    let snap = store.getSnapshot();
+    expect(snap.running).toBe(false);
+    expect(snap.failed).toBe(true);
+    store.retry();
+    expect(FakeWorker.instances).toHaveLength(2);
+    expect(worker()).not.toBe(w);
+    expect(worker().posted[0].input.minimums[0]).toBe(1);
+    snap = store.getSnapshot();
+    expect(snap.running).toBe(true);
+    expect(snap.failed).toBe(false);
+    const seq = worker().posted[0].seq;
+    worker().emit({ seq, kind: "result", output: output(), refining: false, verified: true });
+    expect(store.getSnapshot().shown).not.toBeNull();
+  });
+
+  test("the same query dispatched again (a remounted builder) runs instead of re-attaching", () => {
+    const { store, worker } = setup();
+    store.run(input(1), ORIGIN);
+    crash(worker());
+    store.run(input(1), ORIGIN);
+    expect(FakeWorker.instances).toHaveLength(2);
+    expect(worker().posted).toHaveLength(1);
+    expect(store.getSnapshot().running).toBe(true);
+  });
+
+  test("then a different query runs on a fresh worker and clears the failure", () => {
+    const { store, worker } = setup();
+    store.run(input(1), ORIGIN);
+    let seq = worker().posted[0].seq;
+    worker().emit({ seq, kind: "result", output: output(), refining: false, verified: true });
+    store.run(input(2), ORIGIN);
+    const w = worker();
+    crash(w);
+    // The list on screen was input(1)'s, not the failed query's: it goes with the crash,
+    // so nothing can show it against the new targets.
+    expect(store.getSnapshot().failed).toBe(true);
+    expect(store.getSnapshot().shown).toBeNull();
+    store.run(input(3), ORIGIN);
+    expect(worker()).not.toBe(w);
+    expect(worker().posted[0].input.minimums[0]).toBe(3);
+    expect(store.getSnapshot().failed).toBe(false);
+    seq = worker().posted[0].seq;
+    worker().emit({ seq, kind: "result", output: output(), refining: false, verified: true });
+    expect(store.getSnapshot().shown?.key).toBe(JSON.stringify(input(3)));
+  });
+
+  test("a crash after the query's own list is up keeps that list", () => {
+    const { store, worker } = setup();
+    store.run(input(1), ORIGIN);
+    const seq = worker().posted[0].seq;
+    worker().emit({ seq, kind: "result", output: output({ capped: true }), refining: true, verified: false });
+    crash(worker());
+    const snap = store.getSnapshot();
+    expect(snap.failed).toBe(true);
+    expect(snap.refinement.phase).toBe("idle");
+    expect(snap.shown?.key).toBe(JSON.stringify(input(1)));
+  });
+
+  test("a worker that fails while idle is dropped without a failure", () => {
+    const { store, worker } = setup();
+    store.warm();
+    const w = worker();
+    crash(w);
+    expect(store.getSnapshot().failed).toBe(false);
+    store.run(input(1), ORIGIN);
+    expect(worker()).not.toBe(w);
+    expect(worker().posted).toHaveLength(1);
+  });
+
+  test("an error from a superseded worker changes nothing", () => {
+    const { store, worker } = setup();
+    store.run(input(1), ORIGIN);
+    const old = worker();
+    store.run(input(2), ORIGIN);
+    crash(old);
+    expect(store.getSnapshot().failed).toBe(false);
+    expect(store.getSnapshot().running).toBe(true);
+  });
+
+  test("cancel clears the failure", () => {
+    const { store, worker } = setup();
+    store.run(input(1), ORIGIN);
+    crash(worker());
+    store.cancel();
+    expect(store.getSnapshot().failed).toBe(false);
+    store.retry(); // nothing failed any more
+    expect(FakeWorker.instances).toHaveLength(1);
+  });
 });

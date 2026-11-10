@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { classSets, makeableSetReqs } from "./sets";
+import { classSets, makeableSetReqs, toggleSetReq } from "./sets";
 import type { ArmorPiece } from "./normalize";
 import type { Manifest } from "../manifest/load";
 
@@ -58,5 +58,46 @@ describe("makeableSetReqs", () => {
   it("returns the same object when every requirement can be made", () => {
     const reqs = { 1: 2 as const };
     expect(makeableSetReqs(reqs, new Map([[1, owned(2)]]))).toBe(reqs);
+  });
+});
+
+describe("toggleSetReq", () => {
+  const all = () => true;
+  const toggle = (
+    reqs: Record<number, 2 | 4>,
+    setHash: number,
+    count: 2 | 4,
+    shown: Record<number, 2 | 4> = reqs,
+    isVisible: (h: number) => boolean = all,
+  ) => toggleSetReq(reqs, setHash, count, { shown, isVisible });
+
+  it("picking a 4-piece bonus drops every other shown bonus", () => {
+    expect(toggle({ 1: 4, 2: 2 }, 3, 4)).toEqual({ 3: 4 });
+    expect(toggle({ 2: 2 }, 3, 4)).toEqual({ 3: 4 });
+  });
+
+  it("picking a 2-piece bonus drops another set's shown 4-piece and keeps other 2-pieces", () => {
+    expect(toggle({ 1: 4, 2: 2 }, 3, 2)).toEqual({ 2: 2, 3: 2 });
+    // The same set going from its 4-piece to its 2-piece is just a change of count.
+    expect(toggle({ 1: 4 }, 1, 2)).toEqual({ 1: 2 });
+  });
+
+  it("goes by what the list shows: a stored 4-piece shown as a 2-piece, and a hidden set", () => {
+    // Set 1 is stored as 4 but only makes its 2-piece; set 9 isn't in the list.
+    const reqs = { 1: 4, 9: 2 } as const;
+    const shown = { 1: 2 } as const;
+    // Beside a new 2-piece it stays, stored as the 2-piece it shows: it can't come back
+    // as a 4-piece next to that pick once more pieces are owned.
+    expect(toggle(reqs, 3, 2, shown)).toEqual({ 1: 2, 3: 2, 9: 2 });
+    // A new 4-piece drops it, like any other shown bonus. The hidden set is kept.
+    expect(toggle(reqs, 3, 4, shown)).toEqual({ 3: 4, 9: 2 });
+  });
+
+  it("clicking the shown bonus takes it off, and past the cap a hidden set goes first", () => {
+    expect(toggle({ 1: 4, 2: 2 }, 1, 4)).toEqual({ 2: 2 });
+    // Eight 2-piece requirements (the cap), set 5 hidden: a ninth pick evicts set 5.
+    const twos = (hashes: number[]) => Object.fromEntries(hashes.map((h) => [h, 2])) as Record<number, 2>;
+    const next = toggle(twos([1, 2, 3, 4, 5, 6, 7, 8]), 9, 2, twos([1, 2, 3, 4, 6, 7, 8]), (h) => h !== 5);
+    expect(Object.keys(next).map(Number).sort((x, y) => x - y)).toEqual([1, 2, 3, 4, 6, 7, 8, 9]);
   });
 });

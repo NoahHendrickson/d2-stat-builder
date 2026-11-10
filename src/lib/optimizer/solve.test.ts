@@ -402,9 +402,11 @@ describe("ceiling upper-bound provenance", () => {
   test("timeout-starved uppers never fall below a proven-achievable reference", () => {
     const input = realWarlockTwoSetInput();
     const first = solve(input, { ceilingBudgetMs: 0 });
-    const cheap = solveCeilings(input, first.ceilings, 50);
+    // The full proof takes ~12 ms since the joint set-slot prune (825 ms before it), so
+    // starve it hard: 2 ms can't prove this pool.
+    const cheap = solveCeilings(input, first.ceilings, 2);
     const reference = solveCeilings(input, first.ceilings, 120_000);
-    expect(cheap.exact).toBe(false); // 50ms can't prove this pool
+    expect(cheap.exact).toBe(false);
     expect(reference.exact).toBe(true);
     for (let s = 0; s < 6; s++) {
       expect(cheap.uppers[s]).toBeGreaterThanOrEqual(reference.ceilings[s]);

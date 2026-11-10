@@ -1,6 +1,6 @@
 import { solve } from "./solve";
 import { solveCeilings } from "./ceilings";
-import type { CeilingCarry, OptimizerInput, OptimizerOutput } from "./types";
+import type { BuildList, CeilingCarry, OptimizerInput, OptimizerOutput } from "./types";
 
 /**
  * Wall-clock budgets for the background phases after a capped search: ceilings
@@ -19,6 +19,13 @@ export interface SessionCallbacks {
   onProgress: (progress: number) => void;
   /** Ceiling updates as they refine (seed first, then per-stat improvements). */
   onCeilings: (ceilings: number[]) => void;
+  /**
+   * The first solve's build list, posted the moment its walk ends and before the in-line
+   * ceiling proof (see SolveOptions.onBuilds). Its loadouts are exactly the first
+   * onResult's. Skipped for an empty list: there the maximums are the explanation, so
+   * the UI waits for them.
+   */
+  onBuilds: (builds: BuildList) => void;
   /**
    * A results post. `refining: true` means background work is still running and this
    * build list is frozen for this query (the UI never changes a shown list on its own)
@@ -81,6 +88,9 @@ export function runSolveSession(
   const first = solve(input, {
     onProgress: cb.onProgress,
     onCeilings: cb.onCeilings,
+    onBuilds: (builds) => {
+      if (builds.loadouts.length > 0) cb.onBuilds(builds);
+    },
     topNBudgetMs: budgets.topNBudgetMs,
     ceilingBudgetMs: budgets.ceilingBudgetMs,
     // Cross-edit carryover (see carryover.ts): proven bounds from the previous query when

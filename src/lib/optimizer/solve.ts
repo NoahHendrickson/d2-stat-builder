@@ -1,4 +1,5 @@
 import type {
+  BuildList,
   ModBudget,
   OptimizerInput,
   OptimizerLoadout,
@@ -21,6 +22,7 @@ import {
   computeSuffixBounds,
   makeAdmissionBound,
   makeJointMinCheck,
+  makeSetCheck,
   nextExoticCount,
 } from "./bounds";
 import { CEILING_BUDGET_MS, runCeilings } from "./ceilings";
@@ -110,6 +112,13 @@ export interface SolveOptions {
   onCeilings?: (ceilings: number[]) => void;
   /** Streams overall search progress as a 0–1 fraction (throttled), for a progress bar. */
   onProgress?: (fraction: number) => void;
+  /**
+   * The build list as soon as the walk ends, before the ceilings are refined. Its
+   * `loadouts` is the very array the returned output carries, and its counters and
+   * `capped` match too. Not called when the pool can't fill every slot (that returns
+   * at once anyway).
+   */
+  onBuilds?: (builds: BuildList) => void;
   /** Wall-clock cap for the top-N search (defaults to TOPN_BUDGET_MS). */
   topNBudgetMs?: number;
   /** Wall-clock cap for refining the ceilings past their seeds (defaults to CEILING_BUDGET_MS). */
@@ -258,12 +267,7 @@ export function solve(
     maxModPoints,
     chosenArt,
   );
-  const canReachSets = (k: number): boolean => {
-    for (let r = 0; r < reqs.length; r++) {
-      if (setCounts[r] + setSuffix[r][k] < reqs[r].count) return false;
-    }
-    return true;
-  };
+  const canReachSets = makeSetCheck(slots, reqs, setCounts, setSuffix, needExotic);
   // Top-N admission bound from slot k (see makeAdmissionBound). A subtree whose bound
   // can't beat the heap's worst is skipped (admission is strict, so a tie can't enter
   // either).
@@ -326,7 +330,7 @@ export function solve(
       return;
     }
     if (!canReachMin(k)) return;
-    if (!canReachSets(k)) return;
+    if (!canReachSets(k, exoticCount)) return;
     if (needExotic && exoticCount + exoticSuffix[k] < 1) return;
     if (power && !power.feasible(k)) return;
     if (cannotBeatWorst(k)) return;
@@ -390,8 +394,10 @@ export function solve(
     }
   }
   // Emit the seed immediately as the fast approximate — the animation's first frame —
-  // then refine toward the exact ceilings within the time budget.
+  // then hand over the list (it is final now), then refine toward the exact ceilings
+  // within the time budget.
   onCeilings?.(seed.slice(0, NUM_STATS));
+  opts.onBuilds?.({ loadouts, combosTried, combosValid, combosValidExact: !boundPruned, capped });
   const ceilingBudgetMs = opts.ceilingBudgetMs ?? CEILING_BUDGET_MS;
   // Ceilings fill the remaining progress share by wall-clock share of their budget —
   // their true cost isn't predictable, but time elapsed is monotonic and bounded.

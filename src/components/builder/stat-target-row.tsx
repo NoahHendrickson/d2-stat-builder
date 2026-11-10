@@ -14,6 +14,7 @@ import {
   STAT_LABELS,
 } from "@/lib/armory/stats";
 import type { CeilingsView } from "@/lib/optimizer/optimizer-store";
+import type { EmptyStatState } from "@/lib/optimizer/over-max";
 import {
   createValueStore,
   useStoreValue,
@@ -115,6 +116,9 @@ export const StatTargetRow = memo(function StatTargetRow({
   value,
   ceilingsView,
   onChange,
+  onBurstChange,
+  onCommit,
+  emptyState,
   stepper = false,
 }: {
   statKey: (typeof STAT_DISPLAY_ORDER)[number];
@@ -123,10 +127,31 @@ export const StatTargetRow = memo(function StatTargetRow({
   value: number;
   /** Achievable max per stat, overlaid on the bar; without it the bar runs to 200. */
   ceilingsView?: ValueStore<CeilingsView>;
+  /** One-shot edits: the ticks and the − / + buttons. */
   onChange: (index: number, value: number) => void;
+  /**
+   * Edits that come in bursts: dragging the slider or its arrow keys, typing in the
+   * number box. The builder debounces their search. Called only when the value really
+   * changes (the same contract as PowerRangeControls). Defaults to `onChange`.
+   */
+  onBurstChange?: (index: number, value: number) => void;
+  /** A burst ended: the slider was released, or Enter / blur in the number box. */
+  onCommit?: () => void;
+  /**
+   * Set only while nothing matches the current targets (see overMaxState): "over"
+   * marks this target as past its max (lowering it to that max brings builds back);
+   * "none" means the other targets leave this stat no max at all, and the row reads
+   * as sitting at its own target.
+   */
+  emptyState?: EmptyStatState;
   /** − / + buttons (±1) beside the value. */
   stepper?: boolean;
 }) {
+  // A burst edit that changes nothing is dropped here, so the builder's burst mark is
+  // only ever left by an edit that starts a search.
+  const burstChange = (i: number, next: number) => {
+    if (next !== value) (onBurstChange ?? onChange)(i, next);
+  };
   const { values: ceilings, exact: ceilingsExact } = useStoreValue(
     ceilingsView ?? NO_CEILINGS,
   );
@@ -138,34 +163,52 @@ export const StatTargetRow = memo(function StatTargetRow({
   // Every wording derived from the proven/unproven distinction lives in
   // this ONE object so the visible text, tick label, and accessible names
   // can't drift apart: an exact ceiling is a hard "/ max"; an unproven one
-  // is a lower bound ("81+" — achievable, but possibly more out there, e.g.
-  // while a refinement is still probing or its budget expired). Both render
-  // "/ n" inline; only the tick label and accessible wording mark the
-  // difference. Without a ceiling the top tick and "/ n" fall back to 200.
+  // is a lower bound ("/ 81+" inline and "81+" on the tick — achievable, but
+  // possibly more out there, e.g. while a refinement is still probing or its
+  // budget expired). Without a ceiling the top tick and "/ n" fall back to
+  // 200. While nothing matches, a stat the other targets leave no max reads
+  // as sitting at its own target ("50 / 50", the owner's pick over a dash or
+  // "/ 0"): the Max tick is that target, so clicking it changes nothing.
   const ceilingValue = cap ?? undefined;
+  const noMax = emptyState?.kind === "none";
+  const overMax = emptyState?.kind === "over";
   const maxTick =
     cap === null
       ? {
           value: STAT_SLIDER_MAX,
           srText: null,
+          inline: `/ ${STAT_SLIDER_MAX}`,
           label: ceilingsView ? "Max" : String(STAT_SLIDER_MAX),
           aria: `Set ${label} to ${STAT_SLIDER_MAX}`,
         }
-      : ceilingsExact
+      : noMax
         ? {
-            value: cap,
-            srText: `${label} achievable max: ${cap}`,
+            value,
+            srText: null,
+            inline: `/ ${value}`,
             label: "Max",
-            aria: `Set ${label} to its max (${cap})`,
+            aria: `Set ${label} to ${value}`,
           }
-        : {
-            value: cap,
-            srText: `${label} achievable: at least ${cap}`,
-            label: `${cap}+`,
-            aria: `Set ${label} to its highest proven value (${cap})`,
-          };
+        : ceilingsExact
+          ? {
+              value: cap,
+              srText: `${label} achievable max: ${cap}`,
+              inline: `/ ${cap}`,
+              label: "Max",
+              aria: `Set ${label} to its max (${cap})`,
+            }
+          : {
+              value: cap,
+              srText: `${label} achievable: at least ${cap}`,
+              inline: `/ ${cap}+`,
+              label: `${cap}+`,
+              aria: `Set ${label} to its highest proven value (${cap})`,
+            };
   return (
-    <div className="space-y-1">
+    <div
+      data-over-max={overMax || undefined}
+      className="space-y-1"
+    >
       {/* Header: glyph + name left; value chip + "/ max" right. */}
       <div className="flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-1">
@@ -205,16 +248,21 @@ export const StatTargetRow = memo(function StatTargetRow({
             step={1}
             value={value}
             aria-label={`${label} target value`}
+            aria-invalid={overMax || undefined}
             onFocus={(e) => e.target.select()}
             onChange={(e) => {
               const n = Math.round(Number(e.target.value));
-              onChange(
+              burstChange(
                 index,
                 Number.isFinite(n)
                   ? Math.max(0, Math.min(STAT_SLIDER_MAX, n))
                   : 0,
               );
             }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") onCommit?.();
+            }}
+            onBlur={() => onCommit?.()}
             // Phones type at 16px (see globals.css), so the chip grows to hold it.
             className="h-5 w-9 max-md:h-7 max-md:w-12 max-md:normal:h-7 max-md:normal:w-12 border-foreground/12 bg-foreground/8 px-1 text-center text-[11px] leading-5 font-medium tabular-nums normal:h-6 normal:w-10 normal:rounded-[6px] normal:bg-foreground/4 normal:text-xs normal:font-normal md:normal:text-xs [appearance:textfield] md:text-[11px] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
           />
@@ -230,11 +278,16 @@ export const StatTargetRow = memo(function StatTargetRow({
           {maxTick.srText && (
             <span className="sr-only">{maxTick.srText}</span>
           )}
+          {overMax && (
+            <span className="sr-only">
+              {`${label} target is above its max. Lower it to ${emptyState.max} for builds.`}
+            </span>
+          )}
           <span
             className="text-[11px] leading-5 font-medium text-foreground/50 tabular-nums whitespace-nowrap"
             aria-hidden
           >
-            / {maxTick.value}
+            {maxTick.inline}
           </span>
         </div>
       </div>
@@ -248,8 +301,16 @@ export const StatTargetRow = memo(function StatTargetRow({
             max={STAT_SLIDER_MAX}
             step={1}
             value={[value]}
-            onValueChange={(v) => onChange(index, Array.isArray(v) ? v[0] : v)}
+            onValueChange={(v) => burstChange(index, Array.isArray(v) ? v[0] : v)}
+            // A pointer release ends the drag (search now); arrow keys commit on every
+            // press and stay a debounced burst.
+            onValueCommitted={(_, details) => {
+              if (details.reason !== "keyboard") onCommit?.();
+            }}
             ceiling={ceilingValue}
+            // The target that keeps every build out: the bar's frame turns red (an
+            // error state the owner asked for, not a selection mark).
+            invalid={overMax}
             aria-label={`${label} target`}
             className="cursor-pointer"
           />

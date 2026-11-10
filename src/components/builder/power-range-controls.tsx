@@ -49,6 +49,8 @@ function parsePower(raw: string): number | null {
 export const PowerRangeControls = memo(function PowerRangeControls({
   value,
   onChange,
+  onBurstChange,
+  onCommit,
   slotPieces,
   weaponPlan,
   legacyArmor,
@@ -57,6 +59,14 @@ export const PowerRangeControls = memo(function PowerRangeControls({
 }: {
   value: PowerRangeSelection;
   onChange: (next: PowerRangeSelection) => void;
+  /**
+   * Changes that come in bursts (dragging the range slider, its arrow keys); the builder
+   * debounces their search. Called only when the range really changes. Defaults to
+   * `onChange`.
+   */
+  onBurstChange?: (next: PowerRangeSelection) => void;
+  /** The range slider was released: search now. */
+  onCommit?: () => void;
   /**
    * The optimizer's candidate pieces per slot AS THEY WILL BE while Power matters is on
    * (the toggle itself can change the pool — a checked Dreamer's Bond takes over the
@@ -186,7 +196,12 @@ export const PowerRangeControls = memo(function PowerRangeControls({
                   value={[bounds.min, bounds.max]}
                   onValueChange={(v) => {
                     if (!Array.isArray(v) || v.length !== 2) return;
-                    emit({ ...value, bounds: { min: v[0], max: v[1] } });
+                    const next = { ...value, bounds: { min: v[0], max: v[1] } };
+                    if (samePowerRangeSelection(value, next)) return;
+                    (onBurstChange ?? onChange)(next);
+                  }}
+                  onValueCommitted={(_, details) => {
+                    if (details.reason !== "keyboard") onCommit?.();
                   }}
                   aria-label="Power range"
                   className="cursor-pointer"

@@ -4,9 +4,16 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useLeaveBuildsSurface } from "@/components/builder/leave-builds-surface";
 import type { PoolGapFix, PoolSetting } from "@/lib/armory/optimizer-pool";
-import { ARMOR_SLOTS, SLOT_LABELS } from "@/lib/armory/stats";
+import {
+  ARMOR_SLOTS,
+  SLOT_LABELS,
+  STAT_DISPLAY_ORDER,
+  STAT_LABELS,
+  STAT_ORDER,
+} from "@/lib/armory/stats";
 import { listAnd } from "@/lib/format-list";
-import type { OptimizerOutput, RefinementState } from "@/lib/optimizer/types";
+import { isSettledEmpty, type OverMaxCulprit } from "@/lib/optimizer/over-max";
+import type { BuildList, RefinementState } from "@/lib/optimizer/types";
 
 /** A pool gap (see fillablePoolGap) and how to show its settings. */
 export interface PoolGap extends PoolGapFix {
@@ -14,20 +21,71 @@ export interface PoolGap extends PoolGapFix {
   onShowSettings: () => void;
 }
 
+/**
+ * Targets past their maximums on a settled empty result (see overMaxState), and how to
+ * set one.
+ */
+export interface OverMaxFix {
+  culprits: OverMaxCulprit[];
+  onSet: (stat: number, value: number) => void;
+}
+
 /** The Builds list with no builds in it: why, and what to do. */
 export function EmptyBuilds({
   result,
   refinement,
   poolGap,
+  overMax,
 }: {
-  result: OptimizerOutput;
+  result: BuildList;
   refinement: RefinementState;
   poolGap?: PoolGap;
+  overMax?: OverMaxFix;
 }) {
-  const gap = useGapForResult(result, poolGap);
+  const gap = useHeldForResult(result, poolGap);
+  const fix = useHeldForResult(result, overMax);
   // A gap proves no build exists, whatever the search is still doing.
   if (gap) return <PoolGapNotice gap={gap} />;
+  // Held past an edit (overMax gone, the result still this one): the explanation stays
+  // until the next result, but its buttons are for settings no longer on screen.
+  if (fix && fix.culprits.length > 0) return <OverMaxNotice fix={fix} stale={overMax === undefined} />;
   return <p className="text-muted-foreground text-sm">{emptyBuildsCopy(result, refinement)}</p>;
+}
+
+const statLabel = (stat: number) => STAT_LABELS[STAT_ORDER[stat]];
+
+/**
+ * "Super can reach 122 with your other targets." With several culprits each one alone is
+ * enough, so the sentence lists them all and every one gets its own button. An unproven
+ * max is achievable but may be higher: "at least".
+ */
+function OverMaxNotice({ fix, stale }: { fix: OverMaxFix; stale: boolean }) {
+  const culprits = [...fix.culprits].sort(
+    (a, b) =>
+      STAT_DISPLAY_ORDER.indexOf(STAT_ORDER[a.stat]) -
+      STAT_DISPLAY_ORDER.indexOf(STAT_ORDER[b.stat]),
+  );
+  const reach = (c: OverMaxCulprit) => `${c.proven ? "" : "at least "}${c.max}`;
+  const parts = culprits.map((c, i) =>
+    i === 0 ? `${statLabel(c.stat)} can reach ${reach(c)}` : `${statLabel(c.stat)} ${reach(c)}`,
+  );
+  const list =
+    parts.length > 1 ? `${parts.slice(0, -1).join(", ")} or ${parts[parts.length - 1]}` : parts[0];
+  return (
+    <div className="space-y-3">
+      <p className="text-muted-foreground text-sm">
+        {list} with your other targets.{culprits.length > 1 && " Lowering any one is enough."}
+      </p>
+      <div className="flex flex-wrap gap-2">
+        {culprits.map((c) => (
+          // Stays in the phone's builds sheet: the builds this brings back land right here.
+          <Button key={c.stat} size="sm" disabled={stale} onClick={() => fix.onSet(c.stat, c.max)}>
+            Set {statLabel(c.stat)} to {c.max}
+          </Button>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 /**
@@ -37,29 +95,30 @@ export function EmptyBuilds({
  * pass that also timed out / was cancelled) has NOT proven anything: say "none found in
  * time", never "none exist".
  */
-function emptyBuildsCopy(result: OptimizerOutput, refinement: RefinementState): string {
+function emptyBuildsCopy(result: BuildList, refinement: RefinementState): string {
   if (refinement.phase === "running") {
     return "No builds found in the first pass yet — the deeper search is still running.";
   }
   if (refinement.phase === "done" && refinement.pending) {
     return "The first pass found none — use “Show them” above to load what the full search found.";
   }
-  const exhaustive = !result.capped || (refinement.phase === "done" && refinement.verified);
-  return exhaustive
+  return isSettledEmpty(result, refinement)
     ? "No loadouts from your gear meet those constraints — even with mods. Try easing a target, a set bonus, or raising your mod budget."
     : "No builds found within the search time limit — some may still exist. Narrow your targets (or ease one) and search again.";
 }
 
 /**
- * The gap the empty `result` was searched under. Turning a setting on clears `poolGap`
- * at once, but the empty result stays until the new search lands; keep its explanation
- * until then rather than fall back to the generic copy.
+ * What explains the empty `result` (a pool gap, a target past its max), held for as long
+ * as that result is on screen. An edit clears the explanation at once (turning a setting
+ * on, clicking "Set Super to 122"), but the empty result stays until the new search
+ * lands; keep its explanation until then rather than fall back to the generic "none
+ * exist" copy for a query that may well have builds.
  */
-function useGapForResult(result: OptimizerOutput, poolGap?: PoolGap): PoolGap | undefined {
-  const [held, setHeld] = useState({ result, gap: poolGap });
-  const changed = held.result !== result || (poolGap !== undefined && held.gap !== poolGap);
-  if (changed) setHeld({ result, gap: poolGap });
-  return changed ? poolGap : (poolGap ?? held.gap);
+function useHeldForResult<T>(result: BuildList, value: T | undefined): T | undefined {
+  const [held, setHeld] = useState({ result, value });
+  const changed = held.result !== result || (value !== undefined && held.value !== value);
+  if (changed) setHeld({ result, value });
+  return changed ? value : (value ?? held.value);
 }
 
 const SETTING_NAMES: Record<PoolSetting, string> = {

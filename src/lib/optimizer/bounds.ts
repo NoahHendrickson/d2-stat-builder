@@ -564,6 +564,74 @@ export function makeJointMinCheck(
 }
 
 /**
+ * Set-requirement reachability from slot k, shared by the top-N walk and the ceiling
+ * probes (one definition, like makeJointMinCheck). `setCounts[r]` is the walk's live
+ * count of chosen pieces from `reqs[r]`'s set; `setSuffix` comes from
+ * computeSuffixBounds. Prune if EITHER fails:
+ *  - per requirement: the remaining slots that offer its set can't supply its missing
+ *    pieces;
+ *  - jointly: a slot holds one piece, and a piece belongs to at most one set, so the
+ *    missing pieces of every required set (summed over DISTINCT sets — a set listed
+ *    twice needs only its larger count) need that many distinct remaining slots, each
+ *    offering some required set. Under "require"/"specific" an exotic still to come
+ *    takes one of the remaining slots too, unless some exotic in the pool belongs to a
+ *    required set (then it could be a set piece and no slot is charged for it).
+ * Exported for tests (the admissibility harness brute-forces every completion).
+ */
+export function makeSetCheck(
+  slots: InternalPiece[][],
+  reqs: SetRequirement[],
+  setCounts: number[],
+  setSuffix: number[][],
+  needExotic: boolean,
+): (k: number, exoticCount: number) => boolean {
+  // One entry per distinct set: the requirement index whose count the walk reads, and
+  // the largest count asked of that set.
+  const firstOf = new Map<number, number>();
+  const need: number[] = [];
+  const at: number[] = [];
+  for (let r = 0; r < reqs.length; r++) {
+    const seen = firstOf.get(reqs[r].setHash);
+    if (seen === undefined) {
+      firstOf.set(reqs[r].setHash, need.length);
+      need.push(reqs[r].count);
+      at.push(r);
+    } else if (reqs[r].count > need[seen]) {
+      need[seen] = reqs[r].count;
+    }
+  }
+  // reqSlots[k]: slots in k..4 offering a piece of some required set.
+  const reqSlots = new Array(NUM_SLOTS + 1).fill(0);
+  let exoticInSet = false;
+  for (let k = NUM_SLOTS - 1; k >= 0; k--) {
+    let offers = false;
+    for (const p of slots[k]) {
+      if (p.setHash === undefined || !firstOf.has(p.setHash)) continue;
+      offers = true;
+      if (p.exotic) exoticInSet = true;
+    }
+    reqSlots[k] = reqSlots[k + 1] + (offers ? 1 : 0);
+  }
+  const chargeExotic = needExotic && !exoticInSet;
+  const joint = need.length > 1 || chargeExotic;
+  return (k, exoticCount) => {
+    let missing = 0;
+    for (let r = 0; r < reqs.length; r++) {
+      if (setCounts[r] + setSuffix[r][k] < reqs[r].count) return false;
+    }
+    if (!joint) return true;
+    for (let i = 0; i < need.length; i++) {
+      const m = need[i] - setCounts[at[i]];
+      if (m > 0) missing += m;
+    }
+    if (missing === 0) return true;
+    if (missing > reqSlots[k]) return false;
+    const free = NUM_SLOTS - k - (chargeExotic && exoticCount === 0 ? 1 : 0);
+    return missing <= free;
+  };
+}
+
+/**
  * Build the per-slot search pool shared by solve() and solveCeilings(): pre-filter
  * pieces the exotic constraint excludes (they can never appear in a valid loadout,
  * but left in the pool they inflate every suffix bound — looser bounds → less

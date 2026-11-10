@@ -14,7 +14,7 @@ import { useArmory } from "@/lib/armory/use-armory";
 import { useManifest } from "@/lib/manifest/use-manifest";
 import { useOptimizer } from "@/lib/optimizer/use-optimizer";
 import { useSmoothedProgress } from "@/lib/use-smoothed-progress";
-import { availableSets, makeableSetReqs } from "@/lib/armory/sets";
+import { availableSets, makeableSetReqs, toggleSetReq } from "@/lib/armory/sets";
 import {
   makeableRaidReqs,
   ownedLegacyRaids,
@@ -118,6 +118,8 @@ import {
 } from "@/lib/dim/subclasses";
 import { useApplyCurrentFragments } from "@/lib/armory/use-apply-current-fragments";
 import { useAutoSearch } from "@/lib/optimizer/use-auto-search";
+import { overMaxState } from "@/lib/optimizer/over-max";
+import type { OverMaxFix } from "@/components/builder/empty-builds";
 import { useOptimizerWarmup } from "@/lib/optimizer/use-optimizer-warmup";
 import { MAX_SET_BONUSES, type BuilderSnapshot, type QueryOrigin } from "@/lib/loadouts/types";
 import { togglePinnedSet, usePinnedSets } from "@/lib/settings/pinned-sets";
@@ -148,6 +150,9 @@ export function BuilderPanel({
     refinement,
     applyPending,
     getSnapshot,
+    shown: shownResult,
+    failed,
+    retry,
   } = useOptimizer();
   // `progress` is a value store: the smoother reads it per frame and writes the eased
   // value to another store; neither touches this component's render.
@@ -870,8 +875,12 @@ export function BuilderPanel({
   // inputs, so its identity changing is the "something changed" signal. Paused on the
   // theoretical tab. Coming back dispatches at once, and the store drops it as a repeat
   // unless a shared setting (class, pools) changed meanwhile: Builds' inputs read only
-  // the Builds tab.
-  useAutoSearch(searchReady && classType !== null && !theoretical, runOptimizer);
+  // the Builds tab. One-shot edits search at once; slider drags and typing mark their
+  // edits as bursts (`autoSearch.burst`) and search on release, Enter or a pause.
+  const autoSearch = useAutoSearch(
+    searchReady && classType !== null && !theoretical,
+    runOptimizer,
+  );
 
   const theory = useTheoryBuilds({
     active: theoretical,
@@ -949,6 +958,30 @@ export function BuilderPanel({
       updateTab("targets", (prev) => prev.map((v, idx) => (idx === i ? value : v))),
     [updateTab],
   );
+  // A slider drag or typed value: its search waits for a pause, a release or Enter.
+  // Burst handlers are called only for a real change (the controls' contract), so the
+  // mark burst() leaves is always consumed by the search that change starts.
+  const setTargetBurst = useCallback(
+    (i: number, value: number) => {
+      autoSearch.burst();
+      setTarget(i, value);
+    },
+    [autoSearch, setTarget],
+  );
+
+  // Nothing matches and one target alone is to blame (see overMaxState): the rows it
+  // marks, and the fix the empty list offers.
+  const overMax = useMemo(
+    () =>
+      theoretical
+        ? null
+        : overMaxState({ shown: shownResult, refinement, running, failed, input: optimizerInput }),
+    [theoretical, shownResult, refinement, running, failed, optimizerInput],
+  );
+  const overMaxFix = useMemo(
+    (): OverMaxFix | undefined => overMax ? { culprits: overMax.culprits, onSet: setTarget } : undefined,
+    [overMax, setTarget],
+  );
   // Section Reset buttons: always clickable. A section already at its default keeps
   // its state object, so the click is a no-op (no re-render, no new search).
   // Resetting the targets starts over, so it also ends a linked loadout.
@@ -1001,6 +1034,14 @@ export function BuilderPanel({
     [powerRange, actualClassItemHash, updateTab],
   );
 
+  const onPowerRangeBurst = useCallback(
+    (next: PowerRangeSelection) => {
+      autoSearch.burst();
+      onPowerRangeChange(next);
+    },
+    [autoSearch, onPowerRangeChange],
+  );
+
   const setSetMinOwned = useCallback(
     (minOwned: SetMinOwned) =>
       setSetFilters((prev) =>
@@ -1012,28 +1053,14 @@ export function BuilderPanel({
   const visibleSets = settingsView.setMap;
   const toggleSet = useCallback(
     (setHash: number, count: 2 | 4) => {
-      updateTab("setReqs", (prev) => {
+      updateTab("setReqs", (prev) =>
         // Toggles act on the requirements as shown (on Builds, the ones the owned pieces
         // make — see ownedSetReqs).
-        const shown = theoretical ? prev : makeableSetReqs(prev, visibleSets);
-        const next = { ...prev };
-        if (shown[setHash] === count) {
-          delete next[setHash];
-          return next;
-        }
-        next[setHash] = count;
-        // Requirements for sets no longer in the pool are kept (a pool toggle
-        // shouldn't drop one for good) but they're invisible here, so they must
-        // never crowd out a pick the player can actually see.
-        const keys = Object.keys(next);
-        if (keys.length > MAX_SET_BONUSES) {
-          const evict =
-            keys.find((h) => Number(h) !== setHash && !visibleSets.has(Number(h))) ??
-            keys.find((h) => Number(h) !== setHash);
-          if (evict !== undefined) delete next[Number(evict)];
-        }
-        return next;
-      });
+        toggleSetReq(prev, setHash, count, {
+          shown: theoretical ? prev : makeableSetReqs(prev, visibleSets),
+          isVisible: (h) => visibleSets.has(h),
+        }),
+      );
     },
     [visibleSets, theoretical, updateTab],
   );
@@ -1124,6 +1151,10 @@ export function BuilderPanel({
       refinementProgress,
       onShowPending: applyPending,
       onCancel: cancel,
+      failed,
+      onRetry: retry,
+      overMax: overMaxFix,
+      final: shownResult?.final ?? false,
       pieceMap,
       setMap,
       statIcons,
@@ -1156,6 +1187,10 @@ export function BuilderPanel({
       refinementProgress,
       applyPending,
       cancel,
+      failed,
+      retry,
+      overMaxFix,
+      shownResult?.final,
       pieceMap,
       setMap,
       statIcons,
@@ -1215,6 +1250,9 @@ export function BuilderPanel({
                       value={tab.targets[i]}
                       ceilingsView={settingsView.ceilings}
                       onChange={setTarget}
+                      onBurstChange={setTargetBurst}
+                      onCommit={autoSearch.commit}
+                      emptyState={overMax?.rows[i]}
                     />
                   );
                 })}
@@ -1343,6 +1381,8 @@ export function BuilderPanel({
                   <PowerRangeControls
                     value={powerRange}
                     onChange={onPowerRangeChange}
+                    onBurstChange={onPowerRangeBurst}
+                    onCommit={autoSearch.commit}
                     slotPieces={powerSlotPieces}
                     weaponPlan={weaponPlan}
                     legacyArmor={useLegacyArmor}
