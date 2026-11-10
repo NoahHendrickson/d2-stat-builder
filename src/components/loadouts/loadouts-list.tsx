@@ -88,6 +88,10 @@ import {
 } from "@/components/loadouts/use-loadout-editor-sections";
 import { LoadoutRow } from "@/components/loadouts/loadout-row";
 import { LoadoutIndex } from "@/components/loadouts/loadout-index";
+import { EquippedGearList } from "@/components/loadouts/equipped-gear-list";
+import { EquippedGearCard } from "@/components/loadouts/equipped-gear-card";
+import { equippedGearAsLoadout } from "@/lib/loadouts/equipped-gear";
+import type { ArmoryCharacter } from "@/lib/armory/fetch";
 import { useCurrentRow } from "@/components/loadouts/use-current-row";
 import { useMinWidth } from "@/lib/use-min-width";
 import {
@@ -286,6 +290,39 @@ export function LoadoutsList({
         mods: editorModsFor(saved, pieceMap, weaponMap, manifest, armory.insertablePlugs),
       }),
     [pieceMap, weaponMap, manifest, armory.insertablePlugs],
+  );
+  // The character whose equipped gear shows as a card above the saved ones. Built from
+  // the armory, so it follows the gear as the profile refreshes.
+  const [equippedId, setEquippedId] = useState<string | null>(null);
+  const toggleEquipped = useCallback(
+    (character: ArmoryCharacter) => setEquippedId((id) => (id === character.id ? null : character.id)),
+    [],
+  );
+  const equippedCharacter = armory.characters.find((c) => c.id === equippedId);
+  const equippedData = useMemo(
+    () =>
+      equippedCharacter &&
+      equippedGearAsLoadout(equippedCharacter, { pieceMap, weaponMap, manifest }),
+    [equippedCharacter, pieceMap, weaponMap, manifest],
+  );
+  const saveEquipped = () => {
+    if (!equippedData) return;
+    const pending = toast.loading("Saving loadout");
+    create.mutate(equippedData, {
+      onSuccess: () => {
+        setEquippedId(null);
+        pending.success("Loadout saved", `Saved as ${equippedData.loadout.name}`);
+      },
+      onError: reportLoadoutError(pending),
+    });
+  };
+  // Jumping to a saved loadout puts the list back on its own.
+  const jumpToLoadout = useCallback(
+    (index: number) => {
+      setEquippedId(null);
+      jumpTo(index);
+    },
+    [jumpTo],
   );
   const openDelete = useCallback(
     (saved: SavedLoadout) => setDialog({ kind: "delete", loadout: saved }),
@@ -666,83 +703,118 @@ export function LoadoutsList({
         </div>
       )}
 
-      {loadouts.isError ? (
-        <p className="text-muted-foreground text-sm">
-          {loadouts.error.notConfigured
-            ? "Loadout storage isn't configured on this deployment yet — set DATABASE_URL (see .env.example)."
-            : `Couldn't load your loadouts — ${loadouts.error.message}`}
-        </p>
-      ) : loadouts.isPending ? (
-        <p className="text-muted-foreground text-sm">
-          Loading your loadouts…
-        </p>
-      ) : all.length === 0 ? (
-        <p className="text-muted-foreground text-sm">
-          No saved loadouts yet. Expand a build in the optimizer and choose
-          Save.
-        </p>
-      ) : shown.length === 0 ? (
-        <p className="text-muted-foreground text-sm">No loadouts match.</p>
-      ) : (
-        <div className="flex min-h-0 flex-1 gap-4">
-          {showIndex && (
-            <LoadoutIndex
-              loadouts={shown}
-              activeId={currentId}
-              onJump={jumpTo}
-              className="w-56 shrink-0"
+      {/* The name column (wide screens) leads with what each character has on now, so
+          it shows even before there are loadouts to list. */}
+      <div className="flex min-h-0 flex-1 gap-4">
+        {showIndex && (
+          <div className="flex min-h-0 w-56 shrink-0 flex-col gap-4">
+            <EquippedGearList
+              characters={armory.characters}
+              disabled={provisional}
+              openId={equippedCharacter?.id}
+              onOpen={toggleEquipped}
+            />
+            {shown.length > 0 && (
+              <div className="flex min-h-0 flex-1 flex-col gap-2">
+                <h2 className="d2-label shrink-0 px-1">Loadouts</h2>
+                <LoadoutIndex
+                  loadouts={shown}
+                  activeId={currentId}
+                  onJump={jumpToLoadout}
+                  className="flex-1"
+                />
+              </div>
+            )}
+          </div>
+        )}
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-10">
+          {equippedData && (
+            <EquippedGearCard
+              data={equippedData}
+              pieceMap={pieceMap}
+              weaponMap={weaponMap}
+              manifest={manifest}
+              statIcons={statIcons}
+              blockedLabel={provisional ? "Refreshing your gear from Bungie…" : undefined}
+              saving={create.isPending}
+              onSave={saveEquipped}
+              onClose={() => setEquippedId(null)}
             />
           )}
-          <div
-            ref={setScrollEl}
-            className="d2-scroll min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain"
-          >
-            <div
-              className="relative w-full"
-              style={{ height: virtualizer.getTotalSize() }}
-            >
-              {virtualizer.getVirtualItems().map((item) => {
-                const saved = shown[item.index];
-                return (
-                  <div
-                    key={item.key}
-                    ref={virtualizer.measureElement}
-                    data-index={item.index}
-                    className="absolute top-0 left-0 w-full"
-                    style={{ transform: `translateY(${item.start}px)` }}
-                  >
-                    <LoadoutRow
-                      saved={saved}
-                      open={expanded.has(saved.id)}
-                      onToggle={toggleExpanded}
-                      pieceMap={pieceMap}
-                      weaponMap={weaponMap}
-                      weapons={armory.weapons}
-                      provisional={provisional}
-                      setRunning={setRun !== null}
-                      manifest={manifest}
-                      characters={armory.characters}
-                      statIcons={statIcons}
-                      balancedTuningIcon={balancedTuningIcon}
-                      now={now}
-                      onEdit={openEdit}
-                      onDuplicate={duplicateLoadout}
-                      onDelete={openDelete}
-                      onShare={shareLoadout}
-                      onOptimize={optimizeLoadout}
-                      onArmoryChanged={onArmoryChanged}
-                      allTags={hashtags}
-                      onSetTag={setLoadoutTag}
-                      selected={selecting ? picked.has(saved.id) : undefined}
-                      onSelect={togglePicked}
-                    />
-                  </div>
-                );
-              })}
-            </div>
+          <div className="flex min-h-0 flex-1 flex-col gap-3">
+            {/* Only with the equipped card above, to tell the saved loadouts apart from it. */}
+            {equippedData && <h2 className="d2-label shrink-0">Loadouts</h2>}
+            {loadouts.isError ? (
+              <p className="text-muted-foreground text-sm">
+                {loadouts.error.notConfigured
+                  ? "Loadout storage isn't configured on this deployment yet — set DATABASE_URL (see .env.example)."
+                  : `Couldn't load your loadouts — ${loadouts.error.message}`}
+              </p>
+            ) : loadouts.isPending ? (
+              <p className="text-muted-foreground text-sm">
+                Loading your loadouts…
+              </p>
+            ) : all.length === 0 ? (
+              <p className="text-muted-foreground text-sm">
+                {showIndex
+                  ? "No saved loadouts yet. Save your equipped gear from the list, or expand a build in the optimizer and choose Save."
+                  : "No saved loadouts yet. Expand a build in the optimizer and choose Save."}
+              </p>
+            ) : shown.length === 0 ? (
+              <p className="text-muted-foreground text-sm">No loadouts match.</p>
+            ) : (
+              <div
+                ref={setScrollEl}
+                className="d2-scroll min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain"
+              >
+                <div
+                  className="relative w-full"
+                  style={{ height: virtualizer.getTotalSize() }}
+                >
+                  {virtualizer.getVirtualItems().map((item) => {
+                    const saved = shown[item.index];
+                    return (
+                      <div
+                        key={item.key}
+                        ref={virtualizer.measureElement}
+                        data-index={item.index}
+                        className="absolute top-0 left-0 w-full"
+                        style={{ transform: `translateY(${item.start}px)` }}
+                      >
+                        <LoadoutRow
+                          saved={saved}
+                          open={expanded.has(saved.id)}
+                          onToggle={toggleExpanded}
+                          pieceMap={pieceMap}
+                          weaponMap={weaponMap}
+                          weapons={armory.weapons}
+                          provisional={provisional}
+                          setRunning={setRun !== null}
+                          manifest={manifest}
+                          characters={armory.characters}
+                          statIcons={statIcons}
+                          balancedTuningIcon={balancedTuningIcon}
+                          now={now}
+                          onEdit={openEdit}
+                          onDuplicate={duplicateLoadout}
+                          onDelete={openDelete}
+                          onShare={shareLoadout}
+                          onOptimize={optimizeLoadout}
+                          onArmoryChanged={onArmoryChanged}
+                          allTags={hashtags}
+                          onSetTag={setLoadoutTag}
+                          selected={selecting ? picked.has(saved.id) : undefined}
+                          onSelect={togglePicked}
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
           </div>
         </div>
-      )}
+      </div>
 
       <LoadoutEditorDrawer
         open={dialog.kind === "edit"}
