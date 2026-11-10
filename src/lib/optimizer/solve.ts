@@ -1,4 +1,5 @@
 import type {
+  BuildList,
   ModBudget,
   OptimizerInput,
   OptimizerLoadout,
@@ -114,11 +115,10 @@ export interface SolveOptions {
   /**
    * The build list as soon as the walk ends, before the ceilings are refined. Its
    * `loadouts` is the very array the returned output carries, and its counters and
-   * `capped` match too; its ceilings are only the seed, with no proven uppers
-   * (`ceilingUppers` all STAT_CAP, `ceilingsExact` false). Not called when the pool
-   * can't fill every slot (that returns at once anyway).
+   * `capped` match too. Not called when the pool can't fill every slot (that returns
+   * at once anyway).
    */
-  onBuilds?: (early: OptimizerOutput) => void;
+  onBuilds?: (builds: BuildList) => void;
   /** Wall-clock cap for the top-N search (defaults to TOPN_BUDGET_MS). */
   topNBudgetMs?: number;
   /** Wall-clock cap for refining the ceilings past their seeds (defaults to CEILING_BUDGET_MS). */
@@ -397,18 +397,7 @@ export function solve(
   // then hand over the list (it is final now), then refine toward the exact ceilings
   // within the time budget.
   onCeilings?.(seed.slice(0, NUM_STATS));
-  opts.onBuilds?.({
-    loadouts,
-    combosTried,
-    combosValid,
-    combosValidExact: !boundPruned,
-    ceilings: seed.slice(0, NUM_STATS),
-    // Nothing is proven about the maxima yet: the trivial bound, so the pair stays
-    // honest (ceilings ≤ uppers, not exact).
-    ceilingUppers: new Array(NUM_STATS).fill(STAT_CAP),
-    ceilingsExact: false,
-    capped,
-  });
+  opts.onBuilds?.({ loadouts, combosTried, combosValid, combosValidExact: !boundPruned, capped });
   const ceilingBudgetMs = opts.ceilingBudgetMs ?? CEILING_BUDGET_MS;
   // Ceilings fill the remaining progress share by wall-clock share of their budget —
   // their true cost isn't predictable, but time elapsed is monotonic and bounded.

@@ -65,7 +65,7 @@ import { MaterialCost, materialSummary } from "@/components/material-cost";
 import type {
   AppliedTuning,
   OptimizerLoadout,
-  OptimizerOutput,
+  BuildList,
   RefinementState,
 } from "@/lib/optimizer/types";
 
@@ -774,10 +774,6 @@ function SearchStatus({
   switch (refinement.phase) {
     case "idle":
       return cappedBanner;
-    case "proving":
-      // The list is up and the in-line maximums pass ends within ~1.2 s: nothing to say
-      // yet (a capped list's banner and the background card follow its result).
-      return null;
     case "running":
       // Alert-style card sized like a build row (same rounded border footprint) — the
       // background search materially changes what the sliders offer, so it earns more
@@ -872,6 +868,7 @@ function SearchStatus({
 
 export function BuildResults({
   result,
+  final,
   refinement,
   refinementProgress,
   onShowPending,
@@ -894,7 +891,12 @@ export function BuildResults({
   poolGap,
   overMax,
 }: {
-  result: OptimizerOutput;
+  result: BuildList;
+  /**
+   * The maximums for `result` are in. Until then (at most ~1.2 s) a time-capped list
+   * says nothing yet: its banner or the background card follows with the result.
+   */
+  final: boolean;
   refinement: RefinementState;
   refinementProgress: ValueStore<number>;
   onShowPending: () => void;
@@ -940,7 +942,7 @@ export function BuildResults({
   const entering = useEntrance(result.loadouts);
   const status = (
     <SearchStatus
-      capped={result.capped}
+      capped={result.capped && final}
       refinement={refinement}
       refinementProgress={refinementProgress}
       onShowPending={onShowPending}

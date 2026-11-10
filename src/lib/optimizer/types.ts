@@ -186,6 +186,17 @@ export interface OptimizerOutput {
 }
 
 /**
+ * A walk's build list on its own: the builds and their counters, with nothing about the
+ * stat maximums. This is what the early "builds" message carries, ahead of the in-line
+ * maximums proof. It has no ceiling fields on purpose, so nothing can read a maximum
+ * (or feed the ceiling carry) from a list whose maximums aren't proven yet.
+ */
+export type BuildList = Pick<
+  OptimizerOutput,
+  "loadouts" | "combosTried" | "combosValid" | "combosValidExact" | "capped"
+>;
+
+/**
  * How a background refinement resolved: "improved" = it proved higher per-stat maxima
  * than the capped search reported (the slider overlays rose — raise a target to
  * explore); "confirmed" = a fully proven "nothing better exists" — the build walk ran
@@ -204,16 +215,9 @@ export type RefineOutcome = "improved" | "confirmed";
  * exhaustion (the frozen list is proven complete); an outcome of null with
  * `verified: false` means the background pass itself timed out (the time-limit
  * messaging stays).
- *
- * "proving" is the short in-line window (at most the inline ceiling budget, ~1.2 s)
- * between the early "builds" post and the run's first result: the list is on screen
- * and final, and the slider maximums are still being proven. It has no UI of its own
- * (a status card there would flash on ordinary searches); it only tells readers that
- * the shown result is not a full result yet.
  */
 export type RefinementState =
   | { phase: "idle" }
-  | { phase: "proving" }
   | {
       phase: "running";
       progress: number;
@@ -267,16 +271,14 @@ export interface OptimizerRequest {
  *
  * "builds" comes first when the walk found any build: the list as soon as the walk ends,
  * ahead of the in-line ceiling proof (which can take up to its 1.2 s budget). Its
- * loadouts and counters are exactly what the run's first "result" carries; its ceilings
- * are only the seed (`ceilingUppers` the trivial STAT_CAP, `ceilingsExact` false), so
- * it is never a full result: it must not feed the ceiling carry (the store's `last`) or
- * anything that reads proven maximums. An empty walk posts no
- * "builds": its maximums are what explain it, so the UI keeps loading until they land.
+ * loadouts and counters are exactly what the run's first "result" carries, and it has no
+ * maximums at all (see BuildList). An empty walk posts no "builds": its maximums are
+ * what explain it, so the UI keeps loading until they land.
  */
 export type OptimizerResponse =
   | { seq: number; kind: "progress"; progress: number }
   | { seq: number; kind: "ceilings"; ceilings: StatArray }
-  | { seq: number; kind: "builds"; output: OptimizerOutput }
+  | { seq: number; kind: "builds"; builds: BuildList }
   | { seq: number; kind: "better"; output: OptimizerOutput }
   | {
       seq: number;

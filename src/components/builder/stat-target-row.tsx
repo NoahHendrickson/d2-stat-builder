@@ -131,22 +131,27 @@ export const StatTargetRow = memo(function StatTargetRow({
   onChange: (index: number, value: number) => void;
   /**
    * Edits that come in bursts: dragging the slider or its arrow keys, typing in the
-   * number box. The builder debounces their search. Defaults to `onChange`.
+   * number box. The builder debounces their search. Called only when the value really
+   * changes (the same contract as PowerRangeControls). Defaults to `onChange`.
    */
   onBurstChange?: (index: number, value: number) => void;
   /** A burst ended: the slider was released, or Enter / blur in the number box. */
   onCommit?: () => void;
   /**
-   * Set only while nothing matches the current targets (a settled empty result):
-   * "over" marks this target as past its max (lowering it to the max brings builds
-   * back); "none" means the other targets leave this stat no max at all, and the
-   * row reads as sitting at its own target.
+   * Set only while nothing matches the current targets (see overMaxState): "over"
+   * marks this target as past its max (lowering it to that max brings builds back);
+   * "none" means the other targets leave this stat no max at all, and the row reads
+   * as sitting at its own target.
    */
   emptyState?: EmptyStatState;
   /** − / + buttons (±1) beside the value. */
   stepper?: boolean;
 }) {
-  const burstChange = onBurstChange ?? onChange;
+  // A burst edit that changes nothing is dropped here, so the builder's burst mark is
+  // only ever left by an edit that starts a search.
+  const burstChange = (i: number, next: number) => {
+    if (next !== value) (onBurstChange ?? onChange)(i, next);
+  };
   const { values: ceilings, exact: ceilingsExact } = useStoreValue(
     ceilingsView ?? NO_CEILINGS,
   );
@@ -165,8 +170,8 @@ export const StatTargetRow = memo(function StatTargetRow({
   // as sitting at its own target ("50 / 50", the owner's pick over a dash or
   // "/ 0"): the Max tick is that target, so clicking it changes nothing.
   const ceilingValue = cap ?? undefined;
-  const noMax = emptyState === "none" && cap === 0;
-  const overMax = emptyState === "over" && cap !== null && value > cap;
+  const noMax = emptyState?.kind === "none";
+  const overMax = emptyState?.kind === "over";
   const maxTick =
     cap === null
       ? {
@@ -275,7 +280,7 @@ export const StatTargetRow = memo(function StatTargetRow({
           )}
           {overMax && (
             <span className="sr-only">
-              {`${label} target is above its max. Lower it to ${cap} for builds.`}
+              {`${label} target is above its max. Lower it to ${emptyState.max} for builds.`}
             </span>
           )}
           <span

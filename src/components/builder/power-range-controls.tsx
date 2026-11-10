@@ -49,7 +49,7 @@ function parsePower(raw: string): number | null {
 export const PowerRangeControls = memo(function PowerRangeControls({
   value,
   onChange,
-  onBurst,
+  onBurstChange,
   onCommit,
   slotPieces,
   weaponPlan,
@@ -59,8 +59,12 @@ export const PowerRangeControls = memo(function PowerRangeControls({
 }: {
   value: PowerRangeSelection;
   onChange: (next: PowerRangeSelection) => void;
-  /** Called just before a slider-drag (or arrow key) change: its search is debounced. */
-  onBurst?: () => void;
+  /**
+   * Changes that come in bursts (dragging the range slider, its arrow keys); the builder
+   * debounces their search. Called only when the range really changes. Defaults to
+   * `onChange`.
+   */
+  onBurstChange?: (next: PowerRangeSelection) => void;
   /** The range slider was released: search now. */
   onCommit?: () => void;
   /**
@@ -194,8 +198,7 @@ export const PowerRangeControls = memo(function PowerRangeControls({
                     if (!Array.isArray(v) || v.length !== 2) return;
                     const next = { ...value, bounds: { min: v[0], max: v[1] } };
                     if (samePowerRangeSelection(value, next)) return;
-                    onBurst?.();
-                    onChange(next);
+                    (onBurstChange ?? onChange)(next);
                   }}
                   onValueCommitted={(_, details) => {
                     if (details.reason !== "keyboard") onCommit?.();

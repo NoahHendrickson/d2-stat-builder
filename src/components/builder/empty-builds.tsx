@@ -12,8 +12,8 @@ import {
   STAT_ORDER,
 } from "@/lib/armory/stats";
 import { listAnd } from "@/lib/format-list";
-import type { OverMaxCulprit } from "@/lib/optimizer/over-max";
-import type { OptimizerOutput, RefinementState } from "@/lib/optimizer/types";
+import { isSettledEmpty, type OverMaxCulprit } from "@/lib/optimizer/over-max";
+import type { BuildList, RefinementState } from "@/lib/optimizer/types";
 
 /** A pool gap (see fillablePoolGap) and how to show its settings. */
 export interface PoolGap extends PoolGapFix {
@@ -22,9 +22,8 @@ export interface PoolGap extends PoolGapFix {
 }
 
 /**
- * Targets past their maximums on a settled empty result (see overMaxCulprits), and how to
- * set one. The builder computes it only when the empty list is proven and is for the
- * targets on screen.
+ * Targets past their maximums on a settled empty result (see overMaxState), and how to
+ * set one.
  */
 export interface OverMaxFix {
   culprits: OverMaxCulprit[];
@@ -38,7 +37,7 @@ export function EmptyBuilds({
   poolGap,
   overMax,
 }: {
-  result: OptimizerOutput;
+  result: BuildList;
   refinement: RefinementState;
   poolGap?: PoolGap;
   overMax?: OverMaxFix;
@@ -93,15 +92,14 @@ function OverMaxNotice({ fix }: { fix: OverMaxFix }) {
  * pass that also timed out / was cancelled) has NOT proven anything: say "none found in
  * time", never "none exist".
  */
-function emptyBuildsCopy(result: OptimizerOutput, refinement: RefinementState): string {
+function emptyBuildsCopy(result: BuildList, refinement: RefinementState): string {
   if (refinement.phase === "running") {
     return "No builds found in the first pass yet — the deeper search is still running.";
   }
   if (refinement.phase === "done" && refinement.pending) {
     return "The first pass found none — use “Show them” above to load what the full search found.";
   }
-  const exhaustive = !result.capped || (refinement.phase === "done" && refinement.verified);
-  return exhaustive
+  return isSettledEmpty(result, refinement)
     ? "No loadouts from your gear meet those constraints — even with mods. Try easing a target, a set bonus, or raising your mod budget."
     : "No builds found within the search time limit — some may still exist. Narrow your targets (or ease one) and search again.";
 }
@@ -111,7 +109,7 @@ function emptyBuildsCopy(result: OptimizerOutput, refinement: RefinementState): 
  * at once, but the empty result stays until the new search lands; keep its explanation
  * until then rather than fall back to the generic copy.
  */
-function useGapForResult(result: OptimizerOutput, poolGap?: PoolGap): PoolGap | undefined {
+function useGapForResult(result: BuildList, poolGap?: PoolGap): PoolGap | undefined {
   const [held, setHeld] = useState({ result, gap: poolGap });
   const changed = held.result !== result || (poolGap !== undefined && held.gap !== poolGap);
   if (changed) setHeld({ result, gap: poolGap });

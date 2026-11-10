@@ -25,6 +25,12 @@ export interface TuneOption {
   applied: AppliedTuning | null;
 }
 
+/**
+ * The optimizer's view of one piece. projectSlots (ceilings.ts) merges pieces a
+ * feasibility probe can't tell apart, and builds that equivalence from every field a
+ * probe reads here: a new field that a prune or the tuner starts reading must join its
+ * key, or two pieces that differ on it would be merged.
+ */
 export interface InternalPiece {
   id: string;
   stats: number[];

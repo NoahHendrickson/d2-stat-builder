@@ -3,12 +3,12 @@ import { computeCeilingCarry } from "./carryover";
 import { beats, runSolveSession } from "./session";
 import { solve } from "./solve";
 import { solveCeilings } from "./ceilings";
-import type { OptimizerInput, OptimizerOutput, OptimizerPiece } from "./types";
+import type { BuildList, OptimizerInput, OptimizerOutput, OptimizerPiece } from "./types";
 import { realWarlockCodaInput, realWarlockTwoSetInput } from "./real-pool.fixture";
 
 type SessionEvent =
   | { type: "progress"; value: number }
-  | { type: "builds"; output: OptimizerOutput }
+  | { type: "builds"; list: BuildList }
   | { type: "better"; output: OptimizerOutput }
   | { type: "result"; output: OptimizerOutput; refining: boolean; verified: boolean };
 
@@ -50,7 +50,7 @@ function collector() {
     cb: {
       onProgress: (value: number) => events.push({ type: "progress", value }),
       onCeilings: () => {},
-      onBuilds: (output: OptimizerOutput) => events.push({ type: "builds", output }),
+      onBuilds: (list: BuildList) => events.push({ type: "builds", list }),
       onBetter: (output: OptimizerOutput) => events.push({ type: "better", output }),
       onResult: (output: OptimizerOutput, refining: boolean, verified: boolean) =>
         events.push({ type: "result", output, refining, verified }),
@@ -87,7 +87,7 @@ test("an uncapped search posts exactly one final, verified result", () => {
   expect(events.findIndex((e) => e.type === "builds")).toBeLessThan(
     events.findIndex((e) => e.type === "result"),
   );
-  expect(builds()[0].output.loadouts).toEqual(results()[0].output.loadouts);
+  expect(builds()[0].list.loadouts).toEqual(results()[0].output.loadouts);
 });
 
 test("the early list carries the result's list and counters, with seed ceilings only", () => {
@@ -99,7 +99,7 @@ test("the early list carries the result's list and counters, with seed ceilings 
     refineCeilingBudgetMs: 10,
   });
   expect(builds()).toHaveLength(1);
-  const early = builds()[0].output;
+  const early = builds()[0].list;
   const [first] = results();
   expect(events.findIndex((e) => e.type === "builds")).toBeLessThan(
     events.findIndex((e) => e.type === "result"),
@@ -110,12 +110,10 @@ test("the early list carries the result's list and counters, with seed ceilings 
   expect(early.combosValid).toBe(first.output.combosValid);
   expect(early.combosValidExact).toBe(first.output.combosValidExact);
   expect(early.capped).toBe(first.output.capped);
-  // Nothing is proven yet: the trivial upper, never exact, and seeds under the result's.
-  expect(early.ceilingsExact).toBe(false);
-  expect(early.ceilingUppers).toEqual([200, 200, 200, 200, 200, 200]);
-  for (let s = 0; s < 6; s++) {
-    expect(early.ceilings[s]).toBeLessThanOrEqual(first.output.ceilings[s]);
-  }
+  // The early list has no maximums at all: nothing to mistake for a proven one.
+  expect(Object.keys(early).sort()).toEqual(
+    ["capped", "combosTried", "combosValid", "combosValidExact", "loadouts"],
+  );
 }, 60_000);
 
 test("an empty walk posts no early list: its maximums come with the result", () => {
@@ -198,8 +196,8 @@ test("a capped search freezes its list, refines ceilings, and offers a better li
   expect(final.verified).toBe(true); // background build search ran to exhaustion
   // A capped walk's list also goes out early, and it is the frozen list.
   expect(builds()).toHaveLength(1);
-  expect(builds()[0].output.capped).toBe(true);
-  expect(builds()[0].output.loadouts).toEqual(interim.output.loadouts);
+  expect(builds()[0].list.capped).toBe(true);
+  expect(builds()[0].list.loadouts).toEqual(interim.output.loadouts);
 
   // The shown build list is FROZEN: the final post repeats the capped list verbatim
   // (and stays flagged capped — it is still a best-effort list for these targets).

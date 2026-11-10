@@ -44,11 +44,12 @@ export function BuildUsageRecorder() {
       if (!isBuildUsageRecording()) return;
       const { shown, running, refinement, failed } = store.getSnapshot();
       const displayed = displayedBuildsStore.get();
-      // The list goes up before its maximums are proven, and a time-capped search keeps
-      // refining after its first list is up; wait for the final result rather than
-      // record twice. A crashed run's screen isn't a settled result either.
-      if (!shown || running || failed) return;
-      if (refinement.phase === "running" || refinement.phase === "proving") return;
+      // The list goes up before its maximums are proven (not final yet), and a
+      // time-capped search keeps refining after its first list is up; wait for the final
+      // result rather than record twice. A crashed run's screen isn't a settled result
+      // either.
+      if (!shown || !shown.final || running || failed) return;
+      if (refinement.phase === "running") return;
       if (!displayed || displayed.result !== shown.result) return;
       const classType = shown.origin.classType;
       if (classType === undefined) return;

@@ -1,5 +1,6 @@
 import { runSolveSession } from "./session";
 import type {
+  BuildList,
   OptimizerOutput,
   OptimizerRequest,
   OptimizerResponse,
@@ -20,8 +21,8 @@ ctx.onmessage = (e: MessageEvent<OptimizerRequest>) => {
       ctx.postMessage({ seq, kind: "progress", progress } satisfies OptimizerResponse),
     onCeilings: (ceilings: number[]) =>
       ctx.postMessage({ seq, kind: "ceilings", ceilings } satisfies OptimizerResponse),
-    onBuilds: (output: OptimizerOutput) =>
-      ctx.postMessage({ seq, kind: "builds", output } satisfies OptimizerResponse),
+    onBuilds: (builds: BuildList) =>
+      ctx.postMessage({ seq, kind: "builds", builds } satisfies OptimizerResponse),
     onBetter: (output: OptimizerOutput) =>
       ctx.postMessage({ seq, kind: "better", output } satisfies OptimizerResponse),
     onResult: (output: OptimizerOutput, refining: boolean, verified: boolean) =>

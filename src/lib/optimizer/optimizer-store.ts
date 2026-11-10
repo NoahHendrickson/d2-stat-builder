@@ -10,6 +10,7 @@ import { createValueStore, type ValueStore } from "../value-store";
 import type { QueryOrigin } from "../loadouts/types";
 import { computeCeilingCarry } from "./carryover";
 import type {
+  BuildList,
   OptimizerInput,
   OptimizerLoadout,
   OptimizerOutput,
@@ -37,23 +38,17 @@ export type CeilingsView = {
  * serialized identity, so a re-run of the same query can refresh `origin` in place
  * without ever touching a result that belongs to a different query. `input` is the
  * query itself, for readers that need its pool or constraints (the armor usage history).
+ *
+ * `final` is the one place that says whether the maximums are in. A run's list goes up
+ * as soon as its walk ends (`final: false`, a BuildList with no maximums to misread) and
+ * the run's first result replaces it with the full output (`final: true`, the same list).
+ * Anything that needs a maximum, or a settled result, has to narrow on `final` first.
  */
-export interface ShownResult {
-  result: OptimizerOutput;
+export type ShownResult = {
   origin: QueryOrigin;
   key: string;
   input: OptimizerInput;
-}
-
-/**
- * The search worker crashed (or failed to load) mid-run. `listIsCurrent` says whether the
- * shown list is the failed query's own (its early list, or a refining one): then the
- * builds are still right and only the maximums are unfinished. Otherwise the list on
- * screen belongs to an older query and must not be presented as matching the targets.
- */
-export interface SearchFailure {
-  listIsCurrent: boolean;
-}
+} & ({ final: true; result: OptimizerOutput } | { final: false; result: BuildList });
 
 export interface OptimizerSnapshot {
   shown: ShownResult | null;
@@ -61,8 +56,12 @@ export interface OptimizerSnapshot {
   /** Identity of the latest run — lets the UI restart progress animation per search. */
   runId: number;
   refinement: RefinementState;
-  /** Set when the latest run's worker crashed; cleared by the next run or a cancel. */
-  failed: SearchFailure | null;
+  /**
+   * The latest run's worker crashed (or failed to load); cleared by the next run or a
+   * cancel. A list still shown is the crashed query's own (only its maximums were left):
+   * an older query's list is dropped with the crash, so `shown` is null then.
+   */
+  failed: boolean;
 }
 
 /** The worker surface the store needs — lets tests substitute a fake. */
@@ -118,7 +117,7 @@ export function createOptimizerStore(
     running: false,
     runId: 0,
     refinement: IDLE,
-    failed: null,
+    failed: false,
   };
   const listeners = new Set<() => void>();
   const setState = (patch: Partial<OptimizerSnapshot>) => {
@@ -193,20 +192,19 @@ export function createOptimizerStore(
   };
 
   // The shown pair for a result of the in-flight run.
-  const shownFor = (result: OptimizerOutput): ShownResult => ({
-    result,
+  const inFlightQuery = () => ({
     origin: inFlightOrigin as QueryOrigin,
     key: inFlightKey as string,
     input: inFlightInput as OptimizerInput,
   });
 
   // A post of the current run, carrying the list the run already showed (see runLoadouts).
-  const pinList = (output: OptimizerOutput): OptimizerOutput => {
+  const pinList = <T extends BuildList>(post: T): T => {
     if (!runLoadouts) {
-      runLoadouts = output.loadouts;
-      return output;
+      runLoadouts = post.loadouts;
+      return post;
     }
-    return output.loadouts === runLoadouts ? output : { ...output, loadouts: runLoadouts };
+    return post.loadouts === runLoadouts ? post : { ...post, loadouts: runLoadouts };
   };
 
   const getWorker = () => {
@@ -232,16 +230,14 @@ export function createOptimizerStore(
           break;
         }
         case "builds": {
-          // The walk's list, ahead of the in-line maximums proof. Shown at once and the
-          // progress ends here; the run stays in flight (a new query still terminates it)
-          // and the "proving" phase marks the result as not full yet. Never `last`: its
-          // ceilings are seeds, with no proven uppers. An empty list never comes
-          // early (the session skips it); if one did, keep loading.
-          if (ref.phase !== "idle" || msg.output.loadouts.length === 0) break;
+          // The walk's list, ahead of the in-line maximums proof. Shown at once (not
+          // final: it has no maximums) and the progress ends here; the run stays in
+          // flight, so a new query still terminates it. An empty list never comes early
+          // (the session skips it); if one did, keep loading.
+          if (!snapshot.running || msg.builds.loadouts.length === 0) break;
           setState({
-            shown: shownFor(pinList(msg.output)),
+            shown: { ...inFlightQuery(), final: false, result: pinList(msg.builds) },
             running: false,
-            refinement: { phase: "proving" },
           });
           break;
         }
@@ -263,7 +259,7 @@ export function createOptimizerStore(
               exact: output.ceilingsExact,
             });
             setState({
-              shown: shownFor(output),
+              shown: { ...inFlightQuery(), final: true, result: output },
               running: false,
               refinement: { phase: "running", progress: 0, interim: output, pending: null },
             });
@@ -271,26 +267,25 @@ export function createOptimizerStore(
             inFlight = false;
             const ceilings =
               ref.phase === "running"
-                ? mergeCeilingsMonotone(ceilingsView.get().values, msg.output.ceilings)
-                : msg.output.ceilings;
+                ? mergeCeilingsMonotone(ceilingsView.get().values, output.ceilings)
+                : output.ceilings;
             publishCeilings({
               values: ceilings,
-              exact: msg.output.ceilingsExact,
+              exact: output.ceilingsExact,
             });
             const patch: Partial<OptimizerSnapshot> = {
-              shown: shownFor(output),
+              shown: { ...inFlightQuery(), final: true, result: output },
               running: false,
             };
-            if (ref.phase === "proving") patch.refinement = IDLE;
             if (ref.phase === "running") {
-              const rose = msg.output.ceilings.some((v, s) => v > ref.interim.ceilings[s]);
+              const rose = output.ceilings.some((v, s) => v > ref.interim.ceilings[s]);
               // "confirmed" is a proven claim about BOTH halves: the build walk ran to
               // exhaustion AND the ceilings are proven exact. Anything less → null.
               patch.refinement = {
                 phase: "done",
                 outcome: rose
                   ? "improved"
-                  : msg.verified && msg.output.ceilingsExact
+                  : msg.verified && output.ceilingsExact
                     ? "confirmed"
                     : null,
                 pending: ref.pending,
@@ -309,8 +304,10 @@ export function createOptimizerStore(
     };
     // A crash (or a worker chunk that failed to load) never answers again, so drop it:
     // the next run creates a fresh one. A run in flight fails visibly and can be retried;
-    // clearing inFlightKey is what lets the very same query run again. A worker that
-    // fails while idle (a warm-up) is just dropped.
+    // clearing inFlightKey is what lets the very same query run again. A list on screen
+    // from an OLDER query goes with it (it doesn't match these targets); the crashed
+    // query's own list stays, only its maximums were left. A worker that fails while idle
+    // (a warm-up) is just dropped.
     const fail = () => {
       w.terminate();
       if (worker !== w) return; // an already-replaced worker
@@ -318,9 +315,10 @@ export function createOptimizerStore(
       dropPendingCeilings();
       if (!inFlight) return;
       inFlight = false;
-      const listIsCurrent = snapshot.shown !== null && snapshot.shown.key === inFlightKey;
+      const patch: Partial<OptimizerSnapshot> = { running: false, refinement: IDLE, failed: true };
+      if (snapshot.shown && snapshot.shown.key !== inFlightKey) patch.shown = null;
       inFlightKey = null;
-      setState({ running: false, refinement: IDLE, failed: { listIsCurrent } });
+      setState(patch);
     };
     w.onerror = fail;
     w.onmessageerror = fail;
@@ -372,7 +370,7 @@ export function createOptimizerStore(
     // query and must not be shown as current — the overlays go dark until this run's
     // own seed streams in.
     ceilingsView.set({ values: carry?.ceilingSeed ?? null, exact: false });
-    setState({ running: true, refinement: IDLE, runId: s, failed: null });
+    setState({ running: true, refinement: IDLE, runId: s, failed: false });
     getWorker().postMessage({ seq: s, input, carry });
   };
 
@@ -401,7 +399,7 @@ export function createOptimizerStore(
       inFlightKey = null;
       worker?.terminate();
       worker = null;
-      setState({ running: false, refinement: IDLE, failed: null });
+      setState({ running: false, refinement: IDLE, failed: false });
     },
 
     retry() {
@@ -421,7 +419,7 @@ export function createOptimizerStore(
       publishCeilings({ values: ceilings, exact: pending.ceilingsExact });
       setState({
         refinement: IDLE,
-        shown: { ...shown, result: pending },
+        shown: { origin: shown.origin, key: shown.key, input: shown.input, final: true, result: pending },
       });
     },
   };

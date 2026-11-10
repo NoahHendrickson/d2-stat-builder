@@ -30,7 +30,7 @@ import type { Manifest } from "@/lib/manifest/load";
 import type { SavedLoadout } from "@/lib/loadouts/types";
 import type {
   OptimizerLoadout,
-  OptimizerOutput,
+  BuildList,
   RefinementState,
 } from "@/lib/optimizer/types";
 import {
@@ -38,7 +38,6 @@ import {
   THEORY_SORT_OPTIONS,
   type TheorySortState,
 } from "@/lib/builder/sort-theory";
-import type { SearchFailure } from "@/lib/optimizer/optimizer-store";
 import { useStoreValue, type ValueStore } from "@/lib/value-store";
 
 const LOADING_ROWS = 5;
@@ -59,20 +58,20 @@ function getBuildsViewState({
 }: {
   ready: boolean;
   showLoading: boolean;
-  result: OptimizerOutput | null;
-  failed: SearchFailure | null;
+  result: BuildList | null;
+  failed: boolean;
 }): BuildsViewState {
   if (!ready) return "not-ready";
-  // A crash leaves an older query's list behind: it doesn't match these targets. A
-  // crash after this query's own list was up keeps that list (only maximums were left).
-  if (failed && !failed.listIsCurrent) return "failed";
+  // A crash drops an older query's list (see the store), so no result means no builds
+  // for these targets. A crash after this query's own list was up keeps that list.
+  if (failed && !result) return "failed";
   if (showLoading) return "searching";
   if (!result) return "idle";
   if (result.loadouts.length === 0) return "no-matches";
   return "results";
 }
 
-function getBuildsStatusLabel(state: BuildsViewState, result: OptimizerOutput | null): string {
+function getBuildsStatusLabel(state: BuildsViewState, result: BuildList | null): string {
   switch (state) {
     case "not-ready":
       return "";
@@ -172,7 +171,9 @@ export interface BuildsColumnContentProps {
   provisional?: boolean;
   showLoading: boolean;
   running: boolean;
-  result: OptimizerOutput | null;
+  result: BuildList | null;
+  /** The maximums for `result` are in (see ShownResult.final). */
+  final: boolean;
   /** Eased 0–1 progress; only the progress bar subscribes to it. */
   displayedProgress: ValueStore<number>;
   /** Background-refinement lifecycle (idle / running / done, with any pending list). */
@@ -182,8 +183,8 @@ export interface BuildsColumnContentProps {
   /** Apply the waiting better list (the explicit user action that changes the list). */
   onShowPending: () => void;
   onCancel: () => void;
-  /** The latest search crashed (see SearchFailure); null otherwise. */
-  failed: SearchFailure | null;
+  /** The latest search crashed; an older query's list is gone by then (`result` null). */
+  failed: boolean;
   /** Run the crashed search again. */
   onRetry: () => void;
   /** Targets past their maximums on a settled empty result (see OverMaxFix). */
@@ -337,6 +338,7 @@ function ActualBuildsBody({
   refinementProgress,
   onShowPending,
   onCancel,
+  final,
   failed,
   onRetry,
   overMax,
@@ -359,8 +361,6 @@ function ActualBuildsBody({
   sort,
   onSortChange,
 }: BodyProps<LoadoutSortState>) {
-  // After a crash an older query's list must not pass for these targets' builds.
-  const listShown = result !== null && (!failed || failed.listIsCurrent);
   return (
     <div className="space-y-5">
       <HeaderRow
@@ -380,17 +380,18 @@ function ActualBuildsBody({
           manifest={manifest}
         />
       )}
-      {failed && <SearchFailedNotice failure={failed} onRetry={onRetry} />}
+      {failed && <SearchFailedNotice listShown={result !== null} onRetry={onRetry} />}
       {showLoading &&
-        !(failed && !failed.listIsCurrent) &&
+        !failed &&
         (result ? (
           <BuildsProgressBar progress={displayedProgress} />
         ) : (
           <BuildsLoading progress={displayedProgress} />
         ))}
-      {listShown ? (
+      {result ? (
         <BuildResults
           result={result}
+          final={final}
           refinement={refinement}
           refinementProgress={refinementProgress}
           onShowPending={onShowPending}
@@ -424,16 +425,17 @@ function ActualBuildsBody({
 
 /** The search worker crashed: say so plainly and offer to run it again. */
 function SearchFailedNotice({
-  failure,
+  listShown,
   onRetry,
 }: {
-  failure: SearchFailure;
+  /** The crashed search's own builds are still up: only its maximums were left. */
+  listShown: boolean;
   onRetry: () => void;
 }) {
   return (
     <div role="alert" className="flex flex-wrap items-center gap-3">
       <p className="text-muted-foreground text-sm">
-        {failure.listIsCurrent
+        {listShown
           ? "The search stopped before it could prove the stat maximums."
           : "The search stopped before it found any builds."}
       </p>

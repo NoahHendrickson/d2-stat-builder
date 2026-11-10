@@ -118,7 +118,7 @@ import {
 } from "@/lib/dim/subclasses";
 import { useApplyCurrentFragments } from "@/lib/armory/use-apply-current-fragments";
 import { useAutoSearch } from "@/lib/optimizer/use-auto-search";
-import { emptyStatStates, overMaxCulprits } from "@/lib/optimizer/over-max";
+import { overMaxState } from "@/lib/optimizer/over-max";
 import type { OverMaxFix } from "@/components/builder/empty-builds";
 import { useOptimizerWarmup } from "@/lib/optimizer/use-optimizer-warmup";
 import { MAX_SET_BONUSES, type BuilderSnapshot, type QueryOrigin } from "@/lib/loadouts/types";
@@ -249,9 +249,6 @@ export function BuilderPanel({
   useEffect(() => {
     if (!classes.length) return;
     if (classType === null || !classes.includes(classType))
-      // Pre-existing (flagged by the newer react-hooks rule); moving it into render
-      // would change when the class settles, which is out of scope here.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
       setClassType(classes[0]);
   }, [classes, classType]);
 
@@ -962,6 +959,8 @@ export function BuilderPanel({
     [updateTab],
   );
   // A slider drag or typed value: its search waits for a pause, a release or Enter.
+  // Burst handlers are called only for a real change (the controls' contract), so the
+  // mark burst() leaves is always consumed by the search that change starts.
   const setTargetBurst = useCallback(
     (i: number, value: number) => {
       autoSearch.burst();
@@ -970,27 +969,20 @@ export function BuilderPanel({
     [autoSearch, setTarget],
   );
 
-  // Nothing matches and one target alone is to blame (see overMaxCulprits). Read only
-  // from a SETTLED empty result for the targets on screen — never from maximums still
-  // streaming in, so a row can't flash red on a search that has builds, and the Set
-  // buttons can't name a maximum the bars have already passed (the background pass
-  // keeps raising them). A capped walk proved nothing (its own copy stays), and a
-  // better list waiting behind "Show them" isn't empty.
+  // Nothing matches and one target alone is to blame (see overMaxState): the rows it
+  // marks, and the fix the empty list offers.
   const actualTargets = tabs.actual.targets;
-  const overMax = useMemo((): { fix: OverMaxFix; rows: ReturnType<typeof emptyStatStates> } | null => {
-    if (theoretical || running || failed || !shownResult) return null;
-    if (refinement.phase === "running") return null;
-    const { result, origin } = shownResult;
-    if (result.loadouts.length > 0 || origin.classType !== (classType ?? undefined)) return null;
-    if (origin.targets.some((v, s) => v !== actualTargets[s])) return null;
-    const exhaustive = !result.capped || (refinement.phase === "done" && refinement.verified);
-    if (!exhaustive || (refinement.phase === "done" && refinement.pending)) return null;
-    const culprits = overMaxCulprits(result, actualTargets);
-    return {
-      fix: { culprits, onSet: setTarget },
-      rows: emptyStatStates(result, culprits),
-    };
-  }, [theoretical, running, failed, shownResult, classType, actualTargets, refinement, setTarget]);
+  const overMax = useMemo(
+    () =>
+      theoretical
+        ? null
+        : overMaxState({ shown: shownResult, refinement, running, failed, classType, targets: actualTargets }),
+    [theoretical, shownResult, refinement, running, failed, classType, actualTargets],
+  );
+  const overMaxFix = useMemo(
+    (): OverMaxFix | undefined => overMax ? { culprits: overMax.culprits, onSet: setTarget } : undefined,
+    [overMax, setTarget],
+  );
   // Section Reset buttons: always clickable. A section already at its default keeps
   // its state object, so the click is a no-op (no re-render, no new search).
   // Resetting the targets starts over, so it also ends a linked loadout.
@@ -1043,6 +1035,14 @@ export function BuilderPanel({
     [powerRange, actualClassItemHash, updateTab],
   );
 
+  const onPowerRangeBurst = useCallback(
+    (next: PowerRangeSelection) => {
+      autoSearch.burst();
+      onPowerRangeChange(next);
+    },
+    [autoSearch, onPowerRangeChange],
+  );
+
   const setSetMinOwned = useCallback(
     (minOwned: SetMinOwned) =>
       setSetFilters((prev) =>
@@ -1057,14 +1057,10 @@ export function BuilderPanel({
       updateTab("setReqs", (prev) =>
         // Toggles act on the requirements as shown (on Builds, the ones the owned pieces
         // make — see ownedSetReqs).
-        toggleSetReq(
-          prev,
-          theoretical ? prev : makeableSetReqs(prev, visibleSets),
-          setHash,
-          count,
-          (h) => visibleSets.has(h),
-          MAX_SET_BONUSES,
-        ),
+        toggleSetReq(prev, setHash, count, {
+          shown: theoretical ? prev : makeableSetReqs(prev, visibleSets),
+          isVisible: (h) => visibleSets.has(h),
+        }),
       );
     },
     [visibleSets, theoretical, updateTab],
@@ -1158,7 +1154,8 @@ export function BuilderPanel({
       onCancel: cancel,
       failed,
       onRetry: retry,
-      overMax: overMax?.fix,
+      overMax: overMaxFix,
+      final: shownResult?.final ?? false,
       pieceMap,
       setMap,
       statIcons,
@@ -1193,7 +1190,8 @@ export function BuilderPanel({
       cancel,
       failed,
       retry,
-      overMax,
+      overMaxFix,
+      shownResult?.final,
       pieceMap,
       setMap,
       statIcons,
@@ -1384,7 +1382,7 @@ export function BuilderPanel({
                   <PowerRangeControls
                     value={powerRange}
                     onChange={onPowerRangeChange}
-                    onBurst={autoSearch.burst}
+                    onBurstChange={onPowerRangeBurst}
                     onCommit={autoSearch.commit}
                     slotPieces={powerSlotPieces}
                     weaponPlan={weaponPlan}
