@@ -119,10 +119,12 @@ export function makeableSetReqs(
 /**
  * `reqs` after a click on `setHash`'s `count`-piece bonus. The click acts on the
  * requirements as the list shows them (`shown`, see makeableSetReqs): clicking the shown
- * bonus takes it off. Picking a 4-piece bonus drops every other 4-piece bonus that is
- * shown, since two of them need eight pieces. Requirements for sets the list can't show
- * (`isVisible` false) are kept, a pool toggle shouldn't drop one for good, but past
- * `max` they are the first to go so they never crowd out a pick the player can see.
+ * bonus takes it off. A 4-piece bonus leaves one slot, so no other set's bonus fits
+ * beside it and the new pick wins: picking a 4-piece drops every other shown bonus, and
+ * picking a 2-piece drops another set's shown 4-piece. Requirements for sets the list
+ * can't show (`isVisible` false) are kept, a pool toggle shouldn't drop one for good,
+ * but past `max` they are the first to go so they never crowd out a pick the player can
+ * see.
  */
 export function toggleSetReq(
   reqs: Record<number, 2 | 4>,
@@ -138,10 +140,9 @@ export function toggleSetReq(
     return next;
   }
   next[setHash] = count;
-  if (count === 4) {
-    for (const h of Object.keys(shown)) {
-      if (Number(h) !== setHash && shown[Number(h)] === 4) delete next[Number(h)];
-    }
+  for (const h of Object.keys(shown)) {
+    const other = Number(h);
+    if (other !== setHash && (count === 4 || shown[other] === 4)) delete next[other];
   }
   const keys = Object.keys(next);
   if (keys.length > max) {
