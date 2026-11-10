@@ -8,6 +8,7 @@ import { Analytics } from "@/components/analytics";
 import { SearchSelectOnRefocus } from "@/components/search-select-on-refocus";
 import { EARLY_FETCH_SCRIPT } from "@/lib/early-fetch";
 import { APP_THEME_SCRIPT, DEFAULT_APP_THEME } from "@/lib/app-theme-script";
+import { SCROLLBAR_SCRIPT } from "@/lib/scrollbar-script";
 import { SITE_NAME, tabTitle } from "@/lib/site";
 
 const geistSans = Geist({
@@ -45,6 +46,7 @@ export default function RootLayout({
             (see early-fetch.ts). */}
         <script id="early-fetch" dangerouslySetInnerHTML={{ __html: EARLY_FETCH_SCRIPT }} />
         <script id="app-theme" dangerouslySetInnerHTML={{ __html: APP_THEME_SCRIPT }} />
+        <script id="scrollbars" dangerouslySetInnerHTML={{ __html: SCROLLBAR_SCRIPT }} />
         {/* Dev only: Figma's html-to-design capture script (Send to Figma). */}
         {process.env.NODE_ENV === "development" && (
           <script src="https://mcp.figma.com/mcp/html-to-design/capture.js" async />
