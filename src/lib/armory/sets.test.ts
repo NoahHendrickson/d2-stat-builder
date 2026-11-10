@@ -86,7 +86,10 @@ describe("toggleSetReq", () => {
     // Set 1 is stored as 4 but only makes its 2-piece; set 9 isn't in the list.
     const reqs = { 1: 4, 9: 2 } as const;
     const shown = { 1: 2 } as const;
-    expect(toggle(reqs, 3, 2, shown)).toEqual({ 1: 4, 3: 2, 9: 2 });
+    // Beside a new 2-piece it stays, stored as the 2-piece it shows: it can't come back
+    // as a 4-piece next to that pick once more pieces are owned.
+    expect(toggle(reqs, 3, 2, shown)).toEqual({ 1: 2, 3: 2, 9: 2 });
+    // A new 4-piece drops it, like any other shown bonus. The hidden set is kept.
     expect(toggle(reqs, 3, 4, shown)).toEqual({ 3: 4, 9: 2 });
   });
 

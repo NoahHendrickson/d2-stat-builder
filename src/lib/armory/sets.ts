@@ -122,7 +122,10 @@ export function makeableSetReqs(
  * requirements as the list shows them (`shown`, see makeableSetReqs): clicking the shown
  * bonus takes it off. A 4-piece bonus leaves one slot, so no other set's bonus fits
  * beside it and the new pick wins: picking a 4-piece drops every other shown bonus, and
- * picking a 2-piece drops another set's shown 4-piece. Requirements for sets the list
+ * picking a 2-piece drops another set's shown 4-piece. A set stored as a 4-piece but
+ * shown as its 2-piece (too few pieces owned) that stays beside the new pick is stored
+ * as that 2-piece from then on, so it can't come back as a second big bonus once the
+ * pieces are owned. Requirements for sets the list
  * can't show (`list.isVisible` false) are kept, a pool toggle shouldn't drop one for
  * good, but past MAX_SET_BONUSES they are the first to go so they never crowd out a pick
  * the player can see.
@@ -147,7 +150,9 @@ export function toggleSetReq(
   next[setHash] = count;
   for (const h of Object.keys(shown)) {
     const other = Number(h);
-    if (other !== setHash && (count === 4 || shown[other] === 4)) delete next[other];
+    if (other === setHash) continue;
+    if (count === 4 || shown[other] === 4) delete next[other];
+    else next[other] = 2;
   }
   const keys = Object.keys(next);
   if (keys.length > MAX_SET_BONUSES) {

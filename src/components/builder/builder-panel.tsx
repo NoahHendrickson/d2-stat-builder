@@ -971,13 +971,12 @@ export function BuilderPanel({
 
   // Nothing matches and one target alone is to blame (see overMaxState): the rows it
   // marks, and the fix the empty list offers.
-  const actualTargets = tabs.actual.targets;
   const overMax = useMemo(
     () =>
       theoretical
         ? null
-        : overMaxState({ shown: shownResult, refinement, running, failed, classType, targets: actualTargets }),
-    [theoretical, shownResult, refinement, running, failed, classType, actualTargets],
+        : overMaxState({ shown: shownResult, refinement, running, failed, input: optimizerInput }),
+    [theoretical, shownResult, refinement, running, failed, optimizerInput],
   );
   const overMaxFix = useMemo(
     (): OverMaxFix | undefined => overMax ? { culprits: overMax.culprits, onSet: setTarget } : undefined,

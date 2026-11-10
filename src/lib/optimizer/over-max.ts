@@ -1,7 +1,7 @@
 // Why a search found nothing, when one target alone is to blame. Pure and in one place,
 // for the stat rows, the empty builds message and its copy alike, so they can't disagree.
-import type { ShownResult } from "./optimizer-store";
-import type { BuildList, OptimizerOutput, RefinementState } from "./types";
+import { queryKey, type ShownResult } from "./optimizer-store";
+import type { BuildList, OptimizerInput, OptimizerOutput, RefinementState } from "./types";
 
 /** A target past its maximum; lowering it to `max` alone brings builds back. */
 export interface OverMaxCulprit {
@@ -60,32 +60,32 @@ export function overMaxCulprits(result: OptimizerOutput, targets: readonly numbe
 
 /**
  * The over-max state for the result on screen, or null when there is nothing to mark.
- * Read only from a FINAL, settled empty result (isSettledEmpty) that was searched for
- * the class and targets on screen: never from maximums still streaming in, so a row
- * can't be marked on a search that has builds, and the Set buttons can't name a maximum
- * the bars have already passed. A search in flight or a crashed one marks nothing.
+ * Read only from a FINAL, settled empty result (isSettledEmpty) for the very query on
+ * screen (`input`, compared by its whole key: targets, class, power range, sets and the
+ * rest): never from maximums still streaming in, and never from a result an edit has
+ * already moved on from, even while that edit's search is still waiting out a debounce.
+ * So a row can't be marked on a search that has builds, and a Set button can't offer a
+ * maximum computed for other settings. A search in flight or a crashed one marks nothing.
  */
 export function overMaxState({
   shown,
   refinement,
   running,
   failed,
-  classType,
-  targets,
+  input,
 }: {
   shown: ShownResult | null;
   refinement: RefinementState;
   running: boolean;
   failed: boolean;
-  classType: number | null;
-  targets: readonly number[];
+  /** The query the builder would search right now; null while it has none. */
+  input: OptimizerInput | null;
 }): OverMaxState | null {
-  if (running || failed || !shown || !shown.final) return null;
-  const { result, origin } = shown;
+  if (running || failed || !input || !shown || !shown.final) return null;
+  const { result } = shown;
   if (!isSettledEmpty(result, refinement)) return null;
-  if (origin.classType !== (classType ?? undefined)) return null;
-  if (origin.targets.some((v, s) => v !== targets[s])) return null;
-  const culprits = overMaxCulprits(result, targets);
+  if (shown.key !== queryKey(input)) return null;
+  const culprits = overMaxCulprits(result, input.minimums);
   const rows = result.ceilings.map((max, s): EmptyStatState | undefined => {
     const culprit = culprits.find((c) => c.stat === s);
     if (culprit) return { kind: "over", max: culprit.max };

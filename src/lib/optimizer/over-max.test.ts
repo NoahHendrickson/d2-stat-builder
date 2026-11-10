@@ -1,7 +1,7 @@
 import { describe, expect, test } from "vitest";
-import type { ShownResult } from "./optimizer-store";
+import { queryKey, type ShownResult } from "./optimizer-store";
 import { isSettledEmpty, overMaxCulprits, overMaxState } from "./over-max";
-import type { OptimizerOutput, RefinementState } from "./types";
+import type { OptimizerInput, OptimizerOutput, RefinementState } from "./types";
 
 const empty = (ceilings: number[], uppers = ceilings): OptimizerOutput => ({
   loadouts: [],
@@ -74,21 +74,25 @@ describe("isSettledEmpty", () => {
 });
 
 describe("overMaxState", () => {
-  const TARGETS = [0, 100, 0, 90, 200, 60];
-  const shown = (result: OptimizerOutput, targets = TARGETS, classType = 1): ShownResult => ({
+  const query = (minimums: number[], over: Partial<OptimizerInput> = {}): OptimizerInput => ({
+    slots: [[], [], [], [], []],
+    minimums,
+    ...over,
+  });
+  const INPUT = query([0, 100, 0, 90, 200, 60]);
+  const shown = (result: OptimizerOutput, input = INPUT): ShownResult => ({
     final: true,
     result,
-    origin: { targets, classType },
-    key: "k",
-    input: { slots: [], minimums: targets },
+    origin: { targets: input.minimums },
+    key: queryKey(input),
+    input,
   });
   const base = {
     shown: shown(empty([0, 0, 0, 0, 122, 0])),
     refinement: IDLE,
     running: false,
     failed: false,
-    classType: 1,
-    targets: TARGETS,
+    input: INPUT,
   };
 
   test("marks the culprit row with its max, and the rows the other targets leave no max", () => {
@@ -105,10 +109,11 @@ describe("overMaxState", () => {
     });
   });
 
-  test("nothing while a search runs, after a crash, or with no result", () => {
+  test("nothing while a search runs, after a crash, or with no result or query", () => {
     expect(overMaxState({ ...base, running: true })).toBeNull();
     expect(overMaxState({ ...base, failed: true })).toBeNull();
     expect(overMaxState({ ...base, shown: null })).toBeNull();
+    expect(overMaxState({ ...base, input: null })).toBeNull();
   });
 
   test("nothing from a list whose maximums aren't in, or one that isn't settled", () => {
@@ -124,9 +129,15 @@ describe("overMaxState", () => {
     expect(overMaxState({ ...base, shown: shown({ ...interim, capped: true }) })).toBeNull();
   });
 
-  test("nothing once the targets or the class on screen have moved on from the result", () => {
-    expect(overMaxState({ ...base, targets: [0, 100, 0, 90, 150, 60] })).toBeNull();
-    expect(overMaxState({ ...base, classType: 2 })).toBeNull();
+  test("nothing once the query on screen has moved on from the result, by any setting", () => {
+    // A target changed.
+    expect(overMaxState({ ...base, input: query([0, 100, 0, 90, 150, 60]) })).toBeNull();
+    // Same targets, another power range: an edit whose search may still be waiting.
+    expect(
+      overMaxState({ ...base, input: query(INPUT.minimums, { powerRange: { min: 400, max: 450 } }) }),
+    ).toBeNull();
+    // An equal query built afresh is still this result's.
+    expect(overMaxState({ ...base, input: query([...INPUT.minimums]) })).not.toBeNull();
   });
 
   test("an empty result with no single culprit marks no row \"over\"", () => {

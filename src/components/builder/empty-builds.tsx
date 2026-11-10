@@ -42,10 +42,13 @@ export function EmptyBuilds({
   poolGap?: PoolGap;
   overMax?: OverMaxFix;
 }) {
-  const gap = useGapForResult(result, poolGap);
+  const gap = useHeldForResult(result, poolGap);
+  const fix = useHeldForResult(result, overMax);
   // A gap proves no build exists, whatever the search is still doing.
   if (gap) return <PoolGapNotice gap={gap} />;
-  if (overMax && overMax.culprits.length > 0) return <OverMaxNotice fix={overMax} />;
+  // Held past an edit (overMax gone, the result still this one): the explanation stays
+  // until the next result, but its buttons are for settings no longer on screen.
+  if (fix && fix.culprits.length > 0) return <OverMaxNotice fix={fix} stale={overMax === undefined} />;
   return <p className="text-muted-foreground text-sm">{emptyBuildsCopy(result, refinement)}</p>;
 }
 
@@ -56,7 +59,7 @@ const statLabel = (stat: number) => STAT_LABELS[STAT_ORDER[stat]];
  * enough, so the sentence lists them all and every one gets its own button. An unproven
  * max is achievable but may be higher: "at least".
  */
-function OverMaxNotice({ fix }: { fix: OverMaxFix }) {
+function OverMaxNotice({ fix, stale }: { fix: OverMaxFix; stale: boolean }) {
   const culprits = [...fix.culprits].sort(
     (a, b) =>
       STAT_DISPLAY_ORDER.indexOf(STAT_ORDER[a.stat]) -
@@ -76,7 +79,7 @@ function OverMaxNotice({ fix }: { fix: OverMaxFix }) {
       <div className="flex flex-wrap gap-2">
         {culprits.map((c) => (
           // Stays in the phone's builds sheet: the builds this brings back land right here.
-          <Button key={c.stat} size="sm" onClick={() => fix.onSet(c.stat, c.max)}>
+          <Button key={c.stat} size="sm" disabled={stale} onClick={() => fix.onSet(c.stat, c.max)}>
             Set {statLabel(c.stat)} to {c.max}
           </Button>
         ))}
@@ -105,15 +108,17 @@ function emptyBuildsCopy(result: BuildList, refinement: RefinementState): string
 }
 
 /**
- * The gap the empty `result` was searched under. Turning a setting on clears `poolGap`
- * at once, but the empty result stays until the new search lands; keep its explanation
- * until then rather than fall back to the generic copy.
+ * What explains the empty `result` (a pool gap, a target past its max), held for as long
+ * as that result is on screen. An edit clears the explanation at once (turning a setting
+ * on, clicking "Set Super to 122"), but the empty result stays until the new search
+ * lands; keep its explanation until then rather than fall back to the generic "none
+ * exist" copy for a query that may well have builds.
  */
-function useGapForResult(result: BuildList, poolGap?: PoolGap): PoolGap | undefined {
-  const [held, setHeld] = useState({ result, gap: poolGap });
-  const changed = held.result !== result || (poolGap !== undefined && held.gap !== poolGap);
-  if (changed) setHeld({ result, gap: poolGap });
-  return changed ? poolGap : (poolGap ?? held.gap);
+function useHeldForResult<T>(result: BuildList, value: T | undefined): T | undefined {
+  const [held, setHeld] = useState({ result, value });
+  const changed = held.result !== result || (value !== undefined && held.value !== value);
+  if (changed) setHeld({ result, value });
+  return changed ? value : (value ?? held.value);
 }
 
 const SETTING_NAMES: Record<PoolSetting, string> = {

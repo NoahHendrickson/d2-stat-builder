@@ -99,6 +99,12 @@ export interface OptimizerStore {
 }
 
 /**
+ * A query's serialized identity: two inputs with the same key are the same search. The
+ * store keys runs and shown results on it.
+ */
+export const queryKey = (input: OptimizerInput): string => JSON.stringify(input);
+
+/**
  * Element-wise max of the displayed ceilings and an update. Every ceiling the app
  * shows is proven-achievable for the current query, so within one run the displayed
  * value must never regress — all ceiling writes during/after a refinement go through
@@ -327,7 +333,7 @@ export function createOptimizerStore(
   };
 
   const run = (input: OptimizerInput, origin: QueryOrigin): void => {
-    const key = JSON.stringify(input);
+    const key = queryKey(input);
     // Same query as the run in flight, or as the one whose result is showing (and not
     // cancelled): nothing to search. This is what lets a re-mounted builder pick the
     // search back up instead of restarting it. The origin still refreshes: the same

@@ -380,7 +380,7 @@ function ActualBuildsBody({
           manifest={manifest}
         />
       )}
-      {failed && <SearchFailedNotice listShown={result !== null} onRetry={onRetry} />}
+      {failed && <SearchFailedNotice result={result} onRetry={onRetry} />}
       {showLoading &&
         !failed &&
         (result ? (
@@ -425,19 +425,25 @@ function ActualBuildsBody({
 
 /** The search worker crashed: say so plainly and offer to run it again. */
 function SearchFailedNotice({
-  listShown,
+  result,
   onRetry,
 }: {
-  /** The crashed search's own builds are still up: only its maximums were left. */
-  listShown: boolean;
+  /**
+   * The crashed search's own builds, if they were already up. A time-capped list was
+   * still being searched deeper (higher maximums, then better builds); any other list
+   * only had its maximums left to prove.
+   */
+  result: BuildList | null;
   onRetry: () => void;
 }) {
   return (
     <div role="alert" className="flex flex-wrap items-center gap-3">
       <p className="text-muted-foreground text-sm">
-        {listShown
-          ? "The search stopped before it could prove the stat maximums."
-          : "The search stopped before it found any builds."}
+        {!result
+          ? "The search stopped before it found any builds."
+          : result.capped
+            ? "The deeper search stopped before it finished."
+            : "The search stopped before it could prove the stat maximums."}
       </p>
       <Button size="sm" variant="outline" onClick={onRetry}>
         Retry
