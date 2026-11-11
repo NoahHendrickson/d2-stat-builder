@@ -96,8 +96,12 @@ function isEmptyPlug(socket: ArmorSocket, hash: number, manifest: Manifest): boo
  * The mods the slot puts on a piece, by socket. A socket the slot leaves alone keeps
  * what is socketed now, the way equipping the slot in-game does. An empty mod socket is
  * left out — Apply clears energy-costing leftovers anyway — but an empty tuning or
- * artifice socket is kept as its empty plug: Apply leaves those 0-cost plugs in place
- * unless the loadout names the socket. Cosmetics (shaders, ornaments) are left out.
+ * artifice socket the item names is kept as its empty plug: Apply leaves those 0-cost
+ * plugs in place unless the loadout names the socket. Cosmetics (shaders, ornaments)
+ * are left out.
+ *
+ * Equipped gear (equipped-gear.ts) names every live socket, so its empty tuning and
+ * artifice sockets are saved as empty through this same rule.
  */
 function piecePlacement(item: InGameLoadoutItem, piece: ArmorPiece, manifest: Manifest): Record<number, number> {
   const out: Record<number, number> = {};
@@ -129,6 +133,12 @@ export interface InGameImportInput extends SlotGearLookups {
   name: string;
 }
 
+export interface GearImportInput extends SlotGearLookups {
+  /** The gear, each item with the plugs it puts in its sockets. */
+  items: readonly InGameLoadoutItem[];
+  name: string;
+}
+
 /** A slot's gear as a loadout, under the name the game shows for it. */
 export function inGameSlotAsLoadout(
   slot: InGameLoadoutSlot,
@@ -138,21 +148,26 @@ export function inGameSlotAsLoadout(
   return inGameSlotToLoadout({ slot, name: inGameImportName(slot, names), ...lookups });
 }
 
+/** The saved-loadout payload for an in-game slot. */
+export function inGameSlotToLoadout({ slot, ...rest }: InGameImportInput): SavedLoadoutData {
+  return gearToLoadout({ items: slot.items, ...rest });
+}
+
 /**
- * The saved-loadout payload for an in-game slot. Items the player no longer has (no
- * item hash) are left out; an armor piece the armory doesn't know is kept by reference
- * (it shows as missing) without its mods. When all five armor pieces are live, the
- * stat totals are filled in the way the Edit drawer computes them, so the card shows
- * the build's stats like an optimizer save does.
+ * The saved-loadout payload for a set of gear: an in-game slot's, or what's equipped.
+ * Items the player no longer has (no item hash) are left out; an armor piece the armory
+ * doesn't know is kept by reference (it shows as missing) without its mods. When all
+ * five armor pieces are live, the stat totals are filled in the way the Edit drawer
+ * computes them, so the card shows the build's stats like an optimizer save does.
  */
-export function inGameSlotToLoadout({
-  slot,
+export function gearToLoadout({
+  items,
   name,
   classType,
   pieceMap,
   weaponMap,
   manifest,
-}: InGameImportInput): SavedLoadoutData {
+}: GearImportInput): SavedLoadoutData {
   const bucketOf = (hash: number) =>
     manifest.def("DestinyInventoryItemDefinition", hash)?.inventory?.bucketTypeHash ?? 0;
   let subclass: DimLoadoutItem | undefined;
@@ -161,7 +176,7 @@ export function inGameSlotToLoadout({
   const armor: { ref: DimLoadoutItem; piece?: ArmorPiece }[] = [];
   const placement: ModPlacement = {};
 
-  for (const item of slot.items) {
+  for (const item of items) {
     const hash = item.itemHash;
     if (hash === undefined) continue;
     if (subclassFromItemHash(hash)) {

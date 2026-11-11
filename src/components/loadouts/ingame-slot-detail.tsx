@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, type ReactElement, type ReactNode } from "react";
+import { useMemo, useState, type ComponentProps, type ReactElement, type ReactNode } from "react";
 import { HugeiconsIcon, type IconSvgElement } from "@hugeicons/react";
 import {
   Add01Icon,
@@ -12,8 +12,6 @@ import {
   PaintBrush01Icon,
   PencilEdit02Icon,
 } from "@hugeicons/core-free-icons";
-import type { ArmorPiece } from "@/lib/armory/normalize";
-import type { LoadoutWeapon } from "@/lib/armory/weapons";
 import {
   slotAppearanceInSet,
   type InGameLoadoutIdentifiers,
@@ -21,27 +19,24 @@ import {
   type SlotIdentifiers,
 } from "@/lib/bungie/ingame-loadouts";
 import type { Manifest } from "@/lib/manifest/load";
-import { statIconsFromManifest } from "@/lib/manifest/stat-icons";
 import { inGameSlotAsLoadout } from "@/lib/loadouts/ingame-import";
 import { resolveLoadout } from "@/lib/loadouts/resolve";
-import { transientLoadout, type SavedLoadout, type SavedLoadoutData } from "@/lib/loadouts/types";
+import type { SavedLoadout } from "@/lib/loadouts/types";
 import { LoadoutPickList } from "@/components/loadouts/activity-set-panel";
 import { Emblem } from "@/components/loadouts/ingame-save-dialog";
 import { inGameSlotName } from "@/components/loadouts/ingame-slot-grid";
 import { LoadoutCardBodyArmorFirst } from "@/components/loadouts/loadout-card-body";
-import { LoadoutStatLine } from "@/components/loadouts/loadout-stat-line";
+import {
+  LoadoutPreviewFrame,
+  usePreviewLoadout,
+  type GearLookups,
+} from "@/components/loadouts/loadout-preview-frame";
 import { EmptySlotIcon, LOADOUT_SLOT_CLASS } from "@/components/loadouts/loadout-weapons-editor";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { TooltipLabel } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-
-interface GearLookups {
-  pieceMap: ReadonlyMap<string, ArmorPiece>;
-  weaponMap: ReadonlyMap<string, LoadoutWeapon>;
-  manifest: Manifest;
-}
 
 const ACTION_CLASS = "h-8 gap-1.5 px-3";
 const SLOT_CTA_CLASS = cn(
@@ -53,94 +48,46 @@ const SLOT_CTA_CLASS = cn(
 function SlotDetailFrame({
   slot,
   identifiers,
+  label,
   title,
-  label = title,
-  titleClassName,
-  titleAction,
-  subtitle,
-  data,
-  manifest,
-  actions,
-  children,
-}: {
+  ...rest
+}: Omit<ComponentProps<typeof LoadoutPreviewFrame>, "label" | "leading"> & {
   slot: InGameLoadoutSlot;
   identifiers: InGameLoadoutIdentifiers;
-  title: string;
   /** The card's accessible name, when the title alone doesn't identify the slot. */
   label?: string;
-  titleClassName?: string;
-  /** A small control right after the title. */
-  titleAction?: ReactNode;
-  subtitle: string;
-  /** The loadout on show; its stats go in the header. */
-  data?: SavedLoadoutData;
-  manifest: Manifest;
-  actions: ReactNode;
-  children: ReactNode;
 }) {
-  const statIcons = statIconsFromManifest(manifest);
   return (
-    <article
-      aria-label={label}
-      className="@container d2-card-frame flex min-w-0 flex-col gap-4 p-4"
-    >
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-        <div className="flex min-w-0 flex-1 basis-48 items-center gap-3">
-          {slot.empty ? (
-            <EmptySlotIcon />
-          ) : (
-            <span aria-hidden className="relative size-12 shrink-0 overflow-hidden">
-              <Emblem
-                identifiers={identifiers}
-                iconHash={slot.iconHash}
-                colorHash={slot.colorHash}
-                size={48}
-              />
-            </span>
-          )}
-          <div className="flex min-w-0 flex-col">
-            <div className="flex min-w-0 items-center gap-1">
-              <h3 className={cn("truncate text-base leading-6 font-medium", titleClassName)}>{title}</h3>
-              {titleAction}
-            </div>
-            <p className="text-muted-foreground truncate text-xs leading-4">{subtitle}</p>
-          </div>
-        </div>
-        {data?.optimizer && (
-          <div className="flex items-center gap-4 text-sm leading-5 tabular-nums max-md:w-full max-md:justify-between max-md:gap-1">
-            <LoadoutStatLine optimizer={data.optimizer} statIcons={statIcons} />
-          </div>
-        )}
-        <div className="flex flex-wrap items-center gap-2">{actions}</div>
-      </div>
-      {children}
-    </article>
+    <LoadoutPreviewFrame
+      {...rest}
+      title={title}
+      label={label ?? title}
+      leading={
+        slot.empty ? (
+          <EmptySlotIcon />
+        ) : (
+          <span aria-hidden className="relative size-12 shrink-0 overflow-hidden">
+            <Emblem identifiers={identifiers} iconHash={slot.iconHash} colorHash={slot.colorHash} size={48} />
+          </span>
+        )
+      }
+    />
   );
 }
 
-/**
- * A slot's gear as a loadout, for showing it. Memoized: the conversion and resolve are
- * heavy, and the view re-renders on every keystroke in a new set's name.
- */
+/** A slot's gear as a loadout, for showing it. */
 function useSlotAsLoadout(
   slot: InGameLoadoutSlot,
   identifiers: InGameLoadoutIdentifiers,
   classType: number,
-  { pieceMap, weaponMap, manifest }: GearLookups,
+  lookups: GearLookups,
 ) {
-  return useMemo(() => {
-    const data = inGameSlotAsLoadout(slot, identifiers.names, {
-      classType,
-      pieceMap,
-      weaponMap,
-      manifest,
-    });
-    return {
-      data,
-      shown: transientLoadout(`slot-${slot.index}`, data),
-      resolved: resolveLoadout(data.loadout, pieceMap, manifest, weaponMap),
-    };
-  }, [slot, identifiers, classType, pieceMap, weaponMap, manifest]);
+  const { pieceMap, weaponMap, manifest } = lookups;
+  const data = useMemo(
+    () => inGameSlotAsLoadout(slot, identifiers.names, { classType, pieceMap, weaponMap, manifest }),
+    [slot, identifiers, classType, pieceMap, weaponMap, manifest],
+  );
+  return { data, ...usePreviewLoadout(data, `slot-${slot.index}`, lookups) };
 }
 
 /** Read-only: what the game holds in a slot right now, seen from an activity set. */

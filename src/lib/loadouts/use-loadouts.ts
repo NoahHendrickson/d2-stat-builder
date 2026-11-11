@@ -106,6 +106,31 @@ export const reportLoadoutError = (pending: Notifier) => (err: { notConfigured: 
   );
 
 /**
+ * Run a loadout write under a spinner toast that turns into its outcome. The write is
+ * awaited (rather than handed per-call `mutate` callbacks, which TanStack Query runs only
+ * for the latest call on a mutation), so overlapping writes each settle their own toast.
+ * `onSuccess` does the follow-up and returns the success toast's title, or title and
+ * description. Resolves true when the write landed.
+ */
+export async function withLoadoutToast<T>(
+  loading: string,
+  run: () => Promise<T>,
+  onSuccess: (result: T) => string | [title: string, description: string],
+): Promise<boolean> {
+  const pending = toast.loading(loading);
+  let result: T;
+  try {
+    result = await run();
+  } catch (err) {
+    reportLoadoutError(pending)(err as { notConfigured: boolean; message: string });
+    return false;
+  }
+  const [title, description] = [onSuccess(result)].flat();
+  pending.success(title, description);
+  return true;
+}
+
+/**
  * Create / update / delete. Each writes the server's response straight into the cached
  * list instead of invalidating it: the row that came back is authoritative, and a
  * refetch of the whole list (which grows with every save) after every edit would be a
