@@ -37,6 +37,7 @@ import {
   reportLoadoutError,
   useLoadoutMutations,
   useLoadouts,
+  withLoadoutToast,
 } from "@/lib/loadouts/use-loadouts";
 import {
   collectHashtags,
@@ -87,7 +88,9 @@ import {
   useLoadoutEditorSections,
 } from "@/components/loadouts/use-loadout-editor-sections";
 import { LoadoutRow } from "@/components/loadouts/loadout-row";
-import { LoadoutIndex } from "@/components/loadouts/loadout-index";
+import { LoadoutsNameColumn } from "@/components/loadouts/loadouts-name-column";
+import { EquippedGearCard } from "@/components/loadouts/equipped-gear-card";
+import { useEquippedGear } from "@/components/loadouts/use-equipped-gear";
 import { useCurrentRow } from "@/components/loadouts/use-current-row";
 import { useMinWidth } from "@/lib/use-min-width";
 import {
@@ -287,6 +290,14 @@ export function LoadoutsList({
       }),
     [pieceMap, weaponMap, manifest, armory.insertablePlugs],
   );
+  const equipped = useEquippedGear({
+    armory,
+    lookups: { pieceMap, weaponMap, manifest },
+    loadouts: all,
+    enabled: showIndex,
+  });
+  // Nothing equips or reads gear from last visit's copy of the armory.
+  const gearBlockedLabel = provisional ? "Refreshing your gear from Bungie…" : undefined;
   const openDelete = useCallback(
     (saved: SavedLoadout) => setDialog({ kind: "delete", loadout: saved }),
     [],
@@ -294,51 +305,44 @@ export function LoadoutsList({
 
   const editLoadout = (values: LoadoutDetailsValues) => {
     if (dialog.kind !== "edit") return;
-    const pending = toast.loading("Saving loadout");
-    update.mutate(
-      {
-        id: dialog.loadout.id,
-        data: commitEditedLoadout(dialog.loadout, values, manifest, dialog.mods),
-      },
-      {
-        onSuccess: () => {
-          setDialog({ kind: "none" });
-          pending.success("Loadout updated");
-        },
-        onError: reportLoadoutError(pending),
+    const data = commitEditedLoadout(dialog.loadout, values, manifest, dialog.mods);
+    void withLoadoutToast(
+      "Saving loadout",
+      () => update.mutateAsync({ id: dialog.loadout.id, data }),
+      () => {
+        setDialog({ kind: "none" });
+        return "Loadout updated";
       },
     );
   };
 
   const deleteLoadout = () => {
     if (dialog.kind !== "delete") return;
-    const pending = toast.loading("Deleting loadout");
-    remove.mutate(dialog.loadout.id, {
-      onSuccess: () => {
+    void withLoadoutToast(
+      "Deleting loadout",
+      () => remove.mutateAsync(dialog.loadout.id),
+      () => {
         setDialog({ kind: "none" });
-        pending.success("Loadout deleted");
+        return "Loadout deleted";
       },
-      onError: reportLoadoutError(pending),
-    });
+    );
   };
 
   const deleteMany = () => {
     if (dialog.kind !== "delete-many" && dialog.kind !== "delete-all") return;
     const everything = dialog.kind === "delete-all";
-    const pending = toast.loading(everything ? "Deleting all loadouts" : "Deleting loadouts");
-    removeMany.mutate(everything ? all.map((l) => l.id) : dialog.ids, {
-      onSuccess: (deleted) => {
+    void withLoadoutToast(
+      everything ? "Deleting all loadouts" : "Deleting loadouts",
+      () => removeMany.mutateAsync(everything ? all.map((l) => l.id) : dialog.ids),
+      (deleted) => {
         setDialog({ kind: "none" });
         stopSelecting();
-        pending.success(
-          `${deleted.length} ${deleted.length === 1 ? "loadout" : "loadouts"} deleted`,
-        );
+        return `${deleted.length} ${deleted.length === 1 ? "loadout" : "loadouts"} deleted`;
       },
-      onError: reportLoadoutError(pending),
-    });
+    );
   };
 
-  const createMutate = create.mutate;
+  const createAsync = create.mutateAsync;
   const duplicateLoadout = useCallback(
     (saved: SavedLoadout) => {
       // Read the names at click time (not via a dependency) so this callback — and with
@@ -356,18 +360,13 @@ export function LoadoutsList({
         ...(saved.builder ? { builder: saved.builder } : {}),
         ...(saved.modPlacement ? { modPlacement: saved.modPlacement } : {}),
       };
-      const pending = toast.loading("Duplicating loadout");
-      createMutate(data, {
-        onSuccess: () => pending.success("Loadout duplicated"),
-        onError: reportLoadoutError(pending),
-      });
+      void withLoadoutToast("Duplicating loadout", () => createAsync(data), () => "Loadout duplicated");
     },
-    [createMutate, queryClient],
+    [createAsync, queryClient],
   );
 
   // One request per loadout, last slot first: the list shows the newest on top, so the
   // first slot lands on top and the rest follow in slot order.
-  const createAsync = create.mutateAsync;
   const importInGame = async (datas: SavedLoadoutData[]) => {
     const pending = toast.loading(
       datas.length === 1 ? "Importing loadout" : `Importing ${datas.length} loadouts`,
@@ -396,14 +395,14 @@ export function LoadoutsList({
         ...(notes ? { notes } : { notes: undefined }),
       },
     };
-    const pending = toast.loading("Importing loadout");
-    create.mutate(withLoadoutSubclass(data, subclass, manifest), {
-      onSuccess: () => {
+    void withLoadoutToast(
+      "Importing loadout",
+      () => createAsync(withLoadoutSubclass(data, subclass, manifest)),
+      () => {
         pendingImport?.dismiss();
-        pending.success("Loadout imported");
+        return "Loadout imported";
       },
-      onError: reportLoadoutError(pending),
-    });
+    );
   };
 
   const shareLoadout = useCallback((saved: SavedLoadout) => {
@@ -490,6 +489,21 @@ export function LoadoutsList({
     : shown.length === all.length
       ? `${all.length} ${all.length === 1 ? "Loadout" : "Loadouts"}`
       : `${shown.length} of ${all.length} loadouts`;
+
+  // What shows instead of the cards, when there are none to show.
+  const listMessage = loadouts.isError
+    ? loadouts.error.notConfigured
+      ? "Loadout storage isn't configured on this deployment yet — set DATABASE_URL (see .env.example)."
+      : `Couldn't load your loadouts — ${loadouts.error.message}`
+    : loadouts.isPending
+      ? "Loading your loadouts…"
+      : all.length === 0
+        ? showIndex
+          ? "No saved loadouts yet. Save your equipped gear from the list, or expand a build in the optimizer and choose Save."
+          : "No saved loadouts yet. Expand a build in the optimizer and choose Save."
+        : shown.length === 0
+          ? "No loadouts match."
+          : null;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
@@ -666,83 +680,91 @@ export function LoadoutsList({
         </div>
       )}
 
-      {loadouts.isError ? (
-        <p className="text-muted-foreground text-sm">
-          {loadouts.error.notConfigured
-            ? "Loadout storage isn't configured on this deployment yet — set DATABASE_URL (see .env.example)."
-            : `Couldn't load your loadouts — ${loadouts.error.message}`}
-        </p>
-      ) : loadouts.isPending ? (
-        <p className="text-muted-foreground text-sm">
-          Loading your loadouts…
-        </p>
-      ) : all.length === 0 ? (
-        <p className="text-muted-foreground text-sm">
-          No saved loadouts yet. Expand a build in the optimizer and choose
-          Save.
-        </p>
-      ) : shown.length === 0 ? (
-        <p className="text-muted-foreground text-sm">No loadouts match.</p>
-      ) : (
-        <div className="flex min-h-0 flex-1 gap-4">
-          {showIndex && (
-            <LoadoutIndex
-              loadouts={shown}
-              activeId={currentId}
-              onJump={jumpTo}
-              className="w-56 shrink-0"
-            />
+      <div className="flex min-h-0 flex-1 gap-4">
+        {showIndex && (
+          <LoadoutsNameColumn
+            characters={armory.characters}
+            blockedLabel={gearBlockedLabel}
+            equippedOpenId={equipped.openId}
+            onToggleEquipped={equipped.toggle}
+            onCloseEquipped={equipped.close}
+            loadouts={shown}
+            activeId={currentId}
+            onJump={jumpTo}
+          />
+        )}
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-3">
+          {equipped.data && equipped.label && (
+            <>
+              <EquippedGearCard
+                data={equipped.data}
+                label={equipped.label}
+                pieceMap={pieceMap}
+                weaponMap={weaponMap}
+                manifest={manifest}
+                blockedLabel={gearBlockedLabel}
+                saving={equipped.saving}
+                onSave={() => void equipped.save()}
+                onClose={equipped.close}
+              />
+              {/* Tells the saved loadouts apart from the card above them. */}
+              <h2 className="d2-label mt-7 shrink-0">Loadouts</h2>
+            </>
           )}
-          <div
-            ref={setScrollEl}
-            className="d2-scroll min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain"
-          >
+          {listMessage ? (
+            <p className="text-muted-foreground text-sm">{listMessage}</p>
+          ) : (
             <div
-              className="relative w-full"
-              style={{ height: virtualizer.getTotalSize() }}
+              ref={setScrollEl}
+              className="d2-scroll min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain"
             >
-              {virtualizer.getVirtualItems().map((item) => {
-                const saved = shown[item.index];
-                return (
-                  <div
-                    key={item.key}
-                    ref={virtualizer.measureElement}
-                    data-index={item.index}
-                    className="absolute top-0 left-0 w-full"
-                    style={{ transform: `translateY(${item.start}px)` }}
-                  >
-                    <LoadoutRow
-                      saved={saved}
-                      open={expanded.has(saved.id)}
-                      onToggle={toggleExpanded}
-                      pieceMap={pieceMap}
-                      weaponMap={weaponMap}
-                      weapons={armory.weapons}
-                      provisional={provisional}
-                      setRunning={setRun !== null}
-                      manifest={manifest}
-                      characters={armory.characters}
-                      statIcons={statIcons}
-                      balancedTuningIcon={balancedTuningIcon}
-                      now={now}
-                      onEdit={openEdit}
-                      onDuplicate={duplicateLoadout}
-                      onDelete={openDelete}
-                      onShare={shareLoadout}
-                      onOptimize={optimizeLoadout}
-                      onArmoryChanged={onArmoryChanged}
-                      allTags={hashtags}
-                      onSetTag={setLoadoutTag}
-                      selected={selecting ? picked.has(saved.id) : undefined}
-                      onSelect={togglePicked}
-                    />
-                  </div>
-                );
-              })}
+              <div
+                className="relative w-full"
+                style={{ height: virtualizer.getTotalSize() }}
+              >
+                {virtualizer.getVirtualItems().map((item) => {
+                  const saved = shown[item.index];
+                  return (
+                    <div
+                      key={item.key}
+                      ref={virtualizer.measureElement}
+                      data-index={item.index}
+                      className="absolute top-0 left-0 w-full"
+                      style={{ transform: `translateY(${item.start}px)` }}
+                    >
+                      <LoadoutRow
+                        saved={saved}
+                        open={expanded.has(saved.id)}
+                        onToggle={toggleExpanded}
+                        pieceMap={pieceMap}
+                        weaponMap={weaponMap}
+                        weapons={armory.weapons}
+                        provisional={provisional}
+                        setRunning={setRun !== null}
+                        manifest={manifest}
+                        characters={armory.characters}
+                        statIcons={statIcons}
+                        balancedTuningIcon={balancedTuningIcon}
+                        now={now}
+                        onEdit={openEdit}
+                        onDuplicate={duplicateLoadout}
+                        onDelete={openDelete}
+                        onShare={shareLoadout}
+                        onOptimize={optimizeLoadout}
+                        onArmoryChanged={onArmoryChanged}
+                        allTags={hashtags}
+                        onSetTag={setLoadoutTag}
+                        selected={selecting ? picked.has(saved.id) : undefined}
+                        onSelect={togglePicked}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
             </div>
-          </div>
+          )}
         </div>
-      )}
+      </div>
 
       <LoadoutEditorDrawer
         open={dialog.kind === "edit"}

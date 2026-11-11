@@ -12,6 +12,12 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    date: "2026-11-10",
+    changes: [
+      "Loadouts: Equipped gear at the top of the list shows what each character has on, and saves it as a loadout in one click.",
+    ],
+  },
+  {
     date: "2026-11-09",
     changes: [
       "Optimizer: builds show up sooner, and clicks search at once instead of after a pause.",
