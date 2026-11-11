@@ -67,6 +67,23 @@ const CRAFT_GLYPH_SIZE = { crafted: 14.7, enhanced: 17 } as const;
 const CRAFT_GLYPH_X = 96 - 12.5;
 const CRAFT_GLYPH_Y = 80.5;
 
+/** The crafted glyph on its own, in the tile glyph's colour and glow (e.g. beside "Pattern"). */
+export function CraftGlyphIcon({ className }: { className?: string }) {
+  const glyph = CRAFT_GLYPHS.crafted;
+  return (
+    <svg
+      aria-hidden
+      viewBox={`0 0 ${glyph.width} ${glyph.height}`}
+      fill="#E7806A"
+      className={cn("shrink-0 drop-shadow-[0_0_2px_rgb(219_100_75/0.75)]", className)}
+    >
+      {glyph.paths.map((d) => (
+        <path key={d} d={d} />
+      ))}
+    </svg>
+  );
+}
+
 /**
  * The crafted (shaped) or enhanced glyph in the bottom-right corner, as vectors (the
  * user's own designs, craft-glyph-paths.ts): Bungie's overlay PNGs are 96px with an

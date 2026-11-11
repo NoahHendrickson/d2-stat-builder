@@ -12,6 +12,12 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    date: "2026-11-11",
+    changes: [
+      "Items: a craftable weapon's panel shows how many of its patterns you've unlocked.",
+    ],
+  },
+  {
     date: "2026-11-10",
     changes: [
       "Loadouts: Equipped gear at the top of the list shows what each character has on, and saves it as a loadout in one click.",
