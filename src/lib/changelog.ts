@@ -14,7 +14,7 @@ export const CHANGELOG: readonly ChangelogEntry[] = [
   {
     date: "2026-11-11",
     changes: [
-      "Items: a craftable weapon's panel shows how many of its patterns you've unlocked.",
+      "Items and Weapon search: craftable weapons show how many of their patterns you've unlocked.",
     ],
   },
   {

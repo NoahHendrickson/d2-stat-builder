@@ -15,24 +15,24 @@ const record = (progress: number, completionValue: number) =>
 describe("patternRecords", () => {
   it("keeps only named, unredacted Weapon Pattern records", () => {
     const defs = [
-      { hash: 1, recordTypeName: "Weapon Pattern", displayProperties: { name: "Funnelweb" }, scope: 0 },
-      { hash: 2, recordTypeName: "Triumph", displayProperties: { name: "Funnelweb" }, scope: 0 },
-      { hash: 3, recordTypeName: "Weapon Pattern", displayProperties: { name: "Hidden" }, scope: 0, redacted: true },
-      { hash: 4, recordTypeName: "Weapon Pattern", displayProperties: { name: "" }, scope: 0 },
-      { hash: 5, recordTypeName: "Weapon Pattern", displayProperties: { name: "Fang of Ir Yût" }, scope: 1 },
+      { hash: 1, recordTypeName: "Weapon Pattern", displayProperties: { name: "Funnelweb" } },
+      { hash: 2, recordTypeName: "Triumph", displayProperties: { name: "Funnelweb" } },
+      { hash: 3, recordTypeName: "Weapon Pattern", displayProperties: { name: "Hidden" }, redacted: true },
+      { hash: 4, recordTypeName: "Weapon Pattern", displayProperties: { name: "" } },
+      { hash: 5, recordTypeName: "Weapon Pattern", displayProperties: { name: "Fang of Ir Yût" } },
     ] as Parameters<typeof patternRecords>[0];
     expect(patternRecords(defs)).toEqual([
-      { hash: 1, name: "Funnelweb", scope: 0 },
-      { hash: 5, name: "Fang of Ir Yût", scope: 1 },
+      { hash: 1, name: "Funnelweb" },
+      { hash: 5, name: "Fang of Ir Yût" },
     ]);
   });
 });
 
 describe("patternProgress", () => {
   const records = [
-    { hash: 1, name: "Funnelweb", scope: 0 },
-    { hash: 5, name: "Fang of Ir Yût", scope: 1 },
-    { hash: 9, name: "Unseen", scope: 0 },
+    { hash: 1, name: "Funnelweb" },
+    { hash: 5, name: "Fang of Ir Yût" },
+    { hash: 9, name: "Unseen" },
   ];
 
   it("reads profile patterns from profile records and raid patterns from the furthest character", () => {
@@ -46,6 +46,12 @@ describe("patternProgress", () => {
       Funnelweb: { progress: 2, needed: 5 },
       "Fang of Ir Yût": { progress: 3, needed: 5 },
     });
+  });
+
+  it("keeps the furthest progress when two records share a name", () => {
+    const twins = [...records, { hash: 2, name: "Funnelweb" }];
+    const profile = { records: { 1: record(5, 5), 2: record(0, 5) } } as unknown as DestinyProfileRecordsComponent;
+    expect(patternProgress(twins, profile, undefined).Funnelweb).toEqual({ progress: 5, needed: 5 });
   });
 
   it("caps progress at what the pattern needs", () => {

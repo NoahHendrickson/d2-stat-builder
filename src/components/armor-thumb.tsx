@@ -1,10 +1,15 @@
 "use client";
 
-import type { ReactNode } from "react";
+import type { ReactNode, SVGProps } from "react";
 import Image from "next/image";
 import { cn } from "@/lib/utils";
 import { BUNGIE_IMAGE_BASE } from "@/lib/bungie/constants";
-import { CRAFT_GLYPHS } from "@/components/craft-glyph-paths";
+import {
+  CRAFT_CORNER_GLOW,
+  CRAFT_FILL,
+  CRAFT_GLOW,
+  CRAFT_GLYPHS,
+} from "@/components/craft-glyph-paths";
 
 const SIZE_CLASS = {
   20: "size-5",
@@ -67,15 +72,27 @@ const CRAFT_GLYPH_SIZE = { crafted: 14.7, enhanced: 17 } as const;
 const CRAFT_GLYPH_X = 96 - 12.5;
 const CRAFT_GLYPH_Y = 80.5;
 
-/** The crafted glyph on its own, in the tile glyph's colour and glow (e.g. beside "Pattern"). */
-export function CraftGlyphIcon({ className }: { className?: string }) {
-  const glyph = CRAFT_GLYPHS.crafted;
+/**
+ * A crafted or enhanced glyph, as vectors (the user's own designs, craft-glyph-paths.ts):
+ * Bungie's overlay PNGs are 96px with an 18px glyph, which blurs when scaled. Its own
+ * `<svg>`, so it can stand alone (beside "Pattern") or nest, placed, in a tile's.
+ */
+export function CraftGlyphIcon({
+  kind = "crafted",
+  className,
+  ...placement
+}: { kind?: CraftKind; className?: string } & Pick<
+  SVGProps<SVGSVGElement>,
+  "x" | "y" | "width" | "height"
+>) {
+  const glyph = CRAFT_GLYPHS[kind];
   return (
     <svg
       aria-hidden
       viewBox={`0 0 ${glyph.width} ${glyph.height}`}
-      fill="#E7806A"
-      className={cn("shrink-0 drop-shadow-[0_0_2px_rgb(219_100_75/0.75)]", className)}
+      fill={CRAFT_FILL}
+      className={className}
+      {...placement}
     >
       {glyph.paths.map((d) => (
         <path key={d} d={d} />
@@ -84,13 +101,7 @@ export function CraftGlyphIcon({ className }: { className?: string }) {
   );
 }
 
-/**
- * The crafted (shaped) or enhanced glyph in the bottom-right corner, as vectors (the
- * user's own designs, craft-glyph-paths.ts): Bungie's overlay PNGs are 96px with an
- * 18px glyph, which blurs when scaled. Fitted to its box, over a red glow that fades
- * out from the corner. Bungie's fill is #F19B83 with a rim shading down to #DB644B;
- * this is a step deeper than the fill, glowing in the rim's colour.
- */
+/** The crafted (shaped) or enhanced glyph in a tile's bottom-right corner, fitted to its box over a red glow fading out from the corner. */
 export function CraftedGlyph({ kind }: { kind: CraftKind }) {
   const glyph = CRAFT_GLYPHS[kind];
   const scale = CRAFT_GLYPH_SIZE[kind] / Math.max(glyph.width, glyph.height);
@@ -98,27 +109,13 @@ export function CraftedGlyph({ kind }: { kind: CraftKind }) {
   const h = glyph.height * scale;
   return (
     <>
-      <span
-        aria-hidden
-        className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_100%_100%,rgb(219_100_75/0.55),transparent_32%)]"
-      />
+      <span aria-hidden className={cn("pointer-events-none absolute inset-0", CRAFT_CORNER_GLOW)} />
       <svg
         aria-hidden
         viewBox="0 0 96 96"
-        className="pointer-events-none absolute inset-0 size-full drop-shadow-[0_0_2px_rgb(219_100_75/0.75)]"
+        className={cn("pointer-events-none absolute inset-0 size-full", CRAFT_GLOW)}
       >
-        <svg
-          x={CRAFT_GLYPH_X - w / 2}
-          y={CRAFT_GLYPH_Y - h / 2}
-          width={w}
-          height={h}
-          viewBox={`0 0 ${glyph.width} ${glyph.height}`}
-          fill="#E7806A"
-        >
-          {glyph.paths.map((d) => (
-            <path key={d} d={d} />
-          ))}
-        </svg>
+        <CraftGlyphIcon kind={kind} x={CRAFT_GLYPH_X - w / 2} y={CRAFT_GLYPH_Y - h / 2} width={w} height={h} />
       </svg>
     </>
   );

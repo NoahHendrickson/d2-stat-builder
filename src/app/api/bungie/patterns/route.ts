@@ -1,19 +1,9 @@
 import { NextResponse } from "next/server";
-import {
-  getDestinyManifest,
-  getProfile,
-  type DestinyComponentType,
-  type DestinyRecordDefinition,
-} from "bungie-api-ts/destiny2";
-import { BUNGIE_IMAGE_BASE } from "@/lib/bungie/constants";
+import { getProfile, type DestinyComponentType } from "bungie-api-ts/destiny2";
 import { createBungieHttp } from "@/lib/bungie/http";
 import { bungieErrorResponse, notSignedIn } from "@/lib/bungie/equip-route";
-import {
-  patternProgress,
-  patternRecords,
-  type PatternRecord,
-  type PatternsResponse,
-} from "@/lib/bungie/patterns";
+import { fetchManifestTable, perManifestVersion } from "@/lib/bungie/manifest-tables";
+import { patternProgress, patternRecords, type PatternsResponse } from "@/lib/bungie/patterns";
 import { getValidAccessToken, readUser } from "@/lib/bungie/session";
 
 // 900 Records: profile-wide and per-character triumph progress, patterns among them.
@@ -22,34 +12,12 @@ const COMPONENTS = [900] as DestinyComponentType[];
 const REAUTH_MESSAGE = "Bungie needs you to sign in again";
 
 /**
- * Which records are patterns comes from the record table (~8 MB, ~400 KB gzipped), which
- * only this route reads, so it is fetched here rather than joining the client manifest
- * (adding a table there re-downloads the whole manifest for everyone). Kept per server
- * instance as the ~200 pattern records; they change only when Bungie ships new weapons.
+ * Which records are patterns, from the record table (~8 MB, ~400 KB gzipped), kept as
+ * the ~200 pattern records. Too big for the data cache, hence `no-store`.
  */
-const RECORDS_TTL_MS = 60 * 60_000;
-let recordsCache: { at: number; value: Promise<PatternRecord[]> } | undefined;
-
-async function fetchPatternRecords(): Promise<PatternRecord[]> {
-  const info = (await getDestinyManifest(createBungieHttp())).Response;
-  const path = info.jsonWorldComponentContentPaths.en.DestinyRecordDefinition;
-  if (!path) throw new Error("Bungie's manifest is missing the record table");
-  // Too big for the data cache, and kept in memory above anyway.
-  const res = await fetch(`${BUNGIE_IMAGE_BASE}${path}`, { cache: "no-store" });
-  if (!res.ok) throw new Error(`Bungie manifest table request failed (HTTP ${res.status})`);
-  return patternRecords(Object.values((await res.json()) as Record<string, DestinyRecordDefinition>));
-}
-
-function loadPatternRecords(): Promise<PatternRecord[]> {
-  if (recordsCache && Date.now() - recordsCache.at < RECORDS_TTL_MS) return recordsCache.value;
-  const value = fetchPatternRecords();
-  recordsCache = { at: Date.now(), value };
-  // A failed load isn't kept: the next request tries again.
-  value.catch(() => {
-    if (recordsCache?.value === value) recordsCache = undefined;
-  });
-  return value;
-}
+const loadPatternRecords = perManifestVersion(async (paths) =>
+  patternRecords(await fetchManifestTable(paths, "DestinyRecordDefinition", { cache: "no-store" })),
+);
 
 /** The player's progress on every crafting pattern, by weapon name. */
 export async function GET() {

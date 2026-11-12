@@ -6,6 +6,7 @@ The Weapon search page lists every weapon in the game. A user can search by name
 
 - `wpn-search` makes a name search narrow the list to the weapon.
 - `wpn-filter` turns a picked suggestion into a removable chip and a URL parameter, and narrows the list.
+- `wpn-pattern`: a craftable weapon's Perks header shows the signed-in player's pattern progress (`meter "Pattern progress"`, `aria-valuetext` "2 of 5" or "Unlocked") where non-craftable weapons offer Add to Farm list.
 - `wpn-perks` opens a weapon's details pane, where picking a perk presses that perk.
 - `wpn-mods` shows the weapon's stat-moving mods in `region "Mods"` under the perk grid; hovering one previews its stats, clicking one keeps it.
 - `wpn-dps`: each boss DPS setup in Advanced stats shows the grid perks it ran; with more than one such setup they are a `radiogroup "DPS setups"`, and "See perks" at the bottom picks the chosen setup's perks in the grid.
@@ -27,6 +28,7 @@ Preconditions:
 - **Filter (`wpn-filter`).** Click the combobox and type `anti-champion`. Click the first `option` in the listbox: `Champion 3` drills into the category. Click the first option again (`Barrier 570`). A `button "Remove Champion: Barrier"` chip appears, the count drops below N, and `location.search` contains `champion=`. Clicking the chip restores N.
 - **Perks (`wpn-perks`).** Click `View <name> perks`. In `complementary "Weapon details"`, a `heading "<name>"` is shown. Click the first button with `aria-pressed="false"`, and it becomes `aria-pressed="true"`.
 - **Mods (`wpn-mods`).** Fill the combobox with `Fatebringer` and click the first `View Fatebringer perks`. In `region "Mods"`, hover `button "Ballistics"`: Range (the `dd` after `dt` "Range") rises (46 → 53). Click it: `aria-pressed="true"`, and Range stays raised after the pointer leaves.
+- **Pattern (`wpn-pattern`).** `meta.seed` gives the stub's `patterns` (by weapon name) for Veiled Threat (2 of 5) and Osteo Striga (5 of 5). Fill the combobox with each and open it: the meter's `aria-valuetext` reads `2 of 5`, then `Unlocked`. The catalog's Funnelweb is a non-craftable reissue, so it shows no meter.
 - **DPS perks (`wpn-dps`).** Fill the combobox with `Synanceia` and open it. Click `button "Advanced stats"` (it starts closed), then `button "See perks"`: in `region "Perks"`, Jagged Edge, Relentless Strikes, Surrounded and Tenacity turn `aria-pressed="true"` (the top setup), and Elemental Honing (the second setup's) stays `false`.
 - **DPS setup choice (`wpn-dps`).** Open `Hezen Vengeance` and Advanced stats. `radio /^13,514 boss DPS/` starts checked; See perks picks Cluster Bomb + Elemental Honing (once each: both trait columns roll them, so count picked tiles by `aria-label`). Click `radio /^8,226 boss DPS/` (no second See perks: once pressed, choosing a setup picks live): Envious Arsenal picked, Cluster Bomb let go, Elemental Honing kept. Clicking the top radio again brings Cluster Bomb back.
 - **Proof.** `01-catalog`, `02-filtered`, `03-perk-picked` (the details pane), `04-mod-hover`, `05-mod-picked`, `06-dps-perks`, `07-dps-setup-picked`.

@@ -16,8 +16,6 @@ const PATTERN_RECORD_TYPE = "Weapon Pattern";
 export interface PatternRecord {
   hash: number;
   name: string;
-  /** 0 profile-wide, 1 per character (the raid patterns). */
-  scope: number;
 }
 
 export interface PatternProgress {
@@ -32,13 +30,13 @@ export interface PatternsResponse {
 
 /** The pattern records out of the record definition table. */
 export function patternRecords(
-  defs: Iterable<Pick<DestinyRecordDefinition, "hash" | "recordTypeName" | "displayProperties" | "scope" | "redacted">>,
+  defs: Iterable<Pick<DestinyRecordDefinition, "hash" | "recordTypeName" | "displayProperties" | "redacted">>,
 ): PatternRecord[] {
   const out: PatternRecord[] = [];
   for (const def of defs) {
     const name = def.displayProperties?.name;
     if (def.recordTypeName !== PATTERN_RECORD_TYPE || def.redacted || !name) continue;
-    out.push({ hash: def.hash, name, scope: def.scope });
+    out.push({ hash: def.hash, name });
   }
   return out;
 }
@@ -53,26 +51,22 @@ function progressOf(record: DestinyRecordComponent | undefined): PatternProgress
 }
 
 /**
- * Each pattern's progress from the profile's records (component 900). Per-character
- * patterns take the furthest character's.
+ * Each pattern's progress from the profile's records (component 900). Bungie files each
+ * record under the profile or under every character, so a hash is looked up in all of
+ * them and the furthest progress kept (per name, should two records share one).
  */
 export function patternProgress(
   records: readonly PatternRecord[],
   profileRecords: DestinyProfileRecordsComponent | undefined,
   characterRecords: Record<string, DestinyCharacterRecordsComponent> | undefined,
 ): Record<string, PatternProgress> {
-  const characters = Object.values(characterRecords ?? {});
+  const sources = [profileRecords, ...Object.values(characterRecords ?? {})];
   const out: Record<string, PatternProgress> = {};
-  for (const { hash, name, scope } of records) {
-    const candidates =
-      scope === 1
-        ? characters.map((c) => progressOf(c.records?.[hash]))
-        : [progressOf(profileRecords?.records?.[hash])];
-    let best: PatternProgress | undefined;
-    for (const p of candidates) {
-      if (p && (!best || p.progress > best.progress)) best = p;
+  for (const { hash, name } of records) {
+    for (const source of sources) {
+      const p = progressOf(source?.records?.[hash]);
+      if (p && (!out[name] || p.progress > out[name].progress)) out[name] = p;
     }
-    if (best) out[name] = best;
   }
   return out;
 }

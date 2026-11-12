@@ -7,7 +7,8 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { GitCompareIcon, SquareLock02Icon, SquareUnlock02Icon } from "@hugeicons/core-free-icons";
 import { EnhancedArrow } from "@/components/enhanced-arrow";
 import { PerkTooltip } from "@/components/weapons/perk-tooltip";
-import { CraftGlyphIcon, ItemWatermark, TierPips } from "@/components/armor-thumb";
+import { ItemWatermark, TierPips } from "@/components/armor-thumb";
+import { PatternProgress } from "@/components/pattern-progress";
 import { PowerValue } from "@/components/power-value";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent } from "@/components/ui/popover";
@@ -18,8 +19,6 @@ import { useProfile } from "@/lib/armory/use-profile";
 import { applyPerks, type PerkChange } from "@/lib/inventory/apply-perks";
 import { armorDetails } from "@/lib/inventory/armor-details";
 import { BUNGIE_IMAGE_BASE } from "@/lib/bungie/constants";
-import { patternFor } from "@/lib/bungie/patterns";
-import { usePatterns } from "@/lib/bungie/use-patterns";
 import { BREAKER_NAMES, type InventoryItem, type ManagerInventory } from "@/lib/inventory/build";
 import { locate, moveOptions, type Place } from "@/lib/inventory/moves";
 import { weaponCopies } from "@/lib/inventory/search";
@@ -107,7 +106,10 @@ export function ItemDetails({
       ) : (
         <ItemDescription itemHash={found.item.itemHash} />
       )}
-      {found.item.craftable && !found.item.crafted && <PatternProgressRow name={found.item.name} />}
+      {/* Enhanced on a craftable weapon means it was shaped and then enhanced. */}
+      {found.item.craftable && !found.item.crafted && !found.item.enhanced && (
+        <PatternProgress name={found.item.name} layout="stacked" className={cn(SECTION, "gap-1.5")} />
+      )}
       {(found.item.instanceId || copies > 1) && (
         <div className={cn(SECTION, "flex-row flex-wrap items-center gap-1")}>
           {found.item.instanceId && <TagButtons instanceId={found.item.instanceId} />}
@@ -723,47 +725,6 @@ function ItemDescription({ itemHash }: { itemHash: number }) {
     <p className={cn(SECTION, "text-muted-foreground block text-[11px] whitespace-pre-line")}>
       {description}
     </p>
-  );
-}
-
-/**
- * How many of the weapon's patterns the player has extracted, as red segments (one per
- * pattern it needs) in the crafted glyph's colours and glow. Nothing until it loads, or
- * if it can't.
- */
-function PatternProgressRow({ name }: { name: string }) {
-  const pattern = patternFor(usePatterns(true).data, name);
-  if (!pattern) return null;
-  const { progress, needed } = pattern;
-  const done = progress >= needed;
-  return (
-    <div className={cn(SECTION, "gap-1.5")}>
-      <div className="flex items-center justify-between gap-3 text-[11px]">
-        <span className="text-muted-foreground flex items-center gap-1.5">
-          <CraftGlyphIcon className="size-3.5" />
-          Pattern
-        </span>
-        <span className="tabular-nums">{done ? "Unlocked" : `${progress} of ${needed}`}</span>
-      </div>
-      <div
-        role="meter"
-        aria-label="Pattern progress"
-        aria-valuemin={0}
-        aria-valuemax={needed}
-        aria-valuenow={progress}
-        className="flex gap-0.5"
-      >
-        {Array.from({ length: needed }, (_, i) => (
-          <span
-            key={i}
-            className={cn(
-              "h-1.5 flex-1",
-              i < progress ? "bg-[#E7806A] shadow-[0_0_8px_1px_rgb(219_100_75/0.85)]" : "bg-foreground/10",
-            )}
-          />
-        ))}
-      </div>
-    </div>
   );
 }
 
