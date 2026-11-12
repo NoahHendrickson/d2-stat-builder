@@ -7,6 +7,7 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { ShoppingCartAdd02Icon } from "@hugeicons/core-free-icons";
 import { Button } from "@/components/ui/button";
 import { DetailSection } from "@/components/detail-card";
+import { PatternProgress } from "@/components/pattern-progress";
 import { fetchProfile, newerProfile } from "@/lib/armory/fetch";
 import { profileKey } from "@/lib/armory/keys";
 import { toast } from "@/lib/toast";
@@ -26,7 +27,7 @@ const PROFILE_FRESH_MS = 30_000;
  * The Perks section. Once a left and a right perk are picked, its header offers to add the
  * roll to the Farm list, unless a copy with everything picked is already owned, in which
  * case the header says so instead. Once the roll is on the list, the button takes it off
- * again. Not shown on craftable weapons.
+ * again. Craftable weapons can't go on the list: they show their pattern progress there.
  */
 export function FarmPerksSection({
   weapon,
@@ -119,7 +120,8 @@ export function FarmPerksSection({
       title="Perks"
       // As tall as the button, so the grid doesn't jump when it appears.
       heading={<span className="flex min-h-7 items-center">Perks</span>}
-      action={action}
+      // A craftable weapon can't go on the Farm list; its pattern progress shows instead.
+      action={action ?? (weapon.craftable ? <PatternProgress name={weapon.name} layout="inline" /> : undefined)}
     >
       {children}
     </DetailSection>

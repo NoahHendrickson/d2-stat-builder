@@ -2,6 +2,19 @@
 // armor-thumb.tsx): the user's own SVGs (customdeepsight.svg, customenhanceddeepsight.svg),
 // paths as exported, each with its viewBox size.
 
+/**
+ * The crafted palette. Bungie's glyph fill is #F19B83 with a rim shading down to #DB644B;
+ * ours is a step deeper than the fill (CRAFT_FILL), glowing in the rim's colour
+ * (rgb 219 100 75). Class strings are written out whole so Tailwind finds them.
+ */
+export const CRAFT_FILL = "#E7806A";
+/** The glow around a glyph. */
+export const CRAFT_GLOW = "drop-shadow-[0_0_2px_rgb(219_100_75/0.75)]";
+/** The red fade out of a crafted tile's corner, under its glyph. */
+export const CRAFT_CORNER_GLOW = "bg-[radial-gradient(circle_at_100%_100%,rgb(219_100_75/0.55),transparent_32%)]";
+/** A filled bar or segment in the glyph's colour, glowing (pattern progress). */
+export const CRAFT_BAR = "bg-[#E7806A] shadow-[0_0_8px_1px_rgb(219_100_75/0.85)]";
+
 export const CRAFT_GLYPHS = {
   crafted: {
     width: 161,

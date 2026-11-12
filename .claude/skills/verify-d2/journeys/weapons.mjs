@@ -1,6 +1,10 @@
 // Weapon search (/weapons): name search, a filter chip from suggestions, the details pane,
 // and picking a perk. Data is the static /data/weapons.json plus Clarity. See features/weapons.md.
-export const meta = { fixture: "small" };
+export const meta = {
+  fixture: "small",
+  // Pattern progress the stub answers for wpn-pattern.
+  seed: () => ({ patterns: { "Veiled Threat": { progress: 2, needed: 5 }, "Osteo Striga": { progress: 5, needed: 5 } } }),
+};
 
 const LIST = { role: "list", name: "Weapons" };
 const STATUS = /(\d[\d,]*) weapons/;
@@ -151,5 +155,17 @@ export default async function ({ page, app, step, shot, expect, log }) {
     await page.click(top, { within: setups });
     await page.waitFor(async () => (await picked("Cluster Bomb")) === 1);
     expect((await picked("Envious Arsenal")) === 0, "back on the top setup, Envious Arsenal is let go");
+  });
+
+  await step("wpn-pattern: a craftable weapon's Perks header shows the player's pattern progress", async () => {
+    const meter = { role: "meter", name: "Pattern progress" };
+    for (const [name, text] of [["Veiled Threat", "2 of 5"], ["Osteo Striga", "Unlocked"]]) {
+      await page.fill(box, name);
+      await page.click({ role: "button", name: `View ${name} perks`, nth: 0 });
+      await page.waitFor(async () => (await page.exists(meter)) && (await page.attr(meter, "aria-valuetext")) === text);
+      expect(true, `${name}: ${text}`);
+      await shot(`pattern-${text === "Unlocked" ? "unlocked" : "partial"}`);
+      await page.press("Escape");
+    }
   });
 }

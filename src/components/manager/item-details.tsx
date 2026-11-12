@@ -8,6 +8,7 @@ import { GitCompareIcon, SquareLock02Icon, SquareUnlock02Icon } from "@hugeicons
 import { EnhancedArrow } from "@/components/enhanced-arrow";
 import { PerkTooltip } from "@/components/weapons/perk-tooltip";
 import { ItemWatermark, TierPips } from "@/components/armor-thumb";
+import { PatternProgress } from "@/components/pattern-progress";
 import { PowerValue } from "@/components/power-value";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent } from "@/components/ui/popover";
@@ -104,6 +105,10 @@ export function ItemDetails({
         <ArmorView instanceId={found.item.instanceId} itemHash={found.item.itemHash} />
       ) : (
         <ItemDescription itemHash={found.item.itemHash} />
+      )}
+      {/* Enhanced on a craftable weapon means it was shaped and then enhanced. */}
+      {found.item.craftable && !found.item.crafted && !found.item.enhanced && (
+        <PatternProgress name={found.item.name} layout="stacked" className={cn(SECTION, "gap-1.5")} />
       )}
       {(found.item.instanceId || copies > 1) && (
         <div className={cn(SECTION, "flex-row flex-wrap items-center gap-1")}>

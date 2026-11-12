@@ -22,7 +22,7 @@ export const STUB_USER = { membershipId: "verify-user", destinyMembershipId: "46
 
 /**
  * `profile` is the GetProfile body (a JSON string). `seed` fills the store:
- * `{ loadouts: SavedLoadout[], shares: { [code]: SavedLoadoutData }, settings: { [key]: { value, updatedAt } }, usage: { [queryKey]: [instanceId, 0|1][] }, ingameSlots, farmList: FarmEntry[] }`.
+ * `{ loadouts: SavedLoadout[], shares: { [code]: SavedLoadoutData }, settings: { [key]: { value, updatedAt } }, usage: { [queryKey]: [instanceId, 0|1][] }, ingameSlots, farmList: FarmEntry[], patterns: { [weaponName]: { progress, needed } } }`.
  */
 export function createStub({ profile, seed = {} }) {
   const store = {
@@ -35,6 +35,8 @@ export function createStub({ profile, seed = {} }) {
     usage: new Map(Object.entries(seed.usage ?? {}).map(([key, pieces]) => [key, new Map(pieces)])),
     ingameSlots: seed.ingameSlots ?? Array.from({ length: 10 }, (_, index) => ({ index, nameHash: 101, iconHash: 201, colorHash: 301, items: [], empty: true })),
     entries: new Map((seed.farmList ?? []).map((e) => [e.id, e])),
+    // Crafting pattern progress by weapon name (GET /api/bungie/patterns).
+    patterns: { ...seed.patterns },
   };
   const characterIds = new Set(Object.keys(JSON.parse(profile).characters?.data ?? {}));
   /** Every /api request: { t, method, path, body, status }. */
@@ -213,6 +215,8 @@ export function createStub({ profile, seed = {} }) {
       store.ingameSlots[b.loadoutIndex] = { index: slot.index, nameHash: 101, iconHash: 201, colorHash: 301, items: [], empty: true };
       return json(200, { ok: true });
     }],
+
+    ["GET", /^\/api\/bungie\/patterns$/, () => json(200, { patterns: store.patterns })],
 
     ["POST", /^\/api\/bug-reports$/, () => json(201, { id: crypto.randomUUID() })],
   ];

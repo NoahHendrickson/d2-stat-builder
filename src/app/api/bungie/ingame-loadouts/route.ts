@@ -1,16 +1,11 @@
 import { NextResponse } from "next/server";
 import {
   clearLoadout,
-  getDestinyManifest,
   getProfile,
   snapshotLoadout,
   updateLoadoutIdentifiers,
   type DestinyComponentType,
-  type DestinyLoadoutColorDefinition,
-  type DestinyLoadoutIconDefinition,
-  type DestinyLoadoutNameDefinition,
 } from "bungie-api-ts/destiny2";
-import { BUNGIE_IMAGE_BASE } from "@/lib/bungie/constants";
 import { createBungieHttp } from "@/lib/bungie/http";
 import { bungieErrorResponse, notSignedIn } from "@/lib/bungie/equip-route";
 import {
@@ -22,6 +17,7 @@ import {
   type InGameLoadoutsResponse,
   type SlotRequest,
 } from "@/lib/bungie/ingame-loadouts";
+import { fetchManifestTable, perManifestVersion } from "@/lib/bungie/manifest-tables";
 import { getValidAccessToken, readUser } from "@/lib/bungie/session";
 import { rejectCrossSite } from "@/lib/http/same-origin";
 
@@ -32,41 +28,18 @@ const COMPONENTS = [206, 102, 201, 205] as DestinyComponentType[];
 /** What a Bungie 401 tells the user here: it's not about equipping. */
 const REAUTH_MESSAGE = "Bungie needs you to sign in again";
 
-/**
- * The name / icon / colour lists are three tiny manifest tables (~9 KB together) that
- * only this route reads, so they are fetched here on demand instead of joining the
- * client manifest — adding a table there re-downloads the whole manifest for everyone.
- * Kept per server instance; they change only when Bungie ships new identifiers.
- */
-const IDENTIFIERS_TTL_MS = 60 * 60_000;
-let identifiersCache: { at: number; value: InGameLoadoutIdentifiers } | undefined;
-
-type Table<T> = Record<string, T>;
-type Def = { hash: number; index: number; redacted?: boolean };
-
-async function fetchTable<T>(path: string | undefined): Promise<T[]> {
-  if (!path) throw new Error("Bungie's manifest is missing the loadout identifier tables");
-  const res = await fetch(`${BUNGIE_IMAGE_BASE}${path}`);
-  if (!res.ok) throw new Error(`Bungie manifest table request failed (HTTP ${res.status})`);
-  return Object.values((await res.json()) as Table<T>);
-}
-
 /** In the game's own order, without the entries Bungie hasn't revealed yet. */
-const visible = <T extends Def>(defs: T[]) =>
+const visible = <T extends { index: number; redacted?: boolean }>(defs: T[]) =>
   defs.filter((d) => !d.redacted).sort((a, b) => a.index - b.index);
 
-async function loadIdentifiers(): Promise<InGameLoadoutIdentifiers> {
-  if (identifiersCache && Date.now() - identifiersCache.at < IDENTIFIERS_TTL_MS) {
-    return identifiersCache.value;
-  }
-  const info = (await getDestinyManifest(createBungieHttp())).Response;
-  const paths = info.jsonWorldComponentContentPaths.en;
+/** The name / icon / colour lists: three tiny manifest tables (~9 KB together) only this route reads. */
+const loadIdentifiers = perManifestVersion(async (paths): Promise<InGameLoadoutIdentifiers> => {
   const [names, icons, colors] = await Promise.all([
-    fetchTable<DestinyLoadoutNameDefinition>(paths.DestinyLoadoutNameDefinition),
-    fetchTable<DestinyLoadoutIconDefinition>(paths.DestinyLoadoutIconDefinition),
-    fetchTable<DestinyLoadoutColorDefinition>(paths.DestinyLoadoutColorDefinition),
+    fetchManifestTable(paths, "DestinyLoadoutNameDefinition"),
+    fetchManifestTable(paths, "DestinyLoadoutIconDefinition"),
+    fetchManifestTable(paths, "DestinyLoadoutColorDefinition"),
   ]);
-  const value: InGameLoadoutIdentifiers = {
+  return {
     names: visible(names)
       .filter((d) => d.name)
       .map((d) => ({ hash: d.hash, name: d.name })),
@@ -77,9 +50,7 @@ async function loadIdentifiers(): Promise<InGameLoadoutIdentifiers> {
       .filter((d) => d.colorImagePath)
       .map((d) => ({ hash: d.hash, path: d.colorImagePath })),
   };
-  identifiersCache = { at: Date.now(), value };
-  return value;
-}
+});
 
 /** A character's in-game loadout slots, plus the identifiers a slot can be given. */
 export async function GET(request: Request) {

@@ -138,4 +138,30 @@ export default async function ({ page, app, stub, step, shot, expect, log }) {
     await shot("moved");
     await page.emulatePointer("fine");
   });
+
+  await step("mgr-pattern: a craftable weapon's panel shows its pattern progress", async () => {
+    await page.fill({ role: "combobox", name: "Search items" }, "is:craftable not:crafted");
+    await page.waitFor({ role: "button", name: /^\d[\d,]* items?$/ });
+    // The search dims every tile it doesn't match.
+    const [a, b] = JSON.parse(await page.evalJs(`JSON.stringify([...document.querySelectorAll('${VAULT_TILE.css}')].filter((t) => !t.className.includes("opacity-")).map((t) => t.getAttribute("aria-label") ?? ""))`));
+    const base = (label) => label.split(",")[0].replace(/\s*\([^)]*\)$/, "");
+    stub.store.patterns[base(a)] = { progress: 2, needed: 5 };
+    stub.store.patterns[base(b)] = { progress: 5, needed: 5 };
+    const tile = (label) => ({ css: `${VAULT_TILE.css}[aria-label="${label.replace(/"/g, '\\"')}"]` });
+    const loads = () => stub.requests.filter((r) => r.path === "/api/bungie/patterns").length;
+    await page.click(tile(a));
+    const meter = { role: "meter", name: "Pattern progress" };
+    await page.waitFor(meter);
+    expect((await page.attr(meter, "aria-valuenow")) === "2" && (await page.attr(meter, "aria-valuemax")) === "5", `${base(a)}: 2 of 5`);
+    await page.waitForText(/2 of 5/);
+    expect(loads() === 1, "one GET /api/bungie/patterns");
+    await shot("pattern-partial");
+    await page.press("Escape");
+    await page.click(tile(b));
+    await page.waitForText(/Unlocked/);
+    expect(loads() === 1, "the second panel reuses the loaded progress");
+    await shot("pattern-unlocked");
+    await page.press("Escape");
+    await page.click({ role: "button", name: "Clear search" });
+  });
 }
