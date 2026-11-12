@@ -5,6 +5,7 @@ import {
   CHAMPION_WORDS,
   ELEMENT_SIDES,
   GRENADE_LAUNCHER_AMMO_WORDS,
+  lookupWord,
   RARITY_WORDS,
   WEAPON_SLOT_ALIASES,
   WEAPON_SLOT_WORDS,
@@ -33,7 +34,27 @@ export interface ParsedWeaponQuery {
    * match nothing rather than falling through to fuzzy text, which would match junk.
    */
   unknown: UnknownFilter[];
+  /**
+   * `pattern:complete` / `pattern:incomplete`: craftable weapons whose pattern the
+   * signed-in player has (or hasn't) finished. Applied by the catalog search, which needs
+   * the player's pattern progress; the last one typed wins.
+   */
+  pattern?: PatternFilter;
 }
+
+export type PatternFilter = "complete" | "incomplete";
+
+/** `pattern:` values, squashed. */
+export const PATTERN_VALUES: Readonly<Record<string, PatternFilter>> = {
+  complete: "complete",
+  completed: "complete",
+  unlocked: "complete",
+  done: "complete",
+  incomplete: "incomplete",
+  notcomplete: "incomplete",
+  unfinished: "incomplete",
+  locked: "incomplete",
+};
 
 /** `WeaponFilters` fields that are OR-within string arrays — the single source of truth for merging. */
 export const ARRAY_FACET_KEYS = [
@@ -57,7 +78,7 @@ export const ARRAY_FACET_KEYS = [
 ] as const satisfies readonly (keyof WeaponFilters)[];
 type ArrayFacetKey = (typeof ARRAY_FACET_KEYS)[number];
 
-/** `key:` tokens that add their value to a facet. `is:`, `not:` and `craftable:` are parsed apart. */
+/** `key:` tokens that add their value to a facet. `is:`, `not:`, `craftable:` and `pattern:` are parsed apart. */
 const FACET_KEYS: ReadonlyMap<string, Exclude<ArrayFacetKey, "craftable">> = new Map([
   ["element", "element"],
   ["damage", "element"],
@@ -228,7 +249,7 @@ function craftableValue(raw: string): string | null {
 
 /**
  * Parse a raw search string into structured {@link WeaponFilters} plus residual
- * free text. Supports `key:value` filters (see {@link FACET_KEYS}, plus `craftable:`)
+ * free text. Supports `key:value` filters (see {@link FACET_KEYS}, plus `craftable:` and `pattern:`)
  * and `is:`/`not:` words (`is:arc`, `is:heavy`, `is:handcannon`, `not:exotic`,
  * `is:adept`, `is:craftable`, … see {@link weaponQueryVocabulary}). Repeated words of
  * one kind OR together (`is:arc is:solar`); `not:` excludes. Element, type, ammo,
@@ -241,6 +262,7 @@ export function parseWeaponQuery(input: string, vocabulary: WeaponQueryVocabular
   const filters: WeaponFilters = {};
   const freeText: string[] = [];
   const unknown: UnknownFilter[] = [];
+  let pattern: PatternFilter | undefined;
 
   const addFacet = (key: ArrayFacetKey, value: string) => {
     pushUnique((filters[key] ??= []), value);
@@ -261,7 +283,7 @@ export function parseWeaponQuery(input: string, vocabulary: WeaponQueryVocabular
     }
 
     const facet = FACET_KEYS.get(key);
-    if (!facet && key !== "is" && key !== "not" && key !== "craftable") {
+    if (!facet && key !== "is" && key !== "not" && key !== "craftable" && key !== "pattern") {
       // "Property:" on its own is the start of a pasted perk name, not a filter.
       if (rawValue) unknown.push({ token, reason: NOT_A_FILTER });
       else freeText.push(token);
@@ -278,6 +300,13 @@ export function parseWeaponQuery(input: string, vocabulary: WeaponQueryVocabular
       const value = vocabulary.values[facet].get(squash(rawValue));
       if (value) addFacet(facet, value);
       else unknown.push({ token, reason: `isn't ${VALUE_NAMES[facet]}` });
+      continue;
+    }
+
+    if (key === "pattern") {
+      const value = lookupWord(PATTERN_VALUES, squash(rawValue));
+      if (value) pattern = value;
+      else unknown.push({ token, reason: "takes complete or incomplete" });
       continue;
     }
 
@@ -313,7 +342,13 @@ export function parseWeaponQuery(input: string, vocabulary: WeaponQueryVocabular
 
   const text = freeText.join(" ").trim();
   const bare = vocabulary.isWords.get(squash(text));
-  return { filters, text, unknown, ...(bare?.bare ? { keyword: bare.facets } : {}) };
+  return {
+    filters,
+    text,
+    unknown,
+    ...(bare?.bare ? { keyword: bare.facets } : {}),
+    ...(pattern ? { pattern } : {}),
+  };
 }
 
 function mergeFacetArray(a: string[] | undefined, b: string[] | undefined): string[] | undefined {

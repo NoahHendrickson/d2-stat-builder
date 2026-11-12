@@ -168,4 +168,28 @@ export default async function ({ page, app, step, shot, expect, log }) {
       await page.press("Escape");
     }
   });
+
+  await step("wpn-pattern-filter: typing craft offers the craftable and pattern words, and pattern: filters", async () => {
+    await page.fill(box, "Veiled Threat craft");
+    const option = (word) => ({ role: "option", name: new RegExp(`^${word}\\b`) });
+    await page.waitFor(option("pattern:incomplete"));
+    for (const word of ["is:craftable", "not:craftable", "pattern:complete"]) {
+      expect(await page.exists(option(word)), `offers ${word}`);
+    }
+    expect(/Patterns you haven't finished/.test(await page.name(option("pattern:incomplete"))), "pattern:incomplete has its grey hint");
+    await shot("pattern-words");
+    await page.click(option("pattern:incomplete"));
+    expect((await page.value(box)) === "Veiled Threat pattern:incomplete ", "the pick replaces the typed word");
+    const listed = (name) => page.exists({ role: "button", name: `View ${name} perks` });
+    await page.waitFor(() => listed("Veiled Threat"));
+    await shot("pattern-incomplete");
+    // Osteo Striga is 5 of 5: listed under pattern:complete, and (once the deferred search
+    // has settled on the new query, shown by the empty state) not under pattern:incomplete.
+    await page.fill(box, "Osteo Striga pattern:complete");
+    await page.waitFor(() => listed("Osteo Striga"));
+    await page.fill(box, "Osteo Striga pattern:incomplete");
+    await page.waitForText(/No weapons match this search/);
+    expect((await page.value(box)) === "Osteo Striga pattern:incomplete", "the search settled on pattern:incomplete");
+    expect(!(await listed("Osteo Striga")), "Osteo Striga (5 of 5) isn't listed under pattern:incomplete");
+  });
 }
