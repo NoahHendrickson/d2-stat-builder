@@ -15,7 +15,12 @@ import {
 } from "./weapon-provenance";
 import { buildWeaponMasterworkOptions } from "./weapon-masterwork";
 import { buildWeaponModOptions } from "./weapon-mods";
-import { isAdeptWeaponName, reconcileAdeptTierPools, reconcileCraftableTwins } from "./weapon-variants";
+import {
+  isAdeptWeaponName,
+  isCraftableWeapon,
+  reconcileAdeptTierPools,
+  reconcileCraftableTwins,
+} from "./weapon-variants";
 import { GENERIC_WEAPON_TYPE_ICONS } from "./weapon-type-icon-paths";
 import type {
   AmmoTypeRef,
@@ -512,9 +517,7 @@ export function buildWeaponIndex(
       rarity: item.inventory?.tierTypeName ?? "Legendary",
       slot: BUCKET_SLOT[item.inventory?.bucketTypeHash ?? 0] ?? "",
       frame: columns.find((c) => c.kind === "Intrinsic")?.perks[0]?.name,
-      // Raid adepts carry their base weapon's recipe (for its enhanced perks), but can't
-      // be crafted themselves, so they have no pattern of their own.
-      craftable: item.inventory?.recipeItemHash != null && !adept,
+      craftable: isCraftableWeapon(item),
       adept,
       seasonNumber: season?.seasonNumber,
       seasonName: season?.seasonName,

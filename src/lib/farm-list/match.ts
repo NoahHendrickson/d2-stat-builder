@@ -6,12 +6,10 @@ import { CLASS_NAMES } from "../armory/stats";
 import { BUCKETS } from "../inventory/buckets";
 import type { PickSlot, Roll } from "../weapons/pick-slots";
 import type { PerkRef, WeaponSummary } from "../weapons/types";
-import { isAdeptWeaponName, weaponVersionFamilyName } from "../weapons/weapon-variants";
+import { ITEM_STATE_CRAFTED, ITEM_STATE_ENHANCED } from "../bungie/item-state";
+import { weaponVersionFamilyName } from "../weapons/weapon-variants";
 import { assignDrops } from "./assign-drops";
 import { FARM_LIST_SCHEMA_VERSION, isFarmDone, type FarmColumn, type FarmEntry, type FarmPerk, type WeaponFarmData, type WeaponFarmEntry } from "./types";
-
-/** `ItemState.Crafted`: a shaped copy, whose perks the player chose. */
-const CRAFTED = 8;
 
 /** The left and right perk columns: a weapon's first two Trait columns, by index. */
 export function traitColumns(weapon: Pick<WeaponSummary, "columns">): [number, number] | null {
@@ -176,7 +174,8 @@ export function ownedCopies(profile: DestinyProfileResponse): OwnedCopy[] {
       out.push({
         instanceId: item.itemInstanceId,
         itemHash: item.itemHash,
-        crafted: (item.state & CRAFTED) !== 0,
+        // Shaped, so the player chose its perks. Enhancing a drop sets Crafted too, with Enhanced.
+        crafted: (item.state & ITEM_STATE_CRAFTED) !== 0 && (item.state & ITEM_STATE_ENHANCED) === 0,
         place: place(item.bucketHash),
       });
     }
@@ -215,22 +214,20 @@ export function hasTraits(profile: DestinyProfileResponse, instanceId: string, t
 /**
  * The copies of a listed weapon that rolled both traits and every required extra (a
  * picked barrel, magazine or origin trait), other than the ones the entry ignores.
- * Crafted copies don't count: the player chose those perks. An adept can't be crafted, so
- * its Crafted flag only means it was enhanced.
+ * Crafted copies don't count: the player chose those perks.
  */
 export function matchingCopies(
   profile: DestinyProfileResponse,
-  entry: Pick<WeaponFarmData, "weaponName" | "weaponHashes" | "traits" | "extras" | "ignoredInstanceIds">,
+  entry: Pick<WeaponFarmData, "weaponHashes" | "traits" | "extras" | "ignoredInstanceIds">,
   copies: readonly OwnedCopy[] = ownedCopies(profile),
 ): OwnedCopy[] {
   const hashes = new Set(entry.weaponHashes);
   const ignored = new Set(entry.ignoredInstanceIds);
   const extras = requiredExtras(entry);
-  const adept = isAdeptWeaponName(entry.weaponName);
   return copies.filter(
     (c) =>
       hashes.has(c.itemHash) &&
-      (adept || !c.crafted) &&
+      !c.crafted &&
       !ignored.has(c.instanceId) &&
       hasTraits(profile, c.instanceId, entry.traits) &&
       extras.every((perk) => copyHasPerk(profile, c.instanceId, perk)),

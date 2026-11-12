@@ -12,7 +12,7 @@ import {
 } from "@/lib/bungie/item-state";
 import type { Manifest } from "@/lib/manifest/load";
 import { parseArchetypeDescription } from "@/lib/armory/archetypes";
-import { isAdeptWeaponName } from "@/lib/weapons/weapon-variants";
+import { isCraftableWeapon } from "@/lib/weapons/weapon-variants";
 import {
   ASCENDANT_SHARD_HASH,
   ENHANCEMENT_CORE_HASH,
@@ -277,9 +277,7 @@ function buildItem(
   const watermark = def ? itemWatermark(def, item.versionNumber) : undefined;
   const state = item.state ?? 0;
   const isWeapon = def?.itemType === ITEM_TYPE_WEAPON;
-  const name = def?.displayProperties?.name || "Unknown item";
-  // Raid adepts carry their base weapon's recipe but can't be crafted themselves.
-  const craftable = !!def?.inventory?.recipeItemHash && !isAdeptWeaponName(name);
+  const craftable = def ? isCraftableWeapon(def) : false;
   // An enhanced weapon levels through the crafting system, so the Crafted flag can come
   // with it: Enhanced wins, and so does Crafted on a weapon that can't be crafted.
   const enhanced =
@@ -310,7 +308,7 @@ function buildItem(
     key,
     ...(item.itemInstanceId ? { instanceId: item.itemInstanceId } : {}),
     itemHash: item.itemHash,
-    name,
+    name: def?.displayProperties?.name || "Unknown item",
     ...(icon ? { icon } : {}),
     ...(ornamentIcon ? { ornamentIcon } : {}),
     ...(watermark ? { watermark } : {}),
