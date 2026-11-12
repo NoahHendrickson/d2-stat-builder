@@ -8,6 +8,24 @@ import { readSearchState } from "./search-state";
 
 const { index } = internWeaponCatalog(sampleWeapons, "test");
 
+describe("pattern: search", () => {
+  const catalog = createWeaponCatalog(index);
+  const names = (query: string, patterns?: Record<string, { progress: number; needed: number }>) =>
+    catalog.search(query, {}, "name", patterns).results.map((w) => w.name);
+  const patterns = { Fatebringer: { progress: 5, needed: 5 }, Stormcharge: { progress: 2, needed: 5 } };
+
+  it("keeps craftable weapons whose pattern is (or isn't) finished", () => {
+    expect(names("pattern:complete", patterns)).toEqual(["Fatebringer"]);
+    expect(names("pattern:incomplete", patterns)).toEqual(["Stormcharge"]);
+    // A craftable weapon with no progress record counts as unfinished.
+    expect(names("pattern:incomplete", { Fatebringer: { progress: 5, needed: 5 } })).toEqual(["Stormcharge"]);
+  });
+
+  it("matches nothing, and says so, until progress is given", () => {
+    expect(catalog.search("pattern:complete", {}, "name")).toEqual({ results: [], unknown: [], needsPatterns: true });
+  });
+});
+
 describe("weapon browser integration", () => {
   it("round trips the compact catalog without changing search results", () => {
     const original = createWeaponCatalog(index);

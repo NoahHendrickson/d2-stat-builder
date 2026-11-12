@@ -5,7 +5,9 @@ import {
   categoryValues,
   matchingCategories,
   pendingPairValue,
+  applyWord,
   suggestFilters,
+  suggestWords,
   withFilter,
   withoutFilter,
 } from "./filter-suggestions";
@@ -246,5 +248,31 @@ describe("activeFilterChips", () => {
       params,
     );
     expect(cleared.toString()).toBe("");
+  });
+});
+
+describe("suggestWords", () => {
+  const words = (query: string, signedIn = true) => suggestWords(query, signedIn).map((w) => w.word);
+
+  it("offers is:/not:craftable and, signed in, the pattern words for craftable", () => {
+    expect(words("craft")).toEqual(["is:craftable", "not:craftable", "pattern:incomplete", "pattern:complete"]);
+    expect(words("craftable", false)).toEqual(["is:craftable", "not:craftable"]);
+    expect(words("fatebringer patt")).toEqual(["pattern:incomplete", "pattern:complete"]);
+  });
+
+  it("completes a started word, skips one already typed, and waits for three letters", () => {
+    expect(words("is:cr")).toEqual(["is:craftable"]);
+    expect(words("pattern:c")).toEqual(["pattern:complete"]);
+    expect(words("is:craftable craft")).toEqual(["not:craftable", "pattern:incomplete", "pattern:complete"]);
+    expect(words("is:craftable")).toEqual([]);
+    expect(words("cr")).toEqual([]);
+  });
+
+  it("has a grey hint for each word", () => {
+    expect(suggestWords("pattern", true)).toContainEqual({ word: "pattern:incomplete", hint: "Patterns you haven't finished" });
+  });
+
+  it("swaps the word being typed for the pick", () => {
+    expect(applyWord("fatebringer craft", "is:craftable")).toBe("fatebringer is:craftable ");
   });
 });

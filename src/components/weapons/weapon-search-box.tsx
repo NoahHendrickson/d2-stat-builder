@@ -5,14 +5,17 @@ import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "rea
 import { HugeiconsIcon } from "@hugeicons/react";
 import { ArrowRight01Icon, Cancel01Icon, Search01Icon } from "@hugeicons/core-free-icons";
 import {
+  applyWord,
   categoryValues,
   matchingCategories,
   pendingPairValue,
   suggestFilters,
+  suggestWords,
   type FilterCategory,
   type FilterChip,
   type FilterIndexEntry,
   type FilterValue,
+  type WordSuggestion,
 } from "@/lib/weapons/filter-suggestions";
 import { matchRank } from "@/lib/weapons/rank";
 import { useCloseAfterClick } from "@/lib/use-close-after-click";
@@ -100,7 +103,8 @@ function chipTone(chip: FilterChip): string {
 
 type Item =
   | { kind: "value"; category: FilterCategory; value: FilterValue }
-  | { kind: "category"; entry: FilterIndexEntry };
+  | { kind: "category"; entry: FilterIndexEntry }
+  | { kind: "word"; suggestion: WordSuggestion };
 
 type Section = { heading?: string; items: Item[]; note?: string };
 
@@ -121,6 +125,7 @@ export function WeaponSearchBox({
   damageTypes,
   ammoTypes,
   trailing,
+  signedIn = false,
 }: {
   index: readonly FilterIndexEntry[];
   query: string;
@@ -134,6 +139,8 @@ export function WeaponSearchBox({
   ammoTypes?: readonly AmmoTypeRef[];
   /** Shown at the end of the bar, after the clear button (the result count and sort). */
   trailing?: ReactNode;
+  /** Signed in: the pattern words (`pattern:incomplete`) are offered too. */
+  signedIn?: boolean;
 }) {
   const id = useId();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -186,6 +193,7 @@ export function WeaponSearchBox({
     const suggestions = suggestFilters(index, query, params).map(
       ({ category, value }): Item => ({ kind: "value", category, value }),
     );
+    const words = suggestWords(query, signedIn).map((suggestion): Item => ({ kind: "word", suggestion }));
     const browse = { heading: "Browse filters", items: categories };
     // Typing a category's name ("frame", "ammo") means browsing it, so lead with it.
     const leadWithCategories =
@@ -197,10 +205,10 @@ export function WeaponSearchBox({
       );
     return (
       leadWithCategories
-        ? [browse, { items: suggestions }]
-        : [{ items: suggestions }, browse]
+        ? [browse, { items: [...words, ...suggestions] }]
+        : [{ items: [...words, ...suggestions] }, browse]
     ).filter((section) => section.items.length);
-  }, [drill, drillText, index, params, pending, query]);
+  }, [drill, drillText, index, params, pending, query, signedIn]);
   const items = useMemo(() => sections.flatMap((s) => s.items), [sections]);
   const expanded =
     open && sections.some((section) => section.items.length || section.note);
@@ -228,6 +236,11 @@ export function WeaponSearchBox({
     setDrillText("");
   }
   function choose(item: Item) {
+    if (item.kind === "word") {
+      onQuery(applyWord(query, item.suggestion.word));
+      setOpen(false);
+      return;
+    }
     if (item.kind === "category") {
       setDrillParam(item.entry.category.param);
       setDrillText("");
@@ -415,9 +428,11 @@ export function WeaponSearchBox({
                 return (
                   <div
                     key={
-                      item.kind === "category"
-                        ? `category:${item.entry.category.param}`
-                        : `${item.category.param}:${item.value.param}:${item.value.value}`
+                      item.kind === "word"
+                        ? `word:${item.suggestion.word}`
+                        : item.kind === "category"
+                          ? `category:${item.entry.category.param}`
+                          : `${item.category.param}:${item.value.param}:${item.value.value}`
                     }
                     id={`${id}-option-${i}`}
                     role="option"
@@ -429,7 +444,12 @@ export function WeaponSearchBox({
                     onMouseMove={() => i !== active && setActive(i)}
                     onClick={() => choose(item)}
                   >
-                    {item.kind === "category" ? (
+                    {item.kind === "word" ? (
+                      <span className="flex min-w-0 flex-1 items-baseline gap-2">
+                        <span className="shrink-0">{item.suggestion.word}</span>
+                        <span className="truncate text-muted-foreground">{item.suggestion.hint}</span>
+                      </span>
+                    ) : item.kind === "category" ? (
                       <>
                         <span className="flex-1">
                           {item.entry.category.label}

@@ -51,6 +51,9 @@ import {
 import { resolveFrame } from "@/lib/weapons/pick-slots";
 import { SORTS, readSearchState } from "@/lib/weapons/search-state";
 import type { WeaponSearchResult } from "@/lib/weapons/catalog";
+import { sessionMembershipId } from "@/lib/armory/use-profile";
+import { useSession } from "@/lib/auth/use-session";
+import { usePatterns } from "@/lib/bungie/use-patterns";
 import type { WeaponSummary } from "@/lib/weapons/types";
 import { weaponTypeIcon } from "@/lib/weapons/weapon-type-icon-paths";
 import { useMinWidth } from "@/lib/use-min-width";
@@ -61,6 +64,8 @@ const SORT_ITEMS: Record<string, string> = Object.fromEntries(SORTS);
 const SPLIT_MIN_PX = 1024;
 
 const NO_RESULTS: WeaponSearchResult = { results: [], unknown: [] };
+/** A `pattern:` filter in the query, which needs the player's pattern progress. */
+const PATTERN_FILTER = /(^|\s)pattern:/i;
 /** A result row's nameplate height, and the gap left between plates. */
 const ROW_PX = 40;
 const ROW_GAP_PX = 4;
@@ -126,11 +131,14 @@ export function WeaponBrowser() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const detailsRef = useRef<HTMLElement>(null);
   const data = query.data;
-  const { results, unknown: unknownFilters } = useMemo(
+  // The player's pattern progress, loaded only for a `pattern:` search.
+  const signedIn = sessionMembershipId(useSession().data) !== undefined;
+  const patterns = usePatterns(PATTERN_FILTER.test(deferred.query)).data;
+  const { results, unknown: unknownFilters, needsPatterns } = useMemo(
     () =>
-      data?.search(deferred.query, deferred.filters, deferred.sort) ??
+      data?.search(deferred.query, deferred.filters, deferred.sort, patterns) ??
       NO_RESULTS,
-    [data, deferred],
+    [data, deferred, patterns],
   );
   // A weapon always stays open: the last one picked (even after a search
   // filters it out), else the top result.
@@ -201,6 +209,7 @@ export function WeaponBrowser() {
             onClear={() => navigate(new URLSearchParams(), true)}
             damageTypes={data?.damageTypes}
             ammoTypes={data?.ammoTypes}
+            signedIn={signedIn}
             // The result count and sort ride at the end of the bar (Figma 120:127).
             trailing={
               <>
@@ -273,7 +282,13 @@ export function WeaponBrowser() {
           >
             {!query.isPending && results.length === 0 && (
               <div className="py-12 text-center">
-                {unknownFilters.length > 0 ? (
+                {needsPatterns ? (
+                  <p className="text-sm text-muted-foreground">
+                    {signedIn
+                      ? "Loading your pattern progress…"
+                      : "Sign in to search by your pattern progress."}
+                  </p>
+                ) : unknownFilters.length > 0 ? (
                   <>
                     <p>
                       <code>{unknownFilters[0]!.token}</code>{" "}

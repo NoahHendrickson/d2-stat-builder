@@ -12,6 +12,12 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    date: "2026-11-12",
+    changes: [
+      "Weapon search: pattern:incomplete and pattern:complete find craftable weapons by your own pattern progress.",
+    ],
+  },
+  {
     date: "2026-11-11",
     changes: [
       "Items and Weapon search: craftable weapons show how many of their patterns you've unlocked.",

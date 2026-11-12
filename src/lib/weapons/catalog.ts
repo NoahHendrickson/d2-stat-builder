@@ -24,6 +24,7 @@ import {
   type WeaponSort,
 } from "./search";
 import type { WeaponIndex, WeaponSummary } from "./types";
+import { patternFor, type PatternProgress } from "@/lib/bungie/patterns";
 
 const collator = new Intl.Collator();
 
@@ -31,6 +32,11 @@ export interface WeaponSearchResult {
   results: WeaponSummary[];
   /** Filter tokens that mean nothing; when there are any, `results` is empty. */
   unknown: UnknownFilter[];
+  /**
+   * The query has a `pattern:` filter but no pattern progress was given (signed out, or
+   * still loading); `results` is empty until it is.
+   */
+  needsPatterns?: boolean;
 }
 
 /** Built once per downloaded catalog, independent of React renders. */
@@ -85,10 +91,14 @@ export function createWeaponCatalog(raw: WeaponIndex) {
     query: string,
     filters: WeaponFilters,
     sort: WeaponSort,
+    /** The signed-in player's pattern progress by weapon name, for `pattern:`. */
+    patterns?: Readonly<Record<string, PatternProgress>>,
   ): WeaponSearchResult {
     const parsed = parseWeaponQuery(query, vocabulary);
     // An unknown filter (`is:arcc`) means nothing, so it matches nothing.
     if (parsed.unknown.length > 0) return { results: [], unknown: parsed.unknown };
+    const pattern = parsed.pattern;
+    if (pattern && !patterns) return { results: [], unknown: [], needsPatterns: true };
     const text = expandWeaponQueryAliases(parsed.text).toLowerCase();
     let cached = textCache.get(text);
     if (!cached) {
@@ -113,11 +123,19 @@ export function createWeaponCatalog(raw: WeaponIndex) {
         textCache.delete(textCache.keys().next().value!);
       textCache.set(text, cached);
     }
-    const filtered = filterWeapons(
+    let filtered = filterWeapons(
       cached.matches,
       mergeWeaponFilters(filters, parsed.filters),
       index.perks,
     );
+    if (pattern && patterns) {
+      const wantComplete = pattern === "complete";
+      filtered = filtered.filter((w) => {
+        if (!w.craftable) return false;
+        const p = patternFor(patterns, w.name);
+        return (p !== undefined && p.progress >= p.needed) === wantComplete;
+      });
+    }
     const unique = new Map<number, WeaponSummary>();
     for (const weapon of filtered) {
       const primary = representative.get(weapon.hash) ?? weapon;

@@ -84,6 +84,16 @@ describe("parseWeaponQuery", () => {
     expect(parseWeaponQuery("craftable:no").filters.craftable).toEqual(["No"]);
   });
 
+  test("pattern: takes complete or incomplete (and their synonyms)", () => {
+    expect(parseWeaponQuery("pattern:incomplete").pattern).toBe("incomplete");
+    expect(parseWeaponQuery("pattern:not-complete").pattern).toBe("incomplete");
+    expect(parseWeaponQuery("pattern:unlocked fatebringer")).toMatchObject({ pattern: "complete", text: "fatebringer" });
+    expect(parseWeaponQuery("pattern:half").unknown).toEqual([
+      { token: "pattern:half", reason: "takes complete or incomplete" },
+    ]);
+    expect(parseWeaponQuery("pattern:").pattern).toBeUndefined();
+  });
+
   test("source and season keywords map onto facets", () => {
     const { filters, text } = parseWeaponQuery('source:"Root of Nightmares" season:23');
     expect(filters.source).toEqual(["Root of Nightmares"]);

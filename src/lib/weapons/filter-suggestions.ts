@@ -366,3 +366,48 @@ export function activeFilterChips(
   };
   return chips.sort((a, b) => at(a.param) - at(b.param));
 }
+
+/** A search word the dropdown offers to type in for the user, with a grey hint of what it does. */
+export interface WordSuggestion {
+  /** Replaces the word being typed. */
+  word: string;
+  hint: string;
+}
+
+const SEARCH_WORDS: readonly (WordSuggestion & { keys: readonly string[]; signedIn?: true })[] = [
+  { word: "is:craftable", hint: "Weapons you can craft", keys: ["craftable"] },
+  { word: "not:craftable", hint: "Weapons you can't craft", keys: ["craftable"] },
+  {
+    word: "pattern:incomplete",
+    hint: "Patterns you haven't finished",
+    keys: ["craftable", "pattern", "incomplete"],
+    signedIn: true,
+  },
+  {
+    word: "pattern:complete",
+    hint: "Patterns you've unlocked",
+    keys: ["craftable", "pattern", "complete", "unlocked"],
+    signedIn: true,
+  },
+];
+
+/**
+ * Search words for the word being typed (the query's last): typing "craft" or "pattern"
+ * offers `is:craftable`, `not:craftable` and, signed in, `pattern:incomplete` /
+ * `pattern:complete`; a started word ("is:cr", "pattern:") offers the ones it begins.
+ * Nothing under three letters, or for a word already in the query.
+ */
+export function suggestWords(query: string, signedIn: boolean): WordSuggestion[] {
+  const typed = query.match(/(\S*)$/)![1].toLowerCase();
+  if (typed.length < 3) return [];
+  const present = new Set(query.toLowerCase().split(/\s+/));
+  return SEARCH_WORDS.filter(({ word, keys, signedIn: needsSignIn }) => {
+    if ((needsSignIn && !signedIn) || word === typed || present.has(word)) return false;
+    return typed.includes(":") ? word.startsWith(typed) : keys.some((key) => key.startsWith(typed));
+  }).map(({ word, hint }) => ({ word, hint }));
+}
+
+/** The query with its last word replaced by `word`, ready for the next. */
+export function applyWord(query: string, word: string): string {
+  return `${query.replace(/\S*$/, "")}${word} `;
+}

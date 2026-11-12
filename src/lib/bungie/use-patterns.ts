@@ -33,15 +33,16 @@ const isReauth = (error: unknown) => error instanceof PatternsError && error.rea
  * The player's crafting pattern progress by weapon name: a separate Bungie call, made
  * when a panel needs it so the profile poll stays light. It is keyed on the profile's
  * snapshot, so an extraction the poll picks up shows on the next panel (the old counts
- * stay up while it loads). A load that finds the session gone signs out.
+ * stay up while it loads). A load that finds the session gone signs out. `enabled`
+ * false holds off the call (Weapon search loads it only for a `pattern:` search).
  */
-export function usePatterns() {
+export function usePatterns(enabled = true) {
   const { query: profile, membershipId } = useProfile();
   const queryClient = useQueryClient();
   const query = useQuery({
     queryKey: ["patterns", membershipId, profile.data?.responseMintedTimestamp],
     queryFn: fetchPatterns,
-    enabled: membershipId !== undefined,
+    enabled: enabled && membershipId !== undefined,
     staleTime: Infinity,
     placeholderData: keepPreviousData,
     retry: (failureCount, error) => !isReauth(error) && failureCount < 1,
