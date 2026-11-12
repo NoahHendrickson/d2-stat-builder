@@ -20,6 +20,8 @@ export interface FilterCategory {
   numeric?: boolean;
   /** Other names for the category: typed before a number ("ammo generation 50"), or to browse it ("archetype"). */
   aliases?: string[];
+  /** Set only by typed words (`is:`/`not:craftable`): no browse row or value suggestions, but still a chip. */
+  wordsOnly?: boolean;
 }
 
 /** One pickable value. `param` can differ from its category's (Trait 1 → damage perks). */
@@ -72,7 +74,7 @@ export const FILTER_CATEGORIES: readonly FilterCategory[] = [
   { param: "season", label: LABELS.season },
   { param: "frame", label: LABELS.frame, prefixOnly: true, aliases: ["archetype"] },
   { param: "rarity", label: LABELS.rarity },
-  { param: "craftable", label: LABELS.craftable, max: 1 },
+  { param: "craftable", label: LABELS.craftable, max: 1, wordsOnly: true },
   { param: "adept", label: "Adept", max: 1 },
 ];
 
@@ -99,7 +101,7 @@ export interface FilterIndexEntry {
 export function buildFilterIndex(
   facets: Record<string, FacetOption[]>,
 ): FilterIndexEntry[] {
-  return FILTER_CATEGORIES.map((category) => {
+  return FILTER_CATEGORIES.filter((c) => !c.wordsOnly).map((category) => {
     const values: FilterValue[] = (facets[category.param] ?? []).map(
       ({ value, count }) => ({
         param: category.param,
