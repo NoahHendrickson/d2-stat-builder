@@ -193,7 +193,10 @@ export function WeaponSearchBox({
     const suggestions = suggestFilters(index, query, params).map(
       ({ category, value }): Item => ({ kind: "value", category, value }),
     );
-    const words = suggestWords(query, signedIn).map((suggestion): Item => ({ kind: "word", suggestion }));
+    // Search words lead only when they're plainly what's being typed: Enter takes the top row.
+    const typedWords = suggestWords(query, signedIn);
+    const words = typedWords.items.map((suggestion): Item => ({ kind: "word", suggestion }));
+    const rows = typedWords.lead ? [...words, ...suggestions] : [...suggestions, ...words];
     const browse = { heading: "Browse filters", items: categories };
     // Typing a category's name ("frame", "ammo") means browsing it, so lead with it.
     const leadWithCategories =
@@ -205,8 +208,8 @@ export function WeaponSearchBox({
       );
     return (
       leadWithCategories
-        ? [browse, { items: [...words, ...suggestions] }]
-        : [{ items: [...words, ...suggestions] }, browse]
+        ? [browse, { items: rows }]
+        : [{ items: rows }, browse]
     ).filter((section) => section.items.length);
   }, [drill, drillText, index, params, pending, query, signedIn]);
   const items = useMemo(() => sections.flatMap((s) => s.items), [sections]);

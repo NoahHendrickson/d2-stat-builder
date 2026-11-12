@@ -4,6 +4,7 @@ import {
   mergeWeaponFilters,
   parseWeaponQuery,
   weaponQueryVocabulary,
+  type PatternFilter,
   type UnknownFilter,
 } from "./query-language";
 import { buildWeaponNameIndex } from "./weapon-name-index";
@@ -24,7 +25,7 @@ import {
   type WeaponSort,
 } from "./search";
 import type { WeaponIndex, WeaponSummary } from "./types";
-import { patternFor, type PatternProgress } from "@/lib/bungie/patterns";
+import { isPatternComplete, patternFor, type PatternProgress } from "@/lib/bungie/patterns";
 
 const collator = new Intl.Collator();
 
@@ -32,11 +33,17 @@ export interface WeaponSearchResult {
   results: WeaponSummary[];
   /** Filter tokens that mean nothing; when there are any, `results` is empty. */
   unknown: UnknownFilter[];
-  /**
-   * The query has a `pattern:` filter but no pattern progress was given (signed out, or
-   * still loading); `results` is empty until it is.
-   */
-  needsPatterns?: boolean;
+}
+
+/** A craftable weapon whose pattern is (or isn't) finished; no progress record counts as unfinished. */
+function matchesPattern(
+  weapon: WeaponSummary,
+  filter: PatternFilter,
+  patterns: Readonly<Record<string, PatternProgress>>,
+): boolean {
+  if (!weapon.craftable) return false;
+  const progress = patternFor(patterns, weapon.name);
+  return (progress !== undefined && isPatternComplete(progress)) === (filter === "complete");
 }
 
 /** Built once per downloaded catalog, independent of React renders. */
@@ -87,6 +94,12 @@ export function createWeaponCatalog(raw: WeaponIndex) {
     .sort(collator.compare)
     .map((value) => ({ value, count: 0 }));
 
+  /** Whether the query has a working `pattern:` filter, so the caller should load progress. */
+  function usesPatterns(query: string): boolean {
+    const parsed = parseWeaponQuery(query, vocabulary);
+    return parsed.pattern !== undefined && parsed.unknown.length === 0;
+  }
+
   function search(
     query: string,
     filters: WeaponFilters,
@@ -97,8 +110,9 @@ export function createWeaponCatalog(raw: WeaponIndex) {
     const parsed = parseWeaponQuery(query, vocabulary);
     // An unknown filter (`is:arcc`) means nothing, so it matches nothing.
     if (parsed.unknown.length > 0) return { results: [], unknown: parsed.unknown };
+    // A `pattern:` search matches nothing until the player's progress is given.
     const pattern = parsed.pattern;
-    if (pattern && !patterns) return { results: [], unknown: [], needsPatterns: true };
+    if (pattern && !patterns) return { results: [], unknown: [] };
     const text = expandWeaponQueryAliases(parsed.text).toLowerCase();
     let cached = textCache.get(text);
     if (!cached) {
@@ -123,22 +137,16 @@ export function createWeaponCatalog(raw: WeaponIndex) {
         textCache.delete(textCache.keys().next().value!);
       textCache.set(text, cached);
     }
-    let filtered = filterWeapons(
+    const filtered = filterWeapons(
       cached.matches,
       mergeWeaponFilters(filters, parsed.filters),
       index.perks,
     );
-    if (pattern && patterns) {
-      const wantComplete = pattern === "complete";
-      filtered = filtered.filter((w) => {
-        if (!w.craftable) return false;
-        const p = patternFor(patterns, w.name);
-        return (p !== undefined && p.progress >= p.needed) === wantComplete;
-      });
-    }
     const unique = new Map<number, WeaponSummary>();
     for (const weapon of filtered) {
       const primary = representative.get(weapon.hash) ?? weapon;
+      // Judged on the row that shows (its pool's representative), not the version that matched.
+      if (pattern && !matchesPattern(primary, pattern, patterns!)) continue;
       unique.set(primary.hash, primary);
     }
     const results = rankWeaponResults(
@@ -166,7 +174,7 @@ export function createWeaponCatalog(raw: WeaponIndex) {
 
   // `allWeapons` keeps the superseded versions browse hides: old copies still drop
   // (and sit in vaults) under those hashes.
-  return { ...index, weapons, allWeapons: index.weapons, facets, search, poolLabel, comboPartners };
+  return { ...index, weapons, allWeapons: index.weapons, facets, search, usesPatterns, poolLabel, comboPartners };
 }
 
 export type WeaponCatalog = ReturnType<typeof createWeaponCatalog>;

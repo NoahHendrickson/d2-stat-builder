@@ -71,6 +71,9 @@ export function patternProgress(
   return out;
 }
 
+/** Every pattern the weapon needs is extracted: it can be crafted. */
+export const isPatternComplete = ({ progress, needed }: PatternProgress) => progress >= needed;
+
 /**
  * A weapon's pattern progress by its name. Adept, Harrowed and Timelost copies share the
  * base weapon's pattern, so a trailing "(…)" is dropped when the full name has none.

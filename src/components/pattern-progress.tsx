@@ -2,7 +2,7 @@
 
 import { CraftGlyphIcon } from "@/components/armor-thumb";
 import { CRAFT_BAR } from "@/components/craft-glyph-paths";
-import { patternFor } from "@/lib/bungie/patterns";
+import { isPatternComplete, patternFor } from "@/lib/bungie/patterns";
 import { usePatterns } from "@/lib/bungie/use-patterns";
 import { cn } from "@/lib/utils";
 
@@ -25,7 +25,7 @@ export function PatternProgress({
   const pattern = patternFor(usePatterns().data, name);
   if (!pattern) return null;
   const { progress, needed } = pattern;
-  const label = progress >= needed ? "Unlocked" : `${progress} of ${needed}`;
+  const label = isPatternComplete(pattern) ? "Unlocked" : `${progress} of ${needed}`;
   const inline = layout === "inline";
   return (
     <div className={cn("flex text-[11px]", inline ? "items-center gap-2.5" : "flex-col gap-1.5", className)}>

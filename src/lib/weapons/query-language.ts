@@ -45,7 +45,7 @@ export interface ParsedWeaponQuery {
 export type PatternFilter = "complete" | "incomplete";
 
 /** `pattern:` values, squashed. */
-const PATTERN_VALUES: Readonly<Record<string, PatternFilter>> = {
+export const PATTERN_VALUES: Readonly<Record<string, PatternFilter>> = {
   complete: "complete",
   completed: "complete",
   unlocked: "complete",

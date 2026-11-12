@@ -183,10 +183,13 @@ export default async function ({ page, app, step, shot, expect, log }) {
     const listed = (name) => page.exists({ role: "button", name: `View ${name} perks` });
     await page.waitFor(() => listed("Veiled Threat"));
     await shot("pattern-incomplete");
-    await page.fill(box, "Osteo Striga pattern:incomplete");
-    await page.waitFor(async () => !(await listed("Osteo Striga")));
+    // Osteo Striga is 5 of 5: listed under pattern:complete, and (once the deferred search
+    // has settled on the new query, shown by the empty state) not under pattern:incomplete.
     await page.fill(box, "Osteo Striga pattern:complete");
     await page.waitFor(() => listed("Osteo Striga"));
-    expect(true, "Osteo Striga (5 of 5) lists under pattern:complete only");
+    await page.fill(box, "Osteo Striga pattern:incomplete");
+    await page.waitForText(/No weapons match this search/);
+    expect((await page.value(box)) === "Osteo Striga pattern:incomplete", "the search settled on pattern:incomplete");
+    expect(!(await listed("Osteo Striga")), "Osteo Striga (5 of 5) isn't listed under pattern:incomplete");
   });
 }

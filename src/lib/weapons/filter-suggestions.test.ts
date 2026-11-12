@@ -252,7 +252,7 @@ describe("activeFilterChips", () => {
 });
 
 describe("suggestWords", () => {
-  const words = (query: string, signedIn = true) => suggestWords(query, signedIn).map((w) => w.word);
+  const words = (query: string, signedIn = true) => suggestWords(query, signedIn).items.map((w) => w.word);
 
   it("offers is:/not:craftable and, signed in, the pattern words for craftable", () => {
     expect(words("craft")).toEqual(["is:craftable", "not:craftable", "pattern:incomplete", "pattern:complete"]);
@@ -260,16 +260,35 @@ describe("suggestWords", () => {
     expect(words("fatebringer patt")).toEqual(["pattern:incomplete", "pattern:complete"]);
   });
 
-  it("completes a started word, skips one already typed, and waits for three letters", () => {
+  it("completes a started word, pattern: values by any spelling the parser takes", () => {
     expect(words("is:cr")).toEqual(["is:craftable"]);
     expect(words("pattern:c")).toEqual(["pattern:complete"]);
-    expect(words("is:craftable craft")).toEqual(["not:craftable", "pattern:incomplete", "pattern:complete"]);
+    expect(words("pattern:un")).toEqual(["pattern:incomplete", "pattern:complete"]);
+    expect(words("pattern:lo")).toEqual(["pattern:incomplete"]);
     expect(words("is:craftable")).toEqual([]);
     expect(words("cr")).toEqual([]);
   });
 
+  it("offers nothing that contradicts or repeats a word already in the query", () => {
+    expect(words("pattern:complete craft")).toEqual(["is:craftable", "not:craftable"]);
+    expect(words("not:craftable craft")).toEqual(["pattern:incomplete", "pattern:complete"]);
+    expect(words("craftable:yes craft")).toEqual(["pattern:incomplete", "pattern:complete"]);
+    expect(words("is:craftble craft")).toEqual(["pattern:incomplete", "pattern:complete"]);
+  });
+
+  it("leads the list only for a word that's plainly one of these", () => {
+    expect(suggestWords("craftable", true).lead).toBe(true);
+    expect(suggestWords("pattern:", true).lead).toBe(true);
+    // "com", "inc", "unl" offer nothing, and a short prefix could be a perk, so it trails.
+    expect(suggestWords("comp", true).items).toEqual([]);
+    expect(suggestWords("cra", true).lead).toBe(false);
+  });
+
   it("has a grey hint for each word", () => {
-    expect(suggestWords("pattern", true)).toContainEqual({ word: "pattern:incomplete", hint: "Patterns you haven't finished" });
+    expect(suggestWords("pattern", true).items).toContainEqual({
+      word: "pattern:incomplete",
+      hint: "Patterns you haven't finished",
+    });
   });
 
   it("swaps the word being typed for the pick", () => {

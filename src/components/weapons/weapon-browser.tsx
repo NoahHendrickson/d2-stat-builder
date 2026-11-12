@@ -64,8 +64,6 @@ const SORT_ITEMS: Record<string, string> = Object.fromEntries(SORTS);
 const SPLIT_MIN_PX = 1024;
 
 const NO_RESULTS: WeaponSearchResult = { results: [], unknown: [] };
-/** A `pattern:` filter in the query, which needs the player's pattern progress. */
-const PATTERN_FILTER = /(^|\s)pattern:/i;
 /** A result row's nameplate height, and the gap left between plates. */
 const ROW_PX = 40;
 const ROW_GAP_PX = 4;
@@ -131,10 +129,14 @@ export function WeaponBrowser() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const detailsRef = useRef<HTMLElement>(null);
   const data = query.data;
-  // The player's pattern progress, loaded only for a `pattern:` search.
+  // The player's pattern progress, loaded and searched with only for a `pattern:`
+  // search, and only this session's (never a signed-out or other account's leftovers).
   const signedIn = sessionMembershipId(useSession().data) !== undefined;
-  const patterns = usePatterns(PATTERN_FILTER.test(deferred.query)).data;
-  const { results, unknown: unknownFilters, needsPatterns } = useMemo(
+  const wantsPatterns = data?.usesPatterns(deferred.query) ?? false;
+  const patternsQuery = usePatterns(wantsPatterns);
+  const patterns = wantsPatterns && signedIn ? patternsQuery.data : undefined;
+  const awaitingPatterns = wantsPatterns && !patterns;
+  const { results, unknown: unknownFilters } = useMemo(
     () =>
       data?.search(deferred.query, deferred.filters, deferred.sort, patterns) ??
       NO_RESULTS,
@@ -282,12 +284,25 @@ export function WeaponBrowser() {
           >
             {!query.isPending && results.length === 0 && (
               <div className="py-12 text-center">
-                {needsPatterns ? (
-                  <p className="text-sm text-muted-foreground">
-                    {signedIn
-                      ? "Loading your pattern progress…"
-                      : "Sign in to search by your pattern progress."}
-                  </p>
+                {awaitingPatterns ? (
+                  !signedIn ? (
+                    <p className="text-sm text-muted-foreground">Sign in to search by your pattern progress.</p>
+                  ) : patternsQuery.isError ? (
+                    <>
+                      <p>Couldn&apos;t load your pattern progress.</p>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="mt-3"
+                        disabled={patternsQuery.isFetching}
+                        onClick={() => void patternsQuery.refetch()}
+                      >
+                        Try again
+                      </Button>
+                    </>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">Loading your pattern progress…</p>
+                  )
                 ) : unknownFilters.length > 0 ? (
                   <>
                     <p>

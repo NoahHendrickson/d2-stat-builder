@@ -1,6 +1,7 @@
 import { expandWeaponQueryAliases } from "./aliases";
 import { matchRank } from "./rank";
 import type { FacetOption } from "./search";
+import { PATTERN_VALUES } from "./query-language";
 import { FILTERS, type WeaponSearchState } from "./search-state";
 
 /** A filter family the search box can suggest values from, keyed by its URL param. */
@@ -374,37 +375,64 @@ export interface WordSuggestion {
   hint: string;
 }
 
-const SEARCH_WORDS: readonly (WordSuggestion & { keys: readonly string[]; signedIn?: true })[] = [
-  { word: "is:craftable", hint: "Weapons you can craft", keys: ["craftable"] },
-  { word: "not:craftable", hint: "Weapons you can't craft", keys: ["craftable"] },
+/** `group`: a query holds one word per group (`is:` vs `not:craftable`, complete vs incomplete). */
+const SEARCH_WORDS: readonly (WordSuggestion & {
+  group: "craftable" | "pattern";
+  keys: readonly string[];
+  signedIn?: true;
+})[] = [
+  { word: "is:craftable", hint: "Weapons you can craft", group: "craftable", keys: ["craftable"] },
+  { word: "not:craftable", hint: "Weapons you can't craft", group: "craftable", keys: ["craftable"] },
   {
     word: "pattern:incomplete",
     hint: "Patterns you haven't finished",
-    keys: ["craftable", "pattern", "incomplete"],
+    group: "pattern",
+    keys: ["craftable", "pattern"],
     signedIn: true,
   },
   {
     word: "pattern:complete",
     hint: "Patterns you've unlocked",
-    keys: ["craftable", "pattern", "complete", "unlocked"],
+    group: "pattern",
+    keys: ["craftable", "pattern"],
     signedIn: true,
   },
 ];
 
+/** Earlier words that already fill a group: any craftable word, any `pattern:`. */
+const GROUP_TOKENS = {
+  craftable: /^(?:(?:is|not):crafta?ble|craftable:)/i,
+  pattern: /^pattern:/i,
+} as const;
+
 /**
  * Search words for the word being typed (the query's last): typing "craft" or "pattern"
  * offers `is:craftable`, `not:craftable` and, signed in, `pattern:incomplete` /
- * `pattern:complete`; a started word ("is:cr", "pattern:") offers the ones it begins.
- * Nothing under three letters, or for a word already in the query.
+ * `pattern:complete`; a started word ("is:cr", "pattern:un") offers the ones it begins,
+ * `pattern:` values by any spelling the parser takes. A group the query already has
+ * (`not:craftable`, `pattern:complete`) offers nothing more, so no pick contradicts it.
+ * Nothing under three letters. `lead`: the word is plainly one of these (it has a colon,
+ * or is "craftable"/"pattern" in full), so they go above the value suggestions; a
+ * shorter prefix ("cra", "pat") could be a perk, so they go after.
  */
-export function suggestWords(query: string, signedIn: boolean): WordSuggestion[] {
+export function suggestWords(query: string, signedIn: boolean): { items: WordSuggestion[]; lead: boolean } {
   const typed = query.match(/(\S*)$/)![1].toLowerCase();
-  if (typed.length < 3) return [];
-  const present = new Set(query.toLowerCase().split(/\s+/));
-  return SEARCH_WORDS.filter(({ word, keys, signedIn: needsSignIn }) => {
-    if ((needsSignIn && !signedIn) || word === typed || present.has(word)) return false;
-    return typed.includes(":") ? word.startsWith(typed) : keys.some((key) => key.startsWith(typed));
+  if (typed.length < 3) return { items: [], lead: false };
+  const earlier = query.slice(0, query.length - typed.length).split(/\s+/).filter(Boolean);
+  const filled = (group: keyof typeof GROUP_TOKENS) => earlier.some((t) => GROUP_TOKENS[group].test(t));
+  const colon = typed.indexOf(":");
+  const items = SEARCH_WORDS.filter(({ word, group, keys, signedIn: needsSignIn }) => {
+    if ((needsSignIn && !signedIn) || word === typed || filled(group)) return false;
+    if (colon < 0) return keys.some((key) => key.startsWith(typed));
+    if (group === "pattern" && typed.startsWith("pattern:")) {
+      const value = typed.slice("pattern:".length).replace(/[^a-z0-9]+/g, "");
+      const canonical = word.slice("pattern:".length);
+      return Object.entries(PATTERN_VALUES).some(([spelling, to]) => to === canonical && spelling.startsWith(value));
+    }
+    return word.startsWith(typed);
   }).map(({ word, hint }) => ({ word, hint }));
+  const lead = colon >= 0 || SEARCH_WORDS.some(({ keys }) => keys.includes(typed));
+  return { items, lead };
 }
 
 /** The query with its last word replaced by `word`, ready for the next. */
