@@ -546,11 +546,9 @@ describe("buildWeaponIndex", () => {
     const byName = (n: string) => index.weapons.find((w) => w.name === n)!;
     expect(byName("Tarnation")).toMatchObject({ craftable: true, adept: false });
     expect(byName("Tarnation (Adept)")).toMatchObject({ craftable: false, adept: true });
-    // The pattern's crafted-only Sticky Grenades can't be on an adept.
-    const name = (i: number) => index.perks[i]!.name;
-    expect(byName("Tarnation").columns[0]!.craftedOnly?.map(name)).toEqual(["Sticky Grenades"]);
-    expect(byName("Tarnation (Adept)").columns[0]!.perkIndices.map(name).sort()).toEqual(["Mini Frags", "Spike Grenades"]);
-    expect(byName("Tarnation (Adept)").columns[0]).not.toHaveProperty("craftedOnly");
+    // It keeps the pattern's crafted-only perks: enhancing an adept reshapes its barrel and
+    // magazine from the recipe.
+    expect(byName("Tarnation (Adept)").columns[0]!.craftedOnly).toEqual(byName("Tarnation").columns[0]!.craftedOnly);
   });
 });
 

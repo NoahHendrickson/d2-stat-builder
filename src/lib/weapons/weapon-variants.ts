@@ -23,7 +23,8 @@ export function isAdeptWeaponName(name: string): boolean {
 
 /**
  * Craftable: the weapon has a crafting recipe and isn't an Adept, Timelost or Harrowed
- * copy. Raid adepts carry their base weapon's recipe but can't be crafted themselves.
+ * copy. Raid adepts carry their base weapon's recipe, which enhancing one uses to reshape
+ * its barrel and magazine, but can't be crafted themselves.
  */
 export function isCraftableWeapon(def: {
   displayProperties?: { name?: string };

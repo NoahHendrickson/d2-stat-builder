@@ -123,11 +123,8 @@ export function internWeaponCatalog(
 
   const summaries: WeaponSummary[] = weapons.map((weapon) => {
     const columns: InternedPerkColumn[] = weapon.columns.map((column) => {
-      // Crafted-only perks can't be on a weapon that can't be crafted (an adept shares
-      // them through its base weapon's recipe or the tier pool merge).
-      const perks = weapon.craftable ? column.perks : column.perks.filter((perk) => !perk.craftedOnly);
-      const perkIndices = perks.map((perk) => internPerk(perk));
-      const craftedOnly = perkIndices.filter((_, i) => perks[i]!.craftedOnly);
+      const perkIndices = column.perks.map((perk) => internPerk(perk));
+      const craftedOnly = perkIndices.filter((_, i) => column.perks[i]!.craftedOnly);
       return {
         kind: column.kind,
         perkIndices,
