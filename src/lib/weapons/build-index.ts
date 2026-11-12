@@ -15,7 +15,12 @@ import {
 } from "./weapon-provenance";
 import { buildWeaponMasterworkOptions } from "./weapon-masterwork";
 import { buildWeaponModOptions } from "./weapon-mods";
-import { reconcileAdeptTierPools, reconcileCraftableTwins } from "./weapon-variants";
+import {
+  isAdeptWeaponName,
+  isCraftableWeapon,
+  reconcileAdeptTierPools,
+  reconcileCraftableTwins,
+} from "./weapon-variants";
 import { GENERIC_WEAPON_TYPE_ICONS } from "./weapon-type-icon-paths";
 import type {
   AmmoTypeRef,
@@ -468,7 +473,7 @@ export function buildWeaponIndex(
     const investmentStats = weaponInvestmentStats(item, stats);
     const statGroupHash = item.stats?.statGroupHash ?? undefined;
     const masterworkOptions = buildWeaponMasterworkOptions(item, items, plugSets, stats);
-    const adept = /\((Adept|Timelost|Harrowed)\)/.test(name);
+    const adept = isAdeptWeaponName(name);
     const modOptions = buildWeaponModOptions(item, items, plugSets, sandboxPerks, adept);
 
     const element =
@@ -512,7 +517,7 @@ export function buildWeaponIndex(
       rarity: item.inventory?.tierTypeName ?? "Legendary",
       slot: BUCKET_SLOT[item.inventory?.bucketTypeHash ?? 0] ?? "",
       frame: columns.find((c) => c.kind === "Intrinsic")?.perks[0]?.name,
-      craftable: item.inventory?.recipeItemHash != null,
+      craftable: isCraftableWeapon(item),
       adept,
       seasonNumber: season?.seasonNumber,
       seasonName: season?.seasonName,

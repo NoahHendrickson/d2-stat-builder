@@ -149,6 +149,16 @@ describe("matchingCopies", () => {
     ]);
     expect(matchingCopies(p, { ...entry, ignoredInstanceIds: ["11"] })).toEqual([]);
   });
+
+  it("counts an enhanced copy, whose Crafted flag comes with Enhanced", () => {
+    const adept = makeEntry({ 2: 3, 3: 6 }, ADEPT)!;
+    const p = profile([
+      { hash: 1, id: "20", sockets: [[301], [402]], state: 8 | 32 },
+      { hash: 4, id: "21", sockets: [[301], [402]], state: 8 | 32 },
+    ]);
+    expect(matchingCopies(p, entry).map((c) => c.instanceId)).toEqual(["20"]);
+    expect(matchingCopies(p, adept).map((c) => c.instanceId)).toEqual(["21"]);
+  });
 });
 
 describe("picked extras are strict", () => {

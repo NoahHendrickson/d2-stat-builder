@@ -3,7 +3,13 @@
 export const meta = {
   fixture: "small",
   // Pattern progress the stub answers for wpn-pattern.
-  seed: () => ({ patterns: { "Veiled Threat": { progress: 2, needed: 5 }, "Osteo Striga": { progress: 5, needed: 5 } } }),
+  seed: () => ({
+    patterns: {
+      "Veiled Threat": { progress: 2, needed: 5 },
+      "Osteo Striga": { progress: 5, needed: 5 },
+      "Summum Bonum": { progress: 5, needed: 5 },
+    },
+  }),
 };
 
 const LIST = { role: "list", name: "Weapons" };
@@ -167,6 +173,17 @@ export default async function ({ page, app, step, shot, expect, log }) {
       await shot(`pattern-${text === "Unlocked" ? "unlocked" : "partial"}`);
       await page.press("Escape");
     }
+    // An Adept carries its base weapon's recipe but can't be crafted: no meter, even with
+    // the base pattern finished (the base shows Unlocked first, so progress has loaded).
+    await page.fill(box, "Summum Bonum");
+    await page.click({ role: "button", name: "View Summum Bonum perks" });
+    await page.waitFor(async () => (await page.exists(meter)) && (await page.attr(meter, "aria-valuetext")) === "Unlocked");
+    await page.press("Escape");
+    await page.click({ role: "button", name: "View Summum Bonum (Adept) perks" });
+    await page.waitFor({ role: "heading", name: "Summum Bonum (Adept)" });
+    expect(!(await page.exists(meter)), "Summum Bonum (Adept) shows no pattern progress");
+    await shot("pattern-adept-none");
+    await page.press("Escape");
   });
 
   await step("wpn-pattern-filter: typing craft offers the craftable and pattern words, and pattern: filters", async () => {

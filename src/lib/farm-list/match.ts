@@ -6,12 +6,10 @@ import { CLASS_NAMES } from "../armory/stats";
 import { BUCKETS } from "../inventory/buckets";
 import type { PickSlot, Roll } from "../weapons/pick-slots";
 import type { PerkRef, WeaponSummary } from "../weapons/types";
+import { ITEM_STATE_CRAFTED, ITEM_STATE_ENHANCED } from "../bungie/item-state";
 import { weaponVersionFamilyName } from "../weapons/weapon-variants";
 import { assignDrops } from "./assign-drops";
 import { FARM_LIST_SCHEMA_VERSION, isFarmDone, type FarmColumn, type FarmEntry, type FarmPerk, type WeaponFarmData, type WeaponFarmEntry } from "./types";
-
-/** `ItemState.Crafted`: a shaped copy, whose perks the player chose. */
-const CRAFTED = 8;
 
 /** The left and right perk columns: a weapon's first two Trait columns, by index. */
 export function traitColumns(weapon: Pick<WeaponSummary, "columns">): [number, number] | null {
@@ -176,7 +174,8 @@ export function ownedCopies(profile: DestinyProfileResponse): OwnedCopy[] {
       out.push({
         instanceId: item.itemInstanceId,
         itemHash: item.itemHash,
-        crafted: (item.state & CRAFTED) !== 0,
+        // Shaped, so the player chose its perks. Enhancing a drop sets Crafted too, with Enhanced.
+        crafted: (item.state & ITEM_STATE_CRAFTED) !== 0 && (item.state & ITEM_STATE_ENHANCED) === 0,
         place: place(item.bucketHash),
       });
     }

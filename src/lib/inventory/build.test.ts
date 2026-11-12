@@ -12,6 +12,7 @@ const items: Record<number, object> = {
   3: { displayProperties: { name: "Helm" }, itemType: 2, classType: 1, inventory: { bucketTypeHash: BUCKETS.helmet, tierType: 5 } },
   4: { displayProperties: { name: "Glimmer-ish" }, itemType: 0, inventory: { bucketTypeHash: MATERIAL_BUCKET, tierType: 2 } },
   5: { displayProperties: { name: "Shader" }, itemType: 0, inventory: { bucketTypeHash: BUCKETS.consumables, tierType: 2 } },
+  6: { displayProperties: { name: "Fatebringer (Timelost)" }, itemType: 3, inventory: { bucketTypeHash: BUCKETS.kinetic, tierType: 5, recipeItemHash: 2002 } },
 };
 const manifest = {
   def: (table: string, hash: number | null | undefined) => {
@@ -137,6 +138,9 @@ test("reads crafted, enhanced, and Deepsight state and the weapon's champion", (
             item(2, BUCKETS.vault, { itemInstanceId: "d", state: 8 | 32 }),
             // Crafted flag on a weapon with no pattern: it can only have been enhanced.
             item(1, BUCKETS.vault, { itemInstanceId: "e", state: 8 }),
+            // A raid adept carries the base recipe but can't be crafted.
+            item(6, BUCKETS.vault, { itemInstanceId: "f" }),
+            item(6, BUCKETS.vault, { itemInstanceId: "g", state: 8 }),
           ],
         },
       },
@@ -156,6 +160,9 @@ test("reads crafted, enhanced, and Deepsight state and the weapon's champion", (
   expect(byId.c.breakerType).toBeUndefined();
   expect(byId.d).toMatchObject({ crafted: false, enhanced: true });
   expect(byId.e).toMatchObject({ crafted: false, enhanced: true });
+  expect(byId.f).not.toHaveProperty("craftable");
+  expect(byId.g).toMatchObject({ crafted: false, enhanced: true });
+  expect(byId.g).not.toHaveProperty("craftable");
 });
 
 test("reads the champion a frame or exotic perk grants through its hidden sandbox perk", () => {
