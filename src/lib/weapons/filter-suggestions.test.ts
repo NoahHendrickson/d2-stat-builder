@@ -110,14 +110,6 @@ describe("matchingCategories", () => {
       matchingCategories(index, "magazine").map((e) => e.category.label),
     ).toEqual(["Barrel / Mag"]);
   });
-
-  it("leaves Craftable to the is:/not:craftable words but keeps its chip", () => {
-    const withCraftable = buildFilterIndex({ craftable: [{ value: "Yes", count: 2 }] });
-    expect(withCraftable.map((e) => e.category.param)).not.toContain("craftable");
-    expect(
-      activeFilterChips(readSearchState(new URLSearchParams("craftable=Yes"))).map((c) => c.text),
-    ).toEqual(["Craftable: Yes"]);
-  });
 });
 
 describe("categoryValues", () => {

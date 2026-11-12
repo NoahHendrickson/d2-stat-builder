@@ -49,7 +49,11 @@ import {
   withoutFilter,
 } from "@/lib/weapons/filter-suggestions";
 import { resolveFrame } from "@/lib/weapons/pick-slots";
-import { SORTS, readSearchState } from "@/lib/weapons/search-state";
+import {
+  SORTS,
+  readSearchState,
+  withLegacyCraftableInQuery,
+} from "@/lib/weapons/search-state";
 import type { WeaponSearchResult } from "@/lib/weapons/catalog";
 import { sessionMembershipId } from "@/lib/armory/use-profile";
 import { useSession } from "@/lib/auth/use-session";
@@ -170,6 +174,12 @@ export function WeaponBrowser() {
   useEffect(() => {
     detailsRef.current?.scrollTo({ top: 0 });
   }, [shown?.hash]);
+  // An old `craftable=` link becomes its typed word in the URL too, so deleting
+  // the word from the box removes the filter.
+  useEffect(() => {
+    const next = withLegacyCraftableInQuery(currentParams);
+    if (next) navigate(next);
+  }, [currentParams]);
 
   function navigate(next: URLSearchParams, push = false) {
     const url = `${window.location.pathname}${next.size ? `?${next}` : ""}`;
