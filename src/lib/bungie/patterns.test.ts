@@ -63,10 +63,10 @@ describe("patternProgress", () => {
 describe("patternFor", () => {
   const patterns = { "Fang of Ir Yût": { progress: 4, needed: 5 }, "Found Verdict": { progress: 1, needed: 5 } };
 
-  it("matches by name, and Adept / Timelost copies to the base pattern", () => {
+  it("matches by exact name, so Adept / Timelost copies have none", () => {
     expect(patternFor(patterns, "Fang of Ir Yût")).toEqual({ progress: 4, needed: 5 });
-    expect(patternFor(patterns, "Fang of Ir Yût (Adept)")).toEqual({ progress: 4, needed: 5 });
-    expect(patternFor(patterns, "Found Verdict (Timelost)")).toEqual({ progress: 1, needed: 5 });
+    expect(patternFor(patterns, "Fang of Ir Yût (Adept)")).toBeUndefined();
+    expect(patternFor(patterns, "Found Verdict (Timelost)")).toBeUndefined();
     expect(patternFor(patterns, "Funnelweb")).toBeUndefined();
     expect(patternFor(undefined, "Funnelweb")).toBeUndefined();
   });

@@ -12,6 +12,7 @@ import {
 } from "@/lib/bungie/item-state";
 import type { Manifest } from "@/lib/manifest/load";
 import { parseArchetypeDescription } from "@/lib/armory/archetypes";
+import { isAdeptWeaponName } from "@/lib/weapons/weapon-variants";
 import {
   ASCENDANT_SHARD_HASH,
   ENHANCEMENT_CORE_HASH,
@@ -276,11 +277,14 @@ function buildItem(
   const watermark = def ? itemWatermark(def, item.versionNumber) : undefined;
   const state = item.state ?? 0;
   const isWeapon = def?.itemType === ITEM_TYPE_WEAPON;
+  const name = def?.displayProperties?.name || "Unknown item";
+  // Raid adepts carry their base weapon's recipe but can't be crafted themselves.
+  const craftable = !!def?.inventory?.recipeItemHash && !isAdeptWeaponName(name);
   // An enhanced weapon levels through the crafting system, so the Crafted flag can come
-  // with it: Enhanced wins, and so does Crafted on a weapon with no pattern to craft from.
+  // with it: Enhanced wins, and so does Crafted on a weapon that can't be crafted.
   const enhanced =
     (state & ITEM_STATE_ENHANCED) !== 0 ||
-    (isWeapon && (state & ITEM_STATE_CRAFTED) !== 0 && !def?.inventory?.recipeItemHash);
+    (isWeapon && (state & ITEM_STATE_CRAFTED) !== 0 && !craftable);
   const crafted = (state & ITEM_STATE_CRAFTED) !== 0 && !enhanced;
   const breaker = isWeapon
     ? manifest.def(
@@ -306,7 +310,7 @@ function buildItem(
     key,
     ...(item.itemInstanceId ? { instanceId: item.itemInstanceId } : {}),
     itemHash: item.itemHash,
-    name: def?.displayProperties?.name || "Unknown item",
+    name,
     ...(icon ? { icon } : {}),
     ...(ornamentIcon ? { ornamentIcon } : {}),
     ...(watermark ? { watermark } : {}),
@@ -333,7 +337,7 @@ function buildItem(
     locked: (state & ITEM_STATE_LOCKED) !== 0,
     masterworked: (state & ITEM_STATE_MASTERWORK) !== 0,
     crafted,
-    ...(def?.inventory?.recipeItemHash ? { craftable: true } : {}),
+    ...(craftable ? { craftable: true } : {}),
     enhanced,
     deepsight: (state & ITEM_STATE_HIGHLIGHTED_OBJECTIVE) !== 0,
     transferStatus: item.transferStatus ?? 0,

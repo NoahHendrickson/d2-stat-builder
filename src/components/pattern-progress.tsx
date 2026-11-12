@@ -17,7 +17,7 @@ export function PatternProgress({
   layout,
   className,
 }: {
-  /** The weapon's name: Adept and other "(…)" copies share the base pattern. */
+  /** The weapon's exact name, which is how Bungie's pattern records are keyed. */
   name: string;
   layout: "stacked" | "inline";
   className?: string;

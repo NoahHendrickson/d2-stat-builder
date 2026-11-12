@@ -16,6 +16,11 @@ type WeaponPerkPoolVersionCandidate = WeaponVersionCandidate &
 
 const ADEPT_NAME_SUFFIX_RE = /\s*\((Adept|Timelost|Harrowed)\)\s*$/;
 
+/** An Adept, Timelost or Harrowed copy, by its name's suffix. */
+export function isAdeptWeaponName(name: string): boolean {
+  return ADEPT_NAME_SUFFIX_RE.test(name);
+}
+
 /** Strip Adept/Harrowed/Timelost suffixes for detail version grouping. */
 export function weaponVersionFamilyName(name: string): string {
   return name.replace(ADEPT_NAME_SUFFIX_RE, "").trim();

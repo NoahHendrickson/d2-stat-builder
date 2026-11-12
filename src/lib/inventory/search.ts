@@ -16,6 +16,7 @@ import { BUCKETS } from "./buckets";
 import type { InventoryItem, ManagerInventory } from "./build";
 import type { Place } from "./moves";
 import { WEAPON_CATEGORIES, WEAPON_TYPE_ALIASES } from "./weapon-types";
+import { isAdeptWeaponName } from "@/lib/weapons/weapon-variants";
 import {
   AMMO_WORDS,
   CHAMPION_SYNONYMS,
@@ -193,8 +194,6 @@ export const KEY_VALUES: Readonly<Record<string, readonly string[]>> = {
   ammo: Object.keys(AMMO_NAMES),
 };
 
-/** Adept-tier reprises: Trials/Nightfall "(Adept)", raid "(Timelost)" and "(Harrowed)". */
-const ADEPT_NAME = /\((adept|timelost|harrowed)\)/i;
 /** TransferStatuses.NotTransferrable. */
 const TRANSFER_NOT_TRANSFERRABLE = 2;
 
@@ -243,7 +242,7 @@ function isKeyword(word: string): Predicate | undefined {
     case "deepsight":
       return (i) => i.deepsight;
     case "adept":
-      return (i) => i.itemType === ITEM_TYPE_WEAPON && ADEPT_NAME.test(i.name);
+      return (i) => i.itemType === ITEM_TYPE_WEAPON && isAdeptWeaponName(i.name);
     case "transferable":
     case "movable":
       return (i) => (i.transferStatus & TRANSFER_NOT_TRANSFERRABLE) === 0;

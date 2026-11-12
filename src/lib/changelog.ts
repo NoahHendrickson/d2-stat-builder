@@ -15,6 +15,7 @@ export const CHANGELOG: readonly ChangelogEntry[] = [
     date: "2026-11-12",
     changes: [
       "Weapon search: pattern:incomplete and pattern:complete find craftable weapons by your own pattern progress.",
+      "Weapon search: raid Adept weapons can go on the Farm list, since they can't be crafted.",
     ],
   },
   {

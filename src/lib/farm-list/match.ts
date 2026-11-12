@@ -6,7 +6,7 @@ import { CLASS_NAMES } from "../armory/stats";
 import { BUCKETS } from "../inventory/buckets";
 import type { PickSlot, Roll } from "../weapons/pick-slots";
 import type { PerkRef, WeaponSummary } from "../weapons/types";
-import { weaponVersionFamilyName } from "../weapons/weapon-variants";
+import { isAdeptWeaponName, weaponVersionFamilyName } from "../weapons/weapon-variants";
 import { assignDrops } from "./assign-drops";
 import { FARM_LIST_SCHEMA_VERSION, isFarmDone, type FarmColumn, type FarmEntry, type FarmPerk, type WeaponFarmData, type WeaponFarmEntry } from "./types";
 
@@ -215,20 +215,22 @@ export function hasTraits(profile: DestinyProfileResponse, instanceId: string, t
 /**
  * The copies of a listed weapon that rolled both traits and every required extra (a
  * picked barrel, magazine or origin trait), other than the ones the entry ignores.
- * Crafted copies don't count: the player chose those perks.
+ * Crafted copies don't count: the player chose those perks. An adept can't be crafted, so
+ * its Crafted flag only means it was enhanced.
  */
 export function matchingCopies(
   profile: DestinyProfileResponse,
-  entry: Pick<WeaponFarmData, "weaponHashes" | "traits" | "extras" | "ignoredInstanceIds">,
+  entry: Pick<WeaponFarmData, "weaponName" | "weaponHashes" | "traits" | "extras" | "ignoredInstanceIds">,
   copies: readonly OwnedCopy[] = ownedCopies(profile),
 ): OwnedCopy[] {
   const hashes = new Set(entry.weaponHashes);
   const ignored = new Set(entry.ignoredInstanceIds);
   const extras = requiredExtras(entry);
+  const adept = isAdeptWeaponName(entry.weaponName);
   return copies.filter(
     (c) =>
       hashes.has(c.itemHash) &&
-      !c.crafted &&
+      (adept || !c.crafted) &&
       !ignored.has(c.instanceId) &&
       hasTraits(profile, c.instanceId, entry.traits) &&
       extras.every((perk) => copyHasPerk(profile, c.instanceId, perk)),

@@ -509,6 +509,46 @@ describe("buildWeaponIndex", () => {
     expect(magazine!.craftedOnly?.map(name)).toEqual(["Sticky Grenades"]);
     expect(index.perks.find((p) => p.name === "Sticky Grenades")).not.toHaveProperty("craftedOnly");
   });
+
+  it("doesn't call an adept craftable just because it carries the base weapon's recipe", () => {
+    const weapon = (hash: number, name: string) => ({
+      hash,
+      itemType: 3,
+      displayProperties: { name, icon: "" },
+      inventory: { recipeItemHash: 501, bucketTypeHash: 953998645 },
+      equippingBlock: { ammoType: 3 },
+      sockets: {
+        socketEntries: [{ randomizedPlugSetHash: 100 }],
+        socketCategories: [{ socketCategoryHash: 4241085061, socketIndexes: [0] }],
+      },
+    });
+    const defs = {
+      DestinyInventoryItemDefinition: {
+        ...magazines,
+        500: weapon(500, "Tarnation"),
+        502: weapon(502, "Tarnation (Adept)"),
+        501: {
+          hash: 501,
+          displayProperties: { name: "Tarnation", icon: "" },
+          sockets: { socketEntries: [{ reusablePlugSetHash: 200 }] },
+        },
+      },
+      DestinyPlugSetDefinition: { 100: plugSet(magazinePool), 200: plugSet([1, 3, 11, 13]) },
+      DestinyStatDefinition: {},
+      DestinyStatGroupDefinition: {},
+      DestinyDamageTypeDefinition: {},
+      DestinySeasonDefinition: {},
+      DestinyCollectibleDefinition: {},
+      DestinyPresentationNodeDefinition: {},
+    } as unknown as ManifestDefs;
+
+    const { index } = buildWeaponIndex(defs, "test");
+    const byName = (n: string) => index.weapons.find((w) => w.name === n)!;
+    expect(byName("Tarnation")).toMatchObject({ craftable: true, adept: false });
+    expect(byName("Tarnation (Adept)")).toMatchObject({ craftable: false, adept: true });
+    // It still rolls the pattern's enhanced and crafted-only perks.
+    expect(byName("Tarnation (Adept)").columns[0]!.craftedOnly).toEqual(byName("Tarnation").columns[0]!.craftedOnly);
+  });
 });
 
 describe("buildColumnPerks", () => {
