@@ -16,7 +16,6 @@ export const FILTERS = [
   ["rarity", "Rarity"],
   ["source", "Source"],
   ["season", "Season"],
-  ["craftable", "Craftable"],
 ] as const;
 export const SORTS = [
   ["season-desc", "Newest"],
@@ -30,7 +29,26 @@ export function readAmmoGen(raw: string | null): number | null {
   return Number(raw.trim());
 }
 
-export function readSearchState(params: URLSearchParams) {
+/**
+ * Links from before Craftable left Browse filters carry `craftable=Yes|No`. This
+ * moves it into `q` as `is:`/`not:craftable`, the one way Craftable is set now.
+ * Null when there's nothing to move.
+ */
+export function withLegacyCraftableInQuery(params: URLSearchParams): URLSearchParams | null {
+  if (!params.has("craftable")) return null;
+  const values = new Set(params.getAll("craftable").map((v) => v.trim().toLowerCase()));
+  const next = new URLSearchParams(params);
+  next.delete("craftable");
+  // Yes and No together matched everything, so they add no word.
+  if (values.has("yes") !== values.has("no")) {
+    const word = values.has("yes") ? "is:craftable" : "not:craftable";
+    next.set("q", [params.get("q")?.trim(), word].filter(Boolean).join(" "));
+  }
+  return next;
+}
+
+export function readSearchState(raw: URLSearchParams) {
+  const params = withLegacyCraftableInQuery(raw) ?? raw;
   const filters: WeaponFilters = {};
   for (const [key] of FILTERS) {
     const values = [...new Set(params.getAll(key).filter(Boolean))];

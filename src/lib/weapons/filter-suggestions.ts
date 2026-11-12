@@ -72,7 +72,6 @@ export const FILTER_CATEGORIES: readonly FilterCategory[] = [
   { param: "season", label: LABELS.season },
   { param: "frame", label: LABELS.frame, prefixOnly: true, aliases: ["archetype"] },
   { param: "rarity", label: LABELS.rarity },
-  { param: "craftable", label: LABELS.craftable, max: 1 },
   { param: "adept", label: "Adept", max: 1 },
 ];
 

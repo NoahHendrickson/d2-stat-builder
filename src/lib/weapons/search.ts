@@ -527,9 +527,6 @@ export function collectFacets(weapons: WeaponSummary[]): Record<string, FacetOpt
   const season = new Map<string, number>();
   const champion = new Map<string, number>();
 
-  let craftableYes = 0;
-  let craftableNo = 0;
-
   for (const w of weapons) {
     if (!isCatalogWeapon(w)) continue;
     if (w.element) element.set(w.element, (element.get(w.element) ?? 0) + 1);
@@ -542,8 +539,6 @@ export function collectFacets(weapons: WeaponSummary[]): Record<string, FacetOpt
     if (w.source) source.set(w.source, (source.get(w.source) ?? 0) + 1);
     const seasonValue = seasonFacetValue(w);
     if (seasonValue) season.set(seasonValue, (season.get(seasonValue) ?? 0) + 1);
-    if (w.craftable) craftableYes++;
-    else craftableNo++;
   }
 
   return {
@@ -556,10 +551,6 @@ export function collectFacets(weapons: WeaponSummary[]): Record<string, FacetOpt
     source: sortFacetCounts(source),
     season: sortFacetCounts(season),
     champion: sortFacetCounts(champion),
-    craftable: [
-      { value: "Yes", count: craftableYes },
-      { value: "No", count: craftableNo },
-    ],
   };
 }
 
