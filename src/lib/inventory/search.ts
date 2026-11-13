@@ -4,7 +4,7 @@
 //                      matches as its is: filter
 //   #word              notes contain the hashtag
 //   is:/not:<keyword>  weapon, armor, exotic, crafted, craftable, locked, junk, dupe, heavy,
-//                      handcannon, light, …
+//                      handcannon, light, equipped, incurrentchar, onwarlock, …
 //   tag:<tag>          favorite, keep, junk, infuse, archive, none
 //   power:>=400        also >, <, <=, =; the same for tier: and stat:<name>:
 //   stat:total:>=60    armor stat total; any live stat by name (stat:range:>50)
@@ -44,7 +44,15 @@ export interface SearchContext {
   dupes: ReadonlySet<number>;
 }
 
-type Predicate = (item: InventoryItem, place: Place, ctx: SearchContext) => boolean;
+/** The search context plus what matchItems reads off the inventory: who holds what. */
+interface MatchContext extends SearchContext {
+  /** The most recently played character. */
+  currentCharacterId?: string;
+  /** Each character's DestinyClass, by character id. */
+  classOf: ReadonlyMap<string, number>;
+}
+
+type Predicate = (item: InventoryItem, place: Place, ctx: MatchContext) => boolean;
 
 export type ParsedSearch =
   | { ok: true; predicate: Predicate; usesPerks: boolean }
@@ -68,6 +76,10 @@ const TIER_NAMES = numbered<string, Rarity>(RARITY_WORDS, {
 });
 const TIER_COLORS: Record<string, number> = { yellow: 6, purple: 5, blue: 4, green: 3, white: 2 };
 const CLASS_NAMES: Record<string, number> = { titan: 0, hunter: 1, warlock: 2 };
+/** is:ontitan / is:onhunter / is:onwarlock: on a character of that class (equipped or not). */
+const ON_CLASS: Record<string, number> = Object.fromEntries(
+  Object.entries(CLASS_NAMES).map(([name, id]) => [`on${name}`, id]),
+);
 const AMMO_IDS: Record<Ammo, number> = { Primary: 1, Special: 2, Heavy: 3 };
 const AMMO_NAMES = numbered<string, Ammo>(AMMO_WORDS, AMMO_IDS);
 const BREAKER_NAMES = numbered<string, Champion>(CHAMPION_WORDS, {
@@ -125,6 +137,8 @@ export const IS_KEYWORDS: readonly string[] = [
   ...ITEM_TAGS,
   "notes",
   "equipped",
+  "incurrentchar",
+  ...Object.keys(ON_CLASS),
   "postmaster",
   "invault",
   "transferable",
@@ -209,6 +223,10 @@ function isKeyword(word: string): Predicate | undefined {
   if (tier !== undefined) return (i) => i.tierType === tier;
   const classType = numberFor(CLASS_NAMES);
   if (classType !== undefined) return (i) => i.classType === classType;
+  const onClass = numberFor(ON_CLASS);
+  if (onClass !== undefined) {
+    return (_, p, ctx) => p.kind === "character" && ctx.classOf.get(p.characterId) === onClass;
+  }
   const ammo = numberFor(AMMO_NAMES);
   if (ammo !== undefined) return (i) => i.ammoType === ammo;
   const breaker = numberFor(BREAKER_NAMES);
@@ -259,6 +277,9 @@ function isKeyword(word: string): Predicate | undefined {
       return (i, _, ctx) => notesOf(i, ctx) !== "";
     case "equipped":
       return (_, p) => p.kind === "character" && p.equipped;
+    case "incurrentchar":
+    case "currentchar":
+      return (_, p, ctx) => p.kind === "character" && p.characterId === ctx.currentCharacterId;
     case "postmaster":
       return (_, p) => p.kind === "postmaster";
     case "invault":
@@ -507,8 +528,14 @@ export function weaponCopies(inv: ManagerInventory, name: string): { item: Inven
 /** Keys of the items `predicate` matches. */
 export function matchItems(inv: ManagerInventory, predicate: Predicate, ctx: SearchContext): Set<string> {
   const out = new Set<string>();
+  // Characters come most recently played first (build.ts).
+  const match: MatchContext = {
+    ...ctx,
+    currentCharacterId: inv.characters[0]?.id,
+    classOf: new Map(inv.characters.map((c) => [c.id, c.classType])),
+  };
   forEachItem(inv, (item, place) => {
-    if (predicate(item, place, ctx)) out.add(item.key);
+    if (predicate(item, place, match)) out.add(item.key);
   });
   return out;
 }

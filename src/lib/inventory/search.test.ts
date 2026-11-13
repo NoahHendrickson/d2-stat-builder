@@ -150,3 +150,32 @@ test("reports mistakes instead of matching nothing", () => {
   expect(parseSearch("champion:constructor")?.ok).toBe(false);
   expect(parseSearch("ammo:__proto__")?.ok).toBe(false);
 });
+
+test("is:incurrentchar and is:onwarlock (and their not:) match by who holds the item", () => {
+  const warlock = {
+    ...inv.characters[0]!,
+    id: "w",
+    classType: 2,
+    equipped: { [BUCKETS.kinetic]: item("Warlock Gun", { power: 400 }) },
+    inventory: { [BUCKETS.energy]: [item("Warlock Spare", { bucketHash: BUCKETS.energy, power: 400 })] },
+    postmaster: [item("Warlock Mail", { itemType: 0, typeName: "Consumable" })],
+  };
+  // The hunter ("c") played last, so it comes first and is the current character.
+  const own: ManagerInventory = { ...inv, characters: [inv.characters[0]!, warlock] };
+  const find = (query: string) => {
+    const parsed = parseSearch(query);
+    if (!parsed?.ok) throw new Error(parsed ? parsed.error : "empty");
+    return [...matchItems(own, parsed.predicate, ctx)].sort();
+  };
+  expect(find("is:incurrentchar")).toEqual(["Ace of Spades", "Calus Mini-Tool"]);
+  expect(find("is:incurrentchar not:equipped")).toEqual(["Calus Mini-Tool"]);
+  expect(find("is:incurrentchar not:equipped is:haslight")).toEqual(["Calus Mini-Tool"]);
+  expect(find("is:onwarlock")).toEqual(["Warlock Gun", "Warlock Spare"]);
+  expect(find("is:onwarlock not:equipped")).toEqual(["Warlock Spare"]);
+  expect(find("is:onhunter")).toEqual(["Ace of Spades", "Calus Mini-Tool"]);
+  expect(find("is:ontitan")).toEqual([]);
+  expect(find("not:incurrentchar")).toEqual(["Helm A", "Helm B", "Warlock Gun", "Warlock Mail", "Warlock Spare"]);
+  expect(find("not:onwarlock is:weapon")).toEqual(["Ace of Spades", "Calus Mini-Tool"]);
+  expect(find("is:equipped")).toEqual(["Ace of Spades", "Warlock Gun"]);
+  expect(find("not:equipped is:weapon")).toEqual(["Calus Mini-Tool", "Warlock Spare"]);
+});
