@@ -115,6 +115,11 @@ export interface ManagerCharacter {
   postmaster: InventoryItem[];
 }
 
+/** The character played last, which the manager treats as the current one. */
+export function currentCharacter(inventory: ManagerInventory): ManagerCharacter | undefined {
+  return inventory.characters[0];
+}
+
 export interface ManagerInventory {
   /** Most recently played first, as in the game's character select. */
   characters: ManagerCharacter[];

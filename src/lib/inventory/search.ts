@@ -13,7 +13,7 @@
 import type { Annotations, ItemTag } from "./annotations";
 import { ITEM_TAGS } from "./annotations";
 import { BUCKETS } from "./buckets";
-import type { InventoryItem, ManagerInventory } from "./build";
+import { currentCharacter, type InventoryItem, type ManagerInventory } from "./build";
 import type { Place } from "./moves";
 import { WEAPON_CATEGORIES, WEAPON_TYPE_ALIASES } from "./weapon-types";
 import { isAdeptWeaponName } from "@/lib/weapons/weapon-variants";
@@ -160,13 +160,14 @@ export const IS_KEYWORDS: readonly string[] = [
   "notes",
   "equipped",
   "oncurrentchar",
-  ...Object.keys(ON_CLASS),
   "postmaster",
   "invault",
   "transferable",
   "haspower",
   "dupe",
   ...Object.keys(CLASS_NAMES),
+  // After the class words, so "lock" suggests is:warlock before is:onwarlock.
+  ...Object.keys(ON_CLASS),
   ...Object.keys(AMMO_NAMES),
   ...ELEMENTS,
   ...Object.keys(ELEMENT_SIDE_SETS),
@@ -576,10 +577,9 @@ export function weaponCopies(inv: ManagerInventory, name: string): { item: Inven
 /** Keys of the items `predicate` matches. */
 export function matchItems(inv: ManagerInventory, predicate: Predicate, ctx: SearchContext): Set<string> {
   const out = new Set<string>();
-  // Characters come most recently played first (build.ts).
   const match: MatchContext = {
     ...ctx,
-    currentCharacterId: inv.characters[0]?.id,
+    currentCharacterId: currentCharacter(inv)?.id,
     classOf: new Map(inv.characters.map((c) => [c.id, c.classType])),
   };
   forEachItem(inv, (item, place) => {

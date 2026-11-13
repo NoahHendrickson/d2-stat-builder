@@ -14,7 +14,7 @@ export const CHANGELOG: readonly ChangelogEntry[] = [
   {
     date: "2026-11-13",
     changes: [
-      "Items: search is:oncurrentchar, or is:onwarlock, is:onhunter and is:ontitan, to find what a character is holding, then Move all to send it to the vault.",
+      "Items: search is:oncurrentchar or is:onwarlock (onhunter, ontitan) to find what a character holds.",
       "Items: typing in the search box no longer lags.",
     ],
   },

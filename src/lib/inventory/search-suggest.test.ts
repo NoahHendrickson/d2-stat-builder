@@ -14,7 +14,7 @@ const texts = (query: string, caret = query.length) =>
 
 test("completes is: keywords, exact match first", () => {
   expect(texts("is:craft")).toEqual(["is:crafted", "is:craftable"]);
-  expect(texts("not:lock")).toEqual(["not:locked", "not:unlocked", "not:onwarlock", "not:warlock"]);
+  expect(texts("not:lock")).toEqual(["not:locked", "not:unlocked", "not:warlock", "not:onwarlock"]);
   // Already typed out and nothing else matches: nothing to offer.
   expect(texts("is:craftable")).toBeUndefined();
 });

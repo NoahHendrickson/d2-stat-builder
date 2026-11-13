@@ -2,7 +2,7 @@
 
 import { annotationsStore } from "@/lib/inventory/annotations";
 import type { InventoryItem } from "@/lib/inventory/build";
-import { applyMoves, locate, type Landing, type Place } from "@/lib/inventory/moves";
+import { applyMoves, canMove, locate, type Landing, type Place } from "@/lib/inventory/moves";
 import { recentlyMoved, type MoveOutcome } from "@/lib/inventory/move-queue";
 import { planSmartMove } from "@/lib/inventory/smart-moves";
 import { toast } from "@/lib/toast";
@@ -28,10 +28,17 @@ export function moveAll(actions: ManagerActions, items: readonly InventoryItem[]
   const placed = new Set<string>();
   const runs: Promise<MoveOutcome>[] = [];
   let skipped = 0;
+  let unmovable = 0;
   for (const item of items) {
     const at = locate(sim, item.key)?.place;
     if (!at || isThere(at, to)) {
       placed.add(item.key);
+      continue;
+    }
+    // Subclasses, emblems and the like never move: leave them out of the tally rather
+    // than report them as failed.
+    if (!canMove(item, at)) {
+      unmovable++;
       continue;
     }
     const plan = planSmartMove(sim, item, at, to, {
@@ -52,7 +59,7 @@ export function moveAll(actions: ManagerActions, items: readonly InventoryItem[]
   }
   const noRoom = "No room could be made, or they can't go there";
   if (runs.length === 0) {
-    if (skipped === 0) toast.info("Everything is already there");
+    if (skipped === 0) toast.info(unmovable === items.length ? "None of these can be moved" : "Everything is already there");
     else toast.error(`Couldn't move ${plural(skipped)}`, noRoom);
     return;
   }
