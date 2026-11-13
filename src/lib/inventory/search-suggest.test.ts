@@ -33,7 +33,7 @@ test("completes fixed and open-ended values, quoting multi-word ones", () => {
 
 test("a bare word suggests keys, keywords, and the account's types, perks, and items", () => {
   expect(texts("pe")).toEqual(["perk:"]);
-  expect(texts("craf")).toEqual(["is:crafted", "is:craftable"]);
+  expect(texts("craf")).toEqual(["is:crafted", "not:crafted", "is:craftable", "not:craftable"]);
   expect(texts("fate")).toEqual(["name:Fatebringer"]);
   expect(texts("out")).toEqual(["perk:outlaw"]);
   expect(texts("-is:ex")).toEqual(["-is:exotic"]);
@@ -58,4 +58,12 @@ test("applying a suggestion replaces the term and places the caret", () => {
     query: "is:exotic is:weapon",
     caret: 10,
   });
+});
+
+test("state words offer not: beside is:, other keywords don't", () => {
+  expect(texts("equ")).toEqual(expect.arrayContaining(["is:equipped", "not:equipped"]));
+  expect(texts("equ")!.indexOf("not:equipped")).toBe(texts("equ")!.indexOf("is:equipped") + 1);
+  expect(texts("oncurrent")).toEqual(["is:oncurrentchar", "not:oncurrentchar"]);
+  expect(texts("handcannon")).not.toContain("not:handcannon");
+  expect(texts("-equ")).not.toContain("-not:equipped");
 });

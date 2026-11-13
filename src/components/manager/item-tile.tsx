@@ -16,7 +16,7 @@ import { useMovePending } from "@/lib/inventory/move-queue";
 import { useShowOrnaments } from "@/lib/inventory/view-settings";
 import { cn } from "@/lib/utils";
 import { useManagerActions, usePhoneLayout, useTileMetrics } from "./manager-context";
-import { useSearchState } from "./search-store";
+import { useSearchTileRef } from "./search-store";
 import { TAG_ICONS } from "./tag-icons";
 import { FavoriteHeart } from "@/components/favorite-heart";
 
@@ -48,7 +48,7 @@ export const ItemTile = memo(function ItemTile({ item }: { item: InventoryItem }
   const pending = useMovePending(item.key);
   const icon = (useShowOrnaments() && item.ornamentIcon) || item.icon;
   const tag = useAnnotation(item.instanceId)?.tag;
-  const search = useSearchState(item.key);
+  const searchRef = useSearchTileRef(item.key);
   const label = [
     item.name,
     item.typeName,
@@ -67,19 +67,19 @@ export const ItemTile = memo(function ItemTile({ item }: { item: InventoryItem }
     // A div, not a button: Firefox won't start a drag on a <button>. self-start: never
     // stretched by a flex row. Images ignore the pointer so the drag grabs the whole tile.
     <div
+      ref={searchRef}
       role="button"
       tabIndex={0}
       draggable={Boolean(actions)}
       className={cn(
-        "flex shrink-0 cursor-pointer flex-col self-start p-px outline-none select-none transition-[opacity,outline-offset] duration-150 d2-hover-ring focus-visible:d2-tile-selected [&_img]:pointer-events-none",
+        "flex shrink-0 cursor-pointer flex-col self-start p-px outline-none select-none transition-[outline-offset] duration-150 d2-hover-ring focus-visible:d2-tile-selected [&_img]:pointer-events-none",
         item.masterworked ? "bg-item-frame-masterwork" : "bg-item-frame",
-        // A search dims what it doesn't match; with no search, archived items stay out
-        // of the way (as in DIM).
-        search === "miss"
-          ? "opacity-20"
-          : pending
-            ? "opacity-50"
-            : search === "none" && tag === "archive" && "opacity-60",
+        // A search dims what it doesn't match (data-search is set by search-store, not
+        // React); with no search, archived items stay out of the way (as in DIM). No
+        // opacity transition: every keystroke flips hundreds of tiles, and fading them
+        // all at once made typing lag.
+        "data-[search=miss]:opacity-20",
+        pending ? "opacity-50" : tag === "archive" && "[&:not([data-search])]:opacity-60",
       )}
       // The icon sits inside a 1px frame, so it is 2px narrower than the tile.
       style={{ width, "--tile-inner": `${width - 2}px` } as CSSProperties}

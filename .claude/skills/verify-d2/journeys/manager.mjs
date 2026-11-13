@@ -142,8 +142,8 @@ export default async function ({ page, app, stub, step, shot, expect, log }) {
   await step("mgr-pattern: a craftable weapon's panel shows its pattern progress", async () => {
     await page.fill({ role: "combobox", name: "Search items" }, "is:craftable not:crafted");
     await page.waitFor({ role: "button", name: /^\d[\d,]* items?$/ });
-    // The search dims every tile it doesn't match.
-    const [a, b] = JSON.parse(await page.evalJs(`JSON.stringify([...document.querySelectorAll('${VAULT_TILE.css}')].filter((t) => !t.className.includes("opacity-")).map((t) => t.getAttribute("aria-label") ?? ""))`));
+    // The search marks every tile data-search="match" or "miss" (and dims the misses).
+    const [a, b] = JSON.parse(await page.evalJs(`JSON.stringify([...document.querySelectorAll('${VAULT_TILE.css}[data-search="match"]')].map((t) => t.getAttribute("aria-label") ?? ""))`));
     const base = (label) => label.split(",")[0].replace(/\s*\([^)]*\)$/, "");
     stub.store.patterns[base(a)] = { progress: 2, needed: 5 };
     stub.store.patterns[base(b)] = { progress: 5, needed: 5 };

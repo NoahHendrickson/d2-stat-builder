@@ -1,6 +1,6 @@
 "use client";
 
-import { useDeferredValue, useEffect, useId, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useDeferredValue, useEffect, useId, useMemo, useRef, useState } from "react";
 import { HugeiconsIcon } from "@hugeicons/react";
 import {
   Cancel01Icon,
@@ -123,6 +123,8 @@ export function ManagerSearch({
   const [showResults, setShowResults] = useState(false);
   // Clearing the search closes the drawer for good, not until the next search.
   if (showResults && !matches) setShowResults(false);
+  const toggleResults = useCallback(() => setShowResults((s) => !s), []);
+  const closeResults = useCallback(() => setShowResults(false), []);
 
   // What the account holds, for suggestions; perk names are read only once asked for.
   const vocab = useMemo<SearchVocab>(() => {
@@ -374,33 +376,60 @@ export function ManagerSearch({
         {error ? (
           <span className="text-destructive truncate">{error}</span>
         ) : matches ? (
-          <TooltipLabel label="Show them all">
-            <button
-              type="button"
-              aria-haspopup="dialog"
-              aria-expanded={showResults}
-              onClick={() => setShowResults((s) => !s)}
-              className="text-muted-foreground hover:text-foreground aria-expanded:text-foreground normal:rounded-[6px] cursor-pointer truncate px-1 underline decoration-foreground/30 underline-offset-4 outline-none hover:decoration-foreground focus-visible:ring-1 focus-visible:ring-outline-strong"
-            >
-              {matches.size.toLocaleString()} {matches.size === 1 ? "item" : "items"}
-            </button>
-          </TooltipLabel>
+          <MatchCount count={matches.size} open={showResults} onToggle={toggleResults} />
         ) : null}
       </span>
-      {matches && matches.size > 0 && <BulkActions inventory={inventory} matches={matches} />}
-      <SearchHelp />
-      <ViewMenu />
-      {layoutMenu && <ItemsSettings />}
-      <SearchResultsDrawer
+      {/* Memoized: typing re-renders the field, and these menus only change with the
+          (deferred) matches, so they'd otherwise re-render on every keystroke. */}
+      {matches && matches.size > 0 && <MemoBulkActions inventory={inventory} matches={matches} />}
+      <Toolbar layoutMenu={layoutMenu} />
+      <MemoSearchResultsDrawer
         inventory={inventory}
         query={deferred}
         matches={matches}
         open={showResults}
-        onClose={() => setShowResults(false)}
+        onClose={closeResults}
       />
     </div>
   );
 }
+
+const MatchCount = memo(function MatchCount({
+  count,
+  open,
+  onToggle,
+}: {
+  count: number;
+  open: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <TooltipLabel label="Show them all">
+      <button
+        type="button"
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        onClick={onToggle}
+        className="text-muted-foreground hover:text-foreground aria-expanded:text-foreground normal:rounded-[6px] cursor-pointer truncate px-1 underline decoration-foreground/30 underline-offset-4 outline-none hover:decoration-foreground focus-visible:ring-1 focus-visible:ring-outline-strong"
+      >
+        {count.toLocaleString()} {count === 1 ? "item" : "items"}
+      </button>
+    </TooltipLabel>
+  );
+});
+
+/** The menus after the field, which don't depend on what's typed. */
+const Toolbar = memo(function Toolbar({ layoutMenu }: { layoutMenu?: boolean }) {
+  return (
+    <>
+      <SearchHelp />
+      <ViewMenu />
+      {layoutMenu && <ItemsSettings />}
+    </>
+  );
+});
+
+const MemoSearchResultsDrawer = memo(SearchResultsDrawer);
 
 const HELP: [string, string][] = [
   ["fatebringer", "Name, type, or perk contains it"],
@@ -408,7 +437,8 @@ const HELP: [string, string][] = [
   ["is:weapon  is:armor  is:exotic", "Kind and rarity"],
   ["is:crafted  is:craftable  is:deepsight", "Item state"],
   ["is:locked  is:dupe", "Lock and duplicates"],
-  ["is:equipped  is:invault  is:incurrentchar  is:onwarlock", "Where it is"],
+  ["is:equipped  is:invault  is:oncurrentchar", "Where it is"],
+  ["is:onwarlock  is:onhunter  is:ontitan", "On a character of that class"],
   ["tag:junk  tag:none  is:tagged", "Your tags"],
   ["is:solar  is:dark  is:heavy  is:overload", "Element, ammo, champion"],
   ["is:handcannon  is:lfr  is:adept", "Weapon type, adept"],
@@ -447,6 +477,8 @@ function SearchHelp() {
 }
 
 /** Tag, lock, or move every item the search matches. */
+const MemoBulkActions = memo(BulkActions);
+
 function BulkActions({ inventory, matches }: { inventory: ManagerInventory; matches: ReadonlySet<string> }) {
   const actions = useManagerActions();
   const found = useMemo(() => {

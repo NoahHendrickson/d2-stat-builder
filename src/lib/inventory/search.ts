@@ -4,7 +4,7 @@
 //                      matches as its is: filter
 //   #word              notes contain the hashtag
 //   is:/not:<keyword>  weapon, armor, exotic, crafted, craftable, locked, junk, dupe, heavy,
-//                      handcannon, light, equipped, incurrentchar, onwarlock, …
+//                      handcannon, light, equipped, oncurrentchar, onwarlock, …
 //   tag:<tag>          favorite, keep, junk, infuse, archive, none
 //   power:>=400        also >, <, <=, =; the same for tier: and stat:<name>:
 //   stat:total:>=60    armor stat total; any live stat by name (stat:range:>50)
@@ -120,6 +120,28 @@ const SLOT_ALIASES = numbered<string, WeaponSlot>(WEAPON_SLOT_ALIASES, WEAPON_SL
 /** Strip case, spaces, and punctuation so "Hand Cannon" and "handcannon" meet. */
 export const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9#]+/g, "");
 
+// A search runs on every keystroke over every item, so each item's normalized name,
+// type, and perk names are worked out once and kept (items and perk lists are stable
+// objects until the inventory or perk lookup changes).
+const normalizedNames = new WeakMap<InventoryItem, string>();
+const normalizedTypes = new WeakMap<InventoryItem, string>();
+const normalizedLists = new WeakMap<readonly string[], readonly string[]>();
+const nameOf = (i: InventoryItem): string => {
+  let n = normalizedNames.get(i);
+  if (n === undefined) normalizedNames.set(i, (n = normalize(i.name)));
+  return n;
+};
+const typeOf = (i: InventoryItem): string => {
+  let n = normalizedTypes.get(i);
+  if (n === undefined) normalizedTypes.set(i, (n = normalize(i.typeName)));
+  return n;
+};
+const normalizedAll = (list: readonly string[]): readonly string[] => {
+  let n = normalizedLists.get(list);
+  if (!n) normalizedLists.set(list, (n = list.map(normalize)));
+  return n;
+};
+
 /** Every `is:` keyword, for help text and suggestions. */
 export const IS_KEYWORDS: readonly string[] = [
   "weapon",
@@ -137,7 +159,7 @@ export const IS_KEYWORDS: readonly string[] = [
   ...ITEM_TAGS,
   "notes",
   "equipped",
-  "incurrentchar",
+  "oncurrentchar",
   ...Object.keys(ON_CLASS),
   "postmaster",
   "invault",
@@ -156,6 +178,31 @@ export const IS_KEYWORDS: readonly string[] = [
   ...Object.keys(SLOT_ALIASES),
   ...Object.keys(TIER_COLORS),
 ];
+
+/**
+ * `is:` words about an item's state or where it is, where the opposite is a common
+ * search too, so suggestions offer `not:` beside them (`equ` → is:equipped, not:equipped).
+ */
+export const STATE_KEYWORDS: ReadonlySet<string> = new Set([
+  "masterwork",
+  "crafted",
+  "craftable",
+  "enhanced",
+  "deepsight",
+  "adept",
+  "locked",
+  "tagged",
+  ...ITEM_TAGS,
+  "notes",
+  "equipped",
+  "oncurrentchar",
+  ...Object.keys(ON_CLASS),
+  "postmaster",
+  "invault",
+  "transferable",
+  "haspower",
+  "dupe",
+]);
 
 /**
  * Keywords that describe what an item is, so typed on their own ("stasis", "hunter",
@@ -277,8 +324,9 @@ function isKeyword(word: string): Predicate | undefined {
       return (i, _, ctx) => notesOf(i, ctx) !== "";
     case "equipped":
       return (_, p) => p.kind === "character" && p.equipped;
+    case "oncurrentchar":
+    // DIM's name for it, so a search copied from there works (not suggested).
     case "incurrentchar":
-    case "currentchar":
       return (_, p, ctx) => p.kind === "character" && p.characterId === ctx.currentCharacterId;
     case "postmaster":
       return (_, p) => p.kind === "postmaster";
@@ -332,19 +380,19 @@ function filterTerm(key: string, raw: string): { predicate: Predicate; usesPerks
     case "notes":
       return { predicate: (i, _, c) => notesOf(i, c).includes(text) };
     case "name":
-      return { predicate: (i) => normalize(i.name).includes(value) };
+      return { predicate: (i) => nameOf(i).includes(value) };
     case "exactname":
-      return { predicate: (i) => normalize(i.name) === value };
+      return { predicate: (i) => nameOf(i) === value };
     case "perk":
     case "perkname":
-      return { predicate: (i, _, c) => c.perks(i).some((p) => normalize(p).includes(value)), usesPerks: true };
+      return { predicate: (i, _, c) => normalizedAll(c.perks(i)).some((p) => p.includes(value)), usesPerks: true };
     case "exactperk":
-      return { predicate: (i, _, c) => c.perks(i).some((p) => normalize(p) === value), usesPerks: true };
+      return { predicate: (i, _, c) => normalizedAll(c.perks(i)).some((p) => p === value), usesPerks: true };
     case "origin":
     case "origintrait":
-      return { predicate: (i, _, c) => c.origins(i).some((p) => normalize(p).includes(value)), usesPerks: true };
+      return { predicate: (i, _, c) => normalizedAll(c.origins(i)).some((p) => p.includes(value)), usesPerks: true };
     case "type":
-      return { predicate: (i) => normalize(i.typeName).includes(value) };
+      return { predicate: (i) => typeOf(i).includes(value) };
     case "element":
     case "damage":
       return { predicate: (i) => i.element === value };
@@ -448,14 +496,14 @@ export function parseSearch(query: string): ParsedSearch | null {
     const word = normalize(token);
     // A descriptive keyword: what it says ("stasis" is is:stasis), or an item named so.
     const keyword = BARE_KEYWORDS.has(word) ? isKeyword(word) : undefined;
-    if (keyword) return (i, p, c) => keyword(i, p, c) || normalize(i.name).includes(word);
+    if (keyword) return (i, p, c) => keyword(i, p, c) || nameOf(i).includes(word);
     // Plain text: the name, the type, a perk, or the notes.
     usesPerks = true;
     const text = token.toLowerCase();
     return (i, _, c) =>
-      normalize(i.name).includes(word) ||
-      normalize(i.typeName).includes(word) ||
-      c.perks(i).some((p) => normalize(p).includes(word)) ||
+      nameOf(i).includes(word) ||
+      typeOf(i).includes(word) ||
+      normalizedAll(c.perks(i)).some((p) => p.includes(word)) ||
       notesOf(i, c).includes(text);
   };
 
