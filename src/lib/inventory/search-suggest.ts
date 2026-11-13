@@ -1,7 +1,7 @@
 // Autocomplete for the manager's search box: the term under the caret is completed
 // from the query language (keys, is: keywords, tags, …) and from what the account
 // holds (weapon types, perk and item names, stat names).
-import { IS_KEYWORDS, KEY_VALUES, SEARCH_KEYS, normalize } from "./search";
+import { IS_KEYWORDS, KEY_VALUES, SEARCH_KEYS, STATE_KEYWORDS, normalize } from "./search";
 
 /** The account's open-ended values, read only when a suggestion needs them. */
 export interface SearchVocab {
@@ -60,21 +60,44 @@ function termAt(query: string, caret: number): [number, number] | undefined {
   return undefined;
 }
 
+/** A candidate normalized whole and word by word, for ranking. */
+interface Prepared {
+  value: string;
+  whole: string;
+  words: readonly string[];
+}
+
+// Suggestions are ranked on every keystroke against hundreds of perk and item names,
+// so each list is normalized once and kept (the lists are stable arrays).
+const preparedLists = new WeakMap<readonly string[], readonly Prepared[]>();
+function prepare(values: readonly string[]): readonly Prepared[] {
+  let out = preparedLists.get(values);
+  if (!out) {
+    out = values.map((value) => ({
+      value,
+      whole: normalize(value),
+      words: value.toLowerCase().split(/[\s\-–:'.]+/).map(normalize),
+    }));
+    preparedLists.set(values, out);
+  }
+  return out;
+}
+
 /** -1: is it, 0: starts with it, 1: a word starts with it, 2: contains it; undefined: no match. */
-function rank(candidate: string, typed: string): number | undefined {
+function rank({ whole, words }: Prepared, typed: string): number | undefined {
   if (!typed) return 0;
-  const c = normalize(candidate);
-  if (c === typed) return -1;
-  if (c.startsWith(typed)) return 0;
-  if (candidate.toLowerCase().split(/[\s\-–:'.]+/).some((w) => normalize(w).startsWith(typed))) return 1;
-  return c.includes(typed) ? 2 : undefined;
+  if (whole === typed) return -1;
+  if (whole.startsWith(typed)) return 0;
+  if (words.some((w) => w.startsWith(typed))) return 1;
+  return whole.includes(typed) ? 2 : undefined;
 }
 
 /** Best matches first, keeping the list's own order within a rank. */
 function matching(values: readonly string[], typed: string, worst: number): string[] {
   const ranked: { value: string; r: number; i: number }[] = [];
-  values.forEach((value, i) => {
-    const r = rank(value, typed);
+  prepare(values).forEach((candidate, i) => {
+    const { value } = candidate;
+    const r = rank(candidate, typed);
     if (r !== undefined && r <= worst) ranked.push({ value, r, i });
   });
   return ranked.sort((a, b) => a.r - b.r || a.i - b.i).map((x) => x.value);
@@ -122,7 +145,11 @@ export function suggestSearch(query: string, caret: number, vocab: SearchVocab):
     const typed = normalize(body);
     if (!typed) return undefined;
     for (const k of matching(SEARCH_KEYS, typed, 0)) add(`${k}:`, KEY_HINT);
-    for (const v of matching(IS_KEYWORDS, typed, 1)) add(`is:${v}`, KEY_HINT);
+    for (const v of matching(IS_KEYWORDS, typed, 1)) {
+      add(`is:${v}`, KEY_HINT);
+      // "-not:" would be a double negative; "-is:" already covers it.
+      if (!neg && STATE_KEYWORDS.has(v)) add(`not:${v}`, KEY_HINT);
+    }
     if (typed.length >= 2) {
       for (const v of matching(vocab.types(), typed, 1)) add(`type:${quote(v)}`, "Type");
       for (const v of matching(vocab.perks(), typed, 1)) add(`perk:${quote(v)}`, "Perk");

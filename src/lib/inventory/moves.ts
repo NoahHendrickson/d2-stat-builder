@@ -42,6 +42,17 @@ export const MOVABLE_BUCKETS: ReadonlySet<number> = new Set(
 );
 const ACCOUNT_BUCKETS: ReadonlySet<number> = new Set(ACCOUNT_ROWS.map((r) => r.hash));
 
+/**
+ * Whether the manager moves this item from where it sits: postmaster items always,
+ * account-wide items never, otherwise instanced gear in a movable bucket (not a
+ * subclass, emblem, …).
+ */
+export function canMove(item: InventoryItem, place: Place): boolean {
+  if (place.kind === "postmaster") return true;
+  if (place.kind === "account") return false;
+  return MOVABLE_BUCKETS.has(item.bucketHash) && Boolean(item.instanceId);
+}
+
 export function locate(
   inv: ManagerInventory,
   key: string,

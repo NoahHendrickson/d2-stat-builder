@@ -3,7 +3,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { CLASS_NAMES } from "@/lib/armory/stats";
-import type { InventoryItem, ManagerInventory } from "@/lib/inventory/build";
+import { currentCharacter, type InventoryItem, type ManagerInventory } from "@/lib/inventory/build";
 import { requestLock } from "@/lib/inventory/lock-queue";
 import { annotationsStore } from "@/lib/inventory/annotations";
 import { recentlyMoved, requestMoves } from "@/lib/inventory/move-queue";
@@ -14,7 +14,7 @@ import { loadViewSettings, useViewSettings } from "@/lib/inventory/view-settings
 import { currentCharacterOnly, vaultForClass } from "@/lib/inventory/vault-for-class";
 import { CharacterColumnsMenu } from "./items-settings";
 import {
-  MOVABLE_BUCKETS,
+  canMove,
   locate,
   type Landing,
   type Place,
@@ -110,7 +110,7 @@ export function ManagerView({
   // cut to its class. Search counts and acts on just that, with the other characters'
   // gear left out too (they stay as places to move matches to).
   const current =
-    plan?.kind === "columns" && plan.characters === "current" ? inventory.characters[0] : undefined;
+    plan?.kind === "columns" && plan.characters === "current" ? currentCharacter(inventory) : undefined;
   const shownInventory = useMemo(
     () => (current ? vaultForClass(inventory, current.classType) : inventory),
     [inventory, current],
@@ -138,7 +138,7 @@ export function ManagerView({
         setMenu((menu) => (menu?.key === item.key && menu.anchor === anchor ? null : { key: item.key, anchor })),
       dragStart: (item) => {
         const found = locate(latest.current, item.key);
-        if (!found || !canDrag(found.item, found.place)) return false;
+        if (!found || !canMove(found.item, found.place)) return false;
         setMenu(null);
         dragStore.set(found);
         return true;
@@ -164,7 +164,7 @@ export function ManagerView({
         // Double-click: equip on the character played last (DIM's shortcut).
         setMenu(null);
         const found = locate(latest.current, item.key);
-        const character = latest.current.characters[0];
+        const character = currentCharacter(latest.current);
         if (!found || !character) return;
         const { place } = found;
         if (place.kind === "character" && place.equipped && place.characterId === character.id) return;
@@ -304,13 +304,6 @@ function landingName(inventory: ManagerInventory, to: Landing | undefined): stri
   if (to.kind === "vault") return "the vault";
   const character = inventory.characters.find((c) => c.id === to.characterId);
   return `your ${character ? (CLASS_NAMES[character.classType] ?? "Guardian") : "character"}`;
-}
-
-/** Account-wide and non-gear items don't drag (postmaster items always can). */
-function canDrag(item: InventoryItem, place: Place): boolean {
-  if (place.kind === "postmaster") return true;
-  if (place.kind === "account") return false;
-  return MOVABLE_BUCKETS.has(item.bucketHash) && Boolean(item.instanceId);
 }
 
 /** The moves that get `item` to `to`, making room on the way (see smart-moves.ts). */

@@ -12,6 +12,13 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    date: "2026-11-13",
+    changes: [
+      "Items: search is:oncurrentchar or is:onwarlock (onhunter, ontitan) to find what a character holds.",
+      "Items: typing in the search box no longer lags.",
+    ],
+  },
+  {
     date: "2026-11-12",
     changes: [
       "Weapon search: pattern:incomplete and pattern:complete find craftable weapons by your own pattern progress.",

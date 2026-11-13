@@ -4,7 +4,7 @@
 //                      matches as its is: filter
 //   #word              notes contain the hashtag
 //   is:/not:<keyword>  weapon, armor, exotic, crafted, craftable, locked, junk, dupe, heavy,
-//                      handcannon, light, …
+//                      handcannon, light, equipped, oncurrentchar, onwarlock, …
 //   tag:<tag>          favorite, keep, junk, infuse, archive, none
 //   power:>=400        also >, <, <=, =; the same for tier: and stat:<name>:
 //   stat:total:>=60    armor stat total; any live stat by name (stat:range:>50)
@@ -13,7 +13,7 @@
 import type { Annotations, ItemTag } from "./annotations";
 import { ITEM_TAGS } from "./annotations";
 import { BUCKETS } from "./buckets";
-import type { InventoryItem, ManagerInventory } from "./build";
+import { currentCharacter, type InventoryItem, type ManagerInventory } from "./build";
 import type { Place } from "./moves";
 import { WEAPON_CATEGORIES, WEAPON_TYPE_ALIASES } from "./weapon-types";
 import { isAdeptWeaponName } from "@/lib/weapons/weapon-variants";
@@ -44,7 +44,15 @@ export interface SearchContext {
   dupes: ReadonlySet<number>;
 }
 
-type Predicate = (item: InventoryItem, place: Place, ctx: SearchContext) => boolean;
+/** The search context plus what matchItems reads off the inventory: who holds what. */
+interface MatchContext extends SearchContext {
+  /** The most recently played character. */
+  currentCharacterId?: string;
+  /** Each character's DestinyClass, by character id. */
+  classOf: ReadonlyMap<string, number>;
+}
+
+type Predicate = (item: InventoryItem, place: Place, ctx: MatchContext) => boolean;
 
 export type ParsedSearch =
   | { ok: true; predicate: Predicate; usesPerks: boolean }
@@ -68,6 +76,10 @@ const TIER_NAMES = numbered<string, Rarity>(RARITY_WORDS, {
 });
 const TIER_COLORS: Record<string, number> = { yellow: 6, purple: 5, blue: 4, green: 3, white: 2 };
 const CLASS_NAMES: Record<string, number> = { titan: 0, hunter: 1, warlock: 2 };
+/** is:ontitan / is:onhunter / is:onwarlock: on a character of that class (equipped or not). */
+const ON_CLASS: Record<string, number> = Object.fromEntries(
+  Object.entries(CLASS_NAMES).map(([name, id]) => [`on${name}`, id]),
+);
 const AMMO_IDS: Record<Ammo, number> = { Primary: 1, Special: 2, Heavy: 3 };
 const AMMO_NAMES = numbered<string, Ammo>(AMMO_WORDS, AMMO_IDS);
 const BREAKER_NAMES = numbered<string, Champion>(CHAMPION_WORDS, {
@@ -108,6 +120,28 @@ const SLOT_ALIASES = numbered<string, WeaponSlot>(WEAPON_SLOT_ALIASES, WEAPON_SL
 /** Strip case, spaces, and punctuation so "Hand Cannon" and "handcannon" meet. */
 export const normalize = (s: string) => s.toLowerCase().replace(/[^a-z0-9#]+/g, "");
 
+// A search runs on every keystroke over every item, so each item's normalized name,
+// type, and perk names are worked out once and kept (items and perk lists are stable
+// objects until the inventory or perk lookup changes).
+const normalizedNames = new WeakMap<InventoryItem, string>();
+const normalizedTypes = new WeakMap<InventoryItem, string>();
+const normalizedLists = new WeakMap<readonly string[], readonly string[]>();
+const nameOf = (i: InventoryItem): string => {
+  let n = normalizedNames.get(i);
+  if (n === undefined) normalizedNames.set(i, (n = normalize(i.name)));
+  return n;
+};
+const typeOf = (i: InventoryItem): string => {
+  let n = normalizedTypes.get(i);
+  if (n === undefined) normalizedTypes.set(i, (n = normalize(i.typeName)));
+  return n;
+};
+const normalizedAll = (list: readonly string[]): readonly string[] => {
+  let n = normalizedLists.get(list);
+  if (!n) normalizedLists.set(list, (n = list.map(normalize)));
+  return n;
+};
+
 /** Every `is:` keyword, for help text and suggestions. */
 export const IS_KEYWORDS: readonly string[] = [
   "weapon",
@@ -125,12 +159,15 @@ export const IS_KEYWORDS: readonly string[] = [
   ...ITEM_TAGS,
   "notes",
   "equipped",
+  "oncurrentchar",
   "postmaster",
   "invault",
   "transferable",
   "haspower",
   "dupe",
   ...Object.keys(CLASS_NAMES),
+  // After the class words, so "lock" suggests is:warlock before is:onwarlock.
+  ...Object.keys(ON_CLASS),
   ...Object.keys(AMMO_NAMES),
   ...ELEMENTS,
   ...Object.keys(ELEMENT_SIDE_SETS),
@@ -142,6 +179,31 @@ export const IS_KEYWORDS: readonly string[] = [
   ...Object.keys(SLOT_ALIASES),
   ...Object.keys(TIER_COLORS),
 ];
+
+/**
+ * `is:` words about an item's state or where it is, where the opposite is a common
+ * search too, so suggestions offer `not:` beside them (`equ` → is:equipped, not:equipped).
+ */
+export const STATE_KEYWORDS: ReadonlySet<string> = new Set([
+  "masterwork",
+  "crafted",
+  "craftable",
+  "enhanced",
+  "deepsight",
+  "adept",
+  "locked",
+  "tagged",
+  ...ITEM_TAGS,
+  "notes",
+  "equipped",
+  "oncurrentchar",
+  ...Object.keys(ON_CLASS),
+  "postmaster",
+  "invault",
+  "transferable",
+  "haspower",
+  "dupe",
+]);
 
 /**
  * Keywords that describe what an item is, so typed on their own ("stasis", "hunter",
@@ -209,6 +271,10 @@ function isKeyword(word: string): Predicate | undefined {
   if (tier !== undefined) return (i) => i.tierType === tier;
   const classType = numberFor(CLASS_NAMES);
   if (classType !== undefined) return (i) => i.classType === classType;
+  const onClass = numberFor(ON_CLASS);
+  if (onClass !== undefined) {
+    return (_, p, ctx) => p.kind === "character" && ctx.classOf.get(p.characterId) === onClass;
+  }
   const ammo = numberFor(AMMO_NAMES);
   if (ammo !== undefined) return (i) => i.ammoType === ammo;
   const breaker = numberFor(BREAKER_NAMES);
@@ -259,6 +325,10 @@ function isKeyword(word: string): Predicate | undefined {
       return (i, _, ctx) => notesOf(i, ctx) !== "";
     case "equipped":
       return (_, p) => p.kind === "character" && p.equipped;
+    case "oncurrentchar":
+    // DIM's name for it, so a search copied from there works (not suggested).
+    case "incurrentchar":
+      return (_, p, ctx) => p.kind === "character" && p.characterId === ctx.currentCharacterId;
     case "postmaster":
       return (_, p) => p.kind === "postmaster";
     case "invault":
@@ -311,19 +381,19 @@ function filterTerm(key: string, raw: string): { predicate: Predicate; usesPerks
     case "notes":
       return { predicate: (i, _, c) => notesOf(i, c).includes(text) };
     case "name":
-      return { predicate: (i) => normalize(i.name).includes(value) };
+      return { predicate: (i) => nameOf(i).includes(value) };
     case "exactname":
-      return { predicate: (i) => normalize(i.name) === value };
+      return { predicate: (i) => nameOf(i) === value };
     case "perk":
     case "perkname":
-      return { predicate: (i, _, c) => c.perks(i).some((p) => normalize(p).includes(value)), usesPerks: true };
+      return { predicate: (i, _, c) => normalizedAll(c.perks(i)).some((p) => p.includes(value)), usesPerks: true };
     case "exactperk":
-      return { predicate: (i, _, c) => c.perks(i).some((p) => normalize(p) === value), usesPerks: true };
+      return { predicate: (i, _, c) => normalizedAll(c.perks(i)).some((p) => p === value), usesPerks: true };
     case "origin":
     case "origintrait":
-      return { predicate: (i, _, c) => c.origins(i).some((p) => normalize(p).includes(value)), usesPerks: true };
+      return { predicate: (i, _, c) => normalizedAll(c.origins(i)).some((p) => p.includes(value)), usesPerks: true };
     case "type":
-      return { predicate: (i) => normalize(i.typeName).includes(value) };
+      return { predicate: (i) => typeOf(i).includes(value) };
     case "element":
     case "damage":
       return { predicate: (i) => i.element === value };
@@ -427,14 +497,14 @@ export function parseSearch(query: string): ParsedSearch | null {
     const word = normalize(token);
     // A descriptive keyword: what it says ("stasis" is is:stasis), or an item named so.
     const keyword = BARE_KEYWORDS.has(word) ? isKeyword(word) : undefined;
-    if (keyword) return (i, p, c) => keyword(i, p, c) || normalize(i.name).includes(word);
+    if (keyword) return (i, p, c) => keyword(i, p, c) || nameOf(i).includes(word);
     // Plain text: the name, the type, a perk, or the notes.
     usesPerks = true;
     const text = token.toLowerCase();
     return (i, _, c) =>
-      normalize(i.name).includes(word) ||
-      normalize(i.typeName).includes(word) ||
-      c.perks(i).some((p) => normalize(p).includes(word)) ||
+      nameOf(i).includes(word) ||
+      typeOf(i).includes(word) ||
+      normalizedAll(c.perks(i)).some((p) => p.includes(word)) ||
       notesOf(i, c).includes(text);
   };
 
@@ -507,8 +577,13 @@ export function weaponCopies(inv: ManagerInventory, name: string): { item: Inven
 /** Keys of the items `predicate` matches. */
 export function matchItems(inv: ManagerInventory, predicate: Predicate, ctx: SearchContext): Set<string> {
   const out = new Set<string>();
+  const match: MatchContext = {
+    ...ctx,
+    currentCharacterId: currentCharacter(inv)?.id,
+    classOf: new Map(inv.characters.map((c) => [c.id, c.classType])),
+  };
   forEachItem(inv, (item, place) => {
-    if (predicate(item, place, ctx)) out.add(item.key);
+    if (predicate(item, place, match)) out.add(item.key);
   });
   return out;
 }
