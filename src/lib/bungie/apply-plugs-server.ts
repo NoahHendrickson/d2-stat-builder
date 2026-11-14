@@ -7,6 +7,7 @@ import { BungieHttpError } from "./http";
 import { withThrottleRetry } from "./throttle";
 import {
   plugInserter,
+  type PlugAttempt,
   type PlugInserterOptions,
   type PlugProgressEvent,
   type PlugRequest,
@@ -25,6 +26,8 @@ const LIVE_COMPONENTS = [300, 305] as DestinyComponentType[];
 
 export const NOT_STUCK_MESSAGE =
   "Bungie accepted it, but it didn't stay in the socket — apply again";
+export const UNCHECKED_MESSAGE =
+  "Bungie accepted it, but couldn't show whether it went in — refresh your gear to check";
 
 /**
  * Each item's live sockets and energy, one GetItem per item, all at once: reads aren't
@@ -165,81 +168,49 @@ export async function applyPlugTargets({
   };
 
   const insert = plugInserter(inserter);
-  /** The last planned insert into each socket: only its plug should be there at the end. */
-  const lastInSocket = new Map<string, number>();
-  plan.plugs.forEach((p, i) => lastInSocket.set(socketKey(p), i));
-
-  /**
-   * Insert `indices` in order; settle each that is known in place or failed, and return
-   * the ones still to check: `recheck` (Bungie's answer didn't show the socket) and
-   * `missing` (it showed another plug there).
-   */
-  const run = async (indices: number[], lastTry: boolean) => {
-    const recheck: number[] = [];
-    const missing: number[] = [];
-    for (const i of indices) {
-      const plug = toRequest(plan.plugs[i]);
-      const attempt = await insert(plug, () => onProgress?.({ phase: "start", plug }));
-      if (!attempt.ok) settle(i, { ok: false, message: attempt.message }, attempt.code);
-      else if (attempt.alreadyThere) settle(i, { ok: true });
-      else {
-        const seen = plugInResponse(attempt.response, plug.socketIndex);
-        if (seen === undefined) recheck.push(i);
-        else {
-          summary.verified.response++;
-          if (seen === plug.plugItemHash) settle(i, { ok: true });
-          else if (lastTry) settle(i, { ok: false, message: NOT_STUCK_MESSAGE });
-          else missing.push(i);
-        }
-      }
+  /** Is the plug in after an insert Bungie accepted? Undefined: it can't be told. */
+  const placed = async (plug: PlugRequest, attempt: Extract<PlugAttempt, { ok: true }>) => {
+    if (attempt.alreadyThere) return true;
+    const seen = plugInResponse(attempt.response, plug.socketIndex);
+    if (seen !== undefined) {
+      summary.verified.response++;
+      return seen === plug.plugItemHash;
     }
-    return { recheck, missing };
+    const ids = [plug.itemInstanceId];
+    const item = (await readLiveItems({ http, membershipType, membershipId, itemInstanceIds: ids })).get(plug.itemInstanceId);
+    if (!item) return undefined;
+    summary.verified.reread++;
+    return (item.sockets[plug.socketIndex]?.plugHash ?? 0) === plug.plugItemHash;
   };
 
-  /** Re-read the items behind `indices` and settle what's in place; returns the rest. */
-  const reread = async (indices: number[], lastTry: boolean) => {
-    if (indices.length === 0) return [];
-    const ids = indices.map((i) => plan.plugs[i].itemInstanceId);
-    const now = await readLiveItems({ http, membershipType, membershipId, itemInstanceIds: ids });
-    const missing: number[] = [];
-    for (const i of indices) {
-      const plug = plan.plugs[i];
-      const item = now.get(plug.itemInstanceId);
-      if (!item) {
-        // Bungie said it went in and won't show us otherwise: take its word.
-        summary.verified.unverified++;
-        settle(i, { ok: true });
-        continue;
+  // One insert at a time, each checked (and retried once) before the next runs: a later
+  // insert can depend on an earlier one (a clear frees the energy or the perk it needs).
+  for (const [i, p] of plan.plugs.entries()) {
+    const plug = toRequest(p);
+    const reason = skip.get(plug.itemInstanceId);
+    if (reason !== undefined) {
+      onProgress?.({ phase: "start", plug });
+      settle(i, { ok: false, message: `Skipped — its armor piece wasn't equipped (${reason})` });
+      continue;
+    }
+    let inPlace: boolean | undefined;
+    for (let attempt = 0; attempt < 2 && inPlace !== true; attempt++) {
+      if (attempt > 0) summary.retried++;
+      const result = await insert(plug, () => onProgress?.({ phase: "start", plug }));
+      if (!result.ok) {
+        settle(i, { ok: false, message: result.message }, result.code);
+        break;
       }
-      summary.verified.reread++;
-      // A later insert into the same socket (an artifact perk freed, then replaced) owns
-      // what's there now: this one did its job if either plug is in.
-      const last = plan.plugs[lastInSocket.get(socketKey(plug)) ?? i];
-      const there = item.sockets[plug.socketIndex]?.plugHash;
-      if (there === plug.plugItemHash || there === last.plugItemHash) settle(i, { ok: true });
-      else if (lastTry) settle(i, { ok: false, message: NOT_STUCK_MESSAGE });
-      else missing.push(i);
+      // An unconfirmed plug that did go in is confirmed by the retry's "already has it".
+      inPlace = await placed(plug, result);
     }
-    return missing;
-  };
-
-  const runnable: number[] = [];
-  plan.plugs.forEach((p, i) => {
-    const reason = skip.get(p.itemInstanceId);
-    if (reason === undefined) {
-      runnable.push(i);
-      return;
+    if (results[i]) continue;
+    if (inPlace === true) settle(i, { ok: true });
+    else if (inPlace === false) settle(i, { ok: false, message: NOT_STUCK_MESSAGE });
+    else {
+      summary.verified.unverified++;
+      settle(i, { ok: false, message: UNCHECKED_MESSAGE });
     }
-    onProgress?.({ phase: "start", plug: toRequest(p) });
-    settle(i, { ok: false, message: `Skipped — its armor piece wasn't equipped (${reason})` });
-  });
-
-  const first = await run(runnable, false);
-  const retry = [...first.missing, ...(await reread(first.recheck, false))].sort((a, b) => a - b);
-  summary.retried = retry.length;
-  if (retry.length > 0) {
-    const second = await run(retry, true);
-    await reread(second.recheck, true);
   }
 
   return {
@@ -249,8 +220,6 @@ export async function applyPlugTargets({
     summary,
   };
 }
-
-const socketKey = (p: PlugRequest) => `${p.itemInstanceId}:${p.socketIndex}`;
 
 const toRequest = ({ itemInstanceId, socketIndex, plugItemHash }: PlugRequest): PlugRequest => ({
   itemInstanceId,

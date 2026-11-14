@@ -17,7 +17,7 @@ vi.mock("bungie-api-ts/destiny2", () => ({
   getCharacter: vi.fn(),
   pullFromPostmaster: vi.fn(),
 }));
-const { applyPlugTargets, NOT_STUCK_MESSAGE } = await import("./apply-plugs-server");
+const { applyPlugTargets, NOT_STUCK_MESSAGE, UNCHECKED_MESSAGE } = await import("./apply-plugs-server");
 const { planLoadoutPlugs } = await import("../loadouts/apply-plan");
 const { armorTargets, plugCosts } = await import("../loadouts/apply-targets");
 
@@ -190,10 +190,11 @@ describe("planning from live sockets (NoahHendrickson/d2-conflux-feedback#9)", (
     expect(real).toEqual(APPLIED);
   });
 
-  test("an item Bungie won't return is planned from the client's copy", async () => {
+  test("an item Bungie won't return is planned from the client's copy, without trusting its \"in place\"", async () => {
     const real = clone(APPLIED);
     real[HELMET].sockets[3] = E_HEAD;
     const snapshot = clone(real);
+    real[HELMET].sockets[0] = E_GEN; // changed in-game: the copy still shows the stat mod
     fakeBungie(real);
     const reads = getItem.getMockImplementation()!;
     getItem.mockImplementation(async (h: HttpClient, req: { itemInstanceId: string }) => {
@@ -203,6 +204,8 @@ describe("planning from live sockets (NoahHendrickson/d2-conflux-feedback#9)", (
     const out = await apply(snapshot, real, LOADOUT_MODS, PINS);
     expect(out.plan.fromSnapshot).toEqual([HELMET]);
     expect(out.summary.readFailed).toBe(1);
+    expect(out.plan.inPlace.every((p) => p.itemInstanceId !== HELMET)).toBe(true);
+    expect(out.results.every((r) => r.ok)).toBe(true);
     expect(real).toEqual(APPLIED);
   });
 
@@ -259,11 +262,69 @@ describe("checking each insert stayed in", () => {
     const real = clone(EMPTY_HELMET);
     fakeBungie(real, { bareResponses: true, drop: new Map([[`${HELMET}:3:${SUPER_FONT}`, 99]]) });
     const out = await apply(clone(real), real, LOADOUT_MODS, PINS);
-    // One read to plan, one after the inserts, one after the retry.
-    expect(getItem.mock.calls.filter((c) => c[1].itemInstanceId === HELMET)).toHaveLength(3);
+    // One read to plan, then one after each insert: the stat mod, the font, its retry.
+    expect(getItem.mock.calls.filter((c) => c[1].itemInstanceId === HELMET)).toHaveLength(4);
     expect(out.results.find((r) => r.plugItemHash === MINOR_SUPER)?.ok).toBe(true);
     expect(out.results.find((r) => r.plugItemHash === SUPER_FONT)).toMatchObject({ ok: false, message: NOT_STUCK_MESSAGE });
     expect(out.summary.verified).toMatchObject({ response: 0, reread: 3 });
+  });
+
+  test("a clear that doesn't stick is retried before the insert that needs it", async () => {
+    // An artifact perk has to move: free it from socket 0, put 40 there, then 41 in socket 1.
+    const ARTIFACT = "107";
+    const real: Gear = { [ARTIFACT]: { capacity: 99, sockets: [41, 5] } };
+    fakeBungie(real, { drop: new Map([[`${ARTIFACT}:0:5`, 1]]) });
+    const run = applyPlugTargets({
+      http,
+      membershipType: 3,
+      membershipId: "4611686018400000000",
+      characterId: "2305843009200000000",
+      targets: {
+        items: [{ kind: "artifact", itemInstanceId: ARTIFACT, sockets: [{ index: 0, empty: 5, plug: 40 }, { index: 1, empty: 5, plug: 41 }] }],
+        costs: {},
+      },
+      skip: new Map(),
+    });
+    await vi.runAllTimersAsync();
+    const out = await run;
+    expect(insertSocketPlugFree.mock.calls.map((c) => [c[1].plug.socketIndex, c[1].plug.plugItemHash])).toEqual([
+      [0, 5],
+      [0, 5],
+      [0, 40],
+      [1, 41],
+    ]);
+    expect(out.results.every((r) => r.ok)).toBe(true);
+    expect(real[ARTIFACT].sockets).toEqual([40, 41]);
+  });
+
+  test("when Bungie can't show an insert, the retry's \"already has it\" confirms it", async () => {
+    const real = clone(EMPTY_HELMET);
+    fakeBungie(real, { bareResponses: true });
+    const reads = getItem.getMockImplementation()!;
+    let calls = 0;
+    getItem.mockImplementation(async (h: HttpClient, req: { itemInstanceId: string }) => {
+      if (calls++ > 1) throw new BungieHttpError(503, "SystemDisabled", 5); // only the planning reads work
+      return reads(h, req);
+    });
+    const out = await apply(clone(real), real, LOADOUT_MODS, PINS);
+    expect(out.results.every((r) => r.ok)).toBe(true);
+    expect(out.summary).toMatchObject({ retried: 2, verified: { response: 0, reread: 0, unverified: 0 } });
+    expect(real).toEqual(APPLIED);
+  });
+
+  test("an insert that can't be checked at all is retried once, then failed, not called ok", async () => {
+    const real = clone(EMPTY_HELMET);
+    fakeBungie(real, { bareResponses: true, drop: new Map([[`${HELMET}:3:${SUPER_FONT}`, 99]]) });
+    const reads = getItem.getMockImplementation()!;
+    let calls = 0;
+    getItem.mockImplementation(async (h: HttpClient, req: { itemInstanceId: string }) => {
+      if (calls++ > 1) throw new BungieHttpError(503, "SystemDisabled", 5);
+      return reads(h, req);
+    });
+    const out = await apply(clone(real), real, LOADOUT_MODS, PINS);
+    expect(insertsOf(SUPER_FONT)).toBe(2);
+    expect(out.results.find((r) => r.plugItemHash === SUPER_FONT)).toMatchObject({ ok: false, message: UNCHECKED_MESSAGE });
+    expect(out.summary.verified.unverified).toBe(1);
   });
 
   test("a real error is reported as is, not retried", async () => {

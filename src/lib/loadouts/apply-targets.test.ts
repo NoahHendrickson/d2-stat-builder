@@ -56,15 +56,19 @@ describe("planFromLive: armor", () => {
     expect(plan.overEnergy).toEqual(["1"]);
   });
 
-  test("without a live read it falls back to the client's copy", () => {
+  test("without a live read it plans from the client's copy, and sends what that copy calls in place", () => {
     const withCopy: ApplyTargets = {
       ...targets,
       items: [{ ...targets.items[0], sockets: [{ index: 0, plug: 10, empty: 1, current: 10 }, { index: 1, empty: 2, current: 20 }] }] as ApplyTargets["items"],
     };
     const plan = planFromLive(withCopy, () => undefined);
     expect(plan.fromSnapshot).toEqual(["1"]);
-    expect(triple(plan)).toEqual([["1", 1, 2]]);
-    expect(plan.inPlace).toHaveLength(1);
+    // The clear first, then the unconfirmed stat mod (Bungie's 1679 confirms it if it's there).
+    expect(triple(plan)).toEqual([
+      ["1", 1, 2],
+      ["1", 0, 10],
+    ]);
+    expect(plan.inPlace).toEqual([]);
   });
 });
 

@@ -107,9 +107,12 @@ export interface PlannedPlug extends PlugRequest {
 export interface LivePlan {
   /** In the order they run. */
   plugs: PlannedPlug[];
-  /** Target plugs already in their sockets. */
+  /** Target plugs already in their live sockets. */
   inPlace: PlugRequest[];
-  /** Items planned from the client's copy because Bungie didn't return them. */
+  /**
+   * Items planned from the client's copy because Bungie didn't return them. Their plugs
+   * that copy shows in place are sent anyway: only Bungie's answer can confirm them.
+   */
   fromSnapshot: string[];
   /** Armor pieces whose target needs more energy than the piece has. */
   overEnergy: string[];
@@ -143,6 +146,9 @@ export function planFromLive(
     const itemInstanceId = target.itemInstanceId;
     const item = live(itemInstanceId);
     if (!item) fromSnapshot.push(itemInstanceId);
+    /** In place per live sockets; per the client's copy, still to send (and confirm). */
+    const keep = (here: PlugRequest[], unconfirmed: PlannedPlug[]) =>
+      (item ? inPlace : unconfirmed).push(...here);
     const request = (socketIndex: number, plugItemHash: number): PlugRequest => ({
       itemInstanceId,
       socketIndex,
@@ -168,7 +174,7 @@ export function planFromLive(
       };
       freeing.push(...changes.freeing.map(planned));
       using.push(...changes.using.map(planned));
-      inPlace.push(...changes.inPlace.map((c) => request(c.index, c.desired)));
+      keep(changes.inPlace.map((c) => request(c.index, c.desired)), using);
       if (item?.energy) {
         const base = baselineEnergy(item.energy, states.map((s) => s.current), cost);
         const after = states.reduce((n, s) => n + cost(s.desired), base);
@@ -197,7 +203,7 @@ export function planFromLive(
           ...(empties.has(p.plugItemHash) ? { clear: true as const } : {}),
         });
       }
-      inPlace.push(...sc.inPlace.map((p) => request(p.socketIndex, p.plugItemHash)));
+      keep(sc.inPlace.map((p) => request(p.socketIndex, p.plugItemHash)), rest);
     } else {
       const sockets: ArtifactPerkSocket[] = target.sockets.map((s) => ({
         index: s.index,
@@ -220,7 +226,7 @@ export function planFromLive(
           ...(s.clear ? { clear: true as const } : {}),
         });
       }
-      inPlace.push(...here.map((s) => request(s.socketIndex, s.plugItemHash)));
+      keep(here.map((s) => request(s.socketIndex, s.plugItemHash)), rest);
     }
   }
 
