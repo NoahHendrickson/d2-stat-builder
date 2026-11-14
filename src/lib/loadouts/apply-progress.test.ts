@@ -6,6 +6,7 @@ import {
   parseApplyStreamEvent,
   plugStepId,
   readNdjsonLines,
+  withPlugSteps,
   type ApplyStep,
 } from "./apply-progress";
 
@@ -96,5 +97,17 @@ describe("parseApplyStreamEvent", () => {
     });
     expect(parseApplyStreamEvent("not json")).toBeNull();
     expect(parseApplyStreamEvent("{}")).toBeNull();
+  });
+});
+
+describe("withPlugSteps", () => {
+  test("swaps the plug steps for the server's, leaving equip steps alone", () => {
+    const helm = step(itemStepId("helm"), "ok");
+    const guess = step(plugStepId({ itemInstanceId: "helm", socketIndex: 1, plugItemHash: 9 }));
+    const live = [
+      step(plugStepId({ itemInstanceId: "helm", socketIndex: 0, plugItemHash: 8 }), "ok"),
+      step(plugStepId({ itemInstanceId: "helm", socketIndex: 2, plugItemHash: 9 })),
+    ];
+    expect(withPlugSteps([helm, guess], live)).toEqual([helm, ...live]);
   });
 });

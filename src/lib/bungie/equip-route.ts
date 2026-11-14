@@ -11,6 +11,13 @@ import {
   type EquipItemState,
   type SpareItems,
 } from "./equip-plan";
+import type {
+  ApplyTargets,
+  ArmorSocketTarget,
+  ArtifactSocketTarget,
+  ItemTarget,
+  SubclassGroupTarget,
+} from "../loadouts/apply-targets";
 
 /** Bungie instance / character ids: decimal int64s, sent as strings. */
 export const isBungieId = (v: unknown): v is string =>
@@ -78,4 +85,93 @@ export async function bungieErrorResponse(
  */
 export function notSignedIn(): NextResponse {
   return NextResponse.json({ error: "Not signed in", reauth: true }, { status: 401 });
+}
+
+/** Sockets per item a target may name: armor has ~12, a subclass ~18, an artifact 8. */
+const MAX_TARGET_SOCKETS = 32;
+/** Plug hashes the cost table may price (every costing plug a piece's sockets accept). */
+const MAX_PLUG_COSTS = 4000;
+/** Highest armor energy cost a plug can have (pieces top out at 11). */
+const MAX_PLUG_COST = 20;
+
+const isHash = (v: unknown): v is number =>
+  Number.isInteger(v) && (v as number) >= 0 && (v as number) <= 0xffffffff;
+const isIndex = (v: unknown): v is number =>
+  Number.isInteger(v) && (v as number) >= 0 && (v as number) < 256;
+const optional = (v: unknown, check: (v: unknown) => boolean) => v === undefined || check(v);
+
+function isPlugRecord(v: unknown): v is Record<number, number> {
+  if (!v || typeof v !== "object" || Array.isArray(v)) return false;
+  const entries = Object.entries(v);
+  return (
+    entries.length <= MAX_TARGET_SOCKETS &&
+    entries.every(([k, h]) => /^\d{1,3}$/.test(k) && isIndex(Number(k)) && isHash(h))
+  );
+}
+
+function isItemTarget(t: Partial<ItemTarget> | null): boolean {
+  if (!t || !isBungieId(t.itemInstanceId)) return false;
+  const list = (v: unknown) => Array.isArray(v) && v.length <= MAX_TARGET_SOCKETS;
+  switch (t.kind) {
+    case "armor":
+      return (
+        list(t.sockets) &&
+        (t.sockets as Partial<ArmorSocketTarget>[]).every(
+          (s) =>
+            isIndex(s?.index) &&
+            optional(s.plug, isHash) &&
+            optional(s.empty, isHash) &&
+            optional(s.current, isHash),
+        )
+      );
+    case "artifact":
+      return (
+        list(t.sockets) &&
+        (t.sockets as Partial<ArtifactSocketTarget>[]).every(
+          (s) =>
+            isIndex(s?.index) && isHash(s.empty) && optional(s.plug, isHash) && optional(s.current, isHash),
+        )
+      );
+    case "subclass":
+      return (
+        list(t.groups) &&
+        (t.groups as Partial<SubclassGroupTarget>[]).every(
+          (g) =>
+            ["super", "ability", "aspect", "fragment"].includes(g?.kind as string) &&
+            isIndex(g.start) &&
+            Number.isInteger(g.count) &&
+            (g.count as number) >= 0 &&
+            (g.count as number) <= MAX_TARGET_SOCKETS &&
+            Array.isArray(g.desired) &&
+            g.desired.length <= MAX_TARGET_SOCKETS &&
+            g.desired.every(isHash) &&
+            optional(g.emptyHash, isHash) &&
+            optional(g.clearUnused, (v) => typeof v === "boolean") &&
+            optional(g.current, isPlugRecord),
+        )
+      );
+    default:
+      return false;
+  }
+}
+
+/**
+ * Validate the apply route's socket targets (see apply-targets.ts); null if malformed,
+ * oversized, or naming one item twice.
+ */
+export function parseApplyTargets(v: unknown, { maxItems }: { maxItems: number }): ApplyTargets | null {
+  const t = v as Partial<ApplyTargets> | null;
+  if (!t || typeof t !== "object" || !Array.isArray(t.items) || t.items.length > maxItems) return null;
+  if (!t.items.every((item) => isItemTarget(item as Partial<ItemTarget>))) return null;
+  const ids = t.items.map((item) => item.itemInstanceId);
+  if (new Set(ids).size !== ids.length) return null;
+  const costs = t.costs ?? {};
+  if (!costs || typeof costs !== "object" || Array.isArray(costs)) return null;
+  const entries = Object.entries(costs);
+  if (entries.length > MAX_PLUG_COSTS) return null;
+  for (const [hash, cost] of entries) {
+    if (!/^\d{1,10}$/.test(hash) || !isHash(Number(hash))) return null;
+    if (!Number.isInteger(cost) || cost < 0 || cost > MAX_PLUG_COST) return null;
+  }
+  return { items: t.items as ItemTarget[], costs };
 }

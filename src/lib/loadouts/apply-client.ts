@@ -21,6 +21,14 @@ import { plugInfoFromManifest } from "./plug-info";
 import { planExoticWeaponSwap } from "./weapons";
 import { planArtifactApply } from "./artifact-apply";
 import {
+  armorTargets,
+  artifactTarget,
+  plugCosts,
+  type ApplyTargets,
+  type ItemTarget,
+  type PlannedPlug,
+} from "./apply-targets";
+import {
   beginApplyProgress,
   finishApplyProgress,
   itemStepId,
@@ -28,13 +36,18 @@ import {
   patchApplyProgress,
   plugStepId,
   readNdjsonLines,
+  replaceApplyPlugSteps,
   type ApplyStep,
 } from "./apply-progress";
 
 export interface ApplyOutcome {
+  /** The client's plan: where each mod goes, and what couldn't be placed (`skipped`). */
   plan: ApplyPlan;
   equip: ItemResult[];
+  /** One per insert the server made, planned from the items' live sockets. */
   plugs: PlugResult[];
+  /** Target plugs the server found already in place on the live items. */
+  inPlace: PlugRequest[];
   /**
    * The user stopped it from the progress card. Some steps may have run (the card shows
    * which), so gear has moved, but `equip` / `plugs` are empty: treat it as not applied.
@@ -43,9 +56,11 @@ export interface ApplyOutcome {
 }
 
 /**
- * Apply a saved loadout to `character`: plan the plug inserts from live data, POST the
- * equip + plug batch, and stream progress into the apply card. Returns null when the
- * request itself failed (already toasted). Requires `resolved.actionable`.
+ * Apply a saved loadout to `character`: place the mods (from the page's copy of the
+ * profile), POST the equips plus each item's target sockets, and stream progress into
+ * the apply card. The server plans the inserts from the items' live sockets and reports
+ * what it found (`plugs-planned`), so the card shows what really happened. Returns null
+ * when the request itself failed (already toasted). Requires `resolved.actionable`.
  */
 export async function applySavedLoadout({
   saved,
@@ -152,10 +167,12 @@ export async function applySavedLoadout({
     }
   }
 
+  const planPieces = planPiecesFromArmor(pieces, manifest);
+  const plugInfo = plugInfoFromManifest(manifest);
   const plan = planLoadoutPlugs({
-    pieces: planPiecesFromArmor(pieces, manifest),
+    pieces: planPieces,
     modHashes: saved.loadout.parameters.mods,
-    plugInfo: plugInfoFromManifest(manifest),
+    plugInfo,
     placements: saved.modPlacement,
     subclass:
       subclassItem && resolved.subclass?.subclass
@@ -174,11 +191,15 @@ export async function applySavedLoadout({
     plan.skipped.push(...artifactPlan.skipped);
   }
 
-  const plugs: PlugRequest[] = plan.plugs.map(({ itemInstanceId, socketIndex, plugItemHash }) => ({
-    itemInstanceId,
-    socketIndex,
-    plugItemHash,
-  }));
+  // What each item's sockets should end with; the server diffs these against live sockets.
+  const armor = armorTargets(planPieces, plan);
+  const targetItems: ItemTarget[] = [...armor];
+  if (subclassItem && resolved.subclass?.subclass && groups.length > 0) {
+    targetItems.push({ kind: "subclass", itemInstanceId: subclassItem.instanceId, groups });
+  }
+  const artifact = artifactTarget(artifactPlan);
+  if (artifact) targetItems.push(artifact);
+  const targets: ApplyTargets = { items: targetItems, costs: plugCosts(planPieces, armor, plugInfo) };
 
   const iconOf = (hash: number | undefined) =>
     manifest.def("DestinyInventoryItemDefinition", hash)?.displayProperties?.icon;
@@ -223,22 +244,33 @@ export async function applySavedLoadout({
       status: "pending",
     });
   }
-  for (const plug of plan.inPlace) {
-    steps.push({
-      id: plugStepId(plug),
-      name: plug.label,
-      icon: iconOf(plug.plugItemHash),
-      status: "ok",
-    });
-  }
-  for (const plug of plan.plugs) {
-    steps.push({
-      id: plugStepId(plug),
-      name: plug.label,
-      icon: iconOf(plug.plugItemHash),
-      status: "pending",
-    });
-  }
+  // Until the server has read the live sockets, the card shows the plan's guess, with
+  // nothing marked in place yet: the page's profile may be minutes old.
+  const labels = new Map<string, string>();
+  for (const plug of [...plan.inPlace, ...plan.plugs]) labels.set(plugStepId(plug), plug.label);
+  const itemName = (id: string) =>
+    id === subclassItem?.instanceId
+      ? "subclass"
+      : id === artifact?.itemInstanceId
+        ? (resolved.artifact?.name ?? "artifact")
+        : pieceName(id);
+  const plugName = (hash: number | undefined) =>
+    manifest.def("DestinyInventoryItemDefinition", hash)?.displayProperties?.name ?? `mod #${hash}`;
+  /** The plan's label for a plug, or one made up for an insert only the live sockets called for. */
+  const labelOf = (plug: PlugRequest & Partial<Pick<PlannedPlug, "clear" | "current">>) => {
+    if (plug.clear && plug.current !== undefined) {
+      const verb = plug.itemInstanceId === artifact?.itemInstanceId ? "Free" : "Remove";
+      return `${verb} ${plugName(plug.current)} → ${itemName(plug.itemInstanceId)}`;
+    }
+    return labels.get(plugStepId(plug)) ?? `${plugName(plug.plugItemHash)} → ${itemName(plug.itemInstanceId)}`;
+  };
+  const plugStep = (plug: PlugRequest | PlannedPlug, status: ApplyStep["status"]): ApplyStep => ({
+    id: plugStepId(plug),
+    name: labelOf(plug),
+    icon: iconOf(plug.plugItemHash),
+    status,
+  });
+  for (const plug of [...plan.inPlace, ...plan.plugs]) steps.push(plugStep(plug, "pending"));
 
   const showCard = steps.length > 0;
   // Names this apply for the card's Cancel button (see apply-loadout/cancel).
@@ -269,7 +301,7 @@ export async function applySavedLoadout({
     res = await fetch("/api/bungie/apply-loadout", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ characterId: character.id, items, plugs, spares, applyId }),
+      body: JSON.stringify({ characterId: character.id, items, targets, spares, applyId }),
     });
   } catch {
     failCard("Apply failed");
@@ -291,6 +323,9 @@ export async function applySavedLoadout({
 
   let equip: ItemResult[] = [];
   let plugsOut: PlugResult[] = [];
+  let inPlace: PlugRequest[] = [];
+  /** Labels for the inserts the server planned, for the toast. */
+  const planned = new Map<string, string>();
   let streamError: string | undefined;
   let gotDone = false;
   let cancelled = false;
@@ -302,6 +337,17 @@ export async function applySavedLoadout({
         const note = vaultedNote(event.result.vaulted, pieceName);
         const message = event.result.ok ? note : `${event.result.message ?? "Equip failed"} (${note})`;
         event = { ...event, result: { ...event.result, message } };
+      }
+      if (event.type === "plugs-planned") {
+        inPlace = event.inPlace;
+        for (const plug of event.plugs) planned.set(plugStepId(plug), labelOf(plug));
+        if (showCard) {
+          replaceApplyPlugSteps(session, [
+            ...event.inPlace.map((p) => plugStep(p, "ok")),
+            ...event.plugs.map((p) => plugStep(p, "pending")),
+          ]);
+        }
+        continue;
       }
       if (showCard) patchApplyProgress(session, event);
       if (event.type === "done") {
@@ -324,7 +370,7 @@ export async function applySavedLoadout({
 
   if (cancelled) {
     if (showCard) finishApplyProgress(session, "cancelled");
-    return { plan, equip: [], plugs: [], cancelled: true };
+    return { plan, equip: [], plugs: [], inPlace: [], cancelled: true };
   }
 
   if (streamError || !gotDone) {
@@ -338,9 +384,12 @@ export async function applySavedLoadout({
     return null;
   }
 
-  const outcome: ApplyOutcome = { plan, equip, plugs: plugsOut };
+  const outcome: ApplyOutcome = { plan, equip, plugs: plugsOut, inPlace };
   if (showCard) finishApplyProgress(session, finishFromResults(equip, plugsOut));
-  else if (!batch) toastOutcome(outcome, [...pieces, ...equipWeapons], character, pieceName);
+  else if (!batch) {
+    const labelFor = (p: PlugRequest) => planned.get(plugStepId(p)) ?? labelOf(p);
+    toastOutcome(outcome, [...pieces, ...equipWeapons], character, pieceName, labelFor);
+  }
   return outcome;
 }
 
@@ -357,10 +406,11 @@ function finishFromResults(
 }
 
 function toastOutcome(
-  { plan, equip, plugs }: ApplyOutcome,
+  { plan, equip, plugs, inPlace }: ApplyOutcome,
   pieces: { instanceId: string; name: string }[],
   character: ArmoryCharacter,
   pieceName: (id: string) => string,
+  labelOf: (plug: PlugRequest) => string,
 ) {
   const equipFailed = equip.filter((r) => !r.ok);
   // Every spare that left the character, including ones vaulted for a piece that then
@@ -372,7 +422,7 @@ function toastOutcome(
   const summary = [
     equippedCount ? `${equippedCount} equipped` : null,
     pluggedCount ? `${pluggedCount} mods socketed` : null,
-    plan.alreadyApplied.length ? `${plan.alreadyApplied.length} already in place` : null,
+    inPlace.length ? `${inPlace.length} already in place` : null,
     vaultedIds.length ? vaultedNote(vaultedIds, pieceName) : null,
   ]
     .filter(Boolean)
@@ -383,15 +433,7 @@ function toastOutcome(
     const name = pieces.find((p) => p.instanceId === f.itemInstanceId)?.name ?? "Subclass";
     problems.push(`${name}: ${f.message ?? "failed"}`);
   }
-  for (const f of plugFailed) {
-    const label = plan.plugs.find(
-      (p) =>
-        p.itemInstanceId === f.itemInstanceId &&
-        p.socketIndex === f.socketIndex &&
-        p.plugItemHash === f.plugItemHash,
-    )?.label;
-    problems.push(`${label ?? "Mod"}: ${f.message ?? "failed"}`);
-  }
+  for (const f of plugFailed) problems.push(`${labelOf(f)}: ${f.message ?? "failed"}`);
   problems.push(...plan.skipped);
 
   const where = `your ${["Titan", "Hunter", "Warlock"][character.classType] ?? "character"}`;

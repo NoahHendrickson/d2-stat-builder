@@ -188,10 +188,34 @@ export function createStub({ profile, seed = {} }) {
     ["POST", /^\/api\/bungie\/apply-loadout$/, (b) => {
       if (!Array.isArray(b?.items)) return bad();
       const equip = b.items.map((i) => ({ itemInstanceId: i.itemInstanceId, ok: true }));
-      const plugs = (Array.isArray(b.plugs) ? b.plugs : []).map((p) => ({ ...p, ok: true }));
+      // The live socket read is played by the client's own copy (`current`): every target
+      // plug not already there is inserted. See src/lib/loadouts/apply-targets.ts.
+      const planned = { plugs: [], inPlace: [] };
+      for (const t of Array.isArray(b.targets?.items) ? b.targets.items : []) {
+        const id = t.itemInstanceId;
+        if (t.kind === "subclass") {
+          for (const g of t.groups) {
+            const current = g.current ?? {};
+            const held = new Set(Object.values(current));
+            const free = Array.from({ length: g.count }, (_, i) => g.start + i).filter((i) => !current[i] || !g.desired.includes(current[i]));
+            for (const hash of g.desired) {
+              if (held.has(hash)) planned.inPlace.push({ itemInstanceId: id, socketIndex: Number(Object.keys(current).find((k) => current[k] === hash)), plugItemHash: hash });
+              else if (free.length) planned.plugs.push({ itemInstanceId: id, socketIndex: free.shift(), plugItemHash: hash });
+            }
+          }
+          continue;
+        }
+        for (const s of t.sockets) {
+          if (s.plug === undefined) continue;
+          const plug = { itemInstanceId: id, socketIndex: s.index, plugItemHash: s.plug };
+          (s.current === s.plug ? planned.inPlace : planned.plugs).push(plug);
+        }
+      }
+      const plugs = [...(Array.isArray(b.plugs) ? b.plugs : []), ...planned.plugs].map((p) => ({ ...p, ok: true }));
       const lines = [
         ...equip.flatMap((r) => [{ type: "item-start", itemInstanceId: r.itemInstanceId }, { type: "item", result: r }]),
-        ...plugs.flatMap((r) => [{ type: "plug-start", plug: r }, { type: "plug", result: r }]),
+        ...(b.targets ? [{ type: "plugs-planned", ...planned }] : []),
+        ...plugs.flatMap((r) => [{ type: "plug-start", plug: { itemInstanceId: r.itemInstanceId, socketIndex: r.socketIndex, plugItemHash: r.plugItemHash } }, { type: "plug", result: r }]),
         { type: "done", equip, plugs },
       ];
       return { status: 200, body: lines.map((l) => JSON.stringify(l)).join("\n") + "\n", headers: { "content-type": "application/x-ndjson" } };
