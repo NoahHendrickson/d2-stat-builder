@@ -23,6 +23,7 @@ import { planArtifactApply } from "./artifact-apply";
 import {
   armorTargets,
   artifactTarget,
+  planFromLive,
   plugCosts,
   type ApplyTargets,
   type ItemTarget,
@@ -184,12 +185,7 @@ export async function applySavedLoadout({
     if (w.missing) plan.skipped.push(`${w.name} is no longer in your inventory`);
   }
   if (exoticSwap.blocked) plan.skipped.push(exoticSwap.blocked);
-  if (artifactPlan) {
-    plan.plugs.push(...artifactPlan.plugs);
-    plan.inPlace.push(...artifactPlan.inPlace);
-    plan.alreadyApplied.push(...artifactPlan.inPlace.map((p) => p.label));
-    plan.skipped.push(...artifactPlan.skipped);
-  }
+  if (artifactPlan) plan.skipped.push(...artifactPlan.skipped);
 
   // What each item's sockets should end with; the server diffs these against live sockets.
   const armor = armorTargets(planPieces, plan);
@@ -244,10 +240,6 @@ export async function applySavedLoadout({
       status: "pending",
     });
   }
-  // Until the server has read the live sockets, the card shows the plan's guess, with
-  // nothing marked in place yet: the page's profile may be minutes old.
-  const labels = new Map<string, string>();
-  for (const plug of [...plan.inPlace, ...plan.plugs]) labels.set(plugStepId(plug), plug.label);
   const itemName = (id: string) =>
     id === subclassItem?.instanceId
       ? "subclass"
@@ -256,13 +248,13 @@ export async function applySavedLoadout({
         : pieceName(id);
   const plugName = (hash: number | undefined) =>
     manifest.def("DestinyInventoryItemDefinition", hash)?.displayProperties?.name ?? `mod #${hash}`;
-  /** The plan's label for a plug, or one made up for an insert only the live sockets called for. */
+  /** Every plug step's name: "Super Font → Helmet", or "Remove Super Mod → Cloak" for a clear. */
   const labelOf = (plug: PlugRequest & Partial<Pick<PlannedPlug, "clear" | "current">>) => {
     if (plug.clear && plug.current !== undefined) {
       const verb = plug.itemInstanceId === artifact?.itemInstanceId ? "Free" : "Remove";
       return `${verb} ${plugName(plug.current)} → ${itemName(plug.itemInstanceId)}`;
     }
-    return labels.get(plugStepId(plug)) ?? `${plugName(plug.plugItemHash)} → ${itemName(plug.itemInstanceId)}`;
+    return `${plugName(plug.plugItemHash)} → ${itemName(plug.itemInstanceId)}`;
   };
   const plugStep = (plug: PlugRequest | PlannedPlug, status: ApplyStep["status"]): ApplyStep => ({
     id: plugStepId(plug),
@@ -270,7 +262,9 @@ export async function applySavedLoadout({
     icon: iconOf(plug.plugItemHash),
     status,
   });
-  for (const plug of [...plan.inPlace, ...plan.plugs]) steps.push(plugStep(plug, "pending"));
+  // Until the server has read the live sockets, the card shows the server's planner run
+  // on the page's copy, all pending: that copy may be minutes old, so nothing is in place yet.
+  for (const plug of planFromLive(targets, () => undefined).plugs) steps.push(plugStep(plug, "pending"));
 
   const showCard = steps.length > 0;
   // Names this apply for the card's Cancel button (see apply-loadout/cancel).
@@ -324,8 +318,8 @@ export async function applySavedLoadout({
   let equip: ItemResult[] = [];
   let plugsOut: PlugResult[] = [];
   let inPlace: PlugRequest[] = [];
-  /** Labels for the inserts the server planned, for the toast. */
-  const planned = new Map<string, string>();
+  /** The inserts the server planned (with what each replaces), by step, to name them. */
+  let planned: Map<string, PlannedPlug> | undefined;
   let streamError: string | undefined;
   let gotDone = false;
   let cancelled = false;
@@ -340,7 +334,7 @@ export async function applySavedLoadout({
       }
       if (event.type === "plugs-planned") {
         inPlace = event.inPlace;
-        for (const plug of event.plugs) planned.set(plugStepId(plug), labelOf(plug));
+        planned = new Map(event.plugs.map((p) => [plugStepId(p), p]));
         if (showCard) {
           replaceApplyPlugSteps(session, [
             ...event.inPlace.map((p) => plugStep(p, "ok")),
@@ -373,6 +367,13 @@ export async function applySavedLoadout({
     return { plan, equip: [], plugs: [], inPlace: [], cancelled: true };
   }
 
+  // A server from before targets (an instant rollback) ignores them and sends no plan:
+  // its "done" would read as a full apply with none of the mods checked or inserted.
+  if (gotDone && !planned && targets.items.length > 0) {
+    streamError = "Your mods weren't applied — refresh the page and apply again";
+    if (showCard) patchApplyProgress(session, { type: "error", error: streamError });
+  }
+
   if (streamError || !gotDone) {
     const message = streamError ?? "Apply failed";
     if (showCard) {
@@ -387,7 +388,7 @@ export async function applySavedLoadout({
   const outcome: ApplyOutcome = { plan, equip, plugs: plugsOut, inPlace };
   if (showCard) finishApplyProgress(session, finishFromResults(equip, plugsOut));
   else if (!batch) {
-    const labelFor = (p: PlugRequest) => planned.get(plugStepId(p)) ?? labelOf(p);
+    const labelFor = (p: PlugRequest) => labelOf(planned?.get(plugStepId(p)) ?? p);
     toastOutcome(outcome, [...pieces, ...equipWeapons], character, pieceName, labelFor);
   }
   return outcome;

@@ -65,8 +65,6 @@ export interface PlugAction {
 export interface ApplyPlan {
   plugs: PlugAction[];
   /** Plugs that are already socketed exactly where they'd go. */
-  alreadyApplied: string[];
-  /** Same as `alreadyApplied`, as actions — so the progress grid can show them. */
   inPlace: PlugAction[];
   /** Everything that couldn't be placed (armor mods and subclass plugs), as "Name: reason" lines. */
   skipped: string[];
@@ -163,7 +161,6 @@ export function planLoadoutPlugs(input: PlanInput): ApplyPlan {
   const { plugInfo } = input;
   const plugs: PlugAction[] = [];
   const inPlace: PlugAction[] = [];
-  const alreadyApplied: string[] = [];
   const skipped: string[] = [];
   const unplaced: UnplacedMod[] = [];
   const cost = (h: number | undefined) => (h === undefined ? 0 : (plugInfo(h)?.cost ?? 0));
@@ -385,11 +382,7 @@ export function planLoadoutPlugs(input: PlanInput): ApplyPlan {
     });
     freeing.push(...changes.freeing.map(action));
     using.push(...changes.using.map(action));
-    for (const c of changes.inPlace) {
-      const a = action(c);
-      alreadyApplied.push(a.label);
-      inPlace.push(a);
-    }
+    inPlace.push(...changes.inPlace.map(action));
   }
   plugs.push(...freeing, ...using);
 
@@ -397,11 +390,10 @@ export function planLoadoutPlugs(input: PlanInput): ApplyPlan {
     const sc = planSubclassGroups(input.subclass, plugInfo);
     plugs.push(...sc.plugs);
     inPlace.push(...sc.inPlace);
-    alreadyApplied.push(...sc.inPlace.map((p) => p.label));
     skipped.push(...sc.skipped);
   }
 
-  return { plugs, alreadyApplied, inPlace, skipped, unplaced, placement, assigned };
+  return { plugs, inPlace, skipped, unplaced, placement, assigned };
 }
 
 /** One armor socket: the plug in it now and the plug the apply leaves there. */

@@ -10,6 +10,7 @@ import {
   transferItem,
   type BungieMembershipType,
   type DestinyComponentType,
+  type DestinyItemChangeResponse,
   type DestinyItemComponent,
 } from "bungie-api-ts/destiny2";
 import { BungieHttpError } from "./http";
@@ -487,8 +488,8 @@ export type PlugAttempt =
       ok: true;
       /** Bungie answered "already has that plug" (1679): it is in place. */
       alreadyThere?: true;
-      /** Bungie's DestinyItemChangeResponse: the item after the insert, when it says. */
-      response?: unknown;
+      /** The item after the insert, when Bungie says. */
+      response?: DestinyItemChangeResponse;
     }
   | {
       ok: false;
@@ -524,7 +525,7 @@ export function plugInserter({ http, membershipType, characterId, shouldStop, de
     await checkpoint(shouldStop);
     onStart?.();
     try {
-      const res = (await withThrottleRetry(() => {
+      const res = await withThrottleRetry(() => {
         lastStart = Date.now();
         return insertSocketPlugFree(http, {
           plug: {
@@ -536,7 +537,7 @@ export function plugInserter({ http, membershipType, characterId, shouldStop, de
           characterId,
           membershipType,
         });
-      })) as { Response?: unknown } | undefined;
+      });
       return { ok: true, response: res?.Response };
     } catch (err) {
       if (err instanceof BungieHttpError && err.status === 401) throw err;

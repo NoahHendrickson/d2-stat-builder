@@ -17,7 +17,8 @@ vi.mock("bungie-api-ts/destiny2", () => ({
   getCharacter: vi.fn(),
   pullFromPostmaster: vi.fn(),
 }));
-const { applyPlugTargets, NOT_STUCK_MESSAGE, UNCHECKED_MESSAGE } = await import("./apply-plugs-server");
+const { applyPlugTargets, summarize, NOT_STUCK_MESSAGE, UNCHECKED_MESSAGE } = await import("./apply-plugs-server");
+const { ApplyCancelledError } = await import("./equip-server");
 const { planLoadoutPlugs } = await import("../loadouts/apply-plan");
 const { armorTargets, plugCosts } = await import("../loadouts/apply-targets");
 
@@ -116,7 +117,14 @@ async function apply(
       events.push(e.phase === "start" ? `start ${e.plug.plugItemHash}` : `${e.result.ok ? "ok" : "fail"} ${e.result.plugItemHash}`),
   });
   await vi.runAllTimersAsync();
-  return { clientPlan, events, ...(await run) };
+  const { plan, outcomes } = await run;
+  return {
+    clientPlan,
+    events,
+    plan,
+    results: outcomes.map((o) => o.result),
+    summary: summarize(armor.length, plan, outcomes),
+  };
 }
 
 const LOADOUT_MODS = [MINOR_SUPER, SUPER_FONT, SUPER_FONT, SUPER_FONT, POWERFUL_ATTRACTION, CLASS_FONT, CLASS_FONT];
@@ -152,7 +160,7 @@ describe("planning from live sockets (NoahHendrickson/d2-conflux-feedback#9)", (
     const out = await apply(snapshot, real, LOADOUT_MODS, PINS);
 
     // The client's stale guess thought the helmet's stat mod was already right…
-    expect(out.clientPlan.alreadyApplied).toContain(`Minor Super Mod → ${HELMET}`);
+    expect(out.clientPlan.inPlace.map((p) => p.label)).toContain(`Minor Super Mod → ${HELMET}`);
     // …the server, reading live sockets, swaps it and clears the cloak's leftover first.
     expect(out.plan.plugs.map((p) => [p.itemInstanceId, p.socketIndex, p.plugItemHash])).toEqual([
       [HELMET, 0, MINOR_SUPER],
@@ -209,15 +217,40 @@ describe("planning from live sockets (NoahHendrickson/d2-conflux-feedback#9)", (
     expect(real).toEqual(APPLIED);
   });
 
-  test("a piece whose equip failed is neither read nor inserted, and every insert says why", async () => {
-    const real: Gear = { [HELMET]: { capacity: 10, sockets: [E_GEN, E_HEAD, E_HEAD, E_HEAD] }, [CLOAK]: clone(APPLIED)[CLOAK] };
+  test("a piece whose equip failed is read but not inserted: its mods in place stay in place", async () => {
+    const real: Gear = { [HELMET]: { capacity: 10, sockets: [E_GEN, SUPER_FONT, E_HEAD, E_HEAD] }, [CLOAK]: clone(APPLIED)[CLOAK] };
     fakeBungie(real);
     const out = await apply(clone(real), real, LOADOUT_MODS, PINS, { skip: new Map([[HELMET, "Vault is full"]]) });
-    expect(getItem.mock.calls.map((c) => c[1].itemInstanceId)).toEqual([CLOAK]);
     expect(insertSocketPlugFree).not.toHaveBeenCalled();
-    expect(out.results).toHaveLength(4);
-    expect(out.results.every((r) => !r.ok && r.message?.includes("Vault is full"))).toBe(true);
-    expect(out.summary).toMatchObject({ skipped: 4, failed: 0 });
+    expect(out.plan.inPlace).toContainEqual({ itemInstanceId: HELMET, socketIndex: 1, plugItemHash: SUPER_FONT });
+    expect(out.results).toHaveLength(3);
+    expect(out.results.every((r) => !r.ok && r.message === "Skipped — its armor piece wasn't equipped (Vault is full)")).toBe(true);
+    expect(out.summary).toMatchObject({ skipped: 3, failed: 0 });
+  });
+
+  test("a cancel mid-way still leaves the outcomes so far for the log", async () => {
+    const real = clone(APPLIED);
+    real[HELMET].sockets = [E_GEN, SUPER_FONT, SUPER_FONT, E_HEAD];
+    fakeBungie(real);
+    const pieces = planPieces(clone(real));
+    const armor = armorTargets(pieces, planLoadoutPlugs({ pieces, modHashes: LOADOUT_MODS, plugInfo, placements: PINS }));
+    const outcomes: { result: { ok: boolean } }[] = [];
+    let checks = 0;
+    const run = applyPlugTargets({
+      http,
+      membershipType: 3,
+      membershipId: "4611686018400000000",
+      characterId: "2305843009200000000",
+      targets: { items: armor, costs: plugCosts(pieces, armor, plugInfo) },
+      skip: new Map(),
+      shouldStop: async () => ++checks > 1,
+      onOutcome: (o) => outcomes.push(o),
+    });
+    const settled = run.then(() => undefined, (err: unknown) => err);
+    await vi.runAllTimersAsync();
+    expect(await settled).toBeInstanceOf(ApplyCancelledError);
+    expect(insertSocketPlugFree).toHaveBeenCalledTimes(1);
+    expect(outcomes.map((o) => o.result.ok)).toEqual([true]);
   });
 });
 
@@ -266,7 +299,8 @@ describe("checking each insert stayed in", () => {
     expect(getItem.mock.calls.filter((c) => c[1].itemInstanceId === HELMET)).toHaveLength(4);
     expect(out.results.find((r) => r.plugItemHash === MINOR_SUPER)?.ok).toBe(true);
     expect(out.results.find((r) => r.plugItemHash === SUPER_FONT)).toMatchObject({ ok: false, message: NOT_STUCK_MESSAGE });
-    expect(out.summary.verified).toMatchObject({ response: 0, reread: 3 });
+    // Counted once per plug, not per attempt.
+    expect(out.summary.checked).toEqual({ response: 0, reread: 2, already: 0, unchecked: 0 });
   });
 
   test("a clear that doesn't stick is retried before the insert that needs it", async () => {
@@ -286,7 +320,8 @@ describe("checking each insert stayed in", () => {
       skip: new Map(),
     });
     await vi.runAllTimersAsync();
-    const out = await run;
+    const { outcomes } = await run;
+    const out = { results: outcomes.map((o) => o.result) };
     expect(insertSocketPlugFree.mock.calls.map((c) => [c[1].plug.socketIndex, c[1].plug.plugItemHash])).toEqual([
       [0, 5],
       [0, 5],
@@ -308,7 +343,7 @@ describe("checking each insert stayed in", () => {
     });
     const out = await apply(clone(real), real, LOADOUT_MODS, PINS);
     expect(out.results.every((r) => r.ok)).toBe(true);
-    expect(out.summary).toMatchObject({ retried: 2, verified: { response: 0, reread: 0, unverified: 0 } });
+    expect(out.summary).toMatchObject({ retried: 2, checked: { response: 0, reread: 0, already: 2, unchecked: 0 } });
     expect(real).toEqual(APPLIED);
   });
 
@@ -324,7 +359,26 @@ describe("checking each insert stayed in", () => {
     const out = await apply(clone(real), real, LOADOUT_MODS, PINS);
     expect(insertsOf(SUPER_FONT)).toBe(2);
     expect(out.results.find((r) => r.plugItemHash === SUPER_FONT)).toMatchObject({ ok: false, message: UNCHECKED_MESSAGE });
-    expect(out.summary.verified.unverified).toBe(1);
+    expect(out.summary.checked.unchecked).toBe(1);
+  });
+
+  test("a retry that can't go out leaves an unchecked insert unchecked, not failed for the retry's reason", async () => {
+    const real = clone(EMPTY_HELMET);
+    fakeBungie(real, { bareResponses: true });
+    const inserts = insertSocketPlugFree.getMockImplementation()!;
+    let fonts = 0;
+    insertSocketPlugFree.mockImplementation(async (h: HttpClient, req: { plug: { plugItemHash: number } }) => {
+      if (req.plug.plugItemHash === SUPER_FONT && ++fonts === 2) throw new BungieHttpError(200, "DestinyCannotPerformActionAtThisLocation", 1671);
+      return inserts(h, req);
+    });
+    const reads = getItem.getMockImplementation()!;
+    let calls = 0;
+    getItem.mockImplementation(async (h: HttpClient, req: { itemInstanceId: string }) => {
+      if (calls++ > 1) throw new BungieHttpError(503, "SystemDisabled", 5);
+      return reads(h, req);
+    });
+    const out = await apply(clone(real), real, LOADOUT_MODS, PINS);
+    expect(out.results.find((r) => r.plugItemHash === SUPER_FONT)).toMatchObject({ ok: false, message: UNCHECKED_MESSAGE });
   });
 
   test("a real error is reported as is, not retried", async () => {

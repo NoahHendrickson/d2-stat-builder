@@ -119,6 +119,18 @@ describe("planFromLive: subclass and artifact", () => {
   });
 });
 
+test("an artifact perk Bungie marks disabled still counts as there, as the client counts it", () => {
+  const plan = planFromLive(
+    {
+      items: [{ kind: "artifact", itemInstanceId: "7", sockets: [{ index: 0, empty: 5, plug: 40 }, { index: 1, empty: 5, plug: 41 }] }],
+      costs: {},
+    },
+    fromMap({ "7": { sockets: [{ plugHash: 41, isEnabled: false }, { plugHash: 5 }] } }),
+  );
+  // 41 is freed from socket 0 before it moves, instead of a duplicate-perk insert.
+  expect(plan.plugs[0]).toMatchObject({ socketIndex: 0, plugItemHash: 5, clear: true, current: 41 });
+});
+
 describe("client target builders", () => {
   const info: Record<number, PlugInfo> = {
     10: { kind: "general", name: "Minor Super Mod", cost: 1 },

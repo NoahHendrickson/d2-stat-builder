@@ -1,8 +1,15 @@
 // The socket half of /api/bungie/apply-loadout: read each target item's live sockets,
-// plan the inserts from them (apply-targets.ts), run them, then check each one stayed
-// in. A plug Bungie accepted but that isn't in its socket afterwards gets one more try.
+// plan the inserts from them (apply-targets.ts), then run them one at a time, checking
+// each stayed in before the next. A plug Bungie accepted that isn't in its socket (or
+// can't be checked) gets one more try.
 import type { HttpClient } from "bungie-api-ts/http";
-import { getItem, type BungieMembershipType, type DestinyComponentType } from "bungie-api-ts/destiny2";
+import {
+  getItem,
+  type BungieMembershipType,
+  type DestinyComponentType,
+  type DestinyItemChangeResponse,
+  type DestinyItemResponse,
+} from "bungie-api-ts/destiny2";
 import { BungieHttpError } from "./http";
 import { withThrottleRetry } from "./throttle";
 import {
@@ -16,9 +23,9 @@ import {
 import {
   planFromLive,
   type ApplyTargets,
+  type ItemTarget,
   type LiveItem,
   type LivePlan,
-  type LiveSocket,
 } from "../loadouts/apply-targets";
 
 /** ItemInstances (energy) + ItemSockets (what's plugged). */
@@ -68,33 +75,48 @@ export async function readLiveItems({
 }
 
 /** A DestinyItemResponse (GetItem, or an insert's `item`) → its sockets + energy; undefined without sockets. */
-function liveItemFrom(response: unknown): LiveItem | undefined {
-  const r = response as
-    | {
-        sockets?: { data?: { sockets?: LiveSocket[] } };
-        instance?: { data?: { energy?: { energyCapacity: number; energyUsed: number } } };
-      }
-    | undefined;
-  const sockets = r?.sockets?.data?.sockets;
+function liveItemFrom(response: DestinyItemResponse | undefined): LiveItem | undefined {
+  const sockets = response?.sockets?.data?.sockets;
   if (!Array.isArray(sockets)) return undefined;
-  const energy = r?.instance?.data?.energy;
+  const energy = response?.instance?.data?.energy;
   return {
     sockets,
     ...(energy ? { energy: { capacity: energy.energyCapacity, used: energy.energyUsed } } : {}),
   };
 }
 
-/** The plug an insert's DestinyItemChangeResponse shows in `socketIndex`; undefined when it doesn't say. */
-export function plugInResponse(response: unknown, socketIndex: number): number | undefined {
-  const item = liveItemFrom((response as { item?: unknown } | undefined)?.item);
+/** The plug an insert's answer shows in `socketIndex`; undefined when it doesn't say. */
+export function plugInResponse(
+  response: DestinyItemChangeResponse | undefined,
+  socketIndex: number,
+): number | undefined {
+  const item = liveItemFrom(response?.item);
   if (!item) return undefined;
   return item.sockets[socketIndex]?.plugHash ?? 0;
 }
 
+/**
+ * How a plug's placement was told: from the insert's own answer, a re-read of the item,
+ * Bungie's "already has that plug" (1679), or not at all (neither said).
+ */
+export type CheckedBy = "response" | "reread" | "already" | "unchecked";
+
+/** One planned insert, settled. */
+export interface PlugOutcome {
+  result: PlugResult;
+  /** Bungie's PlatformErrorCode, when an attempt failed with one. */
+  code?: number;
+  retried: boolean;
+  /** Absent when the insert failed before anything could be checked, or was skipped. */
+  checkedBy?: CheckedBy;
+  /** Not attempted: the item's equip failed. */
+  skipped?: true;
+}
+
 /** Counts for the one log line an apply writes. Hashes and counts only. */
 export interface PlugSummary {
-  /** Items targeted, and how many of them were planned from the client's copy. */
   items: number;
+  /** Items Bungie didn't return, planned from the client's copy. */
   readFailed: number;
   /** Inserts planned from live state, and targets already in place. */
   sent: number;
@@ -103,27 +125,64 @@ export interface PlugSummary {
   inserted: number;
   retried: number;
   failed: number;
-  /** Not attempted because the piece's equip failed. */
+  /** Not attempted because the item's equip failed. */
   skipped: number;
-  /** Verified from the insert's own response, from a re-read, or not at all (re-read failed). */
-  verified: { response: number; reread: number; unverified: number };
+  /** One count per settled plug: how its placement was told. */
+  checked: Record<CheckedBy, number>;
   overEnergy: number;
   /** PlatformErrorCode → how many inserts ended with it. */
   codes: Record<number, number>;
   failedHashes: number[];
 }
 
+/** The log line's counts, from the plan and whatever outcomes there are (a cancelled apply has some). */
+export function summarize(items: number, plan: LivePlan, outcomes: readonly PlugOutcome[]): PlugSummary {
+  const summary: PlugSummary = {
+    items,
+    readFailed: plan.fromSnapshot.length,
+    sent: plan.plugs.length,
+    inPlace: plan.inPlace.length,
+    inserted: 0,
+    retried: 0,
+    failed: 0,
+    skipped: 0,
+    checked: { response: 0, reread: 0, already: 0, unchecked: 0 },
+    overEnergy: plan.overEnergy.length,
+    codes: {},
+    failedHashes: [],
+  };
+  for (const o of outcomes) {
+    if (o.retried) summary.retried++;
+    if (o.checkedBy) summary.checked[o.checkedBy]++;
+    if (o.code !== undefined) summary.codes[o.code] = (summary.codes[o.code] ?? 0) + 1;
+    if (o.result.ok) summary.inserted++;
+    else if (o.skipped) summary.skipped++;
+    else {
+      summary.failed++;
+      summary.failedHashes.push(o.result.plugItemHash);
+    }
+  }
+  return summary;
+}
+
+const SKIPPED_ITEM: Record<ItemTarget["kind"], string> = {
+  armor: "its armor piece",
+  subclass: "the subclass",
+  artifact: "the artifact",
+};
+
 /**
  * Plan and run the socket targets after equipping. `skip` maps an item whose equip failed
- * to that failure: its inserts are reported as skipped, not attempted (and its sockets
- * aren't read — the client's copy is enough to say what was skipped). Results come back
- * in plan order: one per planned insert.
+ * to that failure: its inserts are reported as skipped, not attempted. Every item is read,
+ * so plugs already in place are reported in place even on a skipped one. Outcomes come
+ * back (and through `onOutcome`, as each settles) in plan order: one per planned insert.
  */
 export async function applyPlugTargets({
   targets,
   membershipId,
   skip,
   onPlanned,
+  onOutcome,
   onProgress,
   ...inserter
 }: PlugInserterOptions & {
@@ -131,98 +190,65 @@ export async function applyPlugTargets({
   membershipId: string;
   skip: ReadonlyMap<string, string>;
   onPlanned?: (plan: LivePlan) => void;
+  onOutcome?: (outcome: PlugOutcome) => void;
   onProgress?: (event: PlugProgressEvent) => void;
-}): Promise<{ plan: LivePlan; results: PlugResult[]; summary: PlugSummary }> {
+}): Promise<{ plan: LivePlan; outcomes: PlugOutcome[] }> {
   const { http, membershipType } = inserter;
-  const readIds = targets.items.map((t) => t.itemInstanceId).filter((id) => !skip.has(id));
-  const live = await readLiveItems({ http, membershipType, membershipId, itemInstanceIds: readIds });
+  const read = (ids: string[]) => readLiveItems({ http, membershipType, membershipId, itemInstanceIds: ids });
+  const live = await read(targets.items.map((t) => t.itemInstanceId));
   const plan = planFromLive(targets, (id) => live.get(id));
   onPlanned?.(plan);
 
-  const summary: PlugSummary = {
-    items: targets.items.length,
-    readFailed: readIds.filter((id) => !live.has(id)).length,
-    sent: plan.plugs.length,
-    inPlace: plan.inPlace.length,
-    inserted: 0,
-    retried: 0,
-    failed: 0,
-    skipped: 0,
-    verified: { response: 0, reread: 0, unverified: 0 },
-    overEnergy: plan.overEnergy.length,
-    codes: {},
-    failedHashes: [],
-  };
-  const results: (PlugResult | undefined)[] = plan.plugs.map(() => undefined);
-  const settle = (i: number, result: Omit<PlugResult, keyof PlugRequest>, code?: number) => {
-    const full: PlugResult = { ...toRequest(plan.plugs[i]), ...result };
-    results[i] = full;
-    if (full.ok) summary.inserted++;
-    else if (skip.has(full.itemInstanceId)) summary.skipped++;
-    else {
-      summary.failed++;
-      summary.failedHashes.push(full.plugItemHash);
-      if (code !== undefined) summary.codes[code] = (summary.codes[code] ?? 0) + 1;
-    }
-    onProgress?.({ phase: "result", result: full });
-  };
-
   const insert = plugInserter(inserter);
-  /** Is the plug in after an insert Bungie accepted? Undefined: it can't be told. */
-  const placed = async (plug: PlugRequest, attempt: Extract<PlugAttempt, { ok: true }>) => {
-    if (attempt.alreadyThere) return true;
+  /** Is the plug in after an insert Bungie accepted? `inPlace` undefined: it can't be told. */
+  const check = async (
+    plug: PlugRequest,
+    attempt: Extract<PlugAttempt, { ok: true }>,
+  ): Promise<{ inPlace?: boolean; by: CheckedBy }> => {
+    if (attempt.alreadyThere) return { inPlace: true, by: "already" };
     const seen = plugInResponse(attempt.response, plug.socketIndex);
-    if (seen !== undefined) {
-      summary.verified.response++;
-      return seen === plug.plugItemHash;
+    if (seen !== undefined) return { inPlace: seen === plug.plugItemHash, by: "response" };
+    const item = (await read([plug.itemInstanceId])).get(plug.itemInstanceId);
+    if (!item) return { by: "unchecked" };
+    return { inPlace: (item.sockets[plug.socketIndex]?.plugHash ?? 0) === plug.plugItemHash, by: "reread" };
+  };
+  const failed = (plug: PlugRequest, message: string): PlugResult => ({ ...plug, ok: false, message });
+
+  /** Insert, check, and (once) retry one plug: done before the next, which may depend on it. */
+  const attemptPlug = async (plug: PlugRequest): Promise<PlugOutcome> => {
+    const start = () => onProgress?.({ phase: "start", plug });
+    const first = await insert(plug, start);
+    if (!first.ok) return { result: failed(plug, first.message), code: first.code, retried: false };
+    const before = await check(plug, first);
+    if (before.inPlace) return { result: { ...plug, ok: true }, retried: false, checkedBy: before.by };
+
+    const second = await insert(plug, start);
+    if (!second.ok) {
+      // A retry that couldn't go out (out of time, throttled) says nothing about the first try.
+      const message = before.inPlace === undefined ? UNCHECKED_MESSAGE : second.message;
+      return { result: failed(plug, message), code: second.code, retried: true, checkedBy: before.by };
     }
-    const ids = [plug.itemInstanceId];
-    const item = (await readLiveItems({ http, membershipType, membershipId, itemInstanceIds: ids })).get(plug.itemInstanceId);
-    if (!item) return undefined;
-    summary.verified.reread++;
-    return (item.sockets[plug.socketIndex]?.plugHash ?? 0) === plug.plugItemHash;
+    const after = await check(plug, second);
+    if (after.inPlace) return { result: { ...plug, ok: true }, retried: true, checkedBy: after.by };
+    const message = after.inPlace === false ? NOT_STUCK_MESSAGE : UNCHECKED_MESSAGE;
+    return { result: failed(plug, message), retried: true, checkedBy: after.by };
   };
 
-  // One insert at a time, each checked (and retried once) before the next runs: a later
-  // insert can depend on an earlier one (a clear frees the energy or the perk it needs).
-  for (const [i, p] of plan.plugs.entries()) {
-    const plug = toRequest(p);
-    const reason = skip.get(plug.itemInstanceId);
-    if (reason !== undefined) {
-      onProgress?.({ phase: "start", plug });
-      settle(i, { ok: false, message: `Skipped — its armor piece wasn't equipped (${reason})` });
-      continue;
-    }
-    let inPlace: boolean | undefined;
-    for (let attempt = 0; attempt < 2 && inPlace !== true; attempt++) {
-      if (attempt > 0) summary.retried++;
-      const result = await insert(plug, () => onProgress?.({ phase: "start", plug }));
-      if (!result.ok) {
-        settle(i, { ok: false, message: result.message }, result.code);
-        break;
-      }
-      // An unconfirmed plug that did go in is confirmed by the retry's "already has it".
-      inPlace = await placed(plug, result);
-    }
-    if (results[i]) continue;
-    if (inPlace === true) settle(i, { ok: true });
-    else if (inPlace === false) settle(i, { ok: false, message: NOT_STUCK_MESSAGE });
+  const kindOf = new Map(targets.items.map((t) => [t.itemInstanceId, t.kind]));
+  const outcomes: PlugOutcome[] = [];
+  for (const { itemInstanceId, socketIndex, plugItemHash } of plan.plugs) {
+    const plug: PlugRequest = { itemInstanceId, socketIndex, plugItemHash };
+    const reason = skip.get(itemInstanceId);
+    let outcome: PlugOutcome;
+    if (reason === undefined) outcome = await attemptPlug(plug);
     else {
-      summary.verified.unverified++;
-      settle(i, { ok: false, message: UNCHECKED_MESSAGE });
+      onProgress?.({ phase: "start", plug });
+      const what = SKIPPED_ITEM[kindOf.get(itemInstanceId) ?? "armor"];
+      outcome = { result: failed(plug, `Skipped — ${what} wasn't equipped (${reason})`), retried: false, skipped: true };
     }
+    outcomes.push(outcome);
+    onOutcome?.(outcome);
+    onProgress?.({ phase: "result", result: outcome.result });
   }
-
-  return {
-    plan,
-    // Every index is settled by now; the filter only satisfies the type.
-    results: results.filter((r): r is PlugResult => r !== undefined),
-    summary,
-  };
+  return { plan, outcomes };
 }
-
-const toRequest = ({ itemInstanceId, socketIndex, plugItemHash }: PlugRequest): PlugRequest => ({
-  itemInstanceId,
-  socketIndex,
-  plugItemHash,
-});
