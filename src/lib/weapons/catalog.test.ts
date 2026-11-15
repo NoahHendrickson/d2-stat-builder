@@ -4,7 +4,7 @@ import { internWeaponCatalog } from "./intern-weapons";
 import { createWeaponCatalog } from "./catalog";
 import { compactWeaponIndex, expandWeaponIndex } from "./transport";
 import { mergeWeaponFilters } from "./query-language";
-import { readSearchState } from "./search-state";
+import { linkedWeapon, readSearchState, weaponSearchHref } from "./search-state";
 
 const { index } = internWeaponCatalog(sampleWeapons, "test");
 
@@ -209,5 +209,56 @@ describe("perk stats in the shipped catalog", () => {
         statMods: undefined,
       },
     ]);
+  });
+});
+
+describe("links to one weapon", () => {
+  const params = (href: string) => new URLSearchParams(href.slice(href.indexOf("?")));
+  const fatebringer = sampleWeapons.find((w) => w.name === "Fatebringer")!;
+  // Another pool under the same name, listed first (newest).
+  const reprise = {
+    ...fatebringer,
+    hash: 9_001,
+    source: "Pantheon",
+    releaseIndex: fatebringer.releaseIndex + 1_000,
+    columns: [{ kind: "Trait", perks: [{ hash: 9_002, name: "Kinetic Tremors", currentlyCanRoll: true }] }],
+    perks: ["Kinetic Tremors"],
+    perkHashes: [9_002],
+  };
+  // A reissue of the original pool under another hash: one row with it.
+  const reissue = { ...fatebringer, hash: 9_003, source: "Pantheon", releaseIndex: fatebringer.releaseIndex + 1 };
+  const catalog = createWeaponCatalog(internWeaponCatalog([...sampleWeapons, reprise, reissue], "test").index);
+  const opens = (hash: number) => linkedWeapon(catalog, params(weaponSearchHref({ name: "Fatebringer", itemHash: hash })));
+
+  it("puts the name in the search box and the exact hash beside it", () => {
+    expect(weaponSearchHref({ name: "Fatebringer", itemHash: 2171478765 })).toBe(
+      "/weapons?q=Fatebringer&weapon=2171478765",
+    );
+    const href = weaponSearchHref({ name: "Hung Jury SR4 & Co", itemHash: 7 });
+    expect(readSearchState(params(href)).query).toBe("Hung Jury SR4 & Co");
+  });
+
+  it("opens the result row for the linked hash, and drops the link from the URL", () => {
+    const rows = catalog.search("fatebringer", {}, "season-desc").results.map((w) => w.hash);
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toBe(9_001);
+    // The second pool, not the top row.
+    const link = opens(fatebringer.hash)!;
+    expect(link.weapon?.hash).toBe(rows[1]);
+    expect(link.rest.toString()).toBe("q=Fatebringer");
+    expect(opens(9_001)?.weapon?.hash).toBe(9_001);
+    // A same-pool reissue opens the row the list shows for that pool.
+    expect(opens(9_003)?.weapon?.hash).toBe(rows[1]);
+  });
+
+  it("leaves the top result open for an unknown or malformed hash, and ignores URLs without one", () => {
+    expect(opens(123)?.weapon).toBeUndefined();
+    for (const raw of ["weapon=", "weapon=abc", "weapon=0", "weapon=-5", "weapon=1.5", "weapon=12345678901"]) {
+      const link = linkedWeapon(catalog, new URLSearchParams(`q=Fatebringer&${raw}`));
+      expect(link?.weapon).toBeUndefined();
+      expect(link?.rest.toString()).toBe("q=Fatebringer");
+    }
+    expect(linkedWeapon(catalog, new URLSearchParams(`weapon=%20${fatebringer.hash}%20`))?.weapon).toBeDefined();
+    expect(linkedWeapon(catalog, new URLSearchParams("q=Fatebringer"))).toBeNull();
   });
 });

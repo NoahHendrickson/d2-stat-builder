@@ -209,4 +209,41 @@ export default async function ({ page, app, step, shot, expect, log }) {
     expect((await page.value(box)) === "Osteo Striga pattern:incomplete", "the search settled on pattern:incomplete");
     expect(!(await listed("Osteo Striga")), "Osteo Striga (5 of 5) isn't listed under pattern:incomplete");
   });
+
+  // Last: it narrows the viewport.
+  await step("wpn-link: a weapon= link opens that version, in the dialog on narrow screens", async () => {
+    // Austringer has two current perk pools; Newest lists the Menagerie one first.
+    const details = { role: "complementary", name: "Weapon details" };
+    const linked = "/weapons?q=Austringer&weapon=3055790362";
+    await app.open("/weapons?q=Austringer");
+    await page.waitFor({ role: "heading", name: /^Austringer.*Menagerie/ }, { within: details });
+    await app.open(linked);
+    await page.waitFor({ role: "heading", name: /^Austringer.*Derelict Leviathan/ }, { within: details });
+    const rows = await page.findAll({ role: "button", name: "View Austringer perks" }, { within: LIST });
+    const current = await Promise.all(rows.map((row) => page.attr(row, "aria-current")));
+    expect(current.join() === ",true", `the second Austringer row is the open one (${current.join()})`);
+    // Applied once, the link leaves the URL.
+    await page.waitFor(async () => (await page.evalJs("location.search")) === "?q=Austringer");
+    await shot("link-desktop");
+    // An unknown hash keeps the top result.
+    await app.open("/weapons?q=Austringer&weapon=123");
+    await page.waitFor({ role: "heading", name: /^Austringer.*Menagerie/ }, { within: details });
+    await page.waitFor(async () => (await page.evalJs("location.search")) === "?q=Austringer");
+    log("  weapon=123 leaves the top result (the Menagerie Austringer) open");
+    // Client-side, after picking another weapon (the page is kept between visits): an
+    // unknown hash still opens the top result, not the earlier pick.
+    await page.fill(box, "Fatebringer");
+    await page.click({ role: "button", name: "View Fatebringer perks", nth: 0 }, { within: LIST });
+    await page.waitFor({ role: "heading", name: /^Fatebringer/ }, { within: details });
+    await page.evalJs(`history.pushState(null, "", "/weapons?q=Austringer&weapon=123")`);
+    await page.waitFor({ role: "heading", name: /^Austringer.*Menagerie/ }, { within: details });
+    expect((await page.evalJs("location.search")) === "?q=Austringer", "the unknown link left the URL too");
+    // Under 1024 px the details are a dialog, which the link opens.
+    await page.s("Emulation.setDeviceMetricsOverride", { width: 800, height: 1000, deviceScaleFactor: 1, mobile: false });
+    await app.open(linked);
+    await page.waitFor({ role: "heading", name: /^Austringer.*Derelict Leviathan/ }, { within: { role: "dialog" } });
+    expect(!(await page.exists(details)), "no side pane at 800 px");
+    await shot("link-narrow");
+    await page.s("Emulation.setDeviceMetricsOverride", { width: 1600, height: 1000, deviceScaleFactor: 1, mobile: false });
+  });
 }

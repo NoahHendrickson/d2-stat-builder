@@ -4,7 +4,8 @@ import { useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import Image from "next/image";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { GitCompareIcon, SquareLock02Icon, SquareUnlock02Icon } from "@hugeicons/core-free-icons";
+import { GitCompareIcon, Search01Icon, SquareLock02Icon, SquareUnlock02Icon } from "@hugeicons/core-free-icons";
+import Link from "next/link";
 import { EnhancedArrow } from "@/components/enhanced-arrow";
 import { PerkTooltip } from "@/components/weapons/perk-tooltip";
 import { ItemWatermark, TierPips } from "@/components/armor-thumb";
@@ -13,7 +14,7 @@ import { PowerValue } from "@/components/power-value";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent } from "@/components/ui/popover";
 import { Drawer, DrawerContent } from "@/components/ui/drawer";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Tooltip, TooltipContent, TooltipLabel, TooltipTrigger } from "@/components/ui/tooltip";
 import { STAT_LABELS } from "@/lib/armory/stats";
 import { useProfile } from "@/lib/armory/use-profile";
 import { applyPerks, type PerkChange } from "@/lib/inventory/apply-perks";
@@ -37,9 +38,10 @@ import { weaponDisplayStats } from "@/lib/weapons/display-stats";
 import { WEAPON_STAT_NUMBERS } from "@/lib/weapons/stat-order";
 import type { PerkRef } from "@/lib/weapons/types";
 import { useClarity } from "@/lib/weapons/use-clarity";
+import { weaponSearchHref } from "@/lib/weapons/search-state";
 import { useWeaponCatalog } from "@/lib/weapons/use-weapon-catalog";
 import { cn } from "@/lib/utils";
-import { TAG_BUTTON, TagButtons } from "./tag-buttons";
+import { TAG_BUTTON, TAG_BUTTON_IDLE, TagButtons } from "./tag-buttons";
 import { useManagerActions } from "./manager-context";
 
 const ITEM_TYPE_ARMOR = 2;
@@ -86,15 +88,15 @@ export function ItemDetails({
   moves?: boolean;
 }) {
   const found = target ? locate(inventory, target.key) : undefined;
-  const copies =
-    found?.item.itemType === ITEM_TYPE_WEAPON ? weaponCopies(inventory, found.item.name).length : 0;
+  const weapon = found?.item.itemType === ITEM_TYPE_WEAPON;
+  const copies = weapon ? weaponCopies(inventory, found.item.name).length : 0;
   const body = found && (
     <>
       <Header item={found.item} onLock={onLock} />
       {moves && (
         <MoveButtons inventory={inventory} item={found.item} place={found.place} onDone={onClose} />
       )}
-      {found.item.itemType === ITEM_TYPE_WEAPON && found.item.instanceId ? (
+      {weapon && found.item.instanceId ? (
         <WeaponRollView
           key={found.item.instanceId}
           item={found.item}
@@ -110,14 +112,33 @@ export function ItemDetails({
       {found.item.craftable && !found.item.crafted && !found.item.enhanced && (
         <PatternProgress name={found.item.name} layout="stacked" className={cn(SECTION, "gap-1.5")} />
       )}
-      {(found.item.instanceId || copies > 1) && (
-        <div className={cn(SECTION, "flex-row flex-wrap items-center gap-1")}>
+      {(found.item.instanceId || weapon) && (
+        // One line in the panel, which widens to fit it (see PopoverContent), so Compare sits
+        // beside the icons. The phone sheet is the screen's width, so there it wraps.
+        <div className={cn(SECTION, "flex-row items-center gap-1", sheet && "flex-wrap")}>
           {found.item.instanceId && <TagButtons instanceId={found.item.instanceId} />}
+          {weapon && (
+            // Every roll the weapon can have, on Weapon search. A link, so it opens in a new tab too.
+            <TooltipLabel label="View all rolls">
+              <Link
+                href={weaponSearchHref(found.item)}
+                aria-label="View all rolls in Weapon search"
+                // Items is kept while hidden: leaving it in this tab closes the popup, so it
+                // isn't still open on the way back. A modified click opens a new tab instead.
+                onClick={(e) => {
+                  if (!e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey) onClose();
+                }}
+                className={cn(TAG_BUTTON, TAG_BUTTON_IDLE, "shrink-0")}
+              >
+                <HugeiconsIcon icon={Search01Icon} className="size-3.5" aria-hidden />
+              </Link>
+            </TooltipLabel>
+          )}
           {copies > 1 && (
             <button
               type="button"
               onClick={() => onCompare(found.item)}
-              className={cn(TAG_BUTTON, "border-foreground/12 bg-foreground/4 shrink-0 gap-1 px-3 text-[0.8rem] font-medium")}
+              className={cn(TAG_BUTTON, TAG_BUTTON_IDLE, "shrink-0 gap-1 px-3 text-[0.8rem] font-medium whitespace-nowrap")}
             >
               <HugeiconsIcon icon={GitCompareIcon} className="size-3.5" aria-hidden />
               Compare {copies} copies
@@ -156,8 +177,8 @@ export function ItemDetails({
         side="right"
         align="start"
         sideOffset={8}
-        // At least 300px, wider when the header's type line needs it (that line never
-        // wraps); w-min lets everything else wrap rather than widen the panel.
+        // At least 300px, wider when the header's type line or the action row needs it
+        // (neither wraps); w-min lets everything else wrap rather than widen the panel.
         className="max-h-(--available-height) w-min max-w-[calc(100vw-1rem)] min-w-[300px] gap-0 overflow-y-auto p-0"
         style={PANEL_FRAME}
       >
