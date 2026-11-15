@@ -175,9 +175,10 @@ export function ItemDetails({
         side="right"
         align="start"
         sideOffset={8}
-        // At least 300px, wider when the header's type line needs it (that line never
-        // wraps); w-min lets everything else wrap rather than widen the panel.
-        className="max-h-(--available-height) w-min max-w-[calc(100vw-1rem)] min-w-[300px] gap-0 overflow-y-auto p-0"
+        // At least 332px, so a weapon's four icon buttons and "Compare NN copies" share a
+        // row; wider when the header's type line needs it (that line never wraps); w-min
+        // lets everything else wrap rather than widen the panel.
+        className="max-h-(--available-height) w-min max-w-[calc(100vw-1rem)] min-w-[332px] gap-0 overflow-y-auto p-0"
         style={PANEL_FRAME}
       >
         {body}
