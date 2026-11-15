@@ -4,7 +4,8 @@ import { useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import Image from "next/image";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { GitCompareIcon, SquareLock02Icon, SquareUnlock02Icon } from "@hugeicons/core-free-icons";
+import { GitCompareIcon, Search01Icon, SquareLock02Icon, SquareUnlock02Icon } from "@hugeicons/core-free-icons";
+import Link from "next/link";
 import { EnhancedArrow } from "@/components/enhanced-arrow";
 import { PerkTooltip } from "@/components/weapons/perk-tooltip";
 import { ItemWatermark, TierPips } from "@/components/armor-thumb";
@@ -13,7 +14,7 @@ import { PowerValue } from "@/components/power-value";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent } from "@/components/ui/popover";
 import { Drawer, DrawerContent } from "@/components/ui/drawer";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Tooltip, TooltipContent, TooltipLabel, TooltipTrigger } from "@/components/ui/tooltip";
 import { STAT_LABELS } from "@/lib/armory/stats";
 import { useProfile } from "@/lib/armory/use-profile";
 import { applyPerks, type PerkChange } from "@/lib/inventory/apply-perks";
@@ -37,6 +38,7 @@ import { weaponDisplayStats } from "@/lib/weapons/display-stats";
 import { WEAPON_STAT_NUMBERS } from "@/lib/weapons/stat-order";
 import type { PerkRef } from "@/lib/weapons/types";
 import { useClarity } from "@/lib/weapons/use-clarity";
+import { weaponSearchHref } from "@/lib/weapons/search-state";
 import { useWeaponCatalog } from "@/lib/weapons/use-weapon-catalog";
 import { cn } from "@/lib/utils";
 import { TAG_BUTTON, TagButtons } from "./tag-buttons";
@@ -86,8 +88,8 @@ export function ItemDetails({
   moves?: boolean;
 }) {
   const found = target ? locate(inventory, target.key) : undefined;
-  const copies =
-    found?.item.itemType === ITEM_TYPE_WEAPON ? weaponCopies(inventory, found.item.name).length : 0;
+  const weapon = found?.item.itemType === ITEM_TYPE_WEAPON;
+  const copies = weapon ? weaponCopies(inventory, found.item.name).length : 0;
   const body = found && (
     <>
       <Header item={found.item} onLock={onLock} />
@@ -110,9 +112,21 @@ export function ItemDetails({
       {found.item.craftable && !found.item.crafted && !found.item.enhanced && (
         <PatternProgress name={found.item.name} layout="stacked" className={cn(SECTION, "gap-1.5")} />
       )}
-      {(found.item.instanceId || copies > 1) && (
+      {(found.item.instanceId || weapon) && (
         <div className={cn(SECTION, "flex-row flex-wrap items-center gap-1")}>
           {found.item.instanceId && <TagButtons instanceId={found.item.instanceId} />}
+          {weapon && (
+            // Every roll the weapon can have, on Weapon search. A link, so it opens in a new tab too.
+            <TooltipLabel label="View all rolls">
+              <Link
+                href={weaponSearchHref(found.item)}
+                aria-label="View all rolls in Weapon search"
+                className={cn(TAG_BUTTON, "border-foreground/12 bg-foreground/4 shrink-0")}
+              >
+                <HugeiconsIcon icon={Search01Icon} className="size-3.5" aria-hidden />
+              </Link>
+            </TooltipLabel>
+          )}
           {copies > 1 && (
             <button
               type="button"

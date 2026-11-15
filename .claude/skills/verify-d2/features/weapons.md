@@ -11,6 +11,7 @@ The Weapon search page lists every weapon in the game. A user can search by name
 - `wpn-perks` opens a weapon's details pane, where picking a perk presses that perk.
 - `wpn-mods` shows the weapon's stat-moving mods in `region "Mods"` under the perk grid; hovering one previews its stats, clicking one keeps it.
 - `wpn-dps`: each boss DPS setup in Advanced stats shows the grid perks it ran; with more than one such setup they are a `radiogroup "DPS setups"`, and "See perks" at the bottom picks the chosen setup's perks in the grid.
+- `wpn-link`: `/weapons?q=<name>&weapon=<itemHash>` (from Items and the Farm list) opens that exact version, in the details dialog below 1024 px; an unknown hash keeps the top result.
 
 ## How to get to it (user POV)
 
@@ -33,6 +34,7 @@ Preconditions:
 - **Pattern filter (`wpn-pattern-filter`).** Fill the combobox with `Veiled Threat craft`: `option`s named `is:craftable …`, `not:craftable …`, `pattern:incomplete Patterns you haven't finished`, `pattern:complete …`. Click `pattern:incomplete`: the box reads `Veiled Threat pattern:incomplete ` and Veiled Threat is listed. `Osteo Striga pattern:incomplete` lists nothing; `Osteo Striga pattern:complete` lists it. Signed out, a `pattern:` search shows "Sign in to search by your pattern progress."
 - **DPS perks (`wpn-dps`).** Fill the combobox with `Synanceia` and open it. Click `button "Advanced stats"` (it starts closed), then `button "See perks"`: in `region "Perks"`, Jagged Edge, Relentless Strikes, Surrounded and Tenacity turn `aria-pressed="true"` (the top setup), and Elemental Honing (the second setup's) stays `false`.
 - **DPS setup choice (`wpn-dps`).** Open `Hezen Vengeance` and Advanced stats. `radio /^13,514 boss DPS/` starts checked; See perks picks Cluster Bomb + Elemental Honing (once each: both trait columns roll them, so count picked tiles by `aria-label`). Click `radio /^8,226 boss DPS/` (no second See perks: once pressed, choosing a setup picks live): Envious Arsenal picked, Cluster Bomb let go, Elemental Honing kept. Clicking the top radio again brings Cluster Bomb back.
+- **Link (`wpn-link`).** Austringer has two current perk pools; `?q=Austringer` opens the Menagerie one (Newest first), `?q=Austringer&weapon=3055790362` the Derelict Leviathan one (the second row has `aria-current`). The details heading's name runs the pool label on with no space ("AustringerThe Derelict…"), so don't match `\b` after the name. `?weapon=123` keeps the top result. At 800 px (`page.s("Emulation.setDeviceMetricsOverride", …)`) the link opens a `dialog` instead of the side pane. Proof: `13-link-desktop`, `14-link-narrow`.
 - **Proof.** `01-catalog`, `02-filtered`, `03-perk-picked` (the details pane), `04-mod-hover`, `05-mod-picked`, `06-dps-perks`, `07-dps-setup-picked`.
 
 ## Gotchas

@@ -23,6 +23,25 @@ export const SORTS = [
   ["name", "A–Z"],
 ] as const;
 
+/** The URL param naming, by item hash, the exact weapon a link opens. */
+const LINKED_WEAPON_PARAM = "weapon";
+
+/**
+ * Weapon search for one weapon: its name in the search box and that exact version open,
+ * so a name with several perk pools still opens the pool this copy rolls from.
+ */
+export function weaponSearchHref({ name, itemHash }: { name: string; itemHash: number }): string {
+  return `/weapons?${new URLSearchParams({ q: name, [LINKED_WEAPON_PARAM]: String(itemHash) })}`;
+}
+
+/** A link's `weapon=` item hash, or null when there's none or it isn't a hash. */
+export function readLinkedWeaponHash(params: URLSearchParams): number | null {
+  const raw = params.get(LINKED_WEAPON_PARAM)?.trim();
+  if (!raw || !/^\d{1,10}$/.test(raw)) return null;
+  const hash = Number(raw);
+  return hash > 0 ? hash : null;
+}
+
 /** An `ammoGen` URL value as a whole number, or null when it isn't one. */
 export function readAmmoGen(raw: string | null): number | null {
   if (!raw || !/^\d{1,3}$/.test(raw.trim())) return null;

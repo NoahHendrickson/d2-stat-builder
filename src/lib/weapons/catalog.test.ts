@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { sampleWeapons } from "./fixtures/sample-weapons";
 import { internWeaponCatalog } from "./intern-weapons";
-import { createWeaponCatalog } from "./catalog";
+import { catalogWeaponFor, createWeaponCatalog } from "./catalog";
 import { compactWeaponIndex, expandWeaponIndex } from "./transport";
 import { mergeWeaponFilters } from "./query-language";
-import { readSearchState } from "./search-state";
+import { readLinkedWeaponHash, readSearchState, weaponSearchHref } from "./search-state";
 
 const { index } = internWeaponCatalog(sampleWeapons, "test");
 
@@ -209,5 +209,57 @@ describe("perk stats in the shipped catalog", () => {
         statMods: undefined,
       },
     ]);
+  });
+});
+
+describe("links to one weapon", () => {
+  const params = (href: string) => new URLSearchParams(href.slice(href.indexOf("?")));
+  /** What Weapon search opens for a link: catalogWeaponFor's pick, or undefined to keep the top result. */
+  const opens = (catalog: ReturnType<typeof createWeaponCatalog>, href: string) => {
+    const hash = readLinkedWeaponHash(params(href));
+    return hash === null
+      ? undefined
+      : catalogWeaponFor(catalog, { itemHash: hash, name: params(href).get("q") ?? "" });
+  };
+
+  it("puts the name in the search box and the exact hash beside it", () => {
+    expect(weaponSearchHref({ name: "Fatebringer", itemHash: 2171478765 })).toBe(
+      "/weapons?q=Fatebringer&weapon=2171478765",
+    );
+    const href = weaponSearchHref({ name: "Hung Jury SR4 & Co", itemHash: 7 });
+    expect(readSearchState(params(href)).query).toBe("Hung Jury SR4 & Co");
+    expect(readLinkedWeaponHash(params(href))).toBe(7);
+  });
+
+  it("ignores a missing or malformed weapon hash", () => {
+    for (const raw of ["", "weapon=", "weapon=abc", "weapon=0", "weapon=-5", "weapon=1.5", "weapon=12345678901"]) {
+      expect(readLinkedWeaponHash(new URLSearchParams(raw))).toBeNull();
+    }
+    expect(readLinkedWeaponHash(new URLSearchParams("weapon=%20123%20"))).toBe(123);
+  });
+
+  it("opens the linked version, falling back to its name, then to nothing", () => {
+    const fatebringer = sampleWeapons.find((w) => w.name === "Fatebringer")!;
+    const reprise = {
+      ...fatebringer,
+      hash: 9_001,
+      source: "Pantheon",
+      releaseIndex: fatebringer.releaseIndex + 1_000,
+      columns: [{ kind: "Trait", perks: [{ hash: 9_002, name: "Kinetic Tremors", currentlyCanRoll: true }] }],
+      perks: ["Kinetic Tremors"],
+      perkHashes: [9_002],
+    };
+    const catalog = createWeaponCatalog(internWeaponCatalog([...sampleWeapons, reprise], "test").index);
+    // Two pools under one name, the reprise listed first: each link opens its own.
+    expect(catalog.search("fatebringer", {}, "season-desc").results[0]?.hash).toBe(9_001);
+    expect(opens(catalog, weaponSearchHref({ name: "Fatebringer", itemHash: fatebringer.hash }))?.hash).toBe(
+      fatebringer.hash,
+    );
+    expect(opens(catalog, weaponSearchHref({ name: "Fatebringer", itemHash: 9_001 }))?.hash).toBe(9_001);
+    // An old copy whose hash the catalog doesn't list: a same-name version.
+    expect(opens(catalog, weaponSearchHref({ name: "Fatebringer", itemHash: 123 }))?.name).toBe("Fatebringer");
+    // Neither known, or no hash: nothing, so the top result stays open.
+    expect(opens(catalog, weaponSearchHref({ name: "Not A Gun", itemHash: 123 }))).toBeUndefined();
+    expect(opens(catalog, "/weapons?q=Fatebringer")).toBeUndefined();
   });
 });

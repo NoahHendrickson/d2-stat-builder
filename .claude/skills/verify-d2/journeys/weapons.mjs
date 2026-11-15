@@ -209,4 +209,31 @@ export default async function ({ page, app, step, shot, expect, log }) {
     expect((await page.value(box)) === "Osteo Striga pattern:incomplete", "the search settled on pattern:incomplete");
     expect(!(await listed("Osteo Striga")), "Osteo Striga (5 of 5) isn't listed under pattern:incomplete");
   });
+
+  // Last: it narrows the viewport.
+  await step("wpn-link: a weapon= link opens that version, in the dialog on narrow screens", async () => {
+    // Austringer has two current perk pools; Newest lists the Menagerie one first.
+    const details = { role: "complementary", name: "Weapon details" };
+    const linked = "/weapons?q=Austringer&weapon=3055790362";
+    await app.open("/weapons?q=Austringer");
+    await page.waitFor({ role: "heading", name: /^Austringer.*Menagerie/ }, { within: details });
+    await app.open(linked);
+    await page.waitFor({ role: "heading", name: /^Austringer.*Derelict Leviathan/ }, { within: details });
+    const rows = await page.findAll({ role: "button", name: "View Austringer perks" }, { within: LIST });
+    const current = await Promise.all(rows.map((row) => page.attr(row, "aria-current")));
+    expect(current.join() === ",true", `the second Austringer row is the open one (${current.join()})`);
+    await shot("link-desktop");
+    // An unknown hash with no name to fall back on keeps the top result.
+    await app.open("/weapons?weapon=123");
+    const top = /^View (.+) perks$/.exec(await page.name({ role: "button", name: /^View .+ perks$/, nth: 0 }, { within: LIST }))[1];
+    await page.waitFor({ role: "heading", name: new RegExp(`^${top.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`) }, { within: details });
+    log(`  weapon=123 leaves the top result (${top}) open`);
+    // Under 1024 px the details are a dialog, which the link opens.
+    await page.s("Emulation.setDeviceMetricsOverride", { width: 800, height: 1000, deviceScaleFactor: 1, mobile: false });
+    await app.open(linked);
+    await page.waitFor({ role: "heading", name: /^Austringer.*Derelict Leviathan/ }, { within: { role: "dialog" } });
+    expect(!(await page.exists(details)), "no side pane at 800 px");
+    await shot("link-narrow");
+    await page.s("Emulation.setDeviceMetricsOverride", { width: 1600, height: 1000, deviceScaleFactor: 1, mobile: false });
+  });
 }

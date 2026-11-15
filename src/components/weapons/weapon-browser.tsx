@@ -51,10 +51,14 @@ import {
 import { resolveFrame } from "@/lib/weapons/pick-slots";
 import {
   SORTS,
+  readLinkedWeaponHash,
   readSearchState,
   withLegacyCraftableInQuery,
 } from "@/lib/weapons/search-state";
-import type { WeaponSearchResult } from "@/lib/weapons/catalog";
+import {
+  catalogWeaponFor,
+  type WeaponSearchResult,
+} from "@/lib/weapons/catalog";
 import { sessionMembershipId } from "@/lib/armory/use-profile";
 import { useSession } from "@/lib/auth/use-session";
 import { usePatterns } from "@/lib/bungie/use-patterns";
@@ -180,6 +184,24 @@ export function WeaponBrowser() {
     const next = withLegacyCraftableInQuery(currentParams);
     if (next) navigate(next);
   }, [currentParams]);
+  // A link to one weapon (`weapon=<hash>`, from Items or the Farm list) opens it once
+  // the catalog loads, in the dialog on narrow screens. An unknown one leaves the top
+  // result open. Opened once per hash, so picking another row sticks.
+  const linkedHash = readLinkedWeaponHash(currentParams);
+  const linkedName = currentParams.get("q") ?? "";
+  const openedLink = useRef<number | null>(null);
+  useEffect(() => {
+    if (!data || linkedHash === null || openedLink.current === linkedHash) return;
+    openedLink.current = linkedHash;
+    const weapon = catalogWeaponFor(data, { itemHash: linkedHash, name: linkedName });
+    if (!weapon) return;
+    setPicked(weapon);
+    // Read now, not `split`: on a fresh load that's still the server's `false` here.
+    setDialogOpen(!window.matchMedia(`(min-width: ${SPLIT_MIN_PX}px)`).matches);
+  }, [data, linkedHash, linkedName]);
+  // The page is kept while hidden (cacheComponents), so following the same link again
+  // later has to open it again.
+  useEffect(() => () => void (openedLink.current = null), []);
 
   function navigate(next: URLSearchParams, push = false) {
     const url = `${window.location.pathname}${next.size ? `?${next}` : ""}`;
