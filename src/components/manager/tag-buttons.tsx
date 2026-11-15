@@ -8,6 +8,8 @@ import { TAG_ICONS } from "./tag-icons";
 /** The 32px square buttons under an item: its tags, and Compare beside them. */
 export const TAG_BUTTON =
   "d2-hover-ring flex h-8 min-w-8 items-center justify-center border outline-none focus-visible:d2-tile-selected";
+/** A TAG_BUTTON that isn't the active tag: faint outline and fill. */
+export const TAG_BUTTON_IDLE = "border-foreground/12 bg-foreground/4";
 
 /** The tags offered; an item already tagged Infuse or Archive still shows that one. */
 const PANEL_TAGS: readonly ItemTag[] = ["favorite", "keep", "junk"];
@@ -34,7 +36,7 @@ export function TagButtons({ instanceId }: { instanceId: string }) {
             "shrink-0",
             tag === t
               ? "border-transparent bg-foreground text-background"
-              : "border-foreground/12 bg-foreground/4",
+              : TAG_BUTTON_IDLE,
           )}
         >
           <HugeiconsIcon icon={TAG_ICONS[t]} className="size-3" aria-hidden />

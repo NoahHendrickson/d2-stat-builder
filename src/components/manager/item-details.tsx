@@ -41,7 +41,7 @@ import { useClarity } from "@/lib/weapons/use-clarity";
 import { weaponSearchHref } from "@/lib/weapons/search-state";
 import { useWeaponCatalog } from "@/lib/weapons/use-weapon-catalog";
 import { cn } from "@/lib/utils";
-import { TAG_BUTTON, TagButtons } from "./tag-buttons";
+import { TAG_BUTTON, TAG_BUTTON_IDLE, TagButtons } from "./tag-buttons";
 import { useManagerActions } from "./manager-context";
 
 const ITEM_TYPE_ARMOR = 2;
@@ -96,7 +96,7 @@ export function ItemDetails({
       {moves && (
         <MoveButtons inventory={inventory} item={found.item} place={found.place} onDone={onClose} />
       )}
-      {found.item.itemType === ITEM_TYPE_WEAPON && found.item.instanceId ? (
+      {weapon && found.item.instanceId ? (
         <WeaponRollView
           key={found.item.instanceId}
           item={found.item}
@@ -121,7 +121,12 @@ export function ItemDetails({
               <Link
                 href={weaponSearchHref(found.item)}
                 aria-label="View all rolls in Weapon search"
-                className={cn(TAG_BUTTON, "border-foreground/12 bg-foreground/4 shrink-0")}
+                // Items is kept while hidden: leaving it in this tab closes the popup, so it
+                // isn't still open on the way back. A modified click opens a new tab instead.
+                onClick={(e) => {
+                  if (!e.metaKey && !e.ctrlKey && !e.shiftKey && !e.altKey) onClose();
+                }}
+                className={cn(TAG_BUTTON, TAG_BUTTON_IDLE, "shrink-0")}
               >
                 <HugeiconsIcon icon={Search01Icon} className="size-3.5" aria-hidden />
               </Link>
@@ -131,7 +136,7 @@ export function ItemDetails({
             <button
               type="button"
               onClick={() => onCompare(found.item)}
-              className={cn(TAG_BUTTON, "border-foreground/12 bg-foreground/4 shrink-0 gap-1 px-3 text-[0.8rem] font-medium")}
+              className={cn(TAG_BUTTON, TAG_BUTTON_IDLE, "shrink-0 gap-1 px-3 text-[0.8rem] font-medium")}
             >
               <HugeiconsIcon icon={GitCompareIcon} className="size-3.5" aria-hidden />
               Compare {copies} copies

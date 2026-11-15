@@ -164,6 +164,14 @@ export function createWeaponCatalog(raw: WeaponIndex) {
     return poolLabels.get(hash);
   }
 
+  /**
+   * The result row a weapon hash shows as (its perk pool's representative, as `search`
+   * lists it), or undefined when browse doesn't list that hash.
+   */
+  function rowFor(hash: number): WeaponSummary | undefined {
+    return representative.get(hash) ?? weapons.find((w) => w.hash === hash);
+  }
+
   /** Perk combo values once `first` is picked: only perks that roll opposite it. */
   function comboPartners(first: string) {
     return collectComboPartners(weapons, index.perks, first).map((p) => ({
@@ -174,7 +182,7 @@ export function createWeaponCatalog(raw: WeaponIndex) {
 
   // `allWeapons` keeps the superseded versions browse hides: old copies still drop
   // (and sit in vaults) under those hashes.
-  return { ...index, weapons, allWeapons: index.weapons, facets, search, usesPatterns, poolLabel, comboPartners };
+  return { ...index, weapons, allWeapons: index.weapons, facets, search, usesPatterns, poolLabel, rowFor, comboPartners };
 }
 
 export type WeaponCatalog = ReturnType<typeof createWeaponCatalog>;
