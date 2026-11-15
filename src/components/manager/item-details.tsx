@@ -113,7 +113,9 @@ export function ItemDetails({
         <PatternProgress name={found.item.name} layout="stacked" className={cn(SECTION, "gap-1.5")} />
       )}
       {(found.item.instanceId || weapon) && (
-        <div className={cn(SECTION, "flex-row flex-wrap items-center gap-1")}>
+        // One line in the panel, which widens to fit it (see PopoverContent), so Compare sits
+        // beside the icons. The phone sheet is the screen's width, so there it wraps.
+        <div className={cn(SECTION, "flex-row items-center gap-1", sheet && "flex-wrap")}>
           {found.item.instanceId && <TagButtons instanceId={found.item.instanceId} />}
           {weapon && (
             // Every roll the weapon can have, on Weapon search. A link, so it opens in a new tab too.
@@ -136,7 +138,7 @@ export function ItemDetails({
             <button
               type="button"
               onClick={() => onCompare(found.item)}
-              className={cn(TAG_BUTTON, TAG_BUTTON_IDLE, "shrink-0 gap-1 px-3 text-[0.8rem] font-medium")}
+              className={cn(TAG_BUTTON, TAG_BUTTON_IDLE, "shrink-0 gap-1 px-3 text-[0.8rem] font-medium whitespace-nowrap")}
             >
               <HugeiconsIcon icon={GitCompareIcon} className="size-3.5" aria-hidden />
               Compare {copies} copies
@@ -175,10 +177,9 @@ export function ItemDetails({
         side="right"
         align="start"
         sideOffset={8}
-        // At least 332px, so a weapon's four icon buttons and "Compare NN copies" share a
-        // row; wider when the header's type line needs it (that line never wraps); w-min
-        // lets everything else wrap rather than widen the panel.
-        className="max-h-(--available-height) w-min max-w-[calc(100vw-1rem)] min-w-[332px] gap-0 overflow-y-auto p-0"
+        // At least 300px, wider when the header's type line or the action row needs it
+        // (neither wraps); w-min lets everything else wrap rather than widen the panel.
+        className="max-h-(--available-height) w-min max-w-[calc(100vw-1rem)] min-w-[300px] gap-0 overflow-y-auto p-0"
         style={PANEL_FRAME}
       >
         {body}
