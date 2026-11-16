@@ -65,8 +65,6 @@ export interface PlugAction {
 export interface ApplyPlan {
   plugs: PlugAction[];
   /** Plugs that are already socketed exactly where they'd go. */
-  alreadyApplied: string[];
-  /** Same as `alreadyApplied`, as actions — so the progress grid can show them. */
   inPlace: PlugAction[];
   /** Everything that couldn't be placed (armor mods and subclass plugs), as "Name: reason" lines. */
   skipped: string[];
@@ -163,7 +161,6 @@ export function planLoadoutPlugs(input: PlanInput): ApplyPlan {
   const { plugInfo } = input;
   const plugs: PlugAction[] = [];
   const inPlace: PlugAction[] = [];
-  const alreadyApplied: string[] = [];
   const skipped: string[] = [];
   const unplaced: UnplacedMod[] = [];
   const cost = (h: number | undefined) => (h === undefined ? 0 : (plugInfo(h)?.cost ?? 0));
@@ -357,9 +354,7 @@ export function planLoadoutPlugs(input: PlanInput): ApplyPlan {
     claim(candidates[0], entry);
   }
 
-  // --- Armor actions: diff each socket's current plug against the plan's. Actions that
-  // free energy (clears, cheaper swaps) run before ones that use it, so the piece's live
-  // energy only dips from where it starts and then climbs to where it ends — never over.
+  // --- Armor actions: diff each socket's current plug against the plan's.
   const freeing: PlugAction[] = [];
   const using: PlugAction[] = [];
   const assigned: Record<string, Record<number, number>> = {};
@@ -367,74 +362,125 @@ export function planLoadoutPlugs(input: PlanInput): ApplyPlan {
   for (const st of states.values()) {
     const { instanceId, name } = st.piece;
     const row: Record<number, number> = (placement[instanceId] = {});
-    for (const socket of st.piece.sockets) {
-      const { current } = socket;
-      const desired = st.plugs.get(socket.index);
-      const label = st.taken.get(socket.index);
-      if (desired !== undefined && desired !== socket.empty) row[socket.index] = desired;
-      if (label !== undefined && desired !== undefined) (assigned[instanceId] ??= {})[socket.index] = desired;
-      if (desired === undefined) continue;
-      const action: PlugAction = {
-        itemInstanceId: instanceId,
-        socketIndex: socket.index,
-        plugItemHash: desired,
-        label: label ?? `Remove ${plugInfo(current!)?.name ?? `mod #${current}`} → ${name}`,
-      };
-      if (desired === current) {
-        if (label === undefined) continue;
-        alreadyApplied.push(label);
-        inPlace.push(action);
-      } else (cost(desired) <= cost(current) ? freeing : using).push(action);
-    }
+    const changes = diffArmorSockets(
+      st.piece.sockets.map((socket) => {
+        const desired = st.plugs.get(socket.index);
+        const assignedHere = st.taken.has(socket.index);
+        if (desired !== undefined && desired !== socket.empty) row[socket.index] = desired;
+        if (assignedHere && desired !== undefined) (assigned[instanceId] ??= {})[socket.index] = desired;
+        return { index: socket.index, current: socket.current, desired, assigned: assignedHere };
+      }),
+      cost,
+    );
+    const action = (c: SocketChange): PlugAction => ({
+      itemInstanceId: instanceId,
+      socketIndex: c.index,
+      plugItemHash: c.desired,
+      label:
+        st.taken.get(c.index) ??
+        `Remove ${plugInfo(c.current!)?.name ?? `mod #${c.current}`} → ${name}`,
+    });
+    freeing.push(...changes.freeing.map(action));
+    using.push(...changes.using.map(action));
+    inPlace.push(...changes.inPlace.map(action));
   }
   plugs.push(...freeing, ...using);
 
-  // --- Fragments: keep ones already socketed; put the rest into sockets holding
-  // fragments the loadout doesn't want (or nothing), lowest index first.
   if (input.subclass) {
-    const sc = input.subclass;
-    for (const group of sc.groups) {
-      const desired = [...new Set(group.desired)];
-      const indices = Array.from({ length: group.count }, (_, i) => group.start + i);
-      const present = new Set(indices.map((i) => group.current[i]).filter(Boolean));
-      const free = indices.filter((i) => {
-        const cur = group.current[i];
-        return !cur || !desired.includes(cur);
-      });
-      for (const hash of desired) {
-        const name = plugInfo(hash)?.name ?? `${GROUP_LABEL[group.kind]} #${hash}`;
-        const label = `${name} → subclass`;
-        if (present.has(hash)) {
-          alreadyApplied.push(label);
-          const socketIndex = indices.find((i) => group.current[i] === hash);
-          if (socketIndex !== undefined) {
-            inPlace.push({ itemInstanceId: sc.instanceId, socketIndex, plugItemHash: hash, label });
-          }
-          continue;
+    const sc = planSubclassGroups(input.subclass, plugInfo);
+    plugs.push(...sc.plugs);
+    inPlace.push(...sc.inPlace);
+    skipped.push(...sc.skipped);
+  }
+
+  return { plugs, inPlace, skipped, unplaced, placement, assigned };
+}
+
+/** One armor socket: the plug in it now and the plug the apply leaves there. */
+export interface SocketState {
+  index: number;
+  current?: number;
+  /** Undefined = leave the socket alone. */
+  desired?: number;
+  /** The loadout put one of its own mods here (so an unchanged socket counts as "in place"). */
+  assigned: boolean;
+}
+
+export interface SocketChange {
+  index: number;
+  current?: number;
+  desired: number;
+}
+
+/**
+ * The inserts that turn one piece's sockets from `current` into `desired`. Inserts that
+ * free energy (clears, cheaper swaps) come before ones that use it, so the piece's live
+ * energy only dips from where it starts and then climbs to where it ends — never over.
+ * Shared by the client planner and the apply route, which runs it on live sockets.
+ */
+export function diffArmorSockets(
+  sockets: readonly SocketState[],
+  cost: (hash: number | undefined) => number,
+): { freeing: SocketChange[]; using: SocketChange[]; inPlace: SocketChange[] } {
+  const freeing: SocketChange[] = [];
+  const using: SocketChange[] = [];
+  const inPlace: SocketChange[] = [];
+  for (const { index, current, desired, assigned } of sockets) {
+    if (desired === undefined) continue;
+    const change = { index, current, desired };
+    if (desired === current) {
+      if (assigned) inPlace.push(change);
+    } else (cost(desired) <= cost(current) ? freeing : using).push(change);
+  }
+  return { freeing, using, inPlace };
+}
+
+/**
+ * Subclass plugs, group by group: keep ones already socketed; put the rest into sockets
+ * holding plugs the loadout doesn't want (or nothing), lowest index first. Shared by the
+ * client planner and the apply route, which runs it on the subclass's live sockets.
+ */
+export function planSubclassGroups(
+  sc: SubclassPlan,
+  plugInfo: (hash: number) => { name: string } | undefined,
+): { plugs: PlugAction[]; inPlace: PlugAction[]; skipped: string[] } {
+  const plugs: PlugAction[] = [];
+  const inPlace: PlugAction[] = [];
+  const skipped: string[] = [];
+  for (const group of sc.groups) {
+    const desired = [...new Set(group.desired)];
+    const indices = Array.from({ length: group.count }, (_, i) => group.start + i);
+    const present = new Set(indices.map((i) => group.current[i]).filter(Boolean));
+    const free = indices.filter((i) => {
+      const cur = group.current[i];
+      return !cur || !desired.includes(cur);
+    });
+    for (const hash of desired) {
+      const name = plugInfo(hash)?.name ?? `${GROUP_LABEL[group.kind]} #${hash}`;
+      const label = `${name} → subclass`;
+      if (present.has(hash)) {
+        const socketIndex = indices.find((i) => group.current[i] === hash);
+        if (socketIndex !== undefined) {
+          inPlace.push({ itemInstanceId: sc.instanceId, socketIndex, plugItemHash: hash, label });
         }
-        const socket = free.shift();
-        if (socket === undefined) {
-          skipped.push(`${name}: no ${group.kind} socket left`);
-          continue;
-        }
-        plugs.push({
-          itemInstanceId: sc.instanceId,
-          socketIndex: socket,
-          plugItemHash: hash,
-          label: `${name} → subclass`,
-        });
+        continue;
       }
-      // Only clear known live sockets; invisible slots may be locked. Keep desired
-      // plugs in their current positions to avoid duplicate-plug failures on swaps.
-      if (group.clearUnused && group.emptyHash !== undefined) {
-        for (const socketIndex of free) {
-          const current = group.current[socketIndex];
-          if (!current || current === group.emptyHash) continue;
-          plugs.push({ itemInstanceId: sc.instanceId, socketIndex, plugItemHash: group.emptyHash, label: `Clear ${group.kind} → subclass` });
-        }
+      const socket = free.shift();
+      if (socket === undefined) {
+        skipped.push(`${name}: no ${group.kind} socket left`);
+        continue;
+      }
+      plugs.push({ itemInstanceId: sc.instanceId, socketIndex: socket, plugItemHash: hash, label });
+    }
+    // Only clear known live sockets; invisible slots may be locked. Keep desired
+    // plugs in their current positions to avoid duplicate-plug failures on swaps.
+    if (group.clearUnused && group.emptyHash !== undefined) {
+      for (const socketIndex of free) {
+        const current = group.current[socketIndex];
+        if (!current || current === group.emptyHash) continue;
+        plugs.push({ itemInstanceId: sc.instanceId, socketIndex, plugItemHash: group.emptyHash, label: `Clear ${group.kind} → subclass` });
       }
     }
   }
-
-  return { plugs, alreadyApplied, inPlace, skipped, unplaced, placement, assigned };
+  return { plugs, inPlace, skipped };
 }

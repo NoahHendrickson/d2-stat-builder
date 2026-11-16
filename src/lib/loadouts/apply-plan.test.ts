@@ -70,7 +70,7 @@ describe("general stat mods", () => {
       modHashes: [201, 101, 102],
       plugInfo,
     });
-    expect(plan.alreadyApplied).toEqual(["Major A → has-major"]);
+    expect(plan.inPlace.map((p) => p.label)).toEqual(["Major A → has-major"]);
     expect(plan.inPlace.map((p) => [p.plugItemHash, p.itemInstanceId])).toEqual([[101, "has-major"]]);
     expect(plan.plugs.map((p) => [p.plugItemHash, p.itemInstanceId, p.socketIndex])).toEqual([
       [201, "full", 1],
@@ -468,7 +468,7 @@ describe("fragments", () => {
       },
     });
     expect(plan.plugs.map((p) => [p.socketIndex, p.plugItemHash])).toEqual([[0, 802]]);
-    expect(plan.alreadyApplied).toEqual([]);
+    expect(plan.inPlace.map((p) => p.label)).toEqual([]);
   });
 
   test("pins an ability, leaving one already socketed alone", () => {
@@ -483,7 +483,7 @@ describe("fragments", () => {
       },
     });
     expect(plan.plugs.map((p) => [p.socketIndex, p.plugItemHash, p.label])).toEqual([[4, 902, "Ability #902 → subclass"]]);
-    expect(plan.alreadyApplied).toEqual(["Ability #911 → subclass"]);
+    expect(plan.inPlace.map((p) => p.label)).toEqual(["Ability #911 → subclass"]);
     expect(plan.inPlace.map((p) => [p.socketIndex, p.plugItemHash])).toEqual([[3, 911]]);
   });
 
@@ -525,7 +525,7 @@ describe("fragments", () => {
         groups: [{ kind: "fragment", start: 7, count: 4, current: { 7: 999, 8: 501, 9: 0 }, desired: [501, 502, 503] }],
       },
     });
-    expect(plan.alreadyApplied).toEqual(["Fragment One → subclass"]);
+    expect(plan.inPlace.map((p) => p.label)).toEqual(["Fragment One → subclass"]);
     expect(plan.inPlace.map((p) => [p.socketIndex, p.plugItemHash])).toEqual([[8, 501]]);
     expect(plan.plugs.map((p) => [p.socketIndex, p.plugItemHash])).toEqual([
       [7, 502],

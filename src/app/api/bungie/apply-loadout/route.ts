@@ -1,29 +1,28 @@
 import { NextResponse } from "next/server";
 import { createBungieHttp, BungieHttpError } from "@/lib/bungie/http";
-import { isBungieId, parseEquipItems, parseSpares } from "@/lib/bungie/equip-route";
+import { isBungieId, parseApplyTargets, parseEquipItems, parseSpares } from "@/lib/bungie/equip-route";
+import {
+  applyPlugTargets,
+  summarize,
+  type PlugOutcome,
+  type PlugSummary,
+} from "@/lib/bungie/apply-plugs-server";
+import type { ApplyTargets, LivePlan } from "@/lib/loadouts/apply-targets";
 import type { EquipItemState, SpareItems } from "@/lib/bungie/equip-plan";
 import {
   ApplyCancelledError,
-  insertPlugs,
   stageAndEquip,
   type ApplyStreamEvent,
-  type PlugRequest,
-  type PlugResult,
 } from "@/lib/bungie/equip-server";
 import { getValidAccessToken, readUser } from "@/lib/bungie/session";
-import { FRAGMENT_SOCKET_COUNT } from "@/lib/armory/equipped-subclass";
-import { MAX_MODS } from "@/lib/loadouts/types";
-import { ABILITY_SOCKET_COUNT, ASPECT_SOCKET_COUNT } from "@/lib/dim/subclasses";
 import { rejectCrossSite } from "@/lib/http/same-origin";
 import { isApplyCancelled, isApplyId } from "@/lib/loadouts/apply-cancel-store";
-
-/** 7 perk inserts, plus an empty plug for each perk that moves to another socket. */
-const ARTIFACT_PLUGS = 14;
 
 /**
  * A full apply is long: up to 11 items × (2 vault hops + up to 3 spares vaulted, each
  * followed by a retry) transfers at 150 ms spacing, plus a character-inventory read
- * when the live fallback runs, then every plug one at a time. Bungie often takes ~2 s
+ * when the live fallback runs, then one batch of parallel item reads (each target item's
+ * live sockets), then every plug one at a time. Bungie often takes ~2 s
  * to answer each plug insert, so a big loadout (armor mods, subclass, artifact) runs
  * well past a minute. At 60 s Vercel killed the stream mid-way and the last mods were
  * never sent (10 of 49 production applies on 2026-10-31/11-01). 300 s is within the
@@ -43,50 +42,53 @@ const PLUG_DEADLINE_MS = (maxDuration - 30) * 1000;
  * slot + the artifact.
  */
 const MAX_ITEMS = 11;
-/**
- * Every mod a loadout may list (stat / tuning / artifice / slot-specific — the same cap
- * the loadout parser enforces) plus every subclass socket a loadout can pin: abilities,
- * aspects, and fragments. Anything the client plans within a valid loadout must fit, or
- * a fully-specified build could never be applied. Then the artifact's perks.
- */
-const MAX_PLUGS =
-  MAX_MODS + ABILITY_SOCKET_COUNT + ASPECT_SOCKET_COUNT + FRAGMENT_SOCKET_COUNT + ARTIFACT_PLUGS;
 
 interface ApplyRequestBody {
   characterId: string;
   /** Armor, weapons, and the subclass item to stage + equip. May be empty when only plugs change. */
   items: EquipItemState[];
-  /** Socket inserts to run after equipping (planned client-side, see apply-plan.ts). */
-  plugs: PlugRequest[];
+  /**
+   * The state each item's sockets should end in. The server reads the items' live
+   * sockets after equipping and works out the inserts itself (see apply-targets.ts).
+   */
+  targets: ApplyTargets;
   /** Same-slot pieces the server may vault when a character's slot is full. */
   spares: SpareItems;
   /** Client-made id the Cancel button flags (apply-loadout/cancel); none means no cancel. */
   applyId?: string;
 }
 
-function parsePlugs(v: unknown): PlugRequest[] | null {
-  if (!Array.isArray(v) || v.length > MAX_PLUGS) return null;
-  for (const p of v as Partial<PlugRequest>[]) {
-    if (
-      !isBungieId(p?.itemInstanceId) ||
-      !Number.isInteger(p.socketIndex) ||
-      (p.socketIndex as number) < 0 ||
-      !Number.isInteger(p.plugItemHash)
-    )
-      return null;
-  }
-  return v as PlugRequest[];
-}
+/**
+ * A page loaded before targets replaced the client-planned `plugs` list (2026-11-14)
+ * still sends that list. It gets told to refresh rather than a bare "Invalid request".
+ */
+const STALE_PAGE_MESSAGE = "This page is out of date — refresh it and apply again";
 
 function parseBody(body: unknown): ApplyRequestBody | null {
   const b = body as Partial<ApplyRequestBody> | null;
   if (!b || !isBungieId(b.characterId)) return null;
   const items = parseEquipItems(b.items ?? [], { min: 0, max: MAX_ITEMS });
-  const plugs = parsePlugs(b.plugs ?? []);
+  const targets = parseApplyTargets(b.targets, { maxItems: MAX_ITEMS });
   const spares = parseSpares(b.spares);
-  if (!items || !plugs || !spares || (items.length === 0 && plugs.length === 0)) return null;
+  if (!items || !targets || !spares) return null;
+  if (items.length === 0 && targets.items.length === 0) return null;
   if (b.applyId !== undefined && !isApplyId(b.applyId)) return null;
-  return { characterId: b.characterId, items, plugs, spares, applyId: b.applyId };
+  return { characterId: b.characterId, items, targets, spares, applyId: b.applyId };
+}
+
+type ApplyOutcomeKind = "done" | "cancelled" | "error";
+
+/**
+ * One line per apply, for reading apply health in the logs: counts, error codes and plug
+ * hashes only — nothing that names the player.
+ */
+function logApply(line: {
+  outcome: ApplyOutcomeKind;
+  ms: number;
+  equip: { ok: number; failed: number };
+  plugs?: PlugSummary;
+}) {
+  console.info(`[apply-loadout] ${JSON.stringify(line)}`);
 }
 
 function streamError(err: unknown): Extract<ApplyStreamEvent, { type: "error" }> {
@@ -104,9 +106,11 @@ function streamError(err: unknown): Extract<ApplyStreamEvent, { type: "error" }>
 }
 
 /**
- * Apply a saved loadout: stage + equip the armor, weapons, and subclass, then socket the
- * planned mods / tuning / artifice / fragments. Plugs for an item whose equip failed
- * are skipped (and say so, with that item's message) rather than attempted.
+ * Apply a saved loadout: stage + equip the armor, weapons, and subclass, then bring each
+ * target item's sockets to their target — mods / tuning / artifice / fragments / artifact
+ * perks — planned from the items' live sockets, each insert checked once it's in.
+ * Plugs for an item whose equip failed are skipped (and say so, with that item's
+ * message) rather than attempted.
  *
  * Success is an NDJSON stream of `ApplyStreamEvent` so the client can watch each
  * transfer / equip / plug as it happens. Auth and validation failures stay JSON.
@@ -121,18 +125,22 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Not signed in" }, { status: 401 });
   }
 
-  let body: ApplyRequestBody | null = null;
+  let raw: unknown;
   try {
-    body = parseBody(await request.json());
+    raw = await request.json();
   } catch {
-    body = null;
+    raw = null;
   }
-  if (!body) return NextResponse.json({ error: "Invalid request" }, { status: 400 });
+  const body = parseBody(raw);
+  if (!body) {
+    const stale = !!raw && typeof raw === "object" && "plugs" in raw && !("targets" in raw);
+    return NextResponse.json({ error: stale ? STALE_PAGE_MESSAGE : "Invalid request" }, { status: 400 });
+  }
 
   const http = createBungieHttp(token);
   const membershipType = user.destinyMembershipType;
   const membershipId = user.destinyMembershipId;
-  const { characterId, items, plugs: requestedPlugs, spares, applyId } = body;
+  const { characterId, items, targets, spares, applyId } = body;
   const encoder = new TextEncoder();
 
   // The cancel flag lives in the database (another instance takes the cancel request),
@@ -151,6 +159,13 @@ export async function POST(request: Request) {
         return cancelled;
       }
     : undefined;
+
+  // For the one summary line each apply logs (see logApply).
+  let outcome: ApplyOutcomeKind = "error";
+  let equipCounts = { ok: 0, failed: 0 };
+  let plan: LivePlan | undefined;
+  /** Filled as each insert settles, so a cancelled or failed apply still logs what ran. */
+  const outcomes: PlugOutcome[] = [];
 
   // Once the client goes away (tab closed, connection dropped) the controller rejects
   // every enqueue; keep applying — Bungie is mid-way through the character — but stop
@@ -193,33 +208,31 @@ export async function POST(request: Request) {
         const failedItems = new Map(
           equip.filter((r) => !r.ok).map((r) => [r.itemInstanceId, r.message ?? "Equip failed"]),
         );
-        const runnable = requestedPlugs.filter((p) => !failedItems.has(p.itemInstanceId));
-        const skippedPlugs: PlugResult[] = requestedPlugs
-          .filter((p) => failedItems.has(p.itemInstanceId))
-          .map((p) => {
-            const result = {
-              ...p,
-              ok: false,
-              message: `Skipped — its armor piece wasn't equipped (${failedItems.get(p.itemInstanceId)})`,
-            };
-            send({ type: "plug", result });
-            return result;
-          });
-        const plugResults = await insertPlugs({
+        equipCounts = { ok: equip.filter((r) => r.ok).length, failed: failedItems.size };
+        const out = await applyPlugTargets({
           http,
           membershipType,
+          membershipId,
           characterId,
-          plugs: runnable,
+          targets,
+          skip: failedItems,
           shouldStop,
           deadline: startedAt + PLUG_DEADLINE_MS,
+          onPlanned: (p) => {
+            plan = p;
+            send({ type: "plugs-planned", plugs: p.plugs, inPlace: p.inPlace });
+          },
+          onOutcome: (o) => outcomes.push(o),
           onProgress: (event) => {
             if (event.phase === "start") send({ type: "plug-start", plug: event.plug });
             else send({ type: "plug", result: event.result });
           },
         });
-        send({ type: "done", equip, plugs: [...plugResults, ...skippedPlugs] });
+        send({ type: "done", equip, plugs: out.outcomes.map((o) => o.result) });
+        outcome = "done";
       } catch (err) {
         if (err instanceof ApplyCancelledError) {
+          outcome = "cancelled";
           send({ type: "cancelled" });
           return;
         }
@@ -227,6 +240,12 @@ export async function POST(request: Request) {
         // the dead session isn't cleared here: the client signs out on `reauth`.
         send(streamError(err));
       } finally {
+        logApply({
+          outcome,
+          ms: Date.now() - startedAt,
+          equip: equipCounts,
+          plugs: plan && summarize(targets.items.length, plan, outcomes),
+        });
         if (!closed) {
           closed = true;
           try {

@@ -36,6 +36,15 @@ export function plugStepId(plug: Pick<PlugRequest, "itemInstanceId" | "socketInd
   return `plug:${plug.itemInstanceId}:${plug.socketIndex}:${plug.plugItemHash}`;
 }
 
+/**
+ * Swap the plug steps for `plugSteps`, keeping every equip step where it is. The client
+ * shows its own guess at the plugs until the server, having read the items' live
+ * sockets, says what it will actually insert (`plugs-planned`).
+ */
+export function withPlugSteps(steps: ApplyStep[], plugSteps: ApplyStep[]): ApplyStep[] {
+  return [...steps.filter((s) => !s.id.startsWith("plug:")), ...plugSteps];
+}
+
 function patchStep(steps: ApplyStep[], id: string, patch: Partial<ApplyStep>): ApplyStep[] {
   return steps.map((s) => (s.id === id ? { ...s, ...patch } : s));
 }
@@ -183,6 +192,12 @@ export async function cancelApplyProgress() {
 export function patchApplyProgress(id: number, event: ApplyStreamEvent) {
   if (snapshot?.session !== id) return;
   snapshot = { ...snapshot, steps: applyStreamEvent(snapshot.steps, event) };
+  emit();
+}
+
+export function replaceApplyPlugSteps(id: number, plugSteps: ApplyStep[]) {
+  if (snapshot?.session !== id) return;
+  snapshot = { ...snapshot, steps: withPlugSteps(snapshot.steps, plugSteps) };
   emit();
 }
 

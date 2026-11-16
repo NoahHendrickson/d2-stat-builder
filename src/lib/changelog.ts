@@ -14,6 +14,7 @@ export const CHANGELOG: readonly ChangelogEntry[] = [
   {
     date: "2026-11-14",
     changes: [
+      "Loadouts: Equip checks your armor's current mods first, so mods changed in-game since the page loaded no longer get left off or block others.",
       "Items: the search button in a weapon's details opens every roll it can have in Weapon search.",
     ],
   },

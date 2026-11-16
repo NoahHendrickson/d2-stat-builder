@@ -10,6 +10,7 @@ import {
   transferItem,
   type BungieMembershipType,
   type DestinyComponentType,
+  type DestinyItemChangeResponse,
   type DestinyItemComponent,
 } from "bungie-api-ts/destiny2";
 import { BungieHttpError } from "./http";
@@ -28,6 +29,7 @@ import {
   type SpareItems,
   type TransferAction,
 } from "./equip-plan";
+import type { PlannedPlug } from "../loadouts/apply-targets";
 
 /** Bungie asks for ≥100ms between item actions; stay comfortably above it. */
 export const ACTION_SPACING_MS = 150;
@@ -141,6 +143,11 @@ export interface ApplyResponse {
 export type ApplyStreamEvent =
   | { type: "item-start"; itemInstanceId: string }
   | { type: "item"; result: ItemResult }
+  /**
+   * Sent once, before any insert: what the server will insert, planned from the items'
+   * live sockets, and which target plugs are already in place. Replaces the client's guess.
+   */
+  | { type: "plugs-planned"; plugs: PlannedPlug[]; inPlace: PlugRequest[] }
   | { type: "plug-start"; plug: PlugRequest }
   | { type: "plug"; result: PlugResult }
   | { type: "done"; equip: ItemResult[]; plugs: PlugResult[] }
@@ -462,27 +469,10 @@ export async function stageAndEquip({
   return results;
 }
 
-/**
- * Insert plugs one at a time, spaced per PLUG_SPACING_MS / PLUG_REST_MS (the character
- * must be in orbit, a social space, or offline). "Free" inserts cover armor mods, tuning,
- * artifice, and subclass fragments without Advanced Write Actions. A 401 is re-thrown;
- * other errors become per-plug results. After an in-activity error (1671), or once
- * `deadline` passes, the remaining plugs are reported failed instead of attempted.
- */
-export async function insertPlugs({
-  http,
-  membershipType,
-  characterId,
-  plugs,
-  onProgress,
-  shouldStop,
-  deadline,
-}: {
+export interface PlugInserterOptions {
   http: HttpClient;
   membershipType: BungieMembershipType;
   characterId: string;
-  plugs: PlugRequest[];
-  onProgress?: (event: PlugProgressEvent) => void;
   /** Checked before each insert. */
   shouldStop?: StopCheck;
   /**
@@ -490,32 +480,52 @@ export async function insertPlugs({
    * plug before its own time limit instead of being cut off mid-list.
    */
   deadline?: number;
-}): Promise<PlugResult[]> {
-  const results: PlugResult[] = [];
+}
+
+/** One insert's outcome, before anyone checks that the plug stayed in. */
+export type PlugAttempt =
+  | {
+      ok: true;
+      /** Bungie answered "already has that plug" (1679): it is in place. */
+      alreadyThere?: true;
+      /** The item after the insert, when Bungie says. */
+      response?: DestinyItemChangeResponse;
+    }
+  | {
+      ok: false;
+      message: string;
+      /** Bungie's PlatformErrorCode; absent when the insert never went out. */
+      code?: number;
+    };
+
+/**
+ * One insert at a time, spaced per PLUG_SPACING_MS / PLUG_REST_MS across every call (the
+ * character must be in orbit, a social space, or offline). "Free" inserts cover armor
+ * mods, tuning, artifice, and subclass fragments without Advanced Write Actions. A 401
+ * is re-thrown; other errors become a failed attempt. After an in-activity error (1671),
+ * or once `deadline` passes, later calls fail without going out. `onStart` runs just
+ * before the insert is sent (or reported not sent).
+ */
+export function plugInserter({ http, membershipType, characterId, shouldStop, deadline }: PlugInserterOptions) {
   /** Set once the rest can't run (in an activity, out of time): their failure message. */
   let skipMessage: string | undefined;
   /** When the last attempt (including a throttle retry) went out, and when it answered. */
   let lastStart = -Infinity;
   let lastEnd = -Infinity;
-  const emitResult = (result: PlugResult) => {
-    results.push(result);
-    onProgress?.({ phase: "result", result });
-  };
-  for (const plug of plugs) {
+  return async (plug: PlugRequest, onStart?: () => void): Promise<PlugAttempt> => {
     if (!skipMessage) {
       const wait = Math.max(lastStart + PLUG_SPACING_MS, lastEnd + PLUG_REST_MS) - Date.now();
       if (wait > 0) await sleep(wait);
       if (deadline !== undefined && Date.now() >= deadline) skipMessage = OUT_OF_TIME_MESSAGE;
     }
     if (skipMessage) {
-      onProgress?.({ phase: "start", plug });
-      emitResult({ ...plug, ok: false, message: skipMessage });
-      continue;
+      onStart?.();
+      return { ok: false, message: skipMessage };
     }
     await checkpoint(shouldStop);
-    onProgress?.({ phase: "start", plug });
+    onStart?.();
     try {
-      await withThrottleRetry(() => {
+      const res = await withThrottleRetry(() => {
         lastStart = Date.now();
         return insertSocketPlugFree(http, {
           plug: {
@@ -528,26 +538,44 @@ export async function insertPlugs({
           membershipType,
         });
       });
-      emitResult({ ...plug, ok: true });
+      return { ok: true, response: res?.Response };
     } catch (err) {
       if (err instanceof BungieHttpError && err.status === 401) throw err;
       const code = err instanceof BungieHttpError ? err.code : undefined;
-      if (code === SOCKET_ALREADY_HAS_PLUG) {
-        emitResult({ ...plug, ok: true });
-        continue;
-      }
+      if (code === SOCKET_ALREADY_HAS_PLUG) return { ok: true, alreadyThere: true };
       if (code === 1671) skipMessage = PLUG_MESSAGES[1671];
-      emitResult({
-        ...plug,
+      return {
         ok: false,
+        ...(code !== undefined ? { code } : {}),
         message: isThrottled(err)
           ? THROTTLED_MESSAGE
           : ((code !== undefined ? PLUG_MESSAGES[code] : undefined) ??
             (err instanceof Error ? err.message : "Mod insert failed")),
-      });
+      };
     } finally {
       lastEnd = Date.now();
     }
+  };
+}
+
+/** Insert plugs one at a time (see `plugInserter`), reporting each as it answers. */
+export async function insertPlugs({
+  plugs,
+  onProgress,
+  ...options
+}: PlugInserterOptions & {
+  plugs: PlugRequest[];
+  onProgress?: (event: PlugProgressEvent) => void;
+}): Promise<PlugResult[]> {
+  const insert = plugInserter(options);
+  const results: PlugResult[] = [];
+  for (const plug of plugs) {
+    const attempt = await insert(plug, () => onProgress?.({ phase: "start", plug }));
+    const result: PlugResult = attempt.ok
+      ? { ...plug, ok: true }
+      : { ...plug, ok: false, message: attempt.message };
+    results.push(result);
+    onProgress?.({ phase: "result", result });
   }
   return results;
 }

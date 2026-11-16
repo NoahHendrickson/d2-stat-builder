@@ -7,6 +7,7 @@ import {
   assignArtifactPerks,
   planArtifactPlugs,
   type ArtifactDefLookup,
+  type ArtifactPerkSocket,
   type OwnedArtifact,
 } from "../armory/artifact-items";
 import type { EquipItemState } from "../bungie/equip-plan";
@@ -21,6 +22,9 @@ export interface ArtifactApplyPlan {
   plugs: PlugAction[];
   inPlace: PlugAction[];
   skipped: string[];
+  /** The artifact's perk sockets and the perk each one should end with (the apply target). */
+  sockets?: ArtifactPerkSocket[];
+  target?: Record<number, number>;
 }
 
 export function planArtifactApply(
@@ -60,5 +64,5 @@ export function planArtifactApply(
       ? `Free ${perkName(item.perks[s.socketIndex])} → ${artifact.name}`
       : `${perkName(s.plugItemHash)} → ${artifact.name}`,
   });
-  return { equip, item, plugs: steps.map(action), inPlace: inPlace.map(action), skipped };
+  return { equip, item, plugs: steps.map(action), inPlace: inPlace.map(action), skipped, sockets, target };
 }

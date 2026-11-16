@@ -30,6 +30,18 @@ export interface SubclassItem {
 }
 
 /**
+ * A subclass socket's plug, or undefined when it holds nothing or is hidden / locked
+ * (a fragment slot the player hasn't unlocked yet). The apply route reads live
+ * subclass sockets with the same rule, so both sides plan from the same plugs.
+ */
+export function visiblePlug(
+  socket: { plugHash?: number; isVisible?: boolean; isEnabled?: boolean } | undefined,
+): number | undefined {
+  if (!socket?.plugHash || socket.isVisible === false || socket.isEnabled === false) return undefined;
+  return socket.plugHash;
+}
+
+/**
  * Every subclass item on a character (equipped + inventory) with its live fragment
  * sockets — what applying a loadout needs to equip the right subclass and plan
  * fragment inserts. Fragment slots the player hasn't unlocked yet (Bungie reports them
@@ -55,20 +67,13 @@ export function subclassItemsForCharacter(
       const fragmentSockets: Record<number, number> = {};
       const aspectSockets: Record<number, number> = {};
       const abilitySockets: Record<number, number> = {};
-      for (const i of abilityIndicesFor?.(item.itemHash) ?? []) {
-        const socket = sockets[i];
-        if (socket?.plugHash && socket.isVisible !== false && socket.isEnabled !== false) abilitySockets[i] = socket.plugHash;
-      }
-      for (let i = aspectSocketStart(subclass); i < aspectSocketStart(subclass) + ASPECT_SOCKET_COUNT; i++) {
-        const socket = sockets[i];
-        if (socket?.plugHash && socket.isVisible !== false && socket.isEnabled !== false) aspectSockets[i] = socket.plugHash;
-      }
-      for (let i = start; i < start + FRAGMENT_SOCKET_COUNT; i++) {
-        const socket = sockets[i];
-        if (!socket?.plugHash) continue;
-        if (socket.isVisible === false || socket.isEnabled === false) continue;
-        fragmentSockets[i] = socket.plugHash;
-      }
+      const keep = (into: Record<number, number>, i: number) => {
+        const plug = visiblePlug(sockets[i]);
+        if (plug) into[i] = plug;
+      };
+      for (const i of abilityIndicesFor?.(item.itemHash) ?? []) keep(abilitySockets, i);
+      for (let i = aspectSocketStart(subclass); i < aspectSocketStart(subclass) + ASPECT_SOCKET_COUNT; i++) keep(aspectSockets, i);
+      for (let i = start; i < start + FRAGMENT_SOCKET_COUNT; i++) keep(fragmentSockets, i);
       out.push({
         itemHash: item.itemHash,
         instanceId: item.itemInstanceId,
