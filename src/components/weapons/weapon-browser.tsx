@@ -51,6 +51,7 @@ import {
 import { resolveFrame } from "@/lib/weapons/pick-slots";
 import {
   SORTS,
+  linkedWeapon,
   readSearchState,
   withLegacyCraftableInQuery,
 } from "@/lib/weapons/search-state";
@@ -60,7 +61,7 @@ import { useSession } from "@/lib/auth/use-session";
 import { usePatterns } from "@/lib/bungie/use-patterns";
 import type { WeaponSummary } from "@/lib/weapons/types";
 import { weaponTypeIcon } from "@/lib/weapons/weapon-type-icon-paths";
-import { useMinWidth } from "@/lib/use-min-width";
+import { matchesMinWidth, useMinWidth } from "@/lib/use-min-width";
 import { cn } from "@/lib/utils";
 
 const SORT_ITEMS: Record<string, string> = Object.fromEntries(SORTS);
@@ -180,6 +181,17 @@ export function WeaponBrowser() {
     const next = withLegacyCraftableInQuery(currentParams);
     if (next) navigate(next);
   }, [currentParams]);
+  // A link to one weapon (`weapon=<hash>`, from Items or the Farm list) opens its row
+  // once the catalog loads, in the dialog on narrow screens, and then leaves the URL.
+  // An unknown one leaves the top result open.
+  useEffect(() => {
+    const link = data && linkedWeapon(data, currentParams);
+    if (!link) return;
+    navigate(link.rest);
+    // Unknown: let go of any earlier pick (the page is kept between visits), so the top result shows.
+    setPicked(link.weapon ?? null);
+    if (link.weapon) setDialogOpen(!matchesMinWidth(SPLIT_MIN_PX));
+  }, [data, currentParams]);
 
   function navigate(next: URLSearchParams, push = false) {
     const url = `${window.location.pathname}${next.size ? `?${next}` : ""}`;

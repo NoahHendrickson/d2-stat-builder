@@ -1,4 +1,6 @@
+import type { WeaponCatalog } from "./catalog";
 import type { WeaponFilters } from "./search";
+import type { WeaponSummary } from "./types";
 
 export const FILTERS = [
   ["trait", "Trait"],
@@ -22,6 +24,41 @@ export const SORTS = [
   ["season-asc", "Oldest"],
   ["name", "A–Z"],
 ] as const;
+
+/** The URL param naming, by item hash, the exact weapon a link opens. */
+const LINKED_WEAPON_PARAM = "weapon";
+
+/**
+ * Weapon search for one weapon: its name in the search box and that exact version open,
+ * so a name with several perk pools still opens the pool this copy rolls from.
+ */
+export function weaponSearchHref({ name, itemHash }: { name: string; itemHash: number }): string {
+  return `/weapons?${new URLSearchParams({ q: name, [LINKED_WEAPON_PARAM]: String(itemHash) })}`;
+}
+
+/** A link's `weapon=` item hash, or null when there's none or it isn't a hash. */
+function readLinkedWeaponHash(params: URLSearchParams): number | null {
+  const raw = params.get(LINKED_WEAPON_PARAM)?.trim();
+  if (!raw || !/^\d{1,10}$/.test(raw)) return null;
+  const hash = Number(raw);
+  return hash > 0 ? hash : null;
+}
+
+/**
+ * What a `weapon=` link opens: null when the URL has no link; else the params without
+ * it (the link is applied once) and the result row for that hash, undefined when the
+ * catalog doesn't list it (the top result stays open).
+ */
+export function linkedWeapon(
+  catalog: Pick<WeaponCatalog, "rowFor">,
+  params: URLSearchParams,
+): { weapon: WeaponSummary | undefined; rest: URLSearchParams } | null {
+  if (!params.has(LINKED_WEAPON_PARAM)) return null;
+  const hash = readLinkedWeaponHash(params);
+  const rest = new URLSearchParams(params);
+  rest.delete(LINKED_WEAPON_PARAM);
+  return { weapon: hash === null ? undefined : catalog.rowFor(hash), rest };
+}
 
 /** An `ammoGen` URL value as a whole number, or null when it isn't one. */
 export function readAmmoGen(raw: string | null): number | null {

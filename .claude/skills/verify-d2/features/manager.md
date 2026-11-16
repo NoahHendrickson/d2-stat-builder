@@ -11,6 +11,7 @@ The Items page is a DIM-style inventory: characters, postmaster, and the vault a
 - `mgr-move` moves a vault item to a character from the popover's move buttons (touch).
 - `mgr-pattern`: a craftable weapon that isn't crafted shows its crafting pattern progress in its popover (`meter "Pattern progress"`, "2 of 5" or "Unlocked").
 - `mgr-ornaments` turns on Show ornaments, so every ornamented tile wears its ornament's art (journey `manager-ornaments`).
+- `mgr-rolls`: a weapon's popover has a search icon `link "View all rolls in Weapon search"` (tooltip "View all rolls") that opens `/weapons?q=<name>&weapon=<itemHash>` and closes the popup.
 
 ## How to get to it (user POV)
 
@@ -33,6 +34,7 @@ Preconditions:
 - **Move (`mgr-move`).** Run `page.emulatePointer("coarse")`, which must return `true`. Click vault tile `nth: 1`, then the first `button /^(Pull|Send|Equip on)\b.*\b(Hunter|Titan|Warlock)$/` (for example `Equip on Hunter`). The toast `Equipped <item>` or `Moved <item>` appears, and `POST /api/bungie/move` has `from.kind: "vault"` and `to.kind: "character"`.
 - **Pattern (`mgr-pattern`).** Search `is:craftable not:crafted`; matching vault tiles are the ones without an `opacity-*` class. The stub answers `GET /api/bungie/patterns` from `stub.store.patterns` (by weapon name, without an `(Adept)`-style suffix), empty by default, so set it before opening the popover. The panel loads progress once and reuses it for the next weapon. Proof: `08-pattern-partial`, `09-pattern-unlocked`.
 - **Ornaments (`mgr-ornaments`, journey `manager-ornaments`).** The fixture has no ornaments, so `meta.profile` sets every vault item's `overrideStyleItemHash` to an equipped helmet's hash: its icon stands in for the ornament. Click `button "Items settings"`: `menuitemcheckbox /^Show ornaments/` is `aria-checked="false"`, and only the exotic weapons (first in each row by the default rarity sort) wear the helmet art. Click it: the menu stays open, every vault tile wears the helmet art, and `showOrnaments: true` is saved in `stat-builder:manager-view:v1` (it survives a reload). Proof: `01-menu-off`, `02-menu-on`, `03-vault-ornaments-on`.
+- **All rolls (`mgr-rolls`).** Search `is:handcannon`, click the first matching vault tile, and read the link's `href`: `q` is the tile's name and `weapon` a hash. Hovering it shows `[data-slot="tooltip-content"]` "View all rolls". Clicking it opens the weapon in `complementary "Weapon details"` with its name in `combobox "Search weapons"`; the URL then drops `weapon=` (`/weapons?q=<name>`). Pick Fatebringer there and go back to Items: the popup is closed, and `history.back()` keeps Fatebringer open. Following the same link again opens the weapon again. It leaves /manager, so it runs last. Proof: `10-rolls-button`, `11-rolls-weapon-search`.
 - **Proof.** `01-layout-legacy`, `02-inventory`, `03-sort-dragging`, `04-sort-menu`, `05-search`, `06-locked`, `07-moved`, `08-pattern-partial`, `09-pattern-unlocked`.
 
 ## Gotchas

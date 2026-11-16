@@ -164,4 +164,55 @@ export default async function ({ page, app, stub, step, shot, expect, log }) {
     await page.press("Escape");
     await page.click({ role: "button", name: "Clear search" });
   });
+
+  // Last: it leaves /manager.
+  await step("mgr-rolls: a weapon's View all rolls link opens that weapon in Weapon search", async () => {
+    await page.fill({ role: "combobox", name: "Search items" }, "is:handcannon");
+    await page.waitFor({ role: "button", name: /^\d[\d,]* items?$/ });
+    const [label] = JSON.parse(await page.evalJs(`JSON.stringify([...document.querySelectorAll('${VAULT_TILE.css}[data-search="match"]')].map((t) => t.getAttribute("aria-label") ?? ""))`));
+    expect(label, "is:handcannon matches a vault tile");
+    const weapon = label.split(",")[0];
+    await page.click({ css: `${VAULT_TILE.css}[aria-label="${label.replace(/"/g, '\\"')}"]` });
+    const link = { role: "link", name: "View all rolls in Weapon search" };
+    await page.waitFor(link);
+    const href = new URL(await page.attr(link, "href"), "http://localhost");
+    expect(
+      href.pathname === "/weapons" && href.searchParams.get("q") === weapon && /^\d+$/.test(href.searchParams.get("weapon") ?? ""),
+      `${weapon} links to ${href.pathname}${href.search}`,
+    );
+    await page.hover(link);
+    const tip = { css: '[data-slot="tooltip-content"]' };
+    await page.waitFor(tip);
+    expect(/View all rolls/.test(await page.text(tip)), "hovering shows the View all rolls tooltip");
+    await shot("rolls-button");
+    await page.click(link);
+    const details = { role: "complementary", name: "Weapon details" };
+    const linked = { role: "heading", name: new RegExp(`^${esc(weapon)}`) };
+    await page.waitFor(linked, { within: details });
+    // Once applied, the link leaves the URL: only the name stays, in the search box.
+    const here = () => page.evalJs("location.pathname + location.search");
+    const want = `/weapons?${new URLSearchParams({ q: weapon })}`;
+    await page.waitFor(async () => (await here()) === want);
+    expect((await page.value({ role: "combobox", name: "Search weapons" })) === weapon, "the weapon's name is in the search box");
+    await shot("rolls-weapon-search");
+    // Pick another weapon there, go back to Items: Weapon search and Items are kept while
+    // hidden, so the popup must have closed, and Back must keep the player's pick.
+    await page.fill({ role: "combobox", name: "Search weapons" }, "Fatebringer");
+    await page.click({ role: "button", name: "View Fatebringer perks", nth: 0 }, { within: { role: "list", name: "Weapons" } });
+    await page.waitFor({ role: "heading", name: /^Fatebringer/ }, { within: details });
+    await app.nav("/manager");
+    expect(!(await page.exists(link)), "the popup closed when the link was followed");
+    await page.evalJs("history.back()");
+    await page.waitFor({ role: "heading", name: /^Fatebringer/ }, { within: details });
+    const reopened = await page.waitFor(linked, { within: details, timeout: 1500 }).then(() => true, () => false);
+    expect(!reopened, `Back to Weapon search keeps Fatebringer, not ${weapon}`);
+    // Following the same link again opens it again.
+    await app.nav("/manager");
+    await page.fill({ role: "combobox", name: "Search items" }, "is:handcannon");
+    await page.waitFor({ role: "button", name: /^\d[\d,]* items?$/ });
+    await page.click({ css: `${VAULT_TILE.css}[aria-label="${label.replace(/"/g, '\\"')}"]` });
+    await page.click(link);
+    await page.waitFor(linked, { within: details });
+    log(`  the second visit opens ${weapon} again`);
+  });
 }

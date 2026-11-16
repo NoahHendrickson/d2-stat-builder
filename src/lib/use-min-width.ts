@@ -20,9 +20,19 @@ export function useMediaQuery(query: string): boolean {
   );
 }
 
+const minWidthQuery = (minWidth: number) => `(min-width: ${minWidth}px)`;
+
 /** `true` once the viewport is at least `minWidth` px wide. */
 export function useMinWidth(minWidth: number): boolean {
-  return useMediaQuery(`(min-width: ${minWidth}px)`);
+  return useMediaQuery(minWidthQuery(minWidth));
+}
+
+/**
+ * The viewport is at least `minWidth` px wide, read now. For effects: there `useMinWidth`
+ * may still hold the hydration snapshot (`false`) on a fresh load.
+ */
+export function matchesMinWidth(minWidth: number): boolean {
+  return window.matchMedia(minWidthQuery(minWidth)).matches;
 }
 
 /** Tailwind `md`: below it, pages lay out for phones (the `max-md:` classes). */

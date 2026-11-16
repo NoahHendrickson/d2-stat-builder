@@ -16,6 +16,7 @@ import type { Manifest } from "@/lib/manifest/load";
 import { copyHasPerk, ownedCopies, placeLabel, type OwnedCopy } from "@/lib/farm-list/match";
 import type { ArmorFarmEntry, FarmColumn, FarmPerk, WeaponFarmEntry } from "@/lib/farm-list/types";
 import { useFarmList, useFarmListMutations } from "@/lib/farm-list/use-farm-list";
+import { weaponSearchHref } from "@/lib/weapons/search-state";
 import { cn } from "@/lib/utils";
 
 /** The perks, in the game's order. */
@@ -259,7 +260,7 @@ function WaitingActions({ entry }: { entry: WeaponFarmEntry }) {
     <>
       <Button
         variant="outline"
-        render={<Link href={`/weapons?q=${encodeURIComponent(entry.weaponName)}`} />}
+        render={<Link href={weaponSearchHref({ name: entry.weaponName, itemHash: entry.weaponHash })} />}
         nativeButton={false}
       >
         Open
