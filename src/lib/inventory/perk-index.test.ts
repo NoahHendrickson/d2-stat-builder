@@ -35,3 +35,35 @@ test("lists a weapon's origin traits among its perks and on their own", () => {
   ]);
   expect(lookup.origins(weapon)).toEqual(["veist stinger", "hakke breach armaments"]);
 });
+
+test("keeps a weapon's left and right trait columns apart, without barrel, mods, or origin", () => {
+  const items: Record<number, object> = {
+    1: plug("Aggressive Frame", "intrinsics"),
+    2: plug("Arrowhead Brake", "barrels"),
+    3: plug("Outlaw", "frames"),
+    4: { ...plug("Outlaw", "frames"), itemTypeDisplayName: "Enhanced Trait" },
+    5: plug("Kill Clip", "frames"),
+    6: plug("Rampage", "frames"),
+    7: plug("Veist Stinger", "origins"),
+    8: plug("Backup Mag", "v400.weapon.mod_magazine"),
+  };
+  const manifest = {
+    def: (_table: string, hash: number | null | undefined) => (hash == null ? undefined : items[hash]),
+  } as unknown as Manifest;
+  const profile = {
+    itemComponents: {
+      sockets: {
+        data: { w: { sockets: [1, 2, 4, 5, 7, 8].map((plugHash) => ({ plugHash, isVisible: true })) } },
+      },
+      reusablePlugs: {
+        data: { w: { plugs: { 2: [{ plugItemHash: 3 }, { plugItemHash: 4 }], 3: [{ plugItemHash: 5 }, { plugItemHash: 6 }] } } },
+      },
+    },
+  } as unknown as DestinyProfileResponse;
+  const lookup = createPerkLookup(profile, manifest);
+  expect(lookup.traits({ instanceId: "w", itemType: 3 } as InventoryItem)).toEqual([
+    ["outlaw", "outlaw"],
+    ["kill clip", "rampage"],
+  ]);
+  expect(lookup.traits({ instanceId: "helmet", itemType: 2 } as InventoryItem)).toEqual([]);
+});
