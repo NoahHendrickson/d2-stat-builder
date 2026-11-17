@@ -187,7 +187,7 @@ test("perkcombo:a+b needs one perk in each trait column, either way round", () =
   const own: ManagerInventory = {
     ...inv,
     characters: [],
-    vault: { [BUCKETS.kinetic]: guns.map((name) => item(name)) },
+    vault: { [BUCKETS.kinetic]: guns.map((name) => item(name, name === "Armor" ? { itemType: 2 } : {})) },
   };
   // Left and right trait columns, and every perk name (barrel and mods included).
   const rolls: Record<string, { traits: string[][]; perks: string[] }> = {
