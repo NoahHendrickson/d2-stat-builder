@@ -32,7 +32,7 @@ test("completes fixed and open-ended values, quoting multi-word ones", () => {
 });
 
 test("a bare word suggests keys, keywords, and the account's types, perks, and items", () => {
-  expect(texts("pe")).toEqual(["perk:"]);
+  expect(texts("pe")).toEqual(["perk:", "perkcombo:"]);
   expect(texts("craf")).toEqual(["is:crafted", "not:crafted", "is:craftable", "not:craftable"]);
   expect(texts("fate")).toEqual(["name:Fatebringer"]);
   expect(texts("out")).toEqual(["perk:outlaw"]);

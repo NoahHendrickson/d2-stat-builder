@@ -12,6 +12,12 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    date: "2026-11-17",
+    changes: [
+      "Items: search perkcombo:outlaw+killclip to find weapons that rolled both perks, one in each trait column.",
+    ],
+  },
+  {
     date: "2026-11-14",
     changes: [
       "Loadouts: Equip checks your armor's current mods first, so mods changed in-game since the page loaded no longer get left off or block others.",

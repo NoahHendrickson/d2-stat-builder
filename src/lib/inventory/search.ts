@@ -9,6 +9,7 @@
 //   power:>=400        also >, <, <=, =; the same for tier: and stat:<name>:
 //   stat:total:>=60    armor stat total; any live stat by name (stat:range:>50)
 //   perk: exactperk: origin: name: exactname: notes: type: element: breaker: class: ammo:
+//   perkcombo:a+b      a weapon that rolled perk a in one trait column and b in the other
 // Terms are ANDed; "or" between terms ORs them; "-term" negates; ( ) group.
 import type { Annotations, ItemTag } from "./annotations";
 import { ITEM_TAGS } from "./annotations";
@@ -40,6 +41,8 @@ export interface SearchContext {
   perks(item: InventoryItem): readonly string[];
   /** Lower-case origin trait names on a weapon. */
   origins(item: InventoryItem): readonly string[];
+  /** A weapon's left and right trait columns, each the lower-case perk names it rolled. */
+  traits(item: InventoryItem): readonly (readonly string[])[];
   /** Item hashes the account owns more than one of. */
   dupes: ReadonlySet<number>;
 }
@@ -229,6 +232,7 @@ export const SEARCH_KEYS: readonly string[] = [
   "tag",
   "perk",
   "exactperk",
+  "perkcombo",
   "origin",
   "name",
   "exactname",
@@ -361,7 +365,25 @@ function comparison(text: string): ((n: number | undefined) => boolean) | undefi
 
 class SearchError extends Error {}
 
+/** `perkcombo:a+b`: perk a in one trait column and b in the other, either way round. */
+function perkCombo(raw: string): Predicate {
+  // Split before normalizing: normalize strips the +.
+  const names = raw.split("+").map(normalize);
+  const [a, b] = names;
+  if (names.length !== 2 || !a || !b) {
+    throw new SearchError("perkcombo: needs two perks, like perkcombo:outlaw+killclip");
+  }
+  return (i, _, c) => {
+    const [left, right] = c.traits(i);
+    if (!left || !right) return false;
+    const l = normalizedAll(left);
+    const r = normalizedAll(right);
+    return (l.includes(a) && r.includes(b)) || (l.includes(b) && r.includes(a));
+  };
+}
+
 function filterTerm(key: string, raw: string): { predicate: Predicate; usesPerks?: boolean } {
+  if (key === "perkcombo") return { predicate: perkCombo(raw), usesPerks: true };
   const value = normalize(raw);
   const text = raw.toLowerCase();
   if (!value) throw new SearchError(`"${key}:" needs a value`);

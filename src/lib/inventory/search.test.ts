@@ -57,6 +57,7 @@ const ctx: SearchContext = {
   annotations: { "Helm B": { tag: "junk", notes: "Great for #pvp" }, "Calus Mini-Tool": { tag: "keep" } },
   perks: (i) => (i.key === "Calus Mini-Tool" ? ["incandescent", "grave robber", "nano-munitions"] : []),
   origins: (i) => (i.key === "Calus Mini-Tool" ? ["nano-munitions"] : []),
+  traits: () => [],
   dupes: dupeHashes(inv),
 };
 
@@ -179,4 +180,55 @@ test("is:oncurrentchar and is:onwarlock (and their not:) match by who holds the 
   expect(find("not:onwarlock is:weapon")).toEqual(["Ace of Spades", "Calus Mini-Tool"]);
   expect(find("is:equipped")).toEqual(["Ace of Spades", "Warlock Gun"]);
   expect(find("not:equipped is:weapon")).toEqual(["Calus Mini-Tool", "Warlock Spare"]);
+});
+
+test("perkcombo:a+b needs one perk in each trait column, either way round", () => {
+  const guns = ["Both", "Swapped", "Same Column", "Barrel Only", "Enhanced", "Armor"];
+  const own: ManagerInventory = {
+    ...inv,
+    characters: [],
+    vault: { [BUCKETS.kinetic]: guns.map((name) => item(name, name === "Armor" ? { itemType: 2 } : {})) },
+  };
+  // Left and right trait columns, and every perk name (barrel and mods included).
+  const rolls: Record<string, { traits: string[][]; perks: string[] }> = {
+    Both: { traits: [["outlaw", "rapid hit"], ["kill clip", "rampage"]], perks: [] },
+    Swapped: { traits: [["kill clip"], ["outlaw"]], perks: [] },
+    "Same Column": { traits: [["outlaw", "kill clip"], ["rampage"]], perks: [] },
+    // Outlaw only on the barrel, a mod, or the frame: not a trait.
+    "Barrel Only": { traits: [["rapid hit"], ["kill clip"]], perks: ["outlaw", "rapid hit", "kill clip"] },
+    // An enhanced perk shares its base perk's name.
+    Enhanced: { traits: [["outlaw", "outlaw"], ["kill clip"]], perks: [] },
+  };
+  const combo: SearchContext = {
+    ...ctx,
+    perks: (i) => rolls[i.key]?.perks ?? [],
+    traits: (i) => rolls[i.key]?.traits ?? [],
+    dupes: new Set(),
+  };
+  const find = (query: string) => {
+    const parsed = parseSearch(query);
+    if (!parsed?.ok) throw new Error(parsed ? parsed.error : "empty");
+    return [...matchItems(own, parsed.predicate, combo)].sort();
+  };
+  expect(find("perkcombo:outlaw+killclip")).toEqual(["Both", "Enhanced", "Swapped"]);
+  expect(find('perkcombo:"kill clip"+outlaw')).toEqual(["Both", "Enhanced", "Swapped"]);
+  expect(find("PerkCombo:Outlaw+Kill-Clip")).toEqual(["Both", "Enhanced", "Swapped"]);
+  // Exact names, like exactperk:.
+  expect(find("perkcombo:out+kill")).toEqual([]);
+  expect(find("perkcombo:rapidhit+rampage")).toEqual(["Both"]);
+  expect(find("-perkcombo:outlaw+killclip")).toEqual(["Armor", "Barrel Only", "Same Column"]);
+  expect(find("perkcombo:outlaw+killclip -name:enhanced")).toEqual(["Both", "Swapped"]);
+  expect(find("perkcombo:rapidhit+killclip or perkcombo:outlaw+rampage")).toEqual([
+    "Barrel Only",
+    "Both",
+    "Same Column",
+  ]);
+});
+
+test("perkcombo: takes exactly two perks", () => {
+  const error = { ok: false, error: "perkcombo: needs two perks, like perkcombo:outlaw+killclip" };
+  for (const query of ["perkcombo:", "perkcombo:outlaw", "perkcombo:outlaw+", "perkcombo:+killclip", "perkcombo:a+b+c", "perkcombo:+"]) {
+    expect(parseSearch(query)).toEqual(error);
+  }
+  expect(parseSearch("perkcombo:outlaw+killclip")?.ok).toBe(true);
 });
