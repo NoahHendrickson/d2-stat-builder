@@ -137,13 +137,13 @@ export function SavedTheoryBuildsMenu({
                   <span className="text-muted-foreground shrink-0 text-xs">{className}</span>
                 )}
                 <TooltipLabel label={`Delete ${build.name}`}>
-                  {/* The app's destructive button, icon-sized, with its delete icon. While
-                      the row is highlighted, menu items recolour everything inside them
-                      (focus:**:text-accent-foreground, down to the icon's paths); the
-                      matching ! rule keeps this one red. */}
+                  {/* A ghost icon button at the smallest icon size, with the delete icon in
+                      the destructive colour. While the row is highlighted, menu items
+                      recolour everything inside them (focus:**:text-accent-foreground,
+                      down to the icon's paths); the matching ! rule keeps it red. */}
                   <Button
-                    variant="destructive"
-                    size="icon-sm"
+                    variant="ghost"
+                    size="icon-xs"
                     className="text-destructive! **:text-destructive!"
                     aria-label={`Delete ${build.name}`}
                     onPointerDown={(e) => e.stopPropagation()}
