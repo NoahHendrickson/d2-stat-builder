@@ -65,5 +65,5 @@ test("keeps a weapon's left and right trait columns apart, without barrel, mods,
     ["outlaw", "outlaw"],
     ["kill clip", "rampage"],
   ]);
-  expect(lookup.traits({ instanceId: "helmet", itemType: 2 } as InventoryItem)).toEqual([]);
+  expect(lookup.traits({ instanceId: "helmet", itemType: 2 } as InventoryItem)).toEqual([[], []]);
 });

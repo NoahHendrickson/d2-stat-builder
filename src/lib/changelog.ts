@@ -12,7 +12,7 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
-    date: "2026-11-17",
+    date: "2026-11-21",
     changes: [
       "Items: search perkcombo:outlaw+killclip to find weapons that rolled both perks, one in each trait column.",
     ],

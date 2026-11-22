@@ -16,6 +16,7 @@ import { ITEM_TAGS } from "./annotations";
 import { BUCKETS } from "./buckets";
 import { currentCharacter, type InventoryItem, type ManagerInventory } from "./build";
 import type { Place } from "./moves";
+import type { PerkLookup } from "./perk-index";
 import { WEAPON_CATEGORIES, WEAPON_TYPE_ALIASES } from "./weapon-types";
 import { isAdeptWeaponName } from "@/lib/weapons/weapon-variants";
 import {
@@ -35,14 +36,9 @@ import {
   type WeaponSlot,
 } from "@/lib/search-vocabulary";
 
-export interface SearchContext {
+/** What a search reads besides the items: notes and tags, perk names, duplicates. */
+export interface SearchContext extends PerkLookup {
   annotations: Annotations;
-  /** Lower-case perk names on the item (plugged and rolled options). */
-  perks(item: InventoryItem): readonly string[];
-  /** Lower-case origin trait names on a weapon. */
-  origins(item: InventoryItem): readonly string[];
-  /** A weapon's left and right trait columns, each the lower-case perk names it rolled. */
-  traits(item: InventoryItem): readonly (readonly string[])[];
   /** Item hashes the account owns more than one of. */
   dupes: ReadonlySet<number>;
 }
@@ -375,7 +371,6 @@ function perkCombo(raw: string): Predicate {
   }
   return (i, _, c) => {
     const [left, right] = c.traits(i);
-    if (!left || !right) return false;
     const l = normalizedAll(left);
     const r = normalizedAll(right);
     return (l.includes(a) && r.includes(b)) || (l.includes(b) && r.includes(a));
@@ -383,7 +378,6 @@ function perkCombo(raw: string): Predicate {
 }
 
 function filterTerm(key: string, raw: string): { predicate: Predicate; usesPerks?: boolean } {
-  if (key === "perkcombo") return { predicate: perkCombo(raw), usesPerks: true };
   const value = normalize(raw);
   const text = raw.toLowerCase();
   if (!value) throw new SearchError(`"${key}:" needs a value`);
@@ -411,6 +405,8 @@ function filterTerm(key: string, raw: string): { predicate: Predicate; usesPerks
       return { predicate: (i, _, c) => normalizedAll(c.perks(i)).some((p) => p.includes(value)), usesPerks: true };
     case "exactperk":
       return { predicate: (i, _, c) => normalizedAll(c.perks(i)).some((p) => p === value), usesPerks: true };
+    case "perkcombo":
+      return { predicate: perkCombo(raw), usesPerks: true };
     case "origin":
     case "origintrait":
       return { predicate: (i, _, c) => normalizedAll(c.origins(i)).some((p) => p.includes(value)), usesPerks: true };

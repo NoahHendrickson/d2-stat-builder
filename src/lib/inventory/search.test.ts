@@ -1,6 +1,7 @@
 import { expect, test } from "vitest";
 import { BUCKETS } from "./buckets";
 import type { InventoryItem, ManagerInventory } from "./build";
+import type { TraitColumns } from "./perk-index";
 import { dupeHashes, matchItems, parseSearch, type SearchContext } from "./search";
 
 const item = (key: string, extra: Partial<InventoryItem> = {}): InventoryItem => ({
@@ -57,7 +58,7 @@ const ctx: SearchContext = {
   annotations: { "Helm B": { tag: "junk", notes: "Great for #pvp" }, "Calus Mini-Tool": { tag: "keep" } },
   perks: (i) => (i.key === "Calus Mini-Tool" ? ["incandescent", "grave robber", "nano-munitions"] : []),
   origins: (i) => (i.key === "Calus Mini-Tool" ? ["nano-munitions"] : []),
-  traits: () => [],
+  traits: () => [[], []],
   dupes: dupeHashes(inv),
 };
 
@@ -183,14 +184,14 @@ test("is:oncurrentchar and is:onwarlock (and their not:) match by who holds the 
 });
 
 test("perkcombo:a+b needs one perk in each trait column, either way round", () => {
-  const guns = ["Both", "Swapped", "Same Column", "Barrel Only", "Enhanced", "Armor"];
+  const guns = ["Both", "Swapped", "Same Column", "Barrel Only", "Enhanced"];
   const own: ManagerInventory = {
     ...inv,
     characters: [],
-    vault: { [BUCKETS.kinetic]: guns.map((name) => item(name, name === "Armor" ? { itemType: 2 } : {})) },
+    vault: { [BUCKETS.kinetic]: guns.map((name) => item(name)) },
   };
   // Left and right trait columns, and every perk name (barrel and mods included).
-  const rolls: Record<string, { traits: string[][]; perks: string[] }> = {
+  const rolls: Record<string, { traits: TraitColumns; perks: string[] }> = {
     Both: { traits: [["outlaw", "rapid hit"], ["kill clip", "rampage"]], perks: [] },
     Swapped: { traits: [["kill clip"], ["outlaw"]], perks: [] },
     "Same Column": { traits: [["outlaw", "kill clip"], ["rampage"]], perks: [] },
@@ -201,8 +202,8 @@ test("perkcombo:a+b needs one perk in each trait column, either way round", () =
   };
   const combo: SearchContext = {
     ...ctx,
-    perks: (i) => rolls[i.key]?.perks ?? [],
-    traits: (i) => rolls[i.key]?.traits ?? [],
+    perks: (i) => rolls[i.key]!.perks,
+    traits: (i) => rolls[i.key]!.traits,
     dupes: new Set(),
   };
   const find = (query: string) => {
@@ -216,7 +217,7 @@ test("perkcombo:a+b needs one perk in each trait column, either way round", () =
   // Exact names, like exactperk:.
   expect(find("perkcombo:out+kill")).toEqual([]);
   expect(find("perkcombo:rapidhit+rampage")).toEqual(["Both"]);
-  expect(find("-perkcombo:outlaw+killclip")).toEqual(["Armor", "Barrel Only", "Same Column"]);
+  expect(find("-perkcombo:outlaw+killclip")).toEqual(["Barrel Only", "Same Column"]);
   expect(find("perkcombo:outlaw+killclip -name:enhanced")).toEqual(["Both", "Swapped"]);
   expect(find("perkcombo:rapidhit+killclip or perkcombo:outlaw+rampage")).toEqual([
     "Barrel Only",
@@ -227,8 +228,11 @@ test("perkcombo:a+b needs one perk in each trait column, either way round", () =
 
 test("perkcombo: takes exactly two perks", () => {
   const error = { ok: false, error: "perkcombo: needs two perks, like perkcombo:outlaw+killclip" };
-  for (const query of ["perkcombo:", "perkcombo:outlaw", "perkcombo:outlaw+", "perkcombo:+killclip", "perkcombo:a+b+c", "perkcombo:+"]) {
+  for (const query of ["perkcombo:outlaw", "perkcombo:outlaw+", "perkcombo:+killclip", "perkcombo:a+b+c"]) {
     expect(parseSearch(query)).toEqual(error);
   }
+  // No names at all: the error every key gives.
+  expect(parseSearch("perkcombo:")).toEqual({ ok: false, error: '"perkcombo:" needs a value' });
+  expect(parseSearch("perkcombo:+")).toEqual({ ok: false, error: '"perkcombo:" needs a value' });
   expect(parseSearch("perkcombo:outlaw+killclip")?.ok).toBe(true);
 });

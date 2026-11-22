@@ -6,17 +6,19 @@
 import type { DestinyProfileResponse } from "bungie-api-ts/destiny2";
 import type { Manifest } from "@/lib/manifest/load";
 import type { InventoryItem } from "./build";
-import { finderPerkColumns } from "./perk-finder";
+import { finderPerkColumns, leftColumn, rightColumn } from "./perk-finder";
 import { weaponRoll } from "./weapon-details";
 
 const ITEM_TYPE_WEAPON = 3;
 const NONE: readonly string[] = [];
-const NO_TRAITS: readonly (readonly string[])[] = [];
+/** A weapon's left and right trait columns, each the lower-case perk names it rolled. */
+export type TraitColumns = readonly [left: readonly string[], right: readonly string[]];
+const NO_TRAITS: TraitColumns = [NONE, NONE];
 
 interface ItemPerks {
   perks: readonly string[];
   origins: readonly string[];
-  traits: readonly (readonly string[])[];
+  traits: TraitColumns;
 }
 const EMPTY: ItemPerks = { perks: NONE, origins: NONE, traits: NO_TRAITS };
 
@@ -25,8 +27,8 @@ export interface PerkLookup {
   perks(item: InventoryItem): readonly string[];
   /** Lower-case origin trait names a weapon has (one, or two on newer weapons). */
   origins(item: InventoryItem): readonly string[];
-  /** A weapon's left and right trait columns, each the lower-case perk names it rolled. */
-  traits(item: InventoryItem): readonly (readonly string[])[];
+  /** A weapon's left and right trait columns (none on other gear). */
+  traits(item: InventoryItem): TraitColumns;
 }
 
 export const NO_PERKS: PerkLookup = { perks: () => NONE, origins: () => NONE, traits: () => NO_TRAITS };
@@ -40,6 +42,8 @@ export function createPerkLookup(profile: DestinyProfileResponse, manifest: Mani
     if (entry) return entry;
     if (item.itemType === ITEM_TYPE_WEAPON) {
       const roll = weaponRoll(profile, manifest, id);
+      const columns = finderPerkColumns(roll);
+      const names = (i: number) => columns[i]?.options.map((o) => o.name.toLowerCase()) ?? NONE;
       entry = {
         perks: [
           ...(roll.frame ? [roll.frame.name] : []),
@@ -49,9 +53,7 @@ export function createPerkLookup(profile: DestinyProfileResponse, manifest: Mani
         origins: roll.columns
           .filter((c) => c.origin)
           .flatMap((c) => c.options.map((o) => o.name.toLowerCase())),
-        traits: finderPerkColumns(roll)
-          .slice(2, 4)
-          .map((c) => c?.options.map((o) => o.name.toLowerCase()) ?? NONE),
+        traits: [names(leftColumn), names(rightColumn)],
       };
     } else {
       const perks = (profile.itemComponents?.sockets?.data?.[id]?.sockets ?? []).flatMap((s) => {
