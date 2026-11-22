@@ -1031,12 +1031,13 @@ export function BuilderPanel({
     },
     [armory, manifest, classType, classes, poolOptions, onClassChange, setTabs],
   );
+  // Only against the live profile: the cached one may lack a newly acquired exotic.
   const savedTheoryBuilds = useMemo(
     () =>
-      ready ? (
+      searchReady ? (
         <SavedTheoryBuildsMenu getCurrent={getTheoryInputs} onLoad={loadTheoryBuild} />
       ) : undefined,
-    [ready, getTheoryInputs, loadTheoryBuild],
+    [searchReady, getTheoryInputs, loadTheoryBuild],
   );
 
   const onExoticSelect = useCallback(

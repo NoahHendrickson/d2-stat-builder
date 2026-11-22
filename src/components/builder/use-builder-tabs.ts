@@ -176,7 +176,7 @@ export function setTabField<K extends keyof TabSelections>(
  */
 export function useBuilderTabs(
   initialActual: () => TabSelections,
-  initialTheoretical: () => TabSelections = () => DEFAULT_TAB,
+  initialTheoretical: () => TabSelections,
 ) {
   const [state, setState] = useState<BuilderTabs>(() => ({
     mode: "actual",
