@@ -78,8 +78,15 @@ export default async function ({ page, app, step, shot, expect, log }) {
 
   await step("inputs survive a reload", async () => {
     // Reload at once, inside the save debounce: the pagehide flush has to write it.
-    await setHealth(80);
-    await page.evalJs("location.reload()");
+    await page.fill(HEALTH, "80");
+    await page.press("Enter");
+    const unsaved = await page.evalJs(`(() => {
+      const cur = JSON.parse(localStorage.getItem("stat-builder:theory-selections") ?? "null");
+      const unsaved = cur?.builder?.targets?.[1] !== 80;
+      location.reload();
+      return unsaved;
+    })()`);
+    expect(unsaved, "Health 80 wasn't stored yet when the reload started");
     await app.open("/");
     await page.click(THEORY_TAB);
     await page.waitFor(async () => (await page.value(HEALTH)) === "80");
