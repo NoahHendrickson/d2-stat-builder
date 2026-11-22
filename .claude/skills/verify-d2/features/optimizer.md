@@ -11,6 +11,7 @@ The home route lets a user pick a class, set a target for each of the six armor 
 - `opt-update` makes Optimize on a saved loadout turn each card's save into "Update loadout", which replaces that loadout's armor and keeps its name, notes, weapons and subclass (`journeys/optimizer-update.mjs`).
 - `opt-overmax` explains an empty list when one target is past its max: the frame around that row's bar turns red, the list names the stat and its max, and `Set <Stat> to <max>` brings builds back, on desktop and in the phone's builds sheet.
 - `opt-raid` lists the legacy (Armor 2.0) raids the class owns armor from under Set bonuses, and requiring N pieces of one puts that many in every build (`journeys/optimizer-raids.mjs`).
+- `opt-theory-saved` saves Theoretical Builds inputs by name in localStorage and loads them back, and keeps the tab's inputs across a reload (`journeys/optimizer-theory-saved.mjs`). On `tab "Theoretical Builds"` only, `button "Saved theoretical builds"` opens a menu whose first item is `menuitem "Save current build…"` (opens `dialog "Save theoretical build"` with `textbox "Build name"`). Each saved build is a `menuitem` named `<name> <Class> Delete <name>` with a `button "Delete <name>"`. A taken name asks `dialog "Replace <name>?"` (`button "Replace"`). Loading switches to the build's class and toasts `Loaded <name>`; anything gone is listed as `Skipped …: no longer available.` Storage keys: `stat-builder:theory-builds`, `stat-builder:theory-selections`.
 
 ## How to get to it (user POV)
 

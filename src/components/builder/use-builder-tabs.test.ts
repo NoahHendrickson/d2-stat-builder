@@ -3,6 +3,8 @@ import {
   clearClassBound,
   DEFAULT_TAB,
   setTabField,
+  tabFromSnapshot,
+  theorySnapshot,
   updateTabs,
   type BuilderTabs,
   type TabSelections,
@@ -66,5 +68,27 @@ describe("clearClassBound", () => {
     expect(clearClassBound(tab)).toBe(tab);
     const before = state(DEFAULT_TAB, tab);
     expect(updateTabs(before, "both", clearClassBound)).toBe(before);
+  });
+});
+
+describe("theorySnapshot / tabFromSnapshot", () => {
+  const tab: TabSelections = {
+    ...picked,
+    raidReqs: {},
+    activeSubclass: "Void",
+    fragSel: { ...DEFAULT_TAB.fragSel, Void: new Set([7, 8]), Solar: new Set([9]) },
+  };
+
+  it("round-trips the tab's inputs with its subclass's fragments", () => {
+    const back = tabFromSnapshot(theorySnapshot(tab));
+    expect({ ...back, fragSel: undefined }).toEqual({ ...tab, fragSel: undefined });
+    expect([...back.fragSel.Void]).toEqual([7, 8]);
+    expect(back.fragSel.Solar.size).toBe(0);
+  });
+
+  it("stores the resolved exotic, and no Spirit perks without one", () => {
+    const s = theorySnapshot(tab, null);
+    expect(s.exoticName).toBeNull();
+    expect(s.exoticPerks).toEqual([null, null]);
   });
 });

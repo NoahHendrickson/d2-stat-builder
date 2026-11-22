@@ -12,6 +12,12 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    date: "2026-11-21",
+    changes: [
+      "Theoretical Builds: save builds by name from the Saved menu and load them later; the tab also keeps its inputs after a reload.",
+    ],
+  },
+  {
     date: "2026-11-14",
     changes: [
       "Loadouts: Equip checks your armor's current mods first, so mods changed in-game since the page loaded no longer get left off or block others.",
