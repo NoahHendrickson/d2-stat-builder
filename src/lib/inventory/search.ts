@@ -9,12 +9,14 @@
 //   power:>=400        also >, <, <=, =; the same for tier: and stat:<name>:
 //   stat:total:>=60    armor stat total; any live stat by name (stat:range:>50)
 //   perk: exactperk: origin: name: exactname: notes: type: element: breaker: class: ammo:
+//   perkcombo:a+b      a weapon that rolled perk a in one trait column and b in the other
 // Terms are ANDed; "or" between terms ORs them; "-term" negates; ( ) group.
 import type { Annotations, ItemTag } from "./annotations";
 import { ITEM_TAGS } from "./annotations";
 import { BUCKETS } from "./buckets";
 import { currentCharacter, type InventoryItem, type ManagerInventory } from "./build";
 import type { Place } from "./moves";
+import type { PerkLookup } from "./perk-index";
 import { WEAPON_CATEGORIES, WEAPON_TYPE_ALIASES } from "./weapon-types";
 import { isAdeptWeaponName } from "@/lib/weapons/weapon-variants";
 import {
@@ -34,12 +36,9 @@ import {
   type WeaponSlot,
 } from "@/lib/search-vocabulary";
 
-export interface SearchContext {
+/** What a search reads besides the items: notes and tags, perk names, duplicates. */
+export interface SearchContext extends PerkLookup {
   annotations: Annotations;
-  /** Lower-case perk names on the item (plugged and rolled options). */
-  perks(item: InventoryItem): readonly string[];
-  /** Lower-case origin trait names on a weapon. */
-  origins(item: InventoryItem): readonly string[];
   /** Item hashes the account owns more than one of. */
   dupes: ReadonlySet<number>;
 }
@@ -229,6 +228,7 @@ export const SEARCH_KEYS: readonly string[] = [
   "tag",
   "perk",
   "exactperk",
+  "perkcombo",
   "origin",
   "name",
   "exactname",
@@ -361,6 +361,22 @@ function comparison(text: string): ((n: number | undefined) => boolean) | undefi
 
 class SearchError extends Error {}
 
+/** `perkcombo:a+b`: perk a in one trait column and b in the other, either way round. */
+function perkCombo(raw: string): Predicate {
+  // Split before normalizing: normalize strips the +.
+  const names = raw.split("+").map(normalize);
+  const [a, b] = names;
+  if (names.length !== 2 || !a || !b) {
+    throw new SearchError("perkcombo: needs two perks, like perkcombo:outlaw+killclip");
+  }
+  return (i, _, c) => {
+    const [left, right] = c.traits(i);
+    const l = normalizedAll(left);
+    const r = normalizedAll(right);
+    return (l.includes(a) && r.includes(b)) || (l.includes(b) && r.includes(a));
+  };
+}
+
 function filterTerm(key: string, raw: string): { predicate: Predicate; usesPerks?: boolean } {
   const value = normalize(raw);
   const text = raw.toLowerCase();
@@ -389,6 +405,8 @@ function filterTerm(key: string, raw: string): { predicate: Predicate; usesPerks
       return { predicate: (i, _, c) => normalizedAll(c.perks(i)).some((p) => p.includes(value)), usesPerks: true };
     case "exactperk":
       return { predicate: (i, _, c) => normalizedAll(c.perks(i)).some((p) => p === value), usesPerks: true };
+    case "perkcombo":
+      return { predicate: perkCombo(raw), usesPerks: true };
     case "origin":
     case "origintrait":
       return { predicate: (i, _, c) => normalizedAll(c.origins(i)).some((p) => p.includes(value)), usesPerks: true };
