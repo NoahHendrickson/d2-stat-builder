@@ -10,10 +10,12 @@ import {
 import type { RaidReqs } from "@/lib/armory/legacy-raids";
 import type { Manifest } from "@/lib/manifest/load";
 import {
+  DEFAULT_POWER_RANGE,
   fragSelFromArrays,
   resolveExoticIndex,
   type PersistedSelections,
 } from "@/lib/builder/selection-storage";
+import type { BuilderSnapshot } from "@/lib/loadouts/types";
 
 /**
  * What Builds and Theoretical Builds each keep for themselves. Class, the set list
@@ -63,6 +65,45 @@ export function tabFromSaved(saved: PersistedSelections): TabSelections {
     exoticPerks: saved.exoticPerks,
     activeSubclass: saved.activeSubclass,
     fragSel: fragSelFromArrays(saved.fragSel),
+  };
+}
+
+/**
+ * A Theoretical tab as a loadout snapshot (theory-storage.ts): its subclass and that
+ * subclass's fragments, with the Builds-only settings at their defaults. `exoticName`
+ * is the exotic to store (the raw name, or the one resolved against the live list); with
+ * none, the Spirit perks are dropped too.
+ */
+export function theorySnapshot(tab: TabSelections, exoticName: string | null): BuilderSnapshot {
+  return {
+    targets: tab.targets,
+    major: tab.major,
+    setReqs: tab.setReqs,
+    raidReqs: DEFAULT_TAB.raidReqs,
+    exoticName,
+    exoticPerks: exoticName === null ? DEFAULT_TAB.exoticPerks : tab.exoticPerks,
+    allowTuning: true,
+    balancedTuning: true,
+    legacyExotics: true,
+    lowerTierArmor: false,
+    legacyArmor: false,
+    powerRange: DEFAULT_POWER_RANGE,
+    activeSubclass: tab.activeSubclass,
+    fragmentHashes: [...tab.fragSel[tab.activeSubclass]],
+  };
+}
+
+/** A stored Theoretical snapshot as a tab; other subclasses start with no fragments. */
+export function tabFromSnapshot(s: BuilderSnapshot): TabSelections {
+  return {
+    targets: s.targets,
+    major: s.major,
+    setReqs: s.setReqs,
+    raidReqs: DEFAULT_TAB.raidReqs,
+    exoticName: s.exoticName,
+    exoticPerks: s.exoticPerks,
+    activeSubclass: s.activeSubclass,
+    fragSel: fragSelFromArrays({ [s.activeSubclass]: s.fragmentHashes }),
   };
 }
 
@@ -130,11 +171,14 @@ export function setTabField<K extends keyof TabSelections>(
  * tab open when the write lands (it reads the mode from state, so its identity never
  * changes); pass `target` to name the tab, e.g. one captured before an await.
  */
-export function useBuilderTabs(initialActual: () => TabSelections) {
+export function useBuilderTabs(
+  initialActual: () => TabSelections,
+  initialTheoretical: () => TabSelections,
+) {
   const [state, setState] = useState<BuilderTabs>(() => ({
     mode: "actual",
     actual: initialActual(),
-    theoretical: DEFAULT_TAB,
+    theoretical: initialTheoretical(),
   }));
 
   const setMode = useCallback(

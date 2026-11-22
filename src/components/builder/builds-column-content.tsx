@@ -166,6 +166,8 @@ export interface BuildsColumnContentProps {
   onModeChange: (mode: BuildsMode) => void;
   /** The Theoretical Builds tab's state (see useTheoryBuilds). */
   theory: TheoryBuilds;
+  /** The saved theoretical builds menu, shown beside the tabs (the panel passes it on Theoretical only). */
+  savedTheoryBuilds?: ReactNode;
   ready: boolean;
   /** The gear on screen is last visit's copy; builds wait for the live profile. */
   provisional?: boolean;
@@ -213,18 +215,21 @@ export interface BuildsColumnContentProps {
 
 /** The tabs, then the open tab's builds (each with its own header extras and sort). */
 export function BuildsColumnContent(props: BuildsColumnContentProps) {
-  const { mode, onModeChange, ready, provisional = false } = props;
+  const { mode, onModeChange, ready, provisional = false, savedTheoryBuilds } = props;
   const header = buildsHeader(props);
   // Each tab's sort lives here, not in its body, so switching tabs keeps both.
   const [actualSort, setActualSort] = useState<LoadoutSortState>(DEFAULT_LOADOUT_SORT);
   const [theorySort, setTheorySort] = useState<TheorySortState>(DEFAULT_THEORY_SORT);
   const tabs = (
-    <Tabs value={mode} onValueChange={(v) => onModeChange(v as BuildsMode)}>
-      <TabsList aria-label="Which builds to show">
-        <TabsTrigger value="actual">Builds</TabsTrigger>
-        <TabsTrigger value="theoretical">Theoretical Builds</TabsTrigger>
-      </TabsList>
-    </Tabs>
+    <div className="flex items-stretch gap-2">
+      <Tabs value={mode} onValueChange={(v) => onModeChange(v as BuildsMode)}>
+        <TabsList aria-label="Which builds to show">
+          <TabsTrigger value="actual">Builds</TabsTrigger>
+          <TabsTrigger value="theoretical">Theoretical Builds</TabsTrigger>
+        </TabsList>
+      </Tabs>
+      {savedTheoryBuilds}
+    </div>
   );
   if (!ready) {
     return (

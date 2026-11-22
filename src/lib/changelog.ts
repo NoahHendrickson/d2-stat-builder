@@ -12,6 +12,13 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    date: "2026-11-22",
+    changes: [
+      "Theoretical Builds: save builds by name in the Save menu and load them again later.",
+      "Theoretical Builds: your stats and picks stay put when you reload the page.",
+    ],
+  },
+  {
     date: "2026-11-21",
     changes: [
       "Items: search perkcombo:outlaw+killclip to find weapons that rolled both perks, one in each trait column.",

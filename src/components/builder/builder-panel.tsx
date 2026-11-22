@@ -30,9 +30,11 @@ import {
   availableFragments,
   type Subclass,
 } from "@/lib/armory/fragments";
+import { classSets } from "@/lib/armory/sets";
 import {
   applySpiritSelectionToClassItems,
   availableExoticClassItems,
+  availableSpiritPerks,
   isExoticClassItemHash,
 } from "@/lib/armory/exotic-class-perks";
 import {
@@ -55,7 +57,8 @@ import {
   type ArmorSlot,
   type StatIconMap,
 } from "@/lib/armory/stats";
-import { itemWatermark } from "@/lib/armory/normalize";
+import { itemWatermark, type ArmorPiece } from "@/lib/armory/normalize";
+import type { Manifest } from "@/lib/manifest/load";
 import { getArchetypes } from "@/lib/armory/archetypes";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -85,6 +88,8 @@ import {
   clearClassBound,
   DEFAULT_TAB,
   tabFromSaved,
+  tabFromSnapshot,
+  theorySnapshot,
   updateTabs,
   useBuilderTabs,
   useTabDerived,
@@ -94,11 +99,21 @@ import { dreamInputForBuild } from "@/lib/optimizer/dream-input";
 import type { OptimizerLoadout } from "@/lib/optimizer/types";
 import type { DreamInput } from "@/lib/optimizer/dream";
 import { useTheoryBuilds } from "@/components/builder/use-theory-builds";
+import { SavedTheoryBuildsMenu } from "@/components/builder/saved-theory-builds-menu";
+import {
+  loadTheoryInputs,
+  resolveTheoryBuild,
+  saveTheoryInputs,
+  skippedNote,
+  type SavedTheoryBuild,
+} from "@/lib/builder/theory-storage";
+import { toast } from "@/lib/toast";
 import {
   DEFAULT_POWER_RANGE,
   forcesDreamersBond,
   loadSelections,
   saveSelections,
+  fragSelFromArrays,
   fragSelToArrays,
   resolveExoticIndex,
   SCHEMA_VERSION,
@@ -172,6 +187,8 @@ export function BuilderPanel({
   // Nothing rendered before `ready` depends on these, so the SSR/hydration output
   // (where storage is unavailable) can't mismatch.
   const [initialSaved] = useState(loadSelections);
+  // Theoretical's inputs from last visit (theory-storage.ts), read the same way.
+  const [initialTheory] = useState(loadTheoryInputs);
 
   // The saved loadout Optimize linked (resolved once here, passed to the builds).
   const linkedLoadout = useOptimizingLoadout();
@@ -182,13 +199,26 @@ export function BuilderPanel({
   /**
    * Actual builds (owned armor) or theoretical ones (the Tier-5 rolls that would reach
    * the targets). Each tab keeps its own targets, major mods, exotic, set bonuses and
-   * fragments (useBuilderTabs): Theoretical opens on the defaults, and Builds gets its
-   * own back on the way out. Class, the set list filters and the settings Theoretical
+   * fragments (useBuilderTabs): each is restored from storage on mount, and Builds gets
+   * its own back on the way out. Theoretical's can also be saved by name
+   * (SavedTheoryBuildsMenu). Class, the set list filters and the settings Theoretical
    * hides are shared. The controls read and edit the open tab (`tab`); the Builds
    * search, persistence and saved loadouts read `tabs.actual`; useTheoryBuilds reads
    * `tabs.theoretical`.
    */
-  const tabs = useBuilderTabs(() => (initialSaved ? tabFromSaved(initialSaved) : DEFAULT_TAB));
+  const tabs = useBuilderTabs(
+    () => (initialSaved ? tabFromSaved(initialSaved) : DEFAULT_TAB),
+    () => {
+      if (!initialTheory) return DEFAULT_TAB;
+      const restored = tabFromSnapshot(initialTheory.builder);
+      // Every subclass's fragment picks, not just the active one's (older drafts lack them).
+      if (initialTheory.fragSel) restored.fragSel = fragSelFromArrays(initialTheory.fragSel);
+      // Stored for another class than the one restored: keep only what isn't per class.
+      return initialTheory.classType === (initialSaved?.classType ?? null)
+        ? restored
+        : clearClassBound(restored);
+    },
+  );
   const { mode: buildsMode, tab, update: updateTab, setTabs } = tabs;
   const theoretical = buildsMode === "theoretical";
   // Pins follow the account between computers (synced-settings.ts), not the selections.
@@ -435,61 +465,10 @@ export function BuilderPanel({
   // with different hashes; the optimizer picks whichever version builds best.
   // Exotic class items are always listed (from the manifest) even when unowned.
   // Ordered by slot (helmet, arms, chest, legs, class item), then name.
-  const exotics = useMemo(() => {
-    const map = new Map<
-      string,
-      {
-        slot: ArmorSlot;
-        hashes: number[];
-        icon?: string;
-        watermark?: string;
-        isTier5?: boolean;
-      }
-    >();
-    for (const p of pool) {
-      if (!p.isExotic) continue;
-      const entry = map.get(p.name) ?? {
-        slot: p.slot,
-        hashes: [],
-        icon: p.icon,
-        watermark: p.watermark,
-        isTier5: p.tunedStat !== undefined,
-      };
-      if (!entry.hashes.includes(p.itemHash)) entry.hashes.push(p.itemHash);
-      if (!entry.icon) entry.icon = p.icon;
-      if (!entry.watermark && p.watermark) entry.watermark = p.watermark;
-      if (p.tunedStat !== undefined) entry.isTier5 = true;
-      map.set(p.name, entry);
-    }
-    if (manifest && classType !== null) {
-      for (const item of availableExoticClassItems(manifest, classType)) {
-        const entry = map.get(item.name) ?? {
-          slot: "classItem" as const,
-          hashes: [],
-          icon: item.icon,
-          watermark: itemWatermark(
-            manifest.def("DestinyInventoryItemDefinition", item.hash),
-          ),
-          isTier5: true,
-        };
-        if (!entry.hashes.includes(item.hash)) entry.hashes.push(item.hash);
-        if (!entry.icon) entry.icon = item.icon;
-        if (!entry.watermark) {
-          entry.watermark = itemWatermark(
-            manifest.def("DestinyInventoryItemDefinition", item.hash),
-          );
-        }
-        map.set(item.name, entry);
-      }
-    }
-    return [...map]
-      .map(([name, rest]) => ({ name, ...rest }))
-      .sort(
-        (a, b) =>
-          ARMOR_SLOTS.indexOf(a.slot) - ARMOR_SLOTS.indexOf(b.slot) ||
-          a.name.localeCompare(b.name),
-      );
-  }, [pool, manifest, classType]);
+  const exotics = useMemo(
+    () => exoticOptions(pool, manifest, classType),
+    [pool, manifest, classType],
+  );
 
   // Each tab's selections against the live lists. Builds' feed its search; the open
   // tab's (`shown`) feed the controls.
@@ -715,9 +694,8 @@ export function BuilderPanel({
   // The Builds tab's exotic as persisted: by name, and only while it's in the live list.
   const persistedExoticName = actualExoticOption?.name ?? null;
 
-  // Persist the Builds tab's selections (debounced) on any change; the theoretical tab's
-  // live only as long as the panel. Held off while a restored exotic is still unresolved
-  // (see pendingExoticName).
+  // Persist the Builds tab's selections (debounced) on any change. Held off while a
+  // restored exotic is still unresolved (see pendingExoticName).
   const pendingSave = useRef<{ timer: number; save: () => void } | null>(null);
   useEffect(() => {
     if (pendingExoticName.current !== undefined) return;
@@ -768,14 +746,46 @@ export function BuilderPanel({
     actualSubclass,
     actualFragSel,
   ]);
+  // The Theoretical tab's inputs, persisted the same way. Its exotic is stored by raw name,
+  // so one still waiting for the live exotics list isn't written back as none.
+  const pendingTheorySave = useRef<{ timer: number; save: () => void } | null>(null);
+  useEffect(() => {
+    const save = () => {
+      pendingTheorySave.current = null;
+      const t = tabs.theoretical;
+      saveTheoryInputs({
+        classType,
+        builder: theorySnapshot(t, t.exoticName),
+        fragSel: fragSelToArrays(t.fragSel),
+      });
+    };
+    const timer = window.setTimeout(save, 300);
+    pendingTheorySave.current = { timer, save };
+    return () => window.clearTimeout(timer);
+  }, [classType, tabs.theoretical]);
+  // A reload doesn't unmount, so write the pending saves as the page goes. Both: a build
+  // loaded into another class changes the class Builds stores, and the Theoretical restore
+  // checks its class against that one.
+  useEffect(() => {
+    const flush = () => {
+      for (const pending of [pendingSave.current, pendingTheorySave.current]) {
+        if (!pending) continue;
+        window.clearTimeout(pending.timer);
+        pending.save();
+      }
+    };
+    window.addEventListener("pagehide", flush);
+    return () => window.removeEventListener("pagehide", flush);
+  }, []);
   // Hidden (tab switch) or unmounted mid-debounce: write the pending selections now
   // instead of dropping them.
   useEffect(
     () => () => {
-      const pending = pendingSave.current;
-      if (!pending) return;
-      window.clearTimeout(pending.timer);
-      pending.save();
+      for (const pending of [pendingSave.current, pendingTheorySave.current]) {
+        if (!pending) continue;
+        window.clearTimeout(pending.timer);
+        pending.save();
+      }
     },
     [],
   );
@@ -1001,6 +1011,63 @@ export function BuilderPanel({
     [setTabs, linkedLoadout],
   );
 
+  // Saved theoretical builds: the inputs as they stand, and loading one into the tab. A
+  // build loads into its own class when the account has it, checked against that class's
+  // exotics, fragments and sets; whatever is gone is dropped and named in the toast.
+  // A save keeps what the tab shows: the resolved exotic and the sets in its list.
+  const theoryResolvedExotic = theoryResolved.exoticOption?.name ?? null;
+  const theorySetMap = theory.setMap;
+  const getTheoryInputs = useCallback(() => {
+    const t = tabs.theoretical;
+    const setReqs = Object.fromEntries(
+      Object.entries(t.setReqs).filter(([hash]) => theorySetMap.has(Number(hash))),
+    ) as Record<number, 2 | 4>;
+    return { classType, builder: theorySnapshot({ ...t, setReqs }, theoryResolvedExotic) };
+  }, [classType, tabs.theoretical, theoryResolvedExotic, theorySetMap]);
+  const loadTheoryBuild = useCallback(
+    (build: SavedTheoryBuild) => {
+      if (!armory || !manifest || classType === null) return;
+      const target =
+        build.classType !== null && classes.includes(build.classType) ? build.classType : classType;
+      const targetPool = armory.pieces.filter(
+        (p) => p.classType === target && inDefaultOptimizerPool(p, poolOptions),
+      );
+      const targetExotics = exoticOptions(targetPool, manifest, target);
+      const { builder, skipped } = resolveTheoryBuild(build.builder, {
+        exotics: new Set(targetExotics.map((e) => e.name)),
+        fragments: new Set(
+          availableFragments(manifest, target)[build.builder.activeSubclass].map((f) => f.hash),
+        ),
+        sets: new Set(classSets(manifest, target, targetPool).map((set) => set.setHash)),
+        spiritPerks: (name) => {
+          const hash = targetExotics
+            .find((e) => e.name === name)
+            ?.hashes.find(isExoticClassItemHash);
+          if (hash === undefined) return null;
+          const perks = availableSpiritPerks(manifest, hash);
+          return { left: perks.left.map((x) => x.hash), right: perks.right.map((x) => x.hash) };
+        },
+      });
+      if (build.classType !== null && target !== build.classType) {
+        skipped.unshift(`the ${CLASS_NAMES[build.classType] ?? "saved"} class`);
+      }
+      if (target !== classType) onClassChange(target);
+      setTabs((t) => ({ ...t, mode: "theoretical", theoretical: tabFromSnapshot(builder) }));
+      if (skipped.length) toast.warning(`Loaded ${build.name}`, skippedNote(skipped));
+      else toast.success(`Loaded ${build.name}`);
+    },
+    [armory, manifest, classType, classes, poolOptions, onClassChange, setTabs],
+  );
+  // On Theoretical only, and only against the live profile: the cached one may lack a
+  // newly acquired exotic.
+  const savedTheoryBuilds = useMemo(
+    () =>
+      searchReady && theoretical ? (
+        <SavedTheoryBuildsMenu getCurrent={getTheoryInputs} onLoad={loadTheoryBuild} />
+      ) : undefined,
+    [searchReady, theoretical, getTheoryInputs, loadTheoryBuild],
+  );
+
   const onExoticSelect = useCallback(
     (index: number | null) => {
       updateTab("exoticName", index === null ? null : (exotics[index]?.name ?? null));
@@ -1141,6 +1208,7 @@ export function BuilderPanel({
       mode: buildsMode,
       onModeChange: tabs.setMode,
       theory,
+      savedTheoryBuilds,
       ready: searchReady,
       provisional,
       showLoading,
@@ -1177,6 +1245,7 @@ export function BuilderPanel({
       buildsMode,
       tabs.setMode,
       theory,
+      savedTheoryBuilds,
       searchReady,
       provisional,
       showLoading,
@@ -1423,9 +1492,11 @@ export function BuilderPanel({
         />
       )}
 
-      {/* Builds scroller spans the results column + the right leftover. */}
+      {/* Builds scroller spans the results column + the right leftover. Like the
+          settings pane, it reaches 12px above its track (negative margin, matching
+          padding) so the clip leaves room for the header buttons' hover ring. */}
       <div
-        className="d2-scroll min-h-0 min-w-0 lg:col-start-4 lg:col-end-6 lg:overflow-y-auto lg:overscroll-contain lg:pr-6 lg:pl-2"
+        className="d2-scroll min-h-0 min-w-0 lg:col-start-4 lg:col-end-6 lg:-mt-3 lg:overflow-y-auto lg:overscroll-contain lg:pt-3 lg:pr-6 lg:pl-2"
         ref={buildsScrollRef}
       >
         <div
@@ -1437,6 +1508,67 @@ export function BuilderPanel({
       </div>
     </div>
   );
+}
+
+/** The exotic picker's options for a class's pool (see the `exotics` memo). */
+function exoticOptions(
+  pool: ArmorPiece[],
+  manifest: Manifest | undefined,
+  classType: number | null,
+) {
+  const map = new Map<
+    string,
+    {
+      slot: ArmorSlot;
+      hashes: number[];
+      icon?: string;
+      watermark?: string;
+      isTier5?: boolean;
+    }
+  >();
+  for (const p of pool) {
+    if (!p.isExotic) continue;
+    const entry = map.get(p.name) ?? {
+      slot: p.slot,
+      hashes: [],
+      icon: p.icon,
+      watermark: p.watermark,
+      isTier5: p.tunedStat !== undefined,
+    };
+    if (!entry.hashes.includes(p.itemHash)) entry.hashes.push(p.itemHash);
+    if (!entry.icon) entry.icon = p.icon;
+    if (!entry.watermark && p.watermark) entry.watermark = p.watermark;
+    if (p.tunedStat !== undefined) entry.isTier5 = true;
+    map.set(p.name, entry);
+  }
+  if (manifest && classType !== null) {
+    for (const item of availableExoticClassItems(manifest, classType)) {
+      const entry = map.get(item.name) ?? {
+        slot: "classItem" as const,
+        hashes: [],
+        icon: item.icon,
+        watermark: itemWatermark(
+          manifest.def("DestinyInventoryItemDefinition", item.hash),
+        ),
+        isTier5: true,
+      };
+      if (!entry.hashes.includes(item.hash)) entry.hashes.push(item.hash);
+      if (!entry.icon) entry.icon = item.icon;
+      if (!entry.watermark) {
+        entry.watermark = itemWatermark(
+          manifest.def("DestinyInventoryItemDefinition", item.hash),
+        );
+      }
+      map.set(item.name, entry);
+    }
+  }
+  return [...map]
+    .map(([name, rest]) => ({ name, ...rest }))
+    .sort(
+      (a, b) =>
+        ARMOR_SLOTS.indexOf(a.slot) - ARMOR_SLOTS.indexOf(b.slot) ||
+        a.name.localeCompare(b.name),
+    );
 }
 
 /** A section header's Reset button, sized like "Save as loadout". */
