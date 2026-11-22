@@ -755,6 +755,17 @@ export function BuilderPanel({
     pendingTheorySave.current = { timer, save };
     return () => window.clearTimeout(timer);
   }, [classType, tabs.theoretical]);
+  // A reload doesn't unmount, so write a pending Theoretical save as the page goes.
+  useEffect(() => {
+    const flush = () => {
+      const pending = pendingTheorySave.current;
+      if (!pending) return;
+      window.clearTimeout(pending.timer);
+      pending.save();
+    };
+    window.addEventListener("pagehide", flush);
+    return () => window.removeEventListener("pagehide", flush);
+  }, []);
   // Hidden (tab switch) or unmounted mid-debounce: write the pending selections now
   // instead of dropping them.
   useEffect(
