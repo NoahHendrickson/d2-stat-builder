@@ -7,7 +7,7 @@ import {
   ArrowDown01Icon,
   BookmarkAdd02Icon,
   Bookmark02Icon,
-  Cancel01Icon,
+  Delete02Icon,
 } from "@hugeicons/core-free-icons";
 import { ConfirmDialog } from "@/components/loadouts/confirm-dialog";
 import { Button } from "@/components/ui/button";
@@ -137,10 +137,14 @@ export function SavedTheoryBuildsMenu({
                   <span className="text-muted-foreground shrink-0 text-xs">{className}</span>
                 )}
                 <TooltipLabel label={`Delete ${build.name}`}>
-                  {/* The app's small icon button, as on the toast close. */}
+                  {/* The app's destructive button, icon-sized, with its delete icon. While
+                      the row is highlighted, menu items recolour everything inside them
+                      (focus:**:text-accent-foreground, down to the icon's paths); the
+                      matching ! rule keeps this one red. */}
                   <Button
-                    variant="ghost"
+                    variant="destructive"
                     size="icon-sm"
+                    className="text-destructive! **:text-destructive!"
                     aria-label={`Delete ${build.name}`}
                     onPointerDown={(e) => e.stopPropagation()}
                     onClick={(e) => {
@@ -148,9 +152,8 @@ export function SavedTheoryBuildsMenu({
                       e.stopPropagation();
                       remove(build);
                     }}
-                    className="text-muted-foreground hover:text-foreground"
                   >
-                    <HugeiconsIcon icon={Cancel01Icon} aria-hidden />
+                    <HugeiconsIcon icon={Delete02Icon} aria-hidden />
                   </Button>
                 </TooltipLabel>
               </DropdownMenuItem>
