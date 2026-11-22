@@ -80,7 +80,7 @@ describe("theorySnapshot / tabFromSnapshot", () => {
   };
 
   it("round-trips the tab's inputs with its subclass's fragments", () => {
-    const back = tabFromSnapshot(theorySnapshot(tab));
+    const back = tabFromSnapshot(theorySnapshot(tab, tab.exoticName));
     expect({ ...back, fragSel: undefined }).toEqual({ ...tab, fragSel: undefined });
     expect([...back.fragSel.Void]).toEqual([7, 8]);
     expect(back.fragSel.Solar.size).toBe(0);

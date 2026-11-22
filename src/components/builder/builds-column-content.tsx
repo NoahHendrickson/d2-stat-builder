@@ -166,7 +166,7 @@ export interface BuildsColumnContentProps {
   onModeChange: (mode: BuildsMode) => void;
   /** The Theoretical Builds tab's state (see useTheoryBuilds). */
   theory: TheoryBuilds;
-  /** The saved theoretical builds menu, shown beside the tabs on Theoretical. */
+  /** The saved theoretical builds menu, shown beside the tabs (the panel passes it on Theoretical only). */
   savedTheoryBuilds?: ReactNode;
   ready: boolean;
   /** The gear on screen is last visit's copy; builds wait for the live profile. */
@@ -228,7 +228,7 @@ export function BuildsColumnContent(props: BuildsColumnContentProps) {
           <TabsTrigger value="theoretical">Theoretical Builds</TabsTrigger>
         </TabsList>
       </Tabs>
-      {mode === "theoretical" && savedTheoryBuilds}
+      {savedTheoryBuilds}
     </div>
   );
   if (!ready) {

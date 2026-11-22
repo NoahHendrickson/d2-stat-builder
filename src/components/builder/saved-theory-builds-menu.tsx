@@ -61,16 +61,20 @@ export function SavedTheoryBuildsMenu({
   const [replacing, setReplacing] = useState<SavedTheoryBuild | null>(null);
   const [confirming, setConfirming] = useState(false);
 
-  // Re-read before each write, so a save in another browser tab isn't lost.
+  // Re-read before each write, so a save in another browser tab isn't lost. The list
+  // and the toast follow what storage actually took.
   const commit = (update: (list: SavedTheoryBuild[]) => SavedTheoryBuild[]) => {
     const next = update(loadSavedTheoryBuilds());
-    writeSavedTheoryBuilds(next);
+    if (!writeSavedTheoryBuilds(next)) return false;
     setBuilds(next);
+    return true;
   };
+  const storageFailed = (what: string) =>
+    toast.error(`Couldn't ${what}`, "This browser's storage is full or blocked.");
 
   const save = (build: SavedTheoryBuild) => {
-    commit((list) => withTheoryBuild(list, build));
-    toast.success(`Saved ${build.name}`);
+    if (commit((list) => withTheoryBuild(list, build))) toast.success(`Saved ${build.name}`);
+    else storageFailed(`save ${build.name}`);
   };
 
   const clean = cleanTheoryBuildName(name);
@@ -85,13 +89,14 @@ export function SavedTheoryBuildsMenu({
   };
 
   const remove = (build: SavedTheoryBuild) => {
-    commit((list) => withoutTheoryBuild(list, build.name));
-    toast.success(`Deleted ${build.name}`);
+    if (commit((list) => withoutTheoryBuild(list, build.name))) toast.success(`Deleted ${build.name}`);
+    else storageFailed(`delete ${build.name}`);
   };
 
   return (
     <>
-      <DropdownMenu>
+      {/* Re-read on open: another browser tab may have changed the list. */}
+      <DropdownMenu onOpenChange={(open) => open && setBuilds(loadSavedTheoryBuilds())}>
         {/* h-auto: stretches to the tab track beside it (see BuildsColumnContent). */}
         <DropdownMenuTrigger
           aria-label="Save or load builds"
@@ -128,6 +133,7 @@ export function SavedTheoryBuildsMenu({
                 key={build.name}
                 className="pr-0.5"
                 onClick={() => onLoad(build)}
+                aria-keyshortcuts="Delete Backspace"
                 onKeyDown={(e) => {
                   if (e.key === "Delete" || e.key === "Backspace") remove(build);
                 }}
@@ -190,7 +196,11 @@ export function SavedTheoryBuildsMenu({
 
       <ConfirmDialog
         open={confirming}
-        onOpenChange={setConfirming}
+        onOpenChange={(open) => {
+          setConfirming(open);
+          // Cancelled: back to the name, as typed, to pick another.
+          if (!open) setNaming(true);
+        }}
         title={`Replace ${replacing?.name ?? ""}?`}
         description="A saved build already has this name."
         confirmLabel="Replace"

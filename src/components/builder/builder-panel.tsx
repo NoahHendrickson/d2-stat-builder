@@ -113,6 +113,7 @@ import {
   forcesDreamersBond,
   loadSelections,
   saveSelections,
+  fragSelFromArrays,
   fragSelToArrays,
   resolveExoticIndex,
   SCHEMA_VERSION,
@@ -210,6 +211,8 @@ export function BuilderPanel({
     () => {
       if (!initialTheory) return DEFAULT_TAB;
       const restored = tabFromSnapshot(initialTheory.builder);
+      // Every subclass's fragment picks, not just the active one's (older drafts lack them).
+      if (initialTheory.fragSel) restored.fragSel = fragSelFromArrays(initialTheory.fragSel);
       // Stored for another class than the one restored: keep only what isn't per class.
       return initialTheory.classType === (initialSaved?.classType ?? null)
         ? restored
@@ -749,19 +752,27 @@ export function BuilderPanel({
   useEffect(() => {
     const save = () => {
       pendingTheorySave.current = null;
-      saveTheoryInputs({ classType, builder: theorySnapshot(tabs.theoretical) });
+      const t = tabs.theoretical;
+      saveTheoryInputs({
+        classType,
+        builder: theorySnapshot(t, t.exoticName),
+        fragSel: fragSelToArrays(t.fragSel),
+      });
     };
     const timer = window.setTimeout(save, 300);
     pendingTheorySave.current = { timer, save };
     return () => window.clearTimeout(timer);
   }, [classType, tabs.theoretical]);
-  // A reload doesn't unmount, so write a pending Theoretical save as the page goes.
+  // A reload doesn't unmount, so write the pending saves as the page goes. Both: a build
+  // loaded into another class changes the class Builds stores, and the Theoretical restore
+  // checks its class against that one.
   useEffect(() => {
     const flush = () => {
-      const pending = pendingTheorySave.current;
-      if (!pending) return;
-      window.clearTimeout(pending.timer);
-      pending.save();
+      for (const pending of [pendingSave.current, pendingTheorySave.current]) {
+        if (!pending) continue;
+        window.clearTimeout(pending.timer);
+        pending.save();
+      }
     };
     window.addEventListener("pagehide", flush);
     return () => window.removeEventListener("pagehide", flush);
@@ -1003,16 +1014,21 @@ export function BuilderPanel({
   // Saved theoretical builds: the inputs as they stand, and loading one into the tab. A
   // build loads into its own class when the account has it, checked against that class's
   // exotics, fragments and sets; whatever is gone is dropped and named in the toast.
+  // A save keeps what the tab shows: the resolved exotic and the sets in its list.
   const theoryResolvedExotic = theoryResolved.exoticOption?.name ?? null;
-  const getTheoryInputs = useCallback(
-    () => ({ classType, builder: theorySnapshot(tabs.theoretical, theoryResolvedExotic) }),
-    [classType, tabs.theoretical, theoryResolvedExotic],
-  );
+  const theorySetMap = theory.setMap;
+  const getTheoryInputs = useCallback(() => {
+    const t = tabs.theoretical;
+    const setReqs = Object.fromEntries(
+      Object.entries(t.setReqs).filter(([hash]) => theorySetMap.has(Number(hash))),
+    ) as Record<number, 2 | 4>;
+    return { classType, builder: theorySnapshot({ ...t, setReqs }, theoryResolvedExotic) };
+  }, [classType, tabs.theoretical, theoryResolvedExotic, theorySetMap]);
   const loadTheoryBuild = useCallback(
     (build: SavedTheoryBuild) => {
       if (!armory || !manifest || classType === null) return;
-      const own = build.classType !== null && classes.includes(build.classType);
-      const target = own ? (build.classType as number) : classType;
+      const target =
+        build.classType !== null && classes.includes(build.classType) ? build.classType : classType;
       const targetPool = armory.pieces.filter(
         (p) => p.classType === target && inDefaultOptimizerPool(p, poolOptions),
       );
@@ -1032,7 +1048,7 @@ export function BuilderPanel({
           return { left: perks.left.map((x) => x.hash), right: perks.right.map((x) => x.hash) };
         },
       });
-      if (!own && build.classType !== null) {
+      if (build.classType !== null && target !== build.classType) {
         skipped.unshift(`the ${CLASS_NAMES[build.classType] ?? "saved"} class`);
       }
       if (target !== classType) onClassChange(target);
@@ -1042,13 +1058,14 @@ export function BuilderPanel({
     },
     [armory, manifest, classType, classes, poolOptions, onClassChange, setTabs],
   );
-  // Only against the live profile: the cached one may lack a newly acquired exotic.
+  // On Theoretical only, and only against the live profile: the cached one may lack a
+  // newly acquired exotic.
   const savedTheoryBuilds = useMemo(
     () =>
-      searchReady ? (
+      searchReady && theoretical ? (
         <SavedTheoryBuildsMenu getCurrent={getTheoryInputs} onLoad={loadTheoryBuild} />
       ) : undefined,
-    [searchReady, getTheoryInputs, loadTheoryBuild],
+    [searchReady, theoretical, getTheoryInputs, loadTheoryBuild],
   );
 
   const onExoticSelect = useCallback(

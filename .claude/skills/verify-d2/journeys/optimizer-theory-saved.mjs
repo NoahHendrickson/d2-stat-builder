@@ -97,6 +97,13 @@ export default async function ({ page, app, step, shot, expect, log }) {
     const confirm = { role: "dialog", name: /^Replace raid\?/ };
     await page.waitFor(confirm);
     await shot("replace-confirm");
+    // Cancel goes back to the name dialog with the name as typed.
+    await page.click({ role: "button", name: "Cancel" }, { within: confirm });
+    const naming = { role: "dialog", name: "Save theoretical build" };
+    await page.waitFor(naming);
+    expect((await page.value({ role: "textbox", name: "Build name" })) === "raid", "the typed name is kept after Cancel");
+    await page.click({ role: "button", name: "Save" }, { within: naming });
+    await page.waitFor(confirm);
     await page.click({ role: "button", name: "Replace" }, { within: confirm });
     await app.toast(/Saved raid/);
     const list = await stored();
@@ -184,6 +191,31 @@ export default async function ({ page, app, step, shot, expect, log }) {
     expect((await page.attr(selected, "aria-selected")) === "true", `the ${names[before]} tab is selected again`);
     await page.waitFor(async () => (await page.value(HEALTH)) === "70");
     expect((await page.value(HEALTH)) === "70", "raid's Health 70 loaded");
+  });
+
+  await step("a reload right after loading another class's build keeps that class", async () => {
+    const names = { 0: "Titan", 1: "Hunter", 2: "Warlock" };
+    const saved = (await stored()).builds[0].classType;
+    const own = { role: "tab", name: new RegExp("^" + names[saved] + ", Power", "i") };
+    const other = { role: "tab", name: new RegExp("^" + names[saved === 1 ? 0 : 1] + ", Power", "i") };
+    await page.click(other);
+    await page.waitFor(async () => (await page.attr(other, "aria-selected")) === "true");
+    await page.waitFor(async () => JSON.parse((await page.evalJs(`localStorage.getItem("stat-builder:selections")`)) ?? "null")?.classType !== saved);
+    await openMenu();
+    await page.click({ role: "menuitem", name: /^raid/ });
+    // Reload before the 300 ms save debounce: the pagehide flush has to write the class.
+    const unsaved = await page.evalJs(`(() => {
+      const cls = JSON.parse(localStorage.getItem("stat-builder:selections") ?? "null")?.classType;
+      location.reload();
+      return cls !== ${saved};
+    })()`);
+    expect(unsaved, "the class wasn't stored yet when the reload started");
+    await app.open("/");
+    await page.waitFor(async () => (await page.attr(own, "aria-selected")) === "true", { timeout: 20000 });
+    expect((await page.attr(own, "aria-selected")) === "true", `the ${names[saved]} tab is selected after the reload`);
+    await page.click(THEORY_TAB);
+    await page.waitFor(async () => (await page.value(HEALTH)) === "70");
+    expect((await page.value(HEALTH)) === "70", "raid's Health 70 is still on Theoretical");
   });
 
   await step("fits beside the tabs at phone width", async () => {

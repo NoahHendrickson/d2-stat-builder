@@ -53,7 +53,7 @@ const build = (name: string, over: Partial<SavedTheoryBuild> = {}): SavedTheoryB
 
 describe("saved theoretical builds", () => {
   it("round-trips a save through storage", () => {
-    writeSavedTheoryBuilds(withTheoryBuild([], build("Raid")));
+    expect(writeSavedTheoryBuilds(withTheoryBuild([], build("Raid")))).toBe(true);
     expect(loadSavedTheoryBuilds()).toEqual([build("Raid")]);
   });
 
@@ -123,15 +123,30 @@ describe("saved theoretical builds", () => {
       },
     };
     expect(loadSavedTheoryBuilds()).toEqual([]);
-    expect(() => writeSavedTheoryBuilds([build("Raid")])).not.toThrow();
+    expect(writeSavedTheoryBuilds([build("Raid")])).toBe(false);
     expect(loadTheoryInputs()).toBeNull();
   });
 });
 
 describe("current theoretical inputs", () => {
-  it("round-trip through storage", () => {
-    saveTheoryInputs({ classType: 1, builder: snapshot() });
-    expect(loadTheoryInputs()).toEqual({ classType: 1, builder: snapshot() });
+  const fragSel = { Prismatic: [], Arc: [], Solar: [9], Strand: [], Stasis: [], Void: [1, 2] };
+
+  it("round-trip through storage, with every subclass's fragments", () => {
+    saveTheoryInputs({ classType: 1, builder: snapshot(), fragSel });
+    expect(loadTheoryInputs()).toEqual({ classType: 1, builder: snapshot(), fragSel });
+  });
+
+  it("read an older draft, or a malformed fragment map, with no map", () => {
+    store.setItem(
+      THEORY_CURRENT_KEY,
+      JSON.stringify({ version: THEORY_STORAGE_VERSION, classType: 1, builder: snapshot() }),
+    );
+    expect(loadTheoryInputs()).toEqual({ classType: 1, builder: snapshot(), fragSel: null });
+    store.setItem(
+      THEORY_CURRENT_KEY,
+      JSON.stringify({ version: THEORY_STORAGE_VERSION, classType: 1, builder: snapshot(), fragSel: { ...fragSel, Void: ["x"] } }),
+    );
+    expect(loadTheoryInputs()?.fragSel).toBeNull();
   });
 
   it("read as none when absent, malformed or another version", () => {

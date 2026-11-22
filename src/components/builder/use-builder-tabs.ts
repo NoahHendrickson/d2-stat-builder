@@ -70,14 +70,11 @@ export function tabFromSaved(saved: PersistedSelections): TabSelections {
 
 /**
  * A Theoretical tab as a loadout snapshot (theory-storage.ts): its subclass and that
- * subclass's fragments, with the Builds-only settings at their defaults. Pass
- * `exoticName` to store the resolved exotic instead of the raw name; with none, the
- * Spirit perks are dropped too.
+ * subclass's fragments, with the Builds-only settings at their defaults. `exoticName`
+ * is the exotic to store (the raw name, or the one resolved against the live list); with
+ * none, the Spirit perks are dropped too.
  */
-export function theorySnapshot(
-  tab: TabSelections,
-  exoticName: string | null = tab.exoticName,
-): BuilderSnapshot {
+export function theorySnapshot(tab: TabSelections, exoticName: string | null): BuilderSnapshot {
   return {
     targets: tab.targets,
     major: tab.major,

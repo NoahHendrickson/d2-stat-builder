@@ -14,7 +14,8 @@ export const CHANGELOG: readonly ChangelogEntry[] = [
   {
     date: "2026-11-22",
     changes: [
-      "Theoretical Builds: save builds by name from the Save menu and load them later; the tab also keeps its inputs after a reload.",
+      "Theoretical Builds: save builds by name in the Save menu and load them again later.",
+      "Theoretical Builds: your stats and picks stay put when you reload the page.",
     ],
   },
   {

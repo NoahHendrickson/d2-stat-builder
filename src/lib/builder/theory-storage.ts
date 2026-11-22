@@ -5,6 +5,7 @@
 // settings, so those fields are stored at their defaults and ignored on load.
 //
 // Runtime imports are relative (not `@/`), matching selection-storage.ts.
+import { SUBCLASSES, type Subclass } from "../armory/fragments";
 import { MAX_NAME_LENGTH, parseBuilderSnapshot, type BuilderSnapshot } from "../loadouts/types";
 
 export const THEORY_CURRENT_KEY = "stat-builder:theory-selections";
@@ -19,6 +20,15 @@ export interface TheoryInputs {
 
 export interface SavedTheoryBuild extends TheoryInputs {
   name: string;
+}
+
+/**
+ * The tab's inputs kept across a reload: the snapshot (the active subclass's fragments)
+ * plus every subclass's fragments, so picks on another subclass survive too. Null when
+ * the stored draft predates the map; the snapshot's fragments then stand.
+ */
+export interface TheoryDraft extends TheoryInputs {
+  fragSel: Record<Subclass, number[]> | null;
 }
 
 // --- pure helpers ---
@@ -175,11 +185,15 @@ function read(key: string): string | null {
   }
 }
 
-function write(key: string, value: unknown): void {
+/** Whether the value reached storage. */
+function write(key: string, value: unknown): boolean {
+  const s = storage();
+  if (!s) return false;
   try {
-    storage()?.setItem(key, JSON.stringify(value));
+    s.setItem(key, JSON.stringify(value));
+    return true;
   } catch {
-    // Persistence is best-effort.
+    return false;
   }
 }
 
@@ -187,23 +201,35 @@ export function loadSavedTheoryBuilds(): SavedTheoryBuild[] {
   return parseSavedTheoryBuilds(read(THEORY_SAVED_KEY));
 }
 
-export function writeSavedTheoryBuilds(builds: readonly SavedTheoryBuild[]): void {
-  write(THEORY_SAVED_KEY, { version: THEORY_STORAGE_VERSION, builds });
+/** False when storage refused the write (full, blocked, unavailable). */
+export function writeSavedTheoryBuilds(builds: readonly SavedTheoryBuild[]): boolean {
+  return write(THEORY_SAVED_KEY, { version: THEORY_STORAGE_VERSION, builds });
+}
+
+/** Every subclass's fragment hashes, or null unless each is an array of integers. */
+function parseFragSel(v: unknown): Record<Subclass, number[]> | null {
+  if (typeof v !== "object" || v === null) return null;
+  const o = v as Record<string, unknown>;
+  const ok = SUBCLASSES.every(
+    (sc) => Array.isArray(o[sc]) && (o[sc] as unknown[]).every(Number.isInteger),
+  );
+  return ok ? (Object.fromEntries(SUBCLASSES.map((sc) => [sc, o[sc]])) as Record<Subclass, number[]>) : null;
 }
 
 /** The tab's inputs from last visit, or null when absent or unreadable. */
-export function loadTheoryInputs(): TheoryInputs | null {
+export function loadTheoryInputs(): TheoryDraft | null {
   const raw = read(THEORY_CURRENT_KEY);
   if (!raw) return null;
   try {
     const obj = JSON.parse(raw) as unknown;
     if ((obj as { version?: unknown } | null)?.version !== THEORY_STORAGE_VERSION) return null;
-    return parseInputs(obj);
+    const inputs = parseInputs(obj);
+    return inputs && { ...inputs, fragSel: parseFragSel((obj as { fragSel?: unknown }).fragSel) };
   } catch {
     return null;
   }
 }
 
-export function saveTheoryInputs(inputs: TheoryInputs): void {
-  write(THEORY_CURRENT_KEY, { version: THEORY_STORAGE_VERSION, ...inputs });
+export function saveTheoryInputs(draft: TheoryDraft): void {
+  write(THEORY_CURRENT_KEY, { version: THEORY_STORAGE_VERSION, ...draft });
 }
