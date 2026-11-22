@@ -110,13 +110,7 @@ export function SavedTheoryBuildsMenu({
           {/* The primary action, as the green button rather than a menu row. */}
           <MenuPrimitive.Item
             nativeButton
-            // Keyboard highlight lights it like hover: the theme's border hides focus rings.
-            render={
-              <Button
-                variant="emphatic"
-                className="w-full data-highlighted:[--equip-fill:var(--emphatic-light)]"
-              />
-            }
+            render={<Button variant="emphatic" className="w-full" />}
             onClick={() => {
               setName("");
               setNaming(true);
@@ -143,8 +137,10 @@ export function SavedTheoryBuildsMenu({
                   <span className="text-muted-foreground shrink-0 text-xs">{className}</span>
                 )}
                 <TooltipLabel label={`Delete ${build.name}`}>
-                  <button
-                    type="button"
+                  {/* The app's small icon button, as on the toast close. */}
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
                     aria-label={`Delete ${build.name}`}
                     onPointerDown={(e) => e.stopPropagation()}
                     onClick={(e) => {
@@ -152,10 +148,10 @@ export function SavedTheoryBuildsMenu({
                       e.stopPropagation();
                       remove(build);
                     }}
-                    className="text-muted-foreground hover:text-foreground focus-visible:ring-outline-strong relative flex size-7 shrink-0 items-center justify-center rounded-none outline-none focus-visible:ring-1 normal:rounded-[8px]"
+                    className="text-muted-foreground hover:text-foreground"
                   >
-                    <HugeiconsIcon icon={Cancel01Icon} className="size-3.5" aria-hidden />
-                  </button>
+                    <HugeiconsIcon icon={Cancel01Icon} aria-hidden />
+                  </Button>
                 </TooltipLabel>
               </DropdownMenuItem>
             );
