@@ -1475,9 +1475,11 @@ export function BuilderPanel({
         />
       )}
 
-      {/* Builds scroller spans the results column + the right leftover. */}
+      {/* Builds scroller spans the results column + the right leftover. Like the
+          settings pane, it reaches 12px above its track (negative margin, matching
+          padding) so the clip leaves room for the header buttons' hover ring. */}
       <div
-        className="d2-scroll min-h-0 min-w-0 lg:col-start-4 lg:col-end-6 lg:overflow-y-auto lg:overscroll-contain lg:pr-6 lg:pl-2"
+        className="d2-scroll min-h-0 min-w-0 lg:col-start-4 lg:col-end-6 lg:-mt-3 lg:overflow-y-auto lg:overscroll-contain lg:pt-3 lg:pr-6 lg:pl-2"
         ref={buildsScrollRef}
       >
         <div

@@ -27,6 +27,24 @@ export default async function ({ page, app, step, shot, expect, log }) {
   };
   const stored = async () =>
     JSON.parse((await page.evalJs(`localStorage.getItem("stat-builder:theory-builds")`)) ?? "null");
+  /** Hovered, the trigger's ring (outline + offset) must clear every clipping ancestor's top. */
+  const ringClear = async (scope = "") => {
+    await page.hover(SAVED, scope ? { within: { css: scope } } : {});
+    await page.waitFor(async () => (await page.evalJs(`getComputedStyle(document.querySelector('${scope} [aria-label="Save or load builds"]')).outlineOffset`)) === "2px");
+    const r = JSON.parse(await page.evalJs(`(() => {
+      const btn = document.querySelector('${scope} [aria-label="Save or load builds"]');
+      const cs = getComputedStyle(btn);
+      const ringTop = btn.getBoundingClientRect().top - parseFloat(cs.outlineWidth) - parseFloat(cs.outlineOffset);
+      let clipTop = -Infinity;
+      for (let el = btn.parentElement; el; el = el.parentElement) {
+        const s = getComputedStyle(el);
+        if (/(auto|scroll|hidden|clip)/.test(s.overflowX + s.overflowY)) clipTop = Math.max(clipTop, el.getBoundingClientRect().top);
+      }
+      return JSON.stringify({ ringTop, clipTop });
+    })()`));
+    log(`  ring top ${r.ringTop}, clip top ${r.clipTop}`);
+    expect(r.ringTop >= r.clipTop, "the hover ring isn't clipped at the top");
+  };
 
   await step("menu shows only on Theoretical", async () => {
     await app.open("/");
@@ -42,6 +60,7 @@ export default async function ({ page, app, step, shot, expect, log }) {
     expect(Math.abs(g.list[0] - g.btn[0]) < 0.5 && Math.abs(g.list[1] - g.btn[1]) < 0.5, "Save button's top and bottom match the tab track");
     expect(/^Save$/i.test((await page.text(SAVED)).trim()), "the button reads Save");
     await shot("desktop-button");
+    await ringClear();
     await openMenu();
     const items = await page.count({ role: "menuitem" });
     expect(items === 1, `empty list still shows the menu with just Save (${items} items)`);
@@ -187,6 +206,7 @@ export default async function ({ page, app, step, shot, expect, log }) {
       expect(g.btn[2] <= g.vw, "button is inside the screen");
       expect(g.scrollW <= g.sheetW, "no horizontal overflow in the sheet");
       await shot("phone-sheet", { within: sheet });
+      await ringClear("#builds-mobile-sheet");
       await page.click(SAVED, { within: sheet });
       await page.waitFor({ role: "menuitem", name: "Save current build" });
       await shot("phone-menu");

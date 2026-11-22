@@ -57,7 +57,10 @@ export const BuildsSurface = memo(function BuildsSurface(props: BuildsColumnCont
         showSwipeHandle
       >
         <DrawerContent id="builds-mobile-sheet">
-          <div className="min-h-0 flex-1 overflow-y-auto px-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
+          {/* pt-1: room above the header row for a hovered button's ring, which the
+              scroll clip would otherwise cut off (the sheet's content box clips too,
+              so a negative margin can't make the room). */}
+          <div className="min-h-0 flex-1 overflow-y-auto px-4 pt-1 pb-[max(1rem,env(safe-area-inset-bottom))]">
             <LeaveBuildsSurfaceProvider value={leaveSheet}>
               <BuildsColumnContent {...props} />
             </LeaveBuildsSurfaceProvider>
