@@ -2,7 +2,13 @@
 
 import { useState, type FormEvent } from "react";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { BookmarkAdd02Icon, Bookmark02Icon, Cancel01Icon } from "@hugeicons/core-free-icons";
+import { Menu as MenuPrimitive } from "@base-ui/react/menu";
+import {
+  ArrowDown01Icon,
+  BookmarkAdd02Icon,
+  Bookmark02Icon,
+  Cancel01Icon,
+} from "@hugeicons/core-free-icons";
 import { ConfirmDialog } from "@/components/loadouts/confirm-dialog";
 import { Button } from "@/components/ui/button";
 import {
@@ -86,23 +92,32 @@ export function SavedTheoryBuildsMenu({
   return (
     <>
       <DropdownMenu>
+        {/* h-auto: stretches to the tab track beside it (see BuildsColumnContent). */}
         <DropdownMenuTrigger
-          aria-label="Saved theoretical builds"
-          render={<Button variant="outline" />}
+          aria-label="Save or load builds"
+          render={<Button variant="outline" className="h-auto" />}
         >
           <HugeiconsIcon icon={Bookmark02Icon} data-icon="inline-start" aria-hidden />
-          <span className="max-sm:sr-only">Saved</span>
+          <span className="max-sm:sr-only">Save</span>
+          <HugeiconsIcon
+            icon={ArrowDown01Icon}
+            data-icon="inline-end"
+            className="text-muted-foreground"
+            aria-hidden
+          />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="w-64 max-w-[calc(100vw-2rem)]">
-          <DropdownMenuItem
+          {/* The primary action, as the green button rather than a menu row. */}
+          <MenuPrimitive.Item
+            render={<Button variant="emphatic" className="w-full" />}
             onClick={() => {
               setName("");
               setNaming(true);
             }}
           >
-            <HugeiconsIcon icon={BookmarkAdd02Icon} aria-hidden />
-            Save current build…
-          </DropdownMenuItem>
+            <HugeiconsIcon icon={BookmarkAdd02Icon} data-icon="inline-start" aria-hidden />
+            Save current build
+          </MenuPrimitive.Item>
           {builds.length > 0 && <DropdownMenuSeparator />}
           {builds.map((build) => {
             const className =

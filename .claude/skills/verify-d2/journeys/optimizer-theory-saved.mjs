@@ -3,7 +3,7 @@
 // See features/optimizer.md (opt-theory-saved).
 export const meta = { fixture: "full" };
 
-const SAVED = { role: "button", name: "Saved theoretical builds" };
+const SAVED = { role: "button", name: "Save or load builds" };
 const HEALTH = { role: "spinbutton", name: "Health target value" };
 const THEORY_TAB = { role: "tab", name: "Theoretical Builds" };
 
@@ -15,11 +15,11 @@ export default async function ({ page, app, step, shot, expect, log }) {
   };
   const openMenu = async () => {
     await page.click(SAVED);
-    await page.waitFor({ role: "menuitem", name: "Save current build…" });
+    await page.waitFor({ role: "menuitem", name: "Save current build" });
   };
   const saveAs = async (name) => {
     await openMenu();
-    await page.click({ role: "menuitem", name: "Save current build…" });
+    await page.click({ role: "menuitem", name: "Save current build" });
     const dialog = { role: "dialog", name: "Save theoretical build" };
     await page.waitFor(dialog);
     await page.fill({ role: "textbox", name: "Build name" }, name, { within: dialog });
@@ -30,9 +30,18 @@ export default async function ({ page, app, step, shot, expect, log }) {
 
   await step("menu shows only on Theoretical", async () => {
     await app.open("/");
-    expect(!(await page.exists(SAVED)), "no Saved menu on Builds");
+    expect(!(await page.exists(SAVED)), "no Save menu on Builds");
     await page.click(THEORY_TAB);
     await page.waitFor(SAVED);
+    const g = JSON.parse(await page.evalJs(`(() => {
+      const list = document.querySelector('[aria-label="Which builds to show"]').getBoundingClientRect();
+      const btn = document.querySelector('[aria-label="Save or load builds"]').getBoundingClientRect();
+      return JSON.stringify({ list: [list.top, list.bottom], btn: [btn.top, btn.bottom] });
+    })()`));
+    log(`  desktop track vs button: ${JSON.stringify(g)}`);
+    expect(Math.abs(g.list[0] - g.btn[0]) < 0.5 && Math.abs(g.list[1] - g.btn[1]) < 0.5, "Save button's top and bottom match the tab track");
+    expect(/^Save$/i.test((await page.text(SAVED)).trim()), "the button reads Save");
+    await shot("desktop-button");
     await openMenu();
     const items = await page.count({ role: "menuitem" });
     expect(items === 1, `empty list still shows the menu with just Save (${items} items)`);
@@ -169,17 +178,17 @@ export default async function ({ page, app, step, shot, expect, log }) {
       const geo = await page.evalJs(`(() => {
         const s = document.querySelector('#builds-mobile-sheet');
         const list = s.querySelector('[aria-label="Which builds to show"]').getBoundingClientRect();
-        const btn = s.querySelector('[aria-label="Saved theoretical builds"]').getBoundingClientRect();
+        const btn = s.querySelector('[aria-label="Save or load builds"]').getBoundingClientRect();
         return JSON.stringify({ list: [list.left, list.top, list.right, list.bottom], btn: [btn.left, btn.top, btn.right, btn.bottom], sheetW: s.clientWidth, scrollW: s.scrollWidth, vw: innerWidth });
       })()`);
       log(`  geometry: ${geo}`);
       const g = JSON.parse(geo);
-      expect(Math.abs(g.list[1] + g.list[3] - g.btn[1] - g.btn[3]) < 8, "Saved button sits on the tabs' row");
+      expect(Math.abs(g.list[1] - g.btn[1]) < 0.5 && Math.abs(g.list[3] - g.btn[3]) < 0.5, "Save button's top and bottom match the tab track at 375 px");
       expect(g.btn[2] <= g.vw, "button is inside the screen");
       expect(g.scrollW <= g.sheetW, "no horizontal overflow in the sheet");
       await shot("phone-sheet", { within: sheet });
       await page.click(SAVED, { within: sheet });
-      await page.waitFor({ role: "menuitem", name: "Save current build…" });
+      await page.waitFor({ role: "menuitem", name: "Save current build" });
       await shot("phone-menu");
     } finally {
       await page.s("Emulation.setDeviceMetricsOverride", { width: 1600, height: 1000, deviceScaleFactor: 1, mobile: false });

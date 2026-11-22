@@ -221,7 +221,7 @@ export function BuildsColumnContent(props: BuildsColumnContentProps) {
   const [actualSort, setActualSort] = useState<LoadoutSortState>(DEFAULT_LOADOUT_SORT);
   const [theorySort, setTheorySort] = useState<TheorySortState>(DEFAULT_THEORY_SORT);
   const tabs = (
-    <div className="flex items-center gap-2">
+    <div className="flex items-stretch gap-2">
       <Tabs value={mode} onValueChange={(v) => onModeChange(v as BuildsMode)}>
         <TabsList aria-label="Which builds to show">
           <TabsTrigger value="actual">Builds</TabsTrigger>
