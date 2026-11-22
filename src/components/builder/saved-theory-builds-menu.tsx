@@ -109,7 +109,14 @@ export function SavedTheoryBuildsMenu({
         <DropdownMenuContent align="start" className="w-64 max-w-[calc(100vw-2rem)]">
           {/* The primary action, as the green button rather than a menu row. */}
           <MenuPrimitive.Item
-            render={<Button variant="emphatic" className="w-full" />}
+            nativeButton
+            // Keyboard highlight lights it like hover: the theme's border hides focus rings.
+            render={
+              <Button
+                variant="emphatic"
+                className="w-full data-highlighted:[--equip-fill:var(--emphatic-light)]"
+              />
+            }
             onClick={() => {
               setName("");
               setNaming(true);
