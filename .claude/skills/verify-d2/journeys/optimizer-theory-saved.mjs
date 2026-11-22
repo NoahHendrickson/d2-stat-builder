@@ -197,10 +197,18 @@ export default async function ({ page, app, step, shot, expect, log }) {
     const names = { 0: "Titan", 1: "Hunter", 2: "Warlock" };
     const saved = (await stored()).builds[0].classType;
     const own = { role: "tab", name: new RegExp("^" + names[saved] + ", Power", "i") };
-    const other = { role: "tab", name: new RegExp("^" + names[saved === 1 ? 0 : 1] + ", Power", "i") };
+    const otherClass = saved === 1 ? 0 : 1;
+    const other = { role: "tab", name: new RegExp("^" + names[otherClass] + ", Power", "i") };
     await page.click(other);
     await page.waitFor(async () => (await page.attr(other, "aria-selected")) === "true");
-    await page.waitFor(async () => JSON.parse((await page.evalJs(`localStorage.getItem("stat-builder:selections")`)) ?? "null")?.classType !== saved);
+    // A different Health on this class, stored with it, so only a flush of the loaded
+    // build can bring Health 70 back after the reload.
+    await setHealth(30);
+    await page.waitFor(async () => {
+      const sel = JSON.parse((await page.evalJs(`localStorage.getItem("stat-builder:selections")`)) ?? "null");
+      const draft = JSON.parse((await page.evalJs(`localStorage.getItem("stat-builder:theory-selections")`)) ?? "null");
+      return sel?.classType === otherClass && draft?.classType === otherClass && draft?.builder?.targets?.[1] === 30;
+    });
     await openMenu();
     await page.click({ role: "menuitem", name: /^raid/ });
     // Reload before the 300 ms save debounce: the pagehide flush has to write the class.
