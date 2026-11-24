@@ -127,13 +127,26 @@ export function farmWeaponFromPicks(
   };
 }
 
+const isMasterwork = (perk: FarmPerk) => perk.slot === "masterwork" || perk.kind === "Masterwork";
+
 /**
- * The extras a copy has to have too: everything picked but the masterwork, which swaps
- * freely in-game (and takes the manifest to read), so it's only shown against the drop.
+ * The extras a copy has to have in its sockets: everything picked but the masterwork,
+ * which goes by its stat at any tier, so it takes the manifest to read (see matchingCopies).
  */
 export function requiredExtras(entry: Pick<WeaponFarmData, "extras">): FarmPerk[] {
-  return entry.extras.filter((perk) => perk.slot !== "masterwork" && perk.kind !== "Masterwork");
+  return entry.extras.filter((perk) => !isMasterwork(perk));
 }
+
+/** The masterwork the entry picked, if any. */
+export function pickedMasterwork(entry: Pick<WeaponFarmData, "extras">): FarmPerk | undefined {
+  return entry.extras.find(isMasterwork);
+}
+
+/**
+ * The stat a copy is masterworked in ("Range"), by instance id; undefined for none.
+ * Reading it takes the manifest, so the caller builds it once the manifest is in.
+ */
+export type MasterworkReader = (instanceId: string) => string | undefined;
 
 /** Identifies a roll's picks: the traits (either order) and the required extras. */
 export function farmWeaponPicksKey(entry: Pick<WeaponFarmData, "traits" | "extras">): string {
@@ -214,23 +227,29 @@ export function hasTraits(profile: DestinyProfileResponse, instanceId: string, t
 /**
  * The copies of a listed weapon that rolled both traits and every required extra (a
  * picked barrel, magazine or origin trait), other than the ones the entry ignores.
- * Crafted copies don't count: the player chose those perks.
+ * Crafted copies don't count: the player chose those perks. A picked masterwork has to
+ * be the copy's masterwork stat, at any tier; without `masterworkOf` (no manifest yet)
+ * that can't be told, so such an entry matches nothing.
  */
 export function matchingCopies(
   profile: DestinyProfileResponse,
   entry: Pick<WeaponFarmData, "weaponHashes" | "traits" | "extras" | "ignoredInstanceIds">,
   copies: readonly OwnedCopy[] = ownedCopies(profile),
+  masterworkOf?: MasterworkReader,
 ): OwnedCopy[] {
   const hashes = new Set(entry.weaponHashes);
   const ignored = new Set(entry.ignoredInstanceIds);
   const extras = requiredExtras(entry);
+  const masterwork = pickedMasterwork(entry);
+  if (masterwork && !masterworkOf) return [];
   return copies.filter(
     (c) =>
       hashes.has(c.itemHash) &&
       !c.crafted &&
       !ignored.has(c.instanceId) &&
       hasTraits(profile, c.instanceId, entry.traits) &&
-      extras.every((perk) => copyHasPerk(profile, c.instanceId, perk)),
+      extras.every((perk) => copyHasPerk(profile, c.instanceId, perk)) &&
+      (!masterwork || `${masterworkOf!(c.instanceId)} Masterwork` === masterwork.name),
   );
 }
 
@@ -238,10 +257,11 @@ export function matchingCopies(
 export function newlyObtained(
   profile: DestinyProfileResponse,
   entries: readonly WeaponFarmEntry[],
+  masterworkOf?: MasterworkReader,
 ): { entry: WeaponFarmEntry; copy: OwnedCopy }[] {
   if (entries.every((w) => w.obtained)) return [];
   const copies = ownedCopies(profile);
-  return assignDrops(entries, (entry) => matchingCopies(profile, entry, copies));
+  return assignDrops(entries, (entry) => matchingCopies(profile, entry, copies, masterworkOf));
 }
 
 /**

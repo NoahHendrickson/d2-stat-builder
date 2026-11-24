@@ -14,11 +14,13 @@ import { toast } from "@/lib/toast";
 import type { WeaponCatalog } from "@/lib/weapons/catalog";
 import type { PickSlot, Roll } from "@/lib/weapons/pick-slots";
 import type { WeaponSummary } from "@/lib/weapons/types";
-import { farmWeaponFromPicks, farmWeaponPicksKey, matchingCopies, sameFarmWeapon } from "@/lib/farm-list/match";
+import { farmWeaponFromPicks, farmWeaponPicksKey, matchingCopies, pickedMasterwork, sameFarmWeapon } from "@/lib/farm-list/match";
 import { isFarmDone } from "@/lib/farm-list/types";
 import { useFarmList, useFarmListMutations } from "@/lib/farm-list/use-farm-list";
 import { useSession } from "@/lib/auth/use-session";
 import { sessionMembershipId, useProfile } from "@/lib/armory/use-profile";
+import { masterworkReader } from "@/lib/inventory/weapon-details";
+import { useManifest } from "@/lib/manifest/use-manifest";
 
 /** How old a held profile may be and still answer "do you own it?". */
 const PROFILE_FRESH_MS = 30_000;
@@ -44,6 +46,8 @@ export function FarmPerksSection({
 }) {
   const membershipId = sessionMembershipId(useSession().data);
   const profile = useProfile().query.data;
+  const manifestStatus = useManifest();
+  const manifest = manifestStatus.state === "ready" ? manifestStatus.manifest : undefined;
   const queryClient = useQueryClient();
   const entries = useFarmList().data;
   const { add, remove } = useFarmListMutations();
@@ -59,8 +63,15 @@ export function FarmPerksSection({
   const canAdd = entry !== null && membershipId !== undefined && entries !== undefined;
   const key = entry ? farmWeaponPicksKey(entry) : "";
   // Rechecked against the live profile: the copy can be dismantled, and this hides the button.
-  const owned = ownedKey === key && entry !== null && profile !== undefined && matchingCopies(profile, entry).length > 0;
+  const owned =
+    ownedKey === key &&
+    entry !== null &&
+    profile !== undefined &&
+    matchingCopies(profile, entry, undefined, masterworkReader(profile, manifest)).length > 0;
   const busy = checking || add.isPending || remove.isPending;
+  // A picked masterwork takes the manifest to check, so Add waits while it loads.
+  const manifestLoading =
+    entry !== null && pickedMasterwork(entry) !== undefined && (manifestStatus.state === "idle" || manifestStatus.state === "loading");
 
   function save() {
     add.mutate(entry!, {
@@ -80,7 +91,7 @@ export function FarmPerksSection({
           return newerProfile(held, await fetchProfile(held));
         },
       });
-      if (matchingCopies(fresh, entry!).length > 0) setOwnedKey(key);
+      if (matchingCopies(fresh, entry!, undefined, masterworkReader(fresh, manifest)).length > 0) setOwnedKey(key);
       else save();
     } catch {
       toast.error("Couldn't check your vault", "Try again in a moment.");
@@ -109,7 +120,7 @@ export function FarmPerksSection({
       You already have this roll.
     </p>
   ) : (
-    <Button size="sm" variant="outline" disabled={busy} onClick={() => void check()}>
+    <Button size="sm" variant="outline" disabled={busy || manifestLoading} onClick={() => void check()}>
       <HugeiconsIcon icon={ShoppingCartAdd02Icon} aria-hidden />
       {checking ? "Checking your vault…" : "Add to Farm list"}
     </Button>

@@ -12,6 +12,12 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    date: "2026-11-23",
+    changes: [
+      "Farm list: a weapon roll with a masterwork picked only counts as owned or dropped when your copy has that masterwork.",
+    ],
+  },
+  {
     date: "2026-11-22",
     changes: [
       "Theoretical Builds: save builds by name in the Save menu and load them again later.",

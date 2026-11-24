@@ -176,11 +176,27 @@ describe("picked extras are strict", () => {
     expect(matchingCopies(p, entry).map((c) => c.instanceId)).toEqual(["10"]);
   });
 
-  it("doesn't need the masterwork", () => {
+  describe("a picked masterwork", () => {
     const mw = makeEntry({ 2: 3, 3: 6, 4: 7 })!;
-    expect(mw.extras.map((e) => e.slot)).toEqual(["masterwork"]);
-    const p = profile([{ hash: 1, id: "10", sockets: [[301], [402]] }]);
-    expect(matchingCopies(p, mw).map((c) => c.instanceId)).toEqual(["10"]);
+    // Copies 10–12 have the perks, masterworked in Range, Stability, and nothing.
+    const p = profile(["10", "11", "12"].map((id) => ({ hash: 1, id, sockets: [[301], [402]] })));
+    const stats: Record<string, string> = { "10": "Range", "11": "Stability" };
+    const masterworkOf = (id: string) => stats[id];
+
+    it("needs the copy masterworked in that stat", () => {
+      expect(mw.extras.map((e) => e.slot)).toEqual(["masterwork"]);
+      expect(matchingCopies(p, mw, undefined, masterworkOf).map((c) => c.instanceId)).toEqual(["10"]);
+    });
+
+    it("matches nothing until the copy's masterwork can be read", () => {
+      expect(matchingCopies(p, mw)).toEqual([]);
+    });
+
+    it("isn't a drop on a copy with another masterwork or none", () => {
+      const waiting = parseFarmEntry({ ...mw, id: "a", createdAt: 1 }) as WeaponFarmEntry;
+      const found = newlyObtained(p, [waiting], (id) => (id === "10" ? undefined : stats[id]));
+      expect(found).toEqual([]);
+    });
   });
 
   it("doesn't need anything left unpicked", () => {

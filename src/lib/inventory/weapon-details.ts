@@ -142,6 +142,15 @@ export function weaponRoll(
   return roll;
 }
 
+/** Names the stat each copy is masterworked in ("Range", any tier), once the manifest is in. */
+export function masterworkReader(
+  profile: DestinyProfileResponse,
+  manifest: Manifest | undefined,
+): ((instanceId: string) => string | undefined) | undefined {
+  if (!manifest) return undefined;
+  return (instanceId) => weaponRoll(profile, manifest, instanceId).mods.find((m) => m.kind === "masterwork")?.stat?.name;
+}
+
 /**
  * Tiered weapons at full masterwork get +tier to each stat their masterwork plug lists
  * as a conditional 0 ("additional stats equal to the weapon's tier"). Bungie's live

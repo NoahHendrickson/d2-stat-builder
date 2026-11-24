@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useArmory } from "@/lib/armory/use-armory";
 import { useProfile } from "@/lib/armory/use-profile";
+import { masterworkReader } from "@/lib/inventory/weapon-details";
+import { useManifest } from "@/lib/manifest/use-manifest";
 import { toast } from "@/lib/toast";
 import { armorFarmTitle, armorPlaceLabel, newlyObtainedArmor } from "@/lib/farm-list/armor";
 import { dismantledDrops, newlyObtained, placeLabel } from "@/lib/farm-list/match";
@@ -78,10 +80,13 @@ function DismantledWatch({ dropped }: { dropped: FarmEntry[] }) {
 
 function WeaponWatch({ entries }: { entries: WeaponFarmEntry[] }) {
   const profile = useProfile().query.data;
+  const manifestStatus = useManifest();
+  const manifest = manifestStatus.state === "ready" ? manifestStatus.manifest : undefined;
   const report = useReportDrop();
   useEffect(() => {
     if (!profile) return;
-    for (const { entry, copy } of newlyObtained(profile, entries)) {
+    // Entries with a masterwork wait for the manifest to read the copy's.
+    for (const { entry, copy } of newlyObtained(profile, entries, masterworkReader(profile, manifest))) {
       report(entry, copy.instanceId, () =>
         toast.success(
           `Farm list: ${entry.weaponName} dropped`,
@@ -89,7 +94,7 @@ function WeaponWatch({ entries }: { entries: WeaponFarmEntry[] }) {
         ),
       );
     }
-  }, [profile, entries, report]);
+  }, [profile, manifest, entries, report]);
   return null;
 }
 
