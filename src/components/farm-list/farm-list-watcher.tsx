@@ -7,7 +7,7 @@ import { masterworkReader } from "@/lib/inventory/weapon-details";
 import { useManifest } from "@/lib/manifest/use-manifest";
 import { toast } from "@/lib/toast";
 import { armorFarmTitle, armorPlaceLabel, newlyObtainedArmor } from "@/lib/farm-list/armor";
-import { dismantledDrops, newlyObtained, placeLabel } from "@/lib/farm-list/match";
+import { dismantledDrops, newlyObtained, pickedMasterwork, placeLabel } from "@/lib/farm-list/match";
 import { isFarmDone, type ArmorFarmEntry, type FarmEntry, type WeaponFarmEntry } from "@/lib/farm-list/types";
 import { useFarmList, useFarmListMutations } from "@/lib/farm-list/use-farm-list";
 
@@ -82,10 +82,14 @@ function WeaponWatch({ entries }: { entries: WeaponFarmEntry[] }) {
   const profile = useProfile().query.data;
   const manifestStatus = useManifest();
   const manifest = manifestStatus.state === "ready" ? manifestStatus.manifest : undefined;
+  // A picked masterwork takes the manifest to read the copy's. Until it's in, hold every
+  // drop: a newer entry without one would otherwise take a copy an older one wants.
+  const waitForManifest =
+    (manifestStatus.state === "idle" || manifestStatus.state === "loading") &&
+    entries.some((e) => !e.obtained && pickedMasterwork(e));
   const report = useReportDrop();
   useEffect(() => {
-    if (!profile) return;
-    // Entries with a masterwork wait for the manifest to read the copy's.
+    if (!profile || waitForManifest) return;
     for (const { entry, copy } of newlyObtained(profile, entries, masterworkReader(profile, manifest))) {
       report(entry, copy.instanceId, () =>
         toast.success(
@@ -94,7 +98,7 @@ function WeaponWatch({ entries }: { entries: WeaponFarmEntry[] }) {
         ),
       );
     }
-  }, [profile, manifest, entries, report]);
+  }, [profile, manifest, waitForManifest, entries, report]);
   return null;
 }
 

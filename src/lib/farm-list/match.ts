@@ -1,6 +1,7 @@
 // Farm list rules for weapons: which picks make an entry, and which owned copies match one. Reads the
-// raw profile (sockets and reusable plugs by hash), so the drop watcher never needs the
-// manifest. Pure — runtime imports stay relative so the module runs under vitest.
+// raw profile (sockets and reusable plugs by hash); only a picked masterwork needs the
+// manifest, through a reader the caller passes in. Pure — runtime imports stay relative so
+// the module runs under vitest.
 import type { DestinyProfileResponse } from "bungie-api-ts/destiny2";
 import { CLASS_NAMES } from "../armory/stats";
 import { BUCKETS } from "../inventory/buckets";
