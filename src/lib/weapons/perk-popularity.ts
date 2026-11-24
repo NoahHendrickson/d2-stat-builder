@@ -149,10 +149,11 @@ export function popularityLookup(catalog: PopularityCatalog): PopularityLookup {
 }
 
 /**
- * For each weapon the tally counts (popularityLookup's), every plug its
- * masterwork socket can hold, any tier, mapped to the catalog's full-tier
- * masterwork for that stat. Masterwork plugs only ever sit in the masterwork
- * socket, so a copy's is found among all its plugs, with no socket to learn.
+ * For each weapon the tally counts (popularityLookup's), every plug that
+ * gives a copy its masterwork, mapped to the catalog's full-tier masterwork
+ * for that stat: any tier in the masterwork socket, or a crafted copy's
+ * enhanced frame. Those plugs sit nowhere else, so a copy's is found among
+ * all its plugs, with no socket to learn.
  */
 export type MasterworkLookup = Map<number, Map<number, number>>;
 
@@ -172,7 +173,12 @@ export function masterworkLookup(catalog: PopularityCatalog, lookup = popularity
   return masterworks;
 }
 
-/** The masterwork among one copy's plugs (see MasterworkLookup), or undefined when none of them is one the catalog knows. */
+/**
+ * The masterwork among one copy's plugs (see MasterworkLookup), or undefined
+ * when none of them is one the catalog knows. The first found wins: the frame
+ * is every weapon's first socket, so a crafted copy's enhanced frame counts
+ * over whatever its masterwork socket holds.
+ */
 export function masterworkOf(
   plugs: ReadonlyMap<number, number> | undefined,
   copy: readonly (number | undefined)[],

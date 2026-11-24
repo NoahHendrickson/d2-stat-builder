@@ -21,7 +21,8 @@ export interface PerkRef {
   /**
    * A masterwork's other plugs: its stat's lower tiers (Tier 1–9) and the full
    * tier's other versions, any of which a copy's masterwork socket may hold
-   * instead. Perk popularity counts them all as this masterwork.
+   * instead, and the enhanced frames that are a crafted copy's masterwork in
+   * that stat. Perk popularity counts them all as this masterwork.
    */
   tierHashes?: number[];
   /** Non-conditional investment stat modifiers when this plug is selected. */
@@ -145,7 +146,7 @@ export interface MasterworkOption {
   /** Bungie icon path from the completed masterwork plug. */
   icon?: string;
   statMods: StatMod[];
-  /** The stat's other masterwork plugs this weapon's socket can hold (see PerkRef.tierHashes). */
+  /** The stat's other masterwork plugs this weapon can hold, crafted frames included (see PerkRef.tierHashes). */
   tierHashes?: number[];
 }
 

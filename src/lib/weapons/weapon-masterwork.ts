@@ -8,6 +8,8 @@ import type { MasterworkOption } from "./types";
 export const WEAPON_MASTERWORK_SOCKET_TYPE_HASH = 2_218_962_841;
 
 const MASTERWORK_STAT_PLUG_ID = /masterworks\.stat/i;
+/** Frames, the enhanced ones a crafted weapon gets included. */
+const INTRINSIC_PLUG_ID = "intrinsics";
 const COMPLETED_MASTERWORK_NAME_PREFIX = "Masterworked:";
 
 function weaponDisplayStatHashes(item: DestinyInventoryItemDefinition): Set<number> {
@@ -45,9 +47,19 @@ export function buildWeaponMasterworkOptions(
   for (const { hash } of candidates) {
     const id = items[hash]?.plug?.plugCategoryIdentifier ?? "";
     if (!MASTERWORK_STAT_PLUG_ID.test(id)) continue;
-    const list = byCategory.get(id) ?? [];
-    if (!list.includes(hash)) list.push(hash);
-    byCategory.set(id, list);
+    byCategory.set(id, [...(byCategory.get(id) ?? []), hash]);
+  }
+  // A crafted copy's masterwork is its enhanced frame, from its pattern's
+  // frame socket: the frames that add to one stat outright, by that stat.
+  const craftedByStat = new Map<number, number[]>();
+  const recipe = items[item.inventory?.recipeItemHash ?? -1];
+  for (const entry of recipe?.sockets?.socketEntries ?? []) {
+    for (const { hash } of collectSocketPlugCandidates(entry, plugSets)) {
+      const def = items[hash];
+      if (def?.plug?.plugCategoryIdentifier !== INTRINSIC_PLUG_ID) continue;
+      const stat = def.investmentStats?.find((s) => !s.isConditionallyActive && s.value > 0)?.statTypeHash;
+      if (stat !== undefined) craftedByStat.set(stat, [...(craftedByStat.get(stat) ?? []), hash]);
+    }
   }
 
   for (const { hash } of candidates) {
@@ -60,7 +72,12 @@ export function buildWeaponMasterworkOptions(
     if (byStatHash.has(primaryMod.hash)) continue;
 
     const statName = stats[primaryMod.hash]?.displayProperties?.name ?? `Stat ${primaryMod.hash}`;
-    const tierHashes = (byCategory.get(def.plug?.plugCategoryIdentifier ?? "") ?? [])
+    const tierHashes = [
+      ...new Set([
+        ...(byCategory.get(def.plug?.plugCategoryIdentifier ?? "") ?? []),
+        ...(craftedByStat.get(primaryMod.hash) ?? []),
+      ]),
+    ]
       .filter((other) => other !== hash)
       .sort((a, b) => a - b);
 

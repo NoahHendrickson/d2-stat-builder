@@ -255,7 +255,7 @@ function HowPopularityWorks({ view }: { view: WeaponPopularityView }) {
         </p>
         <p>
           Each percentage is the share of those copies with that perk, or with that left and right
-          perk together. A masterwork counts at any tier.
+          perk together. Masterworks are shares of the copies whose masterwork we know, at any tier.
         </p>
         <p className="text-muted-foreground">
           {view.copies === 1 ? "One copy" : `${view.copies.toLocaleString("en-US")} copies`}

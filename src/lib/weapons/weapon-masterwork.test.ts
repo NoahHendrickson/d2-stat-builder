@@ -108,6 +108,39 @@ describe("buildWeaponMasterworkOptions", () => {
     ]);
   });
 
+  it("counts a crafted copy's enhanced frame as the masterwork in its stat", () => {
+    const frame = (hash: number, stat?: number) =>
+      ({
+        hash,
+        displayProperties: { name: "Adaptive Frame" },
+        plug: { plugCategoryIdentifier: "intrinsics" },
+        investmentStats: stat ? [{ statTypeHash: stat, value: 10, isConditionallyActive: false }] : [],
+      }) as unknown as DestinyInventoryItemDefinition;
+    const craftable = {
+      ...weapon,
+      inventory: { recipeItemHash: 700 },
+    } as unknown as DestinyInventoryItemDefinition;
+    const withRecipe = {
+      ...items,
+      700: { hash: 700, sockets: { socketEntries: [{ reusablePlugSetHash: 9002 }] } } as unknown as DestinyInventoryItemDefinition,
+      // The plain frame adds nothing outright; the enhanced ones add 10 to one stat.
+      6000: frame(6000),
+      6001: frame(6001, RANGE_HASH),
+      6002: frame(6002, STABILITY_HASH),
+    };
+    const sets = { ...plugSets, 9002: { reusablePlugItems: [{ plugItemHash: 6000 }, { plugItemHash: 6001 }, { plugItemHash: 6002 }] } };
+    const options = buildWeaponMasterworkOptions(
+      craftable,
+      withRecipe,
+      sets as unknown as ManifestDefs["DestinyPlugSetDefinition"],
+      stats,
+    );
+    expect(options?.map((o) => [o.statName, o.tierHashes])).toEqual([
+      ["Range", [5005, 6001]],
+      ["Stability", [5001, 5006, 6002]],
+    ]);
+  });
+
   it("returns undefined when the weapon has no masterwork socket", () => {
     const noSocket = {
       ...weapon,

@@ -75,6 +75,10 @@ describe("masterworkLookup and masterworkOf", () => {
     expect(masterworkOf(masterworks.get(1), [70, undefined])).toBe(70);
   });
 
+  it("takes the first one found: a crafted copy's enhanced frame (601 here) over its masterwork socket", () => {
+    expect(masterworkOf(masterworks.get(1), [601, 11, 13, 15, 70])).toBe(60);
+  });
+
   it("has none when no plug is a masterwork the catalog knows, or the weapon has none", () => {
     expect(masterworkOf(masterworks.get(1), [10, 11, 13, 15, 999])).toBeUndefined();
     expect(masterworkOf(masterworks.get(2), [60])).toBeUndefined();
