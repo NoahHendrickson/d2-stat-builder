@@ -39,6 +39,16 @@ export function buildWeaponMasterworkOptions(
   const displayStatHashes = weaponDisplayStatHashes(item);
   const candidates = collectSocketPlugCandidates(socketEntry, plugSets);
   const byStatHash = new Map<number, MasterworkOption>();
+  // Every stat masterwork plug the socket can hold, any tier, by its stat's
+  // plug category ("…masterworks.stat.range"): a copy holds one of these.
+  const byCategory = new Map<string, number[]>();
+  for (const { hash } of candidates) {
+    const id = items[hash]?.plug?.plugCategoryIdentifier ?? "";
+    if (!MASTERWORK_STAT_PLUG_ID.test(id)) continue;
+    const list = byCategory.get(id) ?? [];
+    if (!list.includes(hash)) list.push(hash);
+    byCategory.set(id, list);
+  }
 
   for (const { hash } of candidates) {
     const def = items[hash];
@@ -50,6 +60,9 @@ export function buildWeaponMasterworkOptions(
     if (byStatHash.has(primaryMod.hash)) continue;
 
     const statName = stats[primaryMod.hash]?.displayProperties?.name ?? `Stat ${primaryMod.hash}`;
+    const tierHashes = (byCategory.get(def.plug?.plugCategoryIdentifier ?? "") ?? [])
+      .filter((other) => other !== hash)
+      .sort((a, b) => a - b);
 
     byStatHash.set(primaryMod.hash, {
       plugHash: hash,
@@ -57,6 +70,7 @@ export function buildWeaponMasterworkOptions(
       statName,
       icon: def.displayProperties?.icon || undefined,
       statMods: statMods,
+      ...(tierHashes.length ? { tierHashes } : {}),
     });
   }
 

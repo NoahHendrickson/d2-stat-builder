@@ -18,6 +18,12 @@ export interface PerkRef {
   enhancedDescription?: string;
   /** Other plug hashes for the same perk (e.g. enhanced tier) — not shown separately in the UI. */
   alternateHashes?: number[];
+  /**
+   * A masterwork's other plugs: its stat's lower tiers (Tier 1–9) and the full
+   * tier's other versions, any of which a copy's masterwork socket may hold
+   * instead. Perk popularity counts them all as this masterwork.
+   */
+  tierHashes?: number[];
   /** Non-conditional investment stat modifiers when this plug is selected. */
   statMods?: StatMod[];
   /** `statMods` keyed by stat name ("Handling": 10); what the browser ships. */
@@ -139,6 +145,8 @@ export interface MasterworkOption {
   /** Bungie icon path from the completed masterwork plug. */
   icon?: string;
   statMods: StatMod[];
+  /** The stat's other masterwork plugs this weapon's socket can hold (see PerkRef.tierHashes). */
+  tierHashes?: number[];
 }
 
 /** Detail fields stored separately and loaded on demand. */

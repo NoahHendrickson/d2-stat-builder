@@ -16,11 +16,12 @@ function masterworkPlug(
   name: string,
   statHash: number,
   value: number,
+  category = name.replace(/^.*: /, "").toLowerCase(),
 ): DestinyInventoryItemDefinition {
   return {
     hash,
     displayProperties: { name, icon: `/icons/mw-${statHash}.png` },
-    plug: { plugCategoryIdentifier: "v400.plugs.weapons.masterworks.stat.stability" },
+    plug: { plugCategoryIdentifier: `v400.plugs.weapons.masterworks.stat.${category}` },
     investmentStats: [{ statTypeHash: statHash, value, isConditionallyActive: false }],
   } as DestinyInventoryItemDefinition;
 }
@@ -36,6 +37,9 @@ describe("buildWeaponMasterworkOptions", () => {
     5002: masterworkPlug(5002, "Masterworked: Stability", STABILITY_HASH, 10),
     5003: masterworkPlug(5003, "Masterworked: Range", RANGE_HASH, 10),
     5004: masterworkPlug(5004, "Masterworked: Magazine", MAGAZINE_HASH, 10),
+    5005: tierPlug(5005, "Tier 3: Range", RANGE_HASH, 3),
+    // The full tier's other version (an adept's, +3 to the rest).
+    5006: masterworkPlug(5006, "Masterworked: Stability", STABILITY_HASH, 10),
   };
 
   const plugSets = {
@@ -45,6 +49,8 @@ describe("buildWeaponMasterworkOptions", () => {
         { plugItemHash: 5002 },
         { plugItemHash: 5003 },
         { plugItemHash: 5004 },
+        { plugItemHash: 5005 },
+        { plugItemHash: 5006 },
       ],
     },
   };
@@ -74,6 +80,7 @@ describe("buildWeaponMasterworkOptions", () => {
     },
   } as unknown as DestinyInventoryItemDefinition;
 
+  // Each option lists its own stat's other plugs, any tier, which copies may hold.
   it("returns completed masterwork options for display stats only", () => {
     const options = buildWeaponMasterworkOptions(
       weapon,
@@ -88,6 +95,7 @@ describe("buildWeaponMasterworkOptions", () => {
         statName: "Range",
         icon: `/icons/mw-${RANGE_HASH}.png`,
         statMods: [{ hash: RANGE_HASH, value: 10 }],
+        tierHashes: [5005],
       },
       {
         plugHash: 5002,
@@ -95,6 +103,7 @@ describe("buildWeaponMasterworkOptions", () => {
         statName: "Stability",
         icon: `/icons/mw-${STABILITY_HASH}.png`,
         statMods: [{ hash: STABILITY_HASH, value: 10 }],
+        tierHashes: [5001, 5006],
       },
     ]);
   });

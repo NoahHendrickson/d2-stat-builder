@@ -95,6 +95,9 @@ export function internWeaponCatalog(
         for (const hash of perk.alternateHashes) alts.add(hash);
         entry.alternateHashes = [...alts];
       }
+      if (perk.tierHashes?.length) {
+        entry.tierHashes = [...new Set([...(entry.tierHashes ?? []), ...perk.tierHashes])].sort((a, b) => a - b);
+      }
       if (perk.statMods?.length && !entry.statMods?.length) {
         entry.statMods = perk.statMods;
         entry.stats = perk.stats ?? namedStats(perk.statMods);
@@ -111,6 +114,7 @@ export function internWeaponCatalog(
       description: perk.description,
       enhancedDescription: perk.enhancedDescription,
       alternateHashes: perk.alternateHashes,
+      ...(perk.tierHashes?.length ? { tierHashes: perk.tierHashes } : {}),
       statMods: perk.statMods,
       stats: perk.stats ?? namedStats(perk.statMods),
     });
@@ -147,6 +151,7 @@ export function internWeaponCatalog(
           .join(", "),
         statMods: option.statMods,
         stats,
+        tierHashes: option.tierHashes,
       });
     });
     const ammoGeneration = weapon.stats.find((s) => s.hash === AMMO_GENERATION_STAT_HASH)?.value;

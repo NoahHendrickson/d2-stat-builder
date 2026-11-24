@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MIN_COMBO_COUNT, mostPopularRoll } from "./popularity-view";
+import { MIN_COMBO_COUNT, MIN_MASTERWORK_COPIES, mostPopularRoll } from "./popularity-view";
 
 // Columns 0 (barrel), 1 and 2 (the traits), perks by catalog index.
 const columns = [
@@ -34,5 +34,22 @@ describe("mostPopularRoll", () => {
   it("falls back to each column's winner without a combo, first of a tie in grid order", () => {
     const tied = [{ column: 0, perks: [{ perkIndex: 1, share: 0.5 }, { perkIndex: 2, share: 0.5 }] }, ...columns.slice(1)];
     expect(mostPopularRoll(tied, [])).toEqual({ 0: 1, 1: 3, 2: 5 });
+  });
+
+  // The masterwork slot (3, after the columns): Range 7, Handling 8, Stability 9.
+  const masterworks = (counted: number, shares: number[]) => ({
+    slot: 3,
+    counted,
+    perks: shares.map((share, i) => ({ perkIndex: 7 + i, share })),
+  });
+
+  it("takes the most run masterwork once enough copies have one known, first of a tie in the section's order", () => {
+    expect(mostPopularRoll(columns, [], masterworks(MIN_MASTERWORK_COPIES, [0.2, 0.5, 0.3]))).toEqual({ 0: 2, 1: 3, 2: 5, 3: 8 });
+    expect(mostPopularRoll(columns, [], masterworks(MIN_MASTERWORK_COPIES, [0.4, 0.2, 0.4]))[3]).toBe(7);
+  });
+
+  it("leaves the masterwork out on too few copies with one known, or none", () => {
+    expect(mostPopularRoll(columns, [], masterworks(MIN_MASTERWORK_COPIES - 1, [0.2, 0.5, 0.3]))).toEqual({ 0: 2, 1: 3, 2: 5 });
+    expect(mostPopularRoll(columns, [], masterworks(0, [0, 0, 0]))).toEqual({ 0: 2, 1: 3, 2: 5 });
   });
 });

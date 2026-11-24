@@ -4,7 +4,7 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { gunzipSync } from "node:zlib";
-import { popularityLookup, type PopularityCatalog } from "../src/lib/weapons/perk-popularity";
+import { masterworkLookup, popularityLookup, type PopularityCatalog } from "../src/lib/weapons/perk-popularity";
 import { decodeContribution } from "../src/lib/weapons/popularity-contribution";
 import { lookupFingerprint, storeDay } from "../src/lib/weapons/popularity-copies";
 import { readCollector } from "../src/lib/weapons/popularity-reads";
@@ -92,7 +92,7 @@ async function main() {
     await readFile(resolve(args.catalog || "public/data/weapons.json"), "utf8"),
   ) as PopularityCatalog;
   const lookup = popularityLookup(catalog);
-  const collected = readCollector(lookup);
+  const collected = readCollector(lookup, masterworkLookup(catalog, lookup));
   let players = 0;
   let copies = 0;
   let vaults = 0;

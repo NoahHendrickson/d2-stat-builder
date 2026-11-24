@@ -9,8 +9,8 @@
  * for as long as its owner keeps playing (popularity-copies.ts); the merge
  * tallies the store
  * into the snapshot published off Vercel, on GitHub Pages, which the weapon
- * page reads: each weapon's perks per column, and the left + right trait pair
- * as a combo.
+ * page reads: each weapon's perks per column, the left + right trait pair
+ * as a combo, and its masterwork's stat.
  */
 
 import type { Hazard } from "./popularity-hazard";
@@ -33,6 +33,15 @@ export interface WeaponPopularity {
    * from before combos were counted.
    */
   combos?: Record<string, number>;
+  /**
+   * The catalog's full-tier masterwork plug hash, for the stat a copy's
+   * masterwork is on at any tier → copies with it. Only copies whose
+   * masterwork was identified count, so this can add up to fewer than
+   * `copies`: missing in snapshots from before masterworks were kept, and
+   * thin at first after, since copies already in the store gain theirs only
+   * once they're read again.
+   */
+  masterworks?: Record<string, number>;
 }
 
 /** The tally every snapshot carries, and all the app reads. */
@@ -105,8 +114,8 @@ export interface CrawlSource {
 
 /** The catalog fields the tally needs: public/data/weapons.json, narrowed. */
 export type PopularityCatalog = {
-  perks: Pick<CompactWeaponIndex["perks"][number], "hash" | "alternateHashes">[];
-  weapons: (Pick<CatalogWeapon, "hash" | "rarity"> & {
+  perks: Pick<CompactWeaponIndex["perks"][number], "hash" | "alternateHashes" | "tierHashes">[];
+  weapons: (Pick<CatalogWeapon, "hash" | "rarity" | "masterworks"> & {
     columns: Pick<CatalogWeapon["columns"][number], "perkIndices" | "kind">[];
   })[];
 };
@@ -137,6 +146,43 @@ export function popularityLookup(catalog: PopularityCatalog): PopularityLookup {
     if (columns.some((plugs) => plugs.size > 0)) lookup.set(weapon.hash, columns);
   }
   return lookup;
+}
+
+/**
+ * For each weapon the tally counts (popularityLookup's), every plug its
+ * masterwork socket can hold, any tier, mapped to the catalog's full-tier
+ * masterwork for that stat. Masterwork plugs only ever sit in the masterwork
+ * socket, so a copy's is found among all its plugs, with no socket to learn.
+ */
+export type MasterworkLookup = Map<number, Map<number, number>>;
+
+export function masterworkLookup(catalog: PopularityCatalog, lookup = popularityLookup(catalog)): MasterworkLookup {
+  const masterworks: MasterworkLookup = new Map();
+  for (const weapon of catalog.weapons) {
+    if (!lookup.has(weapon.hash) || !weapon.masterworks?.length) continue;
+    const plugs = new Map<number, number>();
+    for (const index of weapon.masterworks) {
+      const perk = catalog.perks[index];
+      if (!perk) continue;
+      plugs.set(perk.hash, perk.hash);
+      for (const tier of perk.tierHashes ?? []) plugs.set(tier, perk.hash);
+    }
+    if (plugs.size > 0) masterworks.set(weapon.hash, plugs);
+  }
+  return masterworks;
+}
+
+/** The masterwork among one copy's plugs (see MasterworkLookup), or undefined when none of them is one the catalog knows. */
+export function masterworkOf(
+  plugs: ReadonlyMap<number, number> | undefined,
+  copy: readonly (number | undefined)[],
+): number | undefined {
+  if (!plugs) return undefined;
+  for (const plug of copy) {
+    const masterwork = plug === undefined ? undefined : plugs.get(plug);
+    if (masterwork !== undefined) return masterwork;
+  }
+  return undefined;
 }
 
 /**
@@ -229,6 +275,22 @@ export function columnShares(weapon: WeaponPopularity, column: number): PerkShar
     .filter((c) => c.count > 0)
     .map((c) => ({ ...c, share: c.count / total }))
     .sort((a, b) => b.count - a.count);
+}
+
+/**
+ * A weapon's masterworks by popularity, most run first, and how many copies
+ * had one identified (the shares' denominator); none at all in a snapshot
+ * from before masterworks were kept.
+ */
+export function masterworkShares(weapon: WeaponPopularity): { counted: number; shares: PerkShare[] } {
+  const counts = Object.entries(weapon.masterworks ?? {})
+    .map(([hash, count]) => ({ hash: Number(hash), count }))
+    .filter((c) => c.count > 0);
+  const counted = counts.reduce((sum, c) => sum + c.count, 0);
+  return {
+    counted,
+    shares: counts.map((c) => ({ ...c, share: c.count / counted })).sort((a, b) => b.count - a.count),
+  };
 }
 
 /** One left + right combo's share, for display. */

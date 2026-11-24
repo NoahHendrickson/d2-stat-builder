@@ -4,6 +4,9 @@ import {
   comboShares,
   traitColumns,
   columnSockets,
+  masterworkLookup,
+  masterworkOf,
+  masterworkShares,
   perksAtSockets,
   popularityLookup,
   type PopularityCatalog,
@@ -11,7 +14,8 @@ import {
 } from "./perk-popularity";
 
 // Perk table: 0 frame, 1–2 barrels, 3 Opening Shot (both trait columns), 4 Rampage
-// (enhanced 400), 5 Kill Clip.
+// (enhanced 400), 5 Kill Clip, 6 Range Masterwork (tiers 601, 602), 7 Handling
+// Masterwork (no other plugs).
 const CATALOG: PopularityCatalog = {
   perks: [
     { hash: 10 },
@@ -20,6 +24,8 @@ const CATALOG: PopularityCatalog = {
     { hash: 13 },
     { hash: 14, alternateHashes: [400] },
     { hash: 15 },
+    { hash: 60, tierHashes: [601, 602] },
+    { hash: 70 },
   ],
   weapons: [
     {
@@ -31,8 +37,9 @@ const CATALOG: PopularityCatalog = {
         { kind: "Trait", perkIndices: [3, 4] },
         { kind: "Trait", perkIndices: [3, 5] },
       ],
+      masterworks: [6, 7],
     },
-    { hash: 2, rarity: "Exotic", columns: [{ kind: "Barrel", perkIndices: [1, 2] }] },
+    { hash: 2, rarity: "Exotic", columns: [{ kind: "Barrel", perkIndices: [1, 2] }], masterworks: [6] },
   ],
 };
 
@@ -47,6 +54,30 @@ describe("popularityLookup", () => {
     const columns = lookup.get(1)!;
     expect(columns[0]!.size).toBe(0);
     expect(columns[2]!.get(400)).toBe(14);
+  });
+});
+
+describe("masterworkLookup and masterworkOf", () => {
+  const masterworks = masterworkLookup(CATALOG);
+
+  it("maps every tier of a masterwork's stat to its full tier, for the tally's weapons only", () => {
+    expect([...masterworks.keys()]).toEqual([1]);
+    expect([...masterworks.get(1)!]).toEqual([
+      [60, 60],
+      [601, 60],
+      [602, 60],
+      [70, 70],
+    ]);
+  });
+
+  it("finds a copy's masterwork among all its plugs, whatever socket it's in", () => {
+    expect(masterworkOf(masterworks.get(1), [10, 11, 13, 15, 602, 999])).toBe(60);
+    expect(masterworkOf(masterworks.get(1), [70, undefined])).toBe(70);
+  });
+
+  it("has none when no plug is a masterwork the catalog knows, or the weapon has none", () => {
+    expect(masterworkOf(masterworks.get(1), [10, 11, 13, 15, 999])).toBeUndefined();
+    expect(masterworkOf(masterworks.get(2), [60])).toBeUndefined();
   });
 });
 
@@ -94,6 +125,22 @@ describe("shares", () => {
 
   it("has nothing for a fixed column", () => {
     expect(columnShares(weapon, 0)).toEqual([]);
+  });
+});
+
+describe("masterworkShares", () => {
+  it("ranks masterworks by copies, as shares of the copies with one known", () => {
+    expect(masterworkShares({ copies: 10, columns: [], masterworks: { 60: 1, 70: 3 } })).toEqual({
+      counted: 4,
+      shares: [
+        { hash: 70, count: 3, share: 3 / 4 },
+        { hash: 60, count: 1, share: 1 / 4 },
+      ],
+    });
+  });
+
+  it("counts none in a snapshot from before masterworks were kept", () => {
+    expect(masterworkShares({ copies: 10, columns: [] })).toEqual({ counted: 0, shares: [] });
   });
 });
 

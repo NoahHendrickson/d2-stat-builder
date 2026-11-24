@@ -11,6 +11,27 @@ export interface PerkPopularity {
   share: number;
 }
 
+/**
+ * A weapon's masterworks, as the Popularity card lists them: every one the
+ * weapon can take, in the Masterworks section's order, with its share of the
+ * copies whose masterwork is known.
+ */
+export interface MasterworkPopularity {
+  /** The masterwork slot's key in picks (masterworkSlotKey). */
+  slot: number;
+  /** Copies whose masterwork is known: the shares' denominator, which can be fewer than the weapon's copies. */
+  counted: number;
+  perks: PerkPopularity[];
+}
+
+/**
+ * The fewest copies with a known masterwork for the card to show their shares
+ * (and the roll to take the top one): masterworks are counted only on copies
+ * read since they were kept, so for a while after that began even a popular
+ * weapon has a handful, and a share of a handful reads as a fact.
+ */
+export const MIN_MASTERWORK_COPIES = 30;
+
 /** One left + right combo, as the Popularity card lists it. */
 export interface ComboPopularity {
   /** The trait columns and the catalog perk index in each. */
@@ -37,6 +58,8 @@ export interface WeaponPopularityView {
   columns: { column: number; perks: PerkPopularity[] }[];
   /** The most run left + right combos, most run first. */
   combos: ComboPopularity[];
+  /** Undefined when the weapon has no masterworks to pick. */
+  masterworks?: MasterworkPopularity;
   /** The roll to try, keyed like picks (by column): see mostPopularRoll. */
   topRoll: Roll;
 }
@@ -47,7 +70,9 @@ export interface WeaponPopularityView {
  * take the most run combo (ties also in grid order), so the traits picked were
  * seen together. Only a combo seen at least MIN_COMBO_COUNT times replaces the
  * columns' own winners: on a thin sample one or two copies shouldn't
- * override a column's clear lead.
+ * override a column's clear lead. The most run masterwork (the first of any
+ * tie, in the section's order) goes in too, once MIN_MASTERWORK_COPIES copies
+ * have one known.
  */
 /** The fewest copies with a combo for it to set the roll's traits. */
 export const MIN_COMBO_COUNT = 3;
@@ -55,6 +80,7 @@ export const MIN_COMBO_COUNT = 3;
 export function mostPopularRoll(
   columns: WeaponPopularityView["columns"],
   combos: readonly ComboPopularity[],
+  masterworks?: MasterworkPopularity,
 ): Roll {
   const roll: Roll = {};
   for (const { column, perks } of columns)
@@ -72,5 +98,7 @@ export function mostPopularRoll(
     roll[top.leftColumn] = top.left;
     roll[top.rightColumn] = top.right;
   }
+  if (masterworks && masterworks.counted >= MIN_MASTERWORK_COPIES && masterworks.perks.length > 0)
+    roll[masterworks.slot] = masterworks.perks.reduce((best, p) => (p.share > best.share ? p : best)).perkIndex;
   return roll;
 }

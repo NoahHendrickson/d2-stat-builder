@@ -44,9 +44,12 @@ const columnsOf = (hash: number) =>
  * Two crawls merged: two weapons, three players, one of them read whole
  * twice with a copy out of the loadout by the second, so the hazard has a
  * check. `equipped` false everywhere makes the store scripts/fixtures/copy-store-v3.bin
- * was written from, by the encoder before equipped days were kept (24e999f).
+ * was written from, by the encoder before equipped days were kept (24e999f);
+ * no masterworks, the one scripts/fixtures/copy-store-v4.bin was written from,
+ * by the encoder before masterworks were kept (1bdd49d).
  */
-function sampleStore(equipped = true) {
+function sampleStore(equipped = true, masterworks = true) {
+  const mw = (hash: number) => (masterworks ? hash : undefined);
   const first = storeFromCrawl(
     [
       { id: BigInt("4611686018467000001"), type: 3, played: 19_999, whole: false },
@@ -56,9 +59,9 @@ function sampleStore(equipped = true) {
       [
         1,
         [
-          { id: BigInt(1), owner: 1, perks: [undefined, 11, 13, 15], equipped },
+          { id: BigInt(1), owner: 1, perks: [undefined, 11, 13, 15], equipped, masterwork: mw(60) },
           { id: BigInt(7), owner: 0, perks: [undefined, 12, 14, 13], equipped: false },
-          { id: BigInt(8), owner: 1, perks: [undefined, 12, 14, 13], equipped },
+          { id: BigInt(8), owner: 1, perks: [undefined, 12, 14, 13], equipped, masterwork: mw(70) },
         ],
       ],
     ]),
@@ -71,7 +74,7 @@ function sampleStore(equipped = true) {
       { id: BigInt(2), type: 1, played: 20_001, whole: true },
     ],
     new Map([
-      [4_294_967_295, [{ id: BigInt("18446744073709551615"), owner: 0, perks: [4_000_000_000], equipped }]],
+      [4_294_967_295, [{ id: BigInt("18446744073709551615"), owner: 0, perks: [4_000_000_000], equipped, masterwork: mw(4_000_000_001) }]],
       [1, [{ id: BigInt(1), owner: 1, perks: [undefined, 11, 13, 15], equipped: false }]],
     ]),
     20_001 * 86_400_000 + 3_600_000,
@@ -81,12 +84,14 @@ function sampleStore(equipped = true) {
 }
 
 describe("encodeCopies / decodeCopies", () => {
-  it("round-trips players, copies, days, equipped days, unidentified perks, 64-bit ids, runs and the hazard", () => {
+  it("round-trips players, copies, days, equipped days, masterworks, unidentified perks, 64-bit ids, runs and the hazard", () => {
     const store = sampleStore();
     // Copies 1 (stowed now) and 8 (gone), both last equipped a day before: the store week of day 20,001 is 19,999.
     expect(store.hazard).toEqual({ weeks: [{ day: 19_999, checked: [0, 2], gone: [0, 1] }] });
     const file = encodeCopies(store, key);
     const back = decodeCopies(file, key);
+    // Some masterworks known, some not.
+    expect([...store.weapons.get(1)!.masterwork].map((m) => store.weapons.get(1)!.perks[m])).toEqual([60, undefined]);
     expect(contents(back)).toEqual(contents(store));
     expect(back.runs).toEqual(store.runs);
     expect(back.hazard).toEqual(store.hazard);
@@ -104,10 +109,20 @@ describe("encodeCopies / decodeCopies", () => {
     // sampleStore(false)'s store as the encoder at 24e999f wrote it, with a key of 32 bytes of 7.
     const file = readFileSync(new URL("./fixtures/copy-store-v3.bin", import.meta.url));
     const back = decodeCopies(file, Buffer.alloc(32, 7));
-    const expected = sampleStore(false);
+    const expected = sampleStore(false, false);
     expect(contents(back)).toEqual(contents(expected));
     expect(back.runs).toEqual(expected.runs);
     expect(back.hazard).toBeUndefined();
+  });
+
+  it("reads version 4, from before masterworks were kept: every copy's masterwork unknown", () => {
+    // sampleStore(true, false)'s store as the encoder at 1bdd49d wrote it, with a key of 32 bytes of 7.
+    const file = readFileSync(new URL("./fixtures/copy-store-v4.bin", import.meta.url));
+    const back = decodeCopies(file, Buffer.alloc(32, 7));
+    const expected = sampleStore(true, false);
+    expect(contents(back)).toEqual(contents(expected));
+    expect([...back.weapons.values()].every((weapon) => weapon.masterwork.every((m) => m === 255))).toBe(true);
+    expect(back.hazard).toEqual(expected.hazard);
   });
 
   it("round-trips an empty store", () => {

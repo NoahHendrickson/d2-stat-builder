@@ -12,6 +12,12 @@ export interface ChangelogEntry {
 
 export const CHANGELOG: readonly ChangelogEntry[] = [
   {
+    date: "2026-11-23",
+    changes: [
+      "Weapon search: Popularity shows which masterwork players have on each weapon.",
+    ],
+  },
+  {
     date: "2026-11-22",
     changes: [
       "Theoretical Builds: save builds by name in the Save menu and load them again later.",
