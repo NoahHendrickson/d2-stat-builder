@@ -50,15 +50,18 @@ export function buildWeaponMasterworkOptions(
     byCategory.set(id, [...(byCategory.get(id) ?? []), hash]);
   }
   // A crafted copy's masterwork is its enhanced frame, from its pattern's
-  // frame socket: the frames that add to one stat outright, by that stat.
+  // frame socket: the frames that add to a stat outright, by each such stat
+  // (a fusion's lists Draw Time before its Charge Time), the plain frame the
+  // socket starts with left out.
   const craftedByStat = new Map<number, number[]>();
   const recipe = items[item.inventory?.recipeItemHash ?? -1];
   for (const entry of recipe?.sockets?.socketEntries ?? []) {
     for (const { hash } of collectSocketPlugCandidates(entry, plugSets)) {
       const def = items[hash];
-      if (def?.plug?.plugCategoryIdentifier !== INTRINSIC_PLUG_ID) continue;
-      const stat = def.investmentStats?.find((s) => !s.isConditionallyActive && s.value > 0)?.statTypeHash;
-      if (stat !== undefined) craftedByStat.set(stat, [...(craftedByStat.get(stat) ?? []), hash]);
+      if (hash === entry.singleInitialItemHash || def?.plug?.plugCategoryIdentifier !== INTRINSIC_PLUG_ID) continue;
+      for (const stat of def.investmentStats ?? [])
+        if (!stat.isConditionallyActive && stat.value > 0)
+          craftedByStat.set(stat.statTypeHash, [...(craftedByStat.get(stat.statTypeHash) ?? []), hash]);
     }
   }
 

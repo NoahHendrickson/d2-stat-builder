@@ -109,12 +109,12 @@ describe("buildWeaponMasterworkOptions", () => {
   });
 
   it("counts a crafted copy's enhanced frame as the masterwork in its stat", () => {
-    const frame = (hash: number, stat?: number) =>
+    const frame = (hash: number, ...stats: [stat: number, value: number][]) =>
       ({
         hash,
         displayProperties: { name: "Adaptive Frame" },
         plug: { plugCategoryIdentifier: "intrinsics" },
-        investmentStats: stat ? [{ statTypeHash: stat, value: 10, isConditionallyActive: false }] : [],
+        investmentStats: stats.map(([statTypeHash, value]) => ({ statTypeHash, value, isConditionallyActive: false })),
       }) as unknown as DestinyInventoryItemDefinition;
     const craftable = {
       ...weapon,
@@ -122,11 +122,16 @@ describe("buildWeaponMasterworkOptions", () => {
     } as unknown as DestinyInventoryItemDefinition;
     const withRecipe = {
       ...items,
-      700: { hash: 700, sockets: { socketEntries: [{ reusablePlugSetHash: 9002 }] } } as unknown as DestinyInventoryItemDefinition,
-      // The plain frame adds nothing outright; the enhanced ones add 10 to one stat.
-      6000: frame(6000),
-      6001: frame(6001, RANGE_HASH),
-      6002: frame(6002, STABILITY_HASH),
+      700: {
+        hash: 700,
+        sockets: { socketEntries: [{ reusablePlugSetHash: 9002, singleInitialItemHash: 6000 }] },
+      } as unknown as DestinyInventoryItemDefinition,
+      // The plain frame the socket starts with, though it adds to a stat outright (as Precision
+      // Frame does to Airborne Effectiveness), isn't a masterwork; the enhanced ones add 10.
+      6000: frame(6000, [RANGE_HASH, 25]),
+      6001: frame(6001, [RANGE_HASH, 10]),
+      // Listing another stat first, as a fusion's frames list Draw Time before Charge Time.
+      6002: frame(6002, [MAGAZINE_HASH, 10], [STABILITY_HASH, 10]),
     };
     const sets = { ...plugSets, 9002: { reusablePlugItems: [{ plugItemHash: 6000 }, { plugItemHash: 6001 }, { plugItemHash: 6002 }] } };
     const options = buildWeaponMasterworkOptions(
