@@ -45,8 +45,8 @@ describe("mostPopularRoll", () => {
   it("takes the top masterwork when its shares are shown, and none otherwise", () => {
     const shown: MasterworkPopularity = { state: "shown", slot: 3, counted: 40, perks: [], top: 8, partial: false };
     expect(mostPopularRoll(columns, [], shown)).toEqual({ 0: 2, 1: 3, 2: 5, 3: 8 });
-    expect(mostPopularRoll(columns, [], { state: "few", slot: 3, counted: 12 })).toEqual({ 0: 2, 1: 3, 2: 5 });
-    expect(mostPopularRoll(columns, [], { state: "none", slot: 3 })).toEqual({ 0: 2, 1: 3, 2: 5 });
+    expect(mostPopularRoll(columns, [], { state: "few", counted: 12 })).toEqual({ 0: 2, 1: 3, 2: 5 });
+    expect(mostPopularRoll(columns, [], { state: "none" })).toEqual({ 0: 2, 1: 3, 2: 5 });
   });
 });
 
@@ -75,12 +75,12 @@ describe("masterworkPopularity", () => {
   });
 
   it("has no shares until enough copies have one known, or before any are", () => {
-    expect(at({ 60: MIN_MASTERWORK_COPIES - 1 })).toEqual({ state: "few", slot: 3, counted: MIN_MASTERWORK_COPIES - 1 });
-    expect(at(undefined)).toEqual({ state: "none", slot: 3 });
+    expect(at({ 60: MIN_MASTERWORK_COPIES - 1 })).toEqual({ state: "few", counted: MIN_MASTERWORK_COPIES - 1 });
+    expect(at(undefined)).toEqual({ state: "none" });
   });
 
   it("counts only the weapon's own masterworks, so one the catalog no longer lists can't make every share 0%", () => {
-    expect(at({ 99: 40, 60: 5 })).toEqual({ state: "few", slot: 3, counted: 5 });
+    expect(at({ 99: 40, 60: 5 })).toEqual({ state: "few", counted: 5 });
   });
 
   it("is undefined for a weapon with no masterworks to pick", () => {

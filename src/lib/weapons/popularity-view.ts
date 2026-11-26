@@ -14,8 +14,7 @@ export interface PerkPopularity {
 }
 
 /**
- * A weapon's masterworks, as the Popularity card shows them, in the picks'
- * masterwork `slot` (masterworkSlotKey). `counted` is the copies whose
+ * A weapon's masterworks, as the Popularity card shows them. `counted` is the copies whose
  * masterwork is known, one of the weapon's own: the shares' denominator. With
  * none counted, or too few to go on, there are no shares; otherwise every
  * masterwork the weapon can take, in the Masterworks section's order, its
@@ -23,9 +22,17 @@ export interface PerkPopularity {
  * any tie), and whether the counted copies fall well short of the weapon's.
  */
 export type MasterworkPopularity =
-  | { state: "none"; slot: number }
-  | { state: "few"; slot: number; counted: number }
-  | { state: "shown"; slot: number; counted: number; perks: PerkPopularity[]; top: number; partial: boolean };
+  | { state: "none" }
+  | { state: "few"; counted: number }
+  | {
+      state: "shown";
+      /** The masterwork slot's key in picks (masterworkSlotKey). */
+      slot: number;
+      counted: number;
+      perks: PerkPopularity[];
+      top: number;
+      partial: boolean;
+    };
 
 /**
  * The fewest copies with a known masterwork for their shares to show (and the
@@ -45,19 +52,18 @@ export function masterworkPopularity(
   perks: readonly ({ hash: number } | undefined)[],
 ): MasterworkPopularity | undefined {
   if (!weapon.masterworks?.length) return undefined;
-  const slot = masterworkSlotKey(weapon);
   // Only the weapon's own count: one the catalog no longer lists can't be shown or picked.
   const counts = weapon.masterworks.map((perkIndex) => {
     const hash = perks[perkIndex]?.hash;
     return { perkIndex, count: hash === undefined ? 0 : (data.masterworks?.[hash] ?? 0) };
   });
   const counted = counts.reduce((sum, c) => sum + c.count, 0);
-  if (counted === 0) return { state: "none", slot };
-  if (counted < MIN_MASTERWORK_COPIES) return { state: "few", slot, counted };
+  if (counted === 0) return { state: "none" };
+  if (counted < MIN_MASTERWORK_COPIES) return { state: "few", counted };
   const shown = counts.map(({ perkIndex, count }) => ({ perkIndex, share: count / counted }));
   return {
     state: "shown",
-    slot,
+    slot: masterworkSlotKey(weapon),
     counted,
     perks: shown,
     top: shown.reduce((best, p) => (p.share > best.share ? p : best)).perkIndex,
