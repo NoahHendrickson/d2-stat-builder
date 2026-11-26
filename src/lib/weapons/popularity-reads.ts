@@ -74,9 +74,9 @@ export function profileCopies(
 /**
  * Collects players and their copies of the tally's weapons (random-rolled
  * legendaries, the lookup's), then builds the crawl's store from them, each
- * copy's masterwork read through `masterworks` (none without it).
+ * copy's masterwork read through `masterworks` (masterworkLookup).
  */
-export function readCollector(lookup: PopularityLookup, masterworks: MasterworkLookup = new Map()) {
+export function readCollector(lookup: PopularityLookup, masterworks: MasterworkLookup) {
   const owners: SeenOwner[] = [];
   /** Each weapon's copies (with their owner; only ones with plugs), read into columns once every copy is in. */
   const copiesByWeapon = new Map<

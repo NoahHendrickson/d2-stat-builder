@@ -105,7 +105,7 @@ describe("a signed-in read in the store", () => {
   it("is whole, read when it was saved, and drops the copies the player no longer has", () => {
     const savedAt = Date.parse("2026-10-18T13:00:00Z");
     const read = (copies: Parameters<ReturnType<typeof readCollector>["add"]>[1], at: number) => {
-      const collected = readCollector(lookup);
+      const collected = readCollector(lookup, new Map());
       const result = collected.add({ id: BigInt(7), type: 3, played: storeDay(at), readAt: at }, copies, true, true);
       return { result, store: collected.store(at + 3 * 3_600_000, run(new Date(at).toISOString())) };
     };
@@ -149,10 +149,10 @@ describe("a signed-in read in the store", () => {
 
   it("doesn't stretch the snapshot's span of reports", () => {
     const at = Date.parse("2026-10-18T13:00:00Z");
-    const collected = readCollector(lookup);
+    const collected = readCollector(lookup, new Map());
     collected.add({ id: BigInt(7), type: 3, played: storeDay(at) }, [{ itemHash: 1, id: BigInt(1), plugs: [100], equipped: false }], true, true);
     const signedIn = collected.store(at, { ...run("2026-10-18T13:00:00.000Z"), from: "2026-10-05T00:00:00.000Z" });
-    const crawled = readCollector(lookup);
+    const crawled = readCollector(lookup, new Map());
     crawled.add({ id: BigInt(8), type: 3, played: storeDay(at) }, [{ itemHash: 1, id: BigInt(2), plugs: [102], equipped: true }], false, false);
     const crawl = crawled.store(at, {
       ...run("2026-10-18T12:00:00.000Z"),
@@ -165,7 +165,7 @@ describe("a signed-in read in the store", () => {
   });
 
   it("isn't whole when a tallied weapon came without sockets", () => {
-    const collected = readCollector(lookup);
+    const collected = readCollector(lookup, new Map());
     expect(collected.add({ id: BigInt(7), type: 3, played: 1 }, [{ itemHash: 1, id: BigInt(1), plugs: undefined, equipped: true }], true, false)).toEqual({
       found: 0,
       whole: false,

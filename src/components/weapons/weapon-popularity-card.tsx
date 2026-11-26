@@ -8,7 +8,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { DetailCard, DetailSection } from "@/components/detail-card";
 import type { Roll } from "@/lib/weapons/pick-slots";
 import type { PerkRef, WeaponSummary } from "@/lib/weapons/types";
-import { MIN_MASTERWORK_COPIES, type WeaponPopularityView } from "@/lib/weapons/popularity-view";
+import type { MasterworkPopularity, WeaponPopularityView } from "@/lib/weapons/popularity-view";
 import { traitColumns } from "@/lib/weapons/perk-popularity";
 import { percent, sampledAt } from "@/lib/popularity-format";
 import { cn } from "@/lib/utils";
@@ -18,9 +18,6 @@ const COMBOS_SHOWN = 5;
 
 /** Below this many copies the shares swing on a handful of players. */
 const SMALL_SAMPLE = 30;
-
-/** Below this part of the weapon's copies, the Masterworks section says how many its shares come from. */
-const MOST_COPIES = 0.9;
 
 /** Each share marker's glow, a soft halo in its `--grade`: the dot's tighter, so it stays close to the dot. */
 const MARKER_GLOW = {
@@ -161,7 +158,15 @@ export function WeaponPopularityCard({
           })}
         </div>
       </DetailSection>
-      {view.masterworks && <MasterworkShares view={view} perks={perks} isPicked={isPicked} onPick={onPick} />}
+      {view.masterworks && (
+        <MasterworkShares
+          masterworks={view.masterworks}
+          copies={view.copies}
+          perks={perks}
+          isPicked={isPicked}
+          onPick={onPick}
+        />
+      )}
     </DetailCard>
   );
 }
@@ -169,38 +174,40 @@ export function WeaponPopularityCard({
 /**
  * The Masterworks section: each masterwork the weapon takes, with its share of
  * the copies whose masterwork is known. Those are only the copies read since
- * masterworks were first counted, so until there are MIN_MASTERWORK_COPIES of
- * them it says so instead of showing shares (no masterwork reading 0% for
- * want of data), and while they're well short of the weapon's copies it says
- * how many there are.
+ * masterworks were first counted, so with none or too few (see
+ * MasterworkPopularity) it says so instead of showing shares (no masterwork
+ * reading 0% for want of data), and while they're well short of the weapon's
+ * copies it says how many there are.
  */
 function MasterworkShares({
-  view,
+  masterworks,
+  copies,
   perks,
   isPicked,
   onPick,
 }: {
-  view: WeaponPopularityView;
+  masterworks: MasterworkPopularity;
+  /** The weapon's copies, all told. */
+  copies: number;
   perks: readonly PerkRef[];
   isPicked: (roll: Roll) => boolean;
   onPick: (roll: Roll) => void;
 }) {
-  const { slot, counted, perks: shares } = view.masterworks!;
-  const grades = gradeShares(shares.map((p) => p.share));
-  const copies = (n: number) => (n === 1 ? "one copy" : `${n.toLocaleString("en-US")} copies`);
+  const copiesOf = (n: number) => (n === 1 ? "one copy" : `${n.toLocaleString("en-US")} copies`);
+  const grades = gradeShares(masterworks.state === "shown" ? masterworks.perks.map((p) => p.share) : []);
   return (
     // Named apart from the Perks card's own Masterworks section.
     <DetailSection title="Popular masterworks" heading="Masterworks">
-      {counted === 0 ? (
+      {masterworks.state === "none" ? (
         <p className="text-xs text-muted-foreground">No masterworks counted for this weapon yet.</p>
-      ) : counted < MIN_MASTERWORK_COPIES ? (
+      ) : masterworks.state === "few" ? (
         <p className="text-xs text-muted-foreground">
-          Counted on only {copies(counted)} so far, too few to show.
+          Counted on only {copiesOf(masterworks.counted)} so far, too few to show.
         </p>
       ) : (
         <div className="grid gap-1.5">
           <div className="grid grid-cols-[repeat(auto-fill,minmax(3.25rem,1fr))] gap-1.5">
-            {shares.map(({ perkIndex, share }) => (
+            {masterworks.perks.map(({ perkIndex, share }) => (
               <ShareCell
                 key={perkIndex}
                 label={perks[perkIndex]?.name ?? ""}
@@ -208,16 +215,16 @@ function MasterworkShares({
                 grade={grades.color(share)}
                 marker="bar"
                 glow={grades.glow}
-                selected={isPicked({ [slot]: perkIndex })}
-                onClick={() => onPick({ [slot]: perkIndex })}
+                selected={isPicked({ [masterworks.slot]: perkIndex })}
+                onClick={() => onPick({ [masterworks.slot]: perkIndex })}
               >
                 <PerkIcon perk={perks[perkIndex]} />
               </ShareCell>
             ))}
           </div>
-          {counted < view.copies * MOST_COPIES && (
+          {masterworks.partial && (
             <p className="text-xs text-muted-foreground">
-              Counted on {counted.toLocaleString("en-US")} of {copies(view.copies)} so far.
+              Counted on {masterworks.counted.toLocaleString("en-US")} of {copiesOf(copies)} so far.
             </p>
           )}
         </div>

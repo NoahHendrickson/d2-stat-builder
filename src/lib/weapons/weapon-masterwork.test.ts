@@ -95,7 +95,7 @@ describe("buildWeaponMasterworkOptions", () => {
         statName: "Range",
         icon: `/icons/mw-${RANGE_HASH}.png`,
         statMods: [{ hash: RANGE_HASH, value: 10 }],
-        tierHashes: [5005],
+        masterworkPlugHashes: [5005],
       },
       {
         plugHash: 5002,
@@ -103,7 +103,7 @@ describe("buildWeaponMasterworkOptions", () => {
         statName: "Stability",
         icon: `/icons/mw-${STABILITY_HASH}.png`,
         statMods: [{ hash: STABILITY_HASH, value: 10 }],
-        tierHashes: [5001, 5006],
+        masterworkPlugHashes: [5001, 5006],
       },
     ]);
   });
@@ -140,9 +140,9 @@ describe("buildWeaponMasterworkOptions", () => {
       sets as unknown as ManifestDefs["DestinyPlugSetDefinition"],
       stats,
     );
-    expect(options?.map((o) => [o.statName, o.tierHashes])).toEqual([
-      ["Range", [5005, 6001]],
-      ["Stability", [5001, 5006, 6002]],
+    expect(options?.map((o) => [o.statName, o.masterworkPlugHashes, o.craftedFrameHashes])).toEqual([
+      ["Range", [5005], [6001]],
+      ["Stability", [5001, 5006], [6002]],
     ]);
   });
 

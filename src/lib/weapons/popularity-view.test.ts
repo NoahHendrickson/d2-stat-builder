@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { MIN_COMBO_COUNT, MIN_MASTERWORK_COPIES, mostPopularRoll } from "./popularity-view";
+import {
+  MIN_COMBO_COUNT,
+  MIN_MASTERWORK_COPIES,
+  masterworkPopularity,
+  mostPopularRoll,
+  type MasterworkPopularity,
+} from "./popularity-view";
 
 // Columns 0 (barrel), 1 and 2 (the traits), perks by catalog index.
 const columns = [
@@ -36,20 +42,48 @@ describe("mostPopularRoll", () => {
     expect(mostPopularRoll(tied, [])).toEqual({ 0: 1, 1: 3, 2: 5 });
   });
 
-  // The masterwork slot (3, after the columns): Range 7, Handling 8, Stability 9.
-  const masterworks = (counted: number, shares: number[]) => ({
-    slot: 3,
-    counted,
-    perks: shares.map((share, i) => ({ perkIndex: 7 + i, share })),
+  it("takes the top masterwork when its shares are shown, and none otherwise", () => {
+    const shown: MasterworkPopularity = { state: "shown", slot: 3, counted: 40, perks: [], top: 8, partial: false };
+    expect(mostPopularRoll(columns, [], shown)).toEqual({ 0: 2, 1: 3, 2: 5, 3: 8 });
+    expect(mostPopularRoll(columns, [], { state: "few", slot: 3, counted: 12 })).toEqual({ 0: 2, 1: 3, 2: 5 });
+    expect(mostPopularRoll(columns, [], { state: "none", slot: 3 })).toEqual({ 0: 2, 1: 3, 2: 5 });
+  });
+});
+
+describe("masterworkPopularity", () => {
+  // Three columns, so the masterwork slot is 3; masterworks Range (perk 7, hash 60),
+  // Handling (8, hash 70), Stability (9, hash 80).
+  const weapon = { columns: [{}, {}, {}] as never[], masterworks: [7, 8, 9] };
+  const perks = Object.assign([], { 7: { hash: 60 }, 8: { hash: 70 }, 9: { hash: 80 } });
+  const at = (counts: Record<number, number> | undefined, copies = 100) =>
+    masterworkPopularity({ copies, masterworks: counts }, weapon, perks);
+
+  it("shows every masterwork's share in the section's order, the top one, and whether the counted copies fall well short", () => {
+    expect(at({ 60: 10, 70: 30 })).toEqual({
+      state: "shown",
+      slot: 3,
+      counted: 40,
+      perks: [
+        { perkIndex: 7, share: 0.25 },
+        { perkIndex: 8, share: 0.75 },
+        { perkIndex: 9, share: 0 },
+      ],
+      top: 8,
+      partial: true,
+    });
+    expect(at({ 60: 45, 70: 45 })).toMatchObject({ top: 7, partial: false });
   });
 
-  it("takes the most run masterwork once enough copies have one known, first of a tie in the section's order", () => {
-    expect(mostPopularRoll(columns, [], masterworks(MIN_MASTERWORK_COPIES, [0.2, 0.5, 0.3]))).toEqual({ 0: 2, 1: 3, 2: 5, 3: 8 });
-    expect(mostPopularRoll(columns, [], masterworks(MIN_MASTERWORK_COPIES, [0.4, 0.2, 0.4]))[3]).toBe(7);
+  it("has no shares until enough copies have one known, or before any are", () => {
+    expect(at({ 60: MIN_MASTERWORK_COPIES - 1 })).toEqual({ state: "few", slot: 3, counted: MIN_MASTERWORK_COPIES - 1 });
+    expect(at(undefined)).toEqual({ state: "none", slot: 3 });
   });
 
-  it("leaves the masterwork out on too few copies with one known, or none", () => {
-    expect(mostPopularRoll(columns, [], masterworks(MIN_MASTERWORK_COPIES - 1, [0.2, 0.5, 0.3]))).toEqual({ 0: 2, 1: 3, 2: 5 });
-    expect(mostPopularRoll(columns, [], masterworks(0, [0, 0, 0]))).toEqual({ 0: 2, 1: 3, 2: 5 });
+  it("counts only the weapon's own masterworks, so one the catalog no longer lists can't make every share 0%", () => {
+    expect(at({ 99: 40, 60: 5 })).toEqual({ state: "few", slot: 3, counted: 5 });
+  });
+
+  it("is undefined for a weapon with no masterworks to pick", () => {
+    expect(masterworkPopularity({ copies: 10 }, { columns: [], masterworks: undefined }, perks)).toBeUndefined();
   });
 });

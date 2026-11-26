@@ -26,6 +26,32 @@ function isCompletedMasterworkStatPlug(def: DestinyInventoryItemDefinition): boo
   return MASTERWORK_STAT_PLUG_ID.test(id) && name.startsWith(COMPLETED_MASTERWORK_NAME_PREFIX);
 }
 
+/**
+ * The enhanced frames a crafted copy of `item` can have, from its pattern's
+ * frame socket, by each stat they add to outright (a fusion's list Draw Time
+ * before its Charge Time): a crafted copy's masterwork is its enhanced frame.
+ * The plain frame the socket starts with isn't one.
+ */
+function craftedFramesByStat(
+  item: DestinyInventoryItemDefinition,
+  items: Record<number, DestinyInventoryItemDefinition>,
+  plugSets: ManifestDefs["DestinyPlugSetDefinition"],
+): Map<number, number[]> {
+  const recipe = items[item.inventory?.recipeItemHash ?? -1];
+  const frames = (recipe?.sockets?.socketEntries ?? []).flatMap((entry) =>
+    collectSocketPlugCandidates(entry, plugSets).flatMap(({ hash }) => {
+      const def = items[hash];
+      if (hash === entry.singleInitialItemHash || def?.plug?.plugCategoryIdentifier !== INTRINSIC_PLUG_ID) return [];
+      return (def.investmentStats ?? [])
+        .filter((stat) => !stat.isConditionallyActive && stat.value > 0)
+        .map((stat) => ({ stat: stat.statTypeHash, hash }));
+    }),
+  );
+  return new Map(
+    [...Map.groupBy(frames, (frame) => frame.stat)].map(([stat, list]) => [stat, list.map((frame) => frame.hash)]),
+  );
+}
+
 /** Collect full-tier masterwork stat options for one weapon item definition. */
 export function buildWeaponMasterworkOptions(
   item: DestinyInventoryItemDefinition,
@@ -43,27 +69,12 @@ export function buildWeaponMasterworkOptions(
   const byStatHash = new Map<number, MasterworkOption>();
   // Every stat masterwork plug the socket can hold, any tier, by its stat's
   // plug category ("…masterworks.stat.range"): a copy holds one of these.
-  const byCategory = new Map<string, number[]>();
-  for (const { hash } of candidates) {
-    const id = items[hash]?.plug?.plugCategoryIdentifier ?? "";
-    if (!MASTERWORK_STAT_PLUG_ID.test(id)) continue;
-    byCategory.set(id, [...(byCategory.get(id) ?? []), hash]);
-  }
-  // A crafted copy's masterwork is its enhanced frame, from its pattern's
-  // frame socket: the frames that add to a stat outright, by each such stat
-  // (a fusion's lists Draw Time before its Charge Time), the plain frame the
-  // socket starts with left out.
-  const craftedByStat = new Map<number, number[]>();
-  const recipe = items[item.inventory?.recipeItemHash ?? -1];
-  for (const entry of recipe?.sockets?.socketEntries ?? []) {
-    for (const { hash } of collectSocketPlugCandidates(entry, plugSets)) {
-      const def = items[hash];
-      if (hash === entry.singleInitialItemHash || def?.plug?.plugCategoryIdentifier !== INTRINSIC_PLUG_ID) continue;
-      for (const stat of def.investmentStats ?? [])
-        if (!stat.isConditionallyActive && stat.value > 0)
-          craftedByStat.set(stat.statTypeHash, [...(craftedByStat.get(stat.statTypeHash) ?? []), hash]);
-    }
-  }
+  const category = (hash: number) => items[hash]?.plug?.plugCategoryIdentifier ?? "";
+  const byCategory = Map.groupBy(
+    candidates.filter(({ hash }) => MASTERWORK_STAT_PLUG_ID.test(category(hash))),
+    ({ hash }) => category(hash),
+  );
+  const craftedFrames = craftedFramesByStat(item, items, plugSets);
 
   for (const { hash } of candidates) {
     const def = items[hash];
@@ -75,14 +86,11 @@ export function buildWeaponMasterworkOptions(
     if (byStatHash.has(primaryMod.hash)) continue;
 
     const statName = stats[primaryMod.hash]?.displayProperties?.name ?? `Stat ${primaryMod.hash}`;
-    const tierHashes = [
-      ...new Set([
-        ...(byCategory.get(def.plug?.plugCategoryIdentifier ?? "") ?? []),
-        ...(craftedByStat.get(primaryMod.hash) ?? []),
-      ]),
-    ]
+    const masterworkPlugHashes = (byCategory.get(category(hash)) ?? [])
+      .map((plug) => plug.hash)
       .filter((other) => other !== hash)
       .sort((a, b) => a - b);
+    const craftedFrameHashes = [...(craftedFrames.get(primaryMod.hash) ?? [])].sort((a, b) => a - b);
 
     byStatHash.set(primaryMod.hash, {
       plugHash: hash,
@@ -90,7 +98,8 @@ export function buildWeaponMasterworkOptions(
       statName,
       icon: def.displayProperties?.icon || undefined,
       statMods: statMods,
-      ...(tierHashes.length ? { tierHashes } : {}),
+      ...(masterworkPlugHashes.length ? { masterworkPlugHashes } : {}),
+      ...(craftedFrameHashes.length ? { craftedFrameHashes } : {}),
     });
   }
 

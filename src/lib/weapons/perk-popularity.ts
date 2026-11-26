@@ -114,8 +114,8 @@ export interface CrawlSource {
 
 /** The catalog fields the tally needs: public/data/weapons.json, narrowed. */
 export type PopularityCatalog = {
-  perks: Pick<CompactWeaponIndex["perks"][number], "hash" | "alternateHashes" | "tierHashes">[];
-  weapons: (Pick<CatalogWeapon, "hash" | "rarity" | "masterworks"> & {
+  perks: Pick<CompactWeaponIndex["perks"][number], "hash" | "alternateHashes" | "masterworkPlugHashes">[];
+  weapons: (Pick<CatalogWeapon, "hash" | "rarity" | "masterworks" | "masterworkFrames"> & {
     columns: Pick<CatalogWeapon["columns"][number], "perkIndices" | "kind">[];
   })[];
 };
@@ -128,21 +128,35 @@ type CatalogWeapon = CompactWeaponIndex["weapons"][number];
  */
 export type PopularityLookup = Map<number, Map<number, number>[]>;
 
+/**
+ * Plug hash → base perk hash for the perks at `indices` in `perks`: each
+ * perk's own hash, and the other plugs `others` gives for it (the index in
+ * `indices` alongside), all mapped to it.
+ */
+function plugsToBase<P extends { hash: number }>(
+  perks: readonly (P | undefined)[],
+  indices: readonly number[],
+  others: (perk: P, i: number) => readonly number[] | undefined,
+) {
+  const plugs = new Map<number, number>();
+  indices.forEach((index, i) => {
+    const perk = perks[index];
+    if (!perk) return;
+    plugs.set(perk.hash, perk.hash);
+    for (const other of others(perk, i) ?? []) plugs.set(other, perk.hash);
+  });
+  return plugs;
+}
+
 export function popularityLookup(catalog: PopularityCatalog): PopularityLookup {
   const lookup: PopularityLookup = new Map();
   for (const weapon of catalog.weapons) {
     if (weapon.rarity !== "Legendary") continue;
-    const columns = weapon.columns.map((column) => {
-      const plugs = new Map<number, number>();
-      if (column.perkIndices.length < 2) return plugs;
-      for (const index of column.perkIndices) {
-        const perk = catalog.perks[index];
-        if (!perk) continue;
-        plugs.set(perk.hash, perk.hash);
-        for (const alternate of perk.alternateHashes ?? []) plugs.set(alternate, perk.hash);
-      }
-      return plugs;
-    });
+    const columns = weapon.columns.map((column) =>
+      column.perkIndices.length < 2
+        ? new Map<number, number>()
+        : plugsToBase(catalog.perks, column.perkIndices, (perk) => perk.alternateHashes),
+    );
     if (columns.some((plugs) => plugs.size > 0)) lookup.set(weapon.hash, columns);
   }
   return lookup;
@@ -151,9 +165,9 @@ export function popularityLookup(catalog: PopularityCatalog): PopularityLookup {
 /**
  * For each weapon the tally counts (popularityLookup's), every plug that
  * gives a copy its masterwork, mapped to the catalog's full-tier masterwork
- * for that stat: any tier in the masterwork socket, or a crafted copy's
- * enhanced frame. Those plugs sit nowhere else, so a copy's is found among
- * all its plugs, with no socket to learn.
+ * for that stat: any tier in the masterwork socket, or one of this weapon's
+ * own enhanced frames (a crafted copy's). Those plugs sit nowhere else, so a
+ * copy's is found among all its plugs, with no socket to learn.
  */
 export type MasterworkLookup = Map<number, Map<number, number>>;
 
@@ -161,13 +175,10 @@ export function masterworkLookup(catalog: PopularityCatalog, lookup = popularity
   const masterworks: MasterworkLookup = new Map();
   for (const weapon of catalog.weapons) {
     if (!lookup.has(weapon.hash) || !weapon.masterworks?.length) continue;
-    const plugs = new Map<number, number>();
-    for (const index of weapon.masterworks) {
-      const perk = catalog.perks[index];
-      if (!perk) continue;
-      plugs.set(perk.hash, perk.hash);
-      for (const tier of perk.tierHashes ?? []) plugs.set(tier, perk.hash);
-    }
+    const plugs = plugsToBase(catalog.perks, weapon.masterworks, (perk, i) => [
+      ...(perk.masterworkPlugHashes ?? []),
+      ...(weapon.masterworkFrames?.[i] ?? []),
+    ]);
     if (plugs.size > 0) masterworks.set(weapon.hash, plugs);
   }
   return masterworks;
@@ -281,22 +292,6 @@ export function columnShares(weapon: WeaponPopularity, column: number): PerkShar
     .filter((c) => c.count > 0)
     .map((c) => ({ ...c, share: c.count / total }))
     .sort((a, b) => b.count - a.count);
-}
-
-/**
- * A weapon's masterworks by popularity, most run first, and how many copies
- * had one identified (the shares' denominator); none at all in a snapshot
- * from before masterworks were kept.
- */
-export function masterworkShares(weapon: WeaponPopularity): { counted: number; shares: PerkShare[] } {
-  const counts = Object.entries(weapon.masterworks ?? {})
-    .map(([hash, count]) => ({ hash: Number(hash), count }))
-    .filter((c) => c.count > 0);
-  const counted = counts.reduce((sum, c) => sum + c.count, 0);
-  return {
-    counted,
-    shares: counts.map((c) => ({ ...c, share: c.count / counted })).sort((a, b) => b.count - a.count),
-  };
 }
 
 /** One left + right combo's share, for display. */

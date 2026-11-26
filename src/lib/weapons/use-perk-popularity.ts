@@ -6,13 +6,11 @@ import {
   PERK_POPULARITY_FILE,
   columnShares,
   comboShares,
-  masterworkShares,
   traitColumns,
   type PerkPopularityIndex,
 } from "./perk-popularity";
 import type { WeaponCatalog } from "./catalog";
-import { mostPopularRoll, type WeaponPopularityView } from "./popularity-view";
-import { masterworkSlotKey } from "./pick-slots";
+import { masterworkPopularity, mostPopularRoll, type WeaponPopularityView } from "./popularity-view";
 import type { WeaponSummary } from "./types";
 
 /** The popularity snapshot (see useDataRepoSnapshot); the weapon page goes without when it can't load. */
@@ -68,19 +66,7 @@ export function useWeaponPopularity(
             : [{ leftColumn: traits[0], left: l, rightColumn: traits[1], right: r, count, share }];
         })
       : [];
-    // Every masterwork the weapon can take, in its section's order; 0 for one no counted copy has.
-    const counted = masterworkShares(data);
-    const masterworkShare = new Map(counted.shares.map(({ hash, share }) => [hash, share]));
-    const masterworks = weapon.masterworks?.length
-      ? {
-          slot: masterworkSlotKey(weapon),
-          counted: counted.counted,
-          perks: weapon.masterworks.map((perkIndex) => ({
-            perkIndex,
-            share: masterworkShare.get(catalog.perks[perkIndex]?.hash ?? -1) ?? 0,
-          })),
-        }
-      : undefined;
+    const masterworks = masterworkPopularity(data, weapon, catalog.perks);
     return {
       available: true,
       copies: data.copies,

@@ -43,9 +43,10 @@ export const VERSION = 5;
  * store, since crawl files always come from the same commit as the merge.
  */
 const OLDEST_READ = 3;
-/** The COPY_FIELDS a file of `version` has, in file order: each version adds the field at the end. */
-const copyFieldsOf = (version: number) =>
-  COPY_FIELDS.filter((field) => (field !== "equipped" || version >= 4) && (field !== "masterwork" || version >= 5));
+/** The version each COPY_FIELD came in, where it's later than OLDEST_READ: each adds its field at the end. */
+const SINCE: Partial<Record<(typeof COPY_FIELDS)[number], number>> = { equipped: 4, masterwork: 5 };
+/** The COPY_FIELDS a file of `version` has, in file order. */
+const copyFieldsOf = (version: number) => COPY_FIELDS.filter((field) => version >= (SINCE[field] ?? 0));
 function littleEndianOnly() {
   if (endianness() !== "LE") throw new Error("The copy store file is little-endian; this machine isn't.");
 }

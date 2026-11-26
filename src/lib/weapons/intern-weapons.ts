@@ -95,8 +95,10 @@ export function internWeaponCatalog(
         for (const hash of perk.alternateHashes) alts.add(hash);
         entry.alternateHashes = [...alts];
       }
-      if (perk.tierHashes?.length) {
-        entry.tierHashes = [...new Set([...(entry.tierHashes ?? []), ...perk.tierHashes])].sort((a, b) => a - b);
+      if (perk.masterworkPlugHashes?.length) {
+        entry.masterworkPlugHashes = [...new Set([...(entry.masterworkPlugHashes ?? []), ...perk.masterworkPlugHashes])].sort(
+          (a, b) => a - b,
+        );
       }
       if (perk.statMods?.length && !entry.statMods?.length) {
         entry.statMods = perk.statMods;
@@ -114,7 +116,7 @@ export function internWeaponCatalog(
       description: perk.description,
       enhancedDescription: perk.enhancedDescription,
       alternateHashes: perk.alternateHashes,
-      ...(perk.tierHashes?.length ? { tierHashes: perk.tierHashes } : {}),
+      ...(perk.masterworkPlugHashes?.length ? { masterworkPlugHashes: perk.masterworkPlugHashes } : {}),
       statMods: perk.statMods,
       stats: perk.stats ?? namedStats(perk.statMods),
     });
@@ -151,9 +153,10 @@ export function internWeaponCatalog(
           .join(", "),
         statMods: option.statMods,
         stats,
-        tierHashes: option.tierHashes,
+        masterworkPlugHashes: option.masterworkPlugHashes,
       });
     });
+    const masterworkFrames = (weapon.masterworkOptions ?? []).map((option) => option.craftedFrameHashes ?? []);
     const ammoGeneration = weapon.stats.find((s) => s.hash === AMMO_GENERATION_STAT_HASH)?.value;
     const shown = new Set(weapon.stats.filter((s) => s.value > 0).map((s) => s.hash));
     const statInvestment = Object.fromEntries(
@@ -186,6 +189,7 @@ export function internWeaponCatalog(
         ? { statInvestment, statGroupHash: weapon.statGroupHash }
         : {}),
       ...(masterworks.length ? { masterworks } : {}),
+      ...(masterworkFrames.some((frames) => frames.length) ? { masterworkFrames } : {}),
       columns,
       perks: perkNames,
       perksLower: perkNames.map(lower),
