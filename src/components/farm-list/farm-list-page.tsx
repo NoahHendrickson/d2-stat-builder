@@ -13,9 +13,9 @@ import { finderPerkColumns } from "@/lib/inventory/perk-finder";
 import { weaponRoll } from "@/lib/inventory/weapon-details";
 import { useManifest } from "@/lib/manifest/use-manifest";
 import type { Manifest } from "@/lib/manifest/load";
-import { copyHasPerk, ownedCopies, placeLabel, type OwnedCopy } from "@/lib/farm-list/match";
+import { copyHasPick, ownedCopies, placeLabel, type MasterworkStats, type OwnedCopy } from "@/lib/farm-list/match";
 import type { ArmorFarmEntry, FarmColumn, FarmPerk, WeaponFarmEntry } from "@/lib/farm-list/types";
-import { useFarmList, useFarmListMutations } from "@/lib/farm-list/use-farm-list";
+import { useFarmList, useFarmListMutations, useMasterworkStats } from "@/lib/farm-list/use-farm-list";
 import { weaponSearchHref } from "@/lib/weapons/search-state";
 import { cn } from "@/lib/utils";
 
@@ -67,6 +67,7 @@ export function FarmListPage() {
   );
   const manifestStatus = useManifest();
   const manifest = manifestStatus.state === "ready" ? manifestStatus.manifest : undefined;
+  const masterworks = useMasterworkStats();
   const weapons = entries?.filter((e): e is WeaponFarmEntry => e.kind === "weapon") ?? [];
   const armor = entries?.filter((e): e is ArmorFarmEntry => e.kind === "armor") ?? [];
 
@@ -95,6 +96,7 @@ export function FarmListPage() {
                 profile={profile}
                 copies={copies}
                 manifest={manifest}
+                masterworks={masterworks}
               />
             )}
           />
@@ -139,25 +141,20 @@ function dropFor(
   };
 }
 
-/** Whether the copy has what the entry asks for in a column; undefined until it can tell. */
-function matches(profile: DestinyProfileResponse, drop: Drop, column: ColumnKey, perk: FarmPerk) {
-  // A masterwork goes by its stat, which takes the manifest to read.
-  if (column === "masterwork") return drop.rolled ? `${drop.rolled.masterwork} Masterwork` === perk.name : undefined;
-  return copyHasPerk(profile, drop.copy.instanceId, perk);
-}
-
 const WeaponCard = memo(function WeaponCard({
   entry,
   isNew,
   profile,
   copies,
   manifest,
+  masterworks,
 }: {
   entry: WeaponFarmEntry;
   isNew: boolean;
   profile: DestinyProfileResponse | undefined;
   copies: ReadonlyMap<string, OwnedCopy> | undefined;
   manifest: Manifest | undefined;
+  masterworks: MasterworkStats | undefined;
 }) {
   const drop = dropFor(entry, profile, copies, manifest);
   const status = entry.obtained
@@ -192,10 +189,10 @@ const WeaponCard = memo(function WeaponCard({
         return perks.length > 0 ? perks.map((perk) => ({ key, perk })) : [{ key }];
       }).map(({ key, perk }) => {
         // A dismantled copy can't be read, but it only counted because it had every required
-        // pick. Whether it had the masterwork can't be known any more.
+        // pick. Drops from before a masterwork counted didn't need one, so that stays unknown.
         const match =
           drop && profile && perk
-            ? matches(profile, drop, key, perk)
+            ? copyHasPick(profile, drop.copy.instanceId, perk, masterworks)
             : drop === null && perk && key !== "masterwork"
               ? true
               : undefined;

@@ -1,7 +1,7 @@
 // Farm list rules for weapons: which picks make an entry, and which owned copies match one. Reads the
 // raw profile (sockets and reusable plugs by hash); only a picked masterwork needs the
-// manifest, through a reader the caller passes in. Pure — runtime imports stay relative so
-// the module runs under vitest.
+// manifest, through the MasterworkStats the caller passes in. Pure — runtime imports stay
+// relative so the module runs under vitest.
 import type { DestinyProfileResponse } from "bungie-api-ts/destiny2";
 import { CLASS_NAMES } from "../armory/stats";
 import { BUCKETS } from "../inventory/buckets";
@@ -131,31 +131,18 @@ export function farmWeaponFromPicks(
 const isMasterwork = (perk: FarmPerk) => perk.slot === "masterwork" || perk.kind === "Masterwork";
 
 /**
- * The extras a copy has to have in its sockets: everything picked but the masterwork,
- * which goes by its stat at any tier, so it takes the manifest to read (see matchingCopies).
+ * The stat hash a masterwork plug raises, at any tier; undefined for any other plug. It
+ * takes the manifest to read, so callers only have one once the manifest is ready.
  */
-export function requiredExtras(entry: Pick<WeaponFarmData, "extras">): FarmPerk[] {
-  return entry.extras.filter((perk) => !isMasterwork(perk));
-}
+export type MasterworkStats = (plugHash: number) => number | undefined;
 
-/** The masterwork the entry picked, if any. */
-export function pickedMasterwork(entry: Pick<WeaponFarmData, "extras">): FarmPerk | undefined {
-  return entry.extras.find(isMasterwork);
-}
-
-/**
- * The stat a copy is masterworked in ("Range"), by instance id; undefined for none.
- * Reading it takes the manifest, so the caller builds it once the manifest is in.
- */
-export type MasterworkReader = (instanceId: string) => string | undefined;
-
-/** Identifies a roll's picks: the traits (either order) and the required extras. */
+/** Identifies a roll's picks: the traits (either order) and every other pick, the masterwork included. */
 export function farmWeaponPicksKey(entry: Pick<WeaponFarmData, "traits" | "extras">): string {
   const hashes = (perks: readonly FarmPerk[]) => perks.map((p) => p.hashes[0]).sort().join(",");
-  return `${hashes(entry.traits)}|${hashes(requiredExtras(entry))}`;
+  return `${hashes(entry.traits)}|${hashes(entry.extras)}`;
 }
 
-/** The same weapon and the same picks: a different barrel is a different roll to hunt. */
+/** The same weapon and the same picks: a different barrel or masterwork is a different roll to hunt. */
 export function sameFarmWeapon(
   a: Pick<WeaponFarmData, "weaponHashes" | "traits" | "extras">,
   b: Pick<WeaponFarmData, "weaponHashes" | "traits" | "extras">,
@@ -225,44 +212,52 @@ export function hasTraits(profile: DestinyProfileResponse, instanceId: string, t
   );
 }
 
+interface MatchOptions {
+  /** The profile's copies, when the caller already has them. */
+  copies?: readonly OwnedCopy[];
+  /** Needed to check a picked masterwork; see MasterworkStats. */
+  masterworks?: MasterworkStats;
+}
+
 /**
- * The copies of a listed weapon that rolled both traits and every required extra (a
- * picked barrel, magazine or origin trait), other than the ones the entry ignores.
- * Crafted copies don't count: the player chose those perks. A picked masterwork has to
- * be the copy's masterwork stat, at any tier; without `masterworkOf` (no manifest yet)
- * that can't be told, so such an entry matches nothing.
+ * The copies of a listed weapon that have both traits and every other pick (barrel,
+ * magazine, origin trait, masterwork; see copyHasPick), other than the ones the entry
+ * ignores. Crafted copies don't count: the player chose those perks. Undefined when it
+ * can't be told yet: the entry picks a masterwork and `masterworks` isn't there.
  */
 export function matchingCopies(
   profile: DestinyProfileResponse,
   entry: Pick<WeaponFarmData, "weaponHashes" | "traits" | "extras" | "ignoredInstanceIds">,
-  copies: readonly OwnedCopy[] = ownedCopies(profile),
-  masterworkOf?: MasterworkReader,
-): OwnedCopy[] {
+  { copies = ownedCopies(profile), masterworks }: MatchOptions = {},
+): OwnedCopy[] | undefined {
+  if (!masterworks && entry.extras.some(isMasterwork)) return undefined;
   const hashes = new Set(entry.weaponHashes);
   const ignored = new Set(entry.ignoredInstanceIds);
-  const extras = requiredExtras(entry);
-  const masterwork = pickedMasterwork(entry);
-  if (masterwork && !masterworkOf) return [];
   return copies.filter(
     (c) =>
       hashes.has(c.itemHash) &&
       !c.crafted &&
       !ignored.has(c.instanceId) &&
       hasTraits(profile, c.instanceId, entry.traits) &&
-      extras.every((perk) => copyHasPerk(profile, c.instanceId, perk)) &&
-      (!masterwork || `${masterworkOf!(c.instanceId)} Masterwork` === masterwork.name),
+      entry.extras.every((perk) => copyHasPick(profile, c.instanceId, perk, masterworks)),
   );
 }
 
-/** The waiting entries a profile now has a matching copy for, each with its copy (see assignDrops). */
+/**
+ * The waiting entries a profile now has a matching copy for, each with its copy (see
+ * assignDrops). Undefined while any waiting entry can't be told yet (see matchingCopies):
+ * every drop waits, so a newer entry can't take a copy an older one is owed.
+ */
 export function newlyObtained(
   profile: DestinyProfileResponse,
   entries: readonly WeaponFarmEntry[],
-  masterworkOf?: MasterworkReader,
-): { entry: WeaponFarmEntry; copy: OwnedCopy }[] {
-  if (entries.every((w) => w.obtained)) return [];
+  masterworks?: MasterworkStats,
+): { entry: WeaponFarmEntry; copy: OwnedCopy }[] | undefined {
+  const waiting = entries.filter((w) => !w.obtained);
+  if (waiting.length === 0) return [];
+  if (!masterworks && waiting.some((w) => w.extras.some(isMasterwork))) return undefined;
   const copies = ownedCopies(profile);
-  return assignDrops(entries, (entry) => matchingCopies(profile, entry, copies, masterworkOf));
+  return assignDrops(entries, (entry) => matchingCopies(profile, entry, { copies, masterworks }) ?? []);
 }
 
 /**
@@ -290,7 +285,20 @@ export function placeLabel(profile: DestinyProfileResponse | undefined, place: C
   return name ? `on your ${name}` : "on a character";
 }
 
-/** Whether the copy rolled the perk in any socket (an extra, for the obtained card). */
-export function copyHasPerk(profile: DestinyProfileResponse, instanceId: string, perk: FarmPerk): boolean {
-  return socketPlugs(profile, instanceId).some((socket) => perk.hashes.some((h) => socket.has(h)));
+/**
+ * Whether the copy has a picked perk: rolled in any socket, or for the masterwork, the
+ * same stat at any tier in the socket now (the others it lists are what it could swap to).
+ * Undefined for a masterwork without `masterworks` to read it.
+ */
+export function copyHasPick(
+  profile: DestinyProfileResponse,
+  instanceId: string,
+  perk: FarmPerk,
+  masterworks: MasterworkStats | undefined,
+): boolean | undefined {
+  if (!isMasterwork(perk)) return socketPlugs(profile, instanceId).some((socket) => perk.hashes.some((h) => socket.has(h)));
+  if (!masterworks) return undefined;
+  const stat = masterworks(perk.hashes[0]!);
+  const sockets = profile.itemComponents?.sockets?.data?.[instanceId]?.sockets ?? [];
+  return stat !== undefined && sockets.some((s) => s.plugHash !== undefined && masterworks(s.plugHash) === stat);
 }

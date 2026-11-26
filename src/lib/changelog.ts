@@ -14,7 +14,7 @@ export const CHANGELOG: readonly ChangelogEntry[] = [
   {
     date: "2026-11-23",
     changes: [
-      "Farm list: a weapon roll with a masterwork picked only counts as owned or dropped when your copy has that masterwork.",
+      "Farm list: a weapon roll with a masterwork picked, including ones already on your list, only counts as owned or dropped when your copy has that masterwork.",
     ],
   },
   {

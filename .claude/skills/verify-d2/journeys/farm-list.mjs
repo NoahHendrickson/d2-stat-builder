@@ -214,7 +214,13 @@ export default async function ({ page, app, stub, step, shot, expect, log }) {
     await pick("Surrounded");
     await page.waitFor({ role: "button", name: "Add to Farm list" }, { within: PERKS });
     await pick("Hungry Edge");
+    // Without the listed entry's Impact masterwork, it's a different roll.
+    expect(await page.exists({ role: "button", name: "Add to Farm list" }, { within: PERKS }), "another masterwork (here none) is a new roll");
+    const impact = { role: "button", name: "Impact Masterwork" };
+    await page.click(impact, { within: DETAILS });
     await page.waitFor({ role: "button", name: "On your Farm list" }, { within: PERKS });
+    await page.click(impact, { within: DETAILS });
+    await page.waitFor({ role: "button", name: "Add to Farm list" }, { within: PERKS });
     await unpick("Hungry Edge");
     await unpick("Relentless Strikes");
     await pick("Proximity Power");

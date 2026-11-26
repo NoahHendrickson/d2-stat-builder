@@ -1,7 +1,7 @@
 import { expect, test } from "vitest";
 import type { DestinyProfileResponse } from "bungie-api-ts/destiny2";
 import type { Manifest } from "@/lib/manifest/load";
-import { addInvestment, masterworkReader, weaponRoll, weaponStats } from "./weapon-details";
+import { addInvestment, masterworkPlugStat, weaponRoll, weaponStats } from "./weapon-details";
 
 const plug = (name: string, category: string) => ({
   displayProperties: { name, icon: `/${name}.png` },
@@ -77,19 +77,14 @@ test("splits a weapon's sockets into frame, perk columns, and mods", () => {
   ]);
 });
 
-test("names a copy's masterwork stat at any tier, once the manifest is in", () => {
+test("reads a masterwork plug's stat at any tier, and nothing from other plugs", () => {
   items[61] = {
     ...plug("Tier 2: Blast Radius", "v400.plugs.weapons.masterworks.stat.blast_radius"),
     investmentStats: [{ statTypeHash: 1, value: 2 }],
   };
-  const copies = {
-    itemComponents: {
-      sockets: { data: { a: { sockets: [{ plugHash: 61, isVisible: true }] }, b: { sockets: [{ plugHash: 20, isVisible: true }] } } },
-    },
-  } as unknown as DestinyProfileResponse;
-  const read = masterworkReader(copies, manifest)!;
-  expect([read("a"), read("b")]).toEqual(["Blast Radius", undefined]);
-  expect(masterworkReader(copies, undefined)).toBeUndefined();
+  expect(masterworkPlugStat(manifest, 61)).toEqual({ hash: 1, name: "Blast Radius" });
+  expect(masterworkPlugStat(manifest, 20)).toBeUndefined();
+  expect(masterworkPlugStat(manifest, 999)).toBeUndefined();
 });
 
 test("lists the stats the game shows, in its order", () => {

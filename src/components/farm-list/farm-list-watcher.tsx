@@ -3,13 +3,11 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useArmory } from "@/lib/armory/use-armory";
 import { useProfile } from "@/lib/armory/use-profile";
-import { masterworkReader } from "@/lib/inventory/weapon-details";
-import { useManifest } from "@/lib/manifest/use-manifest";
 import { toast } from "@/lib/toast";
 import { armorFarmTitle, armorPlaceLabel, newlyObtainedArmor } from "@/lib/farm-list/armor";
-import { dismantledDrops, newlyObtained, pickedMasterwork, placeLabel } from "@/lib/farm-list/match";
+import { dismantledDrops, newlyObtained, placeLabel } from "@/lib/farm-list/match";
 import { isFarmDone, type ArmorFarmEntry, type FarmEntry, type WeaponFarmEntry } from "@/lib/farm-list/types";
-import { useFarmList, useFarmListMutations } from "@/lib/farm-list/use-farm-list";
+import { useFarmList, useFarmListMutations, useMasterworkStats } from "@/lib/farm-list/use-farm-list";
 
 /**
  * Watches for Farm list drops: whenever the profile comes in (on load, back to the tab
@@ -80,17 +78,12 @@ function DismantledWatch({ dropped }: { dropped: FarmEntry[] }) {
 
 function WeaponWatch({ entries }: { entries: WeaponFarmEntry[] }) {
   const profile = useProfile().query.data;
-  const manifestStatus = useManifest();
-  const manifest = manifestStatus.state === "ready" ? manifestStatus.manifest : undefined;
-  // A picked masterwork takes the manifest to read the copy's. Until it's in, hold every
-  // drop: a newer entry without one would otherwise take a copy an older one wants.
-  const waitForManifest =
-    (manifestStatus.state === "idle" || manifestStatus.state === "loading") &&
-    entries.some((e) => !e.obtained && pickedMasterwork(e));
+  const masterworks = useMasterworkStats();
   const report = useReportDrop();
   useEffect(() => {
-    if (!profile || waitForManifest) return;
-    for (const { entry, copy } of newlyObtained(profile, entries, masterworkReader(profile, manifest))) {
+    if (!profile) return;
+    // Nothing yet while an entry's masterwork can't be read: every drop waits for it.
+    for (const { entry, copy } of newlyObtained(profile, entries, masterworks) ?? []) {
       report(entry, copy.instanceId, () =>
         toast.success(
           `Farm list: ${entry.weaponName} dropped`,
@@ -98,7 +91,7 @@ function WeaponWatch({ entries }: { entries: WeaponFarmEntry[] }) {
         ),
       );
     }
-  }, [profile, manifest, waitForManifest, entries, report]);
+  }, [profile, masterworks, entries, report]);
   return null;
 }
 
