@@ -63,13 +63,13 @@ describe("masterworkLookup and masterworkOf", () => {
 
   it("maps every tier of a masterwork's stat to its full tier, for the tally's weapons only", () => {
     expect([...masterworks.keys()]).toEqual([1]);
-    expect([...masterworks.get(1)!]).toEqual([
+    expect([...masterworks.get(1)!.plugs]).toEqual([
       [60, 60],
       [601, 60],
       [602, 60],
-      [650, 60],
       [70, 70],
     ]);
+    expect([...masterworks.get(1)!.frames]).toEqual([[650, 60]]);
   });
 
   it("maps only the weapon's own enhanced frames: another weapon's frame on a copy isn't its masterwork", () => {
@@ -87,8 +87,16 @@ describe("masterworkLookup and masterworkOf", () => {
     expect(masterworkOf(masterworks.get(1), [70, undefined])).toBe(70);
   });
 
-  it("takes the first one found: a crafted copy's enhanced frame over its masterwork socket", () => {
-    expect(masterworkOf(masterworks.get(1), [650, 11, 13, 15, 70])).toBe(60);
+  it("counts a crafted copy under the masterwork in its masterwork socket, not its enhanced frame", () => {
+    // Enhanced frame 650 is Range; the copy was crafted with Handling.
+    expect(masterworkOf(masterworks.get(1), [650, 11, 13, 15, 70])).toBe(70);
+    expect(masterworkOf(masterworks.get(1), [650, 11, 13, 15, 601])).toBe(60);
+  });
+
+  it("falls back to the enhanced frame when the masterwork socket holds no stat plug", () => {
+    // 233125175: the hidden placeholder a crafted copy's masterwork socket holds without one.
+    expect(masterworkOf(masterworks.get(1), [650, 11, 13, 15, 233125175])).toBe(60);
+    expect(masterworkOf(masterworks.get(1), [650, 11, 13, 15, undefined])).toBe(60);
   });
 
   it("has none when no plug is a masterwork the catalog knows, or the weapon has none", () => {

@@ -99,10 +99,12 @@ export interface WeaponSummary {
   /** Full-tier masterwork choices as indices into `WeaponIndex.perks`. */
   masterworks?: number[];
   /**
-   * Per masterwork (same index as `masterworks`), the enhanced frames that are
-   * a crafted copy's masterwork in its stat; this weapon's own, since frames
-   * are shared across weapons but which ones a copy can have isn't. Missing
-   * when the weapon has no pattern.
+   * Per masterwork (same index as `masterworks`), the enhanced frames that
+   * count as a crafted copy's masterwork in its stat when its masterwork socket
+   * holds no stat plug. Each frame is under one masterwork only (see
+   * frameMasterworkStat). This weapon's own, since frames are shared across
+   * weapons but which ones a copy can have isn't. Missing when the weapon has
+   * no pattern.
    */
   masterworkFrames?: number[][];
   /** Weapon mods that move a shown stat, as indices into `WeaponIndex.perks`. */

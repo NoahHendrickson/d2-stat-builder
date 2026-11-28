@@ -128,7 +128,7 @@ describe("a signed-in read in the store", () => {
   it("reads each copy's masterwork from its plugs, any tier, into the tally", () => {
     const at = Date.parse("2026-10-18T13:00:00Z");
     // Weapon 1's masterworks: Range 60 (Tier 3 plug 603), Handling 70.
-    const collected = readCollector(lookup, new Map([[1, new Map([[60, 60], [603, 60], [70, 70]])]]));
+    const collected = readCollector(lookup, new Map([[1, { plugs: new Map([[60, 60], [603, 60], [70, 70]]), frames: new Map() }]]));
     collected.add(
       { id: BigInt(7), type: 3, played: storeDay(at) },
       [

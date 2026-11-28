@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import type { ManifestDefs } from "./manifest";
 import {
   buildWeaponMasterworkOptions,
+  frameMasterworkStat,
   WEAPON_MASTERWORK_SOCKET_TYPE_HASH,
 } from "./weapon-masterwork";
 
@@ -29,6 +30,17 @@ function masterworkPlug(
 function tierPlug(hash: number, name: string, statHash: number, tier: number) {
   return masterworkPlug(hash, name, statHash, tier);
 }
+
+describe("frameMasterworkStat", () => {
+  const stat = (statTypeHash: number, value: number) => ({ statTypeHash, value });
+
+  it("takes the only offered stat, the largest, or the first listed on a tie", () => {
+    expect(frameMasterworkStat([stat(1, 10), stat(2, 10)], new Set([2]))).toBe(2);
+    expect(frameMasterworkStat([stat(1, 5), stat(2, 10)], new Set([1, 2]))).toBe(2);
+    expect(frameMasterworkStat([stat(1, 10), stat(2, 10)], new Set([1, 2]))).toBe(1);
+    expect(frameMasterworkStat([stat(1, 10)], new Set([2]))).toBeUndefined();
+  });
+});
 
 describe("buildWeaponMasterworkOptions", () => {
   const plugSetHash = 9001;
@@ -132,8 +144,12 @@ describe("buildWeaponMasterworkOptions", () => {
       6001: frame(6001, [RANGE_HASH, 10]),
       // Listing another stat first, as a fusion's frames list Draw Time before Charge Time.
       6002: frame(6002, [MAGAZINE_HASH, 10], [STABILITY_HASH, 10]),
+      // Two offered stats at +10 each, as a bow's adds Draw Time and Charge Time: the first listed.
+      6003: frame(6003, [STABILITY_HASH, 10], [RANGE_HASH, 10]),
+      // Two offered stats, unequal: the larger.
+      6004: frame(6004, [RANGE_HASH, 5], [STABILITY_HASH, 10]),
     };
-    const sets = { ...plugSets, 9002: { reusablePlugItems: [{ plugItemHash: 6000 }, { plugItemHash: 6001 }, { plugItemHash: 6002 }] } };
+    const sets = { ...plugSets, 9002: { reusablePlugItems: [{ plugItemHash: 6000 }, { plugItemHash: 6001 }, { plugItemHash: 6002 }, { plugItemHash: 6003 }, { plugItemHash: 6004 }] } };
     const options = buildWeaponMasterworkOptions(
       craftable,
       withRecipe,
@@ -142,8 +158,11 @@ describe("buildWeaponMasterworkOptions", () => {
     );
     expect(options?.map((o) => [o.statName, o.masterworkPlugHashes, o.craftedFrameHashes])).toEqual([
       ["Range", [5005], [6001]],
-      ["Stability", [5001, 5006], [6002]],
+      ["Stability", [5001, 5006], [6002, 6003, 6004]],
     ]);
+    // No frame is filed under two masterworks: the catalog would credit it to whichever came last.
+    const frames = options!.flatMap((o) => o.craftedFrameHashes ?? []);
+    expect(new Set(frames).size).toBe(frames.length);
   });
 
   it("returns undefined when the weapon has no masterwork socket", () => {

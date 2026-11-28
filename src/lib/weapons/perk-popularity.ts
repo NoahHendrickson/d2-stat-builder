@@ -163,43 +163,52 @@ export function popularityLookup(catalog: PopularityCatalog): PopularityLookup {
 }
 
 /**
- * For each weapon the tally counts (popularityLookup's), every plug that
- * gives a copy its masterwork, mapped to the catalog's full-tier masterwork
- * for that stat: any tier in the masterwork socket, or one of this weapon's
- * own enhanced frames (a crafted copy's). Those plugs sit nowhere else, so a
- * copy's is found among all its plugs, with no socket to learn.
+ * For each weapon the tally counts (popularityLookup's), the plugs that give a
+ * copy its masterwork, each mapped to the catalog's full-tier masterwork for
+ * that stat. `plugs` are the masterwork socket's stat plugs, any tier: a drop's,
+ * or one chosen when crafting. `frames` are this weapon's own enhanced frames,
+ * which give a crafted copy its masterwork stats when that socket holds no stat
+ * plug (it's empty, or the hidden placeholder crafted copies have). Neither
+ * kind sits anywhere else, so a copy's is found among all its plugs, with no
+ * socket to learn.
  */
-export type MasterworkLookup = Map<number, Map<number, number>>;
+export type WeaponMasterworks = { plugs: Map<number, number>; frames: Map<number, number> };
+export type MasterworkLookup = Map<number, WeaponMasterworks>;
 
 export function masterworkLookup(catalog: PopularityCatalog, lookup = popularityLookup(catalog)): MasterworkLookup {
   const masterworks: MasterworkLookup = new Map();
   for (const weapon of catalog.weapons) {
     if (!lookup.has(weapon.hash) || !weapon.masterworks?.length) continue;
-    const plugs = plugsToBase(catalog.perks, weapon.masterworks, (perk, i) => [
-      ...(perk.masterworkPlugHashes ?? []),
-      ...(weapon.masterworkFrames?.[i] ?? []),
-    ]);
-    if (plugs.size > 0) masterworks.set(weapon.hash, plugs);
+    const plugs = plugsToBase(catalog.perks, weapon.masterworks, (perk) => perk.masterworkPlugHashes);
+    const frames = new Map<number, number>();
+    weapon.masterworks.forEach((index, i) => {
+      const perk = catalog.perks[index];
+      if (perk) for (const frame of weapon.masterworkFrames?.[i] ?? []) frames.set(frame, perk.hash);
+    });
+    if (plugs.size > 0) masterworks.set(weapon.hash, { plugs, frames });
   }
   return masterworks;
 }
 
 /**
  * The masterwork among one copy's plugs (see MasterworkLookup), or undefined
- * when none of them is one the catalog knows. The first found wins: the frame
- * is every weapon's first socket, so a crafted copy's enhanced frame counts
- * over whatever its masterwork socket holds.
+ * when none of them is one the catalog knows. A stat plug in the masterwork
+ * socket wins, crafted copy or not; only without one does an enhanced frame
+ * count.
  */
 export function masterworkOf(
-  plugs: ReadonlyMap<number, number> | undefined,
+  lookup: WeaponMasterworks | undefined,
   copy: readonly (number | undefined)[],
 ): number | undefined {
-  if (!plugs) return undefined;
-  for (const plug of copy) {
-    const masterwork = plug === undefined ? undefined : plugs.get(plug);
-    if (masterwork !== undefined) return masterwork;
-  }
-  return undefined;
+  if (!lookup) return undefined;
+  const find = (plugs: ReadonlyMap<number, number>) => {
+    for (const plug of copy) {
+      const masterwork = plug === undefined ? undefined : plugs.get(plug);
+      if (masterwork !== undefined) return masterwork;
+    }
+    return undefined;
+  };
+  return find(lookup.plugs) ?? find(lookup.frames);
 }
 
 /**
