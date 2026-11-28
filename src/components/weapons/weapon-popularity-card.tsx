@@ -8,7 +8,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { DetailCard, DetailSection } from "@/components/detail-card";
 import type { Roll } from "@/lib/weapons/pick-slots";
 import type { PerkRef, WeaponSummary } from "@/lib/weapons/types";
-import type { WeaponPopularityView } from "@/lib/weapons/popularity-view";
+import type { MasterworkPopularity, WeaponPopularityView } from "@/lib/weapons/popularity-view";
 import { traitColumns } from "@/lib/weapons/perk-popularity";
 import { percent, sampledAt } from "@/lib/popularity-format";
 import { cn } from "@/lib/utils";
@@ -56,9 +56,9 @@ function columnLabel(weapon: WeaponSummary, column: number) {
 /**
  * How many copies of this weapon carry each perk, beside the perk grid: the
  * most run left + right combos as pairs of icons, then each column's perks in
- * columns like the grid's, every one with its share under it. Each picks its
- * perks in the grid (a combo picks both), so the stats show that roll; names
- * are in the tooltips.
+ * columns like the grid's, every one with its share under it, then the
+ * masterworks the same way. Each picks its perks in the grid (a combo picks
+ * both), so the stats show that roll; names are in the tooltips.
  */
 export function WeaponPopularityCard({
   weapon,
@@ -158,7 +158,78 @@ export function WeaponPopularityCard({
           })}
         </div>
       </DetailSection>
+      {view.masterworks && (
+        <MasterworkShares
+          masterworks={view.masterworks}
+          copies={view.copies}
+          perks={perks}
+          isPicked={isPicked}
+          onPick={onPick}
+        />
+      )}
     </DetailCard>
+  );
+}
+
+/**
+ * The Masterworks section: each masterwork the weapon takes, with its share of
+ * the copies whose masterwork is known. Those are only the copies read since
+ * masterworks were first counted, so with none or too few (see
+ * MasterworkPopularity) it says so instead of showing shares (no masterwork
+ * reading 0% for want of data), and while they're well short of the weapon's
+ * copies it says how many there are.
+ */
+function MasterworkShares({
+  masterworks,
+  copies,
+  perks,
+  isPicked,
+  onPick,
+}: {
+  masterworks: MasterworkPopularity;
+  /** The weapon's copies, all told. */
+  copies: number;
+  perks: readonly PerkRef[];
+  isPicked: (roll: Roll) => boolean;
+  onPick: (roll: Roll) => void;
+}) {
+  const copiesOf = (n: number) => (n === 1 ? "one copy" : `${n.toLocaleString("en-US")} copies`);
+  const grades = gradeShares(masterworks.state === "shown" ? masterworks.perks.map((p) => p.share) : []);
+  return (
+    // Named apart from the Perks card's own Masterworks section.
+    <DetailSection title="Popular masterworks" heading="Masterworks">
+      {masterworks.state === "none" ? (
+        <p className="text-xs text-muted-foreground">No masterworks counted for this weapon yet.</p>
+      ) : masterworks.state === "few" ? (
+        <p className="text-xs text-muted-foreground">
+          Counted on only {copiesOf(masterworks.counted)} so far, too few to show.
+        </p>
+      ) : (
+        <div className="grid gap-1.5">
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(3.25rem,1fr))] gap-1.5">
+            {masterworks.perks.map(({ perkIndex, share }) => (
+              <ShareCell
+                key={perkIndex}
+                label={perks[perkIndex]?.name ?? ""}
+                share={share}
+                grade={grades.color(share)}
+                marker="bar"
+                glow={grades.glow}
+                selected={isPicked({ [masterworks.slot]: perkIndex })}
+                onClick={() => onPick({ [masterworks.slot]: perkIndex })}
+              >
+                <PerkIcon perk={perks[perkIndex]} />
+              </ShareCell>
+            ))}
+          </div>
+          {masterworks.partial && (
+            <p className="text-xs text-muted-foreground">
+              Counted on {masterworks.counted.toLocaleString("en-US")} of {copiesOf(copies)} so far.
+            </p>
+          )}
+        </div>
+      )}
+    </DetailSection>
   );
 }
 
@@ -191,7 +262,7 @@ function HowPopularityWorks({ view }: { view: WeaponPopularityView }) {
         </p>
         <p>
           Each percentage is the share of those copies with that perk, or with that left and right
-          perk together.
+          perk together. Masterworks are shares of the copies whose masterwork we know, at any tier.
         </p>
         <p className="text-muted-foreground">
           {view.copies === 1 ? "One copy" : `${view.copies.toLocaleString("en-US")} copies`}

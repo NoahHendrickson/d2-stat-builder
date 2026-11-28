@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 import { parseArgs } from "node:util";
 import type { ArmorReport, ArmorReportEntry } from "../src/lib/armory/set-popularity-reads";
 import { THROTTLE_CODES } from "../src/lib/bungie/throttle";
-import { popularityLookup, type CrawlSample, type PopularityCatalog } from "../src/lib/weapons/perk-popularity";
+import { masterworkLookup, popularityLookup, type CrawlSample, type PopularityCatalog } from "../src/lib/weapons/perk-popularity";
 import { allocOwners, lookupFingerprint, recheckPlan, storeDay } from "../src/lib/weapons/popularity-copies";
 import { profileCopies, readCollector, type ProfileRead } from "../src/lib/weapons/popularity-reads";
 import { createArmorTally } from "./armor-tally";
@@ -471,8 +471,8 @@ async function main() {
       : await fixedWindow(client.get, newest, sample);
   console.log(`Sampling reports ${sampler.describe()} at random.`);
 
-  // The players read and their copies (see readCollector).
-  const collected = readCollector(lookup);
+  // The players read and their copies, masterworks included (see readCollector).
+  const collected = readCollector(lookup, masterworkLookup(catalog, lookup));
   // Players tried, so none is read twice; `players` is how many answered, which
   // is what --players caps and the crawl records. Reads still in flight
   // count towards the cap, so it isn't overshot by one per worker.

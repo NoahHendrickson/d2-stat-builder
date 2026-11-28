@@ -1,7 +1,7 @@
 /**
  * The copy store behind perk popularity: every copy of a legendary weapon the
  * crawler has seen, once each, keyed by its item instance id, with the perk in
- * each column and the player it belongs to. A copy seen again replaces its
+ * each column, its masterwork and the player it belongs to. A copy seen again replaces its
  * earlier record. A player's copies count for as long as they keep playing:
  * each crawl reads again players it hasn't read for a while (recheckPlan),
  * which refreshes their copies and when they last played, and a player who
@@ -54,26 +54,40 @@ export const OWNER_FIELDS = Object.keys(OWNER_ARRAYS) as (keyof Owners)[];
 
 /**
  * One weapon's copies, sorted by id, one array per field: copy n is index n of
- * each, and picks `columns` per copy. COPY_ARRAYS is the one list of the
- * fields, in file order.
+ * each, except a `perkIndex` field "perColumn", which has `columns` per copy.
+ * A `perkIndex` field holds indices into `perks`, UNKNOWN where nothing was
+ * identified, and is filled, remapped and merged alike (allocWeapon, copyRow,
+ * mergeWeapon). COPY_TABLE is the one list of the fields, in file order.
  */
-const COPY_ARRAYS = {
-  ids: BigUint64Array,
+const COPY_TABLE = {
+  ids: { array: BigUint64Array },
   /** The day each copy was last seen. */
-  seen: Uint16Array,
+  seen: { array: Uint16Array },
   /** Each copy's owner, an index into the store's Owners. */
-  owners: Uint32Array,
-  /** Per copy, `columns` indices into `perks`; UNKNOWN where the column's perk wasn't identified. */
-  picks: Uint8Array,
+  owners: { array: Uint32Array },
+  /** Per copy, the perk in each column. */
+  picks: { array: Uint8Array, perkIndex: "perColumn" },
   /** The day each copy was last seen equipped; 0 when it never was (or was seen only by reads from before this was kept). */
-  equipped: Uint16Array,
-};
-type CopyArrays = { [F in keyof typeof COPY_ARRAYS]: InstanceType<(typeof COPY_ARRAYS)[F]> };
-export const COPY_FIELDS = Object.keys(COPY_ARRAYS) as (keyof CopyArrays)[];
+  equipped: { array: Uint16Array },
+  /**
+   * Each copy's masterwork (the full-tier plug for its stat, whatever tier it's
+   * at); UNKNOWN also when the copy was seen only by reads from before this was kept.
+   */
+  masterwork: { array: Uint8Array, perkIndex: "perCopy" },
+} as const;
+type CopyField = keyof typeof COPY_TABLE;
+type CopyArrays = { [F in CopyField]: InstanceType<(typeof COPY_TABLE)[F]["array"]> };
+export const COPY_FIELDS = Object.keys(COPY_TABLE) as CopyField[];
+const perkIndexOf = (field: CopyField) =>
+  (COPY_TABLE[field] as { perkIndex?: "perColumn" | "perCopy" }).perkIndex;
+/** The fields holding perk indices. */
+const PERK_INDEX_FIELDS = COPY_FIELDS.filter((field) => perkIndexOf(field) !== undefined) as ("picks" | "masterwork")[];
+/** How many of `field` each copy of a weapon with `columns` columns has. */
+const widthOf = (field: CopyField, columns: number) => (perkIndexOf(field) === "perColumn" ? columns : 1);
 export interface WeaponCopies extends CopyArrays {
   /** How many columns each copy has a pick for: the catalog's column count. */
   columns: number;
-  /** Base perk hashes the picks index into. */
+  /** Base perk hashes the picks (and masterworks) index into. */
   perks: number[];
 }
 
@@ -127,33 +141,47 @@ export const emptyStore = (): CopyStore => ({ owners: allocOwners(0), weapons: n
 export const copyCount = (store: CopyStore) =>
   [...store.weapons.values()].reduce((sum, weapon) => sum + weapon.ids.length, 0);
 
-/** Room for `length` copies of a weapon with `columns` columns, every pick UNKNOWN. */
+/** Room for `length` copies of a weapon with `columns` columns, every perk index UNKNOWN. */
 export function allocWeapon(columns: number, perks: number[], length: number): WeaponCopies {
   const arrays = Object.fromEntries(
-    COPY_FIELDS.map((field) => [field, new COPY_ARRAYS[field](field === "picks" ? length * columns : length)]),
+    COPY_FIELDS.map((field) => [field, new COPY_TABLE[field].array(length * widthOf(field, columns))]),
   ) as CopyArrays;
-  arrays.picks.fill(UNKNOWN);
+  for (const field of PERK_INDEX_FIELDS) arrays[field].fill(UNKNOWN);
   return { columns, perks, ...arrays };
 }
 
 /** The first `length` copies of `weapon`, in arrays of their own. */
 function trimmed(weapon: WeaponCopies, length: number): WeaponCopies {
   const arrays = Object.fromEntries(
-    COPY_FIELDS.map((field) => [field, weapon[field].slice(0, field === "picks" ? length * weapon.columns : length)]),
+    COPY_FIELDS.map((field) => [field, weapon[field].slice(0, length * widthOf(field, weapon.columns))]),
   ) as CopyArrays;
   return { ...weapon, ...arrays };
 }
 
-/** Copies `from`'s copy `i` into `to`'s row `k`, its picks through `perkMap` (`from`'s perk index → `to`'s) when given. */
+/** A perk index of one side, through `perkMap` (that side's perk index → the other's) when given. */
+const remapped = (pick: number, perkMap: readonly number[] | undefined) =>
+  pick === UNKNOWN || !perkMap ? pick : perkMap[pick]!;
+
+/** Copies `from`'s copy `i` into `to`'s row `k`, its perk indices through `perkMap` (`from`'s perk index → `to`'s) when given. */
 function copyRow(from: WeaponCopies, i: number, to: WeaponCopies, k: number, perkMap?: readonly number[]) {
   to.ids[k] = from.ids[i]!;
-  to.seen[k] = from.seen[i]!;
-  to.owners[k] = from.owners[i]!;
-  to.equipped[k] = from.equipped[i]!;
-  const { columns } = from;
-  for (let column = 0; column < columns; column++) {
-    const pick = from.picks[i * columns + column]!;
-    to.picks[k * columns + column] = pick === UNKNOWN || !perkMap ? pick : perkMap[pick]!;
+  for (const field of COPY_FIELDS) {
+    if (field === "ids") continue;
+    const width = widthOf(field, from.columns);
+    const perk = perkIndexOf(field) !== undefined;
+    for (let n = 0; n < width; n++) {
+      const value = from[field][i * width + n]!;
+      to[field][k * width + n] = perk ? remapped(value, perkMap) : value;
+    }
+  }
+}
+
+/** Fills `out`'s row `k` where a perk index is UNKNOWN from `other`'s copy `at`, through `perkMap`. */
+function fillGaps(out: WeaponCopies, k: number, other: WeaponCopies, at: number, perkMap: readonly number[]) {
+  for (const field of PERK_INDEX_FIELDS) {
+    const width = widthOf(field, out.columns);
+    for (let n = 0; n < width; n++)
+      if (out[field][k * width + n] === UNKNOWN) out[field][k * width + n] = remapped(other[field][at * width + n]!, perkMap);
   }
 }
 
@@ -186,12 +214,13 @@ export interface SeenOwner {
   readAt?: number;
 }
 
-/** One copy as the crawler hands it over: its instance id, its owner (an index into the crawl's owners), base perk per catalog column, and whether it was equipped (undefined when the read didn't say). */
+/** One copy as the crawler hands it over: its instance id, its owner (an index into the crawl's owners), base perk per catalog column, whether it was equipped (undefined when the read didn't say), and its masterwork's full-tier plug hash (undefined when it wasn't identified). */
 export interface SeenCopy {
   id: bigint;
   owner: number;
   perks: readonly (number | undefined)[];
   equipped: boolean | undefined;
+  masterwork?: number;
 }
 
 /** One crawl as a store: its players, read at `readAt` (ms) unless they say otherwise, and their copies, each seen the day its owner was read. */
@@ -223,6 +252,7 @@ export function storeFromCrawl(
       copy.perks.forEach((perk, column) => {
         if (perk !== undefined) weapon.picks[k * weapon.columns + column] = pickFor(perk, weapon.perks, indexOf);
       });
+      if (copy.masterwork !== undefined) weapon.masterwork[k] = pickFor(copy.masterwork, weapon.perks, indexOf);
     });
     weapons.set(hash, weapon);
   }
@@ -246,9 +276,9 @@ export function ownerIndex(owners: Owners) {
  * two come in; reads in the same minute keep the store's record and drop
  * nothing:
  * - a copy in both keeps the record seen on the later day, or on the same
- *   day the one whose owner's read is the later, with any column it couldn't
- *   identify filled from the other, and the later of the days it was seen
- *   equipped;
+ *   day the one whose owner's read is the later, with any column (or the
+ *   masterwork) it couldn't identify filled from the other, and the later of
+ *   the days it was seen equipped;
  * - when the later read saw the player's whole inventory, a copy of theirs
  *   only the earlier read lists is gone (dismantled), on either side;
  * - when they last played is the latest either side knows, so a sighting in a
@@ -392,18 +422,14 @@ function mergeWeapon(
       if (!goneFromB.has(b.owners[j]!)) copyRow(b, j, out, k++, remapB);
       j++;
     } else {
-      // The same copy: the later sighting, its gaps filled from the other, the later day it was seen equipped.
+      // The same copy: the later sighting, its gaps (masterwork too) filled from the other, the later day it was seen equipped.
       const bIsLater = a.seen[i]! === b.seen[j]! ? bLater.has(b.owners[j]!) : b.seen[j]! > a.seen[i]!;
       const [later, at, remap, other, otherAt, otherRemap] = bIsLater
         ? [b, j, remapB, a, i, remapA]
         : [a, i, remapA, b, j, remapB];
       copyRow(later, at, out, k, remap);
       out.equipped[k] = Math.max(a.equipped[i]!, b.equipped[j]!);
-      for (let column = 0; column < columns; column++) {
-        const pick = other.picks[otherAt * columns + column]!;
-        if (out.picks[k * columns + column] === UNKNOWN && pick !== UNKNOWN)
-          out.picks[k * columns + column] = otherRemap[pick]!;
-      }
+      fillGaps(out, k, other, otherAt, otherRemap);
       i++;
       j++;
       k++;
@@ -539,8 +565,9 @@ export function lookupFingerprint(lookup: ReadonlyMap<number, readonly unknown[]
 }
 
 /**
- * The tally the app reads: per weapon, its copies, each column's perks and the
- * left + right trait combo. `store` must have come through mergeCopies with
+ * The tally the app reads: per weapon, its copies, each column's perks, the
+ * left + right trait combo, and the masterworks (of the copies whose
+ * masterwork is known; left out when none is). `store` must have come through mergeCopies with
  * the same catalog, so every weapon lines up with it.
  */
 export function tallyCopies(store: CopyStore, columnsOf: CatalogColumns): Record<string, WeaponPopularity> {
@@ -553,7 +580,14 @@ export function tallyCopies(store: CopyStore, columnsOf: CatalogColumns): Record
     const counts = Array.from({ length: columns }, () => new Uint32Array(perks.length));
     const traits = traitColumns(catalog);
     const combos = new Map<number, number>();
+    const masterworks = new Uint32Array(perks.length);
+    let masterworked = 0;
     for (let copy = 0; copy < weapon.ids.length; copy++) {
+      const masterwork = weapon.masterwork[copy]!;
+      if (masterwork !== UNKNOWN) {
+        masterworks[masterwork]!++;
+        masterworked++;
+      }
       const row = copy * columns;
       for (let column = 0; column < columns; column++) {
         const pick = picks[row + column]!;
@@ -582,6 +616,12 @@ export function tallyCopies(store: CopyStore, columnsOf: CatalogColumns): Record
       popularity.combos = {};
       for (const [key, n] of combos)
         popularity.combos[comboKey(perks[Math.floor(key / 256)]!, perks[key % 256]!)] = n;
+    }
+    if (masterworked > 0) {
+      popularity.masterworks = {};
+      masterworks.forEach((n, pick) => {
+        if (n > 0) popularity.masterworks![perks[pick]!] = n;
+      });
     }
     tally[hash] = popularity;
   }

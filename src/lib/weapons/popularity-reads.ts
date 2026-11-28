@@ -7,8 +7,10 @@
 
 import {
   columnSockets,
+  masterworkOf,
   perksAtSockets,
   type CrawlSource,
+  type MasterworkLookup,
   type PopularityLookup,
 } from "./perk-popularity";
 import { storeFromCrawl, type CopyStore, type SeenCopy, type SeenOwner } from "./popularity-copies";
@@ -71,9 +73,10 @@ export function profileCopies(
 
 /**
  * Collects players and their copies of the tally's weapons (random-rolled
- * legendaries, the lookup's), then builds the crawl's store from them.
+ * legendaries, the lookup's), then builds the crawl's store from them, each
+ * copy's masterwork read through `masterworks` (masterworkLookup).
  */
-export function readCollector(lookup: PopularityLookup) {
+export function readCollector(lookup: PopularityLookup, masterworks: MasterworkLookup) {
   const owners: SeenOwner[] = [];
   /** Each weapon's copies (with their owner; only ones with plugs), read into columns once every copy is in. */
   const copiesByWeapon = new Map<
@@ -117,7 +120,7 @@ export function readCollector(lookup: PopularityLookup) {
     sight(player: Pick<SeenOwner, "id" | "type" | "played">) {
       owners.push({ ...player, whole: false, sightedOnly: true });
     },
-    /** The crawl as a store, read at `readAt` (ms) unless a player says otherwise; each weapon's columns read from the sockets learned from all its copies (see columnSockets). */
+    /** The crawl as a store, read at `readAt` (ms) unless a player says otherwise; each weapon's columns read from the sockets learned from all its copies (see columnSockets), and each copy's masterwork from its plugs (masterworkOf). */
     store(readAt: number, run: CrawlSource): CopyStore {
       const perksByWeapon = new Map<number, SeenCopy[]>();
       for (const [hash, list] of copiesByWeapon) {
@@ -126,9 +129,16 @@ export function readCollector(lookup: PopularityLookup) {
           columns,
           list.map((copy) => copy.plugs),
         );
+        const plugsOf = masterworks.get(hash);
         perksByWeapon.set(
           hash,
-          list.map(({ id, owner, plugs, equipped }) => ({ id, owner, perks: perksAtSockets(columns, placed, plugs), equipped })),
+          list.map(({ id, owner, plugs, equipped }) => ({
+            id,
+            owner,
+            perks: perksAtSockets(columns, placed, plugs),
+            equipped,
+            masterwork: masterworkOf(plugsOf, plugs),
+          })),
         );
       }
       return storeFromCrawl(owners, perksByWeapon, readAt, run);

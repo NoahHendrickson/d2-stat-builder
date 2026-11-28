@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { MIN_COMBO_COUNT, mostPopularRoll } from "./popularity-view";
+import {
+  MIN_COMBO_COUNT,
+  MIN_MASTERWORK_COPIES,
+  masterworkPopularity,
+  mostPopularRoll,
+  type MasterworkPopularity,
+} from "./popularity-view";
 
 // Columns 0 (barrel), 1 and 2 (the traits), perks by catalog index.
 const columns = [
@@ -34,5 +40,50 @@ describe("mostPopularRoll", () => {
   it("falls back to each column's winner without a combo, first of a tie in grid order", () => {
     const tied = [{ column: 0, perks: [{ perkIndex: 1, share: 0.5 }, { perkIndex: 2, share: 0.5 }] }, ...columns.slice(1)];
     expect(mostPopularRoll(tied, [])).toEqual({ 0: 1, 1: 3, 2: 5 });
+  });
+
+  it("takes the top masterwork when its shares are shown, and none otherwise", () => {
+    const shown: MasterworkPopularity = { state: "shown", slot: 3, counted: 40, perks: [], top: 8, partial: false };
+    expect(mostPopularRoll(columns, [], shown)).toEqual({ 0: 2, 1: 3, 2: 5, 3: 8 });
+    expect(mostPopularRoll(columns, [], { state: "few", counted: 12 })).toEqual({ 0: 2, 1: 3, 2: 5 });
+    expect(mostPopularRoll(columns, [], { state: "none" })).toEqual({ 0: 2, 1: 3, 2: 5 });
+  });
+});
+
+describe("masterworkPopularity", () => {
+  // Three columns, so the masterwork slot is 3; masterworks Range (perk 7, hash 60),
+  // Handling (8, hash 70), Stability (9, hash 80).
+  const weapon = { columns: [{}, {}, {}] as never[], masterworks: [7, 8, 9] };
+  const perks = Object.assign([], { 7: { hash: 60 }, 8: { hash: 70 }, 9: { hash: 80 } });
+  const at = (counts: Record<number, number> | undefined, copies = 100) =>
+    masterworkPopularity({ copies, masterworks: counts }, weapon, perks);
+
+  it("shows every masterwork's share in the section's order, the top one, and whether the counted copies fall well short", () => {
+    expect(at({ 60: 10, 70: 30 })).toEqual({
+      state: "shown",
+      slot: 3,
+      counted: 40,
+      perks: [
+        { perkIndex: 7, share: 0.25 },
+        { perkIndex: 8, share: 0.75 },
+        { perkIndex: 9, share: 0 },
+      ],
+      top: 8,
+      partial: true,
+    });
+    expect(at({ 60: 45, 70: 45 })).toMatchObject({ top: 7, partial: false });
+  });
+
+  it("has no shares until enough copies have one known, or before any are", () => {
+    expect(at({ 60: MIN_MASTERWORK_COPIES - 1 })).toEqual({ state: "few", counted: MIN_MASTERWORK_COPIES - 1 });
+    expect(at(undefined)).toEqual({ state: "none" });
+  });
+
+  it("counts only the weapon's own masterworks, so one the catalog no longer lists can't make every share 0%", () => {
+    expect(at({ 99: 40, 60: 5 })).toEqual({ state: "few", counted: 5 });
+  });
+
+  it("is undefined for a weapon with no masterworks to pick", () => {
+    expect(masterworkPopularity({ copies: 10 }, { columns: [], masterworks: undefined }, perks)).toBeUndefined();
   });
 });

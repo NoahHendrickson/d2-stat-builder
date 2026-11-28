@@ -4,6 +4,8 @@ import {
   comboShares,
   traitColumns,
   columnSockets,
+  masterworkLookup,
+  masterworkOf,
   perksAtSockets,
   popularityLookup,
   type PopularityCatalog,
@@ -11,7 +13,9 @@ import {
 } from "./perk-popularity";
 
 // Perk table: 0 frame, 1–2 barrels, 3 Opening Shot (both trait columns), 4 Rampage
-// (enhanced 400), 5 Kill Clip.
+// (enhanced 400), 5 Kill Clip, 6 Range Masterwork (tiers 601, 602), 7 Handling
+// Masterwork (no other plugs). Weapon 1's pattern has an enhanced frame, 650,
+// that's a crafted copy's Range masterwork.
 const CATALOG: PopularityCatalog = {
   perks: [
     { hash: 10 },
@@ -20,6 +24,8 @@ const CATALOG: PopularityCatalog = {
     { hash: 13 },
     { hash: 14, alternateHashes: [400] },
     { hash: 15 },
+    { hash: 60, masterworkPlugHashes: [601, 602] },
+    { hash: 70 },
   ],
   weapons: [
     {
@@ -31,8 +37,10 @@ const CATALOG: PopularityCatalog = {
         { kind: "Trait", perkIndices: [3, 4] },
         { kind: "Trait", perkIndices: [3, 5] },
       ],
+      masterworks: [6, 7],
+      masterworkFrames: [[650], []],
     },
-    { hash: 2, rarity: "Exotic", columns: [{ kind: "Barrel", perkIndices: [1, 2] }] },
+    { hash: 2, rarity: "Exotic", columns: [{ kind: "Barrel", perkIndices: [1, 2] }], masterworks: [6] },
   ],
 };
 
@@ -47,6 +55,53 @@ describe("popularityLookup", () => {
     const columns = lookup.get(1)!;
     expect(columns[0]!.size).toBe(0);
     expect(columns[2]!.get(400)).toBe(14);
+  });
+});
+
+describe("masterworkLookup and masterworkOf", () => {
+  const masterworks = masterworkLookup(CATALOG);
+
+  it("maps every tier of a masterwork's stat to its full tier, for the tally's weapons only", () => {
+    expect([...masterworks.keys()]).toEqual([1]);
+    expect([...masterworks.get(1)!.plugs]).toEqual([
+      [60, 60],
+      [601, 60],
+      [602, 60],
+      [70, 70],
+    ]);
+    expect([...masterworks.get(1)!.frames]).toEqual([[650, 60]]);
+  });
+
+  it("maps only the weapon's own enhanced frames: another weapon's frame on a copy isn't its masterwork", () => {
+    // Weapon 3 takes the same masterworks but has no pattern; its copy holds
+    // frame 650 in socket 0 and Handling in its masterwork socket.
+    const withPlain = {
+      ...CATALOG,
+      weapons: [...CATALOG.weapons, { ...CATALOG.weapons[0]!, hash: 3, masterworkFrames: undefined }],
+    };
+    expect(masterworkOf(masterworkLookup(withPlain).get(3), [650, 11, 13, 15, 70])).toBe(70);
+  });
+
+  it("finds a copy's masterwork among all its plugs, whatever socket it's in", () => {
+    expect(masterworkOf(masterworks.get(1), [10, 11, 13, 15, 602, 999])).toBe(60);
+    expect(masterworkOf(masterworks.get(1), [70, undefined])).toBe(70);
+  });
+
+  it("counts a crafted copy under the masterwork in its masterwork socket, not its enhanced frame", () => {
+    // Enhanced frame 650 is Range; the copy was crafted with Handling.
+    expect(masterworkOf(masterworks.get(1), [650, 11, 13, 15, 70])).toBe(70);
+    expect(masterworkOf(masterworks.get(1), [650, 11, 13, 15, 601])).toBe(60);
+  });
+
+  it("falls back to the enhanced frame when the masterwork socket holds no stat plug", () => {
+    // 233125175: the hidden placeholder a crafted copy's masterwork socket holds without one.
+    expect(masterworkOf(masterworks.get(1), [650, 11, 13, 15, 233125175])).toBe(60);
+    expect(masterworkOf(masterworks.get(1), [650, 11, 13, 15, undefined])).toBe(60);
+  });
+
+  it("has none when no plug is a masterwork the catalog knows, or the weapon has none", () => {
+    expect(masterworkOf(masterworks.get(1), [10, 11, 13, 15, 999])).toBeUndefined();
+    expect(masterworkOf(masterworks.get(2), [60])).toBeUndefined();
   });
 });
 

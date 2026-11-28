@@ -22,6 +22,9 @@ export interface PickSlot {
 /** One pick per slot: slot key → catalog perk index. */
 export type Roll = Record<number, number>;
 
+/** The masterwork slot's key: right after every column (see `PickSlot`). */
+export const masterworkSlotKey = (weapon: Pick<WeaponSummary, "columns">) => weapon.columns.length;
+
 /** The intrinsic column, when it has only the one frame (so nothing to pick). */
 function fixedFrameColumn(weapon: WeaponSummary) {
   return weapon.columns.find((c) => c.kind === "Intrinsic" && c.perkIndices.length === 1);
@@ -43,7 +46,7 @@ export function pickSlots(weapon: WeaponSummary): PickSlot[] {
           },
         ],
   );
-  const after = weapon.columns.length;
+  const after = masterworkSlotKey(weapon);
   if (weapon.masterworks?.length)
     slots.push({ key: after, kind: "masterwork", label: "Masterworks", perkIndices: weapon.masterworks });
   if (weapon.mods?.length)

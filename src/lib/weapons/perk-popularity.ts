@@ -9,8 +9,8 @@
  * for as long as its owner keeps playing (popularity-copies.ts); the merge
  * tallies the store
  * into the snapshot published off Vercel, on GitHub Pages, which the weapon
- * page reads: each weapon's perks per column, and the left + right trait pair
- * as a combo.
+ * page reads: each weapon's perks per column, the left + right trait pair
+ * as a combo, and its masterwork's stat.
  */
 
 import type { Hazard } from "./popularity-hazard";
@@ -33,6 +33,15 @@ export interface WeaponPopularity {
    * from before combos were counted.
    */
   combos?: Record<string, number>;
+  /**
+   * The catalog's full-tier masterwork plug hash, for the stat a copy's
+   * masterwork is on at any tier → copies with it. Only copies whose
+   * masterwork was identified count, so this can add up to fewer than
+   * `copies`: missing in snapshots from before masterworks were kept, and
+   * thin at first after, since copies already in the store gain theirs only
+   * once they're read again.
+   */
+  masterworks?: Record<string, number>;
 }
 
 /** The tally every snapshot carries, and all the app reads. */
@@ -105,8 +114,8 @@ export interface CrawlSource {
 
 /** The catalog fields the tally needs: public/data/weapons.json, narrowed. */
 export type PopularityCatalog = {
-  perks: Pick<CompactWeaponIndex["perks"][number], "hash" | "alternateHashes">[];
-  weapons: (Pick<CatalogWeapon, "hash" | "rarity"> & {
+  perks: Pick<CompactWeaponIndex["perks"][number], "hash" | "alternateHashes" | "masterworkPlugHashes">[];
+  weapons: (Pick<CatalogWeapon, "hash" | "rarity" | "masterworks" | "masterworkFrames"> & {
     columns: Pick<CatalogWeapon["columns"][number], "perkIndices" | "kind">[];
   })[];
 };
@@ -119,24 +128,87 @@ type CatalogWeapon = CompactWeaponIndex["weapons"][number];
  */
 export type PopularityLookup = Map<number, Map<number, number>[]>;
 
+/**
+ * Plug hash → base perk hash for the perks at `indices` in `perks`: each
+ * perk's own hash, and the other plugs `others` gives for it (the index in
+ * `indices` alongside), all mapped to it.
+ */
+function plugsToBase<P extends { hash: number }>(
+  perks: readonly (P | undefined)[],
+  indices: readonly number[],
+  others: (perk: P, i: number) => readonly number[] | undefined,
+) {
+  const plugs = new Map<number, number>();
+  indices.forEach((index, i) => {
+    const perk = perks[index];
+    if (!perk) return;
+    plugs.set(perk.hash, perk.hash);
+    for (const other of others(perk, i) ?? []) plugs.set(other, perk.hash);
+  });
+  return plugs;
+}
+
 export function popularityLookup(catalog: PopularityCatalog): PopularityLookup {
   const lookup: PopularityLookup = new Map();
   for (const weapon of catalog.weapons) {
     if (weapon.rarity !== "Legendary") continue;
-    const columns = weapon.columns.map((column) => {
-      const plugs = new Map<number, number>();
-      if (column.perkIndices.length < 2) return plugs;
-      for (const index of column.perkIndices) {
-        const perk = catalog.perks[index];
-        if (!perk) continue;
-        plugs.set(perk.hash, perk.hash);
-        for (const alternate of perk.alternateHashes ?? []) plugs.set(alternate, perk.hash);
-      }
-      return plugs;
-    });
+    const columns = weapon.columns.map((column) =>
+      column.perkIndices.length < 2
+        ? new Map<number, number>()
+        : plugsToBase(catalog.perks, column.perkIndices, (perk) => perk.alternateHashes),
+    );
     if (columns.some((plugs) => plugs.size > 0)) lookup.set(weapon.hash, columns);
   }
   return lookup;
+}
+
+/**
+ * For each weapon the tally counts (popularityLookup's), the plugs that give a
+ * copy its masterwork, each mapped to the catalog's full-tier masterwork for
+ * that stat. `plugs` are the masterwork socket's stat plugs, any tier: a drop's,
+ * or one chosen when crafting. `frames` are this weapon's own enhanced frames,
+ * which give a crafted copy its masterwork stats when that socket holds no stat
+ * plug (it's empty, or the hidden placeholder crafted copies have). Neither
+ * kind sits anywhere else, so a copy's is found among all its plugs, with no
+ * socket to learn.
+ */
+export type WeaponMasterworks = { plugs: Map<number, number>; frames: Map<number, number> };
+export type MasterworkLookup = Map<number, WeaponMasterworks>;
+
+export function masterworkLookup(catalog: PopularityCatalog, lookup = popularityLookup(catalog)): MasterworkLookup {
+  const masterworks: MasterworkLookup = new Map();
+  for (const weapon of catalog.weapons) {
+    if (!lookup.has(weapon.hash) || !weapon.masterworks?.length) continue;
+    const plugs = plugsToBase(catalog.perks, weapon.masterworks, (perk) => perk.masterworkPlugHashes);
+    const frames = new Map<number, number>();
+    weapon.masterworks.forEach((index, i) => {
+      const perk = catalog.perks[index];
+      if (perk) for (const frame of weapon.masterworkFrames?.[i] ?? []) frames.set(frame, perk.hash);
+    });
+    if (plugs.size > 0) masterworks.set(weapon.hash, { plugs, frames });
+  }
+  return masterworks;
+}
+
+/**
+ * The masterwork among one copy's plugs (see MasterworkLookup), or undefined
+ * when none of them is one the catalog knows. A stat plug in the masterwork
+ * socket wins, crafted copy or not; only without one does an enhanced frame
+ * count.
+ */
+export function masterworkOf(
+  lookup: WeaponMasterworks | undefined,
+  copy: readonly (number | undefined)[],
+): number | undefined {
+  if (!lookup) return undefined;
+  const find = (plugs: ReadonlyMap<number, number>) => {
+    for (const plug of copy) {
+      const masterwork = plug === undefined ? undefined : plugs.get(plug);
+      if (masterwork !== undefined) return masterwork;
+    }
+    return undefined;
+  };
+  return find(lookup.plugs) ?? find(lookup.frames);
 }
 
 /**

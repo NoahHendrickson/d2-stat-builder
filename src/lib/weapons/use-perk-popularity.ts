@@ -10,7 +10,7 @@ import {
   type PerkPopularityIndex,
 } from "./perk-popularity";
 import type { WeaponCatalog } from "./catalog";
-import { mostPopularRoll, type WeaponPopularityView } from "./popularity-view";
+import { masterworkPopularity, mostPopularRoll, type WeaponPopularityView } from "./popularity-view";
 import type { WeaponSummary } from "./types";
 
 /** The popularity snapshot (see useDataRepoSnapshot); the weapon page goes without when it can't load. */
@@ -66,13 +66,15 @@ export function useWeaponPopularity(
             : [{ leftColumn: traits[0], left: l, rightColumn: traits[1], right: r, count, share }];
         })
       : [];
+    const masterworks = masterworkPopularity(data, weapon, catalog.perks);
     return {
       available: true,
       copies: data.copies,
       generatedAt: index?.generatedAt,
       columns,
       combos,
-      topRoll: mostPopularRoll(columns, combos),
+      masterworks,
+      topRoll: mostPopularRoll(columns, combos, masterworks),
     };
   }, [index, weapon, catalog]);
 }

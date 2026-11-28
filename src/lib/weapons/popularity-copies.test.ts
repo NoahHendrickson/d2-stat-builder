@@ -38,22 +38,31 @@ const run = (generatedAt: string, players = 1): CrawlSource => ({
   catalog: "0",
 });
 const player = (id: number, played: number | undefined, whole = false): SeenOwner => ({ id: BigInt(id), type: 3, played, whole });
-/** A copy of `weapon` as [weapon, instance id, owner's membership id, perks, equipped (left out: the read didn't say)]. */
-type Copy = [weapon: number, id: number, owner: number, perks: (number | undefined)[], equipped?: boolean];
+/** A copy of `weapon` as [weapon, instance id, owner's membership id, perks, equipped (left out: the read didn't say), masterwork (left out: not identified)]. */
+type Copy = [weapon: number, id: number, owner: number, perks: (number | undefined)[], equipped?: boolean, masterwork?: number];
 
 /** `day` and `hour` (UTC) as ms. */
 const when = (day: number, hour = 0) => day * 86_400_000 + hour * 3_600_000;
 
 /** One crawl read on `day` (at `hour`): its players, and their copies. */
 function crawl(day: number, at: string, players: SeenOwner[], copies: Copy[], hour = 0) {
-  const byWeapon = new Map<number, { id: bigint; owner: number; perks: (number | undefined)[]; equipped: boolean | undefined }[]>();
-  for (const [weapon, id, owner, perks, equipped] of copies) {
+  const byWeapon = new Map<
+    number,
+    { id: bigint; owner: number; perks: (number | undefined)[]; equipped: boolean | undefined; masterwork?: number }[]
+  >();
+  for (const [weapon, id, owner, perks, equipped, masterwork] of copies) {
     const list = byWeapon.get(weapon) ?? [];
-    list.push({ id: BigInt(id), owner: players.findIndex((p) => p.id === BigInt(owner)), perks, equipped });
+    list.push({ id: BigInt(id), owner: players.findIndex((p) => p.id === BigInt(owner)), perks, equipped, masterwork });
     byWeapon.set(weapon, list);
   }
   return storeFromCrawl(players, byWeapon, when(day, hour), run(at, players.length));
 }
+
+/** Every copy as [id, masterwork], by weapon. */
+const masterworks = (store: CopyStore) =>
+  Object.fromEntries(
+    [...store.weapons].map(([hash, w]) => [hash, Array.from(w.ids, (id, i) => [Number(id), w.masterwork[i] === 255 ? undefined : w.perks[w.masterwork[i]!]])]),
+  );
 
 /** Every copy as [id, day last seen equipped], by weapon. */
 const equippedDays = (store: CopyStore) =>
@@ -398,6 +407,55 @@ describe("snapshotFromCopies", () => {
       crawls: store.runs,
       hazard: emptyHazard(),
     });
+  });
+});
+
+describe("masterworks", () => {
+  // Masterwork plugs 60 (Range) and 70 (Handling), on weapon 1.
+  const perks = [undefined, 11, 13, 15];
+
+  it("keeps each copy's masterwork, unknown where it wasn't identified", () => {
+    const store = merge(crawl(1, "a", [player(7, 1)], [[1, 1, 7, perks, true, 60], [1, 2, 7, perks, false]]));
+    expect(masterworks(store)).toEqual({ 1: [[1, 60], [2, undefined]] });
+  });
+
+  it("takes the later read's masterwork, so a copy moved to another stat counts once, on its new one", () => {
+    const older = crawl(10, "a", [player(7, 10)], [[1, 1, 7, perks, true, 60]]);
+    const newer = crawl(12, "b", [player(7, 12)], [[1, 1, 7, perks, true, 70]]);
+    expect(masterworks(merge(older, newer))).toEqual({ 1: [[1, 70]] });
+    // An older crawl merged late doesn't roll it back.
+    expect(masterworks(merge(newer, older))).toEqual({ 1: [[1, 70]] });
+  });
+
+  it("gives a copy from before masterworks were kept its masterwork when it's read again, and keeps one a later read couldn't identify", () => {
+    const before = crawl(10, "a", [player(7, 10)], [[1, 1, 7, perks, true]]);
+    const reread = crawl(12, "b", [player(7, 12)], [[1, 1, 7, perks, true, 60]]);
+    expect(masterworks(merge(before, reread))).toEqual({ 1: [[1, 60]] });
+    const unidentified = crawl(14, "c", [player(7, 14)], [[1, 1, 7, perks, true]]);
+    expect(masterworks(merge(before, reread, unidentified))).toEqual({ 1: [[1, 60]] });
+  });
+
+  it("keeps masterworks through a prune that renumbers the players", () => {
+    const store = merge(
+      crawl(1, "a", [player(6, 1), player(7, 30)], [[1, 1, 6, perks, true, 60], [1, 2, 7, perks, true, 70], [2, 3, 7, [11], true]]),
+    );
+    expect(masterworks(pruneCopies(store, 20))).toEqual({ 1: [[2, 70]], 2: [[3, undefined]] });
+  });
+
+  it("tallies the copies with a masterwork known, and leaves masterworks out of a weapon with none known", () => {
+    const store = merge(
+      crawl(1, "a", [player(7, 1)], [
+        [1, 1, 7, perks, true, 60],
+        [1, 2, 7, perks, false, 60],
+        [1, 3, 7, perks, false, 70],
+        [1, 4, 7, perks, false],
+        [2, 5, 7, [11], false],
+      ]),
+    );
+    const tally = tallyCopies(store, columnsOf);
+    expect(tally[1]!.masterworks).toEqual({ 60: 2, 70: 1 });
+    expect(tally[1]!.copies).toBe(4);
+    expect(tally[2]).not.toHaveProperty("masterworks");
   });
 });
 

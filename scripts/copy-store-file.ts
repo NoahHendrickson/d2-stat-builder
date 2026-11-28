@@ -29,23 +29,24 @@ import { seal, unseal } from "./sealed-file";
 /** "D2PC": the store's first four bytes, once decrypted and unzipped. */
 export const MAGIC = 0x43503244;
 /**
- * 4: each copy's equipped day, and the hazard in the header (2 kept owners'
- * reads to the day; 1 had no owners, and wasn't encrypted). The change is
- * one-way: code from before it can't read a version 4 store, so going back
- * means starting the store over.
+ * 5: each copy's masterwork (4 added each copy's equipped day and the hazard
+ * in the header; 2 kept owners' reads to the day; 1 had no owners, and wasn't
+ * encrypted). Each change is one-way: code from before it can't read the
+ * newer store, so going back means starting the store over.
  */
-export const VERSION = 4;
+export const VERSION = 5;
 /**
- * Version 3 (no equipped days, no hazard) is still read, so the store on the
- * release carries over: its copies come out never seen equipped. Needed only
- * until the first version 4 merge rewrites that store, since crawl files
- * always come from the same commit as the merge; drop it, V3_COPY_FIELDS and
- * copyFieldsOf after that.
+ * Versions 3 (no equipped days, no hazard) and 4 (no masterworks) are still
+ * read, so the store on the release carries over: its copies come out never
+ * seen equipped (3) and with no masterwork known, which they gain as they're
+ * read again. Needed only until the first version 5 merge rewrites that
+ * store, since crawl files always come from the same commit as the merge.
  */
 const OLDEST_READ = 3;
-/** COPY_FIELDS a version 3 file has: all but `equipped`. */
-const V3_COPY_FIELDS = COPY_FIELDS.filter((field) => field !== "equipped");
-const copyFieldsOf = (version: number) => (version >= 4 ? COPY_FIELDS : V3_COPY_FIELDS);
+/** The version each COPY_FIELD came in, where it's later than OLDEST_READ: each adds its field at the end. */
+const SINCE: Partial<Record<(typeof COPY_FIELDS)[number], number>> = { equipped: 4, masterwork: 5 };
+/** The COPY_FIELDS a file of `version` has, in file order. */
+const copyFieldsOf = (version: number) => COPY_FIELDS.filter((field) => version >= (SINCE[field] ?? 0));
 function littleEndianOnly() {
   if (endianness() !== "LE") throw new Error("The copy store file is little-endian; this machine isn't.");
 }
@@ -120,7 +121,7 @@ function readWeapons(data: Buffer, start: number, version: number) {
     at += 6;
     const perks = Array.from({ length: perkCount }, (_, i) => data.readUInt32LE(at + i * 4));
     at += perkCount * 4;
-    // A version 3 weapon has no equipped days: its copies keep allocWeapon's 0, never seen equipped.
+    // An older weapon's missing fields keep allocWeapon's fill: no equipped days (3, 0: never seen equipped), no masterworks (3 and 4, UNKNOWN).
     const weapon = allocWeapon(columns, perks, data.readUInt32LE(at));
     at += 4;
     for (const field of copyFieldsOf(version)) at = fill(weapon[field], data, at);
