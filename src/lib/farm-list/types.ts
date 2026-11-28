@@ -54,7 +54,7 @@ export interface WeaponFarmData {
   weaponHashes: number[];
   /** The left and right perks, which every entry has. */
   traits: [FarmPerk, FarmPerk];
-  /** Other picks. A drop has to have them too, except the masterwork (see requiredExtras). */
+  /** Other picks. A drop has to have them too; the masterwork goes by its stat (see copyHasPick). */
   extras: FarmPerk[];
   /** Copies that don't count: turned down with "Not this one" (older entries: also owned when made). */
   ignoredInstanceIds: string[];

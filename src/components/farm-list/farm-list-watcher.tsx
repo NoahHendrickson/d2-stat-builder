@@ -7,7 +7,7 @@ import { toast } from "@/lib/toast";
 import { armorFarmTitle, armorPlaceLabel, newlyObtainedArmor } from "@/lib/farm-list/armor";
 import { dismantledDrops, newlyObtained, placeLabel } from "@/lib/farm-list/match";
 import { isFarmDone, type ArmorFarmEntry, type FarmEntry, type WeaponFarmEntry } from "@/lib/farm-list/types";
-import { useFarmList, useFarmListMutations } from "@/lib/farm-list/use-farm-list";
+import { useFarmList, useFarmListMutations, useMasterworkStats } from "@/lib/farm-list/use-farm-list";
 
 /**
  * Watches for Farm list drops: whenever the profile comes in (on load, back to the tab
@@ -78,10 +78,12 @@ function DismantledWatch({ dropped }: { dropped: FarmEntry[] }) {
 
 function WeaponWatch({ entries }: { entries: WeaponFarmEntry[] }) {
   const profile = useProfile().query.data;
+  const masterworks = useMasterworkStats();
   const report = useReportDrop();
   useEffect(() => {
     if (!profile) return;
-    for (const { entry, copy } of newlyObtained(profile, entries)) {
+    // Nothing yet while an entry's masterwork can't be read: every drop waits for it.
+    for (const { entry, copy } of newlyObtained(profile, entries, masterworks) ?? []) {
       report(entry, copy.instanceId, () =>
         toast.success(
           `Farm list: ${entry.weaponName} dropped`,
@@ -89,7 +91,7 @@ function WeaponWatch({ entries }: { entries: WeaponFarmEntry[] }) {
         ),
       );
     }
-  }, [profile, entries, report]);
+  }, [profile, masterworks, entries, report]);
   return null;
 }
 

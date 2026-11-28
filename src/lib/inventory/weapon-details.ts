@@ -135,11 +135,18 @@ export function weaponRoll(
     }
     const kind = modKind(category);
     if (kind === "masterwork") {
-      const stat = masterworkStat(manifest, def?.investmentStats);
+      const stat = masterworkPlugStat(manifest, socket.plugHash);
       roll.mods.push({ ...current, kind, ...(stat ? { stat } : {}) });
     } else if (kind) roll.mods.push({ ...current, kind });
   });
   return roll;
+}
+
+/** The stat a weapon masterwork plug raises, at any tier; undefined for any other plug. */
+export function masterworkPlugStat(manifest: Manifest, plugHash: number): MasterworkStat | undefined {
+  const def = manifest.def("DestinyInventoryItemDefinition", plugHash);
+  if (modKind(def?.plug?.plugCategoryIdentifier ?? "") !== "masterwork") return undefined;
+  return masterworkStat(manifest, def?.investmentStats);
 }
 
 /**

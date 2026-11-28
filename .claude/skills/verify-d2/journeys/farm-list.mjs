@@ -6,8 +6,9 @@
 export const meta = {
   fixture: "full",
   // Two Synanceia copies in the vault, with numeric instance ids (the Farm list ignores
-  // the fixture's `instN` ones): Relentless Strikes + Surrounded, and Attrition Orbs +
-  // Burning Ambition. Sockets: blade, guard, left, right.
+  // the fixture's `instN` ones): Relentless Strikes + Surrounded masterworked in Impact,
+  // and Attrition Orbs + Burning Ambition with no masterwork. Sockets: blade, guard, left,
+  // right, then the masterwork.
   profile: (profile) => {
     const r = profile.Response ?? profile;
     r.responseMintedTimestamp = new Date().toISOString();
@@ -17,7 +18,7 @@ export const meta = {
       r.itemComponents.sockets.data[id] = { sockets: plugs.map((plugHash) => ({ plugHash, isEnabled: true, isVisible: true })) };
       r.itemComponents.reusablePlugs.data[id] = { plugs: Object.fromEntries(plugs.map((h, i) => [i, [{ plugItemHash: h, canInsert: true, enabled: true }]])) };
     };
-    copy(MATCH_COPY, [HUNGRY_EDGE, BALANCED_GUARD, RELENTLESS, SURROUNDED]);
+    copy(MATCH_COPY, [HUNGRY_EDGE, BALANCED_GUARD, RELENTLESS, SURROUNDED, IMPACT_MW]);
     copy(OWNED_COPY, [HUNGRY_EDGE, BALANCED_GUARD, ATTRITION, BURNING]);
     // Armor gets numeric ids too, for the same reason.
     const held = [r.profileInventory.data, ...Object.values(r.characterInventories.data), ...Object.values(r.characterEquipment.data)];
@@ -44,11 +45,28 @@ export const meta = {
         weaponIcon: "/common/destiny2_content/icons/ce20ef1bf74d608b33a31b6863b3bf0b.jpg",
         weaponHashes: [SYNANCEIA],
         traits: [perk("Trait", "Relentless Strikes", RELENTLESS, 4085959009, "ad4bb4c9e36674ca879310b733a6e6a3.png"), perk("Trait", "Surrounded", SURROUNDED, 781192741, "979881b68ca7839267c9aef5aea2b0ce.png")],
-        // The copy has Hungry Edge (✓) and no masterwork (✗: it doesn't stop a match). No
-        // magazine or origin trait asked for: those columns read Any.
+        // The copy has Hungry Edge (✓) and the Impact masterwork (✓). No magazine or
+        // origin trait asked for: those columns read Any.
         extras: [
           perk("Blade", "Hungry Edge", HUNGRY_EDGE, 1498024248, "974bb52d2a830e83bb142699b31e567c.png", "barrel"),
-          perk("Masterwork", "Impact Masterwork", 3486498337, undefined, "672543a43bddce9886b5daa338fcd39a.jpg", "masterwork"),
+          perk("Masterwork", "Impact Masterwork", IMPACT_MW, undefined, "672543a43bddce9886b5daa338fcd39a.jpg", "masterwork"),
+        ],
+        ignoredInstanceIds: [],
+      },
+      {
+        // The same roll with a masterwork the copy doesn't have: it has to keep waiting,
+        // even though it's older and would get the copy first.
+        id: "77777777-7777-4777-8777-777777777777",
+        createdAt: Date.parse("2026-10-20T11:00:00Z"),
+        kind: "weapon",
+        version: 1,
+        weaponHash: SYNANCEIA,
+        weaponName: "Synanceia",
+        weaponHashes: [SYNANCEIA],
+        traits: [perk("Trait", "Relentless Strikes", RELENTLESS, 4085959009, "ad4bb4c9e36674ca879310b733a6e6a3.png"), perk("Trait", "Surrounded", SURROUNDED, 781192741, "979881b68ca7839267c9aef5aea2b0ce.png")],
+        extras: [
+          perk("Blade", "Hungry Edge", HUNGRY_EDGE, 1498024248, "974bb52d2a830e83bb142699b31e567c.png", "barrel"),
+          perk("Masterwork", "Charge Time Masterwork", 3128594062, undefined, "672543a43bddce9886b5daa338fcd39a.jpg", "masterwork"),
         ],
         ignoredInstanceIds: [],
       },
@@ -140,6 +158,8 @@ const RELENTLESS = 1749209109;
 const SURROUNDED = 3708227201;
 const ATTRITION = 243981275;
 const BURNING = 2890807135;
+/** Synanceia's full-tier Impact masterwork. */
+const IMPACT_MW = 3486498337;
 function perk(kind, name, hash, enhanced, icon, slot) {
   return { kind, name, icon: `/common/destiny2_content/icons/${icon}`, ...(slot ? { slot } : {}), hashes: enhanced ? [hash, enhanced] : [hash] };
 }
@@ -180,6 +200,7 @@ export default async function ({ page, app, stub, step, shot, expect, log }) {
     expect(true, "the armor drop PATCHed its numeric instance id");
     await page.waitFor({ role: "link", name: "Farm list (2 new)" });
     expect(!stub.last("PATCH", "/api/farm-list/33333333"), "the entry asking for a magazine the copy lacks keeps waiting");
+    expect(!stub.last("PATCH", "/api/farm-list/77777777"), "so does the one asking for a masterwork the copy lacks");
     await page.waitFor(() => stub.last("DELETE", "/api/farm-list/55555555") !== undefined);
     expect(stub.store.entries.has("66666666-6666-4666-8666-666666666666"), "a kept record survives its copy being dismantled");
     expect(!stub.last("DELETE", "/api/farm-list/66666666"), "and is never deleted");
@@ -193,7 +214,13 @@ export default async function ({ page, app, stub, step, shot, expect, log }) {
     await pick("Surrounded");
     await page.waitFor({ role: "button", name: "Add to Farm list" }, { within: PERKS });
     await pick("Hungry Edge");
+    // Without the listed entry's Impact masterwork, it's a different roll.
+    expect(await page.exists({ role: "button", name: "Add to Farm list" }, { within: PERKS }), "another masterwork (here none) is a new roll");
+    const impact = { role: "button", name: "Impact Masterwork" };
+    await page.click(impact, { within: DETAILS });
     await page.waitFor({ role: "button", name: "On your Farm list" }, { within: PERKS });
+    await page.click(impact, { within: DETAILS });
+    await page.waitFor({ role: "button", name: "Add to Farm list" }, { within: PERKS });
     await unpick("Hungry Edge");
     await unpick("Relentless Strikes");
     await pick("Proximity Power");
@@ -216,6 +243,12 @@ export default async function ({ page, app, stub, step, shot, expect, log }) {
     await page.waitForText(/You already have this roll\./, { within: PERKS });
     await shot("owned", { within: DETAILS });
     expect(!(await page.exists({ role: "button", name: /Add/i }, { within: PERKS })), "no way to add a roll already owned");
+    // The copy has no masterwork: picking one makes it a roll still to farm, and back.
+    const masterwork = { role: "button", name: "Charge Time Masterwork" };
+    await page.click(masterwork, { within: DETAILS });
+    await page.waitFor({ role: "button", name: "Add to Farm list" }, { within: PERKS });
+    await page.click(masterwork, { within: DETAILS });
+    await page.waitForText(/You already have this roll\./, { within: PERKS });
   });
 
   await step("entry-strict: a picked magazine the copy doesn't have is a new roll, with no owned prompt", async () => {
@@ -249,9 +282,9 @@ export default async function ({ page, app, stub, step, shot, expect, log }) {
       expect(await page.exists({ role: "image", name: "Matches" }, { within: cell(column) }), `${column} perk matches`);
     const magazine = await page.text(cell("magazine"));
     expect(/Balanced Guard/.test(magazine) && !(await page.exists({ role: "image", name: "Matches" }, { within: cell("magazine") })), "no magazine asked for: just what the copy rolled");
-    expect(await page.exists({ role: "image", name: "Doesn't match" }, { within: cell("masterwork") }), "Impact Masterwork doesn't match");
+    expect(await page.exists({ role: "image", name: "Matches" }, { within: cell("masterwork") }), "Impact Masterwork matches");
     expect(!(await page.exists(cell("origin"))), "no origin trait asked for or rolled: no field for it");
-    expect((await page.findAll({ css: `${WAITING} [data-entry]` })).length === 3, "three waiting entries");
+    expect((await page.findAll({ css: `${WAITING} [data-entry]` })).length === 4, "four waiting entries");
     expect(stub.last("PATCH", "/api/farm-list")?.body?.seen === true, "opening the page marked drops seen");
     await page.waitFor({ role: "link", name: "Farm list" });
     const record = { css: '[data-entry="66666666-6666-4666-8666-666666666666"]' };
@@ -261,7 +294,7 @@ export default async function ({ page, app, stub, step, shot, expect, log }) {
     await page.waitFor({ css: OBTAINED }, { gone: true });
     expect(stub.last("PATCH", "/api/farm-list/11111111")?.body?.reject === true, "PATCH sent reject");
     expect(stub.store.entries.get("11111111-1111-4111-8111-111111111111").ignoredInstanceIds.join() === MATCH_COPY, "the copy is ignored now");
-    expect((await page.findAll({ css: `${WAITING} [data-entry]` })).length === 4, "four waiting entries");
+    expect((await page.findAll({ css: `${WAITING} [data-entry]` })).length === 5, "five waiting entries");
     await shot("rejected");
   });
 

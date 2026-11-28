@@ -16,7 +16,7 @@ import type { PickSlot, Roll } from "@/lib/weapons/pick-slots";
 import type { WeaponSummary } from "@/lib/weapons/types";
 import { farmWeaponFromPicks, farmWeaponPicksKey, matchingCopies, sameFarmWeapon } from "@/lib/farm-list/match";
 import { isFarmDone } from "@/lib/farm-list/types";
-import { useFarmList, useFarmListMutations } from "@/lib/farm-list/use-farm-list";
+import { useFarmList, useFarmListMutations, useMasterworkStats } from "@/lib/farm-list/use-farm-list";
 import { useSession } from "@/lib/auth/use-session";
 import { sessionMembershipId, useProfile } from "@/lib/armory/use-profile";
 
@@ -44,6 +44,7 @@ export function FarmPerksSection({
 }) {
   const membershipId = sessionMembershipId(useSession().data);
   const profile = useProfile().query.data;
+  const masterworks = useMasterworkStats();
   const queryClient = useQueryClient();
   const entries = useFarmList().data;
   const { add, remove } = useFarmListMutations();
@@ -59,7 +60,8 @@ export function FarmPerksSection({
   const canAdd = entry !== null && membershipId !== undefined && entries !== undefined;
   const key = entry ? farmWeaponPicksKey(entry) : "";
   // Rechecked against the live profile: the copy can be dismantled, and this hides the button.
-  const owned = ownedKey === key && entry !== null && profile !== undefined && matchingCopies(profile, entry).length > 0;
+  const owned =
+    ownedKey === key && entry !== null && profile !== undefined && (matchingCopies(profile, entry, { masterworks })?.length ?? 0) > 0;
   const busy = checking || add.isPending || remove.isPending;
 
   function save() {
@@ -80,7 +82,10 @@ export function FarmPerksSection({
           return newerProfile(held, await fetchProfile(held));
         },
       });
-      if (matchingCopies(fresh, entry!).length > 0) setOwnedKey(key);
+      const found = matchingCopies(fresh, entry!, { masterworks });
+      // A picked masterwork can't be checked without the game data: never add it unchecked.
+      if (found === undefined) toast.error("Couldn't check your vault", "Game data isn't loaded yet. Try again in a moment.");
+      else if (found.length > 0) setOwnedKey(key);
       else save();
     } catch {
       toast.error("Couldn't check your vault", "Try again in a moment.");
