@@ -5,7 +5,7 @@ import type { PerkRef, WeaponSummary } from "../weapons/types";
 import { canFarm, matchingCopies, newlyObtained, sameFarmWeapon, farmWeaponFromPicks, dismantledDrops } from "./match";
 import { parseFarmEntry, parseFarmEntryData, type WeaponFarmData, type WeaponFarmEntry } from "./types";
 
-// 0 frame, 1–2 barrels, 3–4 left traits, 5–6 right traits, 7 masterwork, 8 mod.
+// 0 frame, 1–2 barrels, 3–4 left traits, 5–6 right traits, 7 and 9 masterworks, 8 mod.
 const PERKS: PerkRef[] = [
   { hash: 100, name: "Adaptive Frame", currentlyCanRoll: true },
   { hash: 201, name: "Arrowhead Brake", currentlyCanRoll: true },
@@ -16,6 +16,7 @@ const PERKS: PerkRef[] = [
   { hash: 402, name: "Rampage", currentlyCanRoll: true },
   { hash: 501, name: "Range Masterwork", currentlyCanRoll: true },
   { hash: 601, name: "Backup Mag", currentlyCanRoll: true },
+  { hash: 502, name: "Stability Masterwork", currentlyCanRoll: true },
 ];
 
 const weapon = (overrides: Partial<WeaponSummary> = {}): WeaponSummary =>
@@ -29,7 +30,7 @@ const weapon = (overrides: Partial<WeaponSummary> = {}): WeaponSummary =>
       { kind: "Trait", perkIndices: [3, 4] },
       { kind: "Trait", perkIndices: [5, 6] },
     ],
-    masterworks: [7],
+    masterworks: [7, 9],
     mods: [8],
     ...overrides,
   }) as WeaponSummary;
@@ -134,7 +135,7 @@ describe("matchingCopies", () => {
       { hash: 2, id: "12", sockets: [[100], [301], [402]] },
       { hash: 9, id: "13", sockets: [[301], [402]] },
     ]);
-    expect(matchingCopies(p, entry).map((c) => c.instanceId)).toEqual(["10", "12"]);
+    expect(matchingCopies(p, entry)!.map((c) => c.instanceId)).toEqual(["10", "12"]);
   });
 
   it("needs the two traits in two sockets", () => {
@@ -156,8 +157,8 @@ describe("matchingCopies", () => {
       { hash: 1, id: "20", sockets: [[301], [402]], state: 8 | 32 },
       { hash: 4, id: "21", sockets: [[301], [402]], state: 8 | 32 },
     ]);
-    expect(matchingCopies(p, entry).map((c) => c.instanceId)).toEqual(["20"]);
-    expect(matchingCopies(p, adept).map((c) => c.instanceId)).toEqual(["21"]);
+    expect(matchingCopies(p, entry)!.map((c) => c.instanceId)).toEqual(["20"]);
+    expect(matchingCopies(p, adept)!.map((c) => c.instanceId)).toEqual(["21"]);
   });
 });
 
@@ -173,14 +174,49 @@ describe("picked extras are strict", () => {
 
   it("matches a copy that has it", () => {
     const p = profile([{ hash: 1, id: "10", sockets: [[barrel], [301], [402]] }]);
-    expect(matchingCopies(p, entry).map((c) => c.instanceId)).toEqual(["10"]);
+    expect(matchingCopies(p, entry)!.map((c) => c.instanceId)).toEqual(["10"]);
   });
 
-  it("doesn't need the masterwork", () => {
+  describe("a picked masterwork", () => {
+    // Pick 4: 7 is Range (plug 501). Plug 5011 is a lower Range tier, 502 Stability.
     const mw = makeEntry({ 2: 3, 3: 6, 4: 7 })!;
-    expect(mw.extras.map((e) => e.slot)).toEqual(["masterwork"]);
-    const p = profile([{ hash: 1, id: "10", sockets: [[301], [402]] }]);
-    expect(matchingCopies(p, mw).map((c) => c.instanceId)).toEqual(["10"]);
+    const STATS: Record<number, number> = { 501: 1, 5011: 1, 502: 2 };
+    const masterworks = (plugHash: number) => STATS[plugHash];
+    // 10 and 11 are in Range (full tier, lower tier). 12 is in Stability, though Range is
+    // among what its socket could swap to. 13 has none.
+    const p = profile([
+      { hash: 1, id: "10", sockets: [[301], [402], [501]] },
+      { hash: 1, id: "11", sockets: [[301], [402], [5011]] },
+      { hash: 1, id: "12", sockets: [[301], [402], [502, 501]] },
+      { hash: 1, id: "13", sockets: [[301], [402]] },
+    ]);
+
+    it("needs the copy masterworked in that stat now, at any tier", () => {
+      expect(mw.extras.map((e) => e.slot)).toEqual(["masterwork"]);
+      expect(matchingCopies(p, mw, { masterworks })!.map((c) => c.instanceId)).toEqual(["10", "11"]);
+    });
+
+    it("can't tell without the manifest, rather than saying nothing matches", () => {
+      expect(matchingCopies(p, mw)).toBeUndefined();
+    });
+
+    const waiting = (data: WeaponFarmData, id: string, createdAt: number) =>
+      parseFarmEntry({ ...data, id, createdAt }) as WeaponFarmEntry;
+
+    it("isn't a drop on a copy with another masterwork or none", () => {
+      const only = profile([
+        { hash: 1, id: "12", sockets: [[301], [402], [502, 501]] },
+        { hash: 1, id: "13", sockets: [[301], [402]] },
+      ]);
+      expect(newlyObtained(only, [waiting(mw, "a", 1)], masterworks)).toEqual([]);
+    });
+
+    it("holds every drop until it can be read, so a newer entry can't take the older one's copy", () => {
+      const one = profile([{ hash: 1, id: "10", sockets: [[301], [402], [501]] }]);
+      const entries = [waiting(mw, "mw", 1), waiting(makeEntry({ 2: 3, 3: 6 })!, "plain", 2)];
+      expect(newlyObtained(one, entries)).toBeUndefined();
+      expect(newlyObtained(one, entries, masterworks)!.map((m) => [m.entry.id, m.copy.instanceId])).toEqual([["mw", "10"]]);
+    });
   });
 
   it("doesn't need anything left unpicked", () => {
@@ -195,7 +231,7 @@ describe("newlyObtained", () => {
     const waiting = parseFarmEntry({ ...data, id: "a", createdAt: 1 }) as WeaponFarmEntry;
     const done = { ...waiting, id: "b", obtained: { instanceId: "11", at: 2, seen: false } };
     const p = profile([{ hash: 1, id: "10", sockets: [[301], [402]] }]);
-    expect(newlyObtained(p, [waiting, done]).map((m) => [m.entry.id, m.copy.instanceId])).toEqual([["a", "10"]]);
+    expect(newlyObtained(p, [waiting, done])!.map((m) => [m.entry.id, m.copy.instanceId])).toEqual([["a", "10"]]);
   });
 
   // X+Y, and X+Y with a picked barrel: different hunts that one copy can satisfy.
@@ -205,12 +241,12 @@ describe("newlyObtained", () => {
 
   it("gives one copy to the oldest entry that accepts it", () => {
     const found = newlyObtained(profile([copy("10")]), [loose, strict]);
-    expect(found.map((m) => [m.entry.id, m.copy.instanceId])).toEqual([["strict", "10"]]);
+    expect(found!.map((m) => [m.entry.id, m.copy.instanceId])).toEqual([["strict", "10"]]);
   });
 
   it("fills both entries when there are two copies", () => {
     const found = newlyObtained(profile([copy("10"), copy("11")]), [loose, strict]);
-    expect(found.map((m) => [m.entry.id, m.copy.instanceId])).toEqual([
+    expect(found!.map((m) => [m.entry.id, m.copy.instanceId])).toEqual([
       ["strict", "10"],
       ["loose", "11"],
     ]);
@@ -277,9 +313,12 @@ describe("sameFarmWeapon", () => {
     expect(sameFarmWeapon(a, makeEntry({ 2: 4, 3: 6 })!)).toBe(false);
   });
 
-  it("treats a different barrel as a different roll, but not a different masterwork", () => {
+  it("treats a different barrel or masterwork as a different roll", () => {
     const a = makeEntry({ 2: 3, 3: 6 })!;
+    const range = makeEntry({ 2: 3, 3: 6, 4: 7 })!;
     expect(sameFarmWeapon(a, makeEntry({ 1: 2, 2: 3, 3: 6 })!)).toBe(false);
-    expect(sameFarmWeapon(a, makeEntry({ 2: 3, 3: 6, 4: 7 })!)).toBe(true);
+    expect(sameFarmWeapon(a, range)).toBe(false);
+    expect(sameFarmWeapon(range, makeEntry({ 2: 3, 3: 6, 4: 9 })!)).toBe(false);
+    expect(sameFarmWeapon(range, makeEntry({ 2: 3, 3: 6, 4: 7 })!)).toBe(true);
   });
 });

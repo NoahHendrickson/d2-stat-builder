@@ -1,9 +1,23 @@
 "use client";
 
+import { useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSession } from "@/lib/auth/use-session";
 import { sessionMembershipId } from "@/lib/armory/use-profile";
+import { masterworkPlugStat } from "@/lib/inventory/weapon-details";
+import { useManifest } from "@/lib/manifest/use-manifest";
+import type { MasterworkStats } from "./match";
 import { parseFarmEntry, type FarmEntry, type FarmEntryData, type FarmPatch } from "./types";
+
+/**
+ * Reads masterwork plugs for the weapon matcher, once the manifest is ready. Until then
+ * (or if it fails to load) there's none, and entries with a picked masterwork can't be told.
+ */
+export function useMasterworkStats(): MasterworkStats | undefined {
+  const status = useManifest();
+  const manifest = status.state === "ready" ? status.manifest : undefined;
+  return useMemo(() => manifest && ((plugHash: number) => masterworkPlugStat(manifest, plugHash)?.hash), [manifest]);
+}
 
 /** Per account, so a different sign-in on this browser never sees the last one's list. */
 export const farmListKey = (membershipId: string | undefined) => ["farm-list", membershipId] as const;
